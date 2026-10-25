@@ -13,6 +13,12 @@ This directory provides reproducible, fail-closed, platform-aware build and cach
 | `windows-2025` | `windows/amd64` | Clang / MSVC, CMake | CPU-only, `-DGGML_OPENMP=OFF`; CI binary imports external Microsoft VC DLLs |
 | `windows-11-arm` | `windows/arm64` | Clang / MSVC, CMake | CPU-only, `-DGGML_OPENMP=OFF`; CI binary imports external Microsoft VC DLLs |
 
+The Linux recipe retains a bounded final linker map and archive/object
+inventory in native CI. It distinguishes `libstdc++` and `libgcc` objects
+selected into the binary from dynamic imports; exact notices and exception
+questions are tracked in [LINUX-RUNTIME-AUDIT.md](LINUX-RUNTIME-AUDIT.md).
+This evidence does not admit a product dependency.
+
 ## Pinned Source Archive
 
 Upstream stable release `v1.9.5` does not publish prebuilt CLI binaries (`assets_count = 0`). Standalone executables are built strictly from the pinned official upstream source tarball:

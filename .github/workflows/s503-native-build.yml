@@ -213,6 +213,24 @@ jobs:
                   assert binary.read(4) == b'PE\0\0'
                   machine = struct.unpack('<H', binary.read(2))[0]
               assert machine == {'amd64': 0x8664, 'arm64': 0xaa64}[os.environ['EXPECTED_ARCH']]
+          elif os.environ['EXPECTED_OS'] == 'Linux':
+              link_map = Path('evidence/whisper-cli.link.map')
+              inventory = report['link_map_inventory']
+              assert inventory['schema'] == 's503-linux-link-map-v1'
+              assert Path(report['link_map_path']).resolve() == link_map.resolve()
+              assert inventory['binary_name'] == artifact.name
+              assert inventory['binary_sha256'] == digest
+              assert link_map.is_file() and 0 < link_map.stat().st_size <= 32 << 20
+              assert link_map.stat().st_size == inventory['map_bytes']
+              assert hashlib.sha256(link_map.read_bytes()).hexdigest() == inventory['map_sha256']
+              assert inventory['archive_members']
+              assert all(row['archive'] and row['member'] and row['notice_candidate']
+                         for row in inventory['archive_members'])
+              assert all(row in inventory['archive_members'] for row in inventory['runtime_archive_members'])
+              assert not any(name.startswith(('libstdc++', 'libgcc_s'))
+                             for name in report['imported_libraries'])
+              Path('evidence/whisper-link-inventory.json').write_text(
+                  json.dumps(inventory, indent=2) + '\n')
           Path('evidence/binary-sha256.txt').write_text(f'{digest}  {artifact.name}\n')
           print(Path('evidence/binary-sha256.txt').read_text(), end='')
           PY

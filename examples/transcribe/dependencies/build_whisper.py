@@ -290,8 +290,14 @@ def get_cmake_build_flags(os_name: str, arch_name: str, toolchain: Dict[str, str
             linker_flags += f" -Wl,-Map={link_map_path.as_posix()} -Wl,--verbose"
         flags.append(f"-DCMAKE_EXE_LINKER_FLAGS={linker_flags}")
     elif os_name == "linux":
-        # Avoid GPL runtime dependencies
-        flags.append("-DCMAKE_EXE_LINKER_FLAGS=-static-libgcc -static-libstdc++")
+        # Static flags remove dynamic imports but do not establish which GCC
+        # runtime objects entered the executable. Retain the final ELF map.
+        linker_flags = "-static-libgcc -static-libstdc++"
+        if link_map_path is not None:
+            if any(char.isspace() for char in link_map_path.as_posix()):
+                raise RuntimeError("Linux linker map path must not contain whitespace")
+            linker_flags += f" -Wl,-Map={link_map_path.as_posix()}"
+        flags.append(f"-DCMAKE_EXE_LINKER_FLAGS={linker_flags}")
 
     return flags
 
@@ -378,6 +384,77 @@ def inspect_windows_link_map(map_path: Path, built_exe: Path, build_output: str)
     }
 
 
+def _linux_notice_candidate(archive: str) -> str:
+    name = Path(archive).name.lower()
+    if name.startswith(("libwhisper", "libggml")):
+        return "whisper.cpp/GGML MIT"
+    if name.startswith(("libstdc++", "libsupc++", "libgcc")):
+        return "GCC runtime GPL-3.0-or-later WITH GCC-exception-3.1; review exact source and exception"
+    return "unclassified; inspect source and license"
+
+
+def inspect_linux_link_map(map_path: Path, built_exe: Path, build_output: str) -> Dict[str, Any]:
+    """Inventory selected ELF archive objects from the final GNU-style link."""
+    if not map_path.is_file() or not 0 < map_path.stat().st_size <= 32 << 20:
+        raise RuntimeError(f"Linux linker map missing, empty or over 32 MiB: {map_path}")
+    if len(build_output) > 16 << 20:
+        raise RuntimeError("Linux verbose build log exceeds 16 MiB inventory limit")
+    contents = map_path.read_text(encoding="utf-8", errors="replace")
+    marker = "Linker script and memory map"
+    if marker not in contents:
+        raise RuntimeError("Linux linker map lacks GNU input-section marker")
+    summary, sections = contents.split(marker, 1)
+    map_arg = f"-Wl,-Map={map_path.as_posix()}"
+    links = [line for line in build_output.splitlines()
+             if map_arg in line and re.search(r"(?:^|\s)-o\s+(?:\S*/)?whisper-cli(?:\s|$)", line)]
+    if len(links) != 1:
+        raise RuntimeError("Linux build log does not identify one final whisper-cli link with this map")
+
+    # GNU ld's archive-inclusion table names members pulled from an archive.
+    # Input-section rows establish which of those members contributed bytes.
+    selected = set()
+    for line in summary.splitlines():
+        match = ARCHIVE_MEMBER.match(line)
+        if match:
+            selected.add((match.group("archive"), match.group("member")))
+    retained = set()
+    direct = set()
+    for line in sections.splitlines():
+        if not re.match(r"^\s*(?:\S+\s+)?0x[0-9a-f]+\s+0x[0-9a-f]+\s+", line, re.I):
+            continue
+        for match in ARCHIVE_MEMBER.finditer(line):
+            retained.add((match.group("archive"), match.group("member")))
+        for match in DIRECT_OBJECT.finditer(line):
+            if not ARCHIVE_MEMBER.search(line):
+                direct.add(match.group("object"))
+    if not selected or not retained:
+        raise RuntimeError("Linux linker map has no selected and retained archive object evidence")
+    if not retained <= selected:
+        raise RuntimeError("Linux input-section archive members absent from inclusion table")
+    inventory = [
+        {"archive": archive, "member": member,
+         "in_output_section": (archive, member) in retained,
+         "notice_candidate": _linux_notice_candidate(archive)}
+        for archive, member in sorted(selected, key=lambda pair: (pair[0].lower(), pair[1].lower()))
+    ]
+    runtime = [row for row in inventory if Path(row["archive"]).name.lower().startswith(
+        ("libstdc++", "libsupc++", "libgcc"))]
+    return {
+        "schema": "s503-linux-link-map-v1",
+        "binary_name": built_exe.name,
+        "binary_sha256": compute_sha256(built_exe),
+        "map_sha256": compute_sha256(map_path),
+        "map_bytes": map_path.stat().st_size,
+        "final_link_command": links[0],
+        "archive_members": inventory,
+        "runtime_archive_members": runtime,
+        "direct_objects": sorted(direct, key=str.lower),
+        "unclassified_archives": sorted({row["archive"] for row in inventory
+                                        if row["notice_candidate"].startswith("unclassified")}, key=str.lower),
+        "review_status": "object inventory only; GCC exception and exact notices require review before product admission",
+    }
+
+
 def audit_dynamic_libraries(executable_path: Path, os_name: str,
                             toolchain: Optional[Dict[str, str]] = None) -> List[str]:
     """Inspects dynamic libraries linked by the executable to ensure no GPL/OpenMP dylibs."""
@@ -425,6 +502,8 @@ def audit_dynamic_libraries(executable_path: Path, os_name: str,
         name = Path(lib).name.lower()
         if any(token in name for token in ("gomp", "libomp", "iomp", "vcomp")):
             raise RuntimeError(f"audit failure: OpenMP dynamic library found: {lib}")
+        if os_name == "linux" and name.startswith(("libstdc++", "libgcc_s")):
+            raise RuntimeError(f"audit failure: GCC runtime remains dynamic: {lib}")
         if os_name == "windows" and name.startswith((
             "msvcp", "vcruntime", "concrt", "libgcc", "libstdc++",
             "libwinpthread", "libc++", "libunwind",
@@ -552,7 +631,7 @@ def _build_verified_source(
     # invocation-owned map is copied out only after the verbose link command
     # and archive members have been checked against the finished binary.
     cmake_flags = get_cmake_build_flags(
-        os_name, arch_name, toolchain, map_path if os_name == "windows" else None
+        os_name, arch_name, toolchain, map_path if os_name in ("windows", "linux") else None
     )
 
     # Configure
@@ -638,14 +717,21 @@ def _build_verified_source(
     exe_bytes = built_exe.stat().st_size
 
     link_inventory = None
-    if os_name == "windows":
+    if os_name in ("windows", "linux"):
+        if os_name == "linux" and (not map_path.is_file() or
+                                   not 0 < map_path.stat().st_size <= 32 << 20):
+            raise RuntimeError("Linux linker map missing, empty or over 32 MiB")
         link_map_file.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(map_path, link_map_file)
         # Keep the raw map in the CI artifact even if classification fails;
         # a failed parser must leave the actual linker evidence reviewable.
-        link_inventory = inspect_windows_link_map(map_path, built_exe, build_res.stdout + "\n" + build_res.stderr)
+        output = build_res.stdout + "\n" + build_res.stderr
+        if os_name == "windows":
+            link_inventory = inspect_windows_link_map(map_path, built_exe, output)
+        else:
+            link_inventory = inspect_linux_link_map(map_path, built_exe, output)
         if compute_sha256(link_map_file) != link_inventory["map_sha256"]:
-            raise RuntimeError("retained Windows linker map SHA-256 mismatch")
+            raise RuntimeError("retained linker map SHA-256 mismatch")
 
     # Audit dynamic libraries
     imported_libs = audit_dynamic_libraries(built_exe, os_name, toolchain)
@@ -692,7 +778,7 @@ def _build_verified_source(
         "status": "built_and_cached",
     }
     if link_inventory is not None:
-        report["dependency_audit_scope"] = "PE imports and retained linker map; static object notices require review"
+        report["dependency_audit_scope"] = "dynamic imports and retained linker map; static object notices require review"
         report["link_map_path"] = str(link_map_file)
         report["link_map_inventory"] = link_inventory
     return report
@@ -752,7 +838,7 @@ def main() -> int:
         "--link-map-file",
         type=Path,
         default=None,
-        help="Retain the checked Windows whisper-cli linker map at this path",
+        help="Retain the checked Linux or Windows whisper-cli linker map at this path",
     )
 
     args = parser.parse_args()
