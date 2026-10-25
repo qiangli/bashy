@@ -57,11 +57,17 @@ jobs:
       - name: Observe natural VC loads and signatures
         shell: pwsh
         run: |
-          $bootstrap = Join-Path $env:pythonLocation 'python.exe'
-          if (-not (Test-Path -LiteralPath $bootstrap -PathType Leaf)) {
-            throw "setup-python executable missing: $bootstrap"
+          $receipt = Get-Content -LiteralPath evidence/python-installed/result.json -Raw | ConvertFrom-Json
+          $installedPython = [string]$receipt.installed_python.path
+          if ([string]::IsNullOrWhiteSpace($installedPython) -or -not ([System.IO.Path]::IsPathFullyQualified($installedPython)) -or -not (Test-Path -LiteralPath $installedPython -PathType Leaf)) {
+            throw "fresh installed Python executable missing: $installedPython"
           }
-          & $bootstrap .github/scripts/s503-windows-vc-natural-load.py --installed-result evidence/python-installed/result.json --output evidence/python-installed/vc-natural-load.json
+          $expectedHash = [string]$receipt.installed_python.sha256
+          $actualHash = (Get-FileHash -LiteralPath $installedPython -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ([string]::IsNullOrWhiteSpace($expectedHash) -or $actualHash -ne $expectedHash.ToLowerInvariant()) {
+            throw "fresh installed Python executable differs from receipt: $installedPython"
+          }
+          & $installedPython .github/scripts/s503-windows-vc-natural-load.py --installed-result evidence/python-installed/result.json --output evidence/python-installed/vc-natural-load.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Retain evidence only, never installer or DLL bytes
         if: always()
