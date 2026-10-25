@@ -280,8 +280,8 @@ tar -xzf "$asset"
 ./bashy self install --dir "$HOME/.local/bin"
 ```
 
-Linux releases also publish `.deb`, `.rpm`, and `.apk` packages alongside the
-tarballs. macOS and Windows archive names are `bashy-darwin-{amd64,arm64}.tar.gz`
+Starting with v1.0, Linux releases also publish `.deb`, `.rpm`, and `.apk`
+packages alongside the tarballs. macOS and Windows archive names are `bashy-darwin-{amd64,arm64}.tar.gz`
 and `bashy-windows-{amd64,arm64}.zip`.
 
 A prerelease (a `-rc.N-dev` tag) is not `latest`: download it from its tag,

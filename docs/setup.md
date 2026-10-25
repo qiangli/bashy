@@ -73,7 +73,8 @@ tar -xzf "$asset"
 ./bashy self install --dir "$HOME/.local/bin"
 ```
 
-Linux releases also publish `.deb`, `.rpm`, and `.apk` packages. See the
+Starting with v1.0, Linux releases also publish `.deb`, `.rpm`, and `.apk`
+packages. See the
 [release assets](https://github.com/qiangli/bashy/releases/latest) for all
 platform archives.
 
