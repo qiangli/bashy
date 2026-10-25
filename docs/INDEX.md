@@ -1,6 +1,7 @@
 # bashy docs index
 
 - `transcribe-contract.md` — Sprint 503 S503.1: public transcription command, replaceable stage JSON v1 contract, existing infrastructure seams and unfinished adapter prerequisites.
+- `transcribe-adapter-authoring.md` — Sprint 503 S503.8: setup, registration, extension walkthrough, offline use and dependency licensing for source and decoder authors.
 - `transcribe-seed-adapters.md` — Sprint 503 S503.4: local acquisition, PCM/media decoding, offline CPU whisper.cpp and transcript export; implementation gates and separate native acceptance requirements.
 - `sprint-503/S503.8-runner-identity.md` — the six-label GitHub Actions runner identity preflight, its JSON artifacts, and the boundary between preflight and native transcription evidence.
 - `why-bashy.md` — why bashy, and for whom: the page to hand to whoever approves adoption. Layers (bash everywhere · Bash# polyglot repos · agentic userland A–G · sphere), a persona map, recipes for one-tool/many-session and multi-vendor teams (claim/resource leases first), honest comparisons, shipped/prototype/planned status.
