@@ -1,0 +1,73 @@
+name: S503 Python.org operator installer artifact research
+
+on:
+  push:
+    branches: [s503-contract-integration, s503-python-installer-artifacts]
+    paths:
+      - .github/workflows/s503-python-installer-artifacts.yml
+      - .github/scripts/s503-python-installer-artifacts.py
+      - examples/transcribe/dependencies/prepare_python_host.sh
+      - examples/transcribe/dependencies/external-python-runtime.json
+      - examples/transcribe/dependencies/windows-external-runtime.json
+      - examples/transcribe/dependencies/operator-python-admission.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: s503-python-installers-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify-artifact:
+    name: ${{ matrix.target }} official installer
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: macos-15-intel, target: darwin/amd64}
+          - {runner: macos-15, target: darwin/arm64}
+          - {runner: windows-2025, target: windows/amd64}
+          - {runner: windows-11-arm, target: windows/arm64}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+          architecture: ${{ endsWith(matrix.target, 'arm64') && 'arm64' || 'x64' }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.2'
+      - name: Build native Bashy for the policy script
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/s503-python-installer/bin"
+          suffix=''
+          if [[ '${{ runner.os }}' == Windows ]]; then suffix='.exe'; fi
+          ./scripts/go-product.sh build -trimpath \
+            -o "$RUNNER_TEMP/s503-python-installer/bin/bashy$suffix" ./cmd/bashy
+      - name: Download pinned Python.org bytes and run native artifact gate
+        shell: bash
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+          RUNNER_LABEL: ${{ matrix.runner }}
+          CANDIDATE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          suffix=''
+          if [[ '${{ runner.os }}' == Windows ]]; then suffix='.exe'; fi
+          python .github/scripts/s503-python-installer-artifacts.py \
+            --bashy "$RUNNER_TEMP/s503-python-installer/bin/bashy$suffix" \
+            --evidence evidence/python-installer
+      - name: Retain artifact-gate output and hashes only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-python-installer-${{ matrix.runner }}
+          path: evidence/python-installer/
+          if-no-files-found: warn
+          retention-days: 14

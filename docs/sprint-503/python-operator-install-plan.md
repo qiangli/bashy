@@ -31,6 +31,15 @@ Tcl/Tk, launcher and PATH changes. The [Microsoft VC documentation](https://lear
 describes the separately installed runtime and its native architecture. Its
 latest-download URLs are mutable, so the script does not fetch or install VC.
 
+The research-only [four-target artifact workflow](../../.github/workflows/s503-python-installer-artifacts.yml)
+checks both macOS architectures and both Windows architectures on native GitHub-hosted
+runners. It downloads the exact URL printed by `--plan`, independently compares
+the policy SHA-256, then runs `--verify-artifact`. Each job retains the native
+signature and Windows System32 VC observation, the verifier's stdout/stderr,
+the staged-copy hash, the Bashy and policy hashes, and a result JSON. Installer
+bytes are deleted after the check and are not uploaded. A pass establishes only
+the artifact gate; `operator-python-admission.json` remains unadmitted.
+
 ## Host procedure
 
 1. Claim the native host under the sprint's resource rules. Record the actual

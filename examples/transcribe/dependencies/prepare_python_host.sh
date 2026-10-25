@@ -234,7 +234,8 @@ staged_artifact=$stage_dir/python-installer$stage_suffix
 cp "$artifact" "$staged_artifact" || fail 'cannot stage installer artifact'
 chmod 500 "$staged_artifact" || fail 'cannot protect staged installer artifact'
 chmod 500 "$stage_dir" || fail 'cannot protect staged installer directory'
-[ "$(hash_file "$staged_artifact")" = "$installer_sha" ] ||
+staged_sha=$(hash_file "$staged_artifact")
+[ "$staged_sha" = "$installer_sha" ] ||
     fail 'staged installer differs from reviewed SHA-256'
 case "$target" in
     darwin/*)
@@ -258,8 +259,8 @@ case "$target" in
         windows_vc_check ;;
 esac
 [ "$(hash_file "$staged_artifact")" = "$installer_sha" ] || fail 'staged installer changed during signature verification'
-printf 'target=%s\ninstaller=%s\ninstaller_sha256=%s\nstatus=verified_artifact_not_installed\n' \
-    "$target" "$artifact" "$installer_sha"
+printf 'target=%s\ninstaller=%s\ninstaller_sha256=%s\nstaged_installer_sha256=%s\nsignature_status=verified\nstatus=verified_artifact_not_installed\n' \
+    "$target" "$artifact" "$installer_sha" "$staged_sha"
 [ "$mode" = --install ] || exit 0
 
 case "$target" in
