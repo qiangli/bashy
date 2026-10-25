@@ -3,15 +3,20 @@ id: 3414b9da74b0
 kind: feature
 title: 'S407.2 R1 prep: release pipeline signs + notarizes when credentials exist (macOS Developer ID + notarytool, Windows Azure Artifact Signing), skips loudly when absent; verify scripts'
 seq: 1946
-status: todo
+status: done
 priority: p1
 labels:
     - release
     - signing
 created: 2026-10-24T22:57:39.758015Z
+weave: 278
+assignee: codex-gpt6-sol
 sprint: 407
 sprint_id: 90546935-fbc2-5d09-94b0-19c380846681
 sprint_title: bashy 1.0.0 release gates pending external dependencies (follow-up to Sprint 379)
+closed: 2026-10-24T23:25:04.492118Z
+resolution: fixed
+closed_by: codex-gpt6-sol-r
 ---
 
 Repo: bashy (public; no hostnames, no secrets, no proprietary references). Part of R1 98bc74b37f07, which stays open until real certificates sign a published release.

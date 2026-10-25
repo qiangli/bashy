@@ -3,15 +3,20 @@ id: 621f736b095e
 kind: bug
 title: 'S407.6 P0 cert blocker: bashy process startup costs ~67 ms (go-runewidth v0.0.27 init builds full-width LUTs, 39 ms); every utility and background job pays it, VSC awk set exceeds 600 s'
 seq: 1949
-status: todo
+status: done
 priority: p0
 labels:
     - posix-cert
     - performance
 created: 2026-10-25T03:56:21.936137Z
+weave: 280
+assignee: codex-gpt6-sol
 sprint: 407
 sprint_id: 90546935-fbc2-5d09-94b0-19c380846681
 sprint_title: bashy 1.0.0 release gates pending external dependencies (follow-up to Sprint 379)
+closed: 2026-10-25T04:43:57.220219Z
+resolution: fixed
+closed_by: codex-gpt6-sol-t
 ---
 
 Found 2026-10-25 by the S407.3 replay on v1.0.0-rc.14-dev (bashy 62c83441) on Ubuntu 24.04 x86_64 (s-2vcpu-4gb). The awk set still exceeds its 600 s cap AFTER the S407.4 fd fix (historical 173-229 s on ba62cd91, 2026-10-06).

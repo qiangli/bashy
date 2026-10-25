@@ -3,15 +3,20 @@ id: 5710ec296007
 kind: bug
 title: 'S407.9 P1: in an agent session (CLAUDECODE / CLAUDE_CODE_ENTRYPOINT set) bashy adds ~1 s to EVERY external command'
 seq: 1951
-status: todo
+status: done
 priority: p1
 labels:
     - performance
     - agent-mode
 created: 2026-10-25T04:51:43.026484Z
+weave: 281
+assignee: codex-gpt6-sol
 sprint: 407
 sprint_id: 90546935-fbc2-5d09-94b0-19c380846681
 sprint_title: bashy 1.0.0 release gates pending external dependencies (follow-up to Sprint 379)
+closed: 2026-10-25T05:35:48.289735Z
+resolution: fixed
+closed_by: codex-gpt6-sol-u
 ---
 
 Found 2026-10-25 while verifying S407.6/S407.7 on macOS (Dragon). Script: i=0; while [ $i -lt 5 ]; do /usr/bin/true; i=$((i+1)); done, timed per command:

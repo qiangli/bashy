@@ -3,15 +3,20 @@ id: 9f3cc23e7193
 kind: bug
 title: 'S407.4 P0 cert blocker: bashy sh leaks a pidfd + a /dev/null fd per external command on Linux (job-carrier path); VSC awk set times out'
 seq: 1947
-status: todo
+status: done
 priority: p0
 labels:
     - posix-cert
     - linux
 created: 2026-10-25T01:59:18.058079Z
+weave: 279
+assignee: codex-gpt6-sol
 sprint: 407
 sprint_id: 90546935-fbc2-5d09-94b0-19c380846681
 sprint_title: bashy 1.0.0 release gates pending external dependencies (follow-up to Sprint 379)
+closed: 2026-10-25T02:46:59.430279Z
+resolution: fixed
+closed_by: codex-gpt6-sol-s
 ---
 
 Found by the S407.3 Profile D replay of v1.0.0-rc.13-dev (bashy 4c37c968) on Ubuntu 24.04 x86_64, 2026-10-25.
