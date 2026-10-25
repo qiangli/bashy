@@ -328,7 +328,9 @@ def inspect_windows_link_map(map_path: Path, built_exe: Path, build_output: str)
         raise RuntimeError("Windows build log does not identify one final whisper-cli.exe link with this map")
     members = {(m.group("archive"), m.group("member")) for m in ARCHIVE_MEMBER.finditer(contents)}
     if not members:
-        raise RuntimeError("Windows linker map contains no linked archive members")
+        sample = [line.strip() for line in contents.splitlines()
+                  if ".a" in line.lower() or ".lib" in line.lower()][:5]
+        raise RuntimeError(f"Windows linker map contains no linked archive members; sample={sample!r}")
     inventory = [
         {
             "archive": archive,
@@ -624,9 +626,11 @@ def _build_verified_source(
 
     link_inventory = None
     if os_name == "windows":
-        link_inventory = inspect_windows_link_map(map_path, built_exe, build_res.stdout + "\n" + build_res.stderr)
         link_map_file.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(map_path, link_map_file)
+        # Keep the raw map in the CI artifact even if classification fails;
+        # a failed parser must leave the actual linker evidence reviewable.
+        link_inventory = inspect_windows_link_map(map_path, built_exe, build_res.stdout + "\n" + build_res.stderr)
         if compute_sha256(link_map_file) != link_inventory["map_sha256"]:
             raise RuntimeError("retained Windows linker map SHA-256 mismatch")
 
