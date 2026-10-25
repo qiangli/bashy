@@ -1,0 +1,85 @@
+{
+  "schema": "s503-python-installed-four-target-independent-review-v1",
+  "run_id": 40216950282,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40216950282",
+  "run_conclusion": "success",
+  "candidate_commit": "8fc4dd3419697546f25a246be9a3200522480876",
+  "scope": "Current-policy Python.org 3.12.10 installed-interpreter research on four native disposable GitHub runners; before the notice classifier and preinstall notice-baseline correction.",
+  "verification": [
+    "All four native jobs completed successfully and retained bounded artifacts.",
+    "Downloaded all four artifacts; independently SHA-256 rehashed each result.json, every retained notice copy, and each retained install and interpreter-probe stdout/stderr file against its result.json digest.",
+    "Compared installer SHA-256, policy file hashes and target identity with reviewed artifact run 40216443981; checked installer and interpreter reported hashes, patch version, native process architecture, codec round trips, native signature results and installer deletion.",
+    "Compared Windows System32 and Python-local VC hashes to windows-external-runtime.json; verified both macOS framework package receipt install times changed."
+  ],
+  "targets": [
+    {
+      "target": "darwin/amd64",
+      "artifact_name": "s503-python-installed-macos-15-intel",
+      "artifact_id": 12608192321,
+      "result_json_sha256": "16ebb8b9cdef4cc38ad48fce286c7950f55870cc03fa212f3726bb312218723e",
+      "installation_kind": "reinstall_over_existing_ci_framework",
+      "installer_sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
+      "installed_python_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "process_machine": "x86_64",
+      "notice_files_retained": 45,
+      "reported_third_party_notice_candidates": 0,
+      "product_admitted": false,
+      "operator_admitted": false
+    },
+    {
+      "target": "darwin/arm64",
+      "artifact_name": "s503-python-installed-macos-15",
+      "artifact_id": 12608077222,
+      "result_json_sha256": "516a5ba6a0bda4f276c882d3f35253fb3a2efb414c7f6fe872e471b0c6d435ae",
+      "installation_kind": "reinstall_over_existing_ci_framework",
+      "installer_sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
+      "installed_python_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "process_machine": "arm64",
+      "notice_files_retained": 45,
+      "reported_third_party_notice_candidates": 0,
+      "product_admitted": false,
+      "operator_admitted": false
+    },
+    {
+      "target": "windows/amd64",
+      "artifact_name": "s503-python-installed-windows-2025",
+      "artifact_id": 12608281933,
+      "result_json_sha256": "05a837b4cfca800353295ace5a5d02dfa3abd0daad392e7f2f6bb5bba111f679",
+      "installation_kind": "fresh_install",
+      "installer_sha256": "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb",
+      "installed_python_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+      "process_machine": "AMD64",
+      "system32_msvcp140_sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+      "python_local_vcruntime140_sha256": "052ad6a20d375957e82aa6a3c441ea548d89be0981516ca7eb306e063d5027f4",
+      "notice_files_retained": 3,
+      "reported_third_party_notice_candidates": 0,
+      "product_admitted": false,
+      "operator_admitted": false
+    },
+    {
+      "target": "windows/arm64",
+      "artifact_name": "s503-python-installed-windows-11-arm",
+      "artifact_id": 12607828671,
+      "result_json_sha256": "d0d16f1be9ce97804cd493b3111e394ab2598cab9045df25211cc8b6e8489851",
+      "installation_kind": "fresh_install",
+      "installer_sha256": "377ac8fd478987940088e879441e702a71b53164d2a1e6f1d51ff77a7e470258",
+      "installed_python_sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+      "process_machine": "ARM64",
+      "system32_msvcp140_sha256": "167ceac85c2d726c4cd9e39b8881fafdc6de1520c0e67c4f6b271235f9d2a6c5",
+      "python_local_vcruntime140_sha256": "560cd0ab1ec81b8b2197b119e198453a9c23d2f9e846f15c79a26bf5d75b68c4",
+      "notice_files_retained": 3,
+      "reported_third_party_notice_candidates": 0,
+      "product_admitted": false,
+      "operator_admitted": false
+    }
+  ],
+  "limits": [
+    "The macOS hosts already contained the same Python 3.12.10 framework executable. Package receipt install times changed, but no fresh macOS framework installation or clean uninstall is proved; zero new Python package IDs were recorded.",
+    "The pre-correction notice classifier missed `_vendor` paths: macOS retained pip/_vendor and site-packages license files while reporting zero third-party candidates. Without a preinstall notice snapshot, this run cannot attribute those files to the Python.org package versus the runner image. The follow-up helper correction is a new candidate and needs its own native evidence.",
+    "Retained files do not include installer bytes or the installed interpreter and DLL binaries, so their reported hashes cannot be independently recomputed from the uploaded artifacts. The native job checked them at execution time.",
+    "The Windows probe explicitly LoadLibrary-resolves MSVCP140.dll and VCRUNTIME140.dll. Its paths and hashes prove resolution in that probe, not that both modules were imported before the probe.",
+    "No operator host, product installer, complete third-party license closure, Microsoft VC redistribution right, offline operator-host verification or uninstall/reinstall result was established."
+  ],
+  "product_admitted": false,
+  "operator_admitted": false
+}
