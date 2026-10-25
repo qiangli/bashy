@@ -1,0 +1,47 @@
+{
+  "candidate_commit": "380485d25bb14bd9a4b2246d5a3913c5a3e6d2fa",
+  "product_admitted": false,
+  "run_conclusion": "success",
+  "run_id": 40212690648,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40212690648",
+  "schema": "s503-python-host-plan-review-v1",
+  "scope": "six native plan and pre-artifact install rejection checks; CI Python launcher verified separately; no operator Python install",
+  "targets": [
+    {
+      "plan_status": "unadmitted",
+      "raw_file": "darwin-arm64.json",
+      "raw_sha256": "0d2662c89852e9569128c4769fc023287f6f4e5ee8f7f7b7f3816d21fa7a395d",
+      "target": "darwin/arm64"
+    },
+    {
+      "plan_status": "unadmitted",
+      "raw_file": "darwin-amd64.json",
+      "raw_sha256": "e296f27c6c808cac1b04141687df7a203a1b03480ffc5ea70fbad9eba52198d2",
+      "target": "darwin/amd64"
+    },
+    {
+      "plan_status": "local_source_build_unadmitted",
+      "raw_file": "linux-amd64.json",
+      "raw_sha256": "509263122aab94387d82e755983a38149c42d41e226c04e5dd2164f8d85f0e4f",
+      "target": "linux/amd64"
+    },
+    {
+      "plan_status": "local_source_build_unadmitted",
+      "raw_file": "linux-arm64.json",
+      "raw_sha256": "c83a32c927019c91bd9cc3bfb4ce5025629a024ffeaa512da0c82ab16b12ad53",
+      "target": "linux/arm64"
+    },
+    {
+      "plan_status": "unadmitted",
+      "raw_file": "windows-arm64.json",
+      "raw_sha256": "94a4e9ac12652e8549a87428362fadbfdd4daba3b66b4c83a17b3334c5d9c557",
+      "target": "windows/arm64"
+    },
+    {
+      "plan_status": "unadmitted",
+      "raw_file": "windows-amd64.json",
+      "raw_sha256": "398cdc15b6663aa71e3587c105846bbadbc8fa4b06e0d4afb849f0a7a127fb64",
+      "target": "windows/amd64"
+    }
+  ]
+}

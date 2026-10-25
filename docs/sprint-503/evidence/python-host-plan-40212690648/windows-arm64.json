@@ -1,0 +1,13 @@
+{
+  "schema": "s503-python-launcher-native-v1",
+  "target": "windows/arm64",
+  "runner_label": "windows-11-arm",
+  "candidate_commit": "380485d25bb14bd9a4b2246d5a3913c5a3e6d2fa",
+  "python_sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+  "policy_sha256": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+  "verified_interpreter_reached_adapter": true,
+  "changed_interpreter_rejected_before_exec": true,
+  "operator_host_plan_status": "unadmitted",
+  "unadmitted_host_install_rejected_before_artifact_access": true,
+  "scope": "external CI Python and local pre-exec byte guard; no product install or license admission"
+}

@@ -1,0 +1,13 @@
+{
+  "schema": "s503-python-launcher-native-v1",
+  "target": "darwin/arm64",
+  "runner_label": "macos-15",
+  "candidate_commit": "380485d25bb14bd9a4b2246d5a3913c5a3e6d2fa",
+  "python_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+  "policy_sha256": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+  "verified_interpreter_reached_adapter": true,
+  "changed_interpreter_rejected_before_exec": true,
+  "operator_host_plan_status": "unadmitted",
+  "unadmitted_host_install_rejected_before_artifact_access": true,
+  "scope": "external CI Python and local pre-exec byte guard; no product install or license admission"
+}
