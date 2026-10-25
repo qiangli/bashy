@@ -5,6 +5,7 @@
 - `plan-ycode-yolo.md` — Sprint 415: explicit Genie YOLO profile selection, recipe propagation and regression checks.
 - `plan-s407-carrier-fd-ownership.md` — Sprint 407 Story 1947: Linux descriptor leak reproduction, split carrier/interpreter ownership fix, and Profile D scheduler attribution.
 - `plan-s407-startup-cost.md` — Sprint 407 Story 1949: lazy runewidth fork, Linux startup gate, before/after timings, and certification replay boundary.
+- `plan-s407-agent-exec-latency.md` — Sprint 407 Story 1951: execution-history graph replay profile, delta-write fix, macOS/Linux timings, and gate evidence.
 
 - `plan-interactive-depth.md` — Sprint 379 Story 1511: shared PTY/ConPTY assertions, native execution evidence and declared interactive limitations.
 
