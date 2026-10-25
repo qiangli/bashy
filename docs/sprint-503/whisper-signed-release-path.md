@@ -10,7 +10,10 @@ members are retained. The build reports still say `product_admitted: false`.
 Create a reviewed, immutable `qiangli/bashy` tag matching
 `whisper-cpp-v1.9.5-bashy.<revision>` at the exact source commit. Run
 `.github/workflows/s503-whisper-release.yml` with `workflow_dispatch` **on
-that tag**, with the matching `release_tag` input. The workflow calls the
+that tag**, with the matching `release_tag` input. GitHub requires a manually
+dispatched workflow file to exist on the default branch before dispatch;
+register this workflow there before creating or dispatching the release tag
+([GitHub event documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch)). The workflow calls the
 native six-runner build at the tagged commit, verifies each native binary's
 GitHub attestation against the reusable build workflow, tag ref, source
 commit, and hosted-runner policy, stages the files below, signs
@@ -30,16 +33,20 @@ The release directory has exactly these data assets plus one
 | `whisper-cli-darwin-arm64` | `macos-15` native build |
 | `whisper-cli-windows-amd64.exe` | `windows-2025` native build |
 | `whisper-cli-windows-arm64.exe` | `windows-11-arm` native build |
-| `WHISPER-NOTICES.txt` | reviewed full third-party notices |
-| `whisper-release-manifest.json` | source commit, six binary digests, report digests, notice digest |
-| `whisper-build-evidence.tar.gz` | six reports and runner records; two Windows maps and inventories |
-| `SHA256SUMS` | hashes of the preceding nine assets |
+| `WHISPER-NOTICES.txt` | index of six binary-specific notice bundles and digests |
+| `WHISPER-NOTICES-<os>-<arch>.txt` (six) | exact notices emitted by each native build |
+| `whisper-notices-<os>-<arch>.json` (six) | six per-target notice evidence manifests |
+| `whisper-release-manifest.json` | source commit, six binary digests, report and notice digests |
+| `whisper-build-evidence.tar.gz` | six reports and runner records, six notice bundles and license files, two Windows maps, inventories, and toolchain reports |
+| `SHA256SUMS` | hashes of the preceding 21 assets |
 
 The staging script verifies the runner/source commit, pinned whisper.cpp
 archive, build policy, binary bytes and size, and both Windows linker maps
-against their inventories before naming release assets. The maps and build
-reports are retained in the signed release evidence archive; the signed
-release manifest records each report digest. Native binary attestations are
+against their inventories before naming release assets. It requires all six
+notice manifests, compares their binary/report and source pin digests, checks
+each pinned notice file byte for byte, and reconstructs each bundle text.
+The maps, build reports, and notice files are retained in the signed release
+evidence archive; the signed release manifest records their digests. Native binary attestations are
 also stored by GitHub for the tagged build run.
 
 ## Installation pin
@@ -59,8 +66,8 @@ committed, `EnsureWhisperCpp` refuses the install.
 
 ## Open admission gates
 
-- Complete and review `examples/transcribe/dependencies/WHISPER-NOTICES.txt`
-  from the exact linked components. The conservative Windows inventory in
+- Complete and review the six generated target notice sets and their open
+  gates. The conservative Windows inventory in
   `docs/sprint-503/evidence/windows-static-whisper-license-review.md`
   identifies the LLVM, MinGW-w64, whisper.cpp, and GGML notice candidates;
   Cephes and other unresolved license points still need disposition.

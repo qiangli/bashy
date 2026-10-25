@@ -72,7 +72,6 @@ jobs:
           if [[ "$PUBLISH" == true ]]; then args+=(--require-admitted); fi
           python3 examples/transcribe/dependencies/prepare_whisper_release.py \
             --artifacts artifacts \
-            --notices examples/transcribe/dependencies/WHISPER-NOTICES.txt \
             --output dist --source-commit "$GITHUB_SHA" "${args[@]}"
           (cd dist && sha256sum -c SHA256SUMS --status)
       - uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
@@ -83,7 +82,7 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          for asset in WHISPER-NOTICES.txt whisper-release-manifest.json whisper-build-evidence.tar.gz whisper-cli-* SHA256SUMS; do
+          for asset in WHISPER-NOTICES*.txt whisper-notices-*.json whisper-release-manifest.json whisper-build-evidence.tar.gz whisper-cli-* SHA256SUMS; do
             cosign sign-blob --yes --bundle "$asset.sigstore.json" "$asset"
             cosign verify-blob --bundle "$asset.sigstore.json" \
               --certificate-identity "$SIGNING_IDENTITY" \
@@ -121,7 +120,7 @@ jobs:
           set -euo pipefail
           cd dist
           sha256sum -c SHA256SUMS --status
-          for asset in WHISPER-NOTICES.txt whisper-release-manifest.json whisper-build-evidence.tar.gz whisper-cli-* SHA256SUMS; do
+          for asset in WHISPER-NOTICES*.txt whisper-notices-*.json whisper-release-manifest.json whisper-build-evidence.tar.gz whisper-cli-* SHA256SUMS; do
             cosign verify-blob --bundle "$asset.sigstore.json" \
               --certificate-identity "$SIGNING_IDENTITY" \
               --certificate-oidc-issuer "$SIGNING_ISSUER" "$asset"
