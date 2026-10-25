@@ -5,6 +5,21 @@
     "AMD64": {
       "python_version": "3.12.10",
       "python_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+      "python_official_package": {
+        "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.zip",
+        "sha256": "8649692de846c56a7189d6dae5c322ab20deb1b5908b6f39426b62a36f39415d",
+        "note": "Official Python install-manager package; its python.exe member matches python_sha256. Operator installs externally; this project does not package its VC DLLs."
+      },
+      "python_official_installer": {
+        "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.exe",
+        "sha256": "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb"
+      },
+      "deno": {
+        "asset": "deno-x86_64-pc-windows-msvc.zip",
+        "triple": "x86_64-pc-windows-msvc",
+        "archive_sha256": "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf",
+        "executable_sha256": "924397800533d3eb0ed0c889b20ad70e18b970d93acd8135bc043f425e528266"
+      },
       "system32": {
         "MSVCP140.dll": {"version": "14.51.36247.0", "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca"},
         "VCRUNTIME140.dll": {"version": "14.51.36247.0", "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"}
@@ -13,6 +28,21 @@
     "ARM64": {
       "python_version": "3.12.10",
       "python_sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+      "python_official_package": {
+        "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-arm64.zip",
+        "sha256": "20a5b1a707d899ffdfc5e3086d7372f7cc95eeea344d48ae256047cb7075cf63",
+        "note": "Official Python install-manager package; its python.exe member matches python_sha256. Operator installs externally; this project does not package its VC DLLs."
+      },
+      "python_official_installer": {
+        "url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-arm64.exe",
+        "sha256": "377ac8fd478987940088e879441e702a71b53164d2a1e6f1d51ff77a7e470258"
+      },
+      "deno": {
+        "asset": "deno-aarch64-pc-windows-msvc.zip",
+        "triple": "aarch64-pc-windows-msvc",
+        "archive_sha256": "b413b92b735b50c198e8fe3b85af1aa50e29d5f72e229aab701d132286e14cef",
+        "executable_sha256": "40d161bc35657cc7432a2e3832290922939cd63fddd29f66db2261d291e42478"
+      },
       "system32": {
         "MSVCP140.dll": {"version": "14.51.36247.0", "sha256": "167ceac85c2d726c4cd9e39b8881fafdc6de1520c0e67c4f6b271235f9d2a6c5"},
         "VCRUNTIME140.dll": {"version": "14.51.36247.0", "sha256": "3c56f4167e2b3d8e6338497731e6aae8cd7ec46bd6789f9423a8d9cf9a630310"}

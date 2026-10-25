@@ -69,9 +69,18 @@ class ExternalWindowsRuntimeTests(unittest.TestCase):
     def test_committed_policy_has_exact_pins_for_both_windows_architectures(self):
         policy = json.loads(check.POLICY.read_text(encoding="utf-8"))
         self.assertEqual(set(policy["targets"]), {"AMD64", "ARM64"})
-        for target in policy["targets"].values():
+        reviewed_assets = {"AMD64": ("x86_64-pc-windows-msvc", "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf"),
+                           "ARM64": ("aarch64-pc-windows-msvc", "b413b92b735b50c198e8fe3b85af1aa50e29d5f72e229aab701d132286e14cef")}
+        for arch, target in policy["targets"].items():
             self.assertEqual(target["python_version"], "3.12.10")
             self.assertTrue(check._sha_pin(target["python_sha256"]))
+            self.assertEqual(target["deno"]["triple"], reviewed_assets[arch][0])
+            self.assertEqual(target["deno"]["asset"], "deno-" + reviewed_assets[arch][0] + ".zip")
+            self.assertEqual(target["deno"]["archive_sha256"], reviewed_assets[arch][1])
+            self.assertTrue(check._sha_pin(target["deno"]["executable_sha256"]))
+            self.assertTrue(target["python_official_package"]["url"].startswith("https://www.python.org/ftp/python/3.12.10/"))
+            self.assertTrue(check._sha_pin(target["python_official_package"]["sha256"]))
+            self.assertTrue(check._sha_pin(target["python_official_installer"]["sha256"]))
             self.assertEqual(set(target["system32"]), set(check.VC_DLLS))
             for pin in target["system32"].values():
                 self.assertTrue(check._sha_pin(pin["sha256"]))
