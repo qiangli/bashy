@@ -33,8 +33,29 @@ class RuntimeProbeTests(unittest.TestCase):
         other.write_bytes(b"host-python")
         with mock.patch.dict(os.environ, {"RUNNER_TOOL_CACHE": str(self.cache)}), \
              mock.patch.object(probe_runtime.sys, "executable", str(other)):
-            with self.assertRaisesRegex(RuntimeError, "not inside"):
+            with self.assertRaisesRegex(RuntimeError, "not linked"):
                 probe_runtime.probe()
+
+    def test_macos_framework_binary_requires_toolcache_link(self):
+        framework = self.root / "Library" / "Frameworks" / "python"
+        framework.parent.mkdir(parents=True)
+        framework.write_bytes(b"framework-python")
+        selected = self.cache / "versions" / "3.12.10" / "arm64"
+        (selected / "bin").mkdir(parents=True)
+        launcher = selected / "bin" / "python3.12"
+        launcher.symlink_to(framework)
+        with mock.patch.dict(os.environ, {"RUNNER_TOOL_CACHE": str(self.cache),
+                                      "pythonLocation": str(selected)}), \
+             mock.patch.object(probe_runtime.sys, "executable", str(framework)), \
+             mock.patch.object(probe_runtime.platform, "system", return_value="Darwin"), \
+             mock.patch.object(probe_runtime.platform, "python_version", return_value="3.12.10"):
+            result = probe_runtime.probe()
+            self.assertEqual(result["python"]["tool_cache_link"], str(launcher))
+            launcher.unlink()
+            with self.assertRaisesRegex(RuntimeError, "not linked"):
+                probe_runtime.probe()
+        self.assertEqual(result["python"]["sha256"],
+                         hashlib.sha256(b"framework-python").hexdigest())
 
     def test_windows_requires_both_system32_dlls_and_records_versions(self):
         system32 = self.root / "Windows" / "System32"
