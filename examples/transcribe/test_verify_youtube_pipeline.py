@@ -141,6 +141,18 @@ class GateValidationTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "owned work"):
                 gate.assert_no_owned_temp(outdir, tempdir)
 
+    def test_valid_function_receipts_accept_null_failed_list(self):
+        with tempfile.TemporaryDirectory() as root:
+            ledger = Path(root) / "attest" / "transcribe_pipeline.jsonl"
+            ledger.parent.mkdir()
+            record = {"status": 0, "attest": {"Valid": True, "Skill": "transcribe-pipeline",
+                                               "Passed": ["stage"], "Failed": None,
+                                               "Effects": ["read"]}}
+            ledger.write_text(json.dumps(record) + "\n" + json.dumps(record) + "\n")
+            result = gate.verify_function_receipts({"BASHY_SKILLS_DIR": root})
+            self.assertEqual(result["count"], 2)
+            self.assertEqual(result["identity"], "transcribe-pipeline")
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

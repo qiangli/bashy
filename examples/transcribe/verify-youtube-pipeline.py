@@ -290,8 +290,9 @@ def verify_function_receipts(env):
     require(ledger.is_file(), "Bash# function receipt ledger missing")
     records = [json.loads(line) for line in ledger.read_text().splitlines() if line.strip()]
     require(len(records) >= 2, "script/skill function receipts missing")
-    projection = lambda r: (r["attest"]["Skill"], tuple(r["attest"]["Passed"]),
-                            tuple(r["attest"]["Failed"]), tuple(r["attest"]["Effects"]))
+    projection = lambda r: (r["attest"]["Skill"], tuple(r["attest"].get("Passed") or ()),
+                            tuple(r["attest"].get("Failed") or ()),
+                            tuple(r["attest"].get("Effects") or ()))
     require(all(r.get("status") == 0 and r.get("attest", {}).get("Valid") is True for r in records),
             "function receipt invalid")
     require(len(set(map(projection, records))) == 1, "script/skill function receipt identity differs")
