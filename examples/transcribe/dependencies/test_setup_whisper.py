@@ -71,6 +71,22 @@ class SourceSetupTests(unittest.TestCase):
         )
         self.assertEqual(receipt["executable_sha256"], self.digest)
 
+    def test_existing_receipt_reuses_cached_binary_without_build(self):
+        receipt = setup_whisper.record_source_build(self.report, self.cache)
+        with patch.object(build_whisper, "build_whisper", side_effect=AssertionError("unexpected build")):
+            self.assertEqual(setup_whisper.verify_existing(self.cache), receipt)
+
+    def test_existing_receipt_rejects_changed_binary_or_target(self):
+        receipt = setup_whisper.record_source_build(self.report, self.cache)
+        self.cli.write_bytes(b"x" * self.report["executable_bytes"])
+        with self.assertRaisesRegex(RuntimeError, "executable differs"):
+            setup_whisper.verify_existing(self.cache)
+        self.cli.write_bytes(b"reviewed native binary")
+        receipt["platform"] = "linux/arm64"
+        (self.cli.parent / setup_whisper.RECEIPT_NAME).write_text(json.dumps(receipt))
+        with self.assertRaisesRegex(RuntimeError, "target and source pin"):
+            setup_whisper.verify_existing(self.cache)
+
 
 if __name__ == "__main__":
     unittest.main()

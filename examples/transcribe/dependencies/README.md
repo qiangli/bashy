@@ -56,6 +56,19 @@ archive from `binmgr.EnsureWhisperCppSource` may be supplied with
 `--source-archive PATH --skip-download`; the recipe still verifies its pinned
 length and SHA-256 before extraction.
 
+On a later session, run:
+
+```sh
+python3 examples/transcribe/dependencies/setup_whisper.py --verify-existing
+```
+
+This checks that the native target, v1.9.5 source pin, local
+receipt, cached executable size and SHA-256 still agree. It prints the same
+registration pair without downloading or rebuilding. On Windows, invoke this
+with the selected external `python.exe` path in place of `python3`. This is a
+local cache identity check; the receipt itself is not signed or a substitute
+for a release artifact and license review.
+
 This is an explicit source-build setup command. Ordinary transcription,
 adapter registration and Bashy startup do not invoke it or compile a tool.
 The receipt is a local byte-identity record, not a signed release asset or

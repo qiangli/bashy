@@ -12,6 +12,7 @@ import argparse
 import json
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 from typing import Any
@@ -20,6 +21,7 @@ import build_whisper
 
 
 RECEIPT_NAME = "source-build-receipt.json"
+SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 
 
 def _atomic_json(path: Path, value: dict[str, Any]) -> None:
@@ -105,18 +107,52 @@ def setup(
     return record_source_build(report, cache_dir)
 
 
+def verify_existing(cache_dir: Path | None = None) -> dict[str, Any]:
+    """Check a prior local source-build receipt and binary without rebuilding."""
+    os_name, arch_name, runner_label = build_whisper.detect_target()
+    cli = build_whisper.get_default_coordination_cli_path(os_name, cache_dir).resolve()
+    receipt_path = cli.parent / RECEIPT_NAME
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    if not isinstance(receipt, dict) or any((
+        receipt.get("schema") != "s503-whisper-source-setup-v1",
+        receipt.get("install_method") != "explicit_pinned_source_build",
+        receipt.get("platform") != f"{os_name}/{arch_name}",
+        receipt.get("runner_label") != runner_label,
+        receipt.get("whisper_version") != build_whisper.PINNED_VERSION,
+        receipt.get("source_archive_sha256") != build_whisper.PINNED_SOURCE_SHA256,
+        receipt.get("executable_path") != str(cli),
+        receipt.get("receipt_path") != str(receipt_path),
+    )):
+        raise RuntimeError("cached Whisper source-build receipt does not match this target and source pin")
+    digest = receipt.get("executable_sha256")
+    size = receipt.get("executable_bytes")
+    if (not isinstance(digest, str) or not SHA256.fullmatch(digest)
+            or type(size) is not int or size <= 0
+            or receipt.get("registration") != {
+                "WHISPER_PATH": str(cli), "WHISPER_SHA256": digest,
+            }):
+        raise RuntimeError("cached Whisper source-build receipt has invalid registration or byte pins")
+    if not cli.is_file() or cli.stat().st_size != size or build_whisper.compute_sha256(cli) != digest:
+        raise RuntimeError("cached Whisper executable differs from its source-build receipt")
+    return receipt
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Explicitly build and record pinned whisper.cpp v1.9.5")
     parser.add_argument("--work-dir", type=Path, default=Path(tempfile.gettempdir()) / "s503-whisper-setup")
     parser.add_argument("--cache-dir", type=Path)
     parser.add_argument("--source-archive", type=Path)
     parser.add_argument("--skip-download", action="store_true")
+    parser.add_argument("--verify-existing", action="store_true",
+                        help="check a cached source-build receipt and binary without network or compilation")
     parser.add_argument("--parallel", type=int, default=min(os.cpu_count() or 4, 8))
     args = parser.parse_args()
     if args.parallel <= 0:
         parser.error("--parallel must be positive")
     try:
-        receipt = setup(args.work_dir, args.cache_dir, args.source_archive, args.skip_download, args.parallel)
+        receipt = (verify_existing(args.cache_dir) if args.verify_existing else
+                   setup(args.work_dir, args.cache_dir, args.source_archive,
+                         args.skip_download, args.parallel))
     except (OSError, ValueError, RuntimeError) as exc:
         print(f"whisper source setup rejected: {exc}", file=sys.stderr)
         return 1
