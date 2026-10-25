@@ -22,9 +22,9 @@ shortened hash must be measured independently; the two URLs may produce equal
 bytes. Each of the six `offline_canary` entries requires a reviewed OS policy
 method, enforcer SHA-256 and external probe command. The canary report itself
 must be generated on that runner, with the policy still active during inference.
-The existing Windows amd64 and Darwin arm64 Deno pins cover only two of six
-labels. The operator excerpt and six external offline policy implementations
-are not recorded in the repository.
+All six Deno/EJS admissions are recorded in `docs/sprint-503-deno-admission.md`
+and the umbrella evidence for run `40196010350`. The operator excerpt and six
+external offline policy implementations are not recorded in the repository.
 
 After admission, each native job verifies OS, Python and Go architecture,
 builds candidate Bashy with `scripts/go-product.sh`, builds the seed helper and
