@@ -107,7 +107,17 @@ STAGE
 chmod +x "$work/fixture-stage.sh"
 for pair in 'fixture-site-source fixture-site' 'fixture-fpcm-decoder fixture-fpcm' 'fixture-infer fixture-infer' 'fixture-export fixture-export'; do
     set -- $pair
-    "$BASHY_BIN" commands add "$1" --set exec.0=/bin/sh --set "exec.1=$work/fixture-stage.sh" --set "exec.2=$2" --set effects.0=read --set effects.1=write --set effects.2=net >/dev/null
+    case "$2" in
+      fixture-site) role=acquire ;;
+      fixture-fpcm) role=decode ;;
+      fixture-infer) role=infer ;;
+      fixture-export) role=export ;;
+    esac
+    if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" = 1 ]; then
+        "$BASHY_BIN" commands add "$1" --set exec.0=/bin/sh --set "exec.1=$work/fixture-stage.sh" --set "exec.2=$2" --set effects.0=read --set effects.1=write --set effects.2=net --set "provides.0=transcribe.$role" >/dev/null
+    else
+        "$BASHY_BIN" commands add "$1" --set exec.0=/bin/sh --set "exec.1=$work/fixture-stage.sh" --set "exec.2=$2" --set effects.0=read --set effects.1=write --set effects.2=net >/dev/null
+    fi
 done
 
 pipeline="$root/examples/transcribe/pipeline.bsh"
@@ -136,9 +146,17 @@ if [ "${1:-}" = transcribe ]; then
     exec "$BASHY_BIN" "$provider" "$1"
   fi
   if [ "${1:-}" = select ]; then
-    shift; stage=$1; request=$2
+    shift; stage=$1; shift
+    explicit=
+    if [ "${1:-}" = --provider ]; then
+      explicit=$2; shift 2
+    fi
+    request=$1
     FIXTURE_STAGE=$stage; export FIXTURE_STAGE
     "$BASHY_BIN" jq -e '.stage == env.FIXTURE_STAGE' "$request" >/dev/null
+    if [ -n "$explicit" ]; then
+      echo "$explicit"; exit 0
+    fi
     if [ "${FIXTURE_SELECTOR_AMBIGUOUS:-0}" = 1 ]; then
       echo "ambiguous fixture $stage adapters" >&2; exit 3
     fi
