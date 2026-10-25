@@ -74,7 +74,13 @@ case "$expected" in
 esac
 [ "${#expected}" -eq 64 ] || fail 'expected Python hash is invalid'
 actual=$(sha256sum -- "$python") || fail 'cannot hash selected Python'
-[ "${actual%% *}" = "$expected" ] ||
-    fail "selected Python SHA-256 differs from reviewed bytes (actual=${actual%% *}; expected=$expected; path=$python)"
+actual_hash=${actual%% *}
+# GNU-style sum output prefixes the whole line with a backslash when the
+# filename itself contains backslashes, as native Windows paths do.
+case "$actual_hash" in \\*) actual_hash=${actual_hash#\\} ;; esac
+case "$actual_hash" in *[!0123456789abcdef]*|'') fail 'selected Python hash output is invalid' ;; esac
+[ "${#actual_hash}" -eq 64 ] || fail 'selected Python hash output is invalid'
+[ "$actual_hash" = "$expected" ] ||
+    fail "selected Python SHA-256 differs from reviewed bytes (actual=$actual_hash; expected=$expected; path=$python)"
 
 exec "$python" "$script_dir/source_youtube.py" "$1"
