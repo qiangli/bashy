@@ -6,6 +6,10 @@ on:
     paths:
       - .github/workflows/s503-runner-identity.yml
       - docs/sprint-503/S503.8-runner-identity.md
+      - examples/transcribe/dependencies/prepare_python_host.sh
+      - examples/transcribe/dependencies/operator-python-admission.json
+      - examples/transcribe/dependencies/external-python-runtime.json
+      - examples/transcribe/dependencies/windows-external-runtime.json
   workflow_dispatch:
 
 permissions:

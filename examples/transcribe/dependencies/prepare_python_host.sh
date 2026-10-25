@@ -114,10 +114,10 @@ case "$target" in
             fail 'Windows CI policies disagree on interpreter hash'
         [ "$(jq -er ".targets.$arch_key.python_version" "$windows_policy")" = "$version" ] ||
             fail 'Windows policies disagree on interpreter version'
-        [ "$(jq -er ".targets.$arch_key.python_official_package.url" "$windows_policy")" =
+        [ "$(jq -er ".targets.$arch_key.python_official_package.url" "$windows_policy")" = \
           "$(jq -er ".targets[\"$target\"].archive_url" "$policy")" ] ||
             fail 'Windows policies disagree on official package URL'
-        [ "$(jq -er ".targets.$arch_key.python_official_package.sha256" "$windows_policy")" =
+        [ "$(jq -er ".targets.$arch_key.python_official_package.sha256" "$windows_policy")" = \
           "$(jq -er ".targets[\"$target\"].archive_sha256" "$policy")" ] ||
             fail 'Windows policies disagree on official package hash'
         installer_url=$(jq -er ".targets.$arch_key.python_official_installer.url" "$windows_policy") ||
