@@ -69,8 +69,12 @@ jobs:
             TRANSLATED="$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)"
           fi
           NODE_VERSION="$(node --version)"
-          GO_VERSION="$(go version)"
-          GO_HOST_ARCH="$(go env GOHOSTARCH)"
+          GO_VERSION=missing
+          GO_HOST_ARCH=missing
+          if command -v go >/dev/null 2>&1; then
+            GO_VERSION="$(go version)"
+            GO_HOST_ARCH="$(go env GOHOSTARCH)"
+          fi
           BASH_VERSION="$(bash --version | head -n 1)"
           export ACTUAL_OS ACTUAL_ARCH RAW_ARCH PROCESS_ARCH TRANSLATED NODE_VERSION GO_VERSION GO_HOST_ARCH BASH_VERSION
 
@@ -108,7 +112,7 @@ jobs:
             echo "Translated process cannot establish native execution" >&2
             exit 1
           fi
-          if [[ "$GO_HOST_ARCH" != "$EXPECTED_ARCH" ]]; then
+          if [[ "$GO_HOST_ARCH" != missing && "$GO_HOST_ARCH" != "$EXPECTED_ARCH" ]]; then
             echo "Go toolchain is not native: $GO_HOST_ARCH on $EXPECTED_ARCH" >&2
             exit 1
           fi
