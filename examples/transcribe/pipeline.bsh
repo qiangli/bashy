@@ -1,0 +1,128 @@
+#!/usr/bin/env -S bashy --bashsharp
+# One editable Bash# body for the transcribe-pipeline command and skill.
+# Stage data follows docs/transcribe-contract.md; argv is never shell source.
+set -e
+
+usage() {
+    echo 'Usage: transcribe-pipeline [--model ID] [--language TAG] [--format txt|srt|vtt] [--output PATH] [--source NAME] [--decoder NAME] [--provider NAME] [--exporter NAME] [--device cpu] FILE-OR-URL' >&2
+    exit 2
+}
+model=default language=auto format=txt output= source= decoder= provider= exporter= device=cpu
+while (( $# )); do
+    case "$1" in
+        --model|--language|--format|--output|--source|--decoder|--provider|--exporter|--device)
+            (( $# >= 2 )) || usage
+            case "$1" in
+                --model) model=$2 ;; --language) language=$2 ;; --format) format=$2 ;;
+                --output) output=$2 ;; --source) source=$2 ;; --decoder) decoder=$2 ;;
+                --provider) provider=$2 ;; --exporter) exporter=$2 ;; --device) device=$2 ;;
+            esac
+            shift 2 ;;
+        --) shift; break ;;
+        -*) usage ;;
+        *) break ;;
+    esac
+done
+(( $# == 1 )) || usage
+input=$1
+[[ -n $input && -n $model && -n $language && $device == cpu ]] || usage
+case "$format" in txt|srt|vtt) ;; *) usage ;; esac
+
+# S503.2 owns automatic selection. Explicit names keep fixture proof honest.
+for selected in "$source" "$decoder" "$provider" "$exporter"; do
+    if [[ -z $selected ]]; then
+        echo 'transcribe-pipeline: automatic adapter selection is unavailable; pass --source, --decoder, --provider, and --exporter (S503.2)' >&2
+        exit 126
+    fi
+done
+
+# Export beside the requested path and rename only after validation.
+if [[ -z $output ]]; then
+    case "$input" in
+        *://*) output=transcript.$format ;;
+        *) name=${input##*/}; name=${name%.*}; output=${name:-transcript}.$format ;;
+    esac
+fi
+case "$output" in /*) final=$output ;; *) final=$PWD/$output ;; esac
+parent=${final%/*}
+[[ -n $parent ]] || parent=/
+[[ -d $parent ]] || { echo "transcribe-pipeline: output directory does not exist: $parent" >&2; exit 2; }
+
+stage_run() {
+    local stage=$1 selected=$2 request=$3 result=$4 path
+    export TRANSCRIBE_JSON_STAGE="$stage"
+    if ! bashy transcribe stage "$stage" --provider "$selected" "$request" > "$result"; then
+        echo "transcribe-pipeline: $stage provider $selected failed" >&2
+        return 1
+    fi
+    if ! jq -e '
+        .version == "bashy-transcribe-stage-v1" and
+        .stage == env.TRANSCRIBE_JSON_STAGE and .error == null and
+        (if env.TRANSCRIBE_JSON_STAGE == "infer" then
+            (.segments | type == "array" and length > 0 and
+             all(.[]; (.start_ms | type == "number") and
+                      (.end_ms | type == "number") and
+                      (.text | type == "string" and length > 0) and
+                      .start_ms == (.start_ms | floor) and
+                      .end_ms == (.end_ms | floor) and
+                      .start_ms >= 0 and .end_ms > .start_ms) and
+             ([.[].start_ms] == ([.[].start_ms] | sort)))
+         else
+            (.artifacts | type == "array" and length > 0 and
+             all(.[]; (.path | type == "string" and length > 0)))
+         end)' "$result" >/dev/null; then
+        echo "transcribe-pipeline: $stage provider $selected returned an invalid v1 result" >&2
+        return 1
+    fi
+    if [[ $stage == acquire || $stage == decode ]]; then
+        path=$(jq -r '.artifacts[0].path' "$result") || return 1
+        [[ -f $path ]] || { echo "transcribe-pipeline: $stage artifact is missing: $path" >&2; return 1; }
+    fi
+}
+
+cleanup() {
+    [[ -z ${work:-} ]] || rm -rf "$work"
+    [[ -z ${outdir:-} ]] || rm -rf "$outdir"
+}
+
+@guard("read,write,destroy,exec,net")
+@effects("read,write,destroy,exec,net")
+@require('test -n "$1"')
+@ensure('test "$STATUS" -eq 0 && test "$published" -eq 1 && test -s "$final"')
+agentic function transcribe_pipeline() {
+    published=0
+    work=$(mktemp -d) || return 1
+    trap cleanup EXIT
+    outdir=$(mktemp -d "$parent/.transcribe.XXXXXXXX") || return 1
+    trap 'exit 130' INT TERM HUP
+    export TRANSCRIBE_JSON_WORK_DIR="$work"
+    export TRANSCRIBE_JSON_INPUT="$input" TRANSCRIBE_JSON_MODEL="$model"
+    export TRANSCRIBE_JSON_LANGUAGE="$language" TRANSCRIBE_JSON_FORMAT="$format"
+    export TRANSCRIBE_JSON_OUTPUT="$outdir/transcript.$format"
+
+    jq -n '{version:"bashy-transcribe-stage-v1",stage:"acquire",input:env.TRANSCRIBE_JSON_INPUT,
+            work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' > "$work/acquire-in.json"
+    stage_run acquire "$source" "$work/acquire-in.json" "$work/acquire-out.json" || return 1
+    jq '{version:"bashy-transcribe-stage-v1",stage:"decode",artifacts:.artifacts,media:.media,
+         work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' "$work/acquire-out.json" > "$work/decode-in.json"
+    stage_run decode "$decoder" "$work/decode-in.json" "$work/decode-out.json" || return 1
+    jq '{version:"bashy-transcribe-stage-v1",stage:"infer",artifacts:.artifacts,media:.media,
+         model:env.TRANSCRIBE_JSON_MODEL,language:env.TRANSCRIBE_JSON_LANGUAGE,
+         work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' "$work/decode-out.json" > "$work/infer-in.json"
+    stage_run infer "$provider" "$work/infer-in.json" "$work/infer-out.json" || return 1
+    jq '{version:"bashy-transcribe-stage-v1",stage:"export",segments:.segments,media:.media,
+         format:env.TRANSCRIBE_JSON_FORMAT,output:env.TRANSCRIBE_JSON_OUTPUT}' \
+         "$work/infer-out.json" > "$work/export-in.json"
+    stage_run export "$exporter" "$work/export-in.json" "$work/export-out.json" || return 1
+
+    local reported
+    reported=$(jq -r '.artifacts[0].path' "$work/export-out.json") || return 1
+    [[ $reported == "$TRANSCRIBE_JSON_OUTPUT" && -s $reported ]] || {
+        echo 'transcribe-pipeline: export provider did not create the requested nonempty artifact' >&2
+        return 1
+    }
+    mv -f "$reported" "$final" || return 1
+    published=1
+    echo "$final"
+}
+agentic { transcribe_pipeline "$input"; }
