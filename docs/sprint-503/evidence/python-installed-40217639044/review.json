@@ -1,0 +1,80 @@
+{
+  "schema": "s503-python-installed-notice-baseline-independent-review-v1",
+  "run_id": 40217639044,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40217639044",
+  "run_conclusion": "success",
+  "candidate_commit": "ca8a40955fca622b82aec2ab64a07c3e309ad6e7",
+  "scope": "Four-native-target Python.org 3.12.10 installed-interpreter research after correcting the `_vendor` notice candidate classifier and adding preinstall notice snapshots. No operator-host installation or product admission.",
+  "verification": [
+    "All four native jobs completed successfully and retained bounded artifacts.",
+    "Downloaded all four artifacts; rehashed each result.json, every retained before and after notice copy, and each install and interpreter-probe stdout/stderr file against its result.json digest.",
+    "Compared installer SHA-256 and policy file hashes against artifact review 40216443981; checked reported installed interpreter hashes, native process architecture, versions, codec round trips, signatures, installer deletion and Windows VC identities against current policy.",
+    "Reconciled notice-delta counts with the before and after inventories."
+  ],
+  "targets": [
+    {
+      "target": "darwin/amd64",
+      "artifact_name": "s503-python-installed-macos-15-intel",
+      "artifact_id": 12607568921,
+      "result_json_sha256": "02e1724ef91a6c21d62ee1feb8ab8e96a06d4c524b97ab8dd7faae78cf0ed073",
+      "installation_kind": "reinstall_over_existing_ci_framework",
+      "notice_files_before": 45,
+      "notice_files_after": 45,
+      "third_party_candidates_before": 38,
+      "third_party_candidates_after": 38,
+      "notice_delta": {"unchanged": 45, "changed": 0, "new_paths": 0, "removed": 0},
+      "product_admitted": false,
+      "operator_admitted": false
+    },
+    {
+      "target": "darwin/arm64",
+      "artifact_name": "s503-python-installed-macos-15",
+      "artifact_id": 12607853799,
+      "result_json_sha256": "f6e1e205d17c597459d902d6afbcf4a82348aec9f27465fe3e1e1bd004a78b89",
+      "installation_kind": "reinstall_over_existing_ci_framework",
+      "notice_files_before": 45,
+      "notice_files_after": 45,
+      "third_party_candidates_before": 38,
+      "third_party_candidates_after": 38,
+      "notice_delta": {"unchanged": 45, "changed": 0, "new_paths": 0, "removed": 0},
+      "product_admitted": false,
+      "operator_admitted": false
+    },
+    {
+      "target": "windows/amd64",
+      "artifact_name": "s503-python-installed-windows-2025",
+      "artifact_id": 12608048955,
+      "result_json_sha256": "58e5b6a309c87fc43d90c067619a7d0da2bba936e6776d4e83e58efe8b9a6934",
+      "installation_kind": "fresh_install",
+      "notice_files_before": 0,
+      "notice_files_after": 3,
+      "third_party_candidates_before": 0,
+      "third_party_candidates_after": 0,
+      "notice_delta": {"unchanged": 0, "changed": 0, "new_paths": 3, "removed": 0},
+      "product_admitted": false,
+      "operator_admitted": false
+    },
+    {
+      "target": "windows/arm64",
+      "artifact_name": "s503-python-installed-windows-11-arm",
+      "artifact_id": 12608303620,
+      "result_json_sha256": "c860175c49d1896e6d8ddbe2220eea2ad5360439e78735ca564c92d2ca2e722d",
+      "installation_kind": "fresh_install",
+      "notice_files_before": 0,
+      "notice_files_after": 3,
+      "third_party_candidates_before": 0,
+      "third_party_candidates_after": 0,
+      "notice_delta": {"unchanged": 0, "changed": 0, "new_paths": 3, "removed": 0},
+      "product_admitted": false,
+      "operator_admitted": false
+    }
+  ],
+  "limits": [
+    "On each macOS runner the Python 3.12 framework existed before reinstall and all 45 retained notice paths and hashes were already present. The corrected candidate count identifies 38 third-party notice paths; it does not prove those files came from the 3.12.10 package or that a fresh macOS host installs cleanly.",
+    "Windows notice paths were absent under the private target before installation and three paths appeared afterward on each architecture. The candidate count is a path-name heuristic, not a complete license inventory; OpenSSL and app-local Microsoft runtime terms still need review.",
+    "The artifacts retain notice copies, not the installer, interpreter or loaded DLL bytes. Their native SHA-256 measurements were enforced by the job but cannot be rehashed from the uploaded artifacts.",
+    "No operator host, complete third-party license closure, Microsoft VC redistribution right, offline operator-host recheck, uninstall/reset or product installer acceptance was established."
+  ],
+  "product_admitted": false,
+  "operator_admitted": false
+}
