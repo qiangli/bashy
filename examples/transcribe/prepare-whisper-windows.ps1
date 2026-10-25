@@ -55,8 +55,8 @@ if (-not (Test-Path -LiteralPath $srcDir)) {
 }
 
 # Resolve toolchain provisioned by bashy
-$cmakeBin = 'C:\Users\liqia\AppData\Local\bashy\bin\cmake\4.3.3\cmake-4.3.3-windows-x86_64\bin'
-$clangBin = 'C:\Users\liqia\AppData\Local\bashy\bin\clang\20260616\llvm-mingw-20260616-ucrt-x86_64\bin'
+$cmakeBin = Join-Path $env:LOCALAPPDATA 'bashy\bin\cmake\4.3.3\cmake-4.3.3-windows-x86_64\bin'
+$clangBin = Join-Path $env:LOCALAPPDATA 'bashy\bin\clang\20260616\llvm-mingw-20260616-ucrt-x86_64\bin'
 
 if (-not (Test-Path -LiteralPath $cmakeBin)) {
     # Fallback to PATH search
@@ -126,8 +126,6 @@ $cacheToolsDir = Join-Path $env:LOCALAPPDATA 'bashy\tools\whisper-cpp\v1.9.5'
 $cacheModelsDir = Join-Path $env:LOCALAPPDATA 'bashy\models\whisper'
 New-Item -ItemType Directory -Force -Path $cacheToolsDir | Out-Null
 New-Item -ItemType Directory -Force -Path $cacheModelsDir | Out-Null
-Remove-Item -Force (Join-Path $cacheToolsDir 'libomp.dll') -ErrorAction SilentlyContinue
-
 $cachedCli = Join-Path $cacheToolsDir 'whisper-cli.exe'
 $cachedModel = Join-Path $cacheModelsDir $modelName
 Copy-Item -LiteralPath $cliExe -Destination $cachedCli -Force

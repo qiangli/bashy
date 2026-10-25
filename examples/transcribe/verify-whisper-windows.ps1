@@ -1,5 +1,6 @@
 # Real S503.6 whisper.cpp standalone verification on a claimed Windows/amd64 host.
-# Validates native execution under clean system PATH, speech inference accuracy, and offline repeat.
+# Validates native execution under clean system PATH, speech inference accuracy,
+# and a repeat using cached files. It does not enforce network denial.
 param(
     [string]$WorkRoot = (Join-Path $env:LOCALAPPDATA 'Temp\s503-whisper')
 )
@@ -44,16 +45,16 @@ if ($transcript -notmatch 'ask not what your country can do for you') {
     throw "Inference output did not match JFK reference speech: $transcript"
 }
 
-# Offline repeat test
-$offlineSw = [System.Diagnostics.Stopwatch]::StartNew()
-$offlineRaw = & $cli -m $model -f $wav -nt --no-prints
-$offlineExit = $LASTEXITCODE
-$offlineDurationMs = $offlineSw.ElapsedMilliseconds
+# Cached repeat test; OS-enforced network denial is a separate native gate.
+$repeatSw = [System.Diagnostics.Stopwatch]::StartNew()
+$repeatRaw = & $cli -m $model -f $wav -nt --no-prints
+$repeatExit = $LASTEXITCODE
+$repeatDurationMs = $repeatSw.ElapsedMilliseconds
 $env:PATH = $origPath
 
-if ($offlineExit -ne 0) { throw "Offline repeat inference failed with exit code $offlineExit" }
-$offlineTranscript = ($offlineRaw -join ' ').Trim()
-if ($offlineTranscript -ne $transcript) { throw "Offline repeat transcript diverged!" }
+if ($repeatExit -ne 0) { throw "Cached repeat inference failed with exit code $repeatExit" }
+$repeatTranscript = ($repeatRaw -join ' ').Trim()
+if ($repeatTranscript -ne $transcript) { throw "Cached repeat transcript diverged!" }
 
 [pscustomobject]@{
     platform = $prepared.platform
@@ -75,7 +76,7 @@ if ($offlineTranscript -ne $transcript) { throw "Offline repeat transcript diver
     sample_wav_bytes = $wavBytes
     transcript = $transcript
     inference_duration_ms = $inferDurationMs
-    offline_repeat_duration_ms = $offlineDurationMs
+    cached_repeat_duration_ms = $repeatDurationMs
     clean_path_verified = $true
-    offline_match = $true
+    cached_repeat_match = $true
 } | ConvertTo-Json -Compress
