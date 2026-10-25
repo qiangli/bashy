@@ -55,12 +55,22 @@ literal install argv, exit code and logs; installed interpreter path, hash,
 version and process architecture; zlib, bz2, lzma and SSL module origins and
 hashes; codec round trips and OpenSSL version; installed license and notice
 file hashes with bounded byte copies; and before/after side-effect paths.
-macOS also retains new Python package receipt file lists. Windows records
+macOS also retains file lists for every 3.12 Python package receipt. Windows records
 native System32 VC DLLs before and after installation, app-local VC DLLs,
 loaded DLL origins, the `py` launcher search path and Python registry paths.
+GitHub macOS images may already contain an official Python 3.12 framework.
+On a confirmed GitHub-hosted disposable runner only, this research job records
+its interpreter hash and every 3.12 `pkgutil --pkg-info` receipt before using
+the same official package to overwrite it. It records the receipts again after
+installation, requires the framework receipt's install time to change, and
+labels that outcome as a reinstall. A fresh path is labeled separately.
+The first Windows amd64 research run observed the installer load
+`MSVCP140.dll` from System32 and `VCRUNTIME140.dll` from its own install
+prefix; both origins and their hashes are retained for license review rather
+than treating the System32 prerequisite as proof of the DLL actually loaded.
 The downloaded installer is deleted before artifact upload. Installed files
 remain only until the disposable hosted runner is destroyed. A missing
-preexisting-path check, failed command, wrong architecture or absent stdlib
+identified macOS framework, failed command, wrong architecture or absent stdlib
 module fails the research job. Passing this job supplies evidence for review;
 it does not change any operator admission status or authorize redistribution.
 

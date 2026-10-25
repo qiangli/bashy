@@ -81,10 +81,23 @@ def host_state(target, prefix, evidence, phase):
         ]
         package_receipt, package_stdout = record_command(
             evidence, phase + "-pkgutil", ["/usr/sbin/pkgutil", "--pkgs"], 30)
+        require(package_receipt["exit_code"] == 0, "macOS package receipt listing failed")
         package_ids = sorted(line for line in package_stdout.splitlines()
                              if line.startswith("org.python.Python."))
+        version_312_ids = [item for item in package_ids if item.endswith("-3.12")]
+        package_info = {}
+        for index, package_id in enumerate(version_312_ids):
+            receipt, output = record_command(
+                evidence, f"{phase}-pkg-info-{index:02d}",
+                ["/usr/sbin/pkgutil", "--pkg-info", package_id], 30)
+            require(receipt["exit_code"] == 0, "macOS Python 3.12 package info failed")
+            fields = dict(line.split(": ", 1) for line in output.splitlines() if ": " in line)
+            require(fields.get("package-id") == package_id and fields.get("version") and
+                    fields.get("install-time"), "incomplete macOS Python 3.12 package info")
+            package_info[package_id] = {"fields": fields, "command": receipt}
         return {"watched_paths": [path_state(path) for path in watched],
-                "python_package_ids": package_ids, "pkgutil": package_receipt}
+                "python_package_ids": package_ids, "python_312_package_info": package_info,
+                "pkgutil": package_receipt}
 
     watched = [prefix, prefix / "python.exe",
                Path(os.environ["SystemRoot"]) / "py.exe",
@@ -235,12 +248,16 @@ def main():
     try:
         observed_target = artifact_gate.native_target()
         report["native_target"] = observed_target
+        report["runner_environment"] = os.environ.get("RUNNER_ENVIRONMENT")
         report["runner_identity"] = {"system": platform.system(),
                                      "machine": platform.machine(),
                                      "release": platform.release(),
                                      "python_bootstrap": sys.executable,
                                      "python_bootstrap_sha256": sha256(sys.executable)}
         require(observed_target == target, "runner is not the requested native target")
+        require(os.environ.get("GITHUB_ACTIONS") == "true" and
+                report["runner_environment"] == "github-hosted",
+                "native installation research requires a GitHub-hosted disposable runner")
         admission = json.loads((BASE / "operator-python-admission.json").read_text())
         require(all(row["status"] == "unadmitted" for row in admission["targets"].values()),
                 "operator admission policy changed")
@@ -300,19 +317,44 @@ def main():
                        "PrependPath=0", "TargetDir=" + str(prefix)]
         report["install_prefix"] = str(prefix)
         report["before"] = host_state(target, prefix, args.evidence, "before")
-        require(not prefix.exists(), "preexisting Python install path on runner")
+        if prefix.exists():
+            require(target.startswith("darwin/"), "preexisting Windows install path on runner")
+            prior = report["before"]["watched_paths"][1]
+            framework_id = "org.python.Python.PythonFramework-3.12"
+            require(prior.get("sha256") and
+                    framework_id in report["before"]["python_312_package_info"],
+                    "preexisting macOS Python is not an identified framework install")
+            report["installation_kind"] = "reinstall_over_existing_ci_framework"
+            report["prior_installed_python"] = prior
+        else:
+            report["installation_kind"] = "fresh_install"
         require(sha256(installer) == expected_sha, "installer changed before execution")
         install_receipt, _ = record_command(args.evidence, "install", command, 600)
         report["install_command"] = install_receipt
         report["after"] = host_state(target, prefix, args.evidence, "after")
         if target.startswith("darwin/"):
-            added_packages = sorted(set(report["after"]["python_package_ids"]) -
-                                    set(report["before"]["python_package_ids"]))
-            report["macos_added_package_receipts"] = {}
-            for index, package_id in enumerate(added_packages):
+            report["macos_added_package_ids"] = sorted(
+                set(report["after"]["python_package_ids"]) -
+                set(report["before"]["python_package_ids"]))
+            report["macos_312_package_file_receipts"] = {}
+            for index, package_id in enumerate(report["after"]["python_312_package_info"]):
                 receipt, _ = record_command(args.evidence, f"macos-pkg-files-{index:02d}",
                                             ["/usr/sbin/pkgutil", "--files", package_id], 60)
-                report["macos_added_package_receipts"][package_id] = receipt
+                require(receipt["exit_code"] == 0,
+                        "macOS Python 3.12 package file listing failed")
+                report["macos_312_package_file_receipts"][package_id] = receipt
+            require("org.python.Python.PythonFramework-3.12" in
+                    report["after"]["python_312_package_info"],
+                    "macOS Python 3.12 framework receipt missing after installer")
+            framework_after = report["after"]["python_312_package_info"][
+                "org.python.Python.PythonFramework-3.12"]["fields"]
+            require(framework_after["version"].split(".")[:3] == ["3", "12", "10"],
+                    "macOS Python framework receipt is not version 3.12.10")
+            if report["installation_kind"] == "reinstall_over_existing_ci_framework":
+                framework_before = report["before"]["python_312_package_info"][
+                    "org.python.Python.PythonFramework-3.12"]["fields"]
+                require(framework_after["install-time"] != framework_before["install-time"],
+                        "macOS package receipt did not change after overwrite command")
         report["installer"]["post_install_sha256"] = sha256(installer)
         require(install_receipt["exit_code"] == 0, "official installer failed")
         require(report["installer"]["post_install_sha256"] == expected_sha,
@@ -347,7 +389,9 @@ def main():
             report["windows_launcher"] = {"before": report["before"]["launcher_path_search"],
                                           "after": report["after"]["launcher_path_search"],
                                           "installer_option": "Include_launcher=0"}
-        report["result"] = "INSTALLED_EVIDENCE_CAPTURED_UNADMITTED"
+        report["result"] = ("REINSTALLED_EVIDENCE_CAPTURED_UNADMITTED" if
+                            report["installation_kind"] == "reinstall_over_existing_ci_framework" else
+                            "INSTALLED_EVIDENCE_CAPTURED_UNADMITTED")
     except Exception as error:
         report["error"] = str(error)
         raise
