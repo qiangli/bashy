@@ -17,6 +17,67 @@ With an AI agent you only ever do three things yourself: sign up in the browser,
 answer `bashy ask` prompts (tokens, pairing codes, passwords), and, for a PC
 the agent cannot reach yet, start the bootstrap command on it.
 
+## Install bashy
+
+The installer fetches the current stable release, verifies the archive against
+`checksums.txt`, and runs `bashy self install`. Use one of these commands:
+
+**macOS or Linux (curl):**
+
+```sh
+curl -fsSL https://dhnt.io/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+irm https://dhnt.io/install.ps1 | iex
+```
+
+**macOS (Homebrew):**
+
+```sh
+brew install dhnt/tap/bashy
+```
+
+**Windows (Scoop):**
+
+```powershell
+scoop bucket add dhnt https://github.com/dhnt/scoop-bucket
+scoop install dhnt/bashy
+```
+
+These script, Homebrew, and Scoop installs show no operating-system prompt.
+If PowerShell blocks Scoop's shim, allow current-user scripts once with
+`Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force`.
+
+The v1.0 macOS and Windows binaries are not yet code-signed. A browser-downloaded
+archive prompts at launch: on macOS, right-click the executable and choose
+**Open**, or remove quarantine from it with
+`xattr -d com.apple.quarantine <file>`; on Windows, choose **More info → Run
+anyway**, or unblock the downloaded file with `Unblock-File <file>`. DHNT Inc.
+signed builds arrive in v1.0.x.
+
+For Linux, you can download the matching `bashy-linux-amd64.tar.gz` or
+`bashy-linux-arm64.tar.gz` from the
+[latest release](https://github.com/qiangli/bashy/releases/latest), verify its
+checksum, and install it. This command sequence selects the host architecture:
+
+```sh
+case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "unsupported architecture" >&2; exit 1 ;; esac
+asset="bashy-linux-$arch.tar.gz"
+curl -fSLO "https://github.com/qiangli/bashy/releases/latest/download/$asset"
+curl -fsSLO https://github.com/qiangli/bashy/releases/latest/download/checksums.txt
+grep "  $asset\$" checksums.txt | sha256sum -c -
+tar -xzf "$asset"
+./bashy self install --dir "$HOME/.local/bin"
+```
+
+Starting with v1.0, Linux releases also publish `.deb`, `.rpm`, and `.apk`
+packages. See the
+[release assets](https://github.com/qiangli/bashy/releases/latest) for all
+platform archives.
+
 ### Stage 1: account
 
 1. Sign up or log in at <https://ai.dhnt.io> (GitHub, Google, LinkedIn, …).
@@ -64,8 +125,9 @@ a script: [`skills/bashy/recipes/outpost-setup.dag.md`](../skills/bashy/recipes/
 
 ## Before you start
 
-**1. Download** the archive for the new machine from the
-[Releases](https://github.com/qiangli/bashy/releases) page:
+**1. Install** bashy using one of the methods in [Install bashy](#install-bashy).
+The release archives contain `bashy`, `outpost`, `bash` and `sh` (`.exe` on
+Windows). If you choose a browser download, use the archive for your platform:
 
 | Machine | Asset |
 | --- | --- |
@@ -96,22 +158,13 @@ Run these in any terminal on the new machine: its own keyboard and screen, or a
 remote session you already have on it (for example a cloud VM's console or SSH).
 Driving the setup from another machine is what path 3's agent is for.
 
-1. **Extract and install** into the standard per-user location.
+1. **Install** bashy with the command in [Install bashy](#install-bashy).
+   The installer installs bashy and outpost into the standard per-user
+   location. For an archive you downloaded in a browser, follow the prompt
+   guidance above before running the executables.
 
-   Windows (PowerShell, in the extracted folder):
-   ```powershell
-   .\bashy.exe self install --dir "$env:LOCALAPPDATA\outpost"
-   [Environment]::SetEnvironmentVariable("Path", [Environment]::GetEnvironmentVariable("Path","User") + ";$env:LOCALAPPDATA\outpost", "User")
-   ```
-   Open a new terminal afterwards so the updated `Path` applies.
-
-   macOS / Linux:
-   ```sh
-   tar -xzf bashy-<os>-<arch>.tar.gz
-   ./bashy self install --dir ~/.local/bin      # make sure ~/.local/bin is on PATH
-   ```
-   On macOS, a browser download is quarantined; clear it once with
-   `xattr -dr com.apple.quarantine ~/.local/bin/bashy ~/.local/bin/outpost`.
+   Open a new terminal afterwards if the installer asks you to add its install
+   directory to `PATH`.
 
 2. **Prepare it to stay reachable** (for an always-on outpost; skip on a laptop).
    As administrator: Windows: never sleep on AC power and set the network to
@@ -137,8 +190,9 @@ Driving the setup from another machine is what path 3's agent is for.
 
 Use this when an agent (Claude Code, Codex, ycode, …) runs on the new machine.
 
-1. Download and extract the archive (only the human can do the very first
-   download).
+1. Run one of the commands in [Install bashy](#install-bashy). If browser
+   download is required, download and extract the archive first; only the human
+   can do the very first download.
 2. Give the agent this guide and say where to pair it, for example:
    > Install bashy from this folder following docs/setup.md path 1, and pair it
    > with satellite https://&lt;your-satellite&gt; as `<new-host>`.

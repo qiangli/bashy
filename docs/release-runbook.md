@@ -88,9 +88,50 @@ python3 scripts/generate-install-channels.py vX.Y.Z dist channels
 ```
 
 The generator verifies every archive against `checksums.txt`. Do not publish a
-manifest generated from candidate (`-dev`) bytes under a stable version.
+manifest generated from candidate (`-dev`) bytes under a stable version; manifests
+must only be published from promoted release bytes (e.g. current stable `v0.32.0`,
+and regenerated from promoted bytes at `v1.0.0`).
 
-### Winget validation and submission
+Channel manifests identify publisher as **DHNT Inc.** and use homepage **`https://dhnt.io`**.
+
+### Homebrew tap publication
+
+Homebrew formulae set no quarantine flag, allowing installation of macOS binaries
+without Gatekeeper prompts. Formulae are hosted in the company GitHub org repo
+`github.com/dhnt/homebrew-tap`:
+
+1. Copy `channels/Formula/bashy.rb` into the `homebrew-tap` repository under `Formula/bashy.rb`.
+2. Commit and push to `dhnt/homebrew-tap`.
+3. Users install via:
+   ```sh
+   brew install dhnt/tap/bashy
+   ```
+
+### Scoop bucket publication
+
+Scoop sets no Mark-of-the-Web on downloaded files, allowing installation of Windows
+binaries without SmartScreen unknown-publisher prompts. Manifests are hosted in the
+company GitHub org repo `github.com/dhnt/scoop-bucket`:
+
+1. Copy `channels/bucket/bashy.json` into the `scoop-bucket` repository under `bucket/bashy.json`.
+2. Commit and push to `dhnt/scoop-bucket`.
+3. Users add the bucket and install via:
+   ```powershell
+   scoop bucket add dhnt https://github.com/dhnt/scoop-bucket
+   scoop install dhnt/bashy
+   ```
+
+### Linux packages
+
+Linux releases ship `.deb`, `.rpm`, and `.apk` packages alongside tarballs directly
+in the GitHub release assets.
+
+### Winget validation and submission (v1.0.x signed track)
+
+The generator creates `DHNT.bashy` manifests (`PackageIdentifier: DHNT.bashy`,
+`Publisher: DHNT Inc.`). Per the 2026-10-25 decision, Winget submission requires
+code-signed binaries and is handled under S504.6. Manifests are generated at release
+time but submitted only after Authenticode signing.
 
 Validation is a native Windows gate. Copy the generated `channels/winget`
 directory to `windows-host` and run in PowerShell:
@@ -102,7 +143,7 @@ winget validate C:\path\to\winget
 Record the command output with the release evidence. Validation is not
 submission. With the operator present, copy the three files into the fork of
 `microsoft/winget-pkgs` at
-`manifests/q/qiangli/bashy/<version>/`, rerun `winget validate` on that final
+`manifests/d/DHNT/bashy/<version>/`, rerun `winget validate` on that final
 directory, commit and push one package-version change, and open a pull request
 to `microsoft/winget-pkgs`. Never create or submit that public pull request
 without explicit operator approval.

@@ -330,6 +330,12 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Effects:   []string{atlas.EffExec, atlas.EffNet},
 		Stability: atlas.StabilityExperimental,
 	},
+	"connect": {
+		Stage: atlas.StageCode, Group: atlas.GroupPlatform, Tier: atlas.TierSphere,
+		Caps:      []string{atlas.CapSpawnsProcesses},
+		Effects:   []string{atlas.EffExec, atlas.EffNet},
+		Stability: atlas.StabilityExperimental,
+	},
 	// dhnt reads pipeline/run/binding JSON and writes JSON or Workflow YAML to
 	// stdout. No network, no mutation — the local-first contract/compiler, not
 	// a transport.
