@@ -1,0 +1,144 @@
+{
+  "schema": "s503-whisper-static-runtime-review-v1",
+  "reviewed_at": "2026-10-25T15:38:51.969910+00:00",
+  "run_id": 40207606199,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40207606199",
+  "candidate_commit": "2a490dbf7866ae792bbf04dc7fd48c41bfac77fd",
+  "workflow": ".github/workflows/s503-native-build.yml",
+  "result": "six_native_source_builds_passed; downloaded_artifacts_rehashed; signed_attestations_verified",
+  "scope": "Windows PE import closure and build artifact provenance; no model inference or product license/install admission",
+  "targets": [
+    {
+      "runner_label": "ubuntu-24.04",
+      "target": "linux/amd64",
+      "artifact_id": 12604446751,
+      "runner_identity_sha256": "83412f8fe5057244b5836b070e91c92df0699f6f7391cecb9c09cbb432632121",
+      "build_report_sha256": "0a601db16d0a5155ba95890700fea5225bccabb4163e2952ba0b8aa2b1156b1b",
+      "binary_sha256": "f4d9d2d43510c6287975c326251e5e95cf924af1b240bb3f763784f775527c75",
+      "binary_bytes": 4523312,
+      "imported_libraries": [
+        "libm.so.6",
+        "libc.so.6",
+        "/lib64/ld-linux-x86-64.so.2"
+      ],
+      "attestation": "PASS: gh attestation verify --repo qiangli/bashy --source-digest 2a490dbf7866ae792bbf04dc7fd48c41bfac77fd --signer-workflow qiangli/bashy/.github/workflows/s503-native-build.yml"
+    },
+    {
+      "runner_label": "ubuntu-24.04-arm",
+      "target": "linux/arm64",
+      "artifact_id": 12605055470,
+      "runner_identity_sha256": "ae201a383dd6d95315c218e64d96b954c9f87d8c5058605274be898a9839a68d",
+      "build_report_sha256": "bf2f2b997498f387a9625a9838621e763d5bdbbd1b098c51a14d4a9f006ad6c9",
+      "binary_sha256": "1934f4b09216789e3e67f4ff2dbbc6524d09aadebd6bc3fbc70a4e99625908e6",
+      "binary_bytes": 4447456,
+      "imported_libraries": [
+        "libm.so.6",
+        "libc.so.6",
+        "/lib/ld-linux-aarch64.so.1"
+      ],
+      "attestation": "PASS: gh attestation verify --repo qiangli/bashy --source-digest 2a490dbf7866ae792bbf04dc7fd48c41bfac77fd --signer-workflow qiangli/bashy/.github/workflows/s503-native-build.yml"
+    },
+    {
+      "runner_label": "macos-15-intel",
+      "target": "darwin/amd64",
+      "artifact_id": 12604581473,
+      "runner_identity_sha256": "93558da4c90429ecd3ef22bf20e03693e9168c697d182595d076b150f1b30787",
+      "build_report_sha256": "08ddbab14f7d57b121197d50b419c499c38db33f4056f4039cae666f49e020f6",
+      "binary_sha256": "637cc655c2cb1ea0c9a761d74cfa3368d2ec0409328b3a47e176efdf159768cc",
+      "binary_bytes": 2747920,
+      "imported_libraries": [
+        "/usr/lib/libSystem.B.dylib",
+        "/System/Library/Frameworks/Accelerate.framework/Versions/A/Accelerate",
+        "/usr/lib/libc++.1.dylib"
+      ],
+      "attestation": "PASS: gh attestation verify --repo qiangli/bashy --source-digest 2a490dbf7866ae792bbf04dc7fd48c41bfac77fd --signer-workflow qiangli/bashy/.github/workflows/s503-native-build.yml"
+    },
+    {
+      "runner_label": "macos-15",
+      "target": "darwin/arm64",
+      "artifact_id": 12604286255,
+      "runner_identity_sha256": "c83976384aacd1cebe77922aa3fdbb779ecd53cb3c823903e68020c731c2005e",
+      "build_report_sha256": "befa0973c8b0274ea805a42101d5e32ce371526ea84e90fb4e9f9419ee872933",
+      "binary_sha256": "4e1e027f9a82bb600926e2553f17eee6b1c2818a7d208d93afb549e9036e1650",
+      "binary_bytes": 2499256,
+      "imported_libraries": [
+        "/usr/lib/libSystem.B.dylib",
+        "/System/Library/Frameworks/Accelerate.framework/Versions/A/Accelerate",
+        "/usr/lib/libc++.1.dylib"
+      ],
+      "attestation": "PASS: gh attestation verify --repo qiangli/bashy --source-digest 2a490dbf7866ae792bbf04dc7fd48c41bfac77fd --signer-workflow qiangli/bashy/.github/workflows/s503-native-build.yml"
+    },
+    {
+      "runner_label": "windows-2025",
+      "target": "windows/amd64",
+      "artifact_id": 12604406111,
+      "runner_identity_sha256": "e5e93f98aa2266b89c5e1a5130cdcc022df126efe1b43784a03b33a9789315de",
+      "build_report_sha256": "9344014c3aaf3d092081904857f602b76e02d92fb522bf08489a3e3340c3de29",
+      "binary_sha256": "ed76f5b84b70bdcb93568b4f2819d698ad9b43857a2b249f335da90790b51882",
+      "binary_bytes": 4398080,
+      "imported_libraries": [
+        "KERNEL32.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-environment-l1-1-0.dll",
+        "api-ms-win-crt-private-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-convert-l1-1-0.dll",
+        "api-ms-win-crt-utility-l1-1-0.dll",
+        "api-ms-win-crt-time-l1-1-0.dll",
+        "api-ms-win-crt-multibyte-l1-1-0.dll",
+        "ADVAPI32.dll",
+        "api-ms-win-crt-filesystem-l1-1-0.dll"
+      ],
+      "attestation": "PASS: gh attestation verify --repo qiangli/bashy --source-digest 2a490dbf7866ae792bbf04dc7fd48c41bfac77fd --signer-workflow qiangli/bashy/.github/workflows/s503-native-build.yml",
+      "pe_machine": "0x8664",
+      "toolchain_report_sha256": "d9fae4146d2ba6b692e9c3820ecbdd77888ddba2f082214d30dc86a2df7c8d69",
+      "llvm_mingw_archive_sha256": "b9b68a4d276e16fa25802aaba458e4638f64b3884c290aaccdc2d87083b6ca35",
+      "llvm_mingw_archive_bytes": 187504083,
+      "llvm_mingw_default_target": "x86_64-w64-windows-gnu",
+      "vc_or_third_party_dynamic_cpp_imports": 0
+    },
+    {
+      "runner_label": "windows-11-arm",
+      "target": "windows/arm64",
+      "artifact_id": 12604171475,
+      "runner_identity_sha256": "14f7d1ddaadb46f468a1e1fb630fdc113209490185c8664f4fe46c5257155d12",
+      "build_report_sha256": "8f3d87df9bc3deb337631a19635c87f3d3eff8ceccca7a7db200e46edb061062",
+      "binary_sha256": "3240d7f6899ddf77c6f304ad36bdfa4fc4f30246dd214e281094062b6291054d",
+      "binary_bytes": 3899904,
+      "imported_libraries": [
+        "KERNEL32.dll",
+        "api-ms-win-crt-stdio-l1-1-0.dll",
+        "api-ms-win-crt-string-l1-1-0.dll",
+        "api-ms-win-crt-runtime-l1-1-0.dll",
+        "api-ms-win-crt-locale-l1-1-0.dll",
+        "api-ms-win-crt-heap-l1-1-0.dll",
+        "api-ms-win-crt-environment-l1-1-0.dll",
+        "api-ms-win-crt-private-l1-1-0.dll",
+        "api-ms-win-crt-math-l1-1-0.dll",
+        "api-ms-win-crt-convert-l1-1-0.dll",
+        "api-ms-win-crt-utility-l1-1-0.dll",
+        "api-ms-win-crt-time-l1-1-0.dll",
+        "api-ms-win-crt-multibyte-l1-1-0.dll",
+        "ADVAPI32.dll",
+        "api-ms-win-crt-filesystem-l1-1-0.dll"
+      ],
+      "attestation": "PASS: gh attestation verify --repo qiangli/bashy --source-digest 2a490dbf7866ae792bbf04dc7fd48c41bfac77fd --signer-workflow qiangli/bashy/.github/workflows/s503-native-build.yml",
+      "pe_machine": "0xaa64",
+      "toolchain_report_sha256": "c48109d15fcdfabd69c3de8220f35174ee87fe93958d2b31a0c6e8e4dca88ad4",
+      "llvm_mingw_archive_sha256": "312593669435bd0bfc1a43ac3fba23c8b27e0610bade88b2738e5a01702a99ba",
+      "llvm_mingw_archive_bytes": 181877750,
+      "llvm_mingw_default_target": "aarch64-w64-windows-gnu",
+      "vc_or_third_party_dynamic_cpp_imports": 0
+    }
+  ],
+  "open_gates": [
+    "Static LLVM/mingw C++ and compiler runtime linked-object license and notice review",
+    "Signed tagged CLI release or independently verified source-build product install path",
+    "External Python product installation and Windows Python VC prerequisite",
+    "Operator YouTube six-target acquisition, transcription and offline replay"
+  ]
+}

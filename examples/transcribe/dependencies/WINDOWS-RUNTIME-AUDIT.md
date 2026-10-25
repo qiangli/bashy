@@ -42,3 +42,19 @@ full license admission. The compiled binary and its retained import report
 still need a native Windows amd64 and arm64 workflow run and independent
 artifact review. This candidate does not establish a native pass or settle the
 separate FFmpeg packaging decision.
+
+## Native candidate result, 2026-10-25
+
+[Run 40207606199](https://github.com/qiangli/bashy/actions/runs/40207606199)
+completed successfully on all six native runners at Bashy `2a490dbf`.
+The manager downloaded every binary and report, rehashed them, and verified
+the six signed workflow attestations against that exact source commit and
+workflow identity. Both Windows executables have the correct PE machine type.
+An independent `/usr/bin/objdump -p` import inspection matched the native
+reports: each imports 15 Windows OS/UCRT DLLs and **zero** external VC or
+third-party C++ runtime DLLs. Exact artifact IDs, digests, imports and
+toolchain pins are in the [review ledger](../../../docs/sprint-503/evidence/windows-static-whisper-40207606199.json).
+
+This establishes a candidate Windows dynamic-runtime boundary. Static-linked
+runtime notices, signed release/install policy, external Python and the
+operator-video E2E gate still require separate review and evidence.
