@@ -54,6 +54,10 @@ grep -F 'name: transcribe' "$work/script-skill.md" >/dev/null
     --set effects.2=destroy --set effects.3=exec --set effects.4=net >/dev/null
 "$BASHY_BIN" commands show transcribe-pipeline --yaml > "$work/command.txt"
 grep -F "$pipeline" "$work/command.txt" >/dev/null
+if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" = 1 ]; then
+    "$BASHY_BIN" src show transcribe-pipeline > "$work/source.txt"
+    grep -F "$pipeline" "$work/source.txt" >/dev/null
+fi
 
 # The default shim supplies only the front door missing from an older installed
 # bashy. BASHY_TRANSCRIBE_NATIVE=1 tests the candidate's real S503.1 front door.
@@ -172,6 +176,10 @@ printf '\n# operator-local edit\n' >> "$work/local-pipeline.bsh"
 "$BASHY_BIN" commands set transcribe-pipeline --set "exec.2=$work/local-pipeline.bsh" >/dev/null
 "$BASHY_BIN" commands show transcribe-pipeline --yaml > "$work/override-source.txt"
 grep -F "$work/local-pipeline.bsh" "$work/override-source.txt" >/dev/null
+if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" = 1 ]; then
+    "$BASHY_BIN" src show transcribe-pipeline > "$work/override-src.txt"
+    grep -F "$work/local-pipeline.bsh" "$work/override-src.txt" >/dev/null
+fi
 bashy transcribe $common --output "$work/override.txt" "$STUB_MEDIA" > "$work/override-path.txt"
 cmp "$work/direct.txt" "$work/override.txt"
 if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" != 1 ]; then

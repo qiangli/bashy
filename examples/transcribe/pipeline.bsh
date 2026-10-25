@@ -137,21 +137,21 @@ agentic function transcribe_pipeline() {
     export TRANSCRIBE_JSON_OUTPUT="$outdir/transcript.$format"
 
     jq -n '{version:"bashy-transcribe-stage-v1",stage:"acquire",input:env.TRANSCRIBE_JSON_INPUT,
-            work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' > "$work/acquire-in.json"
+            work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' > "$work/acquire-in.json" || return 1
     selected=$(select_stage acquire "$source" "$work/acquire-in.json") || return 1
     stage_run acquire "$selected" "$work/acquire-in.json" "$work/acquire-out.json" || return 1
     jq '{version:"bashy-transcribe-stage-v1",stage:"decode",artifacts:.artifacts,media:.media,
-         work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' "$work/acquire-out.json" > "$work/decode-in.json"
+         work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' "$work/acquire-out.json" > "$work/decode-in.json" || return 1
     selected=$(select_stage decode "$decoder" "$work/decode-in.json") || return 1
     stage_run decode "$selected" "$work/decode-in.json" "$work/decode-out.json" || return 1
     jq '{version:"bashy-transcribe-stage-v1",stage:"infer",artifacts:.artifacts,media:.media,
          model:env.TRANSCRIBE_JSON_MODEL,language:env.TRANSCRIBE_JSON_LANGUAGE,
-         work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' "$work/decode-out.json" > "$work/infer-in.json"
+         work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' "$work/decode-out.json" > "$work/infer-in.json" || return 1
     selected=$(select_stage infer "$provider" "$work/infer-in.json") || return 1
     stage_run infer "$selected" "$work/infer-in.json" "$work/infer-out.json" || return 1
     jq '{version:"bashy-transcribe-stage-v1",stage:"export",segments:.segments,media:.media,
          format:env.TRANSCRIBE_JSON_FORMAT,output:env.TRANSCRIBE_JSON_OUTPUT}' \
-         "$work/infer-out.json" > "$work/export-in.json"
+         "$work/infer-out.json" > "$work/export-in.json" || return 1
     selected=$(select_stage export "$exporter" "$work/export-in.json") || return 1
     stage_run export "$selected" "$work/export-in.json" "$work/export-out.json" || return 1
 
