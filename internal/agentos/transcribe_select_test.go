@@ -47,6 +47,32 @@ func TestSelectRegisteredProviderMatchesOpenDeclarations(t *testing.T) {
 	}
 }
 
+func TestSelectExplicitProviderValidatesDeclaration(t *testing.T) {
+	request := map[string]any{"input": "https://fixture.test/watch"}
+	records := []fleet.Command{
+		{Name: "fixture", Provides: []string{"transcribe.acquire"}, Accepts: []fleet.CommandMatch{{Path: "/input", Pattern: `^https://fixture\.test/`}}},
+		{Name: "wrong-role", Provides: []string{"transcribe.decode"}},
+		{Name: "wrong-host", Provides: []string{"transcribe.acquire"}, OS: []string{"linux"}},
+	}
+	probes := transcribeTestProbes("darwin", "arm64")
+	if got, err := selectExplicitProvider("transcribe.acquire", "fixture", request, records, probes); err != nil || got != "fixture" {
+		t.Fatalf("explicit selection = %q, %v", got, err)
+	}
+	for _, tc := range []struct{ name, want string }{
+		{"missing", "not registered"},
+		{"wrong-role", "does not declare"},
+		{"wrong-host", "unavailable on this host"},
+	} {
+		if _, err := selectExplicitProvider("transcribe.acquire", tc.name, request, records, probes); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: got %v; want %q", tc.name, err, tc.want)
+		}
+	}
+	request["input"] = "clip.wav"
+	if _, err := selectExplicitProvider("transcribe.acquire", "fixture", request, records, probes); err == nil || !strings.Contains(err.Error(), "does not support") {
+		t.Fatalf("unsupported explicit request = %v", err)
+	}
+}
+
 func TestTranscribeSelectUsesCommandRingAndLocalOverride(t *testing.T) {
 	local := ringDir(t)
 	shared := t.TempDir()
@@ -109,5 +135,9 @@ func TestTranscribeSelectUsesCommandRingAndLocalOverride(t *testing.T) {
 	}
 	if rec, ok := registeredLookup("fixture-source"); !ok || rec.Ring != assetring.RingLocal {
 		t.Fatalf("local record = %+v, %v", rec, ok)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := runTranscribe([]string{"select", "acquire", "--provider", "fixture-source", requestPath}, &stdout, &stderr, nil); code != 0 || strings.TrimSpace(stdout.String()) != "fixture-source" {
+		t.Fatalf("explicit local selection: code=%d out=%q err=%q", code, stdout.String(), stderr.String())
 	}
 }
