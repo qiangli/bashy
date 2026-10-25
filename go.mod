@@ -371,7 +371,7 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
-	github.com/qiangli/bonsai v0.0.0-20261013041512-fbfc95fa4dda // indirect
+	github.com/qiangli/bonsai v0.0.0-20261025043642-4bb78b402429 // indirect
 	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261024183842-74ae98ebd748 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
@@ -595,4 +595,4 @@ replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/externa
 
 // S407.6: all shell, utility, and background-job routes link the lazy MIT
 // fork so TUI-only width tables are built only when a width is queried.
-replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025040214-d4224e17d6f6
+replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402

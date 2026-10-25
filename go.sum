@@ -250,8 +250,6 @@ github.com/chzyer/test v1.0.0/go.mod h1:2JlltgoNkt4TW/z9V/IzDdFaMTM2JPIi26O1pF38
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/clipperhouse/displaywidth v0.11.0 h1:lBc6kY44VFw+TDx4I8opi/EtL9m20WSEFgwIwO+UVM8=
 github.com/clipperhouse/displaywidth v0.11.0/go.mod h1:bkrFNkf81G8HyVqmKGxsPufD3JhNl3dSqnGhOoSD/o0=
-github.com/clipperhouse/uax29/v2 v2.2.0 h1:ChwIKnQN3kcZteTXMgb1wztSgaU+ZemkgWdohwgs8tY=
-github.com/clipperhouse/uax29/v2 v2.2.0/go.mod h1:EFJ2TJMRUaplDxHKj1qAEhCtQPW2tJSwu5BF98AuoVM=
 github.com/clipperhouse/uax29/v2 v2.7.0 h1:+gs4oBZ2gPfVrKPthwbMzWZDaAFPGYK72F0NJv2v7Vk=
 github.com/clipperhouse/uax29/v2 v2.7.0/go.mod h1:EFJ2TJMRUaplDxHKj1qAEhCtQPW2tJSwu5BF98AuoVM=
 github.com/cloudflare/circl v1.6.3 h1:9GPOhQGF9MCYUeXyMYlqTR6a5gTrgR/fBLXvUgtVcg8=
@@ -791,8 +789,6 @@ github.com/mattn/go-colorable v0.1.14 h1:9A9LHSqF/7dyVVX6g0U9cwm9pG3kP9gSzcuIPHP
 github.com/mattn/go-colorable v0.1.14/go.mod h1:6LmQG8QLFO4G5z1gPvYEzlUgJ2wF+stgPZH1UqBm1s8=
 github.com/mattn/go-isatty v0.0.22 h1:j8l17JJ9i6VGPUFUYoTUKPSgKe/83EYU2zBC7YNKMw4=
 github.com/mattn/go-isatty v0.0.22/go.mod h1:ZXfXG4SQHsB/w3ZeOYbR0PrPwLy+n6xiMrJlRFqopa4=
-github.com/mattn/go-runewidth v0.0.27 h1:Feg/Oou5zI/wnpgDF6omIU0OokC9GxLC/WRknhVlIR0=
-github.com/mattn/go-runewidth v0.0.27/go.mod h1:3qAiGCV4Koz/yuveO58qUefmUTRm8r0IGEXZ9jeHp/8=
 github.com/mattn/go-shellwords v1.0.13 h1:DC0OMEpGjm6LfNFU4ckYcvbQKyp2vE8atyFGXNtDcf4=
 github.com/mattn/go-shellwords v1.0.13/go.mod h1:EZzvwXDESEeg03EKmM+RmDnNOPKG4lLtQsUlTZDWQ8Y=
 github.com/mattn/go-sqlite3 v1.14.42 h1:MigqEP4ZmHw3aIdIT7T+9TLa90Z6smwcthx+Azv4Cgo=
@@ -1031,8 +1027,8 @@ github.com/prometheus/procfs v0.20.1/go.mod h1:o9EMBZGRyvDrSPH1RqdxhojkuXstoe4Ul
 github.com/prometheus/statsd_exporter v0.22.7/go.mod h1:N/TevpjkIh9ccs6nuzY3jQn9dFqnUakOjnEuMPJJJnI=
 github.com/prometheus/statsd_exporter v0.29.0 h1:2iaiBLpAg/WcdW4nF0UTQfjCE2DXD+1NVnCM1ulPKd8=
 github.com/prometheus/statsd_exporter v0.29.0/go.mod h1:3t+fT5ESGc0KBUfadCp43KOnVPFmbAF4c58Osotz3Zk=
-github.com/qiangli/bonsai v0.0.0-20261013041512-fbfc95fa4dda h1:ONMy/PmqSAQA3bzbjNyaDhZYcGxkVJLGP6/AyfNt4Tc=
-github.com/qiangli/bonsai v0.0.0-20261013041512-fbfc95fa4dda/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
+github.com/qiangli/bonsai v0.0.0-20261025043642-4bb78b402429 h1:fnj946S6axMcNpFgLITG3iU0VY536qJpQsIU7HElKfo=
+github.com/qiangli/bonsai v0.0.0-20261025043642-4bb78b402429/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
 github.com/qiangli/coreutils v0.0.0-20261024225029-e90cfead9c08 h1:SxYJzAIkpU2cbtNpwauqoTjTG4FApXiZY+9S9AjbeIE=
 github.com/qiangli/coreutils v0.0.0-20261024225029-e90cfead9c08/go.mod h1:hBvsK5nOqSXj34hHDd2RkP37rNuidm45TiteVfJqVd8=
 github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261024225029-e90cfead9c08 h1:qIms97+CLE/+qiHLVjDSXxTRPc1WbXn8fat8IzQ7yzY=
@@ -1073,8 +1069,8 @@ github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9 h
 github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9/go.mod h1:koKm/FhUX+X74g9NuiShrwvEGksSvh8GWnjonftUyRI=
 github.com/qiangli/yoke/external/otel v0.0.0-20261024022434-3c473f9428ec h1:26wA5eGjDeMP7BrV/YO5mQoc8zmJSg7ruCnAaB4/vmM=
 github.com/qiangli/yoke/external/otel v0.0.0-20261024022434-3c473f9428ec/go.mod h1:RbSjraxAoh+yEwleVvEFryP77Pyw7zs4KIi4ssEqRDc=
-github.com/qiangli/yoke/external/runewidth v0.0.0-20261025040214-d4224e17d6f6 h1:ezKTCyZCk+L3Jsta14ljTUUBCuWZolCOW4jpK+uzkuQ=
-github.com/qiangli/yoke/external/runewidth v0.0.0-20261025040214-d4224e17d6f6/go.mod h1:tARgoBZEIZ6C6/dzI4z9VZDCJgeKklZbjfHXG9bGt5o=
+github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402 h1:GaFTBFLiK9HEK4DBrKzVmc61k4MhJE8q9sQws9r1h3o=
+github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402/go.mod h1:tARgoBZEIZ6C6/dzI4z9VZDCJgeKklZbjfHXG9bGt5o=
 github.com/qiangli/yoke/external/securejoin v0.0.0-20261021020216-636e2fd289e9 h1:+om5Lxc8AVl0O3Djg0iaPb18v9VXXx/UvmIXaFydBHY=
 github.com/qiangli/yoke/external/securejoin v0.0.0-20261021020216-636e2fd289e9/go.mod h1:wz56MWzWglqLR8cYd6rDw6atLTts3Krdq2ZWwzhmjyI=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261024022434-3c473f9428ec h1:Ym3ez/W7w5BRAKmuJXYJ9Mj2DQB7mU3mxCXU+J6Tv+Q=
