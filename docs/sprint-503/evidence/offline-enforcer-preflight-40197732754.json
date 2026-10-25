@@ -1,0 +1,222 @@
+{
+  "schema": "s503-offline-enforcer-preflight-summary-v1",
+  "github_run_id": 40197732754,
+  "github_run_url": "https://github.com/qiangli/bashy/actions/runs/40197732754",
+  "workflow_commit": "e40b72eefb336133b6bd6c080a0fd99aafaa6781",
+  "targets": {
+    "macos-15": {
+      "native_os": "Darwin",
+      "native_arch": "arm64",
+      "python_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "method": "macos-sandbox-deny-network",
+      "enforcer_path": "/usr/bin/sandbox-exec",
+      "enforcer_sha256": "2ff75194b3e5689debee061c69f27f873ca21ff8fc54b7d49cbf5f2fb673f6ea",
+      "baseline_connected": true,
+      "denied_before": {
+        "denied": true,
+        "errno": 1,
+        "raw_errno": 1,
+        "winerror": null
+      },
+      "denied_after": {
+        "denied": true,
+        "errno": 1,
+        "raw_errno": 1,
+        "winerror": null
+      },
+      "policy_success": true,
+      "restored_connected": true,
+      "result": "pass",
+      "raw_report_sha256": {
+        "baseline.json": "0d9f0fc588c0c670e1e6db5cc942d84ed3a2ec7e2362da49d08fb6bd0dd3014f",
+        "denied-after.json": "5e185ba8d6a9f14e96ea64e11ed37cec899d1da95b26a51976c490b7b61e8a24",
+        "denied-before.json": "df486c3ff3cea813d671f90b53ecc4b8d3dd95759499012f00cc7f48be0e3d10",
+        "enforcer.json": "e1c5088b55eee9c0b44661757236c4c1b47986f4104c14cb5f3169ea47ce1ba9",
+        "identity.json": "0e627cae125548b5e4a1df3dbcc4b050ce830de546855da6875fb3a0ae16ef56",
+        "policy-attempt.json": "e1b7f84e129c7c5c9bde07f70e3dfd8214b32bd91dfe01dcfc37e91854617f7e",
+        "restored.json": "9bef7c79c083b7d93d7038ab6bdc25c3d02c7caab7d4f7fd81b932caa0a8cf0a",
+        "result.json": "73351e361f10ea04f53c021f01db63a024fefd9c4568d245334714e8b6014e81"
+      }
+    },
+    "macos-15-intel": {
+      "native_os": "Darwin",
+      "native_arch": "x86_64",
+      "python_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "method": "macos-sandbox-deny-network",
+      "enforcer_path": "/usr/bin/sandbox-exec",
+      "enforcer_sha256": "2ff75194b3e5689debee061c69f27f873ca21ff8fc54b7d49cbf5f2fb673f6ea",
+      "baseline_connected": true,
+      "denied_before": {
+        "denied": true,
+        "errno": 1,
+        "raw_errno": 1,
+        "winerror": null
+      },
+      "denied_after": {
+        "denied": true,
+        "errno": 1,
+        "raw_errno": 1,
+        "winerror": null
+      },
+      "policy_success": true,
+      "restored_connected": true,
+      "result": "pass",
+      "raw_report_sha256": {
+        "baseline.json": "ce99e62cf9ba2525766d3a01ae822b05fe6c5331358831e8b273c8d2dec52e96",
+        "denied-after.json": "6470c2f450584478be65700e2b6ade41b3558e90ac84eee6535533b177d6535f",
+        "denied-before.json": "ec1a740d52d9cc3d3b1b60b07bfef73f8de004743e499f4a58a3683c49a25423",
+        "enforcer.json": "e1c5088b55eee9c0b44661757236c4c1b47986f4104c14cb5f3169ea47ce1ba9",
+        "identity.json": "b67972c3bb43bc632831df27e445ef575802f3520ee15ed51bce7053aa30e4a4",
+        "policy-attempt.json": "e1b7f84e129c7c5c9bde07f70e3dfd8214b32bd91dfe01dcfc37e91854617f7e",
+        "restored.json": "0bce9175c119b18727b0033e96754b8ebc985a1e6f5f677db19e2fc62d55dba1",
+        "result.json": "e875255f1b0442e3b02c410490868ff56af3e19aeabcb557fa0b3c8ffbf384e5"
+      }
+    },
+    "ubuntu-24.04": {
+      "native_os": "Linux",
+      "native_arch": "x86_64",
+      "python_sha256": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+      "method": "linux-unshare-net",
+      "enforcer_path": "/usr/bin/unshare",
+      "enforcer_sha256": "a23c8863860669003dc4660039fe642f5795c8c2195898ebc5d01afa1ac3d11c",
+      "baseline_connected": true,
+      "denied_before": {
+        "denied": true,
+        "errno": 101,
+        "raw_errno": 101,
+        "winerror": null
+      },
+      "denied_after": {
+        "denied": true,
+        "errno": 101,
+        "raw_errno": 101,
+        "winerror": null
+      },
+      "policy_success": true,
+      "restored_connected": true,
+      "result": "pass",
+      "raw_report_sha256": {
+        "baseline.json": "9acc20ccbd9d4b6b8a31279cf897a5d1cb8a6863317a7e4971653d3d6bb747c9",
+        "denied-after.json": "65cbdee4ab36de6b33be3ce743f9ae184371cba25683d35e875e2d918bf665ac",
+        "denied-before.json": "3dc4f138e05364de52f1251bcf7f872b75c60365bcc163ae95f7286c7e732c57",
+        "enforcer.json": "c08f3bb57d8b1bfbf5b435d16ff399547d6502879c9b8ab7fafbcac2191bacbc",
+        "identity.json": "66f08dda1fa90068834160c146d5d967a469494ca221629f9ef6f695c78067b1",
+        "policy-attempt.json": "45e86812924d431e312fd6e130be52c7dc821aa132b032cf8907b666e8b4bd96",
+        "restored.json": "ba6b05b6a8a8baaa2c7d1c493144991cdc93e2242740fc022ba2025e26d2240a",
+        "result.json": "15befc12c4a1a5e5171dfdf8b0a2534a2a0625bca51aa4188cd9111ba4d41803"
+      }
+    },
+    "ubuntu-24.04-arm": {
+      "native_os": "Linux",
+      "native_arch": "aarch64",
+      "python_sha256": "5fa9ce7be3c3a2ef767c1999625a370c04ec3102d082472ff7f228225dd590d0",
+      "method": "linux-unshare-net",
+      "enforcer_path": "/usr/bin/unshare",
+      "enforcer_sha256": "e0c145c3d4c06686544b1362ed64da819539166a5e1e6fd96093aea4d2539b6a",
+      "baseline_connected": true,
+      "denied_before": {
+        "denied": true,
+        "errno": 101,
+        "raw_errno": 101,
+        "winerror": null
+      },
+      "denied_after": {
+        "denied": true,
+        "errno": 101,
+        "raw_errno": 101,
+        "winerror": null
+      },
+      "policy_success": true,
+      "restored_connected": true,
+      "result": "pass",
+      "raw_report_sha256": {
+        "baseline.json": "bbd3bfa2e8aed1a73166a9106b59cc90d25b84ac7aac0ae62397691082bc6592",
+        "denied-after.json": "f6fc5421f08a144dd926d681a1e3e0df8c278be39ef0baf46412775ba89003b6",
+        "denied-before.json": "4a2ade21179486276d8ba319a8bb6819e83fb21a2c1a9955f56dabec4b0a8a80",
+        "enforcer.json": "6c4c4c309df967f6216366c90a46d9229bc0f2cd5e6a535c07a22177902e2d37",
+        "identity.json": "868b638899e5613d6373397c005746cfa540355995791f198b482f030a41a140",
+        "policy-attempt.json": "45e86812924d431e312fd6e130be52c7dc821aa132b032cf8907b666e8b4bd96",
+        "restored.json": "ec006fa5a2e293f5624524d98767b3bd5e3e2b1e0b252128a78e46a9ff645b8c",
+        "result.json": "7e3b6588a2cd3739667f07a02784caff85fedea3f30d4b0bd0a9d2954b2a7c13"
+      }
+    },
+    "windows-11-arm": {
+      "native_os": "Windows",
+      "native_arch": "ARM64",
+      "python_sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+      "method": "windows-firewall-program-block",
+      "enforcer_path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "enforcer_sha256": "532aceda5485f1c2728baa0549a498d594f7056022a89cd71eb97df68e33672c",
+      "baseline_connected": true,
+      "denied_before": {
+        "denied": true,
+        "errno": 10013,
+        "raw_errno": 13,
+        "winerror": 10013
+      },
+      "denied_after": {
+        "denied": true,
+        "errno": 10013,
+        "raw_errno": 13,
+        "winerror": 10013
+      },
+      "policy_success": true,
+      "restored_connected": true,
+      "result": "pass",
+      "raw_report_sha256": {
+        "baseline.json": "d58ac2e67c7322a70309da34f7bec5117a10a60290ab633fd054be5aef5144cd",
+        "denied-after.json": "1d070c288059a630fe0edd7942126d6308be8fb0569c49b2cfdece2285e2ad51",
+        "denied-before.json": "d13528d41b9cebf09c3f743a36ae18c02a0636e9cde15fa7d59a2e316474be6a",
+        "enforcer.json": "35232e95ddcc6d81389c1ab91213e3a51f223a2a24cbd2055fc39f5fb5c5dd2a",
+        "identity.json": "b9625670ad8d2564bf2417b2b90f9bbeda070485ec00e499c8b01e843dcc7183",
+        "policy-attempt.json": "02ff14a6dbc79afc05fde63cd41fe08f3b56a18ffc3807cba169bc16fde1c4f0",
+        "restored.json": "bdf28ddf6ff8ed44be7d28c868ed968a92c5c06e92d405ac9d4cdfc81aee90de",
+        "result.json": "e2f0e59112930006398ae4a5afb8c575ee2851839e981850d146972a7da5ee29",
+        "windows-active-rule.json": "4390a51d473c5ba31b4945c6f634bb31e19c44c6bdd1c07304fad77442b11460",
+        "windows-netsecurity-module.json": "1089692300a0f542a7e966cefa179beba0345d153afc9c48961d700bddbc2740"
+      },
+      "windows_netsecurity_module_sha256": "04028a016fa8757a2c2c78d6045e27a2ebc968d5bd9e25cf81ff8d070fa716d5",
+      "windows_rule_active": true,
+      "windows_rule_cleaned": true
+    },
+    "windows-2025": {
+      "native_os": "Windows",
+      "native_arch": "AMD64",
+      "python_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+      "method": "windows-firewall-program-block",
+      "enforcer_path": "C:\\Program Files\\PowerShell\\7\\pwsh.exe",
+      "enforcer_sha256": "fa2c8bb1e35cdd62ad15cd06a1d8f2c5961e9725a9bfa1e7cfd2c322f49e9619",
+      "baseline_connected": true,
+      "denied_before": {
+        "denied": true,
+        "errno": 10013,
+        "raw_errno": 13,
+        "winerror": 10013
+      },
+      "denied_after": {
+        "denied": true,
+        "errno": 10013,
+        "raw_errno": 13,
+        "winerror": 10013
+      },
+      "policy_success": true,
+      "restored_connected": true,
+      "result": "pass",
+      "raw_report_sha256": {
+        "baseline.json": "50753619e0c8688d7312d003b930aaf656273f0c7f75ea886c54a0523b1070b1",
+        "denied-after.json": "bdb65443c279d755bc2ba887327f19595f6b0eb3fc6a8e60b01e13a19c18b74d",
+        "denied-before.json": "0bd168ce6b2a6be41453a8ce493720f81b01aedc5e1dd8e53aec80cbdf690782",
+        "enforcer.json": "62a75a22546a1a1687a206c46ef3b1eddf7054767ff4060518cfca3582782c37",
+        "identity.json": "92ea618c75c0cfbee0f7b2cfbbe6ebd39dab899a6713d048baec5b943a3136e0",
+        "policy-attempt.json": "9fe08d48a37a7185750834af676ccd975fdef7c0e4b069806312be89b62fc8a9",
+        "restored.json": "e5166e1b2a00038b6e96e1a71d6cf9d0fbf8bca8bcea58a28e21ce9206936ab5",
+        "result.json": "2bbe606877eb16911db7ad75c1c4e4ba5c0d9f0e9e7d18bc72f7d37b15598e8d",
+        "windows-active-rule.json": "b029f6be65fecc1a2fa2925f78a5fb8633a64f8db953f494891cb7c37b63f65f",
+        "windows-netsecurity-module.json": "1089692300a0f542a7e966cefa179beba0345d153afc9c48961d700bddbc2740"
+      },
+      "windows_netsecurity_module_sha256": "04028a016fa8757a2c2c78d6045e27a2ebc968d5bd9e25cf81ff8d070fa716d5",
+      "windows_rule_active": true,
+      "windows_rule_cleaned": true
+    }
+  }
+}
