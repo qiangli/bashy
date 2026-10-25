@@ -529,6 +529,7 @@ func containsString(items []string, want string) bool {
 // verbSynopsis describes the front-door verb shims (the coreutils tools carry
 // their own Synopsis; builtins are standard). Brand-neutral, one line each.
 var verbSynopsis = map[string]string{
+	"transcribe":    "transcribe one media file or URL through a registered Bash# pipeline unit",
 	"install-agent": "configure a coding agent to use bashy as its shell or MCP server",
 
 	"proxy":              "standalone local network proxy: SOCKS5 CONNECT with remote DNS and optional username/password authentication",

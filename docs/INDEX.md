@@ -1,5 +1,7 @@
 # bashy docs index
 
+- `transcribe-contract.md` — Sprint 503 S503.1: public transcription command, replaceable stage JSON v1 contract, existing infrastructure seams and unfinished adapter prerequisites.
+
 - `why-bashy.md` — why bashy, and for whom: the page to hand to whoever approves adoption. Layers (bash everywhere · Bash# polyglot repos · agentic userland A–G · sphere), a persona map, recipes for one-tool/many-session and multi-vendor teams (claim/resource leases first), honest comparisons, shipped/prototype/planned status.
 - `bashy-service-design.md` — Sprint 418 S16: `bashy supervisord` as the service monitor over every enabled `bashy service` unit (process provider, delegated internal provider, health/restart/start-limit policy, live reload, control socket, `--pid1`), the runtime verbs and the acceptance evidence; S19 retires `supervisord DAG.md TARGET` in favour of a dag-root unit (`exec: bashy dag DAG.md TARGET`), with the scratch image entrypoint `bashy supervisord --pid1`. The unit schema and provider contract are yoke's S15 doc.
 - `plan-ycode-yolo.md` — Sprint 415: explicit Genie YOLO profile selection, recipe propagation and regression checks.

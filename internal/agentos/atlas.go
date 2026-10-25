@@ -142,6 +142,12 @@ func atlasCatalog(builtins, core, verbs, hidden []string) []atlasRecord {
 // lists it with a conductor consumer: the tool-record fallback would leave it
 // without effects, which the v1.0 release bar counts as no atlas entry.
 var bashyOwnedVerbAtlas = map[string]atlas.Entry{
+	"transcribe": {
+		Stage: atlas.StageCross, Group: atlas.GroupToolchains, Tier: atlas.TierUserland,
+		Caps:      []string{atlas.CapSpawnsProcesses},
+		Effects:   []string{atlas.EffRead, atlas.EffWrite, atlas.EffExec, atlas.EffNet},
+		Stability: atlas.StabilityExperimental,
+	},
 	// foreman drives a persistent, steerable agent session (chat elevated).
 	// Same shape as its session siblings (chat/delegate/coach): it spawns
 	// external agent processes that reach the network on metered inference.
