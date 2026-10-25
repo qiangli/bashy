@@ -71,6 +71,15 @@ evidence confirms their effect.** Determine whether Zig 0.15.2 supplies the
 C++/unwind link automatically; do not paper over missing components with
 Ubuntu `libstdc++`, `libgcc`, or glibc.
 
+The [third hosted run](evidence/linux-musl-40218975176-review.md) established
+that both native targets pass the flag preflight and build `whisper-cli` with
+full printed maps. Its fail-closed classifier stopped on Zig's generated
+`libzigc.a`, which both maps load through only `libzigc_zcu.o`. The pinned
+Zig source builds this archive from `lib/c.zig` and related Zig C shim
+sources under the distribution's MIT license. The next audit now requires
+that exact member in both map and archive, retains the archive bytes and
+source anchors, and continues to reject every other unknown input.
+
 The desired ELF graph is one static `whisper-cli` composed of whisper.cpp/GGML
 and Zig's musl/libc++/libc++abi/libunwind/compiler-runtime inputs. It has no
 `PT_INTERP`, no `DT_NEEDED`, and no `GLIBC`, `GLIBCXX`, `GCC`, or `CXXABI`

@@ -3,6 +3,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import probe_linux_musl_runtime as probe
 
@@ -19,11 +20,11 @@ class LinkInputPolicyTest(unittest.TestCase):
             directory.mkdir()
         self.map_file = self.root / "link.map"
 
-    def inspect(self, path: Path, retain=False):
+    def inspect(self, path: Path, retain=False, member="member.o"):
         path.write_bytes(b"input")
         self.map_file.write_text(
             "VMA LMA Size Align Out In Symbol\n" +
-            f"    1000 1000 10 4 {path}(member.o):(.text)\n")
+            f"    1000 1000 10 4 {path}({member}):(.text)\n")
         link_log = f"ld.lld -o {self.build}/bin/whisper-cli {path}\n"
         return probe.check_link_inputs(self.map_file, link_log,
                                        self.build, self.zig, self.cache,
@@ -44,6 +45,28 @@ class LinkInputPolicyTest(unittest.TestCase):
     def test_unclassified_archive_is_refused(self):
         with self.assertRaisesRegex(RuntimeError, "unclassified"):
             self.inspect(self.cache / "libunknown.a")
+
+    def test_zigc_requires_the_reviewed_member_and_retains_source_identity(self):
+        archive = self.cache / "libzigc.a"
+        with self.assertRaisesRegex(RuntimeError, "unreviewed libzigc map members"):
+            self.inspect(archive)
+        listed = probe.subprocess.CompletedProcess(["ar", "t", str(archive)], 0,
+                                                    "libzigc_zcu.o\n", "")
+        with patch.object(probe.shutil, "which", return_value="/usr/bin/ar"), \
+             patch.object(probe.subprocess, "run", return_value=listed):
+            result = self.inspect(archive, retain=True,
+                                  member=str(self.cache / "libzigc_zcu.o"))
+        item = result["inputs"][0]
+        self.assertEqual(item["category"], "zig-libc-compat")
+        self.assertEqual(item["license_anchor"], "LICENSE")
+        self.assertEqual(item["archive_members"], ["libzigc_zcu.o"])
+        self.assertEqual(set(item["source_anchors"]), set(probe.ZIGC_SOURCES))
+        self.assertEqual((self.root / "evidence" / item["retained_path"]).read_bytes(), b"input")
+        listed.stdout = "other.o\n"
+        with patch.object(probe.shutil, "which", return_value="/usr/bin/ar"), \
+             patch.object(probe.subprocess, "run", return_value=listed):
+            with self.assertRaisesRegex(RuntimeError, "unreviewed libzigc archive members"):
+                self.inspect(archive, member="libzigc_zcu.o")
 
     def test_host_archive_is_refused(self):
         host = self.root / "host"

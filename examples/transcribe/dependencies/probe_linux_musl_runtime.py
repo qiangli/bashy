@@ -34,6 +34,16 @@ ZIG_ARCHIVES = {
 }
 SOURCE_ANCHORS = (
     "LICENSE",
+    "lib/c.zig",
+    "lib/c/common.zig",
+    "lib/c/inttypes.zig",
+    "lib/c/stdlib.zig",
+    "lib/c/string.zig",
+    "lib/c/strings.zig",
+    "lib/std/std.zig",
+    "lib/std/mem.zig",
+    "lib/std/ascii.zig",
+    "lib/std/c.zig",
     "lib/libc/musl/COPYRIGHT",
     "lib/libc/musl/crt/crt1.c",
     "lib/libc/musl/crt/Scrt1.c",
@@ -57,6 +67,8 @@ MUSL_NAMES = {"libc.a", "libm.a", "libpthread.a", "libdl.a", "librt.a",
 LLVM_NAMES = {"libc++.a": "lib/libcxx/LICENSE.TXT",
               "libc++abi.a": "lib/libcxxabi/LICENSE.TXT",
               "libunwind.a": "lib/libunwind/LICENSE.TXT"}
+ZIGC_SOURCES = tuple(anchor for anchor in SOURCE_ANCHORS
+                     if anchor == "lib/c.zig" or anchor.startswith(("lib/c/", "lib/std/")))
 
 
 def sha256(path: Path) -> str:
@@ -170,6 +182,22 @@ def verbose_link_inputs(build_log: str, output_name: str = "whisper-cli") -> tup
     return commands[0], inputs
 
 
+def inspect_zigc_archive(path: Path, loaded_members: list[str]) -> list[str]:
+    """Bind Zig's generated libc shim archive to its one reviewed member."""
+    expected = "libzigc_zcu.o"
+    if len(loaded_members) != 1 or Path(loaded_members[0]).name != expected:
+        raise RuntimeError(f"unreviewed libzigc map members: {loaded_members}")
+    ar = shutil.which("ar")
+    if not ar:
+        raise RuntimeError("ar is required to inspect libzigc archive members")
+    result = subprocess.run([ar, "t", str(path)], capture_output=True, text=True,
+                            check=False, timeout=30)
+    archive_members = result.stdout.splitlines()
+    if result.returncode or len(archive_members) != 1 or Path(archive_members[0]).name != expected:
+        raise RuntimeError(f"unreviewed libzigc archive members: {archive_members}; ar status {result.returncode}")
+    return archive_members
+
+
 def check_link_inputs(map_file: Path, build_log: str, build: Path,
                       zig_root: Path, zig_cache: Path,
                       retain_dir: Path | None = None) -> dict:
@@ -196,6 +224,9 @@ def check_link_inputs(map_file: Path, build_log: str, build: Path,
         resolved = path.resolve(strict=True)
         if not any(resolved.is_relative_to(root) for root in allowed_roots):
             raise RuntimeError(f"link input outside verified Zig/build roots: {resolved}")
+        loaded_members = sorted({member for archive, member in extracted
+                                 if archive == raw and member})
+        archive_members = None
         if resolved.is_relative_to(build.resolve()):
             category, license_anchor = "whisper-build", "whisper.cpp/LICENSE"
         else:
@@ -206,14 +237,19 @@ def check_link_inputs(map_file: Path, build_log: str, build: Path,
                 category, license_anchor = "zig-llvm-runtime", LLVM_NAMES[name]
             elif name.startswith(("libcompiler_rt", "compiler_rt", "libclang_rt.builtins")):
                 category, license_anchor = "zig-compiler-runtime", "LICENSE"
+            elif name == "libzigc.a" and resolved.is_relative_to(zig_cache.resolve()):
+                archive_members = inspect_zigc_archive(resolved, loaded_members)
+                category, license_anchor = "zig-libc-compat", "LICENSE"
             else:
                 raise RuntimeError(f"unclassified Zig link input; source review required: {resolved}")
         digest = sha256(resolved)
         item = {"path": raw, "resolved_path": str(resolved),
                 "sha256": digest, "category": category,
                 "license_anchor": license_anchor,
-                "members": sorted({member for archive, member in extracted
-                                   if archive == raw and member})}
+                "members": loaded_members}
+        if archive_members is not None:
+            item["archive_members"] = archive_members
+            item["source_anchors"] = ZIGC_SOURCES
         if retain_dir is not None:
             retained_bytes += resolved.stat().st_size
             if retained_bytes > 512 << 20:
