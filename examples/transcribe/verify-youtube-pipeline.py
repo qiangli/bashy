@@ -102,6 +102,10 @@ def subtitle_intervals(text, fmt, duration_ms):
             require(len(lines) >= 3 and lines[0] == str(len(intervals) + 1),
                     "invalid SRT cue number or body")
             lines = lines[1:]
+        elif lines and lines[0].isdigit():
+            require(lines[0] == str(len(intervals) + 1),
+                    "invalid VTT cue number")
+            lines = lines[1:]
         require(len(lines) >= 2 and lines[0].count(" --> ") == 1 and
                 all(line.strip() and " --> " not in line for line in lines[1:]),
                 "invalid subtitle cue body")

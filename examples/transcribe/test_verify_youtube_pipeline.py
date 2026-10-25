@@ -28,6 +28,11 @@ class GateValidationTest(unittest.TestCase):
         vtt = "WEBVTT\n\n00:00:00.100 --> 00:00:01.200\nhello\n"
         self.assertEqual(gate.subtitle_intervals(srt, "srt", 2000), [(100, 1200), (1200, 2000)])
         self.assertEqual(gate.subtitle_intervals(vtt, "vtt", 2000), [(100, 1200)])
+        numbered_vtt = "WEBVTT\n\n1\n00:00:00.100 --> 00:00:01.200\nhello\n\n2\n00:00:01.200 --> 00:00:02.000\nworld\n"
+        self.assertEqual(gate.subtitle_intervals(numbered_vtt, "vtt", 2000),
+                         [(100, 1200), (1200, 2000)])
+        with self.assertRaisesRegex(ValueError, "VTT cue number"):
+            gate.subtitle_intervals(numbered_vtt.replace("\n2\n", "\n3\n"), "vtt", 2000)
         with self.assertRaisesRegex(ValueError, "outside media duration"):
             gate.subtitle_intervals(srt, "srt", 1999)
         with self.assertRaisesRegex(ValueError, "overlap"):
