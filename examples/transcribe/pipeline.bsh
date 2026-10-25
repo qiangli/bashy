@@ -182,6 +182,9 @@ agentic function transcribe_pipeline() {
 
     local reported
     reported=$(jq -r '.artifacts[0].path' "$work/export-out.json") || return 1
+    # Go's filepath.Abs reports backslashes on Windows; compare both paths in
+    # the shell's forward-slash form before checking or publishing the file.
+    reported=$(absolute_native_path "$reported") || return 1
     [[ $reported == "$TRANSCRIBE_JSON_OUTPUT" && -s $reported ]] || {
         echo 'transcribe-pipeline: export provider did not create the requested nonempty artifact' >&2
         return 1
