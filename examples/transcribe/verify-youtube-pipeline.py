@@ -24,9 +24,17 @@ import time
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
 FORMATS = ("txt", "srt", "vtt")
-STAMP = re.compile(r"^(\d{2}):(\d{2}):(\d{2})[,.](\d{3})$")
-YOUTUBE_SHA256 = "f6aba46f43523ad83a604cec1a05821d4f4288fc55b18db9ad2dea7ccac50ff3"
+STAMP = re.compile(r"^(\d{2,}):(\d{2}):(\d{2})([,.])(\d{3})$")
+SHA256 = re.compile(r"[0-9a-f]{64}\Z")
 YTDLP_SHA256 = "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14"
+SOURCE_FILES = (
+    "examples/transcribe/verify-youtube-pipeline.py",
+    "examples/transcribe/pipeline.bsh",
+    "examples/transcribe/source_youtube.py",
+    "examples/transcribe/adapters/register.sh",
+    "skills/bashy/commands/transcribe.md",
+    "skills/bashy/commands/transcribe.dhnt",
+)
 URLS = {
     "canonical": "https://www.youtube.com/watch?v=_j_PixI3Muo",
     "shortened": "https://youtu.be/_j_PixI3Muo?si=if_lqvXvU5GaM1nb",
@@ -59,23 +67,46 @@ def reference_score(text, reference):
                for i in range(max(1, len(actual) - width + 1)))
 
 
-def milliseconds(value):
+def checkout_commit():
+    return subprocess.check_output(
+        ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True).strip()
+
+
+def committed_digest(source):
+    committed = subprocess.check_output(
+        ["git", "-C", str(ROOT), "show", "HEAD:" + source])
+    return hashlib.sha256(committed).hexdigest()
+
+
+def milliseconds(value, fmt):
     match = STAMP.fullmatch(value)
     require(match is not None, "invalid subtitle timestamp: " + value)
-    h, m, s, ms = map(int, match.groups())
+    h, m, s, sep, ms = match.groups()
+    require(sep == ("," if fmt == "srt" else "."), "invalid subtitle separator: " + value)
+    h, m, s, ms = map(int, (h, m, s, ms))
     require(m < 60 and s < 60, "invalid subtitle clock: " + value)
     return ((h * 60 + m) * 60 + s) * 1000 + ms
 
 
 def subtitle_intervals(text, fmt, duration_ms):
+    require(fmt in ("srt", "vtt"), "unknown subtitle format")
+    text = text.replace("\r\n", "\n")
     if fmt == "vtt":
-        require(text.startswith("WEBVTT\n"), "VTT header missing")
+        require(text.startswith("WEBVTT\n\n"), "VTT header missing")
+        text = text[len("WEBVTT\n\n"):]
+    require(bool(text.strip()), fmt + " has no timed cues")
     intervals = []
-    for line in text.splitlines():
-        if " --> " not in line:
-            continue
-        left, right = line.split(" --> ", 1)
-        start, end = milliseconds(left), milliseconds(right.split()[0])
+    for block in re.split(r"\n\s*\n", text.strip()):
+        lines = block.splitlines()
+        if fmt == "srt":
+            require(len(lines) >= 3 and lines[0] == str(len(intervals) + 1),
+                    "invalid SRT cue number or body")
+            lines = lines[1:]
+        require(len(lines) >= 2 and lines[0].count(" --> ") == 1 and
+                all(line.strip() and " --> " not in line for line in lines[1:]),
+                "invalid subtitle cue body")
+        left, right = lines[0].split(" --> ")
+        start, end = milliseconds(left, fmt), milliseconds(right, fmt)
         require(0 <= start < end <= duration_ms, "subtitle timestamp outside media duration")
         require(not intervals or start >= intervals[-1][1], "subtitle timestamps overlap")
         intervals.append((start, end))
@@ -85,8 +116,15 @@ def subtitle_intervals(text, fmt, duration_ms):
 
 def validated_manifest(m):
     require(m.get("schema") == "s503-youtube-pipeline-v1", "unknown manifest schema")
-    require(re.fullmatch(r"[0-9a-f]{7,40}", m.get("candidate_commit", "")),
-            "candidate commit is required")
+    require(m.get("candidate_commit") == checkout_commit(),
+            "candidate commit must match this checkout HEAD")
+    source_hashes = m.get("source_sha256")
+    require(isinstance(source_hashes, dict) and set(source_hashes) == set(SOURCE_FILES),
+            "all candidate source SHA-256 values are required")
+    for source in SOURCE_FILES:
+        require(source_hashes[source] == digest(ROOT / source), source + " SHA-256 mismatch")
+        require(source_hashes[source] == committed_digest(source),
+                source + " differs from candidate commit")
     require(m.get("acquisition_evidence") == {"windows_amd64": "run165", "darwin_arm64": "run168"},
             "preserved native acquisition evidence must be linked")
     require(m.get("os") == platform.system().lower(), "manifest OS differs from native host")
@@ -119,8 +157,6 @@ def validated_manifest(m):
         require(isinstance(item.get("reference"), str) and len(words(item["reference"])) >= 6,
                 name + " reviewed excerpt missing")
         require(0.5 <= item.get("min_score", 0) <= 1, name + " reference tolerance invalid")
-    require(m.get("controlled_webm_sha256") != YOUTUBE_SHA256,
-            "controlled speech fixture must differ from operator video")
     media = m.get("operator_media")
     require(isinstance(media, dict) and set(media) == set(URLS), "both preserved URL variants required")
     for label, url in URLS.items():
@@ -128,10 +164,36 @@ def validated_manifest(m):
         require(item.get("url") == url and item.get("video_id") == "_j_PixI3Muo",
                 label + " URL identity mismatch")
         require(item.get("duration_ms") == operator["duration_ms"], label + " duration mismatch")
-        require(item.get("sha256") == YOUTUBE_SHA256, label + " evidence hash mismatch")
-        require(Path(item.get("path", "")).is_file() and digest(item["path"]) == YOUTUBE_SHA256,
+        require(isinstance(item.get("sha256"), str) and SHA256.fullmatch(item["sha256"]),
+                label + " evidence hash missing")
+        require(Path(item.get("path", "")).is_file() and digest(item["path"]) == item["sha256"],
                 label + " retained media missing or changed")
+        require(item["sha256"] != m["controlled_webm_sha256"],
+                "controlled speech fixture must differ from operator video")
     return m
+
+
+def offline_canary(m):
+    enforcement = m.get("offline_enforcement")
+    require(isinstance(enforcement, dict) and enforcement.get("method") and
+            isinstance(enforcement.get("canary_report"), str) and
+            isinstance(enforcement.get("canary_sha256"), str) and
+            SHA256.fullmatch(enforcement["canary_sha256"]),
+            "offline run needs external network-denial canary evidence")
+    report_path = Path(enforcement["canary_report"])
+    require(report_path.is_absolute() and report_path.is_file() and
+            digest(report_path) == enforcement["canary_sha256"],
+            "offline canary report missing or changed")
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    require(report.get("schema") == "s503-network-denial-v1" and
+            report.get("os") == m["os"] and report.get("arch") == m["arch"] and
+            report.get("candidate_commit") == m["candidate_commit"] and
+            report.get("network_denied") is True and
+            isinstance(report.get("probe_command"), list) and report["probe_command"] and
+            isinstance(report.get("exit_code"), int) and report["exit_code"] != 0 and
+            isinstance(report.get("error"), str) and report["error"].strip(),
+            "offline canary report does not prove a failed network probe")
+    return enforcement
 
 
 def run(argv, env, timeout=60, check=True):
@@ -248,7 +310,7 @@ def failure_and_cancel(m, env, outdir, tempdir, online):
             "invalid URL produced a success artifact")
     assert_no_owned_temp(outdir, tempdir)
     if os.name != "posix":
-        return "cancellation requires a native process-group implementation on this host"
+        return "not_tested_windows_no_native_process_group"
     cancel = outdir / "cancelled.txt"
     cmd = [m["bashy"], "transcribe", "--source", "transcribe-local",
            "--decoder", m["decoder"]["name"], "--provider", "transcribe-whisper",
@@ -281,6 +343,7 @@ def main():
     args = parser.parse_args()
     m = validated_manifest(json.loads(args.manifest.read_text()))
     require(not (args.offline and args.online), "online acquisition and offline repeat are separate runs")
+    enforcement = offline_canary(m) if args.offline else None
     if args.validate_only:
         print("manifest and retained media validated; no pipeline run")
         return
@@ -307,8 +370,6 @@ def main():
         cases = [("controlled", m["controlled_webm"], m["controlled"], "transcribe-local"),
                  ("operator", m["operator_media"]["canonical"]["path"],
                   m["operator"], "transcribe-local")]
-        if args.offline:
-            require(m.get("offline_enforcement"), "offline run needs recorded external network disablement")
         for label, media, expectation, source in cases:
             for orientation in ("script", "skill"):
                 paths = {fmt: invoke(m, env, source, media, label, orientation, fmt, outdir, skill)
@@ -318,28 +379,35 @@ def main():
                 results.append({"case": label, "orientation": orientation, "source": source,
                                 "formats": artifacts})
         if args.online:
-            # One acquisition per URL form, with both orientations represented.
-            # The retained local media covers the other exports without repeats.
-            for label, orientation in (("canonical", "script"), ("shortened", "skill")):
-                path = invoke(m, env, "transcribe-youtube", URLS[label], "url-" + label,
-                              orientation, "txt", outdir, skill)
-                text = path.read_text(encoding="utf-8")
-                require(reference_score(text, m["operator"]["reference"]) >= m["operator"]["min_score"],
-                        label + " URL pipeline transcript misses reviewed excerpt")
-                assert_no_owned_temp(outdir, tempdir)
-                results.append({"case": "url-" + label, "orientation": orientation,
-                                "source": "transcribe-youtube", "formats": {"txt": {
-                                    "sha256": digest(path), "bytes": path.stat().st_size}}})
+            # URL acquisition is crossed with orientation. Retained media runs
+            # above cross orientation with every format without 12 downloads.
+            for label, url in URLS.items():
+                for orientation in ("script", "skill"):
+                    path = invoke(m, env, "transcribe-youtube", url, "url-" + label,
+                                  orientation, "txt", outdir, skill)
+                    body = path.read_text(encoding="utf-8")
+                    require(len(words(body)) >= 12 and
+                            reference_score(body, m["operator"]["reference"]) >=
+                            m["operator"]["min_score"],
+                            label + " URL pipeline transcript misses reviewed excerpt")
+                    assert_no_owned_temp(outdir, tempdir)
+                    results.append({"case": "url-" + label, "orientation": orientation,
+                                    "source": "transcribe-youtube", "formats": {"txt": {
+                                        "sha256": digest(path), "bytes": path.stat().st_size}}})
         function_receipts = verify_function_receipts(env)
         cancellation = failure_and_cancel(m, env, outdir, tempdir, args.online)
         summary = {"schema": "s503-youtube-pipeline-result-v1", "candidate_commit": m["candidate_commit"],
                           "candidate_sha256": digest(m["bashy"]),
                           "os": m["os"], "arch": m["arch"], "offline": args.offline,
                           "online_acquisition": args.online,
-                          "offline_enforcement": m.get("offline_enforcement") if args.offline else None,
-                          "operator_media_sha256": YOUTUBE_SHA256, "skill_identity": skill["identity"],
+                          "offline_enforcement": enforcement,
+                          "operator_media_sha256": {label: item["sha256"] for label, item in
+                                                    m["operator_media"].items()},
+                          "source_sha256": m["source_sha256"], "skill_identity": skill["identity"],
                           "function_receipts": function_receipts,
-                          "results": results, "failure_cleanup": "pass", "cancellation": cancellation}
+                          "results": results, "failure_cleanup": "pass",
+                          "local_pipeline_cancellation": cancellation,
+                          "download_cancellation": "not_tested_by_native_gate"}
         (outdir / "result.json").write_text(json.dumps(summary, indent=2) + "\n")
         print(json.dumps(summary, indent=2))
 

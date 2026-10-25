@@ -1,6 +1,14 @@
 {
   "schema": "s503-youtube-pipeline-v1",
-  "candidate_commit": "c32bf04d",
+  "candidate_commit": "FILL: full git rev-parse HEAD of this Bashy checkout",
+  "source_sha256": {
+    "examples/transcribe/verify-youtube-pipeline.py": "FILL",
+    "examples/transcribe/pipeline.bsh": "FILL",
+    "examples/transcribe/source_youtube.py": "FILL",
+    "examples/transcribe/adapters/register.sh": "FILL",
+    "skills/bashy/commands/transcribe.md": "FILL",
+    "skills/bashy/commands/transcribe.dhnt": "FILL"
+  },
   "os": "darwin",
   "arch": "arm64",
   "acquisition_evidence": {
@@ -52,10 +60,14 @@
       "video_id": "_j_PixI3Muo",
       "path": "/private/acquire-shortened/_j_PixI3Muo.webm",
       "duration_ms": 499000,
-      "sha256": "f6aba46f43523ad83a604cec1a05821d4f4288fc55b18db9ad2dea7ccac50ff3"
+      "sha256": "FILL: independently measured shortened acquisition SHA-256"
     }
   },
-  "offline_enforcement": "FILL after externally disabling network access",
+  "offline_enforcement": {
+    "method": "FILL: native OS network-denial mechanism",
+    "canary_report": "/private/evidence/network-denial.json",
+    "canary_sha256": "FILL: SHA-256 of external canary report"
+  },
   "case_timeout_seconds": 1800,
   "cancel_after_seconds": 2
 }
