@@ -250,6 +250,8 @@ github.com/chzyer/test v1.0.0/go.mod h1:2JlltgoNkt4TW/z9V/IzDdFaMTM2JPIi26O1pF38
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/clipperhouse/displaywidth v0.11.0 h1:lBc6kY44VFw+TDx4I8opi/EtL9m20WSEFgwIwO+UVM8=
 github.com/clipperhouse/displaywidth v0.11.0/go.mod h1:bkrFNkf81G8HyVqmKGxsPufD3JhNl3dSqnGhOoSD/o0=
+github.com/clipperhouse/uax29/v2 v2.2.0 h1:ChwIKnQN3kcZteTXMgb1wztSgaU+ZemkgWdohwgs8tY=
+github.com/clipperhouse/uax29/v2 v2.2.0/go.mod h1:EFJ2TJMRUaplDxHKj1qAEhCtQPW2tJSwu5BF98AuoVM=
 github.com/clipperhouse/uax29/v2 v2.7.0 h1:+gs4oBZ2gPfVrKPthwbMzWZDaAFPGYK72F0NJv2v7Vk=
 github.com/clipperhouse/uax29/v2 v2.7.0/go.mod h1:EFJ2TJMRUaplDxHKj1qAEhCtQPW2tJSwu5BF98AuoVM=
 github.com/cloudflare/circl v1.6.3 h1:9GPOhQGF9MCYUeXyMYlqTR6a5gTrgR/fBLXvUgtVcg8=
@@ -1071,6 +1073,8 @@ github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9 h
 github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9/go.mod h1:koKm/FhUX+X74g9NuiShrwvEGksSvh8GWnjonftUyRI=
 github.com/qiangli/yoke/external/otel v0.0.0-20261024022434-3c473f9428ec h1:26wA5eGjDeMP7BrV/YO5mQoc8zmJSg7ruCnAaB4/vmM=
 github.com/qiangli/yoke/external/otel v0.0.0-20261024022434-3c473f9428ec/go.mod h1:RbSjraxAoh+yEwleVvEFryP77Pyw7zs4KIi4ssEqRDc=
+github.com/qiangli/yoke/external/runewidth v0.0.0-20261025040214-d4224e17d6f6 h1:ezKTCyZCk+L3Jsta14ljTUUBCuWZolCOW4jpK+uzkuQ=
+github.com/qiangli/yoke/external/runewidth v0.0.0-20261025040214-d4224e17d6f6/go.mod h1:tARgoBZEIZ6C6/dzI4z9VZDCJgeKklZbjfHXG9bGt5o=
 github.com/qiangli/yoke/external/securejoin v0.0.0-20261021020216-636e2fd289e9 h1:+om5Lxc8AVl0O3Djg0iaPb18v9VXXx/UvmIXaFydBHY=
 github.com/qiangli/yoke/external/securejoin v0.0.0-20261021020216-636e2fd289e9/go.mod h1:wz56MWzWglqLR8cYd6rDw6atLTts3Krdq2ZWwzhmjyI=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261024022434-3c473f9428ec h1:Ym3ez/W7w5BRAKmuJXYJ9Mj2DQB7mU3mxCXU+J6Tv+Q=

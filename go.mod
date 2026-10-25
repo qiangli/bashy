@@ -592,3 +592,7 @@ replace github.com/hashicorp/yamux => github.com/qiangli/yamux v0.1.0
 replace github.com/libp2p/go-yamux/v5 => github.com/qiangli/yamux/v5 v5.0.0
 
 replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/external/securejoin v0.0.0-20261021020216-636e2fd289e9
+
+// S407.6: all shell, utility, and background-job routes link the lazy MIT
+// fork so TUI-only width tables are built only when a width is queried.
+replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025040214-d4224e17d6f6
