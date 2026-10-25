@@ -95,3 +95,56 @@ adapters), and S503.6 (admitted model/tool artifacts). The command does not
 claim transcription succeeds before those stories pass. S503.5 adds YouTube
 acquisition later. Sprint 499 voice interaction is separate work and is not
 required for batch transcription.
+
+## Registering and selecting adapters
+
+A transcription adapter is an ordinary registered command. The command record
+uses the existing ring and atlas fields and adds generic provider metadata:
+
+- `provides` contains open dotted roles. The pipeline asks for
+  `transcribe.acquire`, `transcribe.decode`, `transcribe.infer`, or
+  `transcribe.export`; these are values, not a core enum.
+- `accepts` contains zero or more RFC 6901 JSON-pointer/RE2 pairs. All pairs
+  must match the stage request. An empty list accepts every input for the
+  declared role. Website hosts, filename suffixes, MIME strings and export
+  formats therefore remain adapter data.
+- `requires` is the same applicability expression used by skill
+  `metadata.requires`. Use `has=COMMAND` for executable dependencies and
+  `os=` / `arch=` for the supported coordinate. The command's existing `os`
+  field is also enforced.
+- `effects` is the existing command effect declaration. It is not inferred
+  from the adapter role or input.
+
+For example, a source for one independently defined fixture host can be
+imported with the ordinary command mechanism:
+
+```yaml
+name: fixture-source
+kind: command
+exec: [/absolute/path/fixture-source]
+provides: [transcribe.acquire]
+accepts:
+  - path: /input
+    pattern: '^https://media\.example\.test/'
+requires: 'os=linux,darwin,windows arch=amd64,arm64 has=curl'
+effects: [read, write, exec, net]
+```
+
+```text
+bashy commands add fixture-source.yaml
+bashy commands show fixture-source --yaml
+bashy commands list --json
+bashy transcribe select acquire acquire-request.json
+```
+
+The selector prints exactly one registered command name. No match reports the
+providers rejected by input, dependency or platform declarations; multiple
+matches report every ambiguous name and the explicit stage option that resolves
+it. `--source`, `--decoder`, `--provider`, and `--exporter` remain authoritative
+and call the named registered command directly.
+
+Shared command directories remain read-only and the normal local ring remains
+the override. `bashy commands set fixture-source ...` materializes and edits a
+local copy; neither selection nor dispatch has a separate override store. A new
+adapter is thus registration data plus its executable body: it requires no
+pipeline edit, dispatch case, website table, media-type enum, or Bashy rebuild.

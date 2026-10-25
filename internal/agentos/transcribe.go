@@ -33,6 +33,9 @@ func runTranscribe(args []string, stdout, stderr io.Writer, run transcribeRunner
 	if len(args) > 0 && args[0] == "stage" {
 		return runTranscribeStage(args[1:], stdout, stderr, run)
 	}
+	if len(args) > 0 && args[0] == "select" {
+		return runTranscribeSelect(args[1:], stdout, stderr)
+	}
 	fs := flag.NewFlagSet("transcribe", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	model := fs.String("model", "default", "local model ID")
@@ -143,6 +146,7 @@ Options:
   --decoder NAME   Explicit decoder provider
   --exporter NAME  Explicit export provider
 
+Selection: bashy transcribe select <acquire|decode|infer|export> <request.json>
 Stages: bashy transcribe stage <acquire|decode|infer|export> --provider NAME <request.json>
 Registered Bash# pipeline unit: transcribe-pipeline. CPU is the default device.`)
 }
