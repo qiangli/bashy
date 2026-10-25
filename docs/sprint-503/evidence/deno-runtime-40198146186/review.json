@@ -1,0 +1,191 @@
+{
+  "candidate_commit": "e317d1e91eb66e2071339823e0d575eaa19d7476",
+  "open_gates": [
+    "External hosted-runner identities do not establish operator-host installation or product package admission.",
+    "Deno binary transitive notices/SBOM and full operator YouTube route remain open."
+  ],
+  "product_admitted": false,
+  "run_conclusion": "success",
+  "run_id": 40198146186,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40198146186",
+  "schema": "s503-deno-ejs-runtime-review-v1",
+  "scope": "native Deno 2.9.8, yt-dlp 2026.10.21 bundled EJS 0.8.0 and external CI Python/Windows VC identity; no operator-host install",
+  "targets": [
+    {
+      "deno_archive_sha256": "4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c",
+      "deno_executable_sha256": "5d206ba69742549cc161db06e86f1d93c5622e1dbc8ba9d15a618e538fbc92f4",
+      "ejs_script_sha256": {
+        "yt_dlp_ejs/yt/solver/core.min.js": "18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00",
+        "yt_dlp_ejs/yt/solver/lib.min.js": "c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577"
+      },
+      "external_runtime": {
+        "python": {
+          "path": "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12",
+          "sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+          "source": "actions/setup-python@v5 runner tool cache",
+          "tool_cache_link": "/Users/runner/hostedtoolcache/Python/3.12.10/x64/bin/python",
+          "version": "3.12.10"
+        },
+        "schema": "s503-external-runtime-identity-v1",
+        "windows_vc_runtime": {}
+      },
+      "product_admitted": false,
+      "report_sha256": "56b2c855d4f317fb47ffe8076afb8164db08f25e5f15ad8ce9bb22a908283167",
+      "result": "PASS",
+      "runner_label": "macos-15-intel",
+      "target": "darwin/amd64",
+      "yt_dlp_zipapp_sha256": "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14"
+    },
+    {
+      "deno_archive_sha256": "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e",
+      "deno_executable_sha256": "d1e99265e5e6ee096c5780d88ff7d3e6cfdf33b1953a118b4889cab8ca6980ba",
+      "ejs_script_sha256": {
+        "yt_dlp_ejs/yt/solver/core.min.js": "18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00",
+        "yt_dlp_ejs/yt/solver/lib.min.js": "c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577"
+      },
+      "external_runtime": {
+        "python": {
+          "path": "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12",
+          "sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+          "source": "actions/setup-python@v5 runner tool cache",
+          "tool_cache_link": "/Users/runner/hostedtoolcache/Python/3.12.10/arm64/bin/python",
+          "version": "3.12.10"
+        },
+        "schema": "s503-external-runtime-identity-v1",
+        "windows_vc_runtime": {}
+      },
+      "product_admitted": false,
+      "report_sha256": "fc4b355d03611f507518df54530d452497ca2dc32f5b35cba0337a0b53502785",
+      "result": "PASS",
+      "runner_label": "macos-15",
+      "target": "darwin/arm64",
+      "yt_dlp_zipapp_sha256": "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14"
+    },
+    {
+      "deno_archive_sha256": "e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609",
+      "deno_executable_sha256": "368bca08999e02c6911b8f248167b582276b1f547db5712b6e736d7eda1dbda7",
+      "ejs_script_sha256": {
+        "yt_dlp_ejs/yt/solver/core.min.js": "18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00",
+        "yt_dlp_ejs/yt/solver/lib.min.js": "c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577"
+      },
+      "external_runtime": {
+        "python": {
+          "path": "/opt/hostedtoolcache/Python/3.12.15/x64/bin/python3.12",
+          "sha256": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+          "source": "actions/setup-python@v5 runner tool cache",
+          "tool_cache_link": null,
+          "version": "3.12.15"
+        },
+        "schema": "s503-external-runtime-identity-v1",
+        "windows_vc_runtime": {}
+      },
+      "product_admitted": false,
+      "report_sha256": "c32175efe993ba7f86c616734816ef93feff36ba1fcd7dbc43a1430f18722425",
+      "result": "PASS",
+      "runner_label": "ubuntu-24.04",
+      "target": "linux/amd64",
+      "yt_dlp_zipapp_sha256": "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14"
+    },
+    {
+      "deno_archive_sha256": "d49596c20b9788cf8f5d8ddf644103d4bde56ed239753f0bdb92ba9361d51905",
+      "deno_executable_sha256": "b484f780e5149ca05c673f1f79f7fb466f12a2295933bdad917af4a8a5c020e8",
+      "ejs_script_sha256": {
+        "yt_dlp_ejs/yt/solver/core.min.js": "18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00",
+        "yt_dlp_ejs/yt/solver/lib.min.js": "c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577"
+      },
+      "external_runtime": {
+        "python": {
+          "path": "/opt/hostedtoolcache/Python/3.12.15/arm64/bin/python3.12",
+          "sha256": "5fa9ce7be3c3a2ef767c1999625a370c04ec3102d082472ff7f228225dd590d0",
+          "source": "actions/setup-python@v5 runner tool cache",
+          "tool_cache_link": null,
+          "version": "3.12.15"
+        },
+        "schema": "s503-external-runtime-identity-v1",
+        "windows_vc_runtime": {}
+      },
+      "product_admitted": false,
+      "report_sha256": "552672445e55bccac03a5b606b6bd20e96cbd9ba95c565ea9d7ae42db5870056",
+      "result": "PASS",
+      "runner_label": "ubuntu-24.04-arm",
+      "target": "linux/arm64",
+      "yt_dlp_zipapp_sha256": "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14"
+    },
+    {
+      "deno_archive_sha256": "cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf",
+      "deno_executable_sha256": "924397800533d3eb0ed0c889b20ad70e18b970d93acd8135bc043f425e528266",
+      "ejs_script_sha256": {
+        "yt_dlp_ejs/yt/solver/core.min.js": "18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00",
+        "yt_dlp_ejs/yt/solver/lib.min.js": "c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577"
+      },
+      "external_runtime": {
+        "python": {
+          "path": "C:\\hostedtoolcache\\windows\\Python\\3.12.10\\x64\\python.exe",
+          "sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+          "source": "actions/setup-python@v5 runner tool cache",
+          "tool_cache_link": null,
+          "version": "3.12.10"
+        },
+        "schema": "s503-external-runtime-identity-v1",
+        "windows_vc_runtime": {
+          "MSVCP140.dll": {
+            "path": "C:\\Windows\\System32\\msvcp140.dll",
+            "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca",
+            "source": "external Windows System32",
+            "version": "14.51.36247.0"
+          },
+          "VCRUNTIME140.dll": {
+            "path": "C:\\Windows\\System32\\vcruntime140.dll",
+            "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7",
+            "source": "external Windows System32",
+            "version": "14.51.36247.0"
+          }
+        }
+      },
+      "product_admitted": false,
+      "report_sha256": "51b1dcdac5f035f550bfd3524e823eaaf1ad5989c5958459b83329043ac5165c",
+      "result": "PASS",
+      "runner_label": "windows-2025",
+      "target": "windows/amd64",
+      "yt_dlp_zipapp_sha256": "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14"
+    },
+    {
+      "deno_archive_sha256": "b413b92b735b50c198e8fe3b85af1aa50e29d5f72e229aab701d132286e14cef",
+      "deno_executable_sha256": "40d161bc35657cc7432a2e3832290922939cd63fddd29f66db2261d291e42478",
+      "ejs_script_sha256": {
+        "yt_dlp_ejs/yt/solver/core.min.js": "18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00",
+        "yt_dlp_ejs/yt/solver/lib.min.js": "c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577"
+      },
+      "external_runtime": {
+        "python": {
+          "path": "C:\\hostedtoolcache\\windows\\Python\\3.12.10\\arm64\\python.exe",
+          "sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+          "source": "actions/setup-python@v5 runner tool cache",
+          "tool_cache_link": null,
+          "version": "3.12.10"
+        },
+        "schema": "s503-external-runtime-identity-v1",
+        "windows_vc_runtime": {
+          "MSVCP140.dll": {
+            "path": "C:\\Windows\\System32\\msvcp140.dll",
+            "sha256": "167ceac85c2d726c4cd9e39b8881fafdc6de1520c0e67c4f6b271235f9d2a6c5",
+            "source": "external Windows System32",
+            "version": "14.51.36247.0"
+          },
+          "VCRUNTIME140.dll": {
+            "path": "C:\\Windows\\System32\\vcruntime140.dll",
+            "sha256": "3c56f4167e2b3d8e6338497731e6aae8cd7ec46bd6789f9423a8d9cf9a630310",
+            "source": "external Windows System32",
+            "version": "14.51.36247.0"
+          }
+        }
+      },
+      "product_admitted": false,
+      "report_sha256": "3b2c8622d5fd875dfac1e7b5be2e94b82f134b3517a6159fe336c233e5183e10",
+      "result": "PASS",
+      "runner_label": "windows-11-arm",
+      "target": "windows/arm64",
+      "yt_dlp_zipapp_sha256": "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14"
+    }
+  ]
+}
