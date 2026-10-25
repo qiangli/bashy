@@ -77,6 +77,7 @@ checks the skill identity, contract, effect cap and receipt, and proves a
 local command source override. With a candidate binary that contains S503.1,
 set `BASHY_BIN=/absolute/path/to/bashy BASHY_TRANSCRIBE_NATIVE=1` to use
 its real front door. The default test shim supplies only that front door for
-an older installed binary. Fixture text says `fixture only`; it does not
-prove transcription. S503.2 integration adds automatic selection and
-ambiguity tests; S503.4/5/6/8 own real media quality and native evidence.
+an older installed binary; its stub selector also checks the pipeline's
+automatic-selection call site, ambiguity failure and explicit precedence.
+Fixture text says `fixture only`; it does not prove transcription or S503.2's
+real applicability rules. S503.4/5/6/8 own media quality and native evidence.
