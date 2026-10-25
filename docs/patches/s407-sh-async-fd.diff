@@ -1,0 +1,92 @@
+diff --git a/interp/async_stdin_fd_linux_test.go b/interp/async_stdin_fd_linux_test.go
+new file mode 100644
+index 000000000..8be57bc0f
+--- /dev/null
++++ b/interp/async_stdin_fd_linux_test.go
+@@ -0,0 +1,46 @@
++// Copyright (c) 2026 qiangli
++// See LICENSE for licensing information
++
++package interp
++
++import (
++	"context"
++	"io"
++	"os"
++	"runtime"
++	"runtime/debug"
++	"strings"
++	"testing"
++
++	"mvdan.cc/sh/v3/syntax"
++)
++
++func TestAsyncStdinDescriptorClosed(t *testing.T) {
++	// An unclosed *os.File has a finalizer; disabling GC makes the
++	// descriptor ownership assertion deterministic.
++	runtime.GC()
++	oldGC := debug.SetGCPercent(-1)
++	defer debug.SetGCPercent(oldGC)
++	count := func() int {
++		entries, err := os.ReadDir("/proc/self/fd")
++		if err != nil {
++			t.Fatal(err)
++		}
++		return len(entries)
++	}
++	before := count()
++	r, err := New(StdIO(nil, io.Discard, io.Discard))
++	if err != nil {
++		t.Fatal(err)
++	}
++	file, err := syntax.NewParser().Parse(strings.NewReader(strings.Repeat(": & wait\n", 200)), "async-fds")
++	if err != nil {
++		t.Fatal(err)
++	}
++	if err := r.Run(context.Background(), file); err != nil {
++		t.Fatal(err)
++	}
++	if growth := count() - before; growth > 8 {
++		t.Fatalf("asynchronous lists leaked %d file descriptors", growth)
++	}
++}
+diff --git a/interp/runner.go b/interp/runner.go
+index 04af64c00..533ef81e4 100644
+--- a/interp/runner.go
++++ b/interp/runner.go
+@@ -4826,6 +4826,7 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
+ 		r2.asyncList = true
+ 		r2.inheritedBang = r.lastBangProc()
+ 		r2.ignoreAsyncListSignals()
++		var asyncStdin *os.File
+ 		// POSIX 2.11: an asynchronous list's stdin defaults to /dev/null
+ 		// whenever job control is not enabled (bash does this in default
+ 		// mode too, not only in POSIX mode). An explicit redirection on the
+@@ -4833,6 +4834,7 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
+ 		if !r.monitorActive() && !r.asyncStdinExplicit {
+ 			f, err := os.Open(os.DevNull)
+ 			if err == nil {
++				asyncStdin = f
+ 				r2.stdin = f
+ 			}
+ 		}
+@@ -4872,6 +4874,9 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
+ 		// a shell whose fork failed, and `$!` keeps its previous value.
+ 		if err := r.attachCarrier(bgCtx, r2, bg); err != nil {
+ 			cancel()
++			if asyncStdin != nil {
++				_ = asyncStdin.Close()
++			}
+ 			r2.closeDirFile()
+ 			r.errf("%s%v\n", r.bashErrPrefix(st.Pos()), err)
+ 			r.exit = exitStatus{code: 1}
+@@ -4908,6 +4913,9 @@ func (r *Runner) stmt(ctx context.Context, st *syntax.Stmt) {
+ 			go func() {
+ 				close(launched)
+ 				defer r2.closeDirFile()
++				if asyncStdin != nil {
++					defer asyncStdin.Close()
++				}
+ 				cleaned := false
+ 				cleanup := func() {
+ 					if cleaned {

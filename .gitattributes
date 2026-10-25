@@ -4,3 +4,5 @@
 # makes every line differ while printing identically.
 *.bpp text eol=lf
 *.expected text eol=lf
+# Unified patches contain context lines prefixed by one space before tabs.
+docs/patches/*.diff -whitespace

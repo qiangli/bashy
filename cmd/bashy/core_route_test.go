@@ -3,11 +3,13 @@
 package main
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // This is a non-shipping import-boundary proof: one Bashy inode must serve
@@ -24,7 +26,7 @@ func TestCoreRouteOneFileAndCommandCRUD(t *testing.T) {
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("build Bashy core: %v\n%s", err, out)
 	}
-	for _, name := range []string{"sh", "kill"} {
+	for _, name := range []string{"sh", "bash", "kill"} {
 		if err := os.Symlink(bin, filepath.Join(dir, name)); err != nil {
 			t.Fatal(err)
 		}
@@ -52,25 +54,34 @@ func TestCoreRouteOneFileAndCommandCRUD(t *testing.T) {
 			}
 		})
 	}
-	// POSIX at/batch/crontab share this scheduler. The native certification
-	// runner must be able to start it before any TCC process is launched.
-	scheduleEnv := append(os.Environ(), "BASHY_SCHEDULE_STATE="+filepath.Join(dir, "schedule.json"))
-	schedule := func(args ...string) string {
-		t.Helper()
-		cmd := exec.Command(bin, append([]string{"schedule"}, args...)...)
-		cmd.Env = scheduleEnv
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("schedule %v: %v; output=%q", args, err, out)
+	// Shell aliases have no scheduler startup side effect, including in a
+	// certification run. The harness may separately start a scheduler for
+	// at/batch/crontab, but an ordinary sh/bash invocation must not do so.
+	for _, alias := range []string{"sh", "bash"} {
+		for _, profile := range []string{"", "cert"} {
+			stateDir := filepath.Join(dir, "shell-"+alias+"-"+profile)
+			if err := os.MkdirAll(stateDir, 0700); err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command(filepath.Join(dir, alias), "-c", "/usr/bin/true")
+			cmd.Env = append(os.Environ(), "VSC_PROFILE="+profile, "BASHY_SCHEDULE_STATE="+filepath.Join(stateDir, "schedule.json"))
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("%s VSC_PROFILE=%q: %v; output=%q", alias, profile, err, out)
+			}
+			if _, err := os.Stat(filepath.Join(stateDir, "schedule-daemon.pid")); !os.IsNotExist(err) {
+				t.Fatalf("%s VSC_PROFILE=%q started a schedule daemon: %v", alias, profile, err)
+			}
 		}
-		return string(out)
 	}
-	if got := schedule("start", "--interval", "1s", "--json"); !strings.Contains(got, `"running":true`) {
-		t.Fatalf("schedule start did not report running: %q", got)
-	}
-	t.Cleanup(func() { schedule("stop", "--json") })
-	if got := schedule("status", "--json"); !strings.Contains(got, `"running":true`) {
-		t.Fatalf("schedule status did not report running: %q", got)
+	// POSIX at/batch/crontab share this scheduler. The native certification
+	// harness explicitly owns its foreground daemon's lifetime.
+	scheduleEnv := append(os.Environ(), "BASHY_SCHEDULE_STATE="+filepath.Join(dir, "schedule.json"))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	daemon := exec.CommandContext(ctx, bin, "schedule", "daemon", "--interval=10ms")
+	daemon.Env = scheduleEnv
+	if out, err := daemon.CombinedOutput(); ctx.Err() != context.DeadlineExceeded || !strings.Contains(string(out), "schedule daemon: ticking every 10ms") {
+		t.Fatalf("foreground schedule daemon: %v (context: %v); output=%q", err, ctx.Err(), out)
 	}
 	// The base profile retains Bash# Go-source execution. Its loader belongs
 	// to the language, even though optional AgentOS imports stay absent.
