@@ -106,9 +106,13 @@ Deno 2.9.8 CLI, the published yt-dlp zipapp hash, and matching bundled EJS
 versions, sizes and hashes. A failed or missing runner remains a blocked target;
 there is no partial aggregate PASS.
 
-The original dependency run passed **6/6 native Deno/EJS checks**. The new
-external-runtime identity check has **0/6 native results** until a new run.
-S503.6 still needs runtime identity review and a product install policy;
+The original dependency run passed **6/6 native Deno/EJS checks**. The
+[external-runtime identity run 40198146186](https://github.com/qiangli/bashy/actions/runs/40198146186)
+also passed all six, and its [retained review](sprint-503/evidence/deno-runtime-40198146186/review.json)
+reconciles the exact Deno, yt-dlp, bundled EJS, Python tool-cache and Windows
+VC hashes with native runner identity. This proves the external CI test
+environment, not an operator-host installation or a distributable Python
+runtime. S503.6 still needs product install and transitive-notice policy review;
 S503.8 still needs the operator video, transcript, timing and proved offline
 native pipeline evidence on all six targets. Neither a Deno/EJS PASS nor a
 native whisper build alone closes those gates.
