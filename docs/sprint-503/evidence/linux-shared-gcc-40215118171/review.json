@@ -1,0 +1,205 @@
+{
+  "candidate_commit": "fff610a1e3471e1506f4a85c1269340bad17a079",
+  "open_gates": [
+    "Host-provided GPL GCC runtime exception policy and target-host ABI compatibility remain unreviewed.",
+    "GCC direct startup objects crtbeginS.o and crtendS.o still require source/license mapping.",
+    "This experimental binary has not undergone the full six-target transcription or operator video gates."
+  ],
+  "prior_failed_run": {
+    "arm64_reason": "Nine outlined-atomic helpers still linked from static libgcc.a; corrected with -mno-outline-atomics for both C and C++.",
+    "run_id": 40214278199
+  },
+  "product_admitted": false,
+  "run_conclusion": "success",
+  "run_id": 40215118171,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40215118171",
+  "schema": "s503-linux-shared-gcc-review-v1",
+  "signed_provenance": "gh attestation verify passed for both binaries and matched both SHA-256 values",
+  "targets": [
+    {
+      "binary_sha256": "57f92f95840251fc3a1d04ff7c1d9971f70439930867064286bbc178a747b493",
+      "compile_commands_sha256": "c23d23d09f83a35adeb27bb3aeb04858c98beefa8b3ed2a61b7cbe84b909fda0",
+      "dynamic_needed": [
+        "libc.so.6",
+        "libgcc_s.so.1",
+        "libm.so.6",
+        "libstdc++.so.6"
+      ],
+      "elf_dynamic_sha256": "d3775c3971c4197c70cd329cb1021f8deddbc422d98f317858ecfa02f8a8ca27",
+      "elf_versions_sha256": "2ecee1f8fe97854415b3072430cce50951431d58d078853d573dafb76489b9a5",
+      "gcc_direct_objects": [
+        "/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/crti.o",
+        "/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/crtn.o",
+        "/usr/lib/gcc/x86_64-linux-gnu/13/../../../x86_64-linux-gnu/Scrt1.o",
+        "/usr/lib/gcc/x86_64-linux-gnu/13/crtbeginS.o",
+        "/usr/lib/gcc/x86_64-linux-gnu/13/crtendS.o"
+      ],
+      "gcc_startup_objects": {
+        "crtbeginS.o": {
+          "package": "libgcc-13-dev:amd64",
+          "package_version": "13.3.0-6ubuntu2~24.04.1",
+          "path": "/usr/lib/gcc/x86_64-linux-gnu/13/crtbeginS.o",
+          "sha256": "667ff5f1edc931d44d1f2bb44d313907aa274bcc207c0beff71a398335f0d29f"
+        },
+        "crtendS.o": {
+          "package": "libgcc-13-dev:amd64",
+          "package_version": "13.3.0-6ubuntu2~24.04.1",
+          "path": "/usr/lib/gcc/x86_64-linux-gnu/13/crtendS.o",
+          "sha256": "9c8b2caad195193301ef072895dc89bea1d23371d4c19accd821debe27773063"
+        }
+      },
+      "host_gcc_runtime_providers": {
+        "libgcc_s.so.1": {
+          "package": "libgcc-s1:amd64",
+          "package_version": "14.2.0-4ubuntu2~24.04.1",
+          "path": "/usr/lib/x86_64-linux-gnu/libgcc_s.so.1",
+          "sha256": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb"
+        },
+        "libstdc++.so.6": {
+          "package": "libstdc++6:amd64",
+          "package_version": "14.2.0-4ubuntu2~24.04.1",
+          "path": "/usr/lib/x86_64-linux-gnu/libstdc++.so.6.0.33",
+          "sha256": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11"
+        }
+      },
+      "ldd_sha256": "99226cefe160bf4a390c3a34a8d91125944e0ab7a2ce2653a53888e31ddcd934",
+      "link_inventory_sha256": "865910e197f3299cda22989e2c49536f983b8af4cb3bae37da82d7db80e98c65",
+      "map_sha256": "275b6c59457269d329245fa6e7d5b8fc427b394643ec368198dab925d4af8419",
+      "probe_report_sha256": "9fa991353979dd96edbff7b3b6c4c07efa78223b3bd1b0ca7a74027f7cea672c",
+      "product_admitted": false,
+      "runner_label": "ubuntu-24.04",
+      "shared_gcc_archive_member_count": 0,
+      "static_gcc_archive_member_count": 100,
+      "target": "linux/amd64",
+      "version_requirements": {
+        "CXXABI": [
+          "CXXABI_1.3",
+          "CXXABI_1.3.8",
+          "CXXABI_1.3.9"
+        ],
+        "GCC": [
+          "GCC_3.0"
+        ],
+        "GLIBC": [
+          "GLIBC_2.14",
+          "GLIBC_2.17",
+          "GLIBC_2.2.5",
+          "GLIBC_2.27",
+          "GLIBC_2.29",
+          "GLIBC_2.3.2",
+          "GLIBC_2.3.4",
+          "GLIBC_2.32",
+          "GLIBC_2.33",
+          "GLIBC_2.34",
+          "GLIBC_2.38",
+          "GLIBC_2.4",
+          "GLIBC_2.7"
+        ],
+        "GLIBCXX": [
+          "GLIBCXX_3.4",
+          "GLIBCXX_3.4.11",
+          "GLIBCXX_3.4.14",
+          "GLIBCXX_3.4.15",
+          "GLIBCXX_3.4.17",
+          "GLIBCXX_3.4.18",
+          "GLIBCXX_3.4.20",
+          "GLIBCXX_3.4.21",
+          "GLIBCXX_3.4.22",
+          "GLIBCXX_3.4.26",
+          "GLIBCXX_3.4.29",
+          "GLIBCXX_3.4.9"
+        ]
+      }
+    },
+    {
+      "binary_sha256": "c6b1c1ed131e60066b861ce9064bd92dbffafcb1a4c2a1361adb458a7e319adf",
+      "compile_commands_sha256": "ff3842b904726ae32219b084db065d11edfb567b94008777a2549112341c45bb",
+      "dynamic_needed": [
+        "ld-linux-aarch64.so.1",
+        "libc.so.6",
+        "libgcc_s.so.1",
+        "libm.so.6",
+        "libstdc++.so.6"
+      ],
+      "elf_dynamic_sha256": "53d73c194dbed475819a923b4ffceda9e813e35a2894a60082fe9cc6b8d6ab9d",
+      "elf_versions_sha256": "d6ed8ee8d3c3fb5bc8c07d7be88380bc0ae375c249aa7fde3d6806f2ab21bc82",
+      "gcc_direct_objects": [
+        "/usr/lib/gcc/aarch64-linux-gnu/13/../../../aarch64-linux-gnu/crti.o",
+        "/usr/lib/gcc/aarch64-linux-gnu/13/../../../aarch64-linux-gnu/crtn.o",
+        "/usr/lib/gcc/aarch64-linux-gnu/13/../../../aarch64-linux-gnu/Scrt1.o",
+        "/usr/lib/gcc/aarch64-linux-gnu/13/crtbeginS.o",
+        "/usr/lib/gcc/aarch64-linux-gnu/13/crtendS.o"
+      ],
+      "gcc_startup_objects": {
+        "crtbeginS.o": {
+          "package": "libgcc-13-dev:arm64",
+          "package_version": "13.3.0-6ubuntu2~24.04.1",
+          "path": "/usr/lib/gcc/aarch64-linux-gnu/13/crtbeginS.o",
+          "sha256": "2d0881b2018ca7b1c7a7af19ef91b9f42739d8f51c214f0faf22a2dc49c4c002"
+        },
+        "crtendS.o": {
+          "package": "libgcc-13-dev:arm64",
+          "package_version": "13.3.0-6ubuntu2~24.04.1",
+          "path": "/usr/lib/gcc/aarch64-linux-gnu/13/crtendS.o",
+          "sha256": "3da9c42040eca63e3432014ee4b0a98a24ea1f7c4a33e1b40c2b02cc7a15c208"
+        }
+      },
+      "host_gcc_runtime_providers": {
+        "libgcc_s.so.1": {
+          "package": "libgcc-s1:arm64",
+          "package_version": "14.2.0-4ubuntu2~24.04.1",
+          "path": "/usr/lib/aarch64-linux-gnu/libgcc_s.so.1",
+          "sha256": "f2d3ad2bf0b61f6bc944cc37d7b6ab7f88d2582b41ff989ca164803f56cc5f20"
+        },
+        "libstdc++.so.6": {
+          "package": "libstdc++6:arm64",
+          "package_version": "14.2.0-4ubuntu2~24.04.1",
+          "path": "/usr/lib/aarch64-linux-gnu/libstdc++.so.6.0.33",
+          "sha256": "6e3112d35cfc86db7ee85b27e1746f67408e2837ff8628b46386c3eabd5682a4"
+        }
+      },
+      "ldd_sha256": "3a03886b529b082bc998b2e061e1c4972479ae49cf7baa50ffc2278d0abab94a",
+      "link_inventory_sha256": "985ae56f8e02594d0e05a2a31eaea3281c06b715ea3faaaa529623911a1c3033",
+      "map_sha256": "e3cac236082e2ad8ef58537015a0705483a6c52f6b5374f557cbf236cb3b8942",
+      "probe_report_sha256": "c12173ed879e4b4c48d9ad326ad39ecae2263550e4b107df06d5f4ef74d00064",
+      "product_admitted": false,
+      "runner_label": "ubuntu-24.04-arm",
+      "shared_gcc_archive_member_count": 0,
+      "static_gcc_archive_member_count": 111,
+      "target": "linux/arm64",
+      "version_requirements": {
+        "CXXABI": [
+          "CXXABI_1.3",
+          "CXXABI_1.3.8",
+          "CXXABI_1.3.9"
+        ],
+        "GCC": [
+          "GCC_3.0"
+        ],
+        "GLIBC": [
+          "GLIBC_2.17",
+          "GLIBC_2.27",
+          "GLIBC_2.29",
+          "GLIBC_2.32",
+          "GLIBC_2.33",
+          "GLIBC_2.34",
+          "GLIBC_2.38"
+        ],
+        "GLIBCXX": [
+          "GLIBCXX_3.4",
+          "GLIBCXX_3.4.11",
+          "GLIBCXX_3.4.14",
+          "GLIBCXX_3.4.15",
+          "GLIBCXX_3.4.17",
+          "GLIBCXX_3.4.18",
+          "GLIBCXX_3.4.20",
+          "GLIBCXX_3.4.21",
+          "GLIBCXX_3.4.22",
+          "GLIBCXX_3.4.26",
+          "GLIBCXX_3.4.29",
+          "GLIBCXX_3.4.9"
+        ]
+      }
+    }
+  ]
+}
