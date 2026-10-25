@@ -17,10 +17,12 @@ import re
 import subprocess
 import sys
 from typing import Any
+from urllib.parse import urlparse
 
 
 VERSION = "bashy-transcribe-stage-v1"
 STAGE = "acquire"
+YTDLP_SHA256 = "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14"
 VIDEO_ID = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
 MEDIA_TYPES = {
     ".m4a": "audio/mp4",
@@ -70,6 +72,19 @@ def _run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(command, proc.returncode, stdout, stderr)
 
 
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _youtube_host(url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower().rstrip(".")
+    return host in {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be"}
+
+
 def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
     zipapp = os.environ.get("BASHY_TRANSCRIBE_YTDLP", "")
     if not zipapp:
@@ -81,6 +96,21 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
     zipapp_path = Path(zipapp).expanduser().resolve()
     if not zipapp_path.is_file():
         raise AcquisitionError("dependency_unavailable", "configured yt-dlp zipapp does not exist", True)
+    if _sha256(zipapp_path) != YTDLP_SHA256:
+        raise AcquisitionError("dependency_unavailable", "yt-dlp zipapp SHA-256 does not match the reviewed S503.6 pin")
+
+    # YouTube extraction needs an admitted JavaScript runtime and matching EJS
+    # package. Never ask yt-dlp to fetch an unpinned remote EJS component.
+    js_options = ["--no-remote-components"]
+    if _youtube_host(url):
+        runtime = os.environ.get("BASHY_TRANSCRIBE_JS_RUNTIME", "")
+        runtime_path = Path(runtime).expanduser().resolve() if runtime else None
+        if runtime_path is None or not runtime_path.is_file():
+            raise AcquisitionError(
+                "dependency_unavailable",
+                "YouTube requires an admitted Deno runtime and matching yt-dlp-ejs package; set BASHY_TRANSCRIBE_JS_RUNTIME",
+            )
+        js_options += ["--no-js-runtimes", "--js-runtimes", "deno:" + str(runtime_path)]
 
     python = os.environ.get("BASHY_TRANSCRIBE_PYTHON") or sys.executable
     # Probe metadata without downloading. This rejects playlist-only and live
@@ -94,6 +124,7 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
             "--no-cookies",
             "--no-netrc",
             "--no-cache-dir",
+            *js_options,
             "--no-playlist",
             "--dump-single-json",
             "--skip-download",
@@ -137,6 +168,7 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
                 "--no-cookies",
                 "--no-netrc",
                 "--no-cache-dir",
+                *js_options,
                 "--no-playlist",
                 "--match-filter",
                 "!is_live",
@@ -160,14 +192,12 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
         remove_partial_downloads()
         raise AcquisitionError("download_failed", message or "yt-dlp failed to download this video", True)
 
-    # --print can produce warning lines on some versions; accept only the last
-    # nonempty line and require the resulting path to stay in work_dir.
+    # Require exactly one reported artifact, matching the probed video ID.
     lines = [line.strip() for line in downloaded.stdout.splitlines() if line.strip()]
-    candidate_text = lines[-1] if lines else ""
-    if not candidate_text:
+    if len(lines) != 1:
         remove_partial_downloads()
-        raise AcquisitionError("download_failed", "yt-dlp did not report a downloaded media file", True)
-    candidate = Path(candidate_text)
+        raise AcquisitionError("download_failed", "yt-dlp did not report exactly one media file", True)
+    candidate = Path(lines[0])
     if not candidate.is_absolute():
         candidate = work_dir / candidate
     try:
@@ -179,6 +209,9 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
     if not resolved.is_file() or resolved.stat().st_size == 0:
         remove_partial_downloads()
         raise AcquisitionError("download_failed", "yt-dlp produced an empty media file", True)
+    if resolved.parent != work_dir.resolve() or resolved.stem != video_id:
+        remove_partial_downloads()
+        raise AcquisitionError("download_failed", "yt-dlp output does not match the resolved video", True)
     return resolved
 
 
@@ -190,6 +223,12 @@ def acquire(request: dict[str, Any]) -> dict[str, Any]:
         raise AcquisitionError("invalid_request", "acquire request requires a nonempty URL")
     if "\x00" in url:
         raise AcquisitionError("invalid_request", "URL contains a NUL character")
+    try:
+        parsed = urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise AcquisitionError("invalid_request", "acquire input must be an HTTP(S) URL")
+    except ValueError as exc:
+        raise AcquisitionError("invalid_request", f"invalid URL: {exc}") from exc
     work_dir = request.get("work_dir")
     if not isinstance(work_dir, str) or not work_dir:
         raise AcquisitionError("invalid_request", "acquire request requires work_dir")
@@ -197,10 +236,6 @@ def acquire(request: dict[str, Any]) -> dict[str, Any]:
     if not directory.is_dir():
         raise AcquisitionError("invalid_request", "acquire work_dir must be an existing directory")
     media_path = _yt_dlp(request, directory, url)
-    digest_state = hashlib.sha256()
-    with media_path.open("rb") as media_file:
-        for block in iter(lambda: media_file.read(1024 * 1024), b""):
-            digest_state.update(block)
     return {
         "version": VERSION,
         "stage": STAGE,
@@ -208,7 +243,7 @@ def acquire(request: dict[str, Any]) -> dict[str, Any]:
             {
                 "path": str(media_path),
                 "media_type": MEDIA_TYPES.get(media_path.suffix.lower(), "application/octet-stream"),
-                "sha256": digest_state.hexdigest(),
+                "sha256": _sha256(media_path),
             }
         ],
         "media": {"source": url},

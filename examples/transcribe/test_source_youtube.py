@@ -16,6 +16,12 @@ import unittest
 
 ADAPTER = Path(__file__).with_name("source_youtube.py")
 VERSION = "bashy-transcribe-stage-v1"
+TEST_RUNNER = '''import sys
+sys.path.insert(0, sys.argv[1])
+import source_youtube
+source_youtube.YTDLP_SHA256 = sys.argv[2]
+raise SystemExit(source_youtube.main(["source_youtube.py", sys.argv[3]]))
+'''
 
 
 FAKE_YTDLP = r'''import json, os, pathlib, sys, time
@@ -43,6 +49,13 @@ if mode == "download_fail":
     pathlib.Path.cwd().joinpath("fixture01.webm.part").write_bytes(b"partial")
     print("download failed", file=sys.stderr)
     raise SystemExit(1)
+if mode == "wrong_id":
+    path = pathlib.Path.cwd() / "other.webm"
+    path.write_bytes(b"wrong video")
+    print(str(path))
+    raise SystemExit(0)
+if mode == "multiple_outputs":
+    print(str(pathlib.Path.cwd() / "fixture01.webm"))
 path = pathlib.Path.cwd() / "fixture01.webm"
 path.write_bytes(b"controlled audio bytes")
 print(str(path))
@@ -57,12 +70,16 @@ class YouTubeSourceTests(unittest.TestCase):
         self.work.mkdir()
         self.zipapp = self.root / "controlled yt-dlp.pyz"
         self.zipapp.write_text(FAKE_YTDLP, encoding="utf-8")
+        self.zipapp_hash = hashlib.sha256(self.zipapp.read_bytes()).hexdigest()
+        self.runtime = self.root / "admitted deno"
+        self.runtime.write_bytes(b"controlled runtime fixture")
         self.log = self.root / "argv.jsonl"
         self.request = self.root / "request.json"
         self.env = os.environ.copy()
         self.env.update(
             {
                 "BASHY_TRANSCRIBE_YTDLP": str(self.zipapp),
+                "BASHY_TRANSCRIBE_JS_RUNTIME": str(self.runtime),
                 "BASHY_TRANSCRIBE_PYTHON": sys.executable,
                 "BASHY_TEST_FAKE_LOG": str(self.log),
                 "BASHY_TEST_MODE": "ok",
@@ -86,7 +103,7 @@ class YouTubeSourceTests(unittest.TestCase):
             encoding="utf-8",
         )
         return subprocess.run(
-            [sys.executable, str(ADAPTER), str(self.request)],
+            [sys.executable, "-c", TEST_RUNNER, str(ADAPTER.parent), self.zipapp_hash, str(self.request)],
             text=True,
             capture_output=True,
             env=self.env,
@@ -112,6 +129,8 @@ class YouTubeSourceTests(unittest.TestCase):
         self.assertIn("bestaudio", calls[1])
         self.assertIn("--no-playlist", calls[1])
         self.assertIn("--format", calls[1])
+        self.assertIn("--no-remote-components", calls[0])
+        self.assertIn("deno:" + str(self.runtime.resolve()), calls[0])
         self.assertEqual([path.resolve() for path in self.work.iterdir()], [media_path.resolve()])
 
     def test_adapter_accepts_other_ytdlp_supported_sites_when_selected(self) -> None:
@@ -121,14 +140,31 @@ class YouTubeSourceTests(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["stage"], "acquire")
         calls = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
         self.assertEqual(calls[0][-1], url)
+        self.assertNotIn("--js-runtimes", calls[0])
+
+    def test_canonical_and_short_youtube_urls_return_same_video_identity(self) -> None:
+        short = self.invoke("https://youtu.be/fixture01?si=literal")
+        canonical = self.invoke("https://www.youtube.com/watch?v=fixture01")
+        self.assertEqual(short.returncode, 0, short.stderr)
+        self.assertEqual(canonical.returncode, 0, canonical.stderr)
+        self.assertEqual(
+            Path(json.loads(short.stdout)["artifacts"][0]["path"]).name,
+            Path(json.loads(canonical.stdout)["artifacts"][0]["path"]).name,
+        )
 
     def test_unavailable_url_is_reported_as_stage_error(self) -> None:
-        result = self.invoke("invalid://unavailable", mode="resolve_fail")
+        result = self.invoke("https://youtu.be/unavailable", mode="resolve_fail")
         self.assertNotEqual(result.returncode, 0)
         payload = json.loads(result.stdout)
         self.assertEqual(payload["error"]["code"], "download_failed")
         self.assertIn("unavailable", payload["error"]["message"])
         self.assertEqual(list(self.work.iterdir()), [])
+
+    def test_malformed_url_is_reported_without_executing_dependency(self) -> None:
+        result = self.invoke("https://[invalid")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["error"]["code"], "invalid_request")
+        self.assertFalse(self.log.exists())
 
     def test_playlist_is_rejected_before_download(self) -> None:
         result = self.invoke("https://youtu.be/playlist?list=fixture", mode="playlist")
@@ -150,6 +186,16 @@ class YouTubeSourceTests(unittest.TestCase):
         self.assertNotIn("artifacts", json.loads(result.stdout))
         self.assertEqual(list(self.work.iterdir()), [])
 
+    def test_download_output_must_match_resolved_video(self) -> None:
+        result = self.invoke("https://youtu.be/fixture01", mode="wrong_id")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["error"]["code"], "download_failed")
+
+    def test_download_must_report_exactly_one_file(self) -> None:
+        result = self.invoke("https://youtu.be/fixture01", mode="multiple_outputs")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["error"]["code"], "download_failed")
+
     def test_cancellation_terminates_yt_dlp_child_and_reports_cancelled(self) -> None:
         self.env["BASHY_TEST_MODE"] = "hold"
         self.request.write_text(
@@ -164,7 +210,7 @@ class YouTubeSourceTests(unittest.TestCase):
             encoding="utf-8",
         )
         proc = subprocess.Popen(
-            [sys.executable, str(ADAPTER), str(self.request)],
+            [sys.executable, "-c", TEST_RUNNER, str(ADAPTER.parent), self.zipapp_hash, str(self.request)],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -186,6 +232,20 @@ class YouTubeSourceTests(unittest.TestCase):
         result = self.invoke("https://youtube.com/watch?v=fixture01")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(json.loads(result.stdout)["error"]["code"], "dependency_unavailable")
+
+    def test_unreviewed_zipapp_is_rejected_before_execution(self) -> None:
+        self.request.write_text(json.dumps({"version": VERSION, "stage": "acquire", "input": "https://youtu.be/fixture01", "work_dir": str(self.work)}), encoding="utf-8")
+        result = subprocess.run([sys.executable, str(ADAPTER), str(self.request)], text=True, capture_output=True, env=self.env, timeout=10)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["error"]["code"], "dependency_unavailable")
+        self.assertFalse(self.log.exists(), "unreviewed dependency was executed")
+
+    def test_youtube_requires_explicit_runtime(self) -> None:
+        self.env.pop("BASHY_TRANSCRIBE_JS_RUNTIME")
+        result = self.invoke("https://youtu.be/fixture01")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["error"]["code"], "dependency_unavailable")
+        self.assertFalse(self.log.exists())
 
 
 if __name__ == "__main__":
