@@ -51,7 +51,8 @@ ignored by v1 consumers; a different version must be rejected.
   "artifacts": [{"path": "/tmp/audio.wav", "media_type": "audio/wav"}],
   "media": {"duration_ms": 1200, "sample_rate_hz": 16000, "channels": 1},
   "model": "default",
-  "language": "auto"
+  "language": "auto",
+  "work_dir": "/tmp/transcribe-run-123"
 }
 ```
 
@@ -59,6 +60,10 @@ An `acquire` request has `input` set to the original file or URL. Its result
 has at least one artifact path. `decode` receives an artifact and returns a
 normalized audio artifact plus media metadata. `infer` receives that artifact
 and returns nonempty `segments` with integer `start_ms`, `end_ms`, and `text`.
+`work_dir` is an optional absolute per-run directory owned by the pipeline;
+acquire, decode and infer adapters may place intermediate artifacts there.
+The pipeline removes it on exit. The export `output` path is the caller's
+resolved destination and is not removed with `work_dir`.
 `export` receives segments, `format`, and optionally `output`; it returns the
 created transcript artifact. Successful results include `version`, `stage`,
 and the required artifact or segments. Failed results contain
@@ -135,13 +140,15 @@ bashy commands add fixture-source.yaml
 bashy commands show fixture-source --yaml
 bashy commands list --json
 bashy transcribe select acquire acquire-request.json
+bashy transcribe select acquire --provider fixture-source acquire-request.json
 ```
 
 The selector prints exactly one registered command name. No match reports the
 providers rejected by input, dependency or platform declarations; multiple
 matches report every ambiguous name and the explicit stage option that resolves
-it. `--source`, `--decoder`, `--provider`, and `--exporter` remain authoritative
-and call the named registered command directly.
+it. `--source`, `--decoder`, `--provider`, and `--exporter` remain authoritative:
+the pipeline validates the named command's role, host requirements and input
+declaration through `select --provider`, then invokes that registered command.
 
 Shared command directories remain read-only and the normal local ring remains
 the override. `bashy commands set fixture-source ...` materializes and edits a
