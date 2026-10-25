@@ -1,0 +1,65 @@
+name: S503 Windows Python VC natural-load research
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: s503-windows-python-vc-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  vc-closure:
+    name: ${{ matrix.target }} VC load and signature evidence
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: windows-2025, target: windows/amd64}
+          - {runner: windows-11-arm, target: windows/arm64}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.10'
+          architecture: ${{ endsWith(matrix.target, 'arm64') && 'arm64' || 'x64' }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.2'
+      - name: Build native verifier in hosted runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/s503-python-vc/bin"
+          ./scripts/go-product.sh build -trimpath \
+            -o "$RUNNER_TEMP/s503-python-vc/bin/bashy.exe" ./cmd/bashy
+      - name: Verify and install official Python.org bytes in private runner prefix
+        shell: bash
+        env:
+          EXPECTED_TARGET: ${{ matrix.target }}
+          RUNNER_LABEL: ${{ matrix.runner }}
+          CANDIDATE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python .github/scripts/s503-python-installed-native.py \
+            --bashy "$RUNNER_TEMP/s503-python-vc/bin/bashy.exe" \
+            --evidence evidence/python-installed
+      - name: Observe natural VC loads and signatures
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/scripts/s503-windows-vc-natural-load.py \
+            --installed-result evidence/python-installed/result.json \
+            --output evidence/python-installed/vc-natural-load.json
+      - name: Retain evidence only, never installer or DLL bytes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-python-vc-${{ matrix.runner }}
+          path: evidence/python-installed/
+          if-no-files-found: warn
+          retention-days: 14
