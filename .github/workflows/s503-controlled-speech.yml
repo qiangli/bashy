@@ -1,0 +1,48 @@
+name: S503 CC0 controlled speech artifact
+
+on:
+  push:
+    branches: [s503-contract-integration]
+    paths:
+      - .github/workflows/s503-controlled-speech.yml
+      - examples/transcribe/webm-opus/testdata/speech-long.webm
+      - examples/transcribe/webm-opus/testdata/manifest.json
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  controlled-speech:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify CC0 fixture bytes and source record
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+
+          root = Path('examples/transcribe/webm-opus/testdata')
+          fixture = root / 'speech-long.webm'
+          manifest = json.loads((root / 'manifest.json').read_text())
+          digest = hashlib.sha256(fixture.read_bytes()).hexdigest()
+          if (digest != 'ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090' or
+                  digest != manifest['files']['speech-long.webm'] or
+                  manifest['source_sha256'] !=
+                  '9744230eb367b00f1aa5d0c64572c24b2cc533d5f893294bcaabdd912ed1b5a3' or
+                  manifest['long_speech_packets'] != 533 or
+                  manifest['long_speech_packet_span_ms'] != 10660):
+              raise SystemExit('CC0 long speech source or artifact mismatch')
+          print('PASS: controlled speech sha256=' + digest + ' bytes=' + str(fixture.stat().st_size))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: s503-controlled-speech
+          path: examples/transcribe/webm-opus/testdata/speech-long.webm
+          if-no-files-found: error
+          retention-days: 14
