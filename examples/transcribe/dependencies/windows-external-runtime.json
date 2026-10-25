@@ -1,0 +1,22 @@
+{
+  "schema": "s503-windows-external-runtime-v1",
+  "provenance": "GitHub Actions run 40198146186; actions/setup-python@v5 tool cache and runner System32. These pins do not prove bare-host availability or redistribution rights.",
+  "targets": {
+    "AMD64": {
+      "python_version": "3.12.10",
+      "python_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+      "system32": {
+        "MSVCP140.dll": {"version": "14.51.36247.0", "sha256": "7c26614e1d733892c2deac7e245ce115504b1d80592dd0a01b08e3e5a55f89ca"},
+        "VCRUNTIME140.dll": {"version": "14.51.36247.0", "sha256": "d1f4225df2cd877dbf130d5668a021dce3f94118455ff5ec952061c30afc9ce7"}
+      }
+    },
+    "ARM64": {
+      "python_version": "3.12.10",
+      "python_sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+      "system32": {
+        "MSVCP140.dll": {"version": "14.51.36247.0", "sha256": "167ceac85c2d726c4cd9e39b8881fafdc6de1520c0e67c4f6b271235f9d2a6c5"},
+        "VCRUNTIME140.dll": {"version": "14.51.36247.0", "sha256": "3c56f4167e2b3d8e6338497731e6aae8cd7ec46bd6789f9423a8d9cf9a630310"}
+      }
+    }
+  }
+}

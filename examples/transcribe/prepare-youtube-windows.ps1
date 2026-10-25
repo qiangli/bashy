@@ -17,6 +17,27 @@ if (-not [Environment]::Is64BitOperatingSystem -or
     throw 'This pinned preparation script targets native Windows amd64 only.'
 }
 
+# A managed CPython archive would bring app-local Microsoft VC DLLs. Require
+# an explicit, already installed interpreter with reviewed bytes instead.
+if (-not $env:BASHY_TRANSCRIBE_PYTHON) {
+    throw 'Set BASHY_TRANSCRIBE_PYTHON to an externally installed, reviewed python.exe.'
+}
+$runtimePolicy = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'dependencies/windows-external-runtime.json') -Raw | ConvertFrom-Json
+$python = (Resolve-Path -LiteralPath $env:BASHY_TRANSCRIBE_PYTHON -ErrorAction Stop).Path
+if (-not (Test-Path -LiteralPath $python -PathType Leaf) -or
+    [IO.Path]::GetFileName($python).ToLowerInvariant() -ne 'python.exe') {
+    throw 'External Python must be a python.exe file.'
+}
+$pythonSHA256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $python).Hash.ToLowerInvariant()
+if ($pythonSHA256 -ne $runtimePolicy.targets.AMD64.python_sha256) {
+    throw 'External Python executable SHA-256 does not match the reviewed Windows/amd64 pin.'
+}
+$runtimeCheck = Join-Path $PSScriptRoot 'dependencies/verify_windows_external_runtime.py'
+$externalRuntime = (& $python -I $runtimeCheck | ConvertFrom-Json)
+if ($LASTEXITCODE -ne 0 -or -not $externalRuntime.python.sha256) {
+    throw 'External Python and System32 VC runtime prerequisite verification failed.'
+}
+
 New-Item -ItemType Directory -Force -Path $WorkRoot | Out-Null
 $denoArchive = Join-Path $WorkRoot 'deno-x86_64-pc-windows-msvc.zip'
 $denoDir = Join-Path $WorkRoot 'deno'
@@ -49,8 +70,6 @@ if (-not (Test-Path -LiteralPath $ytDlp)) {
 }
 Assert-SHA256 $ytDlp $ytDlpSHA256
 
-$python = (& bashy python -c 'import sys; print(sys.executable)').Trim()
-if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $python)) { throw 'Managed Python is unavailable.' }
 # Python's zipfile accepts the official zipapp's shell preamble.
 $readEjsVersion = @'
 import re, sys, zipfile
@@ -83,4 +102,5 @@ if ($LASTEXITCODE -ne 0 -or $ytDlpVersionOutput -ne $ytDlpVersion) {
     yt_dlp_ejs_version = $ejsVersion
     yt_dlp_path = $ytDlp
     python_path = $python
+    external_runtime = $externalRuntime
 } | ConvertTo-Json -Compress
