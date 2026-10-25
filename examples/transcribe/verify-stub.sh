@@ -41,9 +41,16 @@ STAGE
 chmod +x "$work/stub-stage.sh"
 for pair in 'stub-source acquire' 'stub-decoder decode' 'stub-infer infer' 'stub-export export'; do
     set -- $pair
-    "$BASHY_BIN" commands add "$1" --set exec.0=/bin/sh \
-        --set "exec.1=$work/stub-stage.sh" --set "exec.2=$2" \
-        --set effects.0=read --set effects.1=write >/dev/null
+    if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" = 1 ]; then
+        "$BASHY_BIN" commands add "$1" --set exec.0=/bin/sh \
+            --set "exec.1=$work/stub-stage.sh" --set "exec.2=$2" \
+            --set effects.0=read --set effects.1=write \
+            --set "provides.0=transcribe.$2" >/dev/null
+    else
+        "$BASHY_BIN" commands add "$1" --set exec.0=/bin/sh \
+            --set "exec.1=$work/stub-stage.sh" --set "exec.2=$2" \
+            --set effects.0=read --set effects.1=write >/dev/null
+    fi
 done
 pipeline="$root/examples/transcribe/pipeline.bsh"
 "$BASHY_BIN" --bashsharp "$pipeline" --skill > "$work/script-skill.md"
@@ -157,18 +164,16 @@ receipt_fields='{skill:.attest.Skill,passed:.attest.Passed,failed:.attest.Failed
 first=$("$BASHY_BIN" head -n 1 "$ledger" | "$BASHY_BIN" jq -c "$receipt_fields")
 second=$("$BASHY_BIN" tail -n 1 "$ledger" | "$BASHY_BIN" jq -c "$receipt_fields")
 test "$first" = "$second"
-if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" != 1 ]; then
-    BASHY_TRANSCRIBE_SOURCE= BASHY_TRANSCRIBE_DECODER=
-    BASHY_TRANSCRIBE_PROVIDER= BASHY_TRANSCRIBE_EXPORTER=
-    BASHY_TRANSCRIBE_OUTPUT="$work/skill-auto.txt"
-    BASHY_TRANSCRIBE_RESULT="$work/skill-auto-path.txt"
-    export BASHY_TRANSCRIBE_SOURCE BASHY_TRANSCRIBE_DECODER
-    export BASHY_TRANSCRIBE_PROVIDER BASHY_TRANSCRIBE_EXPORTER
-    export BASHY_TRANSCRIBE_OUTPUT BASHY_TRANSCRIBE_RESULT
-    "$BASHY_BIN" skill run transcribe --json > "$work/skill-auto-receipt.json"
-    cmp "$work/direct.txt" "$work/skill-auto.txt"
-    "$BASHY_BIN" jq -e '.attest.Valid == true' "$work/skill-auto-receipt.json" >/dev/null
-fi
+BASHY_TRANSCRIBE_SOURCE= BASHY_TRANSCRIBE_DECODER=
+BASHY_TRANSCRIBE_PROVIDER= BASHY_TRANSCRIBE_EXPORTER=
+BASHY_TRANSCRIBE_OUTPUT="$work/skill-auto.txt"
+BASHY_TRANSCRIBE_RESULT="$work/skill-auto-path.txt"
+export BASHY_TRANSCRIBE_SOURCE BASHY_TRANSCRIBE_DECODER
+export BASHY_TRANSCRIBE_PROVIDER BASHY_TRANSCRIBE_EXPORTER
+export BASHY_TRANSCRIBE_OUTPUT BASHY_TRANSCRIBE_RESULT
+"$BASHY_BIN" skill run transcribe --json > "$work/skill-auto-receipt.json"
+cmp "$work/direct.txt" "$work/skill-auto.txt"
+"$BASHY_BIN" jq -e '.attest.Valid == true' "$work/skill-auto-receipt.json" >/dev/null
 
 # Editable local composition uses the existing command overlay and src view.
 cp "$pipeline" "$work/local-pipeline.bsh"
@@ -182,19 +187,28 @@ if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" = 1 ]; then
 fi
 bashy transcribe $common --output "$work/override.txt" "$STUB_MEDIA" > "$work/override-path.txt"
 cmp "$work/direct.txt" "$work/override.txt"
-if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" != 1 ]; then
-    bashy transcribe --output "$work/auto.txt" "$STUB_MEDIA" > "$work/auto-path.txt"
-    cmp "$work/direct.txt" "$work/auto.txt"
+bashy transcribe --output "$work/auto.txt" "$STUB_MEDIA" > "$work/auto-path.txt"
+cmp "$work/direct.txt" "$work/auto.txt"
+if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" = 1 ]; then
+    "$BASHY_BIN" commands add stub-source-duplicate --set exec.0=/bin/sh \
+        --set "exec.1=$work/stub-stage.sh" --set exec.2=acquire \
+        --set effects.0=read --set effects.1=write \
+        --set provides.0=transcribe.acquire >/dev/null
+    if bashy transcribe --output "$work/ambiguous.txt" "$STUB_MEDIA" > "$work/ambiguous-path.txt" 2> "$work/ambiguous.stderr"; then
+        echo 'ambiguous native selector was accepted' >&2
+        exit 1
+    fi
+    bashy transcribe $common --output "$work/explicit.txt" "$STUB_MEDIA" > "$work/explicit-path.txt"
+else
     if STUB_SELECT_AMBIGUOUS=1 bashy transcribe --output "$work/ambiguous.txt" "$STUB_MEDIA" > "$work/ambiguous-path.txt" 2> "$work/ambiguous.stderr"; then
         echo 'ambiguous fixture selector was accepted' >&2
         exit 1
     fi
-    grep -F 'ambiguous acquire adapters' "$work/ambiguous.stderr" >/dev/null
-    test ! -e "$work/ambiguous.txt"
-    # Explicit names bypass selection even when the fixture selector refuses.
     STUB_SELECT_AMBIGUOUS=1 bashy transcribe $common --output "$work/explicit.txt" "$STUB_MEDIA" > "$work/explicit-path.txt"
-    cmp "$work/direct.txt" "$work/explicit.txt"
 fi
+grep -F 'ambiguous acquire adapters' "$work/ambiguous.stderr" >/dev/null
+test ! -e "$work/ambiguous.txt"
+cmp "$work/direct.txt" "$work/explicit.txt"
 printf 'existing output\n' > "$work/failed.txt"
 # shellcheck disable=SC2086
 if STUB_BAD_INFER=1 bashy transcribe $common --output "$work/failed.txt" "$STUB_MEDIA" > "$work/failed-path.txt" 2> "$work/failed.stderr"; then
