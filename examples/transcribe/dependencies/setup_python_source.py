@@ -15,6 +15,7 @@ from pathlib import Path
 import platform
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -31,6 +32,8 @@ FORBIDDEN_MODULES = {"readline", "_dbm", "_gdbm"}
 FORBIDDEN_LIB = re.compile(r"(?:readline|gdbm|libdb(?:-|\.|$))", re.I)
 MAX_FILES = 10000
 MAX_UNPACK_BYTES = 200_000_000
+MAX_SIGNATURE_BYTES = 4096
+MAX_KEY_BYTES = 65536
 
 
 def sha256(path: Path) -> str:
@@ -94,6 +97,27 @@ def verify_source(archive: Path, signature: Path, key: Path) -> dict:
             "signature_sha256": SIGNATURE_SHA256}
 
 
+def stage_input(source: Path, destination: Path, limit: int) -> None:
+    """Copy one bounded regular input once; verification uses only this copy."""
+    fd = os.open(source, os.O_RDONLY | os.O_NONBLOCK | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        info = os.fstat(fd)
+        if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+            raise RuntimeError(f"source input is not a bounded regular file: {source}")
+        with os.fdopen(fd, "rb", closefd=False) as incoming, destination.open("xb") as staged:
+            copied = 0
+            while block := incoming.read(min(1024 * 1024, limit - copied + 1)):
+                copied += len(block)
+                if copied > limit:
+                    raise RuntimeError(f"source input exceeds byte bound: {source}")
+                staged.write(block)
+            staged.flush()
+            os.fsync(staged.fileno())
+        destination.chmod(0o400)
+    finally:
+        os.close(fd)
+
+
 def unpack(archive: Path, work: Path) -> Path:
     source = work / ("Python-" + VERSION)
     if source.exists():
@@ -149,6 +173,19 @@ def freeze_prefix(prefix: Path) -> None:
     prefix.chmod(prefix.stat().st_mode & ~0o222)
 
 
+def remove_bundled_pip(prefix: Path) -> None:
+    """Omit ensurepip's vendored wheel; yt-dlp runs as a zipapp without pip."""
+    bundled = prefix / "lib/python3.12/ensurepip/_bundled"
+    if bundled.is_symlink():
+        raise RuntimeError("ensurepip bundled wheel directory is a symlink")
+    if bundled.exists():
+        if not bundled.is_dir():
+            raise RuntimeError("ensurepip bundled wheel path is not a directory")
+        shutil.rmtree(bundled)
+    if any(prefix.rglob("*.whl")):
+        raise RuntimeError("installed Python still contains a bundled wheel")
+
+
 def dependencies(prefix: Path, files: dict[str, dict]) -> dict[str, dict]:
     result = {}
     for relative in files:
@@ -159,8 +196,14 @@ def dependencies(prefix: Path, files: dict[str, dict]) -> dict[str, dict]:
         if checked.returncode or "not found" in checked.stdout:
             raise RuntimeError(f"unresolved dynamic dependency: {relative}")
         names = re.findall(r"(?:=>\s*)?(/[^\s()]+)", checked.stdout)
-        if not names or FORBIDDEN_LIB.search(checked.stdout):
+        if FORBIDDEN_LIB.search(checked.stdout):
             raise RuntimeError(f"forbidden or unreadable dynamic dependencies: {relative}")
+        if not names:
+            dynamic = subprocess.run(["readelf", "-d", str(path)], capture_output=True,
+                                     text=True, timeout=30)
+            if (dynamic.returncode or "Dynamic section at offset" not in dynamic.stdout
+                    or re.search(r"\(NEEDED\)", dynamic.stdout)):
+                raise RuntimeError(f"unreadable dynamic dependency closure: {relative}")
         result[relative] = {
             str(Path(name).resolve(strict=True)): {
                 "sha256": sha256(Path(name).resolve(strict=True)),
@@ -203,9 +246,12 @@ def elf_machine(executable: Path, target_name: str) -> str:
 
 
 def audit(prefix: Path, source: dict, target_name: str, work: Path | None = None,
-          toolchain: dict | None = None) -> dict:
+          toolchain: dict | None = None, expected_files: dict | None = None) -> dict:
     files = inventory(prefix)
-    if not files or "bin/python3.12" not in files or "LICENSE.python-3.12.15" not in files:
+    if expected_files is not None and files != expected_files:
+        raise RuntimeError("installed Python differs from offline receipt: installed_files")
+    if (not files or "sha256" not in files.get("bin/python3.12", {})
+            or "LICENSE.python-3.12.15" not in files):
         raise RuntimeError("installed Python or source license is absent")
     info = runtime(prefix)
     machine = elf_machine(prefix / "bin/python3.12", target_name)
@@ -240,25 +286,43 @@ def setup(archive: Path, signature: Path, key: Path, work: Path, prefix: Path, j
         raise RuntimeError("work directory and install prefix must be separate")
     if prefix.exists() or work.exists():
         raise RuntimeError("work directory and prefix must be absent before setup")
-    source_pin = verify_source(archive, signature, key)
-    work.mkdir(parents=True, mode=0o700)
-    source = unpack(archive, work)
-    (source / "Modules/Setup.local").write_text("*disabled*\nreadline\n_dbm\n_gdbm\n", encoding="ascii")
-    env = clean_env()
-    run([str(source / "configure"), "--prefix=" + str(prefix), "--with-ensurepip=no",
-         "--without-readline"], source, env)
-    run(["make", "-j", str(jobs)], source, env)
-    run(["make", "altinstall"], source, env)
-    shutil.copyfile(source / "LICENSE", prefix / "LICENSE.python-3.12.15")
-    receipt = audit(prefix, source_pin, target_name, work)
-    destination = prefix / "source-build-receipt.json"
-    with destination.open("x", encoding="utf-8") as out:
-        json.dump(receipt, out, sort_keys=True, indent=2)
-        out.write("\n")
-    freeze_prefix(prefix)
-    return {"receipt": str(destination), "executable": receipt["executable"],
-            "executable_sha256": receipt["installed_files"]["bin/python3.12"]["sha256"],
-            "status": receipt["status"]}
+    work.parent.mkdir(parents=True, exist_ok=True)
+    if private_path(work) != work:
+        raise RuntimeError("work directory parent changed before setup")
+    work.mkdir(mode=0o700)
+    try:
+        if work.resolve(strict=True) != work or work.stat().st_mode & 0o077:
+            raise RuntimeError("private work directory was replaced or is accessible to others")
+        staged_archive = work / "Python-3.12.15.tar.xz"
+        staged_signature = work / "Python-3.12.15.tar.xz.asc"
+        staged_key = work / "release-key.gpg"
+        stage_input(archive, staged_archive, SOURCE_BYTES)
+        stage_input(signature, staged_signature, MAX_SIGNATURE_BYTES)
+        stage_input(key, staged_key, MAX_KEY_BYTES)
+        source_pin = verify_source(staged_archive, staged_signature, staged_key)
+        source = unpack(staged_archive, work)
+        if staged_archive.stat().st_size != SOURCE_BYTES or sha256(staged_archive) != SOURCE_SHA256:
+            raise RuntimeError("private source archive changed during extraction")
+        (source / "Modules/Setup.local").write_text("*disabled*\nreadline\n_dbm\n_gdbm\n", encoding="ascii")
+        env = clean_env()
+        run([str(source / "configure"), "--prefix=" + str(prefix), "--with-ensurepip=no",
+             "--without-readline", "--enable-option-checking=fatal"], source, env)
+        run(["make", "-j", str(jobs)], source, env)
+        run(["make", "altinstall"], source, env)
+        remove_bundled_pip(prefix)
+        shutil.copyfile(source / "LICENSE", prefix / "LICENSE.python-3.12.15")
+        receipt = audit(prefix, source_pin, target_name, work)
+        destination = prefix / "source-build-receipt.json"
+        with destination.open("x", encoding="utf-8") as out:
+            json.dump(receipt, out, sort_keys=True, indent=2)
+            out.write("\n")
+        freeze_prefix(prefix)
+        return {"receipt": str(destination), "executable": receipt["executable"],
+                "executable_sha256": receipt["installed_files"]["bin/python3.12"]["sha256"],
+                "status": receipt["status"]}
+    except BaseException:
+        shutil.rmtree(work)
+        raise
 
 
 def verify_existing(prefix: Path) -> dict:
@@ -275,9 +339,11 @@ def verify_existing(prefix: Path) -> dict:
             or receipt.get("source", {}).get("bytes") != SOURCE_BYTES
             or receipt.get("source", {}).get("signature_url") != SOURCE_URL + ".asc"
             or receipt.get("source", {}).get("signature_sha256") != SIGNATURE_SHA256
-            or receipt.get("source", {}).get("release_key_fingerprint") != RELEASE_KEY):
+            or receipt.get("source", {}).get("release_key_fingerprint") != RELEASE_KEY
+            or not isinstance(receipt.get("installed_files"), dict)):
         raise RuntimeError("source receipt does not match pinned Linux Python setup")
-    fresh = audit(prefix, receipt["source"], target_name, toolchain=receipt.get("toolchain"))
+    fresh = audit(prefix, receipt["source"], target_name,
+                  toolchain=receipt.get("toolchain"), expected_files=receipt.get("installed_files"))
     for field in ("installed_files", "dynamic_libraries", "runtime", "license", "toolchain",
                   "elf_machine", "extension_modules"):
         if receipt.get(field) != fresh[field]:

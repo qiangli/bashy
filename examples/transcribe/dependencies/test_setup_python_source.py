@@ -31,14 +31,43 @@ class SourceSetupTests(unittest.TestCase):
     def test_bad_source_does_not_create_work_or_prefix(self):
         archive = self.root / "source.tar.xz"
         archive.write_bytes(b"changed source")
+        (self.root / "sig").write_bytes(b"signature")
+        (self.root / "key").write_bytes(b"key")
         work, prefix = self.root / "work", self.root / "installed"
         with patch.object(setup, "target", return_value="linux/amd64"), patch.object(
-            setup, "private_path", side_effect=lambda path: path
+            setup, "private_path", side_effect=lambda path: path.resolve()
         ), patch.object(setup, "run") as process:
             with self.assertRaisesRegex(RuntimeError, "size or SHA-256"):
                 setup.setup(archive, self.root / "sig", self.root / "key", work, prefix, 1)
             self.assertFalse(work.exists())
             self.assertFalse(prefix.exists())
+            process.assert_not_called()
+
+    def test_caller_archive_swap_after_verification_cannot_change_staged_bytes(self):
+        archive, signature, key = (self.root / name for name in ("source", "signature", "key"))
+        archive.write_bytes(b"original archive")
+        signature.write_bytes(b"signature")
+        key.write_bytes(b"key")
+        work, prefix = self.root / "work", self.root / "prefix"
+        seen = []
+        def verify(staged_archive, *_):
+            self.assertNotEqual(staged_archive, archive)
+            archive.write_bytes(b"replacement")
+            return {"sha256": setup.SOURCE_SHA256}
+        def unpack(staged_archive, *_):
+            seen.append(staged_archive.read_bytes())
+            raise RuntimeError("stop before native build")
+        with patch.object(setup, "target", return_value="linux/amd64"), patch.object(
+            setup, "private_path", side_effect=lambda path: path.resolve()
+        ), patch.object(setup, "verify_source", side_effect=verify), patch.object(
+            setup, "unpack", side_effect=unpack
+        ), patch.object(setup, "SOURCE_BYTES", len(b"original archive")), patch.object(
+            setup, "run"
+        ) as process:
+            with self.assertRaisesRegex(RuntimeError, "stop before native build"):
+                setup.setup(archive, signature, key, work, prefix, 1)
+            self.assertEqual(seen, [b"original archive"])
+            self.assertFalse(work.exists())
             process.assert_not_called()
 
     def test_wrong_release_key_and_bad_signature_rejected(self):
@@ -102,25 +131,44 @@ class SourceSetupTests(unittest.TestCase):
                   "release_key_fingerprint": setup.RELEASE_KEY}
         with patch.object(setup, "target", return_value="linux/amd64"), patch.object(
             setup, "private_path", return_value=prefix
-        ), patch.object(setup, "runtime", return_value={"version": setup.VERSION}), patch.object(
+        ), patch.object(setup, "runtime", return_value={"version": setup.VERSION}) as runtime_probe, patch.object(
             setup, "dependencies", return_value={
                 "bin/python3.12": {},
                 "_ssl.fixture.so": {"/lib/libssl.so.3": {"sha256": "fixture"}},
                 "_hashlib.fixture.so": {"/lib/libcrypto.so.3": {"sha256": "fixture"}},
             }
-        ), patch.object(
+        ) as library_probe, patch.object(
             setup, "elf_machine", return_value="Advanced Micro Devices X86-64"
-        ):
+        ) as elf_probe:
             receipt = setup.audit(prefix, source, "linux/amd64", toolchain={"compiler": "fixture"})
             (prefix / "source-build-receipt.json").write_text(json.dumps(receipt))
             self.assertEqual(setup.verify_existing(prefix)["executable"], str(executable))
             executable.write_bytes(b"changed executable")
-            with self.assertRaisesRegex(RuntimeError, "installed_files"):
-                setup.verify_existing(prefix)
+            runtime_probe.reset_mock()
+            library_probe.reset_mock()
+            elf_probe.reset_mock()
+            with patch.object(setup.subprocess, "run") as run_process, patch.object(
+                setup.subprocess, "check_output"
+            ) as check_output:
+                with self.assertRaisesRegex(RuntimeError, "installed_files"):
+                    setup.verify_existing(prefix)
+                run_process.assert_not_called()
+                check_output.assert_not_called()
+                runtime_probe.assert_not_called()
+                library_probe.assert_not_called()
+                elf_probe.assert_not_called()
             executable.write_bytes(b"source built executable")
             (prefix / "unexpected.so").write_bytes(b"extra module")
             with self.assertRaisesRegex(RuntimeError, "installed_files"):
                 setup.verify_existing(prefix)
+
+    def test_symlink_in_installed_prefix_rejected(self):
+        prefix = self.root / "installed"
+        prefix.mkdir()
+        (prefix / "real").write_bytes(b"file")
+        (prefix / "link").symlink_to("real")
+        with self.assertRaisesRegex(RuntimeError, "symlink"):
+            setup.inventory(prefix)
 
     def test_gpl_named_or_missing_runtime_library_rejected(self):
         prefix = self.root / "installed"
@@ -137,6 +185,29 @@ class SourceSetupTests(unittest.TestCase):
         )):
             with self.assertRaisesRegex(RuntimeError, "unresolved"):
                 setup.dependencies(prefix, files)
+
+    def test_extension_without_needed_libraries_is_allowed(self):
+        prefix = self.root / "installed"
+        (prefix / "bin").mkdir(parents=True)
+        (prefix / "bin/python3.12").write_bytes(b"ELF fixture")
+        (prefix / "_contextvars.fixture.so").write_bytes(b"ELF fixture")
+        files = {"bin/python3.12": {"sha256": "fixture"},
+                 "_contextvars.fixture.so": {"sha256": "fixture"}}
+        def inspect(args, **_):
+            if args[0] == "ldd":
+                return CompletedProcess(args, 0, "statically linked\n", "")
+            return CompletedProcess(args, 0, "Dynamic section at offset 0 contains 0 entries:\n", "")
+        with patch.object(setup.subprocess, "run", side_effect=inspect):
+            self.assertEqual(setup.dependencies(prefix, files),
+                             {"bin/python3.12": {}, "_contextvars.fixture.so": {}})
+
+    def test_bundled_pip_wheel_removed_before_inventory(self):
+        prefix = self.root / "installed"
+        bundled = prefix / "lib/python3.12/ensurepip/_bundled"
+        bundled.mkdir(parents=True)
+        (bundled / "pip-fixture.whl").write_bytes(b"wheel")
+        setup.remove_bundled_pip(prefix)
+        self.assertFalse(bundled.exists())
 
     def test_dedicated_prefix_is_frozen_after_receipt(self):
         prefix = self.root / "python-prefix"

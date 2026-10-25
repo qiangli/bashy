@@ -113,7 +113,10 @@ three downloaded inputs to `setup_python_source.py`:
 - Thomas Wouters's public key linked by [Python.org's OpenPGP page](https://www.python.org/downloads/metadata/pgp/) (pinned fingerprint `7169605F62C751356D054A26A821E680E5FA6305`)
 
 The command verifies the archive length, hash and detached signature with an
-isolated GPG home before unpacking or building. The work directory and install
+isolated GPG home before unpacking or building. It first copies all three
+operator inputs into a new private work directory and verifies those staged
+bytes; caller-path changes cannot alter the archive used for extraction. The
+work directory and install
 prefix must be separate, absent paths beneath the operator's home. It uses no
 container or system install. It requires `gpg`, `cc`, `make`, `readelf`, `ldd`,
 the CPython development headers and libraries, and an OpenSSL build suitable
@@ -130,7 +133,8 @@ python3 examples/transcribe/dependencies/setup_python_source.py \
 ```
 
 The recipe disables `readline`, `_dbm` and `_gdbm` in `Modules/Setup.local`
-and passes `--without-readline`. It rejects those builtins/extensions after
+and passes `--without-readline` with fatal unknown-option checking. It removes
+the `ensurepip` bundled pip wheel directory before inventory. It rejects those builtins/extensions after
 installation and rejects loaded libraries with readline, gdbm or Berkeley DB
 names. It also requires SSL, hashing and archive modules used by yt-dlp.
 Its local `source-build-receipt.json` inventories each installed file and
