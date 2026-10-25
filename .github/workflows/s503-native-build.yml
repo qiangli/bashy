@@ -33,32 +33,26 @@ jobs:
             expected_os: Linux
             expected_arch: amd64
             python_arch: x64
-            cmake_platform: ''
           - label: ubuntu-24.04-arm
             expected_os: Linux
             expected_arch: arm64
             python_arch: arm64
-            cmake_platform: ''
           - label: macos-15-intel
             expected_os: macOS
             expected_arch: amd64
             python_arch: x64
-            cmake_platform: ''
           - label: macos-15
             expected_os: macOS
             expected_arch: arm64
             python_arch: arm64
-            cmake_platform: ''
           - label: windows-2025
             expected_os: Windows
             expected_arch: amd64
             python_arch: x64
-            cmake_platform: x64
           - label: windows-11-arm
             expected_os: Windows
             expected_arch: arm64
             python_arch: arm64
-            cmake_platform: ARM64
     env:
       EXPECTED_OS: ${{ matrix.expected_os }}
       EXPECTED_ARCH: ${{ matrix.expected_arch }}
@@ -132,8 +126,10 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$EXPECTED_OS" == Windows ]]; then
-            export CMAKE_GENERATOR='Visual Studio 17 2022'
-            export CMAKE_GENERATOR_PLATFORM='${{ matrix.cmake_platform }}'
+            # The standard Windows ARM runner has native LLVM/Ninja but no
+            # Visual Studio instance. CMake receives the reviewed clang pair.
+            export CMAKE_GENERATOR=Ninja
+            ninja --version
           fi
           cmake --version
           python examples/transcribe/dependencies/build_whisper.py \

@@ -20,8 +20,9 @@ still upload any evidence they produced.
 
 This gate installs Python 3.12 through `actions/setup-python`, since runner
 toolchains differ. It expects CMake and a native C/C++ compiler on each
-runner; Windows selects the Visual Studio 2022 generator and the native
-platform. It does not build Bashy, fetch a model, or run inference. A green
+runner; Windows selects Ninja and the detected native compiler pair because
+the standard ARM runner has no Visual Studio instance. It does not build Bashy,
+fetch a model, or run inference. A green
 job establishes one native dependency build only. Six green jobs and their
 attestations are required before claiming six-target build admission;
 native transcription remains a separate gate.
