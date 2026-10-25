@@ -1,0 +1,1157 @@
+{
+  "schema": "s503-windows-link-map-v1",
+  "binary_name": "whisper-cli.exe",
+  "binary_sha256": "27e0bb8c1e0d3b6d38ba06874e2c417e4e98aaff508fc2cc73ec4638b391d123",
+  "map_sha256": "492d869f01ce5a8afb23edffd51b3fe4a53626cfd16ee14ce910cd4f3019746e",
+  "map_bytes": 3023447,
+  "final_link_command": "[40/40] C:\\Windows\\system32\\cmd.exe /C \"cd . && D:\\a\\_temp\\s503-llvm-mingw\\llvm-mingw-20260616-ucrt-x86_64\\bin\\clang++.exe -O3 -DNDEBUG -static -Wl,-Map=D:/a/_temp/s503-whisper-build/whisper-build-a9rdofzw/whisper-cli.link.map -Wl,--verbose examples/cli/CMakeFiles/whisper-cli.dir/cli.cpp.obj -o bin\\whisper-cli.exe -Wl,--out-implib,examples\\cli\\libwhisper-cli.dll.a -Wl,--major-image-version,0,--minor-image-version,0  examples/libcommon.a  src/libwhisper.a  -lpthread  ggml/src/ggml.a  ggml/src/ggml-cpu.a  ggml/src/ggml-base.a  -pthread  -lpthread  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 && cd .\"",
+  "archive_members": [
+    {
+      "archive": "ggml-base.a",
+      "member": "ggml-alloc.c.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-base.a(ggml-alloc.c.obj) for ggml_backend_alloc_ctx_tensors"
+    },
+    {
+      "archive": "ggml-base.a",
+      "member": "ggml-backend-meta.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-base.a(ggml-backend-meta.cpp.obj) for ggml_backend_buffer_is_meta"
+    },
+    {
+      "archive": "ggml-base.a",
+      "member": "ggml-backend.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-base.a(ggml-backend.cpp.obj) for ggml_backend_tensor_set"
+    },
+    {
+      "archive": "ggml-base.a",
+      "member": "ggml-quants.c.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-base.a(ggml-quants.c.obj) for iq2xs_init_impl"
+    },
+    {
+      "archive": "ggml-base.a",
+      "member": "ggml-threading.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-base.a(ggml-threading.cpp.obj) for ggml_critical_section_start"
+    },
+    {
+      "archive": "ggml-base.a",
+      "member": "ggml.c.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-base.a(ggml.c.obj) for ggml_nbytes"
+    },
+    {
+      "archive": "ggml-cpu.a",
+      "member": "binary-ops.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-cpu.a(binary-ops.cpp.obj) for ggml_compute_forward_sub"
+    },
+    {
+      "archive": "ggml-cpu.a",
+      "member": "ggml-cpu.c.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-cpu.a(ggml-cpu.c.obj) for ggml_cpu_init"
+    },
+    {
+      "archive": "ggml-cpu.a",
+      "member": "ggml-cpu.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-cpu.a(ggml-cpu.cpp.obj) for ggml_backend_cpu_reg"
+    },
+    {
+      "archive": "ggml-cpu.a",
+      "member": "ops.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-cpu.a(ops.cpp.obj) for ggml_compute_forward_fwht"
+    },
+    {
+      "archive": "ggml-cpu.a",
+      "member": "quants.c.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-cpu.a(quants.c.obj) for ggml_vec_dot_q4_0_q8_0"
+    },
+    {
+      "archive": "ggml-cpu.a",
+      "member": "repack.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-cpu.a(repack.cpp.obj) for ggml_quantize_mat_q8_0_4x8"
+    },
+    {
+      "archive": "ggml-cpu.a",
+      "member": "tiled.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-cpu.a(tiled.cpp.obj) for ggml_compute_forward_mul_mat_tiled"
+    },
+    {
+      "archive": "ggml-cpu.a",
+      "member": "traits.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-cpu.a(traits.cpp.obj) for ggml::cpu::tensor_traits::~tensor_traits()"
+    },
+    {
+      "archive": "ggml-cpu.a",
+      "member": "unary-ops.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-cpu.a(unary-ops.cpp.obj) for ggml_compute_forward_log"
+    },
+    {
+      "archive": "ggml-cpu.a",
+      "member": "vec.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml-cpu.a(vec.cpp.obj) for ggml_vec_dot_f32"
+    },
+    {
+      "archive": "ggml.a",
+      "member": "ggml-backend-dl.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml.a(ggml-backend-dl.cpp.obj) for dl_load_library(std::__1::__fs::filesystem::path const&)"
+    },
+    {
+      "archive": "ggml.a",
+      "member": "ggml-backend-reg.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded ggml.a(ggml-backend-reg.cpp.obj) for ggml_backend_load_all"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "abort_message.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(abort_message.cpp.obj) for __abort_message"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "algorithm.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(algorithm.cpp.obj) for void std::__1::__sort<std::__1::__less<float, float>&, float*>(float*, float*, std::__1::__less<float, float>&)"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "call_once.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(call_once.cpp.obj) for std::__1::__call_once(unsigned long volatile&, void*, void (*)(void*))"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "chrono.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(chrono.cpp.obj) for std::__1::chrono::system_clock::now()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "condition_variable.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(condition_variable.cpp.obj) for std::__1::condition_variable::notify_all()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "cxa_default_handlers.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(cxa_default_handlers.cpp.obj) for __cxa_new_handler"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "cxa_demangle.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(cxa_demangle.cpp.obj) for __cxa_demangle"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "cxa_exception.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(cxa_exception.cpp.obj) for __cxa_allocate_exception"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "cxa_exception_storage.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(cxa_exception_storage.cpp.obj) for __cxa_get_globals_fast"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "cxa_guard.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(cxa_guard.cpp.obj) for __cxa_guard_acquire"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "cxa_handlers.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(cxa_handlers.cpp.obj) for std::terminate()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "cxa_personality.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(cxa_personality.cpp.obj) for __gxx_personality_seh0"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "cxa_virtual.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(cxa_virtual.cpp.obj) for __cxa_pure_virtual"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "directory_iterator.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(directory_iterator.cpp.obj) for std::__1::__fs::filesystem::directory_iterator::directory_iterator(std::__1::__fs::filesystem::path const&, std::__1::error_code*, std::__1::__fs::filesystem::directory_options)"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "error_category.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(error_category.cpp.obj) for std::__1::error_category::~error_category()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "exception.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(exception.cpp.obj) for std::uncaught_exceptions()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "fallback_malloc.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(fallback_malloc.cpp.obj) for __cxxabiv1::__aligned_malloc_with_fallback(unsigned long long)"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "filesystem_error.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(filesystem_error.cpp.obj) for std::__1::__fs::filesystem::filesystem_error::~filesystem_error()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "functional.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(functional.cpp.obj) for std::__1::bad_function_call::~bad_function_call()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "future.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(future.cpp.obj) for std::__1::__assoc_sub_state::__make_ready()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "hash.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(hash.cpp.obj) for std::__1::__next_prime(unsigned long long)"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "ios.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(ios.cpp.obj) for std::__1::ios_base::getloc() const"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "ios.instantiations.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(ios.instantiations.cpp.obj) for std::__1::basic_istream<char, std::__1::char_traits<char>>::~basic_istream()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "locale.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(locale.cpp.obj) for std::__1::locale::has_facet(std::__1::locale::id&) const"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "locale_win32.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(locale_win32.cpp.obj) for std::__1::__locale::__snprintf(char*, unsigned long long, std::__1::__locale::__locale_t, char const*, ...)"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "memory.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(memory.cpp.obj) for std::__1::__shared_weak_count::__release_weak()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "mutex.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(mutex.cpp.obj) for std::__1::mutex::unlock()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "new_helpers.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(new_helpers.cpp.obj) for std::__throw_bad_alloc()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "operations.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(operations.cpp.obj) for std::__1::__fs::filesystem::__current_path(std::__1::error_code*)"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "path.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(path.cpp.obj) for std::__1::__fs::filesystem::path::__filename() const"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "private_typeinfo.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(private_typeinfo.cpp.obj) for vtable for __cxxabiv1::__class_type_info"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "regex.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(regex.cpp.obj) for std::__1::regex_error::regex_error(std::__1::regex_constants::error_type)"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "stdexcept.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(stdexcept.cpp.obj) for std::logic_error::logic_error(char const*)"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "stdlib_exception.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(stdlib_exception.cpp.obj) for std::bad_array_new_length::bad_array_new_length()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "stdlib_new_delete.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(stdlib_new_delete.cpp.obj) for operator delete[](void*)"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "stdlib_stdexcept.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(stdlib_stdexcept.cpp.obj) for std::length_error::~length_error()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "stdlib_typeinfo.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(stdlib_typeinfo.cpp.obj) for std::bad_cast::bad_cast()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "string.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(string.cpp.obj) for std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>>::erase(unsigned long long, unsigned long long)"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "support.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(support.cpp.obj) for wcsnrtombs"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "system_error.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(system_error.cpp.obj) for std::__1::__throw_system_error(int, char const*)"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "thread.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(thread.cpp.obj) for std::__1::thread::hardware_concurrency()"
+    },
+    {
+      "archive": "libc++.a",
+      "member": "thread_win32.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libc++.a(thread_win32.cpp.obj) for std::__1::__libcpp_thread_isnull(void* const*)"
+    },
+    {
+      "archive": "libclang_rt.builtins-x86_64.a",
+      "member": "chkstk.S.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libclang_rt.builtins-x86_64.a(chkstk.S.obj) for ___chkstk_ms"
+    },
+    {
+      "archive": "libclang_rt.builtins-x86_64.a",
+      "member": "divti3.c.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libclang_rt.builtins-x86_64.a(divti3.c.obj) for __divti3"
+    },
+    {
+      "archive": "libclang_rt.builtins-x86_64.a",
+      "member": "udivmodti4.c.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libclang_rt.builtins-x86_64.a(udivmodti4.c.obj) for __udivmodti4"
+    },
+    {
+      "archive": "libcommon.a",
+      "member": "common-whisper.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libcommon.a(common-whisper.cpp.obj) for to_timestamp(long long, bool)"
+    },
+    {
+      "archive": "libcommon.a",
+      "member": "common.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libcommon.a(common.cpp.obj) for is_file_exist(char const*)"
+    },
+    {
+      "archive": "libcommon.a",
+      "member": "grammar-parser.cpp.obj",
+      "notice_candidate": "unclassified; inspect source and license",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libcommon.a(grammar-parser.cpp.obj) for grammar_parser::print_grammar(_iobuf*, grammar_parser::parse_state const&)"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-_newmode.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-_newmode.o) for _newmode"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-cinitexe.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-cinitexe.o) for __xc_a"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-CRT_fp10.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-CRT_fp10.o) for _fpreset"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-crt_handler.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-crt_handler.o) for __mingw_SEH_error_handler"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-dllargv.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-dllargv.o) for _setargv"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-gccmain.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-gccmain.o) for __main"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-merr.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-merr.o) for _matherr"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-mingw_helpers.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-mingw_helpers.o) for __mingw_app_type"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-natstart.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-natstart.o) for __native_startup_lock"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-pesect.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-pesect.o) for __mingw_GetSectionCount"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-pseudo-reloc-list.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-pseudo-reloc-list.o) for __RUNTIME_PSEUDO_RELOC_LIST_END__"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-pseudo-reloc.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-pseudo-reloc.o) for _pei386_runtime_relocator"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-tlsmcrt.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-tlsmcrt.o) for _CRT_MT"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-tlssup.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-tlssup.o) for __dyn_tls_init_callback"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-tlsthrd.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-tlsthrd.o) for __mingw_TLScallback"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-usermatherr.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-usermatherr.o) for __mingw_setusermatherr"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-wildcard.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-wildcard.o) for _dowildcard"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-xncommod.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-xncommod.o) for _commode"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-xthdloc.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-xthdloc.o) for __globallocalestatus"
+    },
+    {
+      "archive": "libmingw32.a",
+      "member": "lib64_libmingw32_a-xtxtmode.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingw32.a(lib64_libmingw32_a-xtxtmode.o) for _fmode"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-_assert.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-_assert.o) for _assert"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-btowc.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-btowc.o) for __declspec(dllimport) btowc"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-dmisc.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-dmisc.o) for __freedtoa"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-g__fmt.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-g__fmt.o) for NanDflt_ldus_D2A"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-gdtoa.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": true,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-gdtoa.o) for __gdtoa"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-gethex.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-gethex.o) for __gethex_D2A"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-gmisc.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-gmisc.o) for __rshift_D2A"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-guard_dispatch.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-guard_dispatch.o) for __guard_dispatch_icall_dummy"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-hd_init.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-hd_init.o) for __hexdig_D2A"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-hexnan.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-hexnan.o) for __hexnan_D2A"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-ldexp.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": true,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-ldexp.o) for ldexp"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-ldexpf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": true,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-ldexpf.o) for ldexpf"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-loadcfg.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-loadcfg.o) for _load_config_used"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_cfguard_support.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_cfguard_support.o) for __guard_dispatch_icall_fptr"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_fprintf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_fprintf.o) for __mingw_fprintf"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_matherr.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_matherr.o) for _MINGW_INSTALL_DEBUG_MATHERR"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_pformat.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_pformat.o) for __mingw_pformat"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_printf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_printf.o) for __mingw_printf"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_sformat.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_sformat.o) for __mingw_sformat"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_snprintf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_snprintf.o) for __mingw_snprintf"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_sscanf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_sscanf.o) for __mingw_sscanf"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_swprintf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_swprintf.o) for __mingw_swprintf"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_vfprintf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_vfprintf.o) for __mingw_vfprintf"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_vsnprintf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_vsnprintf.o) for __mingw_vsnprintf"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_vsscanf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_vsscanf.o) for __mingw_vsscanf"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_vswprintf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_vswprintf.o) for __mingw_vswprintf"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_wcstold.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_wcstold.o) for __mingw_wcstold"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-mingw_wpformat.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-mingw_wpformat.o) for __mingw_wpformat"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-misc.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-misc.o) for __Balloc_D2A"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-smisc.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-smisc.o) for __match_D2A"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-strtodg.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-strtodg.o) for __strtodg"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-strtodnrp.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-strtodnrp.o) for __mingw_strtod"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-strtof.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-strtof.o) for __mingw_strtof"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-strtopx.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-strtopx.o) for strtold"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-sum.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-sum.o) for __sum_D2A"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-wcstof.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-wcstof.o) for wcstof"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-wcstold.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-wcstold.o) for wcstold"
+    },
+    {
+      "archive": "libmingwex.a",
+      "member": "lib64_libmingwex_a-wctob.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmingwex.a(lib64_libmingwex_a-wctob.o) for __declspec(dllimport) wctob"
+    },
+    {
+      "archive": "libmsvcrt.a",
+      "member": "lib64_libucrt_extra_a-__initenv.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmsvcrt.a(lib64_libucrt_extra_a-__initenv.o) for __declspec(dllimport) __initenv"
+    },
+    {
+      "archive": "libmsvcrt.a",
+      "member": "lib64_libucrt_extra_a-__p___initenv.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmsvcrt.a(lib64_libucrt_extra_a-__p___initenv.o) for __p___initenv"
+    },
+    {
+      "archive": "libmsvcrt.a",
+      "member": "lib64_libucrt_extra_a-ucrt___local_stdio_printf_options.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmsvcrt.a(lib64_libucrt_extra_a-ucrt___local_stdio_printf_options.o) for __local_stdio_printf_options"
+    },
+    {
+      "archive": "libmsvcrt.a",
+      "member": "lib64_libucrt_extra_a-ucrt__getmainargs.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmsvcrt.a(lib64_libucrt_extra_a-ucrt__getmainargs.o) for __getmainargs"
+    },
+    {
+      "archive": "libmsvcrt.a",
+      "member": "lib64_libucrt_extra_a-ucrt_amsg_exit.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmsvcrt.a(lib64_libucrt_extra_a-ucrt_amsg_exit.o) for _amsg_exit"
+    },
+    {
+      "archive": "libmsvcrt.a",
+      "member": "lib64_libucrt_extra_a-ucrt_fprintf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmsvcrt.a(lib64_libucrt_extra_a-ucrt_fprintf.o) for fprintf"
+    },
+    {
+      "archive": "libmsvcrt.a",
+      "member": "lib64_libucrt_extra_a-ucrt_ms_fwprintf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmsvcrt.a(lib64_libucrt_extra_a-ucrt_ms_fwprintf.o) for __ms_fwprintf"
+    },
+    {
+      "archive": "libmsvcrt.a",
+      "member": "lib64_libucrt_extra_a-ucrt_printf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmsvcrt.a(lib64_libucrt_extra_a-ucrt_printf.o) for printf"
+    },
+    {
+      "archive": "libmsvcrt.a",
+      "member": "lib64_libucrt_extra_a-ucrt_snprintf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmsvcrt.a(lib64_libucrt_extra_a-ucrt_snprintf.o) for snprintf"
+    },
+    {
+      "archive": "libmsvcrt.a",
+      "member": "lib64_libucrt_extra_a-ucrt_vfprintf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmsvcrt.a(lib64_libucrt_extra_a-ucrt_vfprintf.o) for vfprintf"
+    },
+    {
+      "archive": "libmsvcrt.a",
+      "member": "lib64_libucrt_extra_a-ucrt_vsnprintf.o",
+      "notice_candidate": "MinGW-w64 runtime COPYING and source-specific notices",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libmsvcrt.a(lib64_libucrt_extra_a-ucrt_vsnprintf.o) for vsnprintf"
+    },
+    {
+      "archive": "libunwind.a",
+      "member": "libunwind.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libunwind.a(libunwind.cpp.obj) for logUnwinding"
+    },
+    {
+      "archive": "libunwind.a",
+      "member": "Unwind-seh.cpp.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libunwind.a(Unwind-seh.cpp.obj) for _Unwind_Resume"
+    },
+    {
+      "archive": "libunwind.a",
+      "member": "UnwindLevel1.c.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libunwind.a(UnwindLevel1.c.obj) for _Unwind_DeleteException"
+    },
+    {
+      "archive": "libunwind.a",
+      "member": "UnwindRegistersSave.S.obj",
+      "notice_candidate": "LLVM component LICENSE.TXT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libunwind.a(UnwindRegistersSave.S.obj) for __unw_getcontext"
+    },
+    {
+      "archive": "libwhisper.a",
+      "member": "whisper-aneforge.cpp.obj",
+      "notice_candidate": "whisper.cpp/GGML MIT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libwhisper.a(whisper-aneforge.cpp.obj) for whisper_aneforge_init"
+    },
+    {
+      "archive": "libwhisper.a",
+      "member": "whisper.cpp.obj",
+      "notice_candidate": "whisper.cpp/GGML MIT",
+      "source_review": false,
+      "linker_load_evidence": "ld.lld: Loaded libwhisper.a(whisper.cpp.obj) for whisper_context_default_params"
+    }
+  ],
+  "map_objects": [
+    "abort_message.cpp.obj",
+    "algorithm.cpp.obj",
+    "binary-ops.cpp.obj",
+    "call_once.cpp.obj",
+    "chkstk.S.obj",
+    "chrono.cpp.obj",
+    "common-whisper.cpp.obj",
+    "common.cpp.obj",
+    "condition_variable.cpp.obj",
+    "cxa_default_handlers.cpp.obj",
+    "cxa_demangle.cpp.obj",
+    "cxa_exception.cpp.obj",
+    "cxa_exception_storage.cpp.obj",
+    "cxa_guard.cpp.obj",
+    "cxa_handlers.cpp.obj",
+    "cxa_personality.cpp.obj",
+    "cxa_virtual.cpp.obj",
+    "D:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-x86_64/x86_64-w64-mingw32/lib/crt2.o",
+    "D:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-x86_64/x86_64-w64-mingw32/lib/crtbegin.o",
+    "D:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-x86_64/x86_64-w64-mingw32/lib/crtend.o",
+    "directory_iterator.cpp.obj",
+    "divti3.c.obj",
+    "error_category.cpp.obj",
+    "examples/cli/CMakeFiles/whisper-cli.dir/cli.cpp.obj",
+    "exception.cpp.obj",
+    "fallback_malloc.cpp.obj",
+    "filesystem_error.cpp.obj",
+    "functional.cpp.obj",
+    "future.cpp.obj",
+    "ggml-alloc.c.obj",
+    "ggml-backend-dl.cpp.obj",
+    "ggml-backend-meta.cpp.obj",
+    "ggml-backend-reg.cpp.obj",
+    "ggml-backend.cpp.obj",
+    "ggml-cpu.c.obj",
+    "ggml-cpu.cpp.obj",
+    "ggml-quants.c.obj",
+    "ggml-threading.cpp.obj",
+    "ggml.c.obj",
+    "grammar-parser.cpp.obj",
+    "hash.cpp.obj",
+    "ios.cpp.obj",
+    "ios.instantiations.cpp.obj",
+    "lib64_libmingw32_a-_newmode.o",
+    "lib64_libmingw32_a-cinitexe.o",
+    "lib64_libmingw32_a-CRT_fp10.o",
+    "lib64_libmingw32_a-crt_handler.o",
+    "lib64_libmingw32_a-dllargv.o",
+    "lib64_libmingw32_a-gccmain.o",
+    "lib64_libmingw32_a-merr.o",
+    "lib64_libmingw32_a-mingw_helpers.o",
+    "lib64_libmingw32_a-natstart.o",
+    "lib64_libmingw32_a-pesect.o",
+    "lib64_libmingw32_a-pseudo-reloc-list.o",
+    "lib64_libmingw32_a-pseudo-reloc.o",
+    "lib64_libmingw32_a-tlsmcrt.o",
+    "lib64_libmingw32_a-tlssup.o",
+    "lib64_libmingw32_a-tlsthrd.o",
+    "lib64_libmingw32_a-usermatherr.o",
+    "lib64_libmingw32_a-wildcard.o",
+    "lib64_libmingw32_a-xncommod.o",
+    "lib64_libmingw32_a-xthdloc.o",
+    "lib64_libmingw32_a-xtxtmode.o",
+    "lib64_libmingwex_a-_assert.o",
+    "lib64_libmingwex_a-btowc.o",
+    "lib64_libmingwex_a-dmisc.o",
+    "lib64_libmingwex_a-g__fmt.o",
+    "lib64_libmingwex_a-gdtoa.o",
+    "lib64_libmingwex_a-gethex.o",
+    "lib64_libmingwex_a-gmisc.o",
+    "lib64_libmingwex_a-guard_dispatch.o",
+    "lib64_libmingwex_a-hd_init.o",
+    "lib64_libmingwex_a-hexnan.o",
+    "lib64_libmingwex_a-ldexp.o",
+    "lib64_libmingwex_a-ldexpf.o",
+    "lib64_libmingwex_a-loadcfg.o",
+    "lib64_libmingwex_a-mingw_cfguard_support.o",
+    "lib64_libmingwex_a-mingw_fprintf.o",
+    "lib64_libmingwex_a-mingw_matherr.o",
+    "lib64_libmingwex_a-mingw_pformat.o",
+    "lib64_libmingwex_a-mingw_printf.o",
+    "lib64_libmingwex_a-mingw_sformat.o",
+    "lib64_libmingwex_a-mingw_snprintf.o",
+    "lib64_libmingwex_a-mingw_sscanf.o",
+    "lib64_libmingwex_a-mingw_swprintf.o",
+    "lib64_libmingwex_a-mingw_vfprintf.o",
+    "lib64_libmingwex_a-mingw_vsnprintf.o",
+    "lib64_libmingwex_a-mingw_vsscanf.o",
+    "lib64_libmingwex_a-mingw_vswprintf.o",
+    "lib64_libmingwex_a-mingw_wcstold.o",
+    "lib64_libmingwex_a-mingw_wpformat.o",
+    "lib64_libmingwex_a-misc.o",
+    "lib64_libmingwex_a-smisc.o",
+    "lib64_libmingwex_a-strtodg.o",
+    "lib64_libmingwex_a-strtodnrp.o",
+    "lib64_libmingwex_a-strtof.o",
+    "lib64_libmingwex_a-strtopx.o",
+    "lib64_libmingwex_a-sum.o",
+    "lib64_libmingwex_a-wcstof.o",
+    "lib64_libmingwex_a-wcstold.o",
+    "lib64_libmingwex_a-wctob.o",
+    "lib64_libucrt_extra_a-__initenv.o",
+    "lib64_libucrt_extra_a-__p___initenv.o",
+    "lib64_libucrt_extra_a-ucrt___local_stdio_printf_options.o",
+    "lib64_libucrt_extra_a-ucrt__getmainargs.o",
+    "lib64_libucrt_extra_a-ucrt_amsg_exit.o",
+    "lib64_libucrt_extra_a-ucrt_fprintf.o",
+    "lib64_libucrt_extra_a-ucrt_ms_fwprintf.o",
+    "lib64_libucrt_extra_a-ucrt_printf.o",
+    "lib64_libucrt_extra_a-ucrt_snprintf.o",
+    "lib64_libucrt_extra_a-ucrt_vfprintf.o",
+    "lib64_libucrt_extra_a-ucrt_vsnprintf.o",
+    "libunwind.cpp.obj",
+    "locale.cpp.obj",
+    "locale_win32.cpp.obj",
+    "memory.cpp.obj",
+    "mutex.cpp.obj",
+    "new_helpers.cpp.obj",
+    "operations.cpp.obj",
+    "ops.cpp.obj",
+    "path.cpp.obj",
+    "private_typeinfo.cpp.obj",
+    "quants.c.obj",
+    "regex.cpp.obj",
+    "repack.cpp.obj",
+    "stdexcept.cpp.obj",
+    "stdlib_exception.cpp.obj",
+    "stdlib_new_delete.cpp.obj",
+    "stdlib_stdexcept.cpp.obj",
+    "stdlib_typeinfo.cpp.obj",
+    "string.cpp.obj",
+    "support.cpp.obj",
+    "system_error.cpp.obj",
+    "thread.cpp.obj",
+    "thread_win32.cpp.obj",
+    "tiled.cpp.obj",
+    "traits.cpp.obj",
+    "udivmodti4.c.obj",
+    "unary-ops.cpp.obj",
+    "Unwind-seh.cpp.obj",
+    "UnwindLevel1.c.obj",
+    "UnwindRegistersSave.S.obj",
+    "vec.cpp.obj",
+    "whisper-aneforge.cpp.obj",
+    "whisper.cpp.obj"
+  ],
+  "map_objects_without_archive_match": [
+    "D:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-x86_64/x86_64-w64-mingw32/lib/crt2.o",
+    "D:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-x86_64/x86_64-w64-mingw32/lib/crtbegin.o",
+    "D:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-x86_64/x86_64-w64-mingw32/lib/crtend.o",
+    "examples/cli/CMakeFiles/whisper-cli.dir/cli.cpp.obj"
+  ],
+  "unclassified_archives": [
+    "ggml-base.a",
+    "ggml-cpu.a",
+    "ggml.a",
+    "libcommon.a"
+  ],
+  "review_status": "inventory only; reconcile source-specific notices before product admission"
+}

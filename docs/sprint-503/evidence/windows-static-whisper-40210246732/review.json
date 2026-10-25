@@ -1,0 +1,137 @@
+{
+  "schema": "s503-windows-static-whisper-link-review-v1",
+  "reviewed_at": "2026-10-25T16:11:27.824948+00:00",
+  "run_id": 40210246732,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40210246732",
+  "candidate_commit": "9a0a418bb4e191ec695ec4feb5dec8a923b29ca1",
+  "result": "two native Windows binary builds, map archive inventory and GitHub signed provenance verified",
+  "scope": "build and static notice review; no signed tagged product release or bare-host install",
+  "targets": [
+    {
+      "target": "windows/amd64",
+      "runner_label": "windows-2025",
+      "artifact_id": 12605084890,
+      "binary_sha256": "27e0bb8c1e0d3b6d38ba06874e2c417e4e98aaff508fc2cc73ec4638b391d123",
+      "binary_bytes": 4398080,
+      "map_sha256": "492d869f01ce5a8afb23edffd51b3fe4a53626cfd16ee14ce910cd4f3019746e",
+      "map_bytes": 3023447,
+      "compressed_map_sha256": "381d3487db2f47f46c0094f9d1f8b62c11bd41465e06acc836f6fdbfbee2692a",
+      "compressed_map_bytes": 251755,
+      "archive_member_count": 141,
+      "map_object_count": 145,
+      "unmatched_map_objects": [
+        "D:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-x86_64/x86_64-w64-mingw32/lib/crt2.o",
+        "D:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-x86_64/x86_64-w64-mingw32/lib/crtbegin.o",
+        "D:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-x86_64/x86_64-w64-mingw32/lib/crtend.o",
+        "examples/cli/CMakeFiles/whisper-cli.dir/cli.cpp.obj"
+      ],
+      "archives": {
+        "ggml-base.a": 6,
+        "ggml-cpu.a": 10,
+        "ggml.a": 2,
+        "libc++.a": 42,
+        "libclang_rt.builtins-x86_64.a": 3,
+        "libcommon.a": 3,
+        "libmingw32.a": 20,
+        "libmingwex.a": 38,
+        "libmsvcrt.a": 11,
+        "libunwind.a": 4,
+        "libwhisper.a": 2
+      },
+      "project_archives_to_classify": [
+        "ggml-base.a",
+        "ggml-cpu.a",
+        "ggml.a",
+        "libcommon.a"
+      ],
+      "linker_source_review_members": [
+        {
+          "archive": "libmingwex.a",
+          "member": "lib64_libmingwex_a-gdtoa.o"
+        },
+        {
+          "archive": "libmingwex.a",
+          "member": "lib64_libmingwex_a-ldexp.o"
+        },
+        {
+          "archive": "libmingwex.a",
+          "member": "lib64_libmingwex_a-ldexpf.o"
+        }
+      ],
+      "raw_files_sha256": {
+        "build-report.json": "d59980e1cb473a9cdce6406eb54c2c8b745c23171b7b201afa1244284676901c",
+        "toolchain-report.json": "d9fae4146d2ba6b692e9c3820ecbdd77888ddba2f082214d30dc86a2df7c8d69",
+        "runner-identity.json": "cbea3b30ac0775493d2d20b29a85890547426e44d0f63cb85586ea7c295ce716",
+        "whisper-link-inventory.json": "896531ee98690df2458700eed89e7a5374e7c9d3e946eeb9a03a9409730da7e7",
+        "binary-sha256.txt": "19604a46ca0bd11f191c5691a19c201bc20b6c0275bc504b5212dd2b9ae1ebf4",
+        "whisper-cli.link.map.gz": "381d3487db2f47f46c0094f9d1f8b62c11bd41465e06acc836f6fdbfbee2692a"
+      },
+      "sigstore_attestation_verified": true,
+      "product_admitted": false
+    },
+    {
+      "target": "windows/arm64",
+      "runner_label": "windows-11-arm",
+      "artifact_id": 12605475828,
+      "binary_sha256": "47358db49ac9385e77f3b135a2b5cccb186cc565b81a0c5db278301bc9ea79de",
+      "binary_bytes": 3899904,
+      "map_sha256": "2639fd586fe652d6bcee3a2b1022ea05b4dfcfeeac445549bd29f953ddd318f3",
+      "map_bytes": 2989138,
+      "compressed_map_sha256": "2943f1a0557c2d9bc210a0326660e921f48a1b0d3e6bb2afb32f8a554f517b00",
+      "compressed_map_bytes": 248529,
+      "archive_member_count": 131,
+      "map_object_count": 135,
+      "unmatched_map_objects": [
+        "C:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-aarch64/aarch64-w64-mingw32/lib/crt2.o",
+        "C:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-aarch64/aarch64-w64-mingw32/lib/crtbegin.o",
+        "C:/a/_temp/s503-llvm-mingw/llvm-mingw-20260616-ucrt-aarch64/aarch64-w64-mingw32/lib/crtend.o",
+        "examples/cli/CMakeFiles/whisper-cli.dir/cli.cpp.obj"
+      ],
+      "archives": {
+        "ggml-base.a": 6,
+        "ggml-cpu.a": 10,
+        "ggml.a": 2,
+        "libc++.a": 42,
+        "libclang_rt.builtins-aarch64.a": 3,
+        "libcommon.a": 3,
+        "libmingw32.a": 19,
+        "libmingwex.a": 27,
+        "libmsvcrt.a": 13,
+        "libunwind.a": 4,
+        "libwhisper.a": 2
+      },
+      "project_archives_to_classify": [
+        "ggml-base.a",
+        "ggml-cpu.a",
+        "ggml.a",
+        "libcommon.a"
+      ],
+      "linker_source_review_members": [
+        {
+          "archive": "libmingwex.a",
+          "member": "libarm64_libmingwex_a-gdtoa.o"
+        },
+        {
+          "archive": "libmingwex.a",
+          "member": "libarm64_libmingwex_a-ldexpf.o"
+        }
+      ],
+      "raw_files_sha256": {
+        "build-report.json": "f9eb259803dcf6836ba8111b0e4960b90e1040c440ad1be37ac2cb9bb02206c2",
+        "toolchain-report.json": "c48109d15fcdfabd69c3de8220f35174ee87fe93958d2b31a0c6e8e4dca88ad4",
+        "runner-identity.json": "7579121f8cb8a01fa44682c6e1e9949334ccd73693af7d9643b2075bbf236bfb",
+        "whisper-link-inventory.json": "1bad4fe534f1d21710ceee103cbc680529902804945cc82f821c1b2f83c06fa8",
+        "binary-sha256.txt": "1cf9163f5c9edf26b9a0ace7393a0df2bf08eaaf5b638429849c1975d0e67ea5",
+        "whisper-cli.link.map.gz": "2943f1a0557c2d9bc210a0326660e921f48a1b0d3e6bb2afb32f8a554f517b00"
+      },
+      "sigstore_attestation_verified": true,
+      "product_admitted": false
+    }
+  ],
+  "open_gates": [
+    "Inspect exact per-component licenses and package applicable notice bundle with each distributable binary",
+    "Admit Python Windows VC prerequisite and bare-host installation",
+    "Publish a signed tagged Whisper binary/source install path with committed pins",
+    "Operator YouTube six-target acceptance"
+  ]
+}

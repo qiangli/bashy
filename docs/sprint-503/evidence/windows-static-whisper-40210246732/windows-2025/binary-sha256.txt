@@ -1,0 +1,1 @@
+27e0bb8c1e0d3b6d38ba06874e2c417e4e98aaff508fc2cc73ec4638b391d123  whisper-cli.exe

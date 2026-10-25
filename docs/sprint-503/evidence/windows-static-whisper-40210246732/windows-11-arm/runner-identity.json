@@ -1,0 +1,14 @@
+{
+  "schema": "s503-runner-identity-v1",
+  "runner_label": "windows-11-arm",
+  "expected_os": "Windows",
+  "expected_arch": "arm64",
+  "actual_os": "Windows",
+  "actual_arch": "arm64",
+  "os_arch_raw": "Arm64",
+  "process_arch": "ARM64",
+  "python_arch": "arm64",
+  "translated": "0",
+  "python": "3.12.10",
+  "commit_sha": "9a0a418bb4e191ec695ec4feb5dec8a923b29ca1"
+}

@@ -1,0 +1,17 @@
+{
+  "schema": "s503-llvm-mingw-toolchain-v1",
+  "platform": "windows/amd64",
+  "version": "20260616",
+  "source_url": "https://github.com/mstorsjo/llvm-mingw/releases/download/20260616/llvm-mingw-20260616-ucrt-x86_64.zip",
+  "archive_bytes": 187504083,
+  "archive_sha256": "b9b68a4d276e16fa25802aaba458e4638f64b3884c290aaccdc2d87083b6ca35",
+  "toolchain_root": "D:\\a\\_temp\\s503-llvm-mingw\\llvm-mingw-20260616-ucrt-x86_64",
+  "compiler_host_pe_machine": "0x8664",
+  "compiler_default_target": "x86_64-w64-windows-gnu",
+  "project_license": "ISC (toolchain assembly scripts)",
+  "license_sources": [
+    "https://github.com/mstorsjo/llvm-mingw/blob/20260616/LICENSE.txt",
+    "https://llvm.org/docs/DeveloperPolicy.html#license",
+    "https://www.mingw-w64.org/support/#licensing"
+  ]
+}
