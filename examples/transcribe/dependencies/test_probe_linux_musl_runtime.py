@@ -77,6 +77,10 @@ class LinkInputPolicyTest(unittest.TestCase):
             probe.extract_printed_map(source + source, self.map_file)
 
     def test_link_command_must_identify_direct_inputs_without_library_aliases(self):
+        preflight = "ld.lld -o /tmp/flag-preflight /tmp/start.o\n"
+        command, inputs = probe.verbose_link_inputs(preflight, "flag-preflight")
+        self.assertEqual(command, preflight.strip())
+        self.assertEqual(inputs, {"/tmp/start.o"})
         with self.assertRaisesRegex(RuntimeError, "unresolved -l"):
             probe.verbose_link_inputs("ld.lld -o /tmp/bin/whisper-cli -lstdc++ /tmp/start.o\n")
         with self.assertRaisesRegex(RuntimeError, "no object or archive inputs"):

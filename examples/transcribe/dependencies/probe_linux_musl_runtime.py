@@ -154,12 +154,13 @@ def extract_printed_map(build_log: str, destination: Path) -> None:
     destination.write_text("".join(lines[first:last]), encoding="utf-8")
 
 
-def verbose_link_inputs(build_log: str) -> tuple[str, set[str]]:
-    """Read the exact ld.lld argv printed by Zig --verbose-link."""
+def verbose_link_inputs(build_log: str, output_name: str = "whisper-cli") -> tuple[str, set[str]]:
+    """Read the exact ld.lld argv printed by Zig cc/c++ -v."""
+    output_pattern = re.compile(rf"(?:^|/){re.escape(output_name)}(?:\s|$)")
     commands = [line for line in build_log.splitlines()
-                if line.startswith("ld.lld ") and re.search(r"(?:^|/)whisper-cli(?:\s|$)", line)]
+                if line.startswith("ld.lld ") and output_pattern.search(line)]
     if len(commands) != 1:
-        raise RuntimeError(f"expected one verbose whisper-cli ld.lld invocation, found {len(commands)}")
+        raise RuntimeError(f"expected one verbose {output_name} ld.lld invocation, found {len(commands)}")
     args = shlex.split(commands[0])
     if any(arg.startswith("-l") and arg != "ld.lld" for arg in args):
         raise RuntimeError("verbose LLD invocation has an unresolved -l library")
@@ -308,13 +309,33 @@ def main() -> int:
         cc, cxx = wrappers / "cc", wrappers / "cxx"
         compiler_wrapper(cc, zig, "cc", target)
         compiler_wrapper(cxx, zig, "c++", target)
+        preflight_source = work / "flag-preflight.c"
+        preflight_source.write_text("int main(void) { return 0; }\n", encoding="utf-8")
+        preflight_binary = work / "flag-preflight"
+        preflight_log = run([str(cc), "-static", "-Wl,--print-map", "-v",
+                             str(preflight_source), "-o", str(preflight_binary)],
+                            output / "flag-preflight.log", timeout=300)
+        if (output / "flag-preflight.log").stat().st_size > 2 << 20:
+            raise RuntimeError("link flag preflight log exceeds 2 MiB evidence ceiling")
+        extract_printed_map(preflight_log, output / "flag-preflight.link.map")
+        preflight_command, preflight_inputs = verbose_link_inputs(preflight_log, "flag-preflight")
+        if not preflight_binary.is_file():
+            raise RuntimeError("link flag preflight did not produce an ELF")
+        (output / "flag-preflight-link-command.txt").write_text(preflight_command + "\n")
+        report["link_flag_preflight"] = {
+            "log_sha256": sha256(output / "flag-preflight.log"),
+            "map_sha256": sha256(output / "flag-preflight.link.map"),
+            "link_command_sha256": sha256(output / "flag-preflight-link-command.txt"),
+            "direct_input_count": len(preflight_inputs),
+            "binary_sha256": sha256(preflight_binary),
+        }
         build = work / "build"
         map_file = output / "whisper-cli.link.map"
         flags = pinned.get_cmake_build_flags("linux", arch,
                                              {"c_compiler": str(cc), "cxx_compiler": str(cxx)})
         flags = [flag for flag in flags if not flag.startswith("-DCMAKE_EXE_LINKER_FLAGS=")]
         flags.extend(("-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
-                      "-DCMAKE_EXE_LINKER_FLAGS=-static -Wl,--print-map --verbose-link"))
+                      "-DCMAKE_EXE_LINKER_FLAGS=-static -Wl,--print-map -v"))
         if any("static-libgcc" in flag or "static-libstdc++" in flag for flag in flags):
             raise RuntimeError("GCC static-runtime flag remained in Zig build")
         report["cmake_flags"] = flags
@@ -343,7 +364,7 @@ def main() -> int:
         final_links = [line for line in build_log.splitlines()
                        if re.search(r"(?:^|\s)-o\s+\S*bin/whisper-cli(?:\s|$)", line)
                        and "-static" in line and "-Wl,--print-map" in line
-                       and "--verbose-link" in line]
+                       and re.search(r"(?:^|\s)-v(?:\s|$)", line)]
         if len(final_links) != 1 or str(cxx) not in final_links[0]:
             raise RuntimeError("one exact Zig static final link command was not retained")
         (output / "final-link-command.txt").write_text(final_links[0] + "\n")

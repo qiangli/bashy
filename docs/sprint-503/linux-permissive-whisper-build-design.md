@@ -53,11 +53,17 @@ compilers. Configure with `CMAKE_FIND_ROOT_PATH_MODE_LIBRARY=ONLY` and
 it, and no Linux branch `-static-libgcc`/`-static-libstdc++` flags. The
 [first hosted run](evidence/linux-musl-40218138727-failure.md) showed that
 Zig 0.15.2 rejects `-Wl,-Map=<path>` during CMake's compiler check. The
-corrected candidate uses `CMAKE_EXE_LINKER_FLAGS=-static -Wl,--print-map
---verbose-link`. Zig's [argument parser](https://github.com/ziglang/zig/blob/0.15.2/src/main.zig)
-accepts both options, and its [LLD path](https://github.com/ziglang/zig/blob/0.15.2/src/link/Lld.zig)
-prints the map and exact linker argv. The probe extracts the final link map
-from the build log, inventories its loaded archive members and the direct
+[second hosted run](evidence/linux-musl-40218694323-failure.md) showed that
+`zig cc` rejects the Zig build-mode flag
+`--verbose-link` in Clang compatibility mode. The candidate now uses
+`CMAKE_EXE_LINKER_FLAGS=-static -Wl,--print-map -v`. Zig's
+[C-driver argument parser](https://github.com/ziglang/zig/blob/0.15.2/src/main.zig)
+maps `-v` to verbose linker output, and its
+[LLD path](https://github.com/ziglang/zig/blob/0.15.2/src/link/Lld.zig)
+prints the exact linker argv. A one-shot native flag preflight must first
+produce both the printed map and LLD invocation before CMake starts. The
+probe extracts the final link map from the build log, inventories its loaded
+archive members and the direct
 object/archive argv, and stops if either evidence stream is absent. Save the
 complete command and map, and fail if CMake finds host headers or libraries.
 **The corrected flags remain a hypothesis until native CMake and link
