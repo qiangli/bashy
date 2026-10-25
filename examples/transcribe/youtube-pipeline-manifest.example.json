@@ -1,0 +1,61 @@
+{
+  "schema": "s503-youtube-pipeline-v1",
+  "candidate_commit": "c32bf04d",
+  "os": "darwin",
+  "arch": "arm64",
+  "acquisition_evidence": {
+    "windows_amd64": "run165",
+    "darwin_arm64": "run168"
+  },
+  "bashy": "/private/candidate/bashy",
+  "bashy_sha256": "FILL",
+  "helper": "/private/candidate/transcribe-adapter",
+  "helper_sha256": "FILL",
+  "python": "/private/runtime/python3",
+  "yt_dlp": "/private/dependencies/yt-dlp",
+  "yt_dlp_sha256": "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14",
+  "deno": "/private/dependencies/deno",
+  "deno_sha256": "FILL",
+  "whisper": "/private/dependencies/whisper-cli",
+  "whisper_sha256": "FILL",
+  "model_id": "base",
+  "model": "/private/cache/models/whisper/ggml-base.bin",
+  "model_sha256": "FILL",
+  "decoder": {
+    "name": "transcribe-webm",
+    "exec": ["/private/candidate/transcribe-adapter", "webm"],
+    "sha256": "FILL",
+    "license_evidence": "FILL: reviewed permissive decoder provenance"
+  },
+  "controlled_webm": "/private/fixtures/controlled-speech.webm",
+  "controlled_webm_sha256": "FILL",
+  "controlled": {
+    "duration_ms": 10000,
+    "reference": "FILL with at least six human reviewed words from controlled speech",
+    "min_score": 0.8
+  },
+  "operator": {
+    "duration_ms": 499000,
+    "reference": "FILL with at least six human reviewed words from the operator video",
+    "min_score": 0.7
+  },
+  "operator_media": {
+    "canonical": {
+      "url": "https://www.youtube.com/watch?v=_j_PixI3Muo",
+      "video_id": "_j_PixI3Muo",
+      "path": "/private/acquire-canonical/_j_PixI3Muo.webm",
+      "duration_ms": 499000,
+      "sha256": "f6aba46f43523ad83a604cec1a05821d4f4288fc55b18db9ad2dea7ccac50ff3"
+    },
+    "shortened": {
+      "url": "https://youtu.be/_j_PixI3Muo?si=if_lqvXvU5GaM1nb",
+      "video_id": "_j_PixI3Muo",
+      "path": "/private/acquire-shortened/_j_PixI3Muo.webm",
+      "duration_ms": 499000,
+      "sha256": "f6aba46f43523ad83a604cec1a05821d4f4288fc55b18db9ad2dea7ccac50ff3"
+    }
+  },
+  "offline_enforcement": "FILL after externally disabling network access",
+  "case_timeout_seconds": 1800,
+  "cancel_after_seconds": 2
+}
