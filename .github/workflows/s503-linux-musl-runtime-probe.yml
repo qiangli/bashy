@@ -11,6 +11,7 @@ on:
       - s503-contract-integration
     paths:
       - .github/workflows/s503-linux-musl-runtime-probe.yml
+      - examples/transcribe/dependencies/probe_linux_musl_runtime.py
 
 permissions:
   contents: read
