@@ -1,0 +1,56 @@
+{
+  "candidate_commit": "3ab1af15848e513cd5f347b771ce5d7ea434f85d",
+  "disposition": "Both fresh private installed-Python receipts are internally consistent. Neither target has a passive natural-load or Authenticode report from this run. The workflow used the setup-python toolcache path after the private installer; that path no longer existed. Follow-up correction 3704af0ad5fd83f0d97c29b8bad82a99f95a8337 instead requires and hashes the receipt's freshly installed interpreter before collector invocation. That correction was not in this run and needs native evidence.",
+  "limits": [
+    "The bounded artifacts contain no installer, interpreter or VC DLL bytes; their native-runner hashes and signatures cannot be independently revalidated from the ZIP.",
+    "Do not carry the windows/arm64 natural-load result from a different run into this run. There is no vc-natural-load.json for either target here.",
+    "No product distribution right, operator-host availability or offline operator replay is established."
+  ],
+  "operator_admitted": false,
+  "product_admitted": false,
+  "run_conclusion": "failure",
+  "run_id": 40221114314,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40221114314",
+  "schema": "s503-windows-vc-natural-retry-independent-review-v1",
+  "targets": [
+    {
+      "artifact_file_count": 24,
+      "artifact_id": 12609454174,
+      "artifact_name": "s503-python-vc-windows-2025",
+      "artifact_zip_sha256": "fd8304823dd4d2bd1ff10bf4117201b71e7912619606bb1938a0e9689ef8a035",
+      "error": "setup-python executable missing: C:\\hostedtoolcache\\windows\\Python\\3.12.10\\x64\\python.exe",
+      "fresh_install_result": "INSTALLED_EVIDENCE_CAPTURED_UNADMITTED",
+      "installed_result_sha256": "27c46229f7220baf3ac61ae3de5cc8d59542de2d43154607aa01d153bcfe6c83",
+      "job_id": 121252937166,
+      "job_log_sha256": "2ecd4e69bb300d62fc68c84cab5f9c80e15d2c34a6eaed6a092823b4009f0621",
+      "natural_load_result": "NOT_CAPTURED",
+      "operator_admitted": false,
+      "product_admitted": false,
+      "retained_log_streams_verified": 16,
+      "retained_notice_copies_verified": 3,
+      "target": "windows/amd64"
+    },
+    {
+      "artifact_file_count": 24,
+      "artifact_id": 12609419906,
+      "artifact_name": "s503-python-vc-windows-11-arm",
+      "artifact_zip_sha256": "73cd5b90f337838734261e186c7a9c7a7dfd3a79920f9d6d99b3185d53a3bd0c",
+      "error": "setup-python executable missing: C:\\hostedtoolcache\\windows\\Python\\3.12.10\\arm64\\python.exe",
+      "fresh_install_result": "INSTALLED_EVIDENCE_CAPTURED_UNADMITTED",
+      "installed_result_sha256": "747dc10b74b42c4a75a8a13174578af7e6687df9a48acc0220fc7710016a1702",
+      "job_id": 121252936909,
+      "job_log_sha256": "c7c41433e94bf11a2141802a58cd875406f9c00957f0168949e4e30d146f3bda",
+      "natural_load_result": "NOT_CAPTURED",
+      "operator_admitted": false,
+      "product_admitted": false,
+      "retained_log_streams_verified": 16,
+      "retained_notice_copies_verified": 3,
+      "target": "windows/arm64"
+    }
+  ],
+  "verification": [
+    "Downloaded both raw GitHub artifact ZIPs; their SHA-256 values match GitHub artifact API digests, and each ZIP entry set exactly matches its extracted files.",
+    "Rehashed both retained installed-Python result.json files, 16 stdout/stderr streams and three notice copies per target against each receipt. Installer, installed Python and VC inventory measurements match the independently reviewed prior run 40220590979.",
+    "Read the native job logs; both passive-collector steps failed at the explicit setup-python existence guard before the collector executed."
+  ]
+}
