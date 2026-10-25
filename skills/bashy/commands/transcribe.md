@@ -31,9 +31,9 @@ The script's `--skill` flag prints its code-facing `~~~skill` guidance.
 - Stage selection calls `bashy transcribe select STAGE REQUEST.json`;
   an explicit name is sent as `--provider NAME` to the same selector and
   takes precedence. S503.2 supplies declared applicability, ambiguity
-  errors and local overrides. Until S503.2 is integrated, the fixture shim
-  is the only selector; the production command cannot run.
-  S503.4 and S503.6 supply real inference and verified dependencies.
+  errors and local overrides. The fixture shim exercises this interface with
+  stub adapters; native mode uses the registered-command selector. S503.4 and
+  S503.6 supply real inference and verified dependencies.
 - The pipeline passes optional `work_dir` in acquire, decode and infer
   requests. Adapters should put owned intermediates there so the unit removes
   them on success, failure or cancellation. Export writes to the pipeline's
