@@ -348,8 +348,12 @@ def main():
                     "macOS Python 3.12 framework receipt missing after installer")
             framework_after = report["after"]["python_312_package_info"][
                 "org.python.Python.PythonFramework-3.12"]["fields"]
-            require(framework_after["version"].split(".")[:3] == ["3", "12", "10"],
-                    "macOS Python framework receipt is not version 3.12.10")
+            # Python.org's macOS pkgutil receipt reports version 0 on both
+            # hosted architectures. The exact installer/signature, changed
+            # receipt time and the installed interpreter probe below establish
+            # the package and executable version independently.
+            require(framework_after["version"],
+                    "macOS Python framework receipt has no version field")
             if report["installation_kind"] == "reinstall_over_existing_ci_framework":
                 framework_before = report["before"]["python_312_package_info"][
                     "org.python.Python.PythonFramework-3.12"]["fields"]
@@ -361,6 +365,8 @@ def main():
                 "installer changed during installation")
         require(executable.is_file(), "installed interpreter absent from expected path")
         report["installed_python"] = path_state(executable)
+        require(report["installed_python"]["sha256"] == parsed["ci_python_sha256"],
+                "installed interpreter differs from the reviewed executable pin")
         probe_receipt, probe_stdout = record_command(
             args.evidence, "installed-probe", [str(executable), "-I", "-S", "-c", PROBE], 60)
         report["probe_command"] = probe_receipt
