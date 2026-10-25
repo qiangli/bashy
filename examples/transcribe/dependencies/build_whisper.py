@@ -285,7 +285,9 @@ def get_cmake_build_flags(os_name: str, arch_name: str, toolchain: Dict[str, str
         if link_map_path is not None:
             if any(char.isspace() for char in link_map_path.as_posix()):
                 raise RuntimeError("Windows linker map path must not contain whitespace")
-            linker_flags += f" -Wl,-Map={link_map_path.as_posix()}"
+            # LLD's COFF map records section input member names but omits
+            # their parent archives. Its verbose Loaded lines carry that pair.
+            linker_flags += f" -Wl,-Map={link_map_path.as_posix()} -Wl,--verbose"
         flags.append(f"-DCMAKE_EXE_LINKER_FLAGS={linker_flags}")
     elif os_name == "linux":
         # Avoid GPL runtime dependencies
@@ -326,30 +328,34 @@ def inspect_windows_link_map(map_path: Path, built_exe: Path, build_output: str)
     ]
     if len(link_commands) != 1:
         raise RuntimeError("Windows build log does not identify one final whisper-cli.exe link with this map")
-    members = {(m.group("archive"), m.group("member")) for m in ARCHIVE_MEMBER.finditer(contents)}
+    loaded = {}
+    for line in build_output.splitlines():
+        if "Loaded " not in line or " for " not in line:
+            continue
+        match = ARCHIVE_MEMBER.search(line)
+        if match:
+            loaded[(match.group("archive"), match.group("member"))] = line.strip()
+    members = set(loaded)
     if not members:
-        sample = [line.strip() for line in contents.splitlines()
-                  if ".a" in line.lower() or ".lib" in line.lower()][:5]
-        raise RuntimeError(f"Windows linker map contains no linked archive members; sample={sample!r}")
+        raise RuntimeError("Windows final link log contains no archive member Loaded records")
+    map_objects = set()
+    for line in contents.splitlines():
+        if not re.match(r"^\s*[0-9a-f]+\s+[0-9a-f]+\s+\d+\s+", line, re.I):
+            continue
+        for match in DIRECT_OBJECT.finditer(line):
+            map_objects.add(match.group("object"))
+    if not map_objects:
+        raise RuntimeError("Windows linker map contains no input object sections")
     inventory = [
         {
             "archive": archive,
             "member": member,
             "notice_candidate": _notice_candidate(archive),
             "source_review": bool(re.search(r"cephes|gdtoa|ldexp|wine|pthread", member, re.I)),
+            "linker_load_evidence": loaded[(archive, member)],
         }
         for archive, member in sorted(members, key=lambda pair: (pair[0].lower(), pair[1].lower()))
     ]
-    # Standalone object paths matter too. Exclude archive(member) matches, then
-    # collect only the map's input column to avoid treating symbol names as files.
-    direct_objects = set()
-    for line in contents.splitlines():
-        if ARCHIVE_MEMBER.search(line):
-            continue
-        if not re.match(r"^\s*[0-9a-f]+\s+[0-9a-f]+\s+\d+\s+", line, re.I):
-            continue
-        for match in DIRECT_OBJECT.finditer(line):
-            direct_objects.add(match.group("object"))
     return {
         "schema": "s503-windows-link-map-v1",
         "binary_name": built_exe.name,
@@ -358,7 +364,14 @@ def inspect_windows_link_map(map_path: Path, built_exe: Path, build_output: str)
         "map_bytes": map_path.stat().st_size,
         "final_link_command": link_commands[0],
         "archive_members": inventory,
-        "direct_objects": sorted(direct_objects, key=str.lower),
+        # The raw map cannot itself distinguish an archive member from a
+        # standalone object. Keep every map input and the unmatched set for
+        # review instead of falsely labeling them all direct objects.
+        "map_objects": sorted(map_objects, key=str.lower),
+        "map_objects_without_archive_match": sorted(
+            (obj for obj in map_objects if Path(obj.replace("\\", "/")).name.lower()
+             not in {member.lower() for _, member in members}), key=str.lower
+        ),
         "unclassified_archives": sorted({row["archive"] for row in inventory
                                          if row["notice_candidate"].startswith("unclassified")}, key=str.lower),
         "review_status": "inventory only; reconcile source-specific notices before product admission",

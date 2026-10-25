@@ -47,23 +47,31 @@ class TestWhisperBuildRecipe(unittest.TestCase):
             link_map.write_text(
                 "Address  Size     Align Out     In      Symbol\n"
                 "00001000 00001000  4096 .text\n"
-                "00001000 00000010    16         C:/build/libwhisper.a(whisper.cpp.obj):(.text)\n"
-                "00001010 00000010    16         C:/llvm/lib/libc++.a(string.cpp.obj):(.text)\n"
-                "00001020 00000010    16         C:/llvm/lib/libmingwex.a(gdtoa.o):(.text)\n"
+                "00001000 00000010    16         whisper.cpp.obj:(.text)\n"
+                "00001010 00000010    16         string.cpp.obj:(.text)\n"
+                "00001020 00000010    16         gdtoa.o:(.text)\n"
                 "00001030 00000010    16         C:/build/CMakeFiles/cli.dir/main.cpp.obj:(.text)\n"
-                "00001040 00000010    16         C:/other/libunknown.a(mystery.o):(.text)\n"
+                "00001040 00000010    16         mystery.o:(.text)\n"
             )
-            command = f"clang++ -static -Wl,-Map={link_map.as_posix()} main.obj -o bin/whisper-cli.exe"
-            inventory = build_whisper.inspect_windows_link_map(link_map, cli, command)
+            command = f"clang++ -static -Wl,-Map={link_map.as_posix()} -Wl,--verbose main.obj -o bin/whisper-cli.exe"
+            loads = "\n".join((
+                "ld.lld: Loaded libwhisper.a(whisper.cpp.obj) for whisper_init",
+                "ld.lld: Loaded libc++.a(string.cpp.obj) for std::string",
+                "ld.lld: Loaded libmingwex.a(gdtoa.o) for strtodg",
+                "ld.lld: Loaded libunknown.a(mystery.o) for mystery",
+            ))
+            inventory = build_whisper.inspect_windows_link_map(link_map, cli, command + "\n" + loads)
             self.assertEqual(inventory["binary_sha256"], hashlib.sha256(cli.read_bytes()).hexdigest())
             self.assertEqual(inventory["map_sha256"], hashlib.sha256(link_map.read_bytes()).hexdigest())
             self.assertEqual(len(inventory["archive_members"]), 4)
-            self.assertEqual(inventory["direct_objects"], ["C:/build/CMakeFiles/cli.dir/main.cpp.obj"])
+            self.assertIn("C:/build/CMakeFiles/cli.dir/main.cpp.obj", inventory["map_objects"])
+            self.assertEqual(inventory["map_objects_without_archive_match"],
+                             ["C:/build/CMakeFiles/cli.dir/main.cpp.obj"])
             notices = {r["member"]: r["notice_candidate"] for r in inventory["archive_members"]}
             self.assertIn("LLVM", notices["string.cpp.obj"])
             self.assertIn("MinGW", notices["gdtoa.o"])
             self.assertIn("MIT", notices["whisper.cpp.obj"])
-            self.assertEqual(inventory["unclassified_archives"], ["C:/other/libunknown.a"])
+            self.assertEqual(inventory["unclassified_archives"], ["libunknown.a"])
             self.assertTrue(next(r for r in inventory["archive_members"] if r["member"] == "gdtoa.o")["source_review"])
             self.assertIn("inventory only", inventory["review_status"])
 
@@ -77,20 +85,23 @@ class TestWhisperBuildRecipe(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "missing or empty"):
                 build_whisper.inspect_windows_link_map(link_map, cli, command)
             link_map.write_text("Address  Size     Align Out     In      Symbol\n"
-                                "00001000 00000010 16 libmingwex.a(gdtoa.o):(.text)\n")
+                                "00001000 00000010 16 gdtoa.o:(.text)\n")
+            loads = "\nld.lld: Loaded libmingwex.a(gdtoa.o) for strtodg"
             with self.assertRaisesRegex(RuntimeError, "does not identify one final"):
-                build_whisper.inspect_windows_link_map(link_map, cli, command.replace("whisper-cli.exe", "other.exe"))
+                build_whisper.inspect_windows_link_map(link_map, cli, command.replace("whisper-cli.exe", "other.exe") + loads)
             with self.assertRaisesRegex(RuntimeError, "does not identify one final"):
-                build_whisper.inspect_windows_link_map(link_map, cli, command.replace("-Map", "-Other"))
-            link_map.write_text("Address  Size     Align Out     In      Symbol\n")
-            with self.assertRaisesRegex(RuntimeError, "no linked archive members"):
+                build_whisper.inspect_windows_link_map(link_map, cli, command.replace("-Map", "-Other") + loads)
+            with self.assertRaisesRegex(RuntimeError, "no archive member Loaded records"):
                 build_whisper.inspect_windows_link_map(link_map, cli, command)
+            link_map.write_text("Address  Size     Align Out     In      Symbol\n")
+            with self.assertRaisesRegex(RuntimeError, "no input object sections"):
+                build_whisper.inspect_windows_link_map(link_map, cli, command + loads)
 
     def test_windows_link_map_is_requested_on_final_executable_link(self):
         map_path = Path("C:/runner_temp/whisper-cli.link.map")
         toolchain = {"c_compiler": "C:/clang.exe", "cxx_compiler": "C:/clang++.exe"}
         windows_flags = build_whisper.get_cmake_build_flags("windows", "arm64", toolchain, map_path)
-        self.assertIn(f"-DCMAKE_EXE_LINKER_FLAGS=-static -Wl,-Map={map_path.as_posix()}", windows_flags)
+        self.assertIn(f"-DCMAKE_EXE_LINKER_FLAGS=-static -Wl,-Map={map_path.as_posix()} -Wl,--verbose", windows_flags)
         self.assertEqual(sum(flag.startswith("-DCMAKE_EXE_LINKER_FLAGS=") for flag in windows_flags), 1)
         linux_flags = build_whisper.get_cmake_build_flags("linux", "arm64", toolchain)
         self.assertFalse(any("-Map" in flag for flag in linux_flags))
