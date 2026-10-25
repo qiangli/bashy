@@ -1,0 +1,65 @@
+{
+  "schema": "s503-quickjs-native-independent-review-v1",
+  "run": 40220845613,
+  "candidate_commit": "863f8d6d606e59abf9bb9b4e53213763a6ed0713",
+  "review_result": "RESEARCH_PASS_PRODUCT_BLOCKED",
+  "product_admitted": false,
+  "review_method": "Original GitHub Actions artifact ZIP SHA-256 and CRC; independent pinned upstream source and zipapp download; extracted receipt hash and content checks; controlled EJS script reconstruction. No executable or object bytes were retained.",
+  "pins": {
+    "quickjs_ng_commit": "6d46d07d04041b40f4f49eaa7fdebe44c314c699",
+    "quickjs_ng_archive_sha256": "a62cf1ff7d6d2f82b90a2d247a57e9eb56b81c03feb1f372a53923426e358cb0",
+    "quickjs_ng_license_sha256": "96f73f9d2a16c21a36b418f06073be26e7d6d5e7c1bc99756b21a4f2c74ef171",
+    "yt_dlp_version": "2026.10.21",
+    "yt_dlp_zipapp_sha256": "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14",
+    "bundled_ejs_version": "0.8.0",
+    "ejs_lib_sha256": "c55987fe697e5b9ee18830163f7af85327e9bb5c3e674b969d38c8d205eaa577",
+    "ejs_core_sha256": "18da6ce0758b416e7ae645084f4f8801f9f9d59d6c477c05eaa0ff94ebd8cc00"
+  },
+  "controlled_ejs_expected_result": {
+    "abc": "cba",
+    "xyz": "xyzn"
+  },
+  "targets": {
+    "linux/amd64": {
+      "job": 121251882184,
+      "artifact_id": 12608658065,
+      "artifact_zip_sha256": "62dbfe73ba21a051a7858bed938d7e1e2cc4e6397298ab9bb52aef355574f356",
+      "research_result": "PASS",
+      "map_sha256_verified": "9c4807bb345727cae0d5ac046d87476b66cbd38f8912f6a766bb05097a0779e8",
+      "imports_sha256_verified": "5dcdf8a809e5c83330069ab547b8fd318fba3ceb40c8ca5955c71520abb99ea4",
+      "binary_sha256_runner_reported_only": "8c763ea151b375b75aecf1fde25e9435ade19e309458522077fe2a500098dc28",
+      "machine_runner_reported_only": "linux/amd64",
+      "produced_objects_runner_reported_only": 10,
+      "linked_provider_observations": ["libqjs.a", "libqjs-libc.a", "Scrt1.o", "crti.o", "crtn.o", "crtbeginS.o", "crtendS.o", "libc_nonshared.a", "libgcc.a", "libgcc_s.so.1", "libm.so", "libc.so"],
+      "direct_imports_observed": ["libm.so.6", "libc.so.6"],
+      "controlled_ejs": "PASS"
+    },
+    "windows/arm64": {
+      "job": 121251882060,
+      "artifact_id": 12608898004,
+      "artifact_zip_sha256": "85a64a37a3849c5c1c931132093aafd422d6762a43dfd9a2f75b8c369287b7e9",
+      "research_result": "PASS",
+      "map_sha256_verified": "b5901eeeb04c2f52a000b41eb66d7f436a015e292b51d8c41a7fa04595eb7d3f",
+      "imports_sha256_verified": "88bdb8e3b80a34774102b6de370416426871118af9b756d12df362af8a973963",
+      "binary_sha256_runner_reported_only": "3744c49a9a6fadec003abeac8ce30ced487342b026a0f47472c0b92ff6839f5a",
+      "machine_runner_reported_only": "windows/arm64",
+      "produced_objects_runner_reported_only": 11,
+      "architecture_corroboration": "Runner ARM64; Visual Studio 18 2026 configured with -A ARM64; Hostarm64/arm64 compiler path. PE machine header not independently checked because qjs.exe was not uploaded.",
+      "linked_provider_observations": ["MSVCRT:chkstk.obj", "MSVCRT:secpushpop.obj", "MSVCRT:atomics.obj", "MSVCRT.lib", "vcruntime.lib", "OLDNAMES.lib", "UCRT and Windows SDK import libraries"],
+      "direct_imports_observed": ["VCRUNTIME140.dll", "UCRT API-set DLLs", "KERNEL32.dll"],
+      "controlled_ejs": "PASS"
+    }
+  },
+  "evidence_limits": [
+    "Neither uploaded artifact contains qjs/qjs.exe or built object/archive bytes; runner-reported binary and object hashes and machine headers cannot be independently recomputed.",
+    "Produced-object inventory is not itself the loaded-member inventory; linker maps and verbose library search need component-level classification.",
+    "No product executable attestation or release/installer evidence was produced by this research workflow.",
+    "Controlled bundled EJS prepared-solver dispatch is not live YouTube player extraction or acquisition."
+  ],
+  "remaining_gates": [
+    "Independently classify exact linked and loaded components and providers for each final executable; resolve QuickJS MIT, GNU/glibc/GCC and Microsoft VC/UCRT/SDK obligations and retain applicable notices bound to binary hashes.",
+    "Review security of yt-dlp QuickJS temporary challenge scripts and pinned EJS execution.",
+    "Prove live pinned player extraction and operator canonical and shortened YouTube URL acquisition, then transcript and TXT/SRT/VTT timing in both orientations on all six native targets.",
+    "Complete six-target native binary, provenance, release/installer, host and offline inference gates; independently verify retained final artifacts."
+  ]
+}
