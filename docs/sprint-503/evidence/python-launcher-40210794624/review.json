@@ -1,0 +1,79 @@
+{
+  "schema": "s503-python-launcher-native-review-v1",
+  "reviewed_at": "2026-10-25T16:20:29.188495+00:00",
+  "run_id": 40210794624,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40210794624",
+  "candidate_commit": "c3f155ab1d323eb5da873f38df277baea0de1e65",
+  "result": "six native external-Python launcher checks passed; exact reviewed Python reached adapter, changed bytes rejected before execution",
+  "scope": "pre-exec byte guard for selected external CI Python; no product Python installation, signed distribution, license or Windows VC runtime admission",
+  "policy_sha256": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+  "targets": [
+    {
+      "target": "linux/amd64",
+      "runner_label": "ubuntu-24.04",
+      "job_id": 121221377540,
+      "artifact_id": 12605272185,
+      "result_sha256": "b03fd8289107bbf548e82e6883aab9ec5cc7885f39d488ea2d6f046f142ed38d",
+      "python_sha256": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+      "policy_sha256": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+      "reached_adapter": true,
+      "changed_interpreter_rejected_before_exec": true
+    },
+    {
+      "target": "linux/arm64",
+      "runner_label": "ubuntu-24.04-arm",
+      "job_id": 121221377723,
+      "artifact_id": 12605322055,
+      "result_sha256": "9a7484361d612a585a0c6aa15255532baa23763c1a305eae29c7a166f99fdfc8",
+      "python_sha256": "5fa9ce7be3c3a2ef767c1999625a370c04ec3102d082472ff7f228225dd590d0",
+      "policy_sha256": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+      "reached_adapter": true,
+      "changed_interpreter_rejected_before_exec": true
+    },
+    {
+      "target": "darwin/amd64",
+      "runner_label": "macos-15-intel",
+      "job_id": 121221377708,
+      "artifact_id": 12605517192,
+      "result_sha256": "140833c11775049ca7feb1f486851d07629fd32e2a7a79d0ff851c66f33a661b",
+      "python_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "policy_sha256": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+      "reached_adapter": true,
+      "changed_interpreter_rejected_before_exec": true
+    },
+    {
+      "target": "darwin/arm64",
+      "runner_label": "macos-15",
+      "job_id": 121221377486,
+      "artifact_id": 12605631657,
+      "result_sha256": "b9b6717114a5f5817e5b59cc866379d7c1c906a5a60789ba68b5b01403570208",
+      "python_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "policy_sha256": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+      "reached_adapter": true,
+      "changed_interpreter_rejected_before_exec": true
+    },
+    {
+      "target": "windows/amd64",
+      "runner_label": "windows-2025",
+      "job_id": 121221377536,
+      "artifact_id": 12605317226,
+      "result_sha256": "89dc8621772b4588fa26f0ba53f45f05664ae01d838710d0bb583103ba66adae",
+      "python_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+      "policy_sha256": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+      "reached_adapter": true,
+      "changed_interpreter_rejected_before_exec": true
+    },
+    {
+      "target": "windows/arm64",
+      "runner_label": "windows-11-arm",
+      "job_id": 121221377593,
+      "artifact_id": 12605492268,
+      "result_sha256": "f6f37e9c4f09db648ae4c0bbc8b20e96835b68bfce8fb1b340226cb8a1bf8804",
+      "python_sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+      "policy_sha256": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+      "reached_adapter": true,
+      "changed_interpreter_rejected_before_exec": true
+    }
+  ],
+  "product_admitted": false
+}

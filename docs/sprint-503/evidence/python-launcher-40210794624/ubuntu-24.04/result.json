@@ -1,0 +1,11 @@
+{
+  "schema": "s503-python-launcher-native-v1",
+  "target": "linux/amd64",
+  "runner_label": "ubuntu-24.04",
+  "candidate_commit": "c3f155ab1d323eb5da873f38df277baea0de1e65",
+  "python_sha256": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+  "policy_sha256": "bcd13fd6844b079f99f400b54bbe1c844d52ebb66579a6baeb35df5d42044a75",
+  "verified_interpreter_reached_adapter": true,
+  "changed_interpreter_rejected_before_exec": true,
+  "scope": "external CI Python and local pre-exec byte guard; no product install or license admission"
+}
