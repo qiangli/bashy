@@ -194,7 +194,10 @@ jobs:
           env.pop('BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX', None)
           success = subprocess.run([str(bashy), str(launcher), str(request)],
                                    env=env, capture_output=True, text=True, timeout=60)
-          require(success.returncode == 1, 'verified interpreter did not run adapter')
+          require(success.returncode == 1 and success.stdout.strip(),
+                  'verified interpreter did not reach adapter: returncode=' +
+                  str(success.returncode) + ' stderr=' + success.stderr[:1200] +
+                  ' stdout=' + success.stdout[:1200])
           result = json.loads(success.stdout)
           require(result['error']['code'] == 'invalid_request' and
                   'expected a bashy-transcribe-stage-v1' in result['error']['message'],
