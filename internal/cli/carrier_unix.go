@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -182,7 +183,7 @@ func startExecJobCarrier(ctx context.Context, ignored []string) (interp.CarrierP
 		_ = cmd.Wait()
 		return nil, fmt.Errorf("job carrier readiness: %v", readyErr)
 	}
-	return &execCarrierProc{cmd: cmd, stdin: stdin, events: readyR, initialIgnored: initialIgnored}, nil
+	return &execCarrierProc{cmd: cmd, pid: cmd.Process.Pid, stdin: stdin, events: readyR, initialIgnored: initialIgnored}, nil
 }
 
 var carrierSignalNumbers = []struct {
@@ -194,8 +195,11 @@ var carrierSignalNumbers = []struct {
 
 type execCarrierProc struct {
 	cmd            *exec.Cmd
+	pid            int
 	stdin          io.Closer
 	term           sync.Once
+	reaped         atomic.Bool
+	cleanup        sync.Once
 	events         *os.File
 	initialIgnored map[int]bool
 	waitOnce       sync.Once
@@ -204,20 +208,23 @@ type execCarrierProc struct {
 	terminal       *interp.CarrierWaitState
 }
 
-func (p *execCarrierProc) Pid() int { return p.cmd.Process.Pid }
+func (p *execCarrierProc) Pid() int { return p.pid }
 
 // ProcessGroupID advertises the stable group created by Setpgid at carrier
 // startup. The sh runner uses it only while monitor mode is active, placing
 // every external component of the represented job in the carrier's group.
-func (p *execCarrierProc) ProcessGroupID() int { return p.cmd.Process.Pid }
+func (p *execCarrierProc) ProcessGroupID() int { return p.pid }
 
 func (p *execCarrierProc) ResumeProcessGroupLeader() error {
-	return syscall.Kill(p.cmd.Process.Pid, syscall.SIGCONT)
+	if p.reaped.Load() {
+		return os.ErrProcessDone
+	}
+	return syscall.Kill(p.pid, syscall.SIGCONT)
 }
 
 // WaitState reaps or observes child stop state via wait4/waitpid with WUNTRACED.
 func (p *execCarrierProc) waitKernelState() interp.CarrierWaitState {
-	pid := p.cmd.Process.Pid
+	pid := p.pid
 	var ws syscall.WaitStatus
 	for {
 		_, err := syscall.Wait4(pid, &ws, syscall.WUNTRACED, nil)
@@ -266,6 +273,9 @@ func (p *execCarrierProc) WaitSignalState() interp.CarrierSignalState {
 			defer close(p.states)
 			for {
 				state := p.waitKernelState()
+				if !state.Stopped {
+					p.reaped.Store(true)
+				}
 				p.states <- state
 				if !state.Stopped {
 					return
@@ -299,6 +309,14 @@ func (p *execCarrierProc) WaitSignalState() interp.CarrierSignalState {
 			}
 			state := *p.terminal
 			<-p.states // join the single kernel waiter after its terminal publication
+			p.cleanup.Do(func() {
+				// wait4 consumed the terminal status for stop-aware job control.
+				// exec.Cmd.Wait still owns its parent pipes, and os.Process owns a
+				// Linux pidfd. Wait reports ECHILD here, but closes the pipes;
+				// Release then closes the pidfd. Keep p.pid stable for callers.
+				_ = p.cmd.Wait()
+				_ = p.cmd.Process.Release()
+			})
 			return interp.CarrierSignalState{CarrierWaitState: state}
 		}
 		select {
@@ -351,13 +369,14 @@ func (p *execCarrierProc) Wait() int {
 
 // Terminate makes the helper exit promptly: EOF on its stdin pipe is its exit
 // condition, and the kill spares waiting for it to notice. Idempotent via the
-// sync.Once, and safe to race with Wait — os.Process keeps Kill after reap a
-// harmless ErrProcessDone.
+// sync.Once; the reaped guard avoids signalling a recycled PID after wait4.
 func (p *execCarrierProc) Terminate() {
 	p.term.Do(func() {
 		p.stdin.Close()
+		if p.reaped.Load() {
+			return
+		}
 		_ = p.cmd.Process.Kill()
-		_ = syscall.Kill(p.cmd.Process.Pid, syscall.SIGCONT)
 	})
 }
 
