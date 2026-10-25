@@ -115,6 +115,23 @@ def verify_selected_python(configured: str) -> Path:
     native_arch = _windows_native_arch() if system == "Windows" else normalize_arch(platform.uname().machine)
     translated = _darwin_translated() if system == "Darwin" else False
     policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+    source_prefix = os.environ.get("BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX", "")
+    if source_prefix:
+        if system != "Linux":
+            raise RuntimeError("Python source receipt is supported only on native Linux")
+        if not configured or process_arch != native_arch:
+            raise RuntimeError("Linux source Python must explicitly select a native interpreter")
+        if (not isinstance(policy, dict) or policy.get("schema") != "s503-external-python-runtime-v1"
+                or not isinstance(policy.get("targets"), dict) or set(policy["targets"]) != TARGETS):
+            raise RuntimeError("external Python policy is missing a reviewed six-target pin set")
+        from dependencies import setup_python_source
+        receipt = setup_python_source.verify_existing(Path(source_prefix))
+        selected = Path(configured).expanduser().resolve(strict=True)
+        if (selected != Path(sys.executable).resolve(strict=True)
+                or selected != Path(receipt["executable"]).resolve(strict=True)
+                or platform.python_version() != setup_python_source.VERSION):
+            raise RuntimeError("active Python differs from the explicit Linux source receipt")
+        return selected
     selected, target_name = verify_pins(
         policy, configured, sys.executable, platform.python_version(),
         system, process_arch, native_arch, translated,

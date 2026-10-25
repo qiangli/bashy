@@ -93,12 +93,74 @@ macOS/Windows executable bytes and their independently checked archive
 provenance. It is a prerequisite check, not an installer or permission to
 redistribute Python or Microsoft DLLs. The Linux `actions/python-versions`
 archive setup script is specific to the CI tool cache and is not an admitted
-product install path. Python.org's macOS and Windows installers have archive
+product install path. An explicit Linux source build is now available below;
+it is local operator evidence and has not passed native admission. Python.org's macOS and Windows installers have archive
 provenance but no six-target operator-host installation proof. `elephant` had no
 installed Python and older VC runtime bytes at the read-only probe. Because the
 adapter itself runs under Python, this check gates its child yt-dlp invocation;
 an OS-level launcher would be required to verify Python before starting the
 adapter. Exact pins require review when an external installation changes.
+
+### Explicit Linux Python.org source setup (amd64 and arm64)
+
+[Python.org's 3.12.15 release](https://www.python.org/downloads/release/python-31215/)
+is source only. On the **native Linux host**, the operator may supply these
+three downloaded inputs to `setup_python_source.py`:
+
+- `Python-3.12.15.tar.xz` from `https://www.python.org/ftp/python/3.12.15/Python-3.12.15.tar.xz` (20,829,824 bytes; SHA-256 `c2c4321961fab0fb999d66e0cecf521c2ab3994c7992873ea99e306c1094fd5a`)
+- Its detached `Python-3.12.15.tar.xz.asc` signature from the same directory
+  (SHA-256 `e80124b35dabf82264f254dbb291697df96768f6e4ee0e43d7e8f110a9ea50b6`)
+- Thomas Wouters's public key linked by [Python.org's OpenPGP page](https://www.python.org/downloads/metadata/pgp/) (pinned fingerprint `7169605F62C751356D054A26A821E680E5FA6305`)
+
+The command verifies the archive length, hash and detached signature with an
+isolated GPG home before unpacking or building. The work directory and install
+prefix must be separate, absent paths beneath the operator's home. It uses no
+container or system install. It requires `gpg`, `cc`, `make`, `readelf`, `ldd`,
+the CPython development headers and libraries, and an OpenSSL build suitable
+for Python's `_ssl` and `_hashlib` modules. The native compiler/OpenSSL choices
+remain host-specific and require review.
+
+```sh
+python3 examples/transcribe/dependencies/setup_python_source.py \
+  --source-archive "$HOME/downloads/Python-3.12.15.tar.xz" \
+  --signature "$HOME/downloads/Python-3.12.15.tar.xz.asc" \
+  --release-key "$HOME/downloads/thomas-wouters.gpg" \
+  --work-dir "$HOME/.cache/bashy/python-3.12.15-build" \
+  --prefix "$HOME/.local/bashy/python-3.12.15"
+```
+
+The recipe disables `readline`, `_dbm` and `_gdbm` in `Modules/Setup.local`
+and passes `--without-readline`. It rejects those builtins/extensions after
+installation and rejects loaded libraries with readline, gdbm or Berkeley DB
+names. It also requires SSL, hashing and archive modules used by yt-dlp.
+Its local `source-build-receipt.json` inventories each installed file and
+extension module by SHA-256, the executable's ELF architecture, each loaded
+system library path/hash, OpenSSL runtime version, source signature/key,
+compiler and Python license copy. Per-library license entries remain marked
+for native review. This receipt is unsigned and records
+`local_source_build_unadmitted`; it does not authorize redistribution or a
+product installer. Setup makes the dedicated prefix read only after writing
+the receipt so later imports do not add bytecode caches to the exact file set.
+
+Offline byte recheck (no download, compilation or compiler requirement):
+
+```sh
+python3 examples/transcribe/dependencies/setup_python_source.py \
+  --verify-existing --prefix "$HOME/.local/bashy/python-3.12.15"
+```
+
+For an **explicit local** source adapter run, set
+`BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX` to that prefix and
+`BASHY_TRANSCRIBE_PYTHON` to its `bin/python3.12`, then invoke the adapter with
+that same interpreter. The adapter rechecks the receipt and complete byte
+inventory before yt-dlp. Without the source prefix opt-in, the existing six
+CI-observed executable pins continue to apply. A changed system library causes
+reverification to fail until the host's build and license review is repeated.
+
+Outstanding native gates: execute and inspect this path on Linux amd64 and
+arm64, verify the native compiler and OpenSSL closure and every loaded library's
+license, and decide product distribution policy. This source recipe does not
+close macOS, Windows, FFmpeg, or the six-target transcription gates.
 
 ## Runner Invocation
 

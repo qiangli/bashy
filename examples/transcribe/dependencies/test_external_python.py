@@ -95,6 +95,26 @@ class ExternalPythonTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "System32 VC mismatch"):
                 check.verify_selected_python(str(self.python))
 
+    def test_explicit_linux_source_receipt_requires_active_executable(self):
+        from dependencies import setup_python_source
+        self.policy_path.write_text(json.dumps(self.policy))
+        receipt = {"executable": str(self.python), "status": "local_source_build_unadmitted"}
+        with patch.dict(check.os.environ, {"BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX": str(self.python.parent)}), patch.object(
+            check, "POLICY_PATH", self.policy_path
+        ), patch.object(check.sys, "executable", str(self.python)), patch.object(
+            check.platform, "system", return_value="Linux"
+        ), patch.object(check.platform, "machine", return_value="x86_64"), patch.object(
+            check.platform, "uname", return_value=type("Uname", (), {"machine": "x86_64"})()
+        ), patch.object(check.platform, "python_version", return_value=setup_python_source.VERSION), patch.object(
+            setup_python_source, "verify_existing", return_value=receipt
+        ) as verify:
+            self.assertEqual(check.verify_selected_python(str(self.python)), self.python.resolve())
+            verify.assert_called_once()
+            other = self.python.parent / "other-python"
+            other.write_bytes(b"other")
+            with self.assertRaisesRegex(RuntimeError, "active Python differs"):
+                check.verify_selected_python(str(other))
+
 
 if __name__ == "__main__":
     unittest.main()
