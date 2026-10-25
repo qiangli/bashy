@@ -215,7 +215,7 @@ jobs:
           if os_name == 'Windows':
               native = subprocess.check_output(['pwsh', '-NoProfile', '-Command',
                   '[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()'], text=True).strip()
-              os_arch = arch.get(native, native)
+              os_arch = arch.get(native.upper(), arch.get(native, native))
           translated = '0'
           if os_name == 'macOS':
               p = subprocess.run(['sysctl', '-n', 'sysctl.proc_translated'],
