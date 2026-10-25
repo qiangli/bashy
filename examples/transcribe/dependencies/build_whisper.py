@@ -60,6 +60,19 @@ TARGET_RUNNER_MAP: Dict[Tuple[str, str], str] = {
     v: k for k, v in RUNNER_TARGET_MAP.items()
 }
 
+# Windows API-set contracts and these DLLs are supplied by the OS. The UCRT
+# API set is built into supported Windows releases. MSVC redistributable DLLs
+# and third-party runtimes are deliberately absent from this list.
+WINDOWS_OS_DLLS = {
+    "advapi32.dll", "bcrypt.dll", "cfgmgr32.dll", "comctl32.dll",
+    "comdlg32.dll", "crypt32.dll", "dbghelp.dll", "gdi32.dll",
+    "iphlpapi.dll", "kernel32.dll", "kernelbase.dll", "mswsock.dll",
+    "ntdll.dll", "ole32.dll", "oleaut32.dll", "powrprof.dll",
+    "rpcrt4.dll", "secur32.dll", "setupapi.dll", "shell32.dll",
+    "shlwapi.dll", "ucrtbase.dll", "user32.dll", "version.dll",
+    "winmm.dll", "ws2_32.dll",
+}
+
 # whisper.cpp v1.9.5 enables several of these by default when a native
 # (non-cross) build requests GGML_NATIVE=OFF. Pin the x86 baseline explicitly.
 X86_BASELINE_OFF_OPTIONS = (
@@ -195,18 +208,23 @@ def find_toolchain(os_name: str) -> Dict[str, str]:
     c_compiler = None
     cxx_compiler = None
     if os_name == "windows":
-        # Check llvm-mingw in bashy bin
-        local_app_data = os.environ.get("LOCALAPPDATA", "")
-        clang_candidate = Path(local_app_data) / "bashy/bin/clang/20260616/llvm-mingw-20260616-ucrt-x86_64/bin/clang.exe"
-        if normalize_arch() == "amd64" and clang_candidate.is_file():
-            c_compiler = str(clang_candidate)
-            cxx_candidate = clang_candidate.parent / "clang++.exe"
-            if cxx_candidate.is_file():
-                cxx_compiler = str(cxx_candidate)
-            else:
-                c_compiler = None
+        # The hosted LLVM clang defaults to the MSVC ABI even with -static.
+        # Only the byte-pinned llvm-mingw toolchain prepared by the workflow
+        # is admitted for these Windows artifacts.
+        root = os.environ.get("WHISPER_WINDOWS_MINGW_ROOT")
+        if not root:
+            raise RuntimeError("Windows build requires pinned llvm-mingw; set WHISPER_WINDOWS_MINGW_ROOT")
+        expected_dir = f"llvm-mingw-20260616-ucrt-{'x86_64' if normalize_arch() == 'amd64' else 'aarch64'}"
+        toolchain_root = Path(root).resolve()
+        if toolchain_root.name != expected_dir:
+            raise RuntimeError(f"unexpected Windows toolchain directory: {toolchain_root}")
+        clang_candidate = toolchain_root / "bin" / "clang.exe"
+        cxx_candidate = toolchain_root / "bin" / "clang++.exe"
+        if not clang_candidate.is_file() or not cxx_candidate.is_file():
+            raise RuntimeError(f"incomplete pinned llvm-mingw compiler pair: {toolchain_root}")
+        c_compiler, cxx_compiler = str(clang_candidate), str(cxx_candidate)
 
-    if not c_compiler:
+    if not c_compiler and os_name != "windows":
         # Linux native runners ship a matched GCC/G++ runtime. Prefer that
         # pair so whisper's C++ objects link against their intended runtime.
         pairs = (("gcc", "g++"), ("clang", "clang++"), ("cl", "cl")) if os_name == "linux" else (
@@ -259,10 +277,9 @@ def get_cmake_build_flags(os_name: str, arch_name: str, toolchain: Dict[str, str
         # Keep CPU-only: disable Metal and GPU backends
         flags.append("-DGGML_METAL=OFF")
     elif os_name == "windows":
-        # MinGW / Clang static linking
-        c_comp = toolchain.get("c_compiler", "").lower()
-        if "clang" in c_comp or "gcc" in c_comp or "mingw" in c_comp:
-            flags.append("-DCMAKE_EXE_LINKER_FLAGS=-static")
+        # Request static GNU-ABI C++ and compiler runtimes, then inspect the
+        # actual PE imports. UCRT remains a Windows OS DLL.
+        flags.append("-DCMAKE_EXE_LINKER_FLAGS=-static")
     elif os_name == "linux":
         # Avoid GPL runtime dependencies
         flags.append("-DCMAKE_EXE_LINKER_FLAGS=-static-libgcc -static-libstdc++")
@@ -270,7 +287,8 @@ def get_cmake_build_flags(os_name: str, arch_name: str, toolchain: Dict[str, str
     return flags
 
 
-def audit_dynamic_libraries(executable_path: Path, os_name: str) -> List[str]:
+def audit_dynamic_libraries(executable_path: Path, os_name: str,
+                            toolchain: Optional[Dict[str, str]] = None) -> List[str]:
     """Inspects dynamic libraries linked by the executable to ensure no GPL/OpenMP dylibs."""
     imported: List[str] = []
     if os_name == "darwin":
@@ -280,7 +298,10 @@ def audit_dynamic_libraries(executable_path: Path, os_name: str) -> List[str]:
         ldd = shutil.which("ldd")
         command = [ldd, str(executable_path)] if ldd else None
     elif os_name == "windows":
-        dump_bin = shutil.which("llvm-objdump") or shutil.which("objdump")
+        dump_bin = (str(Path(toolchain["c_compiler"]).parent / "llvm-objdump.exe")
+                    if toolchain else (shutil.which("llvm-objdump") or shutil.which("objdump")))
+        if toolchain and dump_bin and not Path(dump_bin).is_file():
+            dump_bin = None
         command = [dump_bin, "-p", str(executable_path)] if dump_bin else None
     else:
         raise RuntimeError(f"audit failure: unsupported OS {os_name}")
@@ -313,6 +334,15 @@ def audit_dynamic_libraries(executable_path: Path, os_name: str) -> List[str]:
         name = Path(lib).name.lower()
         if any(token in name for token in ("gomp", "libomp", "iomp", "vcomp")):
             raise RuntimeError(f"audit failure: OpenMP dynamic library found: {lib}")
+        if os_name == "windows" and name.startswith((
+            "msvcp", "vcruntime", "concrt", "libgcc", "libstdc++",
+            "libwinpthread", "libc++", "libunwind",
+        )):
+            raise RuntimeError(f"audit failure: external C/C++ runtime DLL found: {lib}")
+        if os_name == "windows" and not (
+            name in WINDOWS_OS_DLLS or name.startswith(("api-ms-win-", "ext-ms-win-"))
+        ):
+            raise RuntimeError(f"audit failure: non-OS Windows DLL import: {lib}")
     if not imported and "statically linked" not in res.stdout.lower():
         raise RuntimeError("audit failure: no dynamic library information returned")
 
@@ -508,7 +538,7 @@ def _build_verified_source(
     exe_bytes = built_exe.stat().st_size
 
     # Audit dynamic libraries
-    imported_libs = audit_dynamic_libraries(built_exe, os_name)
+    imported_libs = audit_dynamic_libraries(built_exe, os_name, toolchain)
 
     # Install into cache through an invocation-owned file in the same directory.
     # Concurrent builders publish complete identical binaries, never partial copies.
@@ -547,6 +577,7 @@ def _build_verified_source(
         "portable_cpu": True,
         "openmp_disabled": True,
         "gpl_free": True,
+        "dependency_audit_scope": "dynamic imports only; static runtime license notices require separate review",
         "status": "built_and_cached",
     }
     return report

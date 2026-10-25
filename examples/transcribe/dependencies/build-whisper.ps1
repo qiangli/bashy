@@ -20,9 +20,13 @@ Set-StrictMode -Version Latest
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $pyScript = Join-Path $scriptDir 'build_whisper.py'
+$toolchainScript = Join-Path $scriptDir 'prepare_llvm_mingw.py'
 
 if (-not (Test-Path -LiteralPath $pyScript)) {
     throw "Build script missing: $pyScript"
+}
+if (-not (Test-Path -LiteralPath $toolchainScript)) {
+    throw "Pinned llvm-mingw preparation script missing: $toolchainScript"
 }
 
 # Resolve python
@@ -36,6 +40,17 @@ if (Get-Command python.exe -ErrorAction SilentlyContinue) {
 } else {
     throw "Python runtime required on Windows runner"
 }
+
+# The toolchain archive is a verified build input. The compiled whisper-cli
+# retains only permitted Windows OS imports; no runtime DLL is bundled.
+if (-not $WorkDir) { $WorkDir = Join-Path $env:TEMP 's503-whisper-build' }
+$toolchainDir = Join-Path $WorkDir 'llvm-mingw'
+$toolchainReport = Join-Path $WorkDir 'llvm-mingw-report.json'
+& $pyExe $toolchainScript --destination $toolchainDir --report-file $toolchainReport
+if ($LASTEXITCODE -ne 0) {
+    throw "pinned llvm-mingw preparation failed with exit code $LASTEXITCODE"
+}
+$env:WHISPER_WINDOWS_MINGW_ROOT = (Get-Content -LiteralPath $toolchainReport -Raw | ConvertFrom-Json).toolchain_root
 
 $argsList = @($pyScript)
 if ($WorkDir) { $argsList += @('--work-dir', $WorkDir) }

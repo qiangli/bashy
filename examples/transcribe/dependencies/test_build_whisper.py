@@ -208,6 +208,48 @@ class TestWhisperBuildRecipe(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "unresolved"):
                 build_whisper.audit_dynamic_libraries(Path("whisper-cli"), "linux")
 
+        for runtime in ("MSVCP140.dll", "VCRUNTIME140.dll", "libstdc++-6.dll"):
+            with self.subTest(runtime=runtime), patch("build_whisper.shutil.which", return_value="objdump"), patch(
+                "build_whisper.subprocess.run",
+                return_value=subprocess.CompletedProcess([], 0, f"DLL Name: KERNEL32.dll\nDLL Name: {runtime}\n", ""),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "external C/C\\+\\+ runtime DLL"):
+                    build_whisper.audit_dynamic_libraries(Path("whisper-cli.exe"), "windows")
+
+        with patch("build_whisper.shutil.which", return_value="objdump"), patch(
+            "build_whisper.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0,
+                "DLL Name: KERNEL32.dll\nDLL Name: api-ms-win-crt-runtime-l1-1-0.dll\nDLL Name: ucrtbase.dll\n", ""),
+        ):
+            imports = build_whisper.audit_dynamic_libraries(Path("whisper-cli.exe"), "windows")
+            self.assertEqual(len(imports), 3)
+
+        with patch("build_whisper.shutil.which", return_value="objdump"), patch(
+            "build_whisper.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, "DLL Name: vendor_runtime.dll\n", ""),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "non-OS Windows DLL import"):
+                build_whisper.audit_dynamic_libraries(Path("whisper-cli.exe"), "windows")
+
+    def test_windows_requires_pinned_mingw_compiler_pair(self):
+        with patch.dict(os.environ, {}, clear=True), patch("build_whisper.shutil.which", return_value="cmake"):
+            with self.assertRaisesRegex(RuntimeError, "requires pinned llvm-mingw"):
+                build_whisper.find_toolchain("windows")
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "llvm-mingw-20260616-ucrt-aarch64"
+            (root / "bin").mkdir(parents=True)
+            for name in ("clang.exe", "clang++.exe"):
+                (root / "bin" / name).touch()
+            with patch.dict(os.environ, {"WHISPER_WINDOWS_MINGW_ROOT": str(root)}), patch(
+                "build_whisper.normalize_arch", return_value="arm64"
+            ), patch("build_whisper.shutil.which", return_value="cmake"):
+                selected = build_whisper.find_toolchain("windows")
+            self.assertEqual(Path(selected["c_compiler"]), (root / "bin" / "clang.exe").resolve())
+            self.assertEqual(Path(selected["cxx_compiler"]), (root / "bin" / "clang++.exe").resolve())
+            self.assertIn("-DCMAKE_EXE_LINKER_FLAGS=-static",
+                          build_whisper.get_cmake_build_flags("windows", "arm64", selected))
+
     def test_concurrent_cache_publication(self):
         """Readers see a complete old or new binary during concurrent publication."""
         with tempfile.TemporaryDirectory() as td:

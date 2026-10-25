@@ -9,6 +9,7 @@ on:
     paths:
       - .github/workflows/s503-native-build.yml
       - examples/transcribe/dependencies/build_whisper.py
+      - examples/transcribe/dependencies/prepare_llvm_mingw.py
       - examples/transcribe/dependencies/build-whisper.sh
       - examples/transcribe/dependencies/build-whisper.ps1
   workflow_dispatch:
@@ -126,10 +127,15 @@ jobs:
         run: |
           set -euo pipefail
           if [[ "$EXPECTED_OS" == Windows ]]; then
-            # The standard Windows ARM runner has native LLVM/Ninja but no
-            # Visual Studio instance. CMake receives the reviewed clang pair.
+            # Hosted LLVM targets MSVC and leaves VC runtime DLL imports.
+            # Prepare the exact native llvm-mingw release for this runner.
             export CMAKE_GENERATOR=Ninja
             ninja --version
+            python examples/transcribe/dependencies/prepare_llvm_mingw.py \
+              --destination "$RUNNER_TEMP/s503-llvm-mingw" \
+              --report-file evidence/toolchain-report.json
+            WHISPER_WINDOWS_MINGW_ROOT="$(python -c 'import json; print(json.load(open("evidence/toolchain-report.json"))["toolchain_root"])')"
+            export WHISPER_WINDOWS_MINGW_ROOT
           fi
           cmake --version
           python examples/transcribe/dependencies/build_whisper.py \
@@ -146,6 +152,7 @@ jobs:
           import json
           import os
           import shutil
+          import struct
           from pathlib import Path
 
           report = json.loads(Path('evidence/build-report.json').read_text())
@@ -157,12 +164,37 @@ jobs:
           assert report['status'] == 'built_and_cached'
           assert report['cpu_only'] and report['portable_cpu'] and report['openmp_disabled'] and report['gpl_free']
           assert '-DGGML_NATIVE=OFF' in report['build_flags']
+          if os.environ['EXPECTED_OS'] == 'Windows':
+              toolchain = json.loads(Path('evidence/toolchain-report.json').read_text())
+              pins = {
+                  'amd64': ('x86_64', 187504083, 'b9b68a4d276e16fa25802aaba458e4638f64b3884c290aaccdc2d87083b6ca35'),
+                  'arm64': ('aarch64', 181877750, '312593669435bd0bfc1a43ac3fba23c8b27e0610bade88b2738e5a01702a99ba'),
+              }
+              token, size, sha = pins[os.environ['EXPECTED_ARCH']]
+              assert toolchain['platform'] == report['platform']
+              assert toolchain['version'] == '20260616'
+              assert toolchain['archive_bytes'] == size and toolchain['archive_sha256'] == sha
+              assert toolchain['compiler_host_pe_machine'] == {'amd64': '0x8664', 'arm64': '0xaa64'}[os.environ['EXPECTED_ARCH']]
+              assert toolchain['compiler_default_target'].startswith(token + '-')
+              assert Path(report['compiler_path']).resolve() == Path(toolchain['toolchain_root'], 'bin', 'clang.exe').resolve()
+              assert Path(report['cxx_compiler_path']).resolve() == Path(toolchain['toolchain_root'], 'bin', 'clang++.exe').resolve()
+              assert Path(toolchain['toolchain_root']).name == f'llvm-mingw-20260616-ucrt-{token}'
+              assert not any(name.lower().startswith(('msvcp', 'vcruntime', 'concrt', 'libgcc', 'libstdc++', 'libwinpthread', 'libc++', 'libunwind')) for name in report['imported_libraries'])
           source = Path(report['cached_executable_path'])
           artifact = Path('evidence') / source.name
           shutil.copy2(source, artifact)
           digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
           assert digest == report['executable_sha256']
           assert artifact.stat().st_size == report['executable_bytes']
+          if os.environ['EXPECTED_OS'] == 'Windows':
+              with artifact.open('rb') as binary:
+                  assert binary.read(2) == b'MZ'
+                  binary.seek(0x3c)
+                  offset = struct.unpack('<I', binary.read(4))[0]
+                  binary.seek(offset)
+                  assert binary.read(4) == b'PE\0\0'
+                  machine = struct.unpack('<H', binary.read(2))[0]
+              assert machine == {'amd64': 0x8664, 'arm64': 0xaa64}[os.environ['EXPECTED_ARCH']]
           Path('evidence/binary-sha256.txt').write_text(f'{digest}  {artifact.name}\n')
           print(Path('evidence/binary-sha256.txt').read_text(), end='')
           PY
