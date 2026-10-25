@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: read
-  actions: write
 
 jobs:
   runner-identity:
@@ -53,11 +52,27 @@ jobs:
           set -euo pipefail
           mkdir -p evidence
           ACTUAL_OS="$(node -p 'process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux"')"
-          ACTUAL_ARCH="$(node -p 'process.arch === "x64" ? "amd64" : process.arch === "arm64" ? "arm64" : process.arch')"
+          PROCESS_ARCH="$(node -p 'process.arch')"
+          if [[ "$ACTUAL_OS" == Windows ]]; then
+            # Query the OS, since an x64 process can run under ARM64 emulation.
+            RAW_ARCH="$(pwsh -NoProfile -Command '[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()' | tr -d '\r')"
+          else
+            RAW_ARCH="$(uname -m)"
+          fi
+          case "$RAW_ARCH" in
+            x86_64|X64) ACTUAL_ARCH=amd64 ;;
+            aarch64|arm64|Arm64) ACTUAL_ARCH=arm64 ;;
+            *) ACTUAL_ARCH="$RAW_ARCH" ;;
+          esac
+          TRANSLATED=0
+          if [[ "$ACTUAL_OS" == macOS ]]; then
+            TRANSLATED="$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)"
+          fi
           NODE_VERSION="$(node --version)"
           GO_VERSION="$(go version)"
+          GO_HOST_ARCH="$(go env GOHOSTARCH)"
           BASH_VERSION="$(bash --version | head -n 1)"
-          export ACTUAL_OS ACTUAL_ARCH NODE_VERSION GO_VERSION BASH_VERSION
+          export ACTUAL_OS ACTUAL_ARCH RAW_ARCH PROCESS_ARCH TRANSLATED NODE_VERSION GO_VERSION GO_HOST_ARCH BASH_VERSION
 
           node <<'NODE'
           const fs = require('fs');
@@ -68,8 +83,12 @@ jobs:
             expected_arch: process.env.EXPECTED_ARCH,
             actual_os: process.env.ACTUAL_OS,
             actual_arch: process.env.ACTUAL_ARCH,
+            os_arch_raw: process.env.RAW_ARCH,
+            process_arch: process.env.PROCESS_ARCH,
+            translated: process.env.TRANSLATED,
             node: process.env.NODE_VERSION,
             go: process.env.GO_VERSION,
+            go_host_arch: process.env.GO_HOST_ARCH,
             bash: process.env.BASH_VERSION,
             commit_sha: process.env.COMMIT_SHA,
           };
@@ -83,6 +102,14 @@ jobs:
           fi
           if [[ "$ACTUAL_ARCH" != "$EXPECTED_ARCH" ]]; then
             echo "Architecture mismatch: expected $EXPECTED_ARCH, got $ACTUAL_ARCH" >&2
+            exit 1
+          fi
+          if [[ "$TRANSLATED" == 1 ]]; then
+            echo "Translated process cannot establish native execution" >&2
+            exit 1
+          fi
+          if [[ "$GO_HOST_ARCH" != "$EXPECTED_ARCH" ]]; then
+            echo "Go toolchain is not native: $GO_HOST_ARCH on $EXPECTED_ARCH" >&2
             exit 1
           fi
 
