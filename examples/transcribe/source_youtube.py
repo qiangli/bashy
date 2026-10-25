@@ -21,6 +21,8 @@ import sys
 from typing import Any
 from urllib.parse import urlparse
 
+from dependencies import external_python
+
 
 VERSION = "bashy-transcribe-stage-v1"
 STAGE = "acquire"
@@ -92,6 +94,11 @@ def _youtube_host(url: str) -> bool:
 
 
 def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> tuple[Path, str, str, int, str | None]:
+    try:
+        python = str(external_python.verify_selected_python(os.environ.get("BASHY_TRANSCRIBE_PYTHON", "")))
+    except (OSError, ValueError, RuntimeError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+        raise AcquisitionError("dependency_unavailable", f"external Python prerequisite rejected: {exc}") from exc
+
     zipapp = os.environ.get("BASHY_TRANSCRIBE_YTDLP", "")
     if not zipapp:
         raise AcquisitionError(
@@ -118,7 +125,6 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> tuple[Path, st
             )
         js_options += ["--no-js-runtimes", "--js-runtimes", "deno:" + str(runtime_path)]
 
-    python = os.environ.get("BASHY_TRANSCRIBE_PYTHON") or sys.executable
     rate = os.environ.get("BASHY_TRANSCRIBE_DOWNLOAD_RATE", "")
     if rate and not re.fullmatch(r"[1-9][0-9]{0,6}[KMG]?", rate):
         raise AcquisitionError("invalid_request", "download rate limit must be a positive yt-dlp rate")

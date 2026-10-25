@@ -10,8 +10,8 @@ This directory provides reproducible, fail-closed, platform-aware build and cach
 | `ubuntu-24.04-arm` | `linux/arm64` | GCC / Clang, CMake | CPU-only, `-DGGML_OPENMP=OFF`, `-static-libgcc -static-libstdc++`, no GPL dylibs |
 | `macos-15-intel` | `darwin/amd64` | AppleClang, CMake | CPU-only, `-DGGML_OPENMP=OFF`, `-DGGML_METAL=OFF`, system frameworks only |
 | `macos-15` | `darwin/arm64` | AppleClang, CMake | CPU-only, `-DGGML_OPENMP=OFF`, `-DGGML_METAL=OFF`, system frameworks only |
-| `windows-2025` | `windows/amd64` | MSVC / llvm-mingw, CMake | CPU-only, `-DGGML_OPENMP=OFF`, `-static` (MinGW) or static CRT (`/MT`), no GPL DLLs |
-| `windows-11-arm` | `windows/arm64` | MSVC / llvm-mingw, CMake | CPU-only, `-DGGML_OPENMP=OFF`, static CRT, no GPL DLLs |
+| `windows-2025` | `windows/amd64` | Clang / MSVC, CMake | CPU-only, `-DGGML_OPENMP=OFF`; CI binary imports external Microsoft VC DLLs |
+| `windows-11-arm` | `windows/arm64` | Clang / MSVC, CMake | CPU-only, `-DGGML_OPENMP=OFF`; CI binary imports external Microsoft VC DLLs |
 
 ## Pinned Source Archive
 
@@ -33,6 +33,30 @@ Finished executables are hashed (SHA-256 and byte length) and placed into the st
 - **Windows**: `%LOCALAPPDATA%\bashy\tools\whisper-cpp\v1.9.5\whisper-cli.exe`
 
 Custom cache roots may be supplied via `--cache-dir` or `--dest-cli`.
+
+## External Python prerequisite for YouTube acquisition
+
+`source_youtube.py` requires `BASHY_TRANSCRIBE_PYTHON` to name the Python
+interpreter running that adapter. Before it invokes the reviewed yt-dlp zipapp,
+it checks the interpreter's exact patch, executable SHA-256, process and native
+OS/architecture against all six pins in `external-python-runtime.json`. Missing
+or changed pins, a missing path, and an interpreter different from the running
+one fail closed. On Windows it additionally runs the existing
+`verify_windows_external_runtime.py` check for the separately installed native
+System32 `MSVCP140.dll` and `VCRUNTIME140.dll` versions and hashes. Windows
+preparation retains its earlier pre-execution Python hash check.
+
+The policy records the CI-observed external Python 3.12.15 Linux and 3.12.10
+macOS/Windows executable bytes and their independently checked archive
+provenance. It is a prerequisite check, not an installer or permission to
+redistribute Python or Microsoft DLLs. The Linux `actions/python-versions`
+archive setup script is specific to the CI tool cache and is not an admitted
+product install path. Python.org's macOS and Windows installers have archive
+provenance but no six-target operator-host installation proof. `elephant` had no
+installed Python and older VC runtime bytes at the read-only probe. Because the
+adapter itself runs under Python, this check gates its child yt-dlp invocation;
+an OS-level launcher would be required to verify Python before starting the
+adapter. Exact pins require review when an external installation changes.
 
 ## Runner Invocation
 
@@ -75,6 +99,6 @@ python bashy\examples\transcribe\dependencies\build_whisper.py --json
 
 1. **CPU-Only**: All GPU/accelerator backends (Metal, CUDA, Vulkan, OpenCL, etc.) are explicitly disabled in CMake flags.
 2. **No OpenMP**: `-DGGML_OPENMP=OFF` is enforced across all platforms, eliminating runtime dependencies on `libgomp.so`, `libomp.dylib`, or `libgomp-1.dll`.
-3. **No GPL Dynamic Dependencies**: Post-build dynamic library audit (`otool -L` on macOS, `ldd` on Linux, `objdump` on Windows) verifies zero GPL or copyleft shared libraries are linked.
+3. **Dynamic Import Check**: Post-build inspection (`otool -L` on macOS, `ldd` on Linux, `objdump` on Windows) rejects missing inspection tools, unresolved imports and named OpenMP libraries. This name-based check is not a full transitive license audit; Windows CI binaries import external Microsoft VC runtime DLLs.
 4. **No Side-Effects**: The build recipe performs zero model downloads, zero media inference, zero FFmpeg dependencies, and no container / OCI requirements.
 5. **No False Six-Target PASS**: The recipe reports actual host operating system, architecture, compiler version, and build flags. CI jobs run natively on each runner to establish independent evidence.

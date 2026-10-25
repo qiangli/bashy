@@ -1,0 +1,48 @@
+{
+  "schema": "s503-external-python-runtime-v1",
+  "provenance": "CI executable identity run 40198146186; exact archive bytes in umbrella docs/sprint-503/evidence/external-python-artifact-provenance.json. This policy verifies an already installed interpreter and does not admit a product installer.",
+  "targets": {
+    "linux/amd64": {
+      "python_version": "3.12.15",
+      "python_sha256": "53dab24bf9e0e9c490088a53d71770b6f027b057678b313648e75f7fc87a675e",
+      "archive_url": "https://github.com/actions/python-versions/releases/download/3.12.15-36805895057/python-3.12.15-linux-24.04-x64.tar.gz",
+      "archive_sha256": "fcb672b0437c2d8df5565b7cc250b2b0d7455e2b8d6a4a107cfa6f2efe4f7ed8",
+      "archive_status": "reviewed provenance, external operator prerequisite; no Bashy install or redistribution"
+    },
+    "linux/arm64": {
+      "python_version": "3.12.15",
+      "python_sha256": "5fa9ce7be3c3a2ef767c1999625a370c04ec3102d082472ff7f228225dd590d0",
+      "archive_url": "https://github.com/actions/python-versions/releases/download/3.12.15-36805895057/python-3.12.15-linux-24.04-arm64.tar.gz",
+      "archive_sha256": "c537f7852633f9a6d909181528e263087ad815cc44d52ed226992b70b2648f44",
+      "archive_status": "reviewed provenance, external operator prerequisite; no Bashy install or redistribution"
+    },
+    "darwin/amd64": {
+      "python_version": "3.12.10",
+      "python_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "archive_url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg",
+      "archive_sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
+      "archive_status": "reviewed provenance, external operator prerequisite; no Bashy install or redistribution"
+    },
+    "darwin/arm64": {
+      "python_version": "3.12.10",
+      "python_sha256": "d4f152f2a753c94e0e7935c8ebbe6b2609979e1df7898422b577d0076383d08b",
+      "archive_url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg",
+      "archive_sha256": "8373e58da4ea146b3eb1c1f9834f19a319440b6b679b06050b1f9ee3237aa8e4",
+      "archive_status": "reviewed provenance, external operator prerequisite; no Bashy install or redistribution"
+    },
+    "windows/amd64": {
+      "python_version": "3.12.10",
+      "python_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+      "archive_url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-amd64.zip",
+      "archive_sha256": "8649692de846c56a7189d6dae5c322ab20deb1b5908b6f39426b62a36f39415d",
+      "archive_status": "reviewed provenance, external operator prerequisite; no Bashy install or redistribution"
+    },
+    "windows/arm64": {
+      "python_version": "3.12.10",
+      "python_sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+      "archive_url": "https://www.python.org/ftp/python/3.12.10/python-3.12.10-arm64.zip",
+      "archive_sha256": "20a5b1a707d899ffdfc5e3086d7372f7cc95eeea344d48ae256047cb7075cf63",
+      "archive_status": "reviewed provenance, external operator prerequisite; no Bashy install or redistribution"
+    }
+  }
+}

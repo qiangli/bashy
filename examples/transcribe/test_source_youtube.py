@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import platform
 import signal
 import subprocess
 import sys
@@ -19,6 +20,10 @@ VERSION = "bashy-transcribe-stage-v1"
 TEST_RUNNER = '''import sys
 sys.path.insert(0, sys.argv[1])
 import source_youtube
+from dependencies import external_python
+from pathlib import Path
+external_python.POLICY_PATH = Path(sys.argv[4])
+external_python._verify_windows_vc = lambda *args: None
 source_youtube.YTDLP_SHA256 = sys.argv[2]
 raise SystemExit(source_youtube.main(["source_youtube.py", sys.argv[3]]))
 '''
@@ -78,6 +83,19 @@ class YouTubeSourceTests(unittest.TestCase):
         self.runtime.write_bytes(b"controlled runtime fixture")
         self.log = self.root / "argv.jsonl"
         self.request = self.root / "request.json"
+        self.runtime_policy = self.root / "external-python-runtime.json"
+        self.runtime_policy.write_text(json.dumps({
+            "schema": "s503-external-python-runtime-v1",
+            "targets": {target: {
+                "python_version": platform.python_version(),
+                "python_sha256": hashlib.sha256(Path(sys.executable).resolve().read_bytes()).hexdigest(),
+                "archive_url": "https://example.test/python-fixture.tar.gz",
+                "archive_sha256": "1" * 64,
+            } for target in (
+                "linux/amd64", "linux/arm64", "darwin/amd64", "darwin/arm64",
+                "windows/amd64", "windows/arm64",
+            )},
+        }), encoding="utf-8")
         self.env = os.environ.copy()
         self.env.update(
             {
@@ -106,12 +124,42 @@ class YouTubeSourceTests(unittest.TestCase):
             encoding="utf-8",
         )
         return subprocess.run(
-            [sys.executable, "-c", TEST_RUNNER, str(ADAPTER.parent), self.zipapp_hash, str(self.request)],
+            [sys.executable, "-c", TEST_RUNNER, str(ADAPTER.parent), self.zipapp_hash,
+             str(self.request), str(self.runtime_policy)],
             text=True,
             capture_output=True,
             env=self.env,
             timeout=timeout,
         )
+
+    def test_direct_invocation_rejects_missing_or_unreviewed_python(self) -> None:
+        self.env.pop("BASHY_TRANSCRIBE_PYTHON")
+        absent = self.invoke("https://youtu.be/fixture01")
+        self.assertEqual(json.loads(absent.stdout)["error"]["code"], "dependency_unavailable")
+        self.assertFalse(self.log.exists())
+
+        actual_entry = subprocess.run(
+            [sys.executable, str(ADAPTER), str(self.request)],
+            text=True, capture_output=True, env=self.env, timeout=10,
+        )
+        self.assertEqual(json.loads(actual_entry.stdout)["error"]["code"], "dependency_unavailable")
+        self.assertFalse(self.log.exists())
+
+        other = self.root / "other-python"
+        other.write_bytes(b"not the active interpreter")
+        self.env["BASHY_TRANSCRIBE_PYTHON"] = str(other)
+        bypass = self.invoke("https://youtu.be/fixture01")
+        self.assertEqual(json.loads(bypass.stdout)["error"]["code"], "dependency_unavailable")
+        self.assertFalse(self.log.exists())
+
+        self.env["BASHY_TRANSCRIBE_PYTHON"] = sys.executable
+        policy = json.loads(self.runtime_policy.read_text())
+        for pin in policy["targets"].values():
+            pin["python_sha256"] = "0" * 64
+        self.runtime_policy.write_text(json.dumps(policy))
+        tampered = self.invoke("https://youtu.be/fixture01")
+        self.assertEqual(json.loads(tampered.stdout)["error"]["code"], "dependency_unavailable")
+        self.assertFalse(self.log.exists())
 
     def test_download_produces_artifact_hash_and_preserves_url_as_one_argument(self) -> None:
         url = "https://youtu.be/fixture01?x=a;b&y=$(touch nope) [literal]"
@@ -225,7 +273,8 @@ class YouTubeSourceTests(unittest.TestCase):
             encoding="utf-8",
         )
         proc = subprocess.Popen(
-            [sys.executable, "-c", TEST_RUNNER, str(ADAPTER.parent), self.zipapp_hash, str(self.request)],
+            [sys.executable, "-c", TEST_RUNNER, str(ADAPTER.parent), self.zipapp_hash,
+             str(self.request), str(self.runtime_policy)],
             text=True,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -250,7 +299,12 @@ class YouTubeSourceTests(unittest.TestCase):
 
     def test_unreviewed_zipapp_is_rejected_before_execution(self) -> None:
         self.request.write_text(json.dumps({"version": VERSION, "stage": "acquire", "input": "https://youtu.be/fixture01", "work_dir": str(self.work)}), encoding="utf-8")
-        result = subprocess.run([sys.executable, str(ADAPTER), str(self.request)], text=True, capture_output=True, env=self.env, timeout=10)
+        runner = TEST_RUNNER.replace("source_youtube.YTDLP_SHA256 = sys.argv[2]", "")
+        result = subprocess.run(
+            [sys.executable, "-c", runner, str(ADAPTER.parent), self.zipapp_hash,
+             str(self.request), str(self.runtime_policy)],
+            text=True, capture_output=True, env=self.env, timeout=10,
+        )
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(json.loads(result.stdout)["error"]["code"], "dependency_unavailable")
         self.assertFalse(self.log.exists(), "unreviewed dependency was executed")
