@@ -8,6 +8,7 @@
 # Windows autocrlf must not rewrite the authored report or executable sources.
 examples/transcribe/*.py text eol=lf
 examples/transcribe/*.bsh text eol=lf
+examples/transcribe/dependencies/*.json text eol=lf
 examples/transcribe/fixtures/*.json text eol=lf
 examples/transcribe/fixtures/*.wav binary
 examples/transcribe/fixtures/*.webm binary
