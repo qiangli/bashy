@@ -60,6 +60,45 @@ jobs:
         uses: actions/attest@v4
         with:
           subject-path: evidence/musl-runtime/whisper-cli
+      - name: Install hosted fixture converter after binary attestation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Prepare exact CC0 speech and pinned multilingual model
+        shell: bash
+        run: |
+          set -euo pipefail
+          python examples/transcribe/dependencies/probe_linux_musl_inference.py prepare \
+            --work-dir "$RUNNER_TEMP/s503-musl-inference" \
+            --evidence-dir evidence/musl-runtime/inference \
+            --expected-arch '${{ matrix.arch }}'
+      - name: Run native CPU inference and online baseline
+        shell: bash
+        run: |
+          set -euo pipefail
+          python examples/transcribe/dependencies/probe_linux_musl_inference.py online \
+            --work-dir "$RUNNER_TEMP/s503-musl-inference" \
+            --evidence-dir evidence/musl-runtime/inference \
+            --expected-arch '${{ matrix.arch }}'
+      - name: Replay exact CLI and speech with OS network denied
+        shell: bash
+        run: |
+          set -euo pipefail
+          interpreter=$(python -c 'import sys; print(sys.executable)')
+          sudo /usr/bin/unshare --net -- "$interpreter" \
+            examples/transcribe/dependencies/probe_linux_musl_inference.py offline \
+            --work-dir "$RUNNER_TEMP/s503-musl-inference" \
+            --evidence-dir evidence/musl-runtime/inference \
+            --expected-arch '${{ matrix.arch }}'
+      - name: Verify complete inference and offline receipts
+        shell: bash
+        run: |
+          set -euo pipefail
+          python examples/transcribe/dependencies/probe_linux_musl_inference.py check \
+            --work-dir "$RUNNER_TEMP/s503-musl-inference" \
+            --evidence-dir evidence/musl-runtime/inference \
+            --expected-arch '${{ matrix.arch }}'
       - name: Retain evidence including failures
         if: always()
         uses: actions/upload-artifact@v4
