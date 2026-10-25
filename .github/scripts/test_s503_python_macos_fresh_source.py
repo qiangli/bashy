@@ -32,6 +32,27 @@ class FreshSourceGuards(unittest.TestCase):
             row = inventory["files"][0]
             self.assertEqual(row["sha256"], MODULE.sha256(evidence / row["retained_copy"]))
 
+    def test_config_log_retains_full_diagnostic_when_bounded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "config.log"
+            log.write_text("conftest link failed: missing SDK\n", encoding="utf-8")
+            receipt = MODULE.retain_config_log(log, root)
+            self.assertTrue(receipt["full_copy"])
+            self.assertEqual((root / receipt["retained_copy"]).read_bytes(), log.read_bytes())
+            self.assertEqual(receipt["sha256"], receipt["retained_copy_sha256"])
+
+    def test_config_log_caps_large_diagnostic(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            log = root / "config.log"
+            log.write_bytes(b"x" * (MODULE.MAX_CONFIG_LOG_COPY_BYTES + 1) + b"link failure")
+            receipt = MODULE.retain_config_log(log, root)
+            self.assertFalse(receipt["full_copy"])
+            retained = (root / receipt["retained_copy"]).read_bytes()
+            self.assertEqual(len(retained), MODULE.MAX_CONFIG_LOG_TAIL_BYTES)
+            self.assertTrue(retained.endswith(b"link failure"))
+
     def test_runtime_rejects_module_from_existing_framework(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

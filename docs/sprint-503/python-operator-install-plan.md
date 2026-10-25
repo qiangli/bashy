@@ -105,6 +105,15 @@ This is a 3.12.15 source-build candidate, so it does not establish a fresh
 admission remain false until native receipts are independently reviewed and the
 remaining license and host gates close.
 
+The first hosted source candidate, [run 40218374690](https://github.com/qiangli/bashy/actions/runs/40218374690),
+passed native identity, exact input hashes and detached signature verification
+on both macOS architectures. Both builds stopped during `configure` at
+`C compiler cannot create executables`; the retained build-log tail does not
+contain the linker diagnostic from `config.log`. This is a source-build blocker,
+not an installed-Python or license pass. The follow-up retains a bounded copy
+of `config.log` and the output of a compiler smoke run with the same environment
+to identify the failure before changing the compiler or SDK settings.
+
 ## Host procedure
 
 1. Claim the native host under the sprint's resource rules. Record the actual

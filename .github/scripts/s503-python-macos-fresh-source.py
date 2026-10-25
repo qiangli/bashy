@@ -32,6 +32,8 @@ KEY_FINGERPRINT = "7169605F62C751356D054A26A821E680E5FA6305"
 MAX_FILES = 12000
 MAX_NOTICES = 256
 MAX_NOTICE_BYTES = 4 * 1024 * 1024
+MAX_CONFIG_LOG_COPY_BYTES = 512 * 1024
+MAX_CONFIG_LOG_TAIL_BYTES = 64 * 1024
 NOTICE_WORDS = ("license", "licence", "copying", "copyright", "notice")
 NOTICE_SUFFIXES = ("", ".txt", ".md", ".rst", ".rtf", ".html", ".htm")
 
@@ -335,6 +337,21 @@ def write_json(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def retain_config_log(path: Path, evidence: Path) -> dict:
+    """Keep the actual configure diagnostic without uploading unbounded logs."""
+    require(path.is_file() and not path.is_symlink(), "configure config.log absent")
+    size = path.stat().st_size
+    full = size <= MAX_CONFIG_LOG_COPY_BYTES
+    destination = evidence / ("config.log" if full else "config-log-tail.txt")
+    with path.open("rb") as source:
+        if not full:
+            source.seek(size - MAX_CONFIG_LOG_TAIL_BYTES)
+        destination.write_bytes(source.read())
+    return {"bytes": size, "sha256": sha256(path),
+            "retained_copy": destination.name,
+            "retained_copy_sha256": sha256(destination), "full_copy": full}
+
+
 def build(input_dir: Path, evidence: Path) -> dict:
     prior = preflight(evidence)
     source = inputs(input_dir, evidence)
@@ -342,9 +359,11 @@ def build(input_dir: Path, evidence: Path) -> dict:
     report = {"schema": "s503-python-macos-fresh-source-v1",
               "candidate_commit": os.environ["CANDIDATE_COMMIT"], "target": target,
               "runner_label": os.environ["RUNNER_LABEL"], "source": source,
+              "candidate_scope": "alternate Python.org 3.12.15 source build; does not close the pinned 3.12.10 external installer policy",
               "policy": prior["policy"], "product_admitted": False,
               "operator_admitted": False, "result": "BLOCKED"}
     log = None
+    config_log = None
     try:
         root = Path(tempfile.mkdtemp(prefix="s503-python-macos-", dir=temp_root()))
         os.chmod(root, 0o700)
@@ -363,6 +382,7 @@ def build(input_dir: Path, evidence: Path) -> dict:
             setup.stage_input(input_dir / name, destination, limit)
         report["source_verified_again"] = setup.verify_source(archive, signature, key)
         extracted = setup.unpack(archive, work)
+        config_log = extracted / "config.log"
         require(sha256(archive) == PINS["Python-3.12.15.tar.xz"][1],
                 "source archive changed during extraction")
         report["source_notices"] = notice_inventory(extracted, evidence, "source")
@@ -375,9 +395,25 @@ def build(input_dir: Path, evidence: Path) -> dict:
         env["PKG_CONFIG_PATH"] = str(Path(openssl["prefix"]) / "lib/pkgconfig")
         env["CPPFLAGS"] = "-I" + str(Path(openssl["prefix"]) / "include")
         env["LDFLAGS"] = "-L" + str(Path(openssl["prefix"]) / "lib")
+        report["configure_env"] = {key: env[key] for key in
+                                   ("CC", "CONFIG_SITE", "CPPFLAGS", "LDFLAGS",
+                                    "PKG_CONFIG_PATH")}
         report["toolchain"] = {"clang": env["CC"], "clang_sha256": sha256(Path(env["CC"])),
                                "clang_version": command([env["CC"], "--version"]).splitlines()[0],
                                "xcode": command(["xcodebuild", "-version"]).splitlines()}
+        smoke_source = root / "compiler-smoke.c"
+        smoke_binary = root / "compiler-smoke"
+        smoke_source.write_text("int main(void) { return 0; }\n", encoding="ascii")
+        smoke_command = [env["CC"], env["CPPFLAGS"], str(smoke_source),
+                         env["LDFLAGS"], "-o", str(smoke_binary)]
+        smoke = subprocess.run(smoke_command, env=env, capture_output=True,
+                               text=True, errors="replace", timeout=60)
+        smoke_output = evidence / "compiler-smoke.txt"
+        smoke_output.write_text(smoke.stdout + smoke.stderr, encoding="utf-8")
+        report["compiler_smoke"] = {"argv": smoke_command,
+                                     "exit_code": smoke.returncode,
+                                     "output_sha256": sha256(smoke_output),
+                                     "output_bytes": smoke_output.stat().st_size}
         configure = [str(extracted / "configure"), "--prefix=" + str(prefix),
                      "--with-ensurepip=no", "--without-readline",
                      "--enable-option-checking=fatal", "--with-openssl=" + openssl["prefix"],
@@ -404,6 +440,8 @@ def build(input_dir: Path, evidence: Path) -> dict:
         report["error"] = str(error)
         raise
     finally:
+        if config_log is not None and config_log.is_file():
+            report["configure_log"] = retain_config_log(config_log, evidence)
         if log is not None and log.is_file():
             report["build_log_sha256"] = sha256(log)
             report["build_log_bytes"] = log.stat().st_size
