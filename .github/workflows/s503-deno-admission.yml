@@ -25,6 +25,7 @@ jobs:
             os: Linux
             arch: amd64
             python_arch: x64
+            python_version: '3.12.15'
             triple: x86_64-unknown-linux-gnu
             archive_sha256: e890975bc2549807bbcc0b584ffafda72cc7c93349dd99c80483dd784f6c4609
             archive_sum_sha256: f41fbb4278955d03b735c37f957470a1432bdae643d673866e913eea6e4a7855
@@ -34,6 +35,7 @@ jobs:
             os: Linux
             arch: arm64
             python_arch: arm64
+            python_version: '3.12.15'
             triple: aarch64-unknown-linux-gnu
             archive_sha256: d49596c20b9788cf8f5d8ddf644103d4bde56ed239753f0bdb92ba9361d51905
             archive_sum_sha256: 8eb865b23b330c730e109461eb3c1e185049ace2cd20a2002e7be1c023e284d0
@@ -43,6 +45,7 @@ jobs:
             os: macOS
             arch: amd64
             python_arch: x64
+            python_version: '3.12.10'
             triple: x86_64-apple-darwin
             archive_sha256: 4b2f5edd2639b7470f034238b321d7002d8dfb4726d8558f52c17afac370eb2c
             archive_sum_sha256: bd12f308c1d793fdb2131cd2b47a1288191b32321d4ce0e20656f151d5b6fb70
@@ -52,6 +55,7 @@ jobs:
             os: macOS
             arch: arm64
             python_arch: arm64
+            python_version: '3.12.10'
             triple: aarch64-apple-darwin
             archive_sha256: 9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e
             archive_sum_sha256: 1ca4234e7c94173c442249c0399070cdce09cc841092c0a6d205101bbde7dca3
@@ -61,6 +65,7 @@ jobs:
             os: Windows
             arch: amd64
             python_arch: x64
+            python_version: '3.12.10'
             triple: x86_64-pc-windows-msvc
             archive_sha256: cba84b26e0df5ae7f74fc66b86a95b866872a86292ebd84fa1e959927edd93bf
             archive_sum_sha256: 0fdedd625087373992be0dff62a3c3a3a9b254a0cf01d46d54c559c451c86413
@@ -70,6 +75,7 @@ jobs:
             os: Windows
             arch: arm64
             python_arch: arm64
+            python_version: '3.12.10'
             triple: aarch64-pc-windows-msvc
             archive_sha256: b413b92b735b50c198e8fe3b85af1aa50e29d5f72e229aab701d132286e14cef
             archive_sum_sha256: fdbe4f38869dcbf70beefda0c7a1fe02c9b52c6f23c46e0b6eea898a742e6fa2
@@ -85,11 +91,12 @@ jobs:
       DENO_EXECUTABLE_SHA256: ${{ matrix.executable_sha256 }}
       DENO_EXECUTABLE_SUM_SHA256: ${{ matrix.executable_sum_sha256 }}
       CANDIDATE_COMMIT: ${{ github.sha }}
+      EXPECTED_PYTHON_VERSION: ${{ matrix.python_version }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python_version }}
           architecture: ${{ matrix.python_arch }}
       - name: Verify native Deno and bundled EJS from upstream bytes
         shell: bash
@@ -179,7 +186,8 @@ jobs:
               evidence['external_runtime'] = json.loads(subprocess.check_output(
                   [sys.executable, 'examples/transcribe/dependencies/probe_runtime.py'],
                   text=True, timeout=60))
-              require(evidence['external_runtime']['python']['version'] == sys.version.split()[0],
+              require(evidence['external_runtime']['python']['version'] ==
+                      sys.version.split()[0] == os.environ['EXPECTED_PYTHON_VERSION'],
                       'Python runtime probe version drift')
               evidence['checks']['external_runtime_identity'] = 'PASS'
 

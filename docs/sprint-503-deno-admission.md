@@ -65,8 +65,9 @@ requires Deno 2.3.0 or newer for this path and says to use `deno`, not
 [Run 40196010350](https://github.com/qiangli/bashy/actions/runs/40196010350)
 passed all six Deno/yt-dlp/EJS dependency jobs. Its reports recorded Python
 3.12.15 on Linux and 3.12.10 on macOS/Windows, but did not hash Python or
-record Windows VC runtime files. A new run of this workflow will also run
-`probe_runtime.py`, recording the exact `actions/setup-python@v5` tool-cache
+record Windows VC runtime files. The updated workflow fixes those same Python
+patches per target. A new run will also run `probe_runtime.py`, recording the
+exact `actions/setup-python@v5` tool-cache
 executable path, patch version and SHA-256. On Windows it records the native
 `System32` copies of `MSVCP140.dll` and `VCRUNTIME140.dll`, with file versions
 and SHA-256. A missing or unreadable dependency fails the job. These are
