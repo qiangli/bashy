@@ -41,3 +41,20 @@ decoder policy, actual multilingual audio/video inference and all three export
 formats under an enforced network-off repeat, plus integration with the
 selection and dual-orientation pipeline stories. A green fixture suite is not
 native transcription evidence.
+
+The registration continuation adds `examples/transcribe/adapters/register.sh`
+using the integrated generic command registry, with role/request applicability,
+platform declarations and effects. It keeps seed records in the ordinary local
+ring, with explicit model setup and optional independently admitted executable
+configuration. The focused registration smoke exercises actual local acquisition,
+PCM normalization, TXT/SRT/VTT export and pipeline publication/cleanup; its
+inference substitution is labelled fixture data. This advances implementation
+integration only. Real whisper.cpp inference, video decoding policy, multilingual
+speech and externally enforced offline evidence remain acceptance prerequisites.
+
+Continuation verification: all five `test_registration.py` groups pass, including
+matching TXT/SRT/VTT bytes and valid receipts in the command/skill orientations.
+The candidate selector was built at `9290f1c431dc`; the helper uses Bashy
+`fe77d5bf840c` with Yoke `b449cd4b0926`. The local changes are registration,
+documentation and this smoke test only. Module-mode seed tests and focused vet
+also pass. These are development fixture results, not native speech evidence.

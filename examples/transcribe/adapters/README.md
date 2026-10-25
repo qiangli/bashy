@@ -10,18 +10,37 @@ Build on an authorized development/build host, from the bashy module:
 
 ```sh
 go build -o /absolute/path/transcribe-adapter ./examples/transcribe/adapters
-bashy commands add transcribe-local --set exec.0=/absolute/path/transcribe-adapter \
-  --set exec.1=local --set effects.0=read --set effects.1=exec
+BASHY_BIN=/absolute/path/bashy bashy examples/transcribe/adapters/register.sh \
+  /absolute/path/transcribe-adapter
 ```
 
-Registration uses `bashy commands add`, as the acquisition example above shows.
-Use the command names in the table as suggested local IDs, each with the same
-helper path and its corresponding operation (`local`, `wav`, `ffmpeg`, `whisper`,
-`export`, or `model`) as a fixed argument. Decode/infer/export additionally need
-`write` and `destroy` effects; model setup also needs `net`. Inspect/edit records
-through ordinary `commands show` / `commands set` / `src` workflows. This
-checkpoint does not install seed records automatically: final applicability
-and dependency declarations await the registry integration story.
+`register.sh` calls only ordinary `bashy commands add` operations. It declares
+`provides`, `accepts`, supported OS/architectures and effects in the same local
+command ring as user adapters. No core rebuild or special seed registry is
+needed. Inspect/edit records through `commands show` / `commands set` / `src`.
+Registration does not download a tool or model; missing or unverified dependencies
+still fail at stage execution. The helper must be built for the native host;
+platform declarations are support intent, not native acceptance evidence.
+
+Automatic acquisition accepts local absolute/relative paths (including Windows
+drive and UNC paths), not URL schemes. Prefix a relative filename containing a
+colon with `./`. The WAV decoder matches `.wav` case-insensitively and then
+validates the bytes; rename extensionless PCM media or edit its `accepts` record.
+Inference accepts normalized `audio/wav` artifacts and export accepts TXT/SRT/VTT.
+These declarations also apply to explicitly selected providers. The helper's
+standalone stage API can inspect bytes without filename-based selection.
+
+The optional `WHISPER_PATH` / `WHISPER_SHA256` environment pair configures an
+independently admitted whisper.cpp executable. `FFMPEG_PATH` / `FFMPEG_SHA256`
+adds the optional decoder only after independent decoder policy admission.
+Both paths must be absolute and checksums must be 64 hexadecimal digits;
+invalid configuration fails before registration starts. Actual bytes are checked
+by the adapter on invocation. With FFmpeg registered, `.wav` matches both
+decoders: explicitly choose `--decoder transcribe-wav` or `transcribe-ffmpeg`.
+Other media matches the external decoder; unsupported codecs fail in that tool.
+Registration is a sequence of ordinary writes, not a transaction: on a command
+write error, inspect existing records before retrying. Local overrides follow
+the registry's normal collision/update rules.
 
 | Command | Stage | Behavior |
 |---|---|---|
@@ -49,6 +68,10 @@ bashy transcribe --model base --language auto --format srt \
   --provider transcribe-whisper --exporter transcribe-export \
   --output 'speech output.srt' 'speech input.wav'
 ```
+
+The installer registers stages only. Register the existing editable pipeline as
+shown in [the transcription skill](../../../skills/bashy/commands/transcribe.md)
+to use the `transcribe` front door or either skill/script orientation.
 
 `default` means multilingual `base`. Model IDs, sizes and SHA-256 digests come
 from the existing binmgr catalog. Inference only reads that verified cache; it
@@ -95,7 +118,18 @@ The helper reserves stdout for one JSON result, and bounds captured stderr.
 go test -v ./internal/transcribeseed ./internal/transcribecontract ./examples/transcribe/adapters
 go test ./internal/agentos -run TestTranscribe -count=1
 go vet ./internal/transcribeseed ./internal/transcribecontract ./examples/transcribe/adapters
+BASHY_BIN=/absolute/path/bashy TRANSCRIBE_ADAPTER=/absolute/path/transcribe-adapter \
+  python3 examples/transcribe/adapters/test_registration.py
 ```
+
+The registration smoke requires a candidate with the real selector. It uses a
+private command/model ring and real helper acquisition/normalization/export,
+checks automatic/explicit selection and ambiguity, rejects invalid deployment
+configuration, and verifies missing-model failure plus cleanup. Its pipeline
+case replaces inference through an ordinary local command override with labelled
+fixture text, compares all three exports through command and skill orientations,
+and checks valid skill receipts. It fails if executable paths are missing; it
+never silently skips.
 
 The subprocess fixtures test implementation behavior only. Synthetic WAV data,
 fixture transcript text and a test executable do not establish native inference,
