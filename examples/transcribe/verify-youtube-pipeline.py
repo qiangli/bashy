@@ -370,6 +370,48 @@ def finish_cancel(proc, description):
     return stdout
 
 
+def owned_process_group_alive(proc):
+    if os.name == "nt":
+        return False
+    try:
+        os.killpg(proc.pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def validate_download_cancellation(proc, stdout, work, timeout=30):
+    if stdout == "" and os.name != "nt":
+        require(proc.returncode in (-signal.SIGINT, 130),
+                "source wrapper did not exit from SIGINT")
+    else:
+        try:
+            result = json.loads(stdout)
+        except (ValueError, TypeError):
+            raise ValueError("source adapter returned invalid cancellation JSON") from None
+        require(proc.returncode == 130 and isinstance(result, dict)
+                and isinstance(result.get("error"), dict)
+                and result["error"].get("code") == "cancelled",
+                "source adapter did not report cancellation")
+
+    # Bashy's exec retains a wrapper process. Group SIGINT can terminate that
+    # wrapper before its Python child finishes removing partial downloads and
+    # before the child's JSON reaches stdout. Wait for both cleanup and group
+    # exit; an empty response never excuses a file or process leak.
+    deadline = time.monotonic() + timeout
+    while True:
+        group_alive = owned_process_group_alive(proc)
+        files_remain = bool(list(work.iterdir()))
+        if not group_alive and not files_remain:
+            return
+        if time.monotonic() >= deadline:
+            require(not group_alive, "cancelled download left a live process group")
+            raise ValueError("cancelled download left media or partial files")
+        time.sleep(0.05)
+
+
 def download_cancellation(m, env, outdir, tempdir):
     work = tempdir / "download-cancel"
     work.mkdir()
@@ -389,14 +431,17 @@ def download_cancellation(m, env, outdir, tempdir):
     try:
         await_stage(proc, partial_started, "admitted yt-dlp download")
         stdout = finish_cancel(proc, "admitted yt-dlp download")
-        result = json.loads(stdout)
-        require(proc.returncode == 130 and result.get("error", {}).get("code") == "cancelled",
-                "source adapter did not report cancellation")
-        require(not list(work.iterdir()), "cancelled download left media or partial files")
+        validate_download_cancellation(proc, stdout, work)
     finally:
         if proc.poll() is None:
             stop_process_group(proc, force=True)
             proc.communicate()
+        elif owned_process_group_alive(proc):
+            # A failed check must also stop descendants whose wrapper exited.
+            try:
+                stop_process_group(proc, force=True)
+            except ProcessLookupError:
+                pass
         request.unlink(missing_ok=True)
         if not list(work.iterdir()):
             work.rmdir()

@@ -4,6 +4,7 @@
 import importlib.util
 import json
 from pathlib import Path, PureWindowsPath
+import signal
 import tempfile
 import unittest
 from unittest import mock
@@ -16,6 +17,73 @@ spec.loader.exec_module(gate)
 
 
 class GateValidationTest(unittest.TestCase):
+    def test_download_cancel_waits_for_descendant_and_partial_cleanup(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root)
+            partial = work / "video.webm.part"
+            partial.write_bytes(b"incomplete download")
+            proc = mock.Mock(pid=12345, returncode=-signal.SIGINT)
+            def finish_cleanup(_delay):
+                partial.unlink()
+            with mock.patch.object(gate.os, "name", "posix"), \
+                 mock.patch.object(gate, "owned_process_group_alive", side_effect=[True, False]), \
+                 mock.patch.object(gate.time, "sleep", side_effect=finish_cleanup) as sleep:
+                gate.validate_download_cancellation(proc, "", work)
+                sleep.assert_called_once()
+            self.assertEqual(list(work.iterdir()), [])
+
+    def test_download_cancel_rejects_live_group_or_files_after_deadline(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root)
+            proc = mock.Mock(pid=12345, returncode=130)
+            with mock.patch.object(gate.os, "name", "posix"), \
+                 mock.patch.object(gate, "owned_process_group_alive", return_value=True):
+                with self.assertRaisesRegex(ValueError, "live process group"):
+                    gate.validate_download_cancellation(proc, "", work, timeout=0)
+            (work / "video.webm.part").write_bytes(b"leaked")
+            with mock.patch.object(gate.os, "name", "posix"), \
+                 mock.patch.object(gate, "owned_process_group_alive", return_value=False):
+                with self.assertRaisesRegex(ValueError, "media or partial files"):
+                    gate.validate_download_cancellation(proc, "", work, timeout=0)
+
+    def test_download_cancel_accepts_envelope_on_both_platforms(self):
+        envelope = json.dumps({"error": {"code": "cancelled"}})
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root)
+            proc = mock.Mock(pid=12345, returncode=130)
+            for platform_name in ("nt", "posix"):
+                with self.subTest(platform=platform_name), \
+                     mock.patch.object(gate.os, "name", platform_name), \
+                     mock.patch.object(gate, "owned_process_group_alive", return_value=False):
+                    gate.validate_download_cancellation(proc, envelope, work)
+
+    def test_download_cancel_rejects_other_exits_and_invalid_responses(self):
+        with tempfile.TemporaryDirectory() as root:
+            work = Path(root)
+            cases = [("posix", 0, ""), ("posix", 1, ""), ("nt", 130, ""),
+                     ("posix", 130, "not JSON"), ("posix", 130, "[]"),
+                     ("posix", 130, '{"error":null}'),
+                     ("posix", 130, '{"error":{"code":"download_failed"}}'),
+                     ("posix", 0, '{"error":{"code":"cancelled"}}')]
+            for platform_name, status, stdout in cases:
+                with self.subTest(platform=platform_name, status=status, stdout=stdout), \
+                     mock.patch.object(gate.os, "name", platform_name), \
+                     mock.patch.object(gate, "owned_process_group_alive", return_value=False):
+                    proc = mock.Mock(pid=12345, returncode=status)
+                    with self.assertRaises(ValueError):
+                        gate.validate_download_cancellation(proc, stdout, work)
+
+    def test_process_group_probe_requires_absence(self):
+        proc = mock.Mock(pid=12345)
+        with mock.patch.object(gate.os, "name", "posix"), \
+             mock.patch.object(gate.os, "killpg", create=True) as killpg:
+            self.assertTrue(gate.owned_process_group_alive(proc))
+            killpg.assert_called_with(proc.pid, 0)
+            killpg.side_effect = PermissionError
+            self.assertTrue(gate.owned_process_group_alive(proc))
+            killpg.side_effect = ProcessLookupError
+            self.assertFalse(gate.owned_process_group_alive(proc))
+
     def test_reported_output_home_abbreviation_is_exact_and_bounded(self):
         expected = Path('/home/runner/work/_temp/transcript.txt')
         self.assertTrue(gate.reported_output_matches(str(expected) + '\n', expected,
