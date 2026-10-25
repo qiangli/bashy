@@ -95,7 +95,8 @@ stage_run() {
                       .start_ms == (.start_ms | floor) and
                       .end_ms == (.end_ms | floor) and
                       .start_ms >= 0 and .end_ms > .start_ms) and
-             ([.[].start_ms] == ([.[].start_ms] | sort)))
+             ([range(1; length) as $i |
+               .[$i].start_ms >= .[$i-1].end_ms] | all))
          else
             (.artifacts | type == "array" and length > 0 and
              all(.[]; (.path | type == "string" and length > 0)))

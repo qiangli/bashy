@@ -26,6 +26,8 @@ case "$stage" in
     infer)
         if [ "${STUB_BAD_INFER:-0}" = 1 ]; then
             "$BASHY_BIN" jq -n '{version:"bashy-transcribe-stage-v1",stage:"infer",segments:[{start_ms:1200,end_ms:0,text:"bad fixture"}]}'
+        elif [ "${STUB_OVERLAP:-0}" = 1 ]; then
+            "$BASHY_BIN" jq -n '{version:"bashy-transcribe-stage-v1",stage:"infer",segments:[{start_ms:0,end_ms:800,text:"first"},{start_ms:700,end_ms:1200,text:"overlap"}]}'
         else
             "$BASHY_BIN" jq -n '{version:"bashy-transcribe-stage-v1",stage:"infer",segments:[{start_ms:0,end_ms:1200,text:"fixture only"}]}'
         fi ;;
@@ -183,6 +185,12 @@ fi
 grep -F 'invalid v1 result' "$work/failed.stderr" >/dev/null
 test "$(cat "$work/failed.txt")" = 'existing output'
 test ! -s "$work/failed-path.txt"
+if STUB_OVERLAP=1 bashy transcribe $common --output "$work/overlap.txt" "$STUB_MEDIA" > "$work/overlap-path.txt" 2> "$work/overlap.stderr"; then
+    echo 'overlapping infer segments were accepted' >&2
+    exit 1
+fi
+grep -F 'invalid v1 result' "$work/overlap.stderr" >/dev/null
+test ! -e "$work/overlap.txt"
 set -- "$work"/.transcribe.*
 test ! -e "$1"
 "$BASHY_BIN" tail -n 1 "$ledger" | "$BASHY_BIN" jq -e '.attest.Valid == false' >/dev/null
