@@ -2,6 +2,12 @@ name: S503 Windows Python VC natural-load research
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - s503-contract-integration
+    paths:
+      - .github/workflows/s503-windows-python-vc-closure.yml
+      - .github/scripts/s503-windows-vc-natural-load.py
 
 permissions:
   contents: read
