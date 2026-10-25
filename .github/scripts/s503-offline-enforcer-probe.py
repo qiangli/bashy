@@ -39,7 +39,7 @@ def probe():
         return {'connected': True, 'denied': False, 'error': '', 'errno': None,
                 'elapsed_seconds': round(time.monotonic() - started, 3)}
     except OSError as exc:
-        number = exc.errno
+        number = (getattr(exc, 'winerror', None) or exc.errno) if platform.system() == 'Windows' else exc.errno
         # Windows Firewall can report a socket timeout rather than WSAEACCES.
         if platform.system() == 'Windows' and isinstance(exc, TimeoutError):
             number = 10060
