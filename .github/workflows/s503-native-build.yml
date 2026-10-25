@@ -9,6 +9,8 @@ on:
     paths:
       - .github/workflows/s503-native-build.yml
       - examples/transcribe/dependencies/build_whisper.py
+      - examples/transcribe/dependencies/build_whisper_notices.py
+      - examples/transcribe/dependencies/notices/**
       - examples/transcribe/dependencies/prepare_llvm_mingw.py
       - examples/transcribe/dependencies/build-whisper.sh
       - examples/transcribe/dependencies/build-whisper.ps1
@@ -219,6 +221,25 @@ jobs:
         uses: actions/attest@v4
         with:
           subject-path: evidence/whisper-cli${{ matrix.expected_os == 'Windows' && '.exe' || '' }}
+
+      - name: Package pinned source notices and review gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary=evidence/whisper-cli
+          options=()
+          if [[ "$EXPECTED_OS" == Windows ]]; then
+            binary+=.exe
+            options=(--toolchain-report evidence/toolchain-report.json
+                     --inventory evidence/whisper-link-inventory.json
+                     --link-map evidence/whisper-cli.link.map)
+          fi
+          python examples/transcribe/dependencies/build_whisper_notices.py \
+            --build-report evidence/build-report.json \
+            --binary "$binary" \
+            --source-archive "$RUNNER_TEMP/s503-whisper-build/whisper.cpp-1.9.5.tar.gz" \
+            --output-dir evidence/whisper-notices \
+            "${options[@]}"
 
       - name: Upload build evidence and binary
         if: always()

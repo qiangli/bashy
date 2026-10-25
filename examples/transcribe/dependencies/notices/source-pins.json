@@ -1,0 +1,70 @@
+{
+  "schema": "s503-whisper-notice-source-pins-v1",
+  "whisper": {
+    "version": "1.9.5",
+    "archive_url": "https://github.com/ggml-org/whisper.cpp/archive/refs/tags/v1.9.5.tar.gz",
+    "archive_bytes": 9626464,
+    "archive_sha256": "ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720",
+    "license_member": "whisper.cpp-1.9.5/LICENSE"
+  },
+  "windows_toolchain": {
+    "tag": "20260616",
+    "tag_commit": "170b7e1ec4ad1d9264e6ba320cd4d02f96299c60",
+    "llvm_tag": "llvmorg-22.1.8",
+    "mingw_w64_commit": "c28e9555bb8800c53449f42a465ad9a5676fce88",
+    "assets": {
+      "amd64": {
+        "archive_bytes": 187504083,
+        "archive_sha256": "b9b68a4d276e16fa25802aaba458e4638f64b3884c290aaccdc2d87083b6ca35",
+        "url": "https://github.com/mstorsjo/llvm-mingw/releases/download/20260616/llvm-mingw-20260616-ucrt-x86_64.zip"
+      },
+      "arm64": {
+        "archive_bytes": 181877750,
+        "archive_sha256": "312593669435bd0bfc1a43ac3fba23c8b27e0610bade88b2738e5a01702a99ba",
+        "url": "https://github.com/mstorsjo/llvm-mingw/releases/download/20260616/llvm-mingw-20260616-ucrt-aarch64.zip"
+      }
+    }
+  },
+  "notices": {
+    "whisper-MIT.txt": {
+      "url": "https://github.com/ggml-org/whisper.cpp/blob/v1.9.5/LICENSE",
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+      "targets": "all"
+    },
+    "llvm-libcxx.txt": {
+      "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-22.1.8/libcxx/LICENSE.TXT",
+      "sha256": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b",
+      "targets": "windows"
+    },
+    "llvm-libcxxabi.txt": {
+      "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-22.1.8/libcxxabi/LICENSE.TXT",
+      "sha256": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c",
+      "targets": "windows"
+    },
+    "llvm-libunwind.txt": {
+      "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-22.1.8/libunwind/LICENSE.TXT",
+      "sha256": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d",
+      "targets": "windows"
+    },
+    "llvm-compiler-rt.txt": {
+      "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-22.1.8/compiler-rt/LICENSE.TXT",
+      "sha256": "1a8f1058753f1ba890de984e48f0242a3a5c29a6a8f2ed9fd813f36985387e8d",
+      "targets": "windows"
+    },
+    "mingw-w64-COPYING.txt": {
+      "url": "https://raw.githubusercontent.com/mingw-w64/mingw-w64/c28e9555bb8800c53449f42a465ad9a5676fce88/COPYING",
+      "sha256": "99a69660981156c21336fdb5661f89341b013c94e4bf9e1c7467b4745718397f",
+      "targets": "windows"
+    },
+    "mingw-w64-runtime.txt": {
+      "url": "https://raw.githubusercontent.com/mingw-w64/mingw-w64/c28e9555bb8800c53449f42a465ad9a5676fce88/COPYING.MinGW-w64-runtime/COPYING.MinGW-w64-runtime.txt",
+      "sha256": "1db8da07b436c68833c0673ffee3d9fcb2526047f3820b81661865dfedc79a1f",
+      "targets": "windows"
+    },
+    "mingw-w64-DISCLAIMER.PD.txt": {
+      "url": "https://raw.githubusercontent.com/mingw-w64/mingw-w64/c28e9555bb8800c53449f42a465ad9a5676fce88/DISCLAIMER.PD",
+      "sha256": "87f33608570312a0f2a9745edcb2527275df813b13982e8c3b3f893d88a4141a",
+      "targets": "windows"
+    }
+  }
+}
