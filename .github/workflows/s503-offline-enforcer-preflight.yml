@@ -1,0 +1,157 @@
+name: S503 six-runner OS network denial preflight
+
+on:
+  push:
+    branches: [s503-offline-enforcer-preflight]
+    paths:
+      - .github/workflows/s503-offline-enforcer-preflight.yml
+      - .github/scripts/s503-offline-enforcer-probe.py
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  network-denial:
+    name: ${{ matrix.label }} OS network denial
+    runs-on: ${{ matrix.label }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {label: ubuntu-24.04, python_arch: x64, python_version: '3.12.15'}
+          - {label: ubuntu-24.04-arm, python_arch: arm64, python_version: '3.12.15'}
+          - {label: macos-15-intel, python_arch: x64, python_version: '3.12.10'}
+          - {label: macos-15, python_arch: arm64, python_version: '3.12.10'}
+          - {label: windows-2025, python_arch: x64, python_version: '3.12.10'}
+          - {label: windows-11-arm, python_arch: arm64, python_version: '3.12.10'}
+    env:
+      TARGET_LABEL: ${{ matrix.label }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python_version }}
+          architecture: ${{ matrix.python_arch }}
+
+      - name: Record native identity, enforcer hash, and live baseline TCP connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/s503-offline-preflight"
+          probe=.github/scripts/s503-offline-enforcer-probe.py
+          python "$probe" identity --label "$TARGET_LABEL" --out "$out"
+          python "$probe" enforcer --out "$out"
+          python "$probe" baseline --out "$out"
+
+      - name: Enter Linux namespace or macOS sandbox and prove repeated denial
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          set -uo pipefail
+          out="$RUNNER_TEMP/s503-offline-preflight"
+          probe="$GITHUB_WORKSPACE/.github/scripts/s503-offline-enforcer-probe.py"
+          enforcer=$(python -c 'import json,os; print(json.load(open(os.path.join(os.environ["RUNNER_TEMP"],"s503-offline-preflight/enforcer.json")))["path"])')
+          interpreter=$(python -c 'import sys; print(sys.executable)')
+          if [[ "$RUNNER_OS" == Linux ]]; then
+            # Redirection intentionally writes evidence as the runner user.
+            # shellcheck disable=SC2024
+            sudo "$enforcer" --net -- "$interpreter" "$probe" policy --out "$out" \
+              > "$out/policy.stdout" 2> "$out/policy.stderr"
+          else
+            "$enforcer" -p '(version 1) (allow default) (deny network*)' \
+              "$interpreter" "$probe" policy --out "$out" \
+              > "$out/policy.stdout" 2> "$out/policy.stderr"
+          fi
+          code=$?
+          POLICY_EXIT_CODE="$code" python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 's503-offline-preflight'
+          code = int(os.environ['POLICY_EXIT_CODE'])
+          (root / 'policy-attempt.json').write_text(json.dumps({
+              'schema': 's503-os-network-policy-attempt-v1',
+              'method': 'linux-unshare-net' if os.environ['RUNNER_OS'] == 'Linux' else 'macos-sandbox-deny-network',
+              'exit_code': code, 'success': code == 0,
+              'stderr': (root / 'policy.stderr').read_text()[-4000:],
+              'stdout': (root / 'policy.stdout').read_text()[-4000:]}, indent=2) + '\n')
+          PY
+          exit 0
+
+      - name: Install Windows program rule, prove repeated denial, and remove rule
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 's503-offline-preflight'
+          $probe = Join-Path $env:GITHUB_WORKSPACE '.github/scripts/s503-offline-enforcer-probe.py'
+          $identity = Get-Content (Join-Path $root 'identity.json') -Raw | ConvertFrom-Json
+          $program = $identity.python
+          $name = 'S503-preflight-' + [guid]::NewGuid().ToString('N')
+          $errors = @()
+          $active = $false
+          $cleaned = $false
+          $module = Get-Module -ListAvailable NetSecurity | Select-Object -First 1
+          if ($module -and $module.Path) {
+            [pscustomobject]@{ path = $module.Path;
+                                sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $module.Path).Hash.ToLowerInvariant() } |
+              ConvertTo-Json | Set-Content (Join-Path $root 'windows-netsecurity-module.json')
+          } else { $errors += 'NetSecurity module unavailable' }
+          try {
+            if ($errors.Count -gt 0) { throw $errors[0] }
+            New-NetFirewallRule -Name $name -DisplayName $name -Enabled True `
+              -Direction Outbound -Action Block -Profile Any -Program $program | Out-Null
+            $rule = Get-NetFirewallRule -Name $name
+            $filter = Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $rule
+            if ($rule.Enabled -ne 'True' -or $rule.Direction -ne 'Outbound' -or
+                $rule.Action -ne 'Block' -or $filter.Program -ne $program) {
+              throw 'Windows outbound program rule is inactive or does not bind the Python executable'
+            }
+            $active = $true
+            [pscustomobject]@{ name = $name; program = $filter.Program;
+                                action = $rule.Action.ToString(); enabled = $rule.Enabled.ToString() } |
+              ConvertTo-Json | Set-Content (Join-Path $root 'windows-active-rule.json')
+            & $program $probe policy --out $root
+            if ($LASTEXITCODE -ne 0) { throw "TCP denial probe failed: $LASTEXITCODE" }
+          } catch { $errors += $_.Exception.Message }
+          finally {
+            try {
+              $existing = Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue
+              if ($existing) { Remove-NetFirewallRule -Name $name -ErrorAction Stop }
+              if (Get-NetFirewallRule -Name $name -ErrorAction SilentlyContinue) {
+                throw 'Firewall rule remains after removal'
+              }
+              $cleaned = $true
+            } catch { $errors += $_.Exception.Message }
+            [pscustomobject]@{ schema = 's503-os-network-policy-attempt-v1';
+                                method = 'windows-firewall-program-block'; rule_name = $name;
+                                program = $program; active = $active; cleaned = $cleaned;
+                                success = ($active -and $cleaned -and $errors.Count -eq 0);
+                                errors = $errors } |
+              ConvertTo-Json -Depth 5 | Set-Content (Join-Path $root 'policy-attempt.json')
+          }
+
+      - name: Prove network connectivity restored after policy exits
+        if: always()
+        shell: bash
+        run: |
+          python .github/scripts/s503-offline-enforcer-probe.py restored \
+            --out "$RUNNER_TEMP/s503-offline-preflight"
+
+      - name: Evaluate complete OS denial and cleanup evidence
+        if: always()
+        shell: bash
+        run: |
+          python .github/scripts/s503-offline-enforcer-probe.py evaluate \
+            --label "$TARGET_LABEL" --out "$RUNNER_TEMP/s503-offline-preflight"
+
+      - name: Upload exact preflight evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-offline-enforcer-${{ matrix.label }}
+          path: ${{ runner.temp }}/s503-offline-preflight/
+          if-no-files-found: error
+          retention-days: 14
