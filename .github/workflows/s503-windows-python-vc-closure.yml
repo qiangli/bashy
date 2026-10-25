@@ -55,12 +55,14 @@ jobs:
             --bashy "$RUNNER_TEMP/s503-python-vc/bin/bashy.exe" \
             --evidence evidence/python-installed
       - name: Observe natural VC loads and signatures
-        shell: bash
+        shell: pwsh
         run: |
-          set -euo pipefail
-          python .github/scripts/s503-windows-vc-natural-load.py \
-            --installed-result evidence/python-installed/result.json \
-            --output evidence/python-installed/vc-natural-load.json
+          $bootstrap = Join-Path $env:pythonLocation 'python.exe'
+          if (-not (Test-Path -LiteralPath $bootstrap -PathType Leaf)) {
+            throw "setup-python executable missing: $bootstrap"
+          }
+          & $bootstrap .github/scripts/s503-windows-vc-natural-load.py --installed-result evidence/python-installed/result.json --output evidence/python-installed/vc-natural-load.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Retain evidence only, never installer or DLL bytes
         if: always()
         uses: actions/upload-artifact@v4
