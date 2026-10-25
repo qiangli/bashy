@@ -40,6 +40,30 @@ the staged-copy hash, the Bashy and policy hashes, and a result JSON. Installer
 bytes are deleted after the check and are not uploaded. A pass establishes only
 the artifact gate; `operator-python-admission.json` remains unadmitted.
 
+The separate [installed-interpreter research workflow](../../.github/workflows/s503-python-installed-native.yml)
+runs when its own workflow, helper, verifier or pinned host-prep inputs change on
+`s503-contract-integration`; it also supports manual dispatch after GitHub
+recognizes the workflow. On disposable GitHub-hosted native macOS amd64/arm64
+and Windows amd64/arm64 runners, it repeats the pinned download and the same
+`prepare_python_host.sh --verify-artifact` gate, then invokes the official
+installer directly. This deliberately does not use the guarded product
+`--install` mode. The installer input must equal the reviewed URL, SHA-256,
+policy file hashes and [artifact run 40213869256](evidence/python-installer-40213869256/review.json).
+
+Each job retains the native runner identity; installer signature and hash;
+literal install argv, exit code and logs; installed interpreter path, hash,
+version and process architecture; zlib, bz2, lzma and SSL module origins and
+hashes; codec round trips and OpenSSL version; installed license and notice
+file hashes with bounded byte copies; and before/after side-effect paths.
+macOS also retains new Python package receipt file lists. Windows records
+native System32 VC DLLs before and after installation, app-local VC DLLs,
+loaded DLL origins, the `py` launcher search path and Python registry paths.
+The downloaded installer is deleted before artifact upload. Installed files
+remain only until the disposable hosted runner is destroyed. A missing
+preexisting-path check, failed command, wrong architecture or absent stdlib
+module fails the research job. Passing this job supplies evidence for review;
+it does not change any operator admission status or authorize redistribution.
+
 ## Host procedure
 
 1. Claim the native host under the sprint's resource rules. Record the actual
