@@ -96,6 +96,12 @@ def main() -> int:
         flags.remove(static_link[0])
         flags.extend(("-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
                       f"-DCMAKE_EXE_LINKER_FLAGS=-shared-libgcc -Wl,-Map={linker_map}"))
+        if arch == "arm64":
+            # GCC's default outlined AArch64 atomics pull LSE helper members
+            # from libgcc.a even with -shared-libgcc. Baseline LL/SC atomics
+            # avoid those static helpers and remain portable on ARMv8 hosts.
+            flags.extend(("-DCMAKE_C_FLAGS=-mno-outline-atomics",
+                          "-DCMAKE_CXX_FLAGS=-mno-outline-atomics"))
         if any("-static-libgcc" in flag or "-static-libstdc++" in flag for flag in flags):
             raise RuntimeError("static GCC runtime flag remains in shared experiment")
 
