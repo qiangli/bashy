@@ -5,6 +5,7 @@ on:
     branches: [s503-contract-integration]
     paths:
       - .github/workflows/s503-deno-admission.yml
+      - examples/transcribe/dependencies/probe_runtime.py
       - docs/sprint-503-deno-admission.md
   workflow_dispatch:
 
@@ -175,6 +176,12 @@ jobs:
                       (os.environ['TARGET_OS'], os.environ['TARGET_ARCH'], os.environ['TARGET_ARCH'], '0'),
                       'runner or Python process is not native to target')
               evidence['checks']['native_identity'] = 'PASS'
+              evidence['external_runtime'] = json.loads(subprocess.check_output(
+                  [sys.executable, 'examples/transcribe/dependencies/probe_runtime.py'],
+                  text=True, timeout=60))
+              require(evidence['external_runtime']['python']['version'] == sys.version.split()[0],
+                      'Python runtime probe version drift')
+              evidence['checks']['external_runtime_identity'] = 'PASS'
 
               base = 'https://github.com/denoland/deno/releases/download/v2.9.8/'
               stem = 'deno-' + os.environ['TARGET_TRIPLE']

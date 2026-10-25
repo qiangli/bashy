@@ -60,6 +60,26 @@ requires Deno 2.3.0 or newer for this path and says to use `deno`, not
 `denort`. v2.9.8 satisfies the version requirement. The workflow checks
 `deno --version` and executes a small local `deno eval` on every target.
 
+## External CI runtime identity
+
+[Run 40196010350](https://github.com/qiangli/bashy/actions/runs/40196010350)
+passed all six Deno/yt-dlp/EJS dependency jobs. Its reports recorded Python
+3.12.15 on Linux and 3.12.10 on macOS/Windows, but did not hash Python or
+record Windows VC runtime files. A new run of this workflow will also run
+`probe_runtime.py`, recording the exact `actions/setup-python@v5` tool-cache
+executable path, patch version and SHA-256. On Windows it records the native
+`System32` copies of `MSVCP140.dll` and `VCRUNTIME140.dll`, with file versions
+and SHA-256. A missing or unreadable dependency fails the job. These are
+external hosted-runner prerequisites and are never copied into the artifact.
+
+The six-target transcription gate requires a reviewer to place the observed
+Python identities for all six labels and VC identities for both Windows labels
+in its admission record. It re-probes the target runner and rejects changed
+versions or bytes before acquisition. This binds the CI test environment; it
+does not establish a distributable CPython installation or permission to
+redistribute Microsoft runtime files. The current admission record is absent,
+and these new runtime identities have not yet been collected natively.
+
 ## License boundary
 
 The adapter downloads and executes Deno and the yt-dlp zipapp as **separate
@@ -85,9 +105,9 @@ Deno 2.9.8 CLI, the published yt-dlp zipapp hash, and matching bundled EJS
 versions, sizes and hashes. A failed or missing runner remains a blocked target;
 there is no partial aggregate PASS.
 
-The local upstream manifest review above is **6/6 coordinates, 0/6 native
-Deno/EJS execution results** until this workflow runs. S503.6 still needs the
-full dependency audit for whisper.cpp and other transcription artifacts; S503.8
-still needs the operator video, transcript, timing and proved offline native
-pipeline evidence on all six targets. Neither a Deno/EJS PASS nor a native
-whisper build alone closes those gates.
+The original dependency run passed **6/6 native Deno/EJS checks**. The new
+external-runtime identity check has **0/6 native results** until a new run.
+S503.6 still needs runtime identity review and a product install policy;
+S503.8 still needs the operator video, transcript, timing and proved offline
+native pipeline evidence on all six targets. Neither a Deno/EJS PASS nor a
+native whisper build alone closes those gates.

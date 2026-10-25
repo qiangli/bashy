@@ -48,6 +48,28 @@ jobs:
                   'pinned whisper build source commit')
           require(set(a.get('deno', {})) == labels, 'six reviewed Deno coordinates')
           require(set(a.get('whisper', {})) == labels, 'six reviewed native whisper binary digests')
+          require(set(a.get('python', {})) == labels, 'six reviewed external CI Python identities')
+          python_versions = {'ubuntu-24.04': '3.12.15', 'ubuntu-24.04-arm': '3.12.15',
+                             'macos-15-intel': '3.12.10', 'macos-15': '3.12.10',
+                             'windows-2025': '3.12.10', 'windows-11-arm': '3.12.10'}
+          for label, expected_version in python_versions.items():
+              p = a['python'][label]
+              require(p.get('version') == expected_version and
+                      p.get('source') == 'actions/setup-python@v5 runner tool cache' and
+                      digest.fullmatch(p.get('sha256', '')),
+                      label + ' reviewed exact CI Python version and executable hash')
+          windows = {'windows-2025', 'windows-11-arm'}
+          require(set(a.get('windows_vc_runtime', {})) == windows,
+                  'two reviewed external Windows VC runtime identities')
+          for label in windows:
+              runtime = a['windows_vc_runtime'][label]
+              require(set(runtime) == {'MSVCP140.dll', 'VCRUNTIME140.dll'},
+                      label + ' reviewed imported VC runtime DLLs')
+              for name, dll in runtime.items():
+                  require(dll.get('source') == 'external Windows System32' and
+                          re.fullmatch(r'14\.\d+\.\d+\.\d+', dll.get('version', '')) and
+                          digest.fullmatch(dll.get('sha256', '')),
+                          label + ' reviewed ' + name + ' version and hash')
           for label, d in a['deno'].items():
               require(d.get('archive_url', '').startswith(
                   'https://github.com/denoland/deno/releases/download/v2.9.8/deno-'),
@@ -194,6 +216,21 @@ jobs:
                   process_arch != os_arch or go_arch != os_arch or translated == '1' or
                   platform.python_version() != os.environ['EXPECTED_PYTHON_VERSION']):
               raise SystemExit('non-native runner, Python, or Go toolchain')
+          runtime = json.loads(subprocess.check_output(
+              [sys.executable, 'examples/transcribe/dependencies/probe_runtime.py'],
+              text=True, timeout=60))
+          admission = json.loads(Path('docs/sprint-503/evidence/native-transcription-admission.json').read_text())
+          expected_python = admission['python'][os.environ['TARGET_LABEL']]
+          actual_python = runtime['python']
+          if any(actual_python[key] != expected_python[key] for key in ('source', 'version', 'sha256')):
+              raise SystemExit('CI Python differs from reviewed executable identity')
+          expected_vc = admission['windows_vc_runtime'].get(os.environ['TARGET_LABEL'], {})
+          actual_vc = runtime['windows_vc_runtime']
+          if set(actual_vc) != set(expected_vc) or any(
+                  actual_vc[name][key] != expected_vc[name][key]
+                  for name in actual_vc for key in ('source', 'version', 'sha256')):
+              raise SystemExit('external Windows VC runtime differs from reviewed identity')
+          Path('evidence/external-runtime.json').write_text(json.dumps(runtime, indent=2) + '\n')
           PY
 
       - name: Build candidate Bashy, seed adapter and WebM decoder
@@ -250,6 +287,10 @@ jobs:
                   identity['commit_sha'] == 'c59c3aa134588e21e1039750515fc00159cc2cb6' and
                   (artifact / 'binary-sha256.txt').read_text().strip() == digest + '  ' + binary.name):
               raise SystemExit('admitted whisper artifact identity, source or SHA-256 mismatch')
+          if os.environ['TARGET_OS'] == 'Windows' and not {
+                  'msvcp140.dll', 'vcruntime140.dll'}.issubset(
+                  {name.lower() for name in report['imported_libraries']}):
+              raise SystemExit('reviewed Windows VC runtime imports changed')
           cache = Path(os.environ['RUNNER_TEMP']) / 's503-native/cache/tools/whisper-cpp/v1.9.5'
           cache.mkdir(parents=True, exist_ok=True)
           installed = cache / binary.name
