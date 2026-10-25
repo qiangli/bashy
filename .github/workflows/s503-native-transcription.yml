@@ -1,0 +1,258 @@
+name: S503 six-target native transcription
+
+on:
+  push:
+    branches: [s503-contract-integration]
+    paths:
+      - .github/workflows/s503-native-transcription.yml
+      - docs/sprint-503/evidence/native-transcription-admission.json
+      - examples/transcribe/**
+      - scripts/go-product.sh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  admission:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require reviewed six-target admission record
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+
+          path = Path('docs/sprint-503/evidence/native-transcription-admission.json')
+          if not path.is_file():
+              raise SystemExit('BLOCKED: reviewed native-transcription-admission.json is absent')
+          a = json.loads(path.read_text())
+          labels = {'ubuntu-24.04', 'ubuntu-24.04-arm', 'macos-15-intel',
+                    'macos-15', 'windows-2025', 'windows-11-arm'}
+          digest = re.compile(r'[0-9a-f]{64}\Z')
+          def require(ok, why):
+              if not ok:
+                  raise SystemExit('BLOCKED: ' + why)
+          require(a.get('schema') == 's503-native-transcription-admission-v1', 'admission schema')
+          require(set(a.get('deno', {})) == labels, 'six reviewed Deno coordinates')
+          require(set(a.get('whisper', {})) == labels, 'six reviewed native whisper binary digests')
+          for label, d in a['deno'].items():
+              require(d.get('archive_url', '').startswith(
+                  'https://github.com/denoland/deno/releases/download/v2.9.8/deno-'),
+                  label + ' Deno v2.9.8 URL')
+              require(all(digest.fullmatch(d.get(k, '')) for k in
+                          ('archive_sha256', 'executable_sha256')),
+                  label + ' exact Deno hashes')
+          for label, w in a['whisper'].items():
+              require(digest.fullmatch(w.get('executable_sha256', '')),
+                      label + ' exact built whisper-cli SHA-256')
+          require(a.get('yt_dlp_sha256') ==
+                  'b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14',
+                  'reviewed yt-dlp zipapp pin')
+          require(a.get('model_sha256') ==
+                  'be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21',
+                  'reviewed ggml-tiny.bin pin')
+          require(a.get('model_bytes') == 77691713, 'model byte count')
+          require(a.get('operator_media_sha256') ==
+                  'f6aba46f43523ad83a604cec1a05821d4f4288fc55b18db9ad2dea7ccac50ff3',
+                  'operator canonical/short media identity')
+          require(a.get('operator_duration_ms') == 499000, 'operator duration')
+          for key in ('operator_reference', 'controlled_reference'):
+              value = a.get(key, '')
+              require(isinstance(value, str) and len(value.split()) >= 6 and
+                      'FILL' not in value and 'TODO' not in value,
+                      key + ' human-reviewed excerpt')
+          require(a.get('review_evidence'), 'reviewed source for both excerpts')
+          require(a.get('controlled_webm_sha256') ==
+                  'dfa1a92759f3ab64c793d16140204efcd9e7c8b84e367a28efd31548da1f04b4',
+                  'controlled fixture pin')
+          require(isinstance(a.get('controlled_duration_ms'), int) and
+                  a['controlled_duration_ms'] > 0, 'controlled fixture duration')
+          print('PASS: reviewed exact-hash and excerpt admission record has six targets')
+          PY
+
+  native-transcription:
+    needs: admission
+    name: ${{ matrix.label }} online and offline transcription
+    runs-on: ${{ matrix.label }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {label: ubuntu-24.04, os: Linux, arch: amd64, python_arch: x64}
+          - {label: ubuntu-24.04-arm, os: Linux, arch: arm64, python_arch: arm64}
+          - {label: macos-15-intel, os: macOS, arch: amd64, python_arch: x64}
+          - {label: macos-15, os: macOS, arch: arm64, python_arch: arm64}
+          - {label: windows-2025, os: Windows, arch: amd64, python_arch: x64}
+          - {label: windows-11-arm, os: Windows, arch: arm64, python_arch: arm64}
+    env:
+      TARGET_LABEL: ${{ matrix.label }}
+      TARGET_OS: ${{ matrix.os }}
+      TARGET_ARCH: ${{ matrix.arch }}
+      CANDIDATE_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.python_arch }}
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.27.2'
+
+      - name: Verify native toolchain and create evidence root
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          python - <<'PY'
+          import json
+          import os
+          import platform
+          import subprocess
+          from pathlib import Path
+          names = {'Linux': 'Linux', 'Darwin': 'macOS', 'Windows': 'Windows'}
+          os_name = names.get(platform.system(), platform.system())
+          raw = platform.machine()
+          arch = {'x86_64': 'amd64', 'AMD64': 'amd64', 'X64': 'amd64',
+                  'aarch64': 'arm64', 'arm64': 'arm64', 'ARM64': 'arm64'}
+          process_arch = arch.get(raw, raw)
+          os_arch = process_arch
+          if os_name == 'Windows':
+              native = subprocess.check_output(['pwsh', '-NoProfile', '-Command',
+                  '[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()'], text=True).strip()
+              os_arch = arch.get(native, native)
+          translated = '0'
+          if os_name == 'macOS':
+              p = subprocess.run(['sysctl', '-n', 'sysctl.proc_translated'],
+                                 capture_output=True, text=True)
+              if p.returncode == 0:
+                  translated = p.stdout.strip()
+          go_arch = subprocess.check_output(['go', 'env', 'GOHOSTARCH'], text=True).strip()
+          identity = {'schema': 's503-runner-identity-v1',
+                      'runner_label': os.environ['TARGET_LABEL'], 'actual_os': os_name,
+                      'actual_arch': os_arch, 'process_arch': raw, 'go_host_arch': go_arch,
+                      'translated': translated, 'commit_sha': os.environ['CANDIDATE_COMMIT']}
+          Path('evidence/runner-identity.json').write_text(json.dumps(identity, indent=2) + '\n')
+          if (os_name != os.environ['TARGET_OS'] or os_arch != os.environ['TARGET_ARCH'] or
+                  process_arch != os_arch or go_arch != os_arch or translated == '1'):
+              raise SystemExit('non-native runner, Python, or Go toolchain')
+          PY
+
+      - name: Build candidate Bashy, seed adapter and WebM decoder
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/s503-native/bin"
+          suffix=''
+          if [[ "$TARGET_OS" == Windows ]]; then suffix=.exe; fi
+          ./scripts/go-product.sh build -trimpath -o "$RUNNER_TEMP/s503-native/bin/bashy$suffix" ./cmd/bashy
+          go build -trimpath -o "$RUNNER_TEMP/s503-native/bin/transcribe-adapter$suffix" ./examples/transcribe/adapters
+          (cd examples/transcribe/webm-opus && GOWORK=off CGO_ENABLED=0 go build -trimpath \
+            -o "$RUNNER_TEMP/s503-native/bin/transcribe-webm-opus$suffix" .)
+          "$RUNNER_TEMP/s503-native/bin/bashy$suffix" --version
+
+      - name: Admit exact dependencies and acquire both operator URL forms
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The reviewed admission JSON supplies every Deno archive and executable
+          # digest. This step must verify all bytes before the source adapter runs.
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import shutil
+          import urllib.request
+          import zipfile
+
+          root = Path(os.environ['RUNNER_TEMP']) / 's503-native'
+          admission = json.loads(Path('docs/sprint-503/evidence/native-transcription-admission.json').read_text())
+          target = admission['deno'][os.environ['TARGET_LABEL']]
+          deps = root / 'dependencies'
+          deps.mkdir(parents=True, exist_ok=True)
+          def sha(path):
+              h = hashlib.sha256()
+              with path.open('rb') as f:
+                  for chunk in iter(lambda: f.read(1024 * 1024), b''):
+                      h.update(chunk)
+              return h.hexdigest()
+          def fetch(url, path, expected):
+              if not path.exists():
+                  with urllib.request.urlopen(url, timeout=180) as src, path.open('wb') as dst:
+                      shutil.copyfileobj(src, dst)
+              if sha(path) != expected:
+                  raise SystemExit('dependency SHA-256 mismatch: ' + path.name)
+          yt = deps / 'yt-dlp'
+          fetch('https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.21/yt-dlp',
+                yt, admission['yt_dlp_sha256'])
+          model = root / 'cache/models/whisper/ggml-tiny.bin'
+          model.parent.mkdir(parents=True, exist_ok=True)
+          fetch('https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.bin',
+                model, admission['model_sha256'])
+          if model.stat().st_size != admission['model_bytes']:
+              raise SystemExit('model byte count mismatch')
+          archive = deps / 'deno.zip'
+          fetch(target['archive_url'], archive, target['archive_sha256'])
+          deno = deps / ('deno.exe' if os.environ['TARGET_OS'] == 'Windows' else 'deno')
+          with zipfile.ZipFile(archive) as z:
+              names = [i for i in z.infolist() if i.filename == deno.name and not i.is_dir()]
+              if len(names) != 1:
+                  raise SystemExit('Deno archive does not contain one expected executable')
+              with z.open(names[0]) as src, deno.open('wb') as dst:
+                  shutil.copyfileobj(src, dst)
+          if sha(deno) != target['executable_sha256']:
+              raise SystemExit('Deno executable SHA-256 mismatch')
+          deno.chmod(0o755)
+          yt.chmod(0o755)
+          resolved = {'yt_dlp': str(yt.resolve()), 'yt_dlp_sha256': sha(yt),
+                      'model': str(model.resolve()), 'model_sha256': sha(model),
+                      'deno': str(deno.resolve()), 'deno_sha256': sha(deno)}
+          Path('evidence/dependencies.json').write_text(json.dumps(resolved, indent=2) + '\n')
+          PY
+          python examples/transcribe/dependencies/build_whisper.py \
+            --cache-dir "$RUNNER_TEMP/s503-native/cache" \
+            --work-dir "$RUNNER_TEMP/s503-native/whisper-build" \
+            --report-file evidence/whisper-build.json
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 's503-native' / 'bin'
+          names = ('bashy', 'transcribe-adapter', 'transcribe-webm-opus')
+          suffix = '.exe' if os.environ['TARGET_OS'] == 'Windows' else ''
+          built = {n: {'sha256': hashlib.sha256((root / (n + suffix)).read_bytes()).hexdigest(),
+                       'bytes': (root / (n + suffix)).stat().st_size} for n in names}
+          report = json.loads(Path('evidence/whisper-build.json').read_text())
+          admission = json.loads(Path('docs/sprint-503/evidence/native-transcription-admission.json').read_text())
+          expected = admission['whisper'][os.environ['TARGET_LABEL']]['executable_sha256']
+          if report['executable_sha256'] != expected:
+              raise SystemExit('built whisper-cli does not match reviewed native target SHA-256')
+          built['whisper-cli'] = {'sha256': report['executable_sha256'],
+                                  'bytes': report['executable_bytes']}
+          Path('evidence/built-binaries.json').write_text(json.dumps(built, indent=2) + '\n')
+          PY
+          # Subsequent work is gated by the operator fixture preparation and
+          # externally enforced offline policy described in the companion note.
+          echo 'BLOCKED: native operator fixture and offline policy wiring await reviewed admission' >&2
+          exit 1
+
+      - name: Upload partial identity and dependency evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-native-transcription-${{ matrix.label }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 14
