@@ -1,0 +1,16 @@
+# S503.6 Linux static-musl rerun review
+
+[Run 40220215578](https://github.com/qiangli/bashy/actions/runs/40220215578) at Bashy `96f408db5f9c44a16fd820a7c5ebc4d60d61311b` **failed on both native Linux jobs**. This [independent review](linux-musl-40220215578-review.json) keeps `probe_passed=false` and `product_admitted=false` for amd64 and arm64. It used the original uploaded ZIPs in a fresh detached worktree; no binary was built or run on Dragon.
+
+| Target | Artifact ID | Uploaded ZIP SHA-256 | ELF SHA-256 | Final map SHA-256 |
+| --- | ---: | --- | --- | --- |
+| amd64 | `12609191864` | `f55370f4ca83593b676fac5ed26dbf994111e9eb3d30a4da13ea28a298f49bc5` | `3f645450720f14df65f0e838321a88543ed70770d4bd38b975b22df2c9283bdb` | `98a585bf947e4146b15a980a9233b2c53ac3e4efd2e376a3220687d55e467925` |
+| arm64 | `12609595870` | `feae2cd2a291b16614626183aa22ad700d9bf65fc13ea917589c74900e06bc69` | `800b28881e3c7e99cbafe9f7d6b219c2969473806f354ebc5244791cf419809b` | `f757bb07e881dc832731c8c43d0bf995fc6e7997f0123c3a93c07936c4c77c81` |
+
+Both ZIP hashes match GitHub's artifact digest and upload log. ZIP CRC, entry manifest, reports, retained Zig minisign logs and signature bytes, all 23 source/license anchors, Whisper notice, preflight receipts, final link commands, maps, ELF logs, and **all 13 retained direct link inputs per target** rehash. The LLD maps enumerate 407 amd64 and 402 arm64 loaded input sections; their loaded archive members match the inventories. The retained `libzigc.a` bytes each contain only their mapped `libzigc_zcu.o` member. The source pins are Zig 0.15.2 (`02aa270f...` amd64, `958ed7d1...` arm64) and whisper.cpp v1.9.5 (`ff1a9053...`); the minisign logs say archive and comment signatures verified. Neither source archive was uploaded, so this review cannot replay those signature checks against the runner's source bytes. The retained anchor bytes match the prior independent review, including the four musl `_DYNAMIC` source files.
+
+Independent ELF byte parsing finds `ET_EXEC` for the correct machine, no `PT_INTERP`, `PT_DYNAMIC`, `.dynamic`, or GNU version section. Each ELF has exactly one named undefined symbol: `_DYNAMIC`, with zero value/size and `NOTYPE LOCAL HIDDEN UND` attributes. The `nm -u` and `readelf` receipts agree. This meets the **narrow static-marker condition** established by the [previous review](linux-musl-40219544978-review.md); it does not prove runtime behavior. The ELF hashes are identical to that prior run's hashes.
+
+Both jobs then failed at the first CLI `--help` smoke. The copied evidence ELF has mode `0644` in each ZIP. The probe uses `shutil.copyfile()` and tries to execute that copy, producing `[Errno 13] Permission denied` before the CLI starts. The `cli-help.txt` files contain only the attempted command. The conditional attestation steps were skipped; independent `gh attestation verify` queries returned HTTP 404 for both digests.
+
+Preserve executable mode and rerun the native smoke and attestations. Product admission additionally needs exact per-member runtime and Whisper/GGML notice closure, a reviewed notice bundle, real CPU inference and target compatibility, signed tagged release bytes and installer pins, bare-host setup, and the wider Sprint 503 native/operator-media gates. No release or install admission follows from this failed experimental run.

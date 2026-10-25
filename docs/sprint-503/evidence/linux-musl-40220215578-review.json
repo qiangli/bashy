@@ -1,0 +1,78 @@
+{
+  "schema": "s503-linux-musl-native-review-v1",
+  "run_id": 40220215578,
+  "run_conclusion": "failure",
+  "source_commit": "96f408db5f9c44a16fd820a7c5ebc4d60d61311b",
+  "story_id": "74ed924ba244",
+  "product_admitted": false,
+  "scope": "independent review of original GitHub Actions ZIP artifacts; no Dragon build or runtime",
+  "targets": {
+    "amd64": {
+      "job_id": 121249964708,
+      "artifact_id": 12609191864,
+      "artifact_zip_sha256": "f55370f4ca83593b676fac5ed26dbf994111e9eb3d30a4da13ea28a298f49bc5",
+      "probe_report_sha256": "c8e178e5226ab4938763f9db8bace9bab43cc08beca60643aa52fa9e5fa1ce5d",
+      "binary_sha256": "3f645450720f14df65f0e838321a88543ed70770d4bd38b975b22df2c9283bdb",
+      "link_map_sha256": "98a585bf947e4146b15a980a9233b2c53ac3e4efd2e376a3220687d55e467925",
+      "link_map_input_sections": 407,
+      "direct_link_inputs": 13,
+      "all_retained_link_inputs_rehashed": true,
+      "all_23_source_anchors_rehashed": true,
+      "zig_archive_pin_sha256": "02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239",
+      "zig_minisign_log_sha256": "c88880abbc6e232e4991f7f438c19f391eef90d9906550a63a7839cc2ee07aaa",
+      "elf": {
+        "type": "ET_EXEC",
+        "machine": "EM_X86_64",
+        "pt_interp": false,
+        "pt_dynamic": false,
+        "dynamic_section": false,
+        "gnu_version_sections": false,
+        "sole_named_undefined": "_DYNAMIC: NOTYPE LOCAL HIDDEN UND, zero value and size"
+      },
+      "cli_help_smoke": "failed: uploaded binary mode 0644; permission denied before execution",
+      "github_attestation": "absent: attest step skipped; verification query returned HTTP 404",
+      "probe_passed": false,
+      "product_admitted": false
+    },
+    "arm64": {
+      "job_id": 121249964412,
+      "artifact_id": 12609595870,
+      "artifact_zip_sha256": "feae2cd2a291b16614626183aa22ad700d9bf65fc13ea917589c74900e06bc69",
+      "probe_report_sha256": "eb7bb8f386d7843ec7d7e38f370fd60afea192ba86a5df50a0ac10874638b57b",
+      "binary_sha256": "800b28881e3c7e99cbafe9f7d6b219c2969473806f354ebc5244791cf419809b",
+      "link_map_sha256": "f757bb07e881dc832731c8c43d0bf995fc6e7997f0123c3a93c07936c4c77c81",
+      "link_map_input_sections": 402,
+      "direct_link_inputs": 13,
+      "all_retained_link_inputs_rehashed": true,
+      "all_23_source_anchors_rehashed": true,
+      "zig_archive_pin_sha256": "958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f",
+      "zig_minisign_log_sha256": "dca65562240856ab97706da2f869393d3721ce8e8ac1f3f79b16f775aa286757",
+      "elf": {
+        "type": "ET_EXEC",
+        "machine": "EM_AARCH64",
+        "pt_interp": false,
+        "pt_dynamic": false,
+        "dynamic_section": false,
+        "gnu_version_sections": false,
+        "sole_named_undefined": "_DYNAMIC: NOTYPE LOCAL HIDDEN UND, zero value and size"
+      },
+      "cli_help_smoke": "failed: uploaded binary mode 0644; permission denied before execution",
+      "github_attestation": "absent: attest step skipped; verification query returned HTTP 404",
+      "probe_passed": false,
+      "product_admitted": false
+    }
+  },
+  "passed_gates": [
+    "original ZIP SHA-256 equals GitHub artifact digest; ZIP CRC and extracted manifest pass",
+    "runner reports use pinned Zig 0.15.2 and whisper.cpp v1.9.5 source SHA-256 values",
+    "retained minisign logs report verified archive and comment signatures; signature bytes and all 23 source anchors rehash",
+    "preflight, final link command, maps, inventory, 13 retained direct inputs and loaded members agree on both targets",
+    "retained ELF bytes independently parse as static ET_EXEC for each machine with only the exact reviewed local-hidden _DYNAMIC marker"
+  ],
+  "failed_or_unproved_gates": [
+    "CLI help never executed because shutil.copyfile discarded executable mode",
+    "neither job created a GitHub binary attestation",
+    "Zig and whisper source archives were verified by runner but not uploaded for independent signature/source-archive replay",
+    "no model inference, bare-host installation, product notice closure or signed tagged release was established"
+  ]
+}
