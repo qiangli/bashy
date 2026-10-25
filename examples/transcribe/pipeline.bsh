@@ -1,6 +1,24 @@
 #!/usr/bin/env -S bashy --bashsharp
 # One editable Bash# body for the transcribe-pipeline command and skill.
 # Stage data follows docs/transcribe-contract.md; argv is never shell source.
+
+~~~skill as guide
+---
+name: transcribe
+description: Compose registered source, decoder, local inference and export adapters for one finite media input. The executable body is this Bash# file; register it as transcribe-pipeline.
+metadata:
+  requires: "has=bashy"
+---
+# Local transcription pipeline
+
+Run `bashy transcribe --help` for options and `bashy skill show transcribe`
+for adapter requirements and verification. This file is the one executable
+body for the command and the text-outer skill step. Use
+`bashy src show transcribe-pipeline` to inspect the registered source and
+`bashy commands set transcribe-pipeline --set exec.2=/absolute/local/file.bsh`
+to compose a local variant. Stub fixtures prove composition only.
+~~~
+
 set -e
 
 usage() {
@@ -10,6 +28,7 @@ usage() {
 model=default language=auto format=txt output= source= decoder= provider= exporter= device=cpu
 while (( $# )); do
     case "$1" in
+        --skill) sed -n '/^~~~skill/,/^~~~$/p' "$0" | sed '1d;$d'; exit 0 ;;
         --model|--language|--format|--output|--source|--decoder|--provider|--exporter|--device)
             (( $# >= 2 )) || usage
             case "$1" in
@@ -28,25 +47,35 @@ input=$1
 [[ -n $input && -n $model && -n $language && $device == cpu ]] || usage
 case "$format" in txt|srt|vtt) ;; *) usage ;; esac
 
-# S503.2 owns automatic selection. Explicit names keep fixture proof honest.
-for selected in "$source" "$decoder" "$provider" "$exporter"; do
-    if [[ -z $selected ]]; then
-        echo 'transcribe-pipeline: automatic adapter selection is unavailable; pass --source, --decoder, --provider, and --exporter (S503.2)' >&2
-        exit 126
-    fi
-done
-
-# Export beside the requested path and rename only after validation.
+# Export beside the requested path and publish only after validation.
 if [[ -z $output ]]; then
     case "$input" in
         *://*) output=transcript.$format ;;
         *) name=${input##*/}; name=${name%.*}; output=${name:-transcript}.$format ;;
     esac
 fi
-case "$output" in /*) final=$output ;; *) final=$PWD/$output ;; esac
-parent=${final%/*}
-[[ -n $parent ]] || parent=/
+final=$(realpath -m -s -- "$output") || exit 2
+parent=$(dirname -- "$final") || exit 2
 [[ -d $parent ]] || { echo "transcribe-pipeline: output directory does not exist: $parent" >&2; exit 2; }
+
+# S503.2 owns the generic selector. Its interface takes the same request JSON
+# as the stage and prints exactly one registered name. Explicit selection wins.
+select_stage() {
+    local stage=$1 explicit=$2 request=$3 chosen
+    if [[ -n $explicit ]]; then
+        echo "$explicit"
+        return 0
+    fi
+    if ! chosen=$(bashy transcribe select "$stage" "$request"); then
+        echo "transcribe-pipeline: no usable $stage adapter; register one or pass its name explicitly (S503.2)" >&2
+        return 126
+    fi
+    if [[ -z $chosen || $chosen == *[[:space:]]* ]]; then
+        echo "transcribe-pipeline: $stage selector did not return one provider name" >&2
+        return 1
+    fi
+    echo "$chosen"
+}
 
 stage_run() {
     local stage=$1 selected=$2 request=$3 result=$4 path
@@ -90,6 +119,7 @@ cleanup() {
 @require('test -n "$1"')
 @ensure('test "$STATUS" -eq 0 && test "$published" -eq 1 && test -s "$final"')
 agentic function transcribe_pipeline() {
+    local selected
     published=0
     work=$(mktemp -d) || return 1
     trap cleanup EXIT
@@ -102,18 +132,22 @@ agentic function transcribe_pipeline() {
 
     jq -n '{version:"bashy-transcribe-stage-v1",stage:"acquire",input:env.TRANSCRIBE_JSON_INPUT,
             work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' > "$work/acquire-in.json"
-    stage_run acquire "$source" "$work/acquire-in.json" "$work/acquire-out.json" || return 1
+    selected=$(select_stage acquire "$source" "$work/acquire-in.json") || return 1
+    stage_run acquire "$selected" "$work/acquire-in.json" "$work/acquire-out.json" || return 1
     jq '{version:"bashy-transcribe-stage-v1",stage:"decode",artifacts:.artifacts,media:.media,
          work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' "$work/acquire-out.json" > "$work/decode-in.json"
-    stage_run decode "$decoder" "$work/decode-in.json" "$work/decode-out.json" || return 1
+    selected=$(select_stage decode "$decoder" "$work/decode-in.json") || return 1
+    stage_run decode "$selected" "$work/decode-in.json" "$work/decode-out.json" || return 1
     jq '{version:"bashy-transcribe-stage-v1",stage:"infer",artifacts:.artifacts,media:.media,
          model:env.TRANSCRIBE_JSON_MODEL,language:env.TRANSCRIBE_JSON_LANGUAGE,
          work_dir:env.TRANSCRIBE_JSON_WORK_DIR}' "$work/decode-out.json" > "$work/infer-in.json"
-    stage_run infer "$provider" "$work/infer-in.json" "$work/infer-out.json" || return 1
+    selected=$(select_stage infer "$provider" "$work/infer-in.json") || return 1
+    stage_run infer "$selected" "$work/infer-in.json" "$work/infer-out.json" || return 1
     jq '{version:"bashy-transcribe-stage-v1",stage:"export",segments:.segments,media:.media,
          format:env.TRANSCRIBE_JSON_FORMAT,output:env.TRANSCRIBE_JSON_OUTPUT}' \
          "$work/infer-out.json" > "$work/export-in.json"
-    stage_run export "$exporter" "$work/export-in.json" "$work/export-out.json" || return 1
+    selected=$(select_stage export "$exporter" "$work/export-in.json") || return 1
+    stage_run export "$selected" "$work/export-in.json" "$work/export-out.json" || return 1
 
     local reported
     reported=$(jq -r '.artifacts[0].path' "$work/export-out.json") || return 1
@@ -121,7 +155,10 @@ agentic function transcribe_pipeline() {
         echo 'transcribe-pipeline: export provider did not create the requested nonempty artifact' >&2
         return 1
     }
-    mv -f "$reported" "$final" || return 1
+    if ! ln "$reported" "$final"; then
+        echo "transcribe-pipeline: output already exists or cannot be published: $final" >&2
+        return 1
+    fi
     published=1
     echo "$final"
 }

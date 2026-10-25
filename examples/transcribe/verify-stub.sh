@@ -44,6 +44,8 @@ for pair in 'stub-source acquire' 'stub-decoder decode' 'stub-infer infer' 'stub
         --set effects.0=read --set effects.1=write >/dev/null
 done
 pipeline="$root/examples/transcribe/pipeline.bsh"
+"$BASHY_BIN" --bashsharp "$pipeline" --skill > "$work/script-skill.md"
+grep -F 'name: transcribe' "$work/script-skill.md" >/dev/null
 "$BASHY_BIN" commands add transcribe-pipeline \
     --set "exec.0=$BASHY_BIN" --set exec.1=--bashsharp \
     --set "exec.2=$pipeline" --set effects.0=read --set effects.1=write \
@@ -94,11 +96,21 @@ test "$(cat "$work/direct.txt")" = 'fixture only'
 cp "$root/skills/bashy/commands/transcribe.md" "$work/skill/SKILL.md"
 cp "$root/skills/bashy/commands/transcribe.dhnt" "$work/skill/skill.dhnt"
 "$BASHY_BIN" skill add "$work/skill" >/dev/null
+"$BASHY_BIN" skill show transcribe > "$work/prose-skill.md"
+grep -F 'name: transcribe' "$work/prose-skill.md" >/dev/null
+"$BASHY_BIN" skill show transcribe --json > "$work/skill-record.json"
+"$BASHY_BIN" jq -e '.contract.effects == ["read","write","destroy","net"] and
+    .contract.ensure == ["gereeni"] and .contract.steps == 1 and
+    (.identity | length > 0) and (.capability | length > 0)' "$work/skill-record.json" >/dev/null
 export BASHY_TRANSCRIBE_INPUT="$STUB_MEDIA" BASHY_TRANSCRIBE_RESULT="$work/skill-path.txt"
 export BASHY_TRANSCRIBE_OUTPUT="$work/skill.txt"
 export BASHY_TRANSCRIBE_SOURCE=stub-source BASHY_TRANSCRIBE_DECODER=stub-decoder
 export BASHY_TRANSCRIBE_PROVIDER=stub-infer BASHY_TRANSCRIBE_EXPORTER=stub-export
 "$BASHY_BIN" skill run transcribe --json > "$work/skill-receipt.json"
+test "$("$BASHY_BIN" jq -r '.identity' "$work/skill-record.json")" = \
+    "$("$BASHY_BIN" jq -r '.attest.Skill' "$work/skill-receipt.json")"
+test "$("$BASHY_BIN" jq -r '.capability' "$work/skill-record.json")" = \
+    "$("$BASHY_BIN" jq -r '.capability' "$work/skill-receipt.json")"
 test "$(cat "$work/skill-path.txt")" = "$work/skill.txt"
 cmp "$work/direct.txt" "$work/skill.txt"
 "$BASHY_BIN" jq -e '.attest.Valid == true and (.attest.Skill | length > 0) and (.attest.Passed | length > 0)' "$work/skill-receipt.json" >/dev/null
@@ -120,13 +132,24 @@ bashy transcribe $common --output "$work/override.txt" "$STUB_MEDIA" > "$work/ov
 cmp "$work/direct.txt" "$work/override.txt"
 printf 'existing output\n' > "$work/failed.txt"
 # shellcheck disable=SC2086
-if STUB_BAD_INFER=1 bashy transcribe $common --output "$work/failed.txt" "$STUB_MEDIA" > "$work/failed-path.txt"; then
+if STUB_BAD_INFER=1 bashy transcribe $common --output "$work/failed.txt" "$STUB_MEDIA" > "$work/failed-path.txt" 2> "$work/failed.stderr"; then
     echo 'invalid infer result was accepted' >&2
     exit 1
 fi
+grep -F 'invalid v1 result' "$work/failed.stderr" >/dev/null
 test "$(cat "$work/failed.txt")" = 'existing output'
 test ! -s "$work/failed-path.txt"
 set -- "$work"/.transcribe.*
 test ! -e "$1"
 "$BASHY_BIN" tail -n 1 "$ledger" | "$BASHY_BIN" jq -e '.attest.Valid == false' >/dev/null
+# A successful stub export still may not replace a pre-existing final file.
+if bashy transcribe $common --output "$work/failed.txt" "$STUB_MEDIA" > "$work/collision-path.txt" 2> "$work/collision.stderr"; then
+    echo 'pre-existing output was overwritten' >&2
+    exit 1
+fi
+grep -F 'output already exists' "$work/collision.stderr" >/dev/null
+test "$(cat "$work/failed.txt")" = 'existing output'
+test ! -s "$work/collision-path.txt"
+set -- "$work"/.transcribe.*
+test ! -e "$1"
 printf 'stub orientations PASS; same body receipt, skill receipt, editable source override\n'

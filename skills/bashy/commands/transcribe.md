@@ -12,9 +12,11 @@ metadata:
 This skill's executable step calls `bashy transcribe`. That front door invokes
 the registered `transcribe-pipeline` command, whose only implementation is
 [`pipeline.bsh`](../../../examples/transcribe/pipeline.bsh). Run the script
-directly with `bashy --bashsharp` to use the code-outer orientation. Install
-the skill as part of bashy's single embedded `bashy` skill, or copy it to a
-local skill ring for editing. The same Bash# file runs in both orientations.
+directly with `bashy --bashsharp` to use the code-outer orientation. This
+skill face is embedded through bashy's single `bashy` skill; copy it to a
+local skill ring when editing the prose. The same Bash# file runs in both
+orientations.
+The script's `--skill` flag prints its code-facing `~~~skill` guidance.
 
 ## Requirements and discovery
 
@@ -26,10 +28,16 @@ local skill ring for editing. The same Bash# file runs in both orientations.
   directory. Its cap is read, write, destroy (owned temporary cleanup), and
   network. The Bash# body also declares exec because adapters are commands.
   Adapter-specific dependencies and effects remain in their registered records.
-- S503.2 supplies automatic applicability and ambiguity resolution. Until its
-  integration, pass all four provider names explicitly. S503.4 and S503.6
-  supply real local inference and verified dependencies. A fixture adapter
-  proves composition only; it is not transcription evidence.
+- Automatic selection calls `bashy transcribe select STAGE REQUEST.json`
+  for each omitted provider. S503.2 supplies that selector's declared
+  applicability, ambiguity errors and local overrides. Explicit names take
+  precedence. Until S503.2 is integrated, pass all four names explicitly.
+  S503.4 and S503.6 supply real inference and verified dependencies.
+- The pipeline passes optional `work_dir` in acquire, decode and infer
+  requests. Adapters should put owned intermediates there so the unit removes
+  them on success, failure or cancellation. Export writes to the pipeline's
+  adjacent temporary output; the unit publishes it with an exclusive hard
+  link only after validation and refuses an existing final path.
 
 ## Run
 
@@ -63,9 +71,12 @@ dispatch edits. `bashy skill show transcribe` discovers the prose face.
 
 ## Verification
 
-`sh examples/transcribe/verify-stub.sh` registers fixture adapters, runs the
-command and skill orientations, compares output bytes and function receipts,
-checks the additional skill receipt, and proves `src show` follows a local
-source override. Fixture text says `fixture only`; it does not prove
-transcription. S503.2 integration adds automatic selection and ambiguity
-tests; S503.4/5/6/8 own real media quality and native runtime evidence.
+`sh examples/transcribe/verify-stub.sh` registers fixture adapters, runs
+the script and skill orientations, compares output bytes and function receipts,
+checks the skill identity, contract, effect cap and receipt, and proves a
+local command source override. With a candidate binary that contains S503.1,
+set `BASHY_BIN=/absolute/path/to/bashy BASHY_TRANSCRIBE_NATIVE=1` to use
+its real front door. The default test shim supplies only that front door for
+an older installed binary. Fixture text says `fixture only`; it does not
+prove transcription. S503.2 integration adds automatic selection and
+ambiguity tests; S503.4/5/6/8 own real media quality and native evidence.
