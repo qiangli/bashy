@@ -4,8 +4,8 @@ name: S503 Linux permissive musl runtime experiment
 on:
   workflow_dispatch:
   # GitHub requires a workflow on the default branch for manual dispatch.
-  # Run this experiment once when the reviewed workflow first lands on the
-  # isolated sprint branch; later source/pin pushes do not rerun it.
+  # Run on reviewed workflow revisions in the isolated sprint branch;
+  # unrelated source and pin pushes do not rerun it.
   push:
     branches:
       - s503-contract-integration
