@@ -1,0 +1,116 @@
+{
+  "candidate_commit": "68a58c5fdbc6b190e14ad7b2abd7c97882021afe",
+  "independent_local_checks": "Rehashed six binaries, build reports, notice bundles, source notice files, four maps and inventories, every SHA256SUMS asset; local release staging passed.",
+  "open_gates": [
+    "Exact linked source-to-binary license review for GCC and MinGW runtime members remains open.",
+    "Operator Python native installer artifacts and dependency policy remain unadmitted.",
+    "Operator-video six-target acquisition, speech reference and full transcription acceptance remain open."
+  ],
+  "product_admitted": false,
+  "release_manifest_sha256": "e3253268b0462d549e3ee619711dbac6c8db296f161f4f73ed9c32e285453b94",
+  "release_sha256sums_sha256": "1d07f8cc7a919ae1bfc1b19339f85290516b28dee934389d8fb17acf1430db97",
+  "retained_evidence_file_count": 72,
+  "run_conclusion": "success",
+  "run_id": 40213424169,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40213424169",
+  "schema": "s503-whisper-notices-review-v2",
+  "signed_provenance": "Six gh attestation verify checks passed; certificates bind binaries to this candidate commit and workflow run.",
+  "targets": [
+    {
+      "artifact_name": "s503-native-build-macos-15-intel",
+      "binary_sha256": "2fdaf42c5e9a54d993804570a415711615ae03c1a3ea2534a7a808c833f961fe",
+      "build_report_sha256": "f36a5dc656bda386ddd962902f64913344d6b4d75d192ea7fde5cf718d05e06f",
+      "notice_bundle_sha256": "a7f95b790b095a07f3c407a74e1450f6ef26d84933981e5acf3f14655243733a",
+      "notice_count": 4,
+      "notice_manifest_sha256": "ad3b9b718d4767b040173d5cffe80a68c125bcd93f32f195129148c66d963d8d",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "Verify macOS linked system framework and runtime inventory and applicable host license notices before product admission."
+      ],
+      "target": "darwin/amd64"
+    },
+    {
+      "artifact_name": "s503-native-build-macos-15",
+      "binary_sha256": "0acf2d8f2541d40ae59c7d0656505aaaa02abcb6506d266c6f8fc6461b56b75d",
+      "build_report_sha256": "e2759dca46da00a14e0aedbb30cd83713288bbbf939a3017e119a5bccfb3d636",
+      "notice_bundle_sha256": "a7f95b790b095a07f3c407a74e1450f6ef26d84933981e5acf3f14655243733a",
+      "notice_count": 4,
+      "notice_manifest_sha256": "33a5ce8c5a877f39fc5fa9f5b0e89bb51b55b097c15903f6b71292a341e991d6",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "Verify macOS linked system framework and runtime inventory and applicable host license notices before product admission."
+      ],
+      "target": "darwin/arm64"
+    },
+    {
+      "artifact_name": "s503-native-build-ubuntu-24.04",
+      "binary_sha256": "2845696e75ceb494cd3f17dc2394e529d219eb6e0c4484a3f24e15a356dfa1fe",
+      "build_report_sha256": "23b9c17633751000297801963312ef4e434696bed962e4ee56e7c4f1c13319e6",
+      "link_inventory_sha256": "9bb47ead5cba0ff30370366d7c716cab573a51ab298cf29fb563bb2a0d3ad5dd",
+      "linked_archive_member_count": 123,
+      "map_sha256": "9f87c5334da9b95abe71e71f16177eb440ccb912e1ed0e1f25fa14bc8a8e4155",
+      "notice_bundle_sha256": "085f19a4ada1229b7f56d981e39f0a85bd9da5ea247ba1db51c29ee5b23becc5",
+      "notice_count": 4,
+      "notice_manifest_sha256": "fe16c2173051faac2efd09e70e2ed5e3a6697d8610874ab35e28c3f6daa1e933",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "GCC runtime exception unresolved: inspect exact GPLv3 GCC Runtime Library Exception applicability and source notices for retained static members, or rebuild with host-provided dynamic libstdc++ and verify imports."
+      ],
+      "runtime_archive_member_count": 100,
+      "target": "linux/amd64"
+    },
+    {
+      "artifact_name": "s503-native-build-ubuntu-24.04-arm",
+      "binary_sha256": "02296f34c7e8fdbfcb1bf8c623addda1be138e1a40d2dcc69cdd68a7239eaa2d",
+      "build_report_sha256": "51012b9db0f90040987217542ab66a463dbdf7d278b1178fdf154180220768d4",
+      "link_inventory_sha256": "362cc5e8d3dc71a567aba94e5e7747bc1716da1b2fe0f622211f1e7bb7bd3ef3",
+      "linked_archive_member_count": 134,
+      "map_sha256": "b886f4f1c2ce6cffc8646b733232141c4e9485518b5f8fb41486e6caf7efe3f1",
+      "notice_bundle_sha256": "085f19a4ada1229b7f56d981e39f0a85bd9da5ea247ba1db51c29ee5b23becc5",
+      "notice_count": 4,
+      "notice_manifest_sha256": "18994a5a44abe1bd2b7204a0f08582888c78fc7c45da6d944d9c6ff49fa1b4db",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "GCC runtime exception unresolved: inspect exact GPLv3 GCC Runtime Library Exception applicability and source notices for retained static members, or rebuild with host-provided dynamic libstdc++ and verify imports."
+      ],
+      "runtime_archive_member_count": 111,
+      "target": "linux/arm64"
+    },
+    {
+      "artifact_name": "s503-native-build-windows-2025",
+      "binary_sha256": "a04db96a0802bda22819d7b8f1e26e6c03b57e56bc698a40e673a09c8abf6d9e",
+      "build_report_sha256": "b07de23d6fcbbed82cce692e57b597f976d04789011ddb4d1932cbd5bd579fa1",
+      "link_inventory_sha256": "417746c9619c8fe63a1e4906f872767972aa3429bcc51a48d36e82e45eb0d174",
+      "linked_archive_member_count": 141,
+      "map_sha256": "492d869f01ce5a8afb23edffd51b3fe4a53626cfd16ee14ce910cd4f3019746e",
+      "notice_bundle_sha256": "1b95f7c23c0963c170b96875d246f37fc924e3ae5a316d4b4e15ba909310d4b0",
+      "notice_count": 11,
+      "notice_manifest_sha256": "219e6eb4b0a64687d8784db603a4d3f1e6d6cc6ad85080a9d312edb06e4a1fa1",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "MinGW runtime notice itself flags Cephes math source licensing as uncertain; verify linked member source lineage.",
+        "Verify source-to-prebuilt llvm-mingw archive provenance and all linked MinGW member licenses before product admission."
+      ],
+      "runtime_archive_member_count": 0,
+      "target": "windows/amd64"
+    },
+    {
+      "artifact_name": "s503-native-build-windows-11-arm",
+      "binary_sha256": "5df5c2ec8778d49635630a89324651fb76db1c9f86f15c75ad41033f10f2e252",
+      "build_report_sha256": "4cadc05059186743bc7a125a760b47317403751f34d9831550d9766cb2a6fade",
+      "link_inventory_sha256": "213e421ea578cb420e85cbe8611638c7fe903fce9ca0aea4aad21183eafb5bca",
+      "linked_archive_member_count": 131,
+      "map_sha256": "2639fd586fe652d6bcee3a2b1022ea05b4dfcfeeac445549bd29f953ddd318f3",
+      "notice_bundle_sha256": "1b95f7c23c0963c170b96875d246f37fc924e3ae5a316d4b4e15ba909310d4b0",
+      "notice_count": 11,
+      "notice_manifest_sha256": "ef9e619b4aff9f07e2551c2b9c0365af7b8fc1a7aca0d6fb9a685d71dee05da3",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "MinGW runtime notice itself flags Cephes math source licensing as uncertain; verify linked member source lineage.",
+        "Verify source-to-prebuilt llvm-mingw archive provenance and all linked MinGW member licenses before product admission."
+      ],
+      "runtime_archive_member_count": 0,
+      "target": "windows/arm64"
+    }
+  ]
+}
