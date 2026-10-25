@@ -69,6 +69,8 @@ tries a real TCP connection before and after the offline harness while the
 policy is active. A successful connection, missing rule, unsupported namespace
 or sandbox, wrong error, or failed replay fails the job. Windows avoids a
 global outbound block that could sever the hosted runner's own heartbeat.
+Its canary accepts only Winsock 10013 (access denied), observed with an active
+program rule; a timeout or unreachable network is not firewall proof.
 The artifact upload retains manifests, native identities, hashes, transcripts,
 receipts and canary reports even when the job fails.
 

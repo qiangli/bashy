@@ -593,9 +593,9 @@ jobs:
                                    'DENIED_ERRNO=101 '),
                          'Darwin': ('DENIED_ERRNO=1 ', 'DENIED_ERRNO=13 ',
                                     'DENIED_ERRNO=51 '),
-                         'Windows': ('DENIED_WINERROR=10013 ',
-                                     'DENIED_WINERROR=10051 ',
-                                     'DENIED_WINERROR=10060 ')}
+                         # WSAEACCES is the observed firewall-rule denial.
+                         # Network unreachable and timeout do not establish it.
+                         'Windows': ('DENIED_WINERROR=10013 ',)}
               os_name = platform.system()
               if proc.returncode != 23 or not any(
                       code in error for code in allowed[os_name]):
