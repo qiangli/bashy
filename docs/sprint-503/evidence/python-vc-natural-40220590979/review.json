@@ -1,0 +1,129 @@
+{
+  "candidate_commit": "3b79ba4ae385fbb41a9fa7787dc9a8b5e3f0156e",
+  "limits": [
+    "windows/amd64 has no natural-load report: bare python invoked the Windows Store alias after installation. Workflow correction 21827072 invokes setup-python by explicit absolute path; it was not part of this run and requires native rerun.",
+    "windows/arm64 observes a process that has imported ctypes and then bz2/lzma/ssl/zlib. Absence of a named DLL in those snapshots does not prove absence from every future workload. GetModuleHandleW observes loaded modules; it does not load a named VC DLL in this collector.",
+    "Valid Authenticode status and signer are native-runner observations. The bounded artifacts contain no interpreter or DLL bytes, so their measured hashes and signatures cannot be independently revalidated from the downloaded ZIP.",
+    "App-local VCRUNTIME140_1.dll is present and signed in arm64 inventory but not naturally loaded in the observed process. Exact redistribution rights, all import paths and operator-host dependency policy remain unresolved.",
+    "No hosted research receipt establishes product redistribution rights, native operator-host availability, real YouTube inference or offline operator replay."
+  ],
+  "operator_admitted": false,
+  "product_admitted": false,
+  "run_conclusion": "failure",
+  "run_id": 40220590979,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40220590979",
+  "schema": "s503-windows-vc-natural-run-independent-review-v1",
+  "scope": "Native hosted research under a fresh private Python.org 3.12.10 prefix. No operator-host or product admission.",
+  "targets": [
+    {
+      "artifact_file_count": 24,
+      "artifact_id": 12608389273,
+      "artifact_name": "s503-python-vc-windows-2025",
+      "artifact_zip_sha256": "dd95a2b3fee3fc3d39c42f39c2fb7398b543d4cdd6de901777ffbbc6e70a26b3",
+      "bootstrap_error": "The bare python command resolved the Windows Store App Execution Alias (exit 49) after fresh install; passive probe never ran.",
+      "installed_installer_sha256": "67b5635e80ea51072b87941312d00ec8927c4db9ba18938f7ad2d27b328b95fb",
+      "installed_python_sha256": "4d6f5f81a4bca11191c4c7c6b43632694d0a4ce74e068619d8fdc161d469859a",
+      "installed_result": "INSTALLED_EVIDENCE_CAPTURED_UNADMITTED",
+      "installed_result_sha256": "aa2a25a9da11176cbe8e80b004707dd38382c6d043017d8e0ebc5dc8d96be5a7",
+      "installer_deleted": true,
+      "job_conclusion": "failure",
+      "job_id": 121251109316,
+      "job_log_sha256": "f049babb748bd4e93882d596e379989470a282390cae29d8ac758c6daed4bdb6",
+      "native_measurements_not_rehashable_from_artifact": true,
+      "natural_load_report_sha256": null,
+      "natural_load_result": "NOT_CAPTURED_WORKFLOW_BOOTSTRAP_ERROR",
+      "notice_copies_verified": 3,
+      "operator_admitted": false,
+      "product_admitted": false,
+      "receipt_log_streams_verified": 16,
+      "target": "windows/amd64"
+    },
+    {
+      "after_stdlib_imports": {
+        "CONCRT140.dll": null,
+        "MSVCP140.dll": null,
+        "VCRUNTIME140.dll": {
+          "path": "C:\\Users\\runneradmin\\AppData\\Local\\Bashy\\Python-3.12.10-ARM64\\VCRUNTIME140.dll",
+          "sha256": "560cd0ab1ec81b8b2197b119e198453a9c23d2f9e846f15c79a26bf5d75b68c4"
+        },
+        "VCRUNTIME140_1.dll": null,
+        "ucrtbase.dll": {
+          "path": "C:\\Windows\\System32\\ucrtbase.dll",
+          "sha256": "e59858bf4245cb0889d8da773612b75d58ac716be5d6bb801e1b39594dccfc6d"
+        }
+      },
+      "artifact_file_count": 25,
+      "artifact_id": 12609508661,
+      "artifact_name": "s503-python-vc-windows-11-arm",
+      "artifact_zip_sha256": "56bb0be94400d2f3c68f1d97fb814eae757ce382e41281602de37dcb609ae67a",
+      "authenticode": [
+        {
+          "file_version": "14.42.34438.0",
+          "path": "C:\\Users\\runneradmin\\AppData\\Local\\Bashy\\Python-3.12.10-ARM64\\vcruntime140.dll",
+          "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+          "status": "Valid"
+        },
+        {
+          "file_version": "14.42.34438.0",
+          "path": "C:\\Users\\runneradmin\\AppData\\Local\\Bashy\\Python-3.12.10-ARM64\\vcruntime140_1.dll",
+          "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+          "status": "Valid"
+        },
+        {
+          "file_version": "14.51.36247.0",
+          "path": "C:\\Windows\\System32\\MSVCP140.dll",
+          "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+          "status": "Valid"
+        },
+        {
+          "file_version": "14.51.36247.0",
+          "path": "C:\\Windows\\System32\\VCRUNTIME140.dll",
+          "signer": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+          "status": "Valid"
+        },
+        {
+          "file_version": "10.0.26100.9711 (WinBuild.160101.0800)",
+          "path": "C:\\Windows\\System32\\ucrtbase.dll",
+          "signer": "CN=Microsoft Windows, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+          "status": "Valid"
+        }
+      ],
+      "before_stdlib_imports": {
+        "CONCRT140.dll": null,
+        "MSVCP140.dll": null,
+        "VCRUNTIME140.dll": {
+          "path": "C:\\Users\\runneradmin\\AppData\\Local\\Bashy\\Python-3.12.10-ARM64\\VCRUNTIME140.dll",
+          "sha256": "560cd0ab1ec81b8b2197b119e198453a9c23d2f9e846f15c79a26bf5d75b68c4"
+        },
+        "VCRUNTIME140_1.dll": null,
+        "ucrtbase.dll": {
+          "path": "C:\\Windows\\System32\\ucrtbase.dll",
+          "sha256": "e59858bf4245cb0889d8da773612b75d58ac716be5d6bb801e1b39594dccfc6d"
+        }
+      },
+      "installed_installer_sha256": "377ac8fd478987940088e879441e702a71b53164d2a1e6f1d51ff77a7e470258",
+      "installed_python_sha256": "7f1ebbbb04164caf8f8073aafa7f82321fb44695e10fe6a9ebaf2138b63892c4",
+      "installed_result": "INSTALLED_EVIDENCE_CAPTURED_UNADMITTED",
+      "installed_result_sha256": "d82e8063c9e647ee7a3097dc3d28c97b2dd2a2097a6e3838e4a73998338b3832",
+      "installer_deleted": true,
+      "job_conclusion": "success",
+      "job_id": 121251109538,
+      "job_log_sha256": "2eeb5f530be14251148debc7eba2b5c057bdf2e0289a3f4fd9f0395452bcbb0e",
+      "native_measurements_not_rehashable_from_artifact": true,
+      "natural_load_report_sha256": "90c261b9557a7165fb50c22563fbb7844d70aea4f786dc031df6d1543354ce94",
+      "natural_load_result": "NATURAL_LOAD_EVIDENCE_CAPTURED_UNADMITTED",
+      "notice_copies_verified": 3,
+      "operator_admitted": false,
+      "product_admitted": false,
+      "receipt_log_streams_verified": 16,
+      "target": "windows/arm64",
+      "unreviewed_natural_vc_loads": {}
+    }
+  ],
+  "verification": [
+    "Fetched each raw GitHub artifact ZIP and matched its SHA-256 to the GitHub artifact API digest. ZIP entries exactly match extracted entries.",
+    "Rehashed both installed result.json files, 16 stdout/stderr streams and three retained notice copies per target against each receipt; installed interpreter, installer and VC inventory measurements matched prior run 40217639044.",
+    "Linked the arm64 vc-natural-load.json to its exact installed result SHA-256 and checked target, inventory, report state and all five Authenticode observations.",
+    "Read both completed native job logs and recorded their SHA-256."
+  ]
+}
