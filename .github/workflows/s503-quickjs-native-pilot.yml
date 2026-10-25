@@ -1,0 +1,58 @@
+name: S503 QuickJS-NG native EJS evidence pilot
+
+# Evidence only. No automatic trigger, product installation, or release gate.
+# workflow_dispatch requires this reviewed workflow to be registered on the
+# repository default branch before a manager can launch it.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: s503-quickjs-native-pilot-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quickjs-ejs:
+    name: QuickJS-NG v0.17.0 ${{ matrix.target }} source/link/EJS pilot
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            target: linux/amd64
+            python_arch: x64
+          - runner: windows-11-arm
+            target: windows/arm64
+            python_arch: arm64
+    env:
+      PILOT_TARGET: ${{ matrix.target }}
+      PILOT_WORK_DIR: ${{ runner.temp }}/s503-quickjs-pilot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.python_arch }}
+      - name: Check archive, machine-header and gate guards
+        shell: pwsh
+        run: |
+          python -m unittest discover -s .github/scripts -p 'test_s503_quickjs_native_pilot.py' -v
+      - name: Build native qjs and capture fail-closed source/link/EJS evidence
+        shell: pwsh
+        run: |
+          python .github/scripts/s503_quickjs_native_pilot.py `
+            --target "$env:PILOT_TARGET" `
+            --work-dir "$env:PILOT_WORK_DIR" `
+            --evidence-dir evidence/quickjs-pilot
+      - name: Retain research evidence on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-quickjs-pilot-${{ matrix.runner }}
+          path: evidence/quickjs-pilot/
+          if-no-files-found: warn
+          retention-days: 14
