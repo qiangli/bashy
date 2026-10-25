@@ -242,8 +242,9 @@ case "$target" in
         case "$signature" in *'Developer ID Installer: Python Software Foundation (BMM5U3QVKW)'*) ;; *) fail 'macOS installer signer differs from Python Software Foundation' ;; esac
         /usr/sbin/spctl --assess --type install "$staged_artifact" || fail 'macOS installer assessment rejected the package' ;;
     windows/*)
-        BASHY_PYTHON_INSTALLER_ARTIFACT=$(cygpath -m "$staged_artifact") ||
-            fail 'cannot pass staged installer path to native Windows signature check'
+        # realpath above requires a native drive path; PowerShell accepts
+        # either slash style without a Git Bash/cygpath dependency.
+        BASHY_PYTHON_INSTALLER_ARTIFACT=$staged_artifact
         export BASHY_PYTHON_INSTALLER_ARTIFACT
         powershell.exe -NoProfile -NonInteractive -Command '
           $ErrorActionPreference="Stop"
