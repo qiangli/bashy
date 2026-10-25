@@ -1,0 +1,86 @@
+{
+  "schema": "s503-linux-musl-native-review-v1",
+  "run_id": 40220541369,
+  "run_conclusion": "success",
+  "source_commit": "7c77581a50b840fd36d2c6bbad666a31b6bf36fb",
+  "story_id": "74ed924ba244",
+  "scope": "independent original-artifact and signed-attestation review; no Dragon build or runtime",
+  "product_admitted": false,
+  "targets": {
+    "amd64": {
+      "job_id": 121250959526,
+      "artifact_id": 12609596428,
+      "artifact_zip_sha256": "9e6a6332a6dd27615fd760f46179f6746a1617aacee854ac5d90951acb99fab5",
+      "probe_report_sha256": "fcaca446efee83e74bcca086f347703d46c079054f6bdea4045b218e8ed4510f",
+      "binary_sha256": "3f645450720f14df65f0e838321a88543ed70770d4bd38b975b22df2c9283bdb",
+      "link_map_sha256": "350a772c7e7ed7cb87665db0f2d92f77be3bcfb38abfd23eb5606f08021445f8",
+      "link_map_input_sections": 407,
+      "retained_direct_link_inputs": 13,
+      "all_link_inputs_rehashed_and_mapped": true,
+      "all_23_source_anchors_rehashed": true,
+      "zig_archive_pin_sha256": "02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239",
+      "zig_minisign_log_sha256": "c88880abbc6e232e4991f7f438c19f391eef90d9906550a63a7839cc2ee07aaa",
+      "elf": {
+        "type": "ET_EXEC",
+        "machine": "EM_X86_64",
+        "pt_interp": false,
+        "pt_dynamic": false,
+        "dynamic_section": false,
+        "gnu_version_sections": false,
+        "sole_named_undefined": "_DYNAMIC: NOTYPE LOCAL HIDDEN UND, zero value and size"
+      },
+      "uploaded_executable_mode": "0755",
+      "native_cli_help": "pass; 5,642-byte usage output retained",
+      "github_attestation": "verified for exact ELF SHA-256, signer workflow, source commit, branch ref and run attempt",
+      "probe_passed": true,
+      "product_admitted": false
+    },
+    "arm64": {
+      "job_id": 121250959721,
+      "artifact_id": 12608923886,
+      "artifact_zip_sha256": "39d80734fc6949bc5af4629d653eabc5b3878befb5fd3e50de080d292a101673",
+      "probe_report_sha256": "a0598586c2e6f6a9bf4e88da4524c545b35e4bc5630e3049fc03d000a7a60cf1",
+      "binary_sha256": "800b28881e3c7e99cbafe9f7d6b219c2969473806f354ebc5244791cf419809b",
+      "link_map_sha256": "207dceaa105633388974273ac025661fd271c55c93a907515dcd83ea3e75fc00",
+      "link_map_input_sections": 402,
+      "retained_direct_link_inputs": 13,
+      "all_link_inputs_rehashed_and_mapped": true,
+      "all_23_source_anchors_rehashed": true,
+      "zig_archive_pin_sha256": "958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f",
+      "zig_minisign_log_sha256": "dca65562240856ab97706da2f869393d3721ce8e8ac1f3f79b16f775aa286757",
+      "elf": {
+        "type": "ET_EXEC",
+        "machine": "EM_AARCH64",
+        "pt_interp": false,
+        "pt_dynamic": false,
+        "dynamic_section": false,
+        "gnu_version_sections": false,
+        "sole_named_undefined": "_DYNAMIC: NOTYPE LOCAL HIDDEN UND, zero value and size"
+      },
+      "uploaded_executable_mode": "0755",
+      "native_cli_help": "pass; 5,642-byte usage output retained",
+      "github_attestation": "verified for exact ELF SHA-256, signer workflow, source commit, branch ref and run attempt",
+      "probe_passed": true,
+      "product_admitted": false
+    }
+  },
+  "source_pins": {
+    "zig_version": "0.15.2",
+    "whisper_cpp_version": "v1.9.5",
+    "whisper_source_sha256": "ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720",
+    "runner_minisign_receipts_verified": true,
+    "original_source_archives_uploaded": false
+  },
+  "attestation_identity": {
+    "workflow": "qiangli/bashy/.github/workflows/s503-linux-musl-runtime-probe.yml",
+    "source_ref": "refs/heads/s503-contract-integration",
+    "source_digest": "7c77581a50b840fd36d2c6bbad666a31b6bf36fb",
+    "run_invocation": "https://github.com/qiangli/bashy/actions/runs/40220541369/attempts/1"
+  },
+  "remaining_product_gates": [
+    "Map each loaded musl, libc++, ABI, unwind, compiler-runtime, Whisper and GGML member to pinned source and exact applicable notice; review and package the complete notice bundle",
+    "Run representative native CPU inference, transcript and timing checks, offline repeat, and bare-host kernel/CPU/thread/locale compatibility",
+    "Publish reviewed signed tagged binaries and committed installer pins; the branch workflow artifacts are experimental",
+    "Finish other S503.6 dependency paths and the six-target/operator-video acceptance gates"
+  ]
+}
