@@ -25,12 +25,17 @@ class NoticeBundleTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         shutil.copytree(notices.ROOT / "sources", self.root / "sources")
         self.pins = json.loads(notices.PINS.read_text())
-        license_bytes = (self.root / "sources" / "whisper-MIT.txt").read_bytes()
         self.archive = self.root / "source.tar.gz"
         with tarfile.open(self.archive, "w:gz") as tar:
-            item = tarfile.TarInfo(self.pins["whisper"]["license_member"])
-            item.size = len(license_bytes)
-            tar.addfile(item, io.BytesIO(license_bytes))
+            for name, row in self.pins["notices"].items():
+                if "archive_member" not in row:
+                    continue
+                data = (self.root / "sources" / name).read_bytes()
+                if "end_marker" in row and row["end_marker"] == "\n*/":
+                    data += b"*/\n"
+                item = tarfile.TarInfo(row["archive_member"])
+                item.size = len(data)
+                tar.addfile(item, io.BytesIO(data))
         source = self.archive.read_bytes()
         self.pins["whisper"].update(archive_sha256=sha(source), archive_bytes=len(source))
         self.pins_path = self.root / "source-pins.json"
@@ -82,7 +87,7 @@ class NoticeBundleTests(unittest.TestCase):
         self.assertEqual(first, second)
         self.assertEqual((self.root / "one" / "THIRD_PARTY_NOTICES.txt").read_bytes(),
                          (self.root / "two" / "THIRD_PARTY_NOTICES.txt").read_bytes())
-        self.assertEqual(len(first["notices"]), 8)
+        self.assertEqual(len(first["notices"]), 11)
         self.assertEqual(first["status"], "candidate_product_not_admitted")
         self.assertEqual(first["evidence"]["map_sha256"], sha(self.map.read_bytes()))
 
@@ -114,13 +119,51 @@ class NoticeBundleTests(unittest.TestCase):
             notices.generate(self.args("bad-toolchain"), self.pins_path)
 
     def test_linux_remains_open_for_static_gcc_runtime(self):
+        self.make_linux()
+        result = notices.generate(self.args("linux"), self.pins_path)
+        self.assertEqual(len(result["notices"]), 4)
+        self.assertEqual(result["evidence"]["map_sha256"], sha(self.map.read_bytes()))
+        self.assertEqual(result["evidence"]["inventory_sha256"], sha(self.inventory_path.read_bytes()))
+        self.assertTrue(any("GPLv3 GCC Runtime Library Exception" in gap for gap in result["open_gates"]))
+        bundle = (self.root / "linux" / "THIRD_PARTY_NOTICES.txt").read_text()
+        for name in ("miniaudio-MIT-0-or-Unlicense.txt", "stb-vorbis-MIT-or-Unlicense.txt", "yarn-MIT-attribution.txt"):
+            self.assertIn(name, bundle)
+
+    def make_linux(self):
         self.binary.rename(self.root / "whisper-cli")
         self.binary = self.root / "whisper-cli"
         self.report["platform"] = "linux/amd64"
+        self.inventory = {
+            "schema": "s503-linux-link-map-v1", "binary_name": self.binary.name,
+            "binary_sha256": sha(self.binary.read_bytes()), "map_sha256": sha(self.map.read_bytes()),
+            "map_bytes": self.map.stat().st_size,
+            "archive_members": [{"archive": name, "member": "sample.o", "in_output_section": True}
+                                for name in sorted(notices.LINUX_PROJECT_ARCHIVES | {"libstdc++.a"})],
+            "runtime_archive_members": [{"archive": "libstdc++.a", "member": "sample.o", "in_output_section": True}],
+            "unclassified_archives": ["libcommon.a"],
+        }
+        self.inventory_path.write_text(json.dumps(self.inventory))
+        self.report["link_map_inventory"] = self.inventory
         self.save_report()
-        result = notices.generate(self.args("linux"), self.pins_path)
-        self.assertEqual(len(result["notices"]), 1)
-        self.assertTrue(any("GPLv3 GCC Runtime Library Exception" in gap for gap in result["open_gates"]))
+
+    def test_linux_map_or_inventory_tamper_rejected(self):
+        self.make_linux()
+        self.map.write_bytes(b"changed map")
+        with self.assertRaisesRegex(ValueError, "link map mismatch"):
+            notices.generate(self.args("bad-linux-map"), self.pins_path)
+        self.map.write_bytes(b"loaded test objects")
+        self.inventory["runtime_archive_members"] = []
+        self.inventory_path.write_text(json.dumps(self.inventory))
+        self.report["link_map_inventory"] = self.inventory
+        self.save_report()
+        with self.assertRaisesRegex(ValueError, "Linux runtime inventory incomplete"):
+            notices.generate(self.args("bad-linux-inventory"), self.pins_path)
+
+    def test_pinned_embedded_notice_mismatch_rejected(self):
+        self.pins["notices"]["stb-vorbis-MIT-or-Unlicense.txt"]["archive_member"] = self.pins["whisper"]["license_member"]
+        self.pins_path.write_text(json.dumps(self.pins))
+        with self.assertRaisesRegex(ValueError, "notice start marker"):
+            notices.generate(self.args("bad-source-notice"), self.pins_path)
 
 
 if __name__ == "__main__":

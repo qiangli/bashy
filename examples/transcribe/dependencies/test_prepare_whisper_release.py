@@ -33,13 +33,17 @@ class PrepareWhisperReleaseTest(unittest.TestCase):
                       "status": "built_and_cached", "cpu_only": True, "portable_cpu": True,
                       "openmp_disabled": True, "gpl_free": True, "product_admitted": False,
                       "executable_sha256": sha, "executable_bytes": binary.stat().st_size}
-            if os_name == "windows":
+            if os_name in ("windows", "linux"):
                 link_map = folder / "whisper-cli.link.map"
                 link_map.write_text("lld map fixture\n")
                 inventory = {"binary_sha256": sha, "map_sha256": release.digest(link_map),
-                             "archive_members": [{"archive": "libx.a", "member": "x.o"}]}
+                             "map_bytes": link_map.stat().st_size, "binary_name": binary.name,
+                             "schema": "s503-linux-link-map-v1" if os_name == "linux" else "s503-windows-link-map-v1",
+                             "archive_members": [{"archive": "libx.a", "member": "x.o"}],
+                             "runtime_archive_members": [{"archive": "libx.a", "member": "x.o"}]}
                 (folder / "whisper-link-inventory.json").write_text(json.dumps(inventory))
                 report["link_map_inventory"] = inventory
+            if os_name == "windows":
                 asset = pins["windows_toolchain"]["assets"][arch]
                 (folder / "toolchain-report.json").write_text(json.dumps({
                     "platform": f"{os_name}/{arch}", "source_url": asset["url"],
@@ -78,10 +82,11 @@ class PrepareWhisperReleaseTest(unittest.TestCase):
             bundle = notice_dir / "THIRD_PARTY_NOTICES.txt"
             bundle.write_text("".join(sections))
             evidence = {"build_report_sha256": release.digest(folder / "build-report.json")}
+            if os_name in ("windows", "linux"):
+                evidence.update({"inventory_sha256": release.digest(folder / "whisper-link-inventory.json"),
+                                 "map_sha256": release.digest(folder / "whisper-cli.link.map")})
             if os_name == "windows":
                 evidence.update({"toolchain_report_sha256": release.digest(folder / "toolchain-report.json"),
-                                 "inventory_sha256": release.digest(folder / "whisper-link-inventory.json"),
-                                 "map_sha256": release.digest(folder / "whisper-cli.link.map"),
                                  "toolchain_asset": pins["windows_toolchain"]["assets"][arch]})
             (notice_dir / "NOTICE_MANIFEST.json").write_text(json.dumps({
                 "schema": "s503-whisper-notice-bundle-v1", "status": "candidate_product_not_admitted",
@@ -108,6 +113,8 @@ class PrepareWhisperReleaseTest(unittest.TestCase):
             names = archive.getnames()
         self.assertEqual(len(names), len(set(names)))
         self.assertIn("s503-native-build-windows-2025/whisper-notices/LICENSES/mingw-w64-runtime.txt", names)
+        self.assertIn("s503-native-build-ubuntu-24.04/whisper-cli.link.map", names)
+        self.assertIn("s503-native-build-ubuntu-24.04-arm/whisper-link-inventory.json", names)
 
     def test_publication_requires_admission(self):
         with self.assertRaisesRegex(ValueError, "product admission"):
@@ -115,6 +122,12 @@ class PrepareWhisperReleaseTest(unittest.TestCase):
 
     def test_windows_linker_map_must_match_binary(self):
         path = self.artifacts / "s503-native-build-windows-2025" / "whisper-cli.link.map"
+        path.write_text("changed\n")
+        with self.assertRaisesRegex(ValueError, "linker evidence"):
+            release.stage(self.artifacts, self.output, COMMIT)
+
+    def test_linux_linker_map_must_match_notice_manifest(self):
+        path = self.artifacts / "s503-native-build-ubuntu-24.04" / "whisper-cli.link.map"
         path.write_text("changed\n")
         with self.assertRaisesRegex(ValueError, "linker evidence"):
             release.stage(self.artifacts, self.output, COMMIT)

@@ -252,6 +252,9 @@ jobs:
             options=(--toolchain-report evidence/toolchain-report.json
                      --inventory evidence/whisper-link-inventory.json
                      --link-map evidence/whisper-cli.link.map)
+          elif [[ "$EXPECTED_OS" == Linux ]]; then
+            options=(--inventory evidence/whisper-link-inventory.json
+                     --link-map evidence/whisper-cli.link.map)
           fi
           # macOS runners use Bash 3.2, where an empty array under nounset
           # raises an error even after options=(). Limit the relaxation to this call.

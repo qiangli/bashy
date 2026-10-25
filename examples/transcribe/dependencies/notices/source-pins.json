@@ -29,7 +29,32 @@
     "whisper-MIT.txt": {
       "url": "https://github.com/ggml-org/whisper.cpp/blob/v1.9.5/LICENSE",
       "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
-      "targets": "all"
+      "targets": "all",
+      "archive_member": "whisper.cpp-1.9.5/LICENSE"
+    },
+    "miniaudio-MIT-0-or-Unlicense.txt": {
+      "url": "https://github.com/ggml-org/whisper.cpp/blob/v1.9.5/examples/miniaudio.h",
+      "sha256": "1d13e0cd56bb6bff8c66eb67084765fbefddcfd931922d2a75c072a9efb7cde9",
+      "targets": "all",
+      "archive_member": "whisper.cpp-1.9.5/examples/miniaudio.h",
+      "start_marker": "This software is available as a choice of the following licenses.",
+      "end_marker": "\n*/"
+    },
+    "stb-vorbis-MIT-or-Unlicense.txt": {
+      "url": "https://github.com/ggml-org/whisper.cpp/blob/v1.9.5/examples/stb_vorbis.c",
+      "sha256": "0459bce8ce9b9b045d20d9c48192226d302f0cce81b151ba71189b2a10c8a8fc",
+      "targets": "all",
+      "archive_member": "whisper.cpp-1.9.5/examples/stb_vorbis.c",
+      "start_marker": "This software is available under 2 licenses -- choose whichever you prefer.",
+      "end_marker": "\n*/"
+    },
+    "yarn-MIT-attribution.txt": {
+      "url": "https://github.com/ggml-org/whisper.cpp/blob/v1.9.5/ggml/src/ggml-cpu/ops.cpp",
+      "sha256": "e34a13140992be619030084522c275f918edf08971f2bb5cff1e17a4c42f7a8a",
+      "targets": "all",
+      "archive_member": "whisper.cpp-1.9.5/ggml/src/ggml-cpu/ops.cpp",
+      "start_marker": "// MIT licensed. Copyright (c) 2023 Jeffrey Quesnelle and Bowen Peng.",
+      "end_marker": "\n"
     },
     "llvm-libcxx.txt": {
       "url": "https://raw.githubusercontent.com/llvm/llvm-project/llvmorg-22.1.8/libcxx/LICENSE.TXT",

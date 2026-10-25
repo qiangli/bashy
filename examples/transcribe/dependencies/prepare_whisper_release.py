@@ -42,23 +42,38 @@ def verified_notices(folder, platform, binary, report_path, require_admitted):
             or manifest.get("bundle_sha256") != digest(bundle_path)
             or manifest.get("evidence", {}).get("build_report_sha256") != digest(report_path)):
         raise ValueError(f"{platform}: notice manifest differs from binary or pinned source")
-    if platform.startswith("windows/"):
-        arch = platform.split("/")[1]
+    if platform.startswith(("windows/", "linux/")):
         evidence = manifest.get("evidence", {})
-        toolchain_path = folder / "toolchain-report.json"
         inventory_path = folder / "whisper-link-inventory.json"
         map_path = folder / "whisper-cli.link.map"
+        inventory = json.loads(inventory_path.read_text())
+        report = json.loads(report_path.read_text())
+        if (evidence.get("inventory_sha256") != digest(inventory_path)
+                or evidence.get("map_sha256") != digest(map_path)
+                or inventory != report.get("link_map_inventory")
+                or inventory.get("binary_sha256") != digest(binary)
+                or inventory.get("map_sha256") != digest(map_path)):
+            raise ValueError(f"{platform}: notice linker evidence mismatch")
+    if platform.startswith("windows/"):
+        arch = platform.split("/")[1]
+        toolchain_path = folder / "toolchain-report.json"
         toolchain = json.loads(toolchain_path.read_text())
         asset = pins["windows_toolchain"]["assets"][arch]
         if (evidence.get("toolchain_report_sha256") != digest(toolchain_path)
-                or evidence.get("inventory_sha256") != digest(inventory_path)
-                or evidence.get("map_sha256") != digest(map_path)
                 or evidence.get("toolchain_asset") != asset
                 or toolchain.get("platform") != platform
                 or toolchain.get("source_url") != asset["url"]
                 or toolchain.get("archive_sha256") != asset["archive_sha256"]
                 or toolchain.get("archive_bytes") != asset["archive_bytes"]):
             raise ValueError(f"{platform}: notice linker or toolchain evidence mismatch")
+    elif platform.startswith("linux/"):
+        if (inventory.get("schema") != "s503-linux-link-map-v1"
+                or inventory.get("binary_name") != binary.name
+                or inventory.get("map_bytes") != map_path.stat().st_size
+                or not inventory.get("archive_members")
+                or not inventory.get("runtime_archive_members")
+                or any(row not in inventory["archive_members"] for row in inventory["runtime_archive_members"])):
+            raise ValueError(f"{platform}: Linux linker inventory incomplete")
     if require_admitted:
         raise ValueError(f"{platform}: notice review remains candidate and product admission is open")
     gaps = manifest.get("open_gates")
@@ -138,7 +153,7 @@ def stage(artifacts, output, source_commit, require_admitted=False):
         binary = folder / ("whisper-cli.exe" if os_name == "windows" else "whisper-cli")
         if not binary.is_file() or digest(binary) != report.get("executable_sha256") or binary.stat().st_size != report.get("executable_bytes"):
             raise ValueError(f"{label}: binary differs from build report")
-        if os_name == "windows":
+        if os_name in ("windows", "linux"):
             link_map = folder / "whisper-cli.link.map"
             link_inventory = folder / "whisper-link-inventory.json"
             evidence = json.loads(link_inventory.read_text())
@@ -147,7 +162,9 @@ def stage(artifacts, output, source_commit, require_admitted=False):
                     or evidence.get("map_sha256") != digest(link_map)
                     or evidence != report.get("link_map_inventory")):
                 raise ValueError(f"{label}: retained linker evidence mismatch")
-            evidence_files.extend((link_map, link_inventory, folder / "toolchain-report.json"))
+            evidence_files.extend((link_map, link_inventory))
+            if os_name == "windows":
+                evidence_files.append(folder / "toolchain-report.json")
         notice_manifest_path, bundle_path, notice_files, notice_manifest = verified_notices(
             folder, platform, binary, report_path, require_admitted)
         evidence_files.extend(notice_files)

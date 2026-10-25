@@ -18,6 +18,8 @@ PINS = ROOT / "source-pins.json"
 PROJECT_ARCHIVES = {"ggml-base.a", "ggml-cpu.a", "ggml.a", "libcommon.a", "libwhisper.a"}
 RUNTIME_ARCHIVES = {"libc++.a", "libunwind.a", "libmingw32.a", "libmingwex.a", "libmsvcrt.a"}
 STARTUP_OBJECTS = {"crt2.o", "crtbegin.o", "crtend.o", "cli.cpp.obj"}
+LINUX_PROJECT_ARCHIVES = {"libggml-base.a", "libggml-cpu.a", "libggml.a", "libcommon.a", "libwhisper.a"}
+LINUX_RUNTIME_ARCHIVES = {"libstdc++.a", "libgcc.a", "libgcc_eh.a"}
 
 
 def checked(path, expected_sha, expected_size=None):
@@ -40,15 +42,33 @@ def require(condition, message):
         raise ValueError(message)
 
 
+def archive_notice(tar, row):
+    """Read the exact notice bytes from the already SHA-verified source archive."""
+    member = tar.extractfile(row["archive_member"])
+    require(member is not None, "notice source member missing")
+    data = member.read()
+    if "start_marker" not in row:
+        return data
+    start = row["start_marker"].encode("utf-8")
+    end = row["end_marker"].encode("utf-8")
+    require(data.count(start) == 1, "notice start marker missing or ambiguous")
+    begin = data.index(start)
+    finish = data.find(end, begin)
+    require(finish >= 0 and end.startswith(b"\n"), "notice end marker missing or invalid")
+    return data[begin:finish + 1]
+
+
 def generate(args, pins_path=PINS):
     pins = load_json(pins_path)
     source_dir = Path(pins_path).parent / "sources"
     archive = checked(args.source_archive, pins["whisper"]["archive_sha256"], pins["whisper"]["archive_bytes"])
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r:gz") as tar:
-        license_data = tar.extractfile(pins["whisper"]["license_member"]).read()
+        archive_notices = {name: archive_notice(tar, row)
+                           for name, row in pins["notices"].items() if row.get("archive_member")}
     notices = {name: checked(source_dir / name, row["sha256"])
                for name, row in pins["notices"].items()}
-    require(license_data == notices["whisper-MIT.txt"], "Whisper LICENSE differs from pinned archive")
+    for name, data in archive_notices.items():
+        require(data == notices[name], f"{name} differs from pinned archive")
 
     report = load_json(args.build_report)
     target = report["platform"]
@@ -63,7 +83,8 @@ def generate(args, pins_path=PINS):
 
     evidence = {"build_report_sha256": digest(Path(args.build_report).read_bytes())}
     gaps = ["Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission."]
-    selected = ["whisper-MIT.txt"]
+    selected = [name for name, row in pins["notices"].items()
+                if row["targets"] == "all" or (os_name == "windows" and row["targets"] == "windows")]
     if os_name == "windows":
         require(all((args.toolchain_report, args.inventory, args.link_map)), "Windows toolchain, inventory and map required")
         tc = load_json(args.toolchain_report)
@@ -96,11 +117,30 @@ def generate(args, pins_path=PINS):
                          "map_sha256": digest(map_bytes), "toolchain_asset": asset,
                          "linked_archive_members": len(inventory["archive_members"]),
                          "linked_archives": sorted(archives), "startup_objects": sorted(unmatched)})
-        selected.extend(name for name, row in pins["notices"].items() if row["targets"] == "windows")
         gaps.extend(["MinGW runtime notice itself flags Cephes math source licensing as uncertain; verify linked member source lineage.",
                      "Verify source-to-prebuilt llvm-mingw archive provenance and all linked MinGW member licenses before product admission."])
     elif os_name == "linux":
-        gaps.append("Retain Linux linker map and static GCC runtime object inventory; inspect exact GPLv3 GCC Runtime Library Exception applicability, or rebuild with host-provided dynamic libstdc++ and verify imports.")
+        require(args.inventory and args.link_map, "Linux inventory and map required")
+        inventory = load_json(args.inventory)
+        require(inventory == report.get("link_map_inventory"), "inventory differs from build report")
+        require(inventory.get("schema") == "s503-linux-link-map-v1", "Linux inventory schema mismatch")
+        map_bytes = Path(args.link_map).read_bytes()
+        require(0 < len(map_bytes) <= 32 << 20 and len(map_bytes) == inventory.get("map_bytes")
+                and digest(map_bytes) == inventory.get("map_sha256"), "link map mismatch")
+        require(inventory.get("binary_sha256") == digest(binary) and inventory.get("binary_name") == Path(args.binary).name,
+                "inventory binary mismatch")
+        members = inventory.get("archive_members", [])
+        runtime = inventory.get("runtime_archive_members", [])
+        require(members and runtime and all(row in members for row in runtime), "Linux runtime inventory incomplete")
+        archives = {Path(row["archive"]).name for row in members}
+        require(LINUX_PROJECT_ARCHIVES <= archives and archives <= LINUX_PROJECT_ARCHIVES | LINUX_RUNTIME_ARCHIVES,
+                "unexpected or missing linked Linux archive")
+        require({Path(row["archive"]).name for row in runtime} == archives & LINUX_RUNTIME_ARCHIVES,
+                "Linux runtime archive classification mismatch")
+        evidence.update({"inventory_sha256": digest(Path(args.inventory).read_bytes()),
+                         "map_sha256": digest(map_bytes), "linked_archive_members": len(members),
+                         "linked_archives": sorted(archives), "runtime_archive_members": len(runtime)})
+        gaps.append("GCC runtime exception unresolved: inspect exact GPLv3 GCC Runtime Library Exception applicability and source notices for retained static members, or rebuild with host-provided dynamic libstdc++ and verify imports.")
     else:
         gaps.append("Verify macOS linked system framework and runtime inventory and applicable host license notices before product admission.")
 
