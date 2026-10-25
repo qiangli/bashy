@@ -27,6 +27,7 @@ import build_whisper as pinned
 RUNTIME_ARCHIVES = ("libstdc++", "libsupc++", "libgcc")
 NEEDED = re.compile(r"\(NEEDED\).*Shared library: \[([^\]]+)\]")
 VERSION_NAME = re.compile(r"\bName: ((?:GLIBCXX|GCC|GLIBC|CXXABI)_[A-Za-z0-9_.]+)")
+LDD_PROVIDER = re.compile(r"^\s*(lib(?:stdc\+\+|gcc_s)\.so\.[0-9]+)\s+=>\s+(/\S+)", re.M)
 
 
 def run_checked(command: list[str], *, output_file: Path | None = None,
@@ -49,6 +50,20 @@ def source_tree(archive: Path, destination: Path) -> Path:
     if not result.is_dir():
         raise RuntimeError("pinned source archive did not yield the expected directory")
     return result
+
+
+def package_receipt(path: Path) -> dict[str, str]:
+    """Bind an observed runtime file to the installed Ubuntu package bytes."""
+    resolved = path.resolve(strict=True)
+    owners = run_checked(["dpkg-query", "-S", str(resolved)]).strip()
+    if ": " not in owners:
+        raise RuntimeError(f"package owner missing for {resolved}")
+    package = owners.split(": ", 1)[0].split(",", 1)[0]
+    version = run_checked(["dpkg-query", "-W", "-f=${Version}", package]).strip()
+    if not version:
+        raise RuntimeError(f"package version missing for {resolved}")
+    return {"path": str(resolved), "sha256": pinned.compute_sha256(resolved),
+            "package": package, "package_version": version}
 
 
 def main() -> int:
@@ -138,6 +153,11 @@ def main() -> int:
         versions = run_checked([readelf, "--version-info", str(binary)],
                                output_file=output / "elf-versions.txt")
         needed = sorted(set(NEEDED.findall(dynamic)))
+        ldd_output = run_checked(["ldd", str(binary)], output_file=output / "ldd.txt")
+        providers = {name: package_receipt(Path(path))
+                     for name, path in LDD_PROVIDER.findall(ldd_output)}
+        if set(providers) != {"libstdc++.so.6", "libgcc_s.so.1"}:
+            raise RuntimeError("host GCC runtime providers could not be identified")
         required_versions = {
             prefix: sorted({name for name in VERSION_NAME.findall(versions)
                             if name.startswith(prefix + "_")})
@@ -148,6 +168,13 @@ def main() -> int:
             for row in inventory["runtime_archive_members"]
             if Path(row["archive"]).name.lower().startswith(RUNTIME_ARCHIVES)
         ]
+        startup_objects = {
+            Path(obj).name: package_receipt(Path(obj))
+            for obj in inventory["direct_objects"]
+            if Path(obj).name in ("crtbeginS.o", "crtendS.o")
+        }
+        if set(startup_objects) != {"crtbeginS.o", "crtendS.o"}:
+            raise RuntimeError("direct GCC startup objects missing from map")
         # The compiler driver can still add direct GCC startup objects. The
         # claim here is limited to archive members; retain direct objects too.
         compiler_versions = {
@@ -173,6 +200,8 @@ def main() -> int:
             "binary_bytes": (output / "whisper-cli").stat().st_size,
             "map_sha256": pinned.compute_sha256(output / "whisper-cli.link.map"),
             "dynamic_needed": needed,
+            "host_gcc_runtime_providers": providers,
+            "gcc_startup_objects": startup_objects,
             "version_requirements": required_versions,
             "gcc_archive_members": retained_runtime,
             "gcc_direct_objects": [obj for obj in inventory["direct_objects"]
