@@ -107,9 +107,26 @@ library licenses, operator-host installation, and product distribution still
 need review. Python.org's macOS and Windows installers have archive
 provenance but no six-target operator-host installation proof. `elephant` had no
 installed Python and older VC runtime bytes at the read-only probe. Because the
-adapter itself runs under Python, this check gates its child yt-dlp invocation;
-an OS-level launcher would be required to verify Python before starting the
-adapter. Exact pins require review when an external installation changes.
+adapter itself runs under Python, its check gates the child yt-dlp invocation.
+For a check before Python starts, invoke the adapter through the native Bashy
+shell launcher:
+
+```sh
+BASHY_TRANSCRIBE_PYTHON=/absolute/path/to/python3.12 \
+  bashy examples/transcribe/launch_python.sh REQUEST.json
+```
+
+The launcher checks the committed policy's exact SHA-256, selects a host
+OS/architecture entry, resolves and hashes the chosen executable, then starts
+Python. The YouTube pipeline gate registers the launcher as its source command.
+With `BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX` set on Linux, it checks the
+signed-source provenance fields and executable hash in the local build receipt;
+the adapter then rechecks the complete installed tree and dynamic libraries.
+This is a local drift check. A writable launcher and receipt, or a change
+between hashing and process start, is outside its integrity guarantee. Exact
+pins require review when an external installation changes. Signed product
+delivery, operator-host installation, complete library licenses, and six-target
+native launcher execution remain separate acceptance gates.
 
 ### Explicit Linux Python.org source setup (amd64 and arm64)
 
@@ -166,9 +183,10 @@ python3 examples/transcribe/dependencies/setup_python_source.py \
 
 For an **explicit local** source adapter run, set
 `BASHY_TRANSCRIBE_PYTHON_SOURCE_PREFIX` to that prefix and
-`BASHY_TRANSCRIBE_PYTHON` to its `bin/python3.12`, then invoke the adapter with
-that same interpreter. The adapter rechecks the receipt and complete byte
-inventory before yt-dlp. Without the source prefix opt-in, the existing six
+`BASHY_TRANSCRIBE_PYTHON` to its `bin/python3.12`, then invoke
+`launch_python.sh` through Bashy with the acquire request. The launcher checks
+the interpreter before execution; the adapter rechecks the receipt and complete
+byte inventory before yt-dlp. Without the source prefix opt-in, the existing six
 CI-observed executable pins continue to apply. A changed system library causes
 reverification to fail until the host's build and license review is repeated.
 
@@ -221,6 +239,6 @@ python bashy\examples\transcribe\dependencies\build_whisper.py --json
 
 1. **CPU-Only**: All GPU/accelerator backends (Metal, CUDA, Vulkan, OpenCL, etc.) are explicitly disabled in CMake flags.
 2. **No OpenMP**: `-DGGML_OPENMP=OFF` is enforced across all platforms, eliminating runtime dependencies on `libgomp.so`, `libomp.dylib`, or `libgomp-1.dll`.
-3. **Dynamic Import Check**: Post-build inspection (`otool -L` on macOS, `ldd` on Linux, `objdump` on Windows) rejects missing inspection tools, unresolved imports and named OpenMP libraries. This name-based check is not a full transitive license audit; Windows CI binaries import external Microsoft VC runtime DLLs.
+3. **Dynamic Import Check**: Post-build inspection (`otool -L` on macOS, `ldd` on Linux, `objdump` on Windows) rejects missing inspection tools, unresolved imports and named OpenMP libraries. This name-based check is not a full transitive license audit. Earlier Windows CI binaries imported external Microsoft VC runtime DLLs; the newer static llvm-mingw candidate does not, but its linked-object notices remain under review.
 4. **No Side-Effects**: The build recipe performs zero model downloads, zero media inference, zero FFmpeg dependencies, and no container / OCI requirements.
 5. **No False Six-Target PASS**: The recipe reports actual host operating system, architecture, compiler version, and build flags. CI jobs run natively on each runner to establish independent evidence.

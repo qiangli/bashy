@@ -1,0 +1,179 @@
+{
+  "schema": "s503-linux-python-source-native-review-v2",
+  "reviewed_at": "2026-10-25T15:53:34.643870+00:00",
+  "run_id": 40208795370,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40208795370",
+  "candidate_commit": "818af919d00dd9b0155bf1186178e39f402658ce",
+  "result": "two native source builds and functional zlib/bz2/lzma codec checks passed; full receipts retained; exact-byte recheck passed under OS network denial",
+  "scope": "native Linux source-build candidate only; no signed product installer or license admission",
+  "targets": [
+    {
+      "target": "linux/amd64",
+      "runner_label": "ubuntu-24.04",
+      "artifact_id": 12604803381,
+      "candidate_commit": "818af919d00dd9b0155bf1186178e39f402658ce",
+      "status": "local_source_build_unadmitted",
+      "installed_file_count": 3358,
+      "extension_module_count": 73,
+      "codec_roundtrip": {
+        "bz2": true,
+        "lzma": true,
+        "zlib": true
+      },
+      "build_header_packages": {
+        "libbz2-dev": "1.0.8-5.1ubuntu0.1",
+        "liblzma-dev": "5.6.1+really5.4.5-1ubuntu0.4"
+      },
+      "loaded_library_count": 14,
+      "system_packages": {
+        "libc6": {
+          "version": "2.39-0ubuntu8.9",
+          "copyright_sha256": "d3c95b56fa33e28b57860580f0baf4e4f4de2a268a2b80f1d031a5191bade265",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libbz2-1.0": {
+          "version": "1.0.8-5.1ubuntu0.1",
+          "copyright_sha256": "832ed535ff3c3d025a8d2348eb1b697b89addcf2eaadbc17650262040b9145e2",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libcrypt1": {
+          "version": "1:4.4.36-4build1",
+          "copyright_sha256": "5a5e7ca0e9f3f9679977e3a3e9ede45ad92885a3297ea78e766979f9866c5a16",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libssl3t64": {
+          "version": "3.0.13-0ubuntu3.16",
+          "copyright_sha256": "6a7da622fe0637a334d2a8fc470852d2ffb77d9a2b2f930f854e32a41ad6ef35",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libffi8": {
+          "version": "3.4.6-1build1",
+          "copyright_sha256": "737ff68f0eb104d3b0d96b291c3a8f40a775a3ec2b53f9b2e4bcfe3188bde118",
+          "license_status": "native_host_policy_review_required"
+        },
+        "liblzma5": {
+          "version": "5.6.1+really5.4.5-1ubuntu0.4",
+          "copyright_sha256": "a2dc8fac0f496e1c58aff67018cf0c6b88336316afa5642f9335b71642e28aa8",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libncursesw6": {
+          "version": "6.4+20240113-1ubuntu2.2",
+          "copyright_sha256": "7c9d2c8dbee48b6f4bbbffb1f370cc5858de11cc4f5a70c5c622c274917e1c65",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libsqlite3-0": {
+          "version": "3.45.1-1ubuntu2.8",
+          "copyright_sha256": "78e9df8f8153c91c762ec970b82d224ac4d30f05aa7773e7e17e268141e53873",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libtinfo6": {
+          "version": "6.4+20240113-1ubuntu2.2",
+          "copyright_sha256": "7c9d2c8dbee48b6f4bbbffb1f370cc5858de11cc4f5a70c5c622c274917e1c65",
+          "license_status": "native_host_policy_review_required"
+        },
+        "zlib1g": {
+          "version": "1:1.3.dfsg-3.1ubuntu2.2",
+          "copyright_sha256": "9e5b96d63773a5d177ba264254390f792be07e41748ebd94730981c6cac31cc6",
+          "license_status": "native_host_policy_review_required"
+        }
+      },
+      "offline_network_errno": 101,
+      "offline_receipt_sha256": "a75c3c997250fe4fba2449aeb2222f89730ee247890b22c575ec10305488ae9a",
+      "raw_evidence_sha256": {
+        "preflight.json": "5090ae549a19e2962fbabcad869cb7ad9131c00bda26ce73f827414f412912a7",
+        "inputs.json": "b2a9ee7b3d2273368177341c69157e03662814842d7a89f1b3999dec6bd603c8",
+        "setup-result.json": "544ecab0d5cc196b17af9033cf0ad6a5db081d141cdefbbf40ba4ede55b615a7",
+        "source-build-receipt.json": "a75c3c997250fe4fba2449aeb2222f89730ee247890b22c575ec10305488ae9a",
+        "offline.json": "4874438b488435a7858ef4fa75f022d94ccf521ea15cab8b039d6338febf05d5",
+        "native-validation.json": "e5f9bb08e80e6fac33460fea2f368256f6a6434648c0281d6a5de355f09e4add"
+      }
+    },
+    {
+      "target": "linux/arm64",
+      "runner_label": "ubuntu-24.04-arm",
+      "artifact_id": 12604813267,
+      "candidate_commit": "818af919d00dd9b0155bf1186178e39f402658ce",
+      "status": "local_source_build_unadmitted",
+      "installed_file_count": 3358,
+      "extension_module_count": 73,
+      "codec_roundtrip": {
+        "bz2": true,
+        "lzma": true,
+        "zlib": true
+      },
+      "build_header_packages": {
+        "libbz2-dev": "1.0.8-5.1ubuntu0.1",
+        "liblzma-dev": "5.6.1+really5.4.5-1ubuntu0.4"
+      },
+      "loaded_library_count": 14,
+      "system_packages": {
+        "libc6": {
+          "version": "2.39-0ubuntu8.9",
+          "copyright_sha256": "d3c95b56fa33e28b57860580f0baf4e4f4de2a268a2b80f1d031a5191bade265",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libbz2-1.0": {
+          "version": "1.0.8-5.1ubuntu0.1",
+          "copyright_sha256": "832ed535ff3c3d025a8d2348eb1b697b89addcf2eaadbc17650262040b9145e2",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libcrypt1": {
+          "version": "1:4.4.36-4build1",
+          "copyright_sha256": "5a5e7ca0e9f3f9679977e3a3e9ede45ad92885a3297ea78e766979f9866c5a16",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libssl3t64": {
+          "version": "3.0.13-0ubuntu3.16",
+          "copyright_sha256": "6a7da622fe0637a334d2a8fc470852d2ffb77d9a2b2f930f854e32a41ad6ef35",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libffi8": {
+          "version": "3.4.6-1build1",
+          "copyright_sha256": "737ff68f0eb104d3b0d96b291c3a8f40a775a3ec2b53f9b2e4bcfe3188bde118",
+          "license_status": "native_host_policy_review_required"
+        },
+        "liblzma5": {
+          "version": "5.6.1+really5.4.5-1ubuntu0.4",
+          "copyright_sha256": "a2dc8fac0f496e1c58aff67018cf0c6b88336316afa5642f9335b71642e28aa8",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libncursesw6": {
+          "version": "6.4+20240113-1ubuntu2.2",
+          "copyright_sha256": "7c9d2c8dbee48b6f4bbbffb1f370cc5858de11cc4f5a70c5c622c274917e1c65",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libsqlite3-0": {
+          "version": "3.45.1-1ubuntu2.8",
+          "copyright_sha256": "78e9df8f8153c91c762ec970b82d224ac4d30f05aa7773e7e17e268141e53873",
+          "license_status": "native_host_policy_review_required"
+        },
+        "libtinfo6": {
+          "version": "6.4+20240113-1ubuntu2.2",
+          "copyright_sha256": "7c9d2c8dbee48b6f4bbbffb1f370cc5858de11cc4f5a70c5c622c274917e1c65",
+          "license_status": "native_host_policy_review_required"
+        },
+        "zlib1g": {
+          "version": "1:1.3.dfsg-3.1ubuntu2.2",
+          "copyright_sha256": "9e5b96d63773a5d177ba264254390f792be07e41748ebd94730981c6cac31cc6",
+          "license_status": "native_host_policy_review_required"
+        }
+      },
+      "offline_network_errno": 101,
+      "offline_receipt_sha256": "6d900e94e9ea88cf8a520b100b4dfa09f085dbb8fe3a83174e5a817e29c6e576",
+      "raw_evidence_sha256": {
+        "preflight.json": "4ca8e78a54415465f09c78e76a943d83a49ed9c0a81ffc2ae51dc2f97ad7e45d",
+        "inputs.json": "b2a9ee7b3d2273368177341c69157e03662814842d7a89f1b3999dec6bd603c8",
+        "setup-result.json": "d9322144f55d102d5bee82d0b450f5c4ed9e9de797ebbb9fc74a8cb9ee7f3125",
+        "source-build-receipt.json": "6d900e94e9ea88cf8a520b100b4dfa09f085dbb8fe3a83174e5a817e29c6e576",
+        "offline.json": "4f5e33b12bde5bd93eb98f3667f94fd1cb3f6d4558fa942812bd1c561331df90",
+        "native-validation.json": "fce8d028ba6b09c2fa0afa849b3c2d8c4a8e800121ccd1a593c1366dee4678e1"
+      }
+    }
+  ],
+  "open_gates": [
+    "Review exact host-library notices including libbz2 and liblzma and conditional redistribution obligations",
+    "Prove operator-host installation and pre-execution Python integrity against an immutable trusted pin",
+    "Admit Windows and macOS Python installation paths and other transcription dependencies",
+    "Operator YouTube acquisition and inference on six native targets"
+  ]
+}

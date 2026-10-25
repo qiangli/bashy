@@ -30,7 +30,9 @@ YTDLP_SHA256 = "b7af77f686e95f7845ce8d09d21957718febb8b48b30555adb9dd2292ad7bf14
 SOURCE_FILES = (
     "examples/transcribe/verify-youtube-pipeline.py",
     "examples/transcribe/pipeline.bsh",
+    "examples/transcribe/launch_python.sh",
     "examples/transcribe/source_youtube.py",
+    "examples/transcribe/dependencies/external-python-runtime.json",
     "examples/transcribe/adapters/register.sh",
     "skills/bashy/commands/transcribe.md",
     "skills/bashy/commands/transcribe.dhnt",
@@ -246,7 +248,7 @@ def add_record(bashy, env, name, executable, role, effects, accepts=None):
 def setup(m, env):
     bashy = m["bashy"]
     run([bashy, HERE / "adapters" / "register.sh", m["helper"]], env)
-    add_record(bashy, env, "transcribe-youtube", [m["python"], str(HERE / "source_youtube.py")],
+    add_record(bashy, env, "transcribe-youtube", [bashy, str(HERE / "launch_python.sh")],
                "acquire", ["read", "write", "destroy", "exec", "net"],
                r"^https://(www\.youtube\.com/watch\?.*|youtu\.be/.*)$")
     add_record(bashy, env, m["decoder"]["name"], m["decoder"]["exec"],
@@ -375,7 +377,7 @@ def download_cancellation(m, env, outdir, tempdir):
     request.write_text(json.dumps({"version": "bashy-transcribe-stage-v1", "stage": "acquire",
                                    "input": URLS["canonical"], "work_dir": str(work)}))
     limited = dict(env, BASHY_TRANSCRIBE_DOWNLOAD_RATE="32K")
-    proc = cancellable_process([m["python"], str(HERE / "source_youtube.py"), str(request)], limited)
+    proc = cancellable_process([m["bashy"], str(HERE / "launch_python.sh"), str(request)], limited)
     def partial_started():
         for path in work.glob("*.part*"):
             try:

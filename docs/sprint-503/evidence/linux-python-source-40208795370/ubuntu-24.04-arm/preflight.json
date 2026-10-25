@@ -1,0 +1,16 @@
+{
+  "build_header_packages": {
+    "libbz2-dev": "1.0.8-5.1ubuntu0.1",
+    "liblzma-dev": "5.6.1+really5.4.5-1ubuntu0.4"
+  },
+  "candidate_commit": "818af919d00dd9b0155bf1186178e39f402658ce",
+  "identity": {
+    "machine": "aarch64",
+    "runner_python": "3.12.3",
+    "system": "Linux",
+    "target": "linux/arm64"
+  },
+  "schema": "s503-python-source-native-preflight-v1",
+  "source_setup_sha256": "2ee404e332b938512186ac09106ee86e8f573a3e78511f5bc2d159f425293d0c",
+  "status": "PASS"
+}

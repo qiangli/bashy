@@ -4,7 +4,9 @@
   "source_sha256": {
     "examples/transcribe/verify-youtube-pipeline.py": "FILL",
     "examples/transcribe/pipeline.bsh": "FILL",
+    "examples/transcribe/launch_python.sh": "FILL",
     "examples/transcribe/source_youtube.py": "FILL",
+    "examples/transcribe/dependencies/external-python-runtime.json": "FILL",
     "examples/transcribe/adapters/register.sh": "FILL",
     "skills/bashy/commands/transcribe.md": "FILL",
     "skills/bashy/commands/transcribe.dhnt": "FILL"

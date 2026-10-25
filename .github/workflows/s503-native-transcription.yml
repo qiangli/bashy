@@ -483,7 +483,10 @@ jobs:
 
           workspace = Path(os.environ['GITHUB_WORKSPACE']).resolve()
           root = Path(os.environ['RUNNER_TEMP']) / 's503-native'
-          source = workspace / 'examples/transcribe/source_youtube.py'
+          launcher = workspace / 'examples/transcribe/launch_python.sh'
+          suffix = '.exe' if os.environ['TARGET_OS'] == 'Windows' else ''
+          binaries = root / 'bin'
+          bashy = (binaries / ('bashy' + suffix)).resolve(strict=True)
           gate_path = workspace / 'examples/transcribe/verify-youtube-pipeline.py'
           spec = importlib.util.spec_from_file_location('s503_gate', gate_path)
           gate = importlib.util.module_from_spec(spec)
@@ -506,7 +509,7 @@ jobs:
                          'input': url, 'work_dir': str(work.resolve())}
               request_path = workspace / 'evidence' / ('acquire-' + label + '-request.json')
               request_path.write_text(json.dumps(request, indent=2) + '\n')
-              proc = subprocess.run([sys.executable, str(source), str(request_path)],
+              proc = subprocess.run([str(bashy), str(launcher), str(request_path)],
                                     env=env, capture_output=True, text=True, timeout=900)
               if proc.returncode:
                   raise SystemExit(label + ' acquisition failed: ' + proc.stderr[-3000:])
@@ -528,9 +531,6 @@ jobs:
               retained[label] = {'url': url, 'video_id': media['video_id'],
                                  'path': str(path), 'duration_ms': media['duration_ms'],
                                  'sha256': expected}
-          suffix = '.exe' if os.environ['TARGET_OS'] == 'Windows' else ''
-          binaries = root / 'bin'
-          bashy = (binaries / ('bashy' + suffix)).resolve(strict=True)
           helper = (binaries / ('transcribe-adapter' + suffix)).resolve(strict=True)
           decoder = (binaries / ('transcribe-webm-opus' + suffix)).resolve(strict=True)
           whisper = (root / 'cache/tools/whisper-cpp/v1.9.5' /
