@@ -1,0 +1,90 @@
+{
+  "schema": "s503-glibc-startup-native-review-v1",
+  "run_id": 40216444004,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40216444004",
+  "run_conclusion": "success",
+  "candidate_commit": "979733b7590c531fc80b271134e634abfdb2e2f8",
+  "prior_shared_gcc_review": "docs/sprint-503/evidence/linux-shared-gcc-40215118171/review.json",
+  "verification": [
+    "Downloaded both GitHub Actions artifacts and rehashed retained binary, link map, copyright and provenance files against both native receipts.",
+    "Checked each direct Scrt1.o, crti.o and crtn.o path in link-inventory.json and linker LOAD map; reviewed the probe source that requires dpkg-query -S exact libc6-dev native owner and dpkg-query source glibc/version.",
+    "Matched each runner label, machine, source commit and glibc receipt to the native probe report; both GH jobs succeeded.",
+    "Matched unchanged link-map hashes, GCC startup-object receipts, dynamic needs, version requirements and zero shared GCC archive members against the prior shared-GCC review.",
+    "Verified both binary attestations with gh attestation verify scoped to qiangli/bashy, exact signer workflow and source digest; signed subject SHA-256 matched each downloaded binary."
+  ],
+  "limits": [
+    "The three glibc .o files were not retained as artifacts; their file SHA-256 and package ownership are native-runner dpkg and hash receipts, not an independent off-run rehash.",
+    "The retained Debian glibc package copyright describes broad library terms but does not identify exact terms for these three object files or prove final linked-byte obligations; its introductory version text says 2.23 while dpkg source/package metadata says 2.39-0ubuntu8.9."
+  ],
+  "open_decisions": [
+    "Map Scrt1.o, crti.o and crtn.o to exact glibc source files and file-level license terms, including any startup-object exception; review static bytes incorporated into distributed whisper-cli and applicable LGPL-2.1-or-later obligations, notices, source and relinking requirements before product admission.",
+    "Resolve separate GCC crtbeginS.o/crtendS.o and host-provided GPL runtime exception policy from the prior review; confirm whether relying on installed libgcc_s.so.1 and libstdc++.so.6 is acceptable for this product.",
+    "Set and test supported target-host ABI floors from recorded GLIBC, GLIBCXX, GCC and CXXABI version requirements, including glibc 2.38 on these Ubuntu 24.04 builds; native build success does not prove older-host compatibility.",
+    "Run admitted packaging and full six-target/operator-video gates only after license and ABI decisions; this run is a two-target link/provenance experiment without inference."
+  ],
+  "targets": [
+    {
+      "platform": "linux/amd64",
+      "runner_label": "ubuntu-24.04",
+      "host_machine": "x86_64",
+      "artifact_id": 12608230770,
+      "binary_package": "libc6-dev:amd64",
+      "binary_package_version": "2.39-0ubuntu8.9",
+      "source_package": "glibc",
+      "source_package_version": "2.39-0ubuntu8.9",
+      "objects": {
+        "Scrt1.o": {
+          "path": "/usr/lib/x86_64-linux-gnu/Scrt1.o",
+          "sha256": "9438d15c4bac893a0e3aad2c2c86ccbceb59d5872bd07101949f237ee1c92a8b"
+        },
+        "crti.o": {
+          "path": "/usr/lib/x86_64-linux-gnu/crti.o",
+          "sha256": "077ccb6c68db1794da3ee262c4a16a3c6f8e902845dd0829110ad4b7065e5aa3"
+        },
+        "crtn.o": {
+          "path": "/usr/lib/x86_64-linux-gnu/crtn.o",
+          "sha256": "a2266079f95b84ccc2162ebbf279bcd78858a748aa1882e0bdb912316c76a58f"
+        }
+      },
+      "copyright_sha256": "d3c95b56fa33e28b57860580f0baf4e4f4de2a268a2b80f1d031a5191bade265",
+      "provenance_sha256": "1bdd5700c7a04f77198eadc01cdc0957502aa33ec22d0051cc816b737b5129d0",
+      "binary_sha256": "a7ba0a315400f06ae5bde3fb50af694d178550ea60012594f23bc165b739af15",
+      "link_map_sha256": "275b6c59457269d329245fa6e7d5b8fc427b394643ec368198dab925d4af8419",
+      "shared_gcc_archive_members": 0,
+      "static_reference_gcc_archive_members": 100,
+      "product_admitted": false
+    },
+    {
+      "platform": "linux/arm64",
+      "runner_label": "ubuntu-24.04-arm",
+      "host_machine": "aarch64",
+      "artifact_id": 12608280793,
+      "binary_package": "libc6-dev:arm64",
+      "binary_package_version": "2.39-0ubuntu8.9",
+      "source_package": "glibc",
+      "source_package_version": "2.39-0ubuntu8.9",
+      "objects": {
+        "Scrt1.o": {
+          "path": "/usr/lib/aarch64-linux-gnu/Scrt1.o",
+          "sha256": "d03fc7a1a0b7cdbc1fb0a5c25425d3e1d2971a193c52f0ccdc40049234b7daae"
+        },
+        "crti.o": {
+          "path": "/usr/lib/aarch64-linux-gnu/crti.o",
+          "sha256": "93bb05d2d87f3464fd89a70d26d8ed29f0797e4b97a60786a2724a7e3ffbeba5"
+        },
+        "crtn.o": {
+          "path": "/usr/lib/aarch64-linux-gnu/crtn.o",
+          "sha256": "1c741c1f9499461b6f1e531e21fc5f86a216cc5d0c49d18bdcf97d7d922342d5"
+        }
+      },
+      "copyright_sha256": "d3c95b56fa33e28b57860580f0baf4e4f4de2a268a2b80f1d031a5191bade265",
+      "provenance_sha256": "ea306ac49381676b0d9d10786cc0ae74f2c13d11548b304eff8b01b468b93f5c",
+      "binary_sha256": "715b3f5ff96527912c852a8581f672465033a141f924aedc73870c3972630cf7",
+      "link_map_sha256": "e3cac236082e2ad8ef58537015a0705483a6c52f6b5374f557cbf236cb3b8942",
+      "shared_gcc_archive_members": 0,
+      "static_reference_gcc_archive_members": 111,
+      "product_admitted": false
+    }
+  ],
+  "product_admitted": false
+}
