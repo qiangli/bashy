@@ -79,6 +79,18 @@ class LinkInputPolicyTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "undefined symbols"):
             probe.assert_no_undefined_symbols("$ nm -u whisper-cli\n                 U _Unwind_Resume\n")
 
+    def test_only_local_hidden_musl_dynamic_marker_is_allowed(self):
+        nm = "$ nm -u whisper-cli\n                 U _DYNAMIC\n"
+        symbols = "$ readelf -s whisper-cli\n     2: 0000000000000000     0 NOTYPE  LOCAL  HIDDEN   UND _DYNAMIC\n"
+        self.assertEqual(probe.assert_no_undefined_symbols(nm, symbols),
+                         "musl-static-local-hidden-_DYNAMIC")
+        with self.assertRaisesRegex(RuntimeError, "exact local-hidden"):
+            probe.assert_no_undefined_symbols(nm, symbols.replace("HIDDEN", "DEFAULT"))
+        with self.assertRaisesRegex(RuntimeError, "undefined symbols"):
+            probe.assert_no_undefined_symbols(nm + "                 U _Unwind_Resume\n", symbols)
+        with self.assertRaisesRegex(RuntimeError, "absent from nm"):
+            probe.assert_no_undefined_symbols("$ nm -u whisper-cli\n", symbols)
+
     def test_supported_print_map_is_extracted_from_final_build_log(self):
         source = (
             "$ cmake --build ...\n"

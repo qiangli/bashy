@@ -1,0 +1,338 @@
+{
+  "product_admitted": false,
+  "run_conclusion": "failure",
+  "run_id": 40219544978,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40219544978",
+  "schema": "s503-linux-musl-native-review-v1",
+  "source_commit": "f4f4c9400012ba296106f828a25d1ecc82289f10",
+  "targets": {
+    "amd64": {
+      "all_retained_link_inputs_rehashed": true,
+      "artifact_id": 12608911292,
+      "artifact_zip_sha256": "7d62864205c889350400bc8bb4c82dc9659a6c98dbe69644af8c8ebf5218eb63",
+      "attestation": "not_created_step_skipped",
+      "binary_sha256": "3f645450720f14df65f0e838321a88543ed70770d4bd38b975b22df2c9283bdb",
+      "cli_help_smoke": "not_run",
+      "direct_link_input_count": 13,
+      "elf": {
+        "dynamic_section": false,
+        "elf_type": "ET_EXEC",
+        "gnu_version_sections": false,
+        "machine_number": 62,
+        "nm_undefined_output": "U _DYNAMIC",
+        "program_header_types": [
+          6,
+          1,
+          1,
+          1,
+          1,
+          7,
+          1685382482,
+          1685382480,
+          1685382481
+        ],
+        "pt_dynamic": false,
+        "pt_interp": false,
+        "readelf_logs_sha256": {
+          "dynamic": "c6e3c6664dd7a2e508fb98558ae4215dea6bad4dbd4eb00b405f70462c0acffe",
+          "header": "5ca904e63cabdc9758362b643c4a10f2ca1b1f6a9e7d0ae0382461be5eb22dc1",
+          "program-headers": "a8f79fae67bf6c05eced1935fced999fd3388254a41fc91ffbf5f57ff044f800",
+          "sections": "de4abba30d3485f89b704beea4f0961574d3a70e0d23eafeb68daf300507a2e1",
+          "symbols": "45b8a6064ecdb998d10d37d317912f3f651515fe8ebbca0b942d11f076e46a7d",
+          "undefined": "f815425d1126f134ea9adc75c2d2d58db1bbb51cd75de39bc24652024bd8b472",
+          "versions": "f65bb55cd5b2933570e9c1c13b4d905f655bc84b1349bf6f0f1c32a827d7346f"
+        },
+        "undefined_symbols": [
+          {
+            "binding": 0,
+            "name": "_DYNAMIC",
+            "visibility": 2
+          }
+        ]
+      },
+      "error": "ELF has undefined symbols or nm evidence is malformed",
+      "libzigc_archive_member": {
+        "bytes": 48856,
+        "name": "/home/runner/work/_temp/s503-musl-runtime/zig-cache/o/475387eb6baab7ffd2e6e211c6da0710/libzigc_zcu.o",
+        "sha256": "d9cb640a74d0e77ffd31643812e656e801d89491538814be9c856be80b1b5e91"
+      },
+      "libzigc_archive_sha256": "cb261058d51c96e0c69882098a5fcda244654f18cbb2466b9eae0b587f28ab0d",
+      "link_inputs": [
+        {
+          "category": "zig-llvm-runtime",
+          "loaded_members": 4,
+          "name": "libunwind.a",
+          "sha256": "8cd154c203cf213c8f1ef347151f991b219828638a56b0a9f921deb0d528a1a7"
+        },
+        {
+          "category": "zig-compiler-runtime",
+          "loaded_members": 1,
+          "name": "libcompiler_rt.a",
+          "sha256": "11987d70f5e7c660bdfc96bce24da9bf96540c2477dd2de18ab3d1a0febe1232"
+        },
+        {
+          "category": "zig-musl",
+          "loaded_members": 0,
+          "name": "crt1.o",
+          "sha256": "54967b243b98edbbd2f0a73ed3bb1bd7a4272fdf134bd07335f339ae6951c5ff"
+        },
+        {
+          "category": "zig-libc-compat",
+          "loaded_members": 1,
+          "name": "libzigc.a",
+          "sha256": "cb261058d51c96e0c69882098a5fcda244654f18cbb2466b9eae0b587f28ab0d"
+        },
+        {
+          "category": "zig-llvm-runtime",
+          "loaded_members": 15,
+          "name": "libc++abi.a",
+          "sha256": "50ecaf4aaa535c17c1442fa939a092fa709d568e8c74958f1f605206e2c4a732"
+        },
+        {
+          "category": "zig-musl",
+          "loaded_members": 336,
+          "name": "libc.a",
+          "sha256": "5df624bff772e07c94e34f0765749da224375b1d3feeac2381bb39bfc6c5d7e8"
+        },
+        {
+          "category": "zig-llvm-runtime",
+          "loaded_members": 25,
+          "name": "libc++.a",
+          "sha256": "8464382850b360408b56b0fd074905bc45130c40445dea05dcf6e2eff0e70732"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 0,
+          "name": "cli.cpp.o",
+          "sha256": "27073e0edffe23e81b7f9019f1cce02fada77095f7005b8f0a39f91c36927ed5"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 3,
+          "name": "libcommon.a",
+          "sha256": "af7a25157a20b9878764d3b866f341a81b4f9f9e72be850e3f4962110b5fa262"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 6,
+          "name": "libggml-base.a",
+          "sha256": "e8a38f39872edf6588f683d7367127e28574a6935cbd331a55da80637dad2ea3"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 10,
+          "name": "libggml-cpu.a",
+          "sha256": "0e723dcecef790ae675e6d477d2d8d7ec8afcca67ca520a9d246f8b3db7c8944"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 2,
+          "name": "libggml.a",
+          "sha256": "94d85b5925d09f3f2a049f1c05f6942c9f9899b50de9e327f2f94b1f2fc8a233"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 2,
+          "name": "libwhisper.a",
+          "sha256": "3c73dd3c0472818a6642fbcab2446a3c3c49f0f9fd15a83f1b147b777c25c48e"
+        }
+      ],
+      "link_map_input_count": 407,
+      "link_map_sha256": "de4b93637e1f88b069f5201b78ef2ff708b307cdbcf78c63dcbf0e5a52d859b5",
+      "preflight_hashes_verified": true,
+      "probe_passed": false,
+      "product_admitted": false,
+      "report_sha256": "8485f34c033dd082dbee7ef1df1a9b18bac18ca9080dfcb8d61ce6d5763cee5b",
+      "source_anchors": {
+        "LICENSE": "5c537d6853e005298a285d508cff9ac7192cea23576c840d485b2b586a7ff177",
+        "lib/c.zig": "b39fec9941872a61508e463ee0bc35087bf7613b56c95f1193c93c2d1a59ad9c",
+        "lib/c/common.zig": "7d4484d9e301f122f1a5be474d72df28ace94cd159274c698937f5a616684d0b",
+        "lib/c/inttypes.zig": "246d6bad1f2172393c86f461db87aae744213e7486b1fbe36b4f7931922d2e54",
+        "lib/c/stdlib.zig": "f077ab46b0e5137d003962a26c058b65eb2e5b36bc37bc1d578e46fd0e1f8e7b",
+        "lib/c/string.zig": "be4e20409e7eebacd77e982fd10e7cf1dbe888a6b24280f5c11c4fd508d83c02",
+        "lib/c/strings.zig": "a9728029705607997f8302e6cab5e8f7f61b19bc324cf1a76790cf6ad7a93db8",
+        "lib/compiler_rt.zig": "46a73ce725f26b104c4c167a6baaa6bb4a7e39ceae662e619f8d816e88eddee1",
+        "lib/libc/musl/COPYRIGHT": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af",
+        "lib/libc/musl/crt/Scrt1.c": "3927b1f5417e5a513a404dc30d218616f0a3f6dc5631a7017417e67fddb44bcd",
+        "lib/libc/musl/crt/crt1.c": "f6c08ffd3125bedd3f0ec0f3c5135e7d95f3e1e5c033c99081819ef37712e99d",
+        "lib/libc/musl/src/env/__libc_start_main.c": "5e5487e579a3c8f14fcb38bb54f2ede10a74f94130ebb9134dcba8d5f28c0cf4",
+        "lib/libcxx/LICENSE.TXT": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b",
+        "lib/libcxxabi/LICENSE.TXT": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c",
+        "lib/libunwind/LICENSE.TXT": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d",
+        "lib/std/ascii.zig": "245e0e29ff75a5cbcf294bade7a32b35d1a5e0242bad59342822831c56f97b88",
+        "lib/std/c.zig": "a8138d10955a61fae402e1235e81685732f46e4cacca1e922609034183824bb1",
+        "lib/std/mem.zig": "d4b891a60b1bb54e106c56d626dfd575ed39a85b1a09795b9c0a534fc10fd9ca",
+        "lib/std/std.zig": "b78c7a6dec7a3ea3381bae30533309bd8de71994422c3f87fc9760e378c7e427"
+      },
+      "source_anchors_rehashed_against_pinned_archive": true,
+      "whisper_source_sha256": "ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720",
+      "zig_archive_sha256": "02aa270f183da276e5b5920b1dac44a63f1a49e55050ebde3aecc9eb82f93239",
+      "zig_minisign_log_sha256": "c88880abbc6e232e4991f7f438c19f391eef90d9906550a63a7839cc2ee07aaa",
+      "zig_signature_verified_by_runner": true
+    },
+    "arm64": {
+      "all_retained_link_inputs_rehashed": true,
+      "artifact_id": 12608364976,
+      "artifact_zip_sha256": "168a260302738cfa2be51eca6f7d7d394505d03b1e548201f429e0207ed4cd1e",
+      "attestation": "not_created_step_skipped",
+      "binary_sha256": "800b28881e3c7e99cbafe9f7d6b219c2969473806f354ebc5244791cf419809b",
+      "cli_help_smoke": "not_run",
+      "direct_link_input_count": 13,
+      "elf": {
+        "dynamic_section": false,
+        "elf_type": "ET_EXEC",
+        "gnu_version_sections": false,
+        "machine_number": 183,
+        "nm_undefined_output": "U _DYNAMIC",
+        "program_header_types": [
+          6,
+          1,
+          1,
+          1,
+          1,
+          7,
+          1685382482,
+          1685382480,
+          1685382481
+        ],
+        "pt_dynamic": false,
+        "pt_interp": false,
+        "readelf_logs_sha256": {
+          "dynamic": "c6e3c6664dd7a2e508fb98558ae4215dea6bad4dbd4eb00b405f70462c0acffe",
+          "header": "13a43cf9aba8552502a20cd5c09572e1454cd1da9cd5302ad78ccb65f6e84782",
+          "program-headers": "ad84b2c85eb1708c6d8a4b731d9daafb71db3f64b8462a25dba6c6eb17321cec",
+          "sections": "005d8333f96186b617930d1f87805298d220e0a23e6c02b35b0b1453f4080fe8",
+          "symbols": "b5acc66f50452fc2b9a32e048ad5b875b739ad28e22e73e6206fe48f21c2fce6",
+          "undefined": "f815425d1126f134ea9adc75c2d2d58db1bbb51cd75de39bc24652024bd8b472",
+          "versions": "f65bb55cd5b2933570e9c1c13b4d905f655bc84b1349bf6f0f1c32a827d7346f"
+        },
+        "undefined_symbols": [
+          {
+            "binding": 0,
+            "name": "_DYNAMIC",
+            "visibility": 2
+          }
+        ]
+      },
+      "error": "ELF has undefined symbols or nm evidence is malformed",
+      "libzigc_archive_member": {
+        "bytes": 52264,
+        "name": "/home/runner/work/_temp/s503-musl-runtime/zig-cache/o/d17fcb57d0192a65a43c0bf099e5a5c1/libzigc_zcu.o",
+        "sha256": "18da21db2e13dd1643f9115909f3dd2129445f31c9671674d4127a465baf75ac"
+      },
+      "libzigc_archive_sha256": "c0d1134c22d77bab4c4dd4edd33bed03f271cb959298c3c6523d5c5fed6a3577",
+      "link_inputs": [
+        {
+          "category": "zig-musl",
+          "loaded_members": 331,
+          "name": "libc.a",
+          "sha256": "b4ad3ca952204bdedcee3571aa256048499b98227e94ccbeb9ca40d533eabce4"
+        },
+        {
+          "category": "zig-llvm-runtime",
+          "loaded_members": 25,
+          "name": "libc++.a",
+          "sha256": "a7bdf901c2b82d6247989b9308737836660fc445aa07be4b310c7eb0278f6388"
+        },
+        {
+          "category": "zig-llvm-runtime",
+          "loaded_members": 4,
+          "name": "libunwind.a",
+          "sha256": "ad54b72ae924638b1933ea27c1dc8bf9366c59dbd5d330b61a7621602c6f0f18"
+        },
+        {
+          "category": "zig-compiler-runtime",
+          "loaded_members": 1,
+          "name": "libcompiler_rt.a",
+          "sha256": "c6abe7fb6ed02865359293186475d4b9e3bbb7c090108989110111bc7f4eefab"
+        },
+        {
+          "category": "zig-musl",
+          "loaded_members": 0,
+          "name": "crt1.o",
+          "sha256": "eca226c36bf9f0cca824a93b36c0c639c5ad3ac8b2f1ef93f90ff1b20c7c6616"
+        },
+        {
+          "category": "zig-libc-compat",
+          "loaded_members": 1,
+          "name": "libzigc.a",
+          "sha256": "c0d1134c22d77bab4c4dd4edd33bed03f271cb959298c3c6523d5c5fed6a3577"
+        },
+        {
+          "category": "zig-llvm-runtime",
+          "loaded_members": 15,
+          "name": "libc++abi.a",
+          "sha256": "8d37356d5ac55dba73a04eccb4782593d18fc5972957a4a44b28ce765d77d530"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 0,
+          "name": "cli.cpp.o",
+          "sha256": "3bab59c87478838b937730990ef9e232126907358a69dd9152dcd10fb954e687"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 3,
+          "name": "libcommon.a",
+          "sha256": "39171a7c16c40f1bce619362823520827edc5be41d2c597980cd990a99e05043"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 6,
+          "name": "libggml-base.a",
+          "sha256": "d86afbbadcdb23af99eccd7b37247c7f8851d37ecf5018af31afb312c64f2237"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 10,
+          "name": "libggml-cpu.a",
+          "sha256": "5d5dab949ecc84234df4ae7bde890db60494270932e1eacad6f8ffed528f0855"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 2,
+          "name": "libggml.a",
+          "sha256": "20054cf5680fe11401a8462fe37c231bcf64359f51e3eb582ba8ef43eb224a4f"
+        },
+        {
+          "category": "whisper-build",
+          "loaded_members": 2,
+          "name": "libwhisper.a",
+          "sha256": "324b2bbe43674aed3c463e53e07bd14db2c8f338d3abf5b5e3b4f18ec1b21ade"
+        }
+      ],
+      "link_map_input_count": 402,
+      "link_map_sha256": "b9e542f49d661e2d98b19e3acd871531a13cea0c022c0eff8dc80fbb030508bf",
+      "preflight_hashes_verified": true,
+      "probe_passed": false,
+      "product_admitted": false,
+      "report_sha256": "c2c2cc1a2ed874a78e8f87701dceceb600155ec4bb3ba7dd2fff071b48cf9cbb",
+      "source_anchors": {
+        "LICENSE": "5c537d6853e005298a285d508cff9ac7192cea23576c840d485b2b586a7ff177",
+        "lib/c.zig": "b39fec9941872a61508e463ee0bc35087bf7613b56c95f1193c93c2d1a59ad9c",
+        "lib/c/common.zig": "7d4484d9e301f122f1a5be474d72df28ace94cd159274c698937f5a616684d0b",
+        "lib/c/inttypes.zig": "246d6bad1f2172393c86f461db87aae744213e7486b1fbe36b4f7931922d2e54",
+        "lib/c/stdlib.zig": "f077ab46b0e5137d003962a26c058b65eb2e5b36bc37bc1d578e46fd0e1f8e7b",
+        "lib/c/string.zig": "be4e20409e7eebacd77e982fd10e7cf1dbe888a6b24280f5c11c4fd508d83c02",
+        "lib/c/strings.zig": "a9728029705607997f8302e6cab5e8f7f61b19bc324cf1a76790cf6ad7a93db8",
+        "lib/compiler_rt.zig": "46a73ce725f26b104c4c167a6baaa6bb4a7e39ceae662e619f8d816e88eddee1",
+        "lib/libc/musl/COPYRIGHT": "f9bc4423732350eb0b3f7ed7e91d530298476f8fec0c6c427a1c04ade22655af",
+        "lib/libc/musl/crt/Scrt1.c": "3927b1f5417e5a513a404dc30d218616f0a3f6dc5631a7017417e67fddb44bcd",
+        "lib/libc/musl/crt/crt1.c": "f6c08ffd3125bedd3f0ec0f3c5135e7d95f3e1e5c033c99081819ef37712e99d",
+        "lib/libc/musl/src/env/__libc_start_main.c": "5e5487e579a3c8f14fcb38bb54f2ede10a74f94130ebb9134dcba8d5f28c0cf4",
+        "lib/libcxx/LICENSE.TXT": "539dd7aed86e8a4f12cbdd0e6c50c189c7d74847e4fecc64ce2c6ee3a01da38b",
+        "lib/libcxxabi/LICENSE.TXT": "e2b35be49f7284a45b7baca8fc7b3ab7440e7902392b2528a457816b5bb2a15c",
+        "lib/libunwind/LICENSE.TXT": "b5efebcaca80879234098e52d1725e6d9eb8fb96a19fce625d39184b705f7b6d",
+        "lib/std/ascii.zig": "245e0e29ff75a5cbcf294bade7a32b35d1a5e0242bad59342822831c56f97b88",
+        "lib/std/c.zig": "a8138d10955a61fae402e1235e81685732f46e4cacca1e922609034183824bb1",
+        "lib/std/mem.zig": "d4b891a60b1bb54e106c56d626dfd575ed39a85b1a09795b9c0a534fc10fd9ca",
+        "lib/std/std.zig": "b78c7a6dec7a3ea3381bae30533309bd8de71994422c3f87fc9760e378c7e427"
+      },
+      "source_anchors_rehashed_against_pinned_archive": true,
+      "whisper_source_sha256": "ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720",
+      "zig_archive_sha256": "958ed7d1e00d0ea76590d27666efbf7a932281b3d7ba0c6b01b0ff26498f667f",
+      "zig_minisign_log_sha256": "dca65562240856ab97706da2f869393d3721ce8e8ac1f3f79b16f775aa286757",
+      "zig_signature_verified_by_runner": true
+    }
+  }
+}

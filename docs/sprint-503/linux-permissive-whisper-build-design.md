@@ -80,6 +80,16 @@ sources under the distribution's MIT license. The next audit now requires
 that exact member in both map and archive, retains the archive bytes and
 source anchors, and continues to reject every other unknown input.
 
+The [fourth native review](evidence/linux-musl-40219544978-review.md)
+rehashes all 13 retained link inputs per target and finds the expected
+static `ET_EXEC` shape. Both jobs stop on the same musl startup marker:
+`_DYNAMIC` appears as `LOCAL HIDDEN UND`, while the ELF has no interpreter,
+dynamic segment, dynamic section, or GNU version sections. Zig's pinned musl
+startup and TLS sources declare this marker weak and hidden. The probe now
+permits only that exact symbol under these static ELF conditions and records
+its source anchors; a new native run is required to reach the CLI smoke and
+attestation. Product admission remains false.
+
 The desired ELF graph is one static `whisper-cli` composed of whisper.cpp/GGML
 and Zig's musl/libc++/libc++abi/libunwind/compiler-runtime inputs. It has no
 `PT_INTERP`, no `DT_NEEDED`, and no `GLIBC`, `GLIBCXX`, `GCC`, or `CXXABI`

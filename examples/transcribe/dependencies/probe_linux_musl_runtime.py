@@ -47,7 +47,11 @@ SOURCE_ANCHORS = (
     "lib/libc/musl/COPYRIGHT",
     "lib/libc/musl/crt/crt1.c",
     "lib/libc/musl/crt/Scrt1.c",
+    "lib/libc/musl/arch/x86_64/crt_arch.h",
+    "lib/libc/musl/arch/aarch64/crt_arch.h",
     "lib/libc/musl/src/env/__libc_start_main.c",
+    "lib/libc/musl/src/env/__init_tls.c",
+    "lib/libc/musl/src/ldso/dl_iterate_phdr.c",
     "lib/libcxx/LICENSE.TXT",
     "lib/libcxxabi/LICENSE.TXT",
     "lib/libunwind/LICENSE.TXT",
@@ -281,23 +285,41 @@ def inspect_elf(binary: Path, output: Path, arch: str) -> dict:
     machine = {"amd64": "Advanced Micro Devices X86-64", "arm64": "AArch64"}[arch]
     if machine not in outputs["header"]:
         raise RuntimeError("ELF machine differs from native job architecture")
-    if re.search(r"\bINTERP\b|Requesting program interpreter", outputs["program-headers"]):
-        raise RuntimeError("ELF has a program interpreter")
-    if re.search(r"\bNEEDED\b", outputs["dynamic"]):
-        raise RuntimeError("ELF has a dynamic library dependency")
-    if re.search(r"\b(?:GLIBC|GLIBCXX|GCC|CXXABI)_[\w.]+", outputs["versions"]):
+    if "Type:                              EXEC (Executable file)" not in outputs["header"]:
+        raise RuntimeError("ELF is not a static ET_EXEC candidate")
+    if re.search(r"\bINTERP\b|\bDYNAMIC\b|Requesting program interpreter",
+                 outputs["program-headers"]):
+        raise RuntimeError("ELF has an interpreter or dynamic segment")
+    if "There is no dynamic section in this file." not in outputs["dynamic"]:
+        raise RuntimeError("ELF has a dynamic section")
+    if "No version information found in this file." not in outputs["versions"] or \
+       re.search(r"\b(?:GLIBC|GLIBCXX|GCC|CXXABI)_[\w.]+", outputs["versions"]):
         raise RuntimeError("ELF has GNU runtime version requirements")
-    assert_no_undefined_symbols(undefined)
+    undefined_marker = assert_no_undefined_symbols(undefined, outputs["symbols"])
     return {"static_elf": True, "machine": machine,
+            "undefined_marker": undefined_marker,
             "readelf_sha256": {name: sha256(output / f"elf-{name}.txt") for name in outputs},
             "undefined_sha256": sha256(output / "elf-undefined.txt")}
 
 
-def assert_no_undefined_symbols(nm_record: str) -> None:
-    """The first record line is our command; every following byte is nm output."""
+def assert_no_undefined_symbols(nm_record: str, symbols_record: str = "") -> str | None:
+    """Permit only musl's reviewed, local hidden static _DYNAMIC marker."""
     command, separator, output = nm_record.partition("\n")
-    if not separator or not command.startswith("$ ") or output.strip():
+    if not separator or not command.startswith("$ "):
         raise RuntimeError("ELF has undefined symbols or nm evidence is malformed")
+    named_undefined = re.findall(
+        r"^\s*\d+:\s+\S+\s+\d+\s+\S+\s+\S+\s+\S+\s+UND\s+(\S+)\s*$",
+        symbols_record, re.M)
+    if not output.strip():
+        if named_undefined:
+            raise RuntimeError("ELF symbol table has undefined symbols absent from nm evidence")
+        return None
+    if not re.fullmatch(r"\s*U _DYNAMIC\s*", output) or named_undefined != ["_DYNAMIC"]:
+        raise RuntimeError("ELF has undefined symbols or nm evidence is malformed")
+    marker = re.compile(r"^\s*\d+:\s+0+\s+0\s+NOTYPE\s+LOCAL\s+HIDDEN\s+UND\s+_DYNAMIC\s*$", re.M)
+    if len(marker.findall(symbols_record)) != 1 or symbols_record.count("_DYNAMIC") != 1:
+        raise RuntimeError("musl static _DYNAMIC marker lacks exact local-hidden ELF evidence")
+    return "musl-static-local-hidden-_DYNAMIC"
 
 
 def main() -> int:
