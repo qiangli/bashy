@@ -34,6 +34,35 @@ Finished executables are hashed (SHA-256 and byte length) and placed into the st
 
 Custom cache roots may be supplied via `--cache-dir` or `--dest-cli`.
 
+## Explicit operator source setup
+
+`binmgr.EnsureWhisperCpp` currently has no committed stable v1.9.5 CLI release
+pin and fails closed. On a native host with an operator-provided Python interpreter and
+compiler toolchain, the operator can explicitly build from the same pinned
+stable source using:
+
+```sh
+python3 examples/transcribe/dependencies/setup_whisper.py --work-dir /absolute/work/dir
+```
+
+`setup_whisper.py` calls `build_whisper.py`'s source recipe, checks its CPU-only
+build report and rehashes the binary in the canonical coordination cache. It
+atomically writes `source-build-receipt.json` beside `whisper-cli` with the
+exact executable path and SHA-256. The JSON output also contains a
+`registration` object with `WHISPER_PATH` and `WHISPER_SHA256`; supply that pair
+to `examples/transcribe/adapters/register.sh`. The seed inference adapter
+rehashes the configured executable before every invocation. A preverified
+archive from `binmgr.EnsureWhisperCppSource` may be supplied with
+`--source-archive PATH --skip-download`; the recipe still verifies its pinned
+length and SHA-256 before extraction.
+
+This is an explicit source-build setup command. Ordinary transcription,
+adapter registration and Bashy startup do not invoke it or compile a tool.
+The receipt is a local byte-identity record, not a signed release asset or
+license admission. A managed release still needs committed pins and signature
+verification in `EnsureWhisperCpp`. Product installation of external Python,
+the Windows VC runtime, and the compiler toolchain remains a separate gate.
+
 ## External Python prerequisite for YouTube acquisition
 
 `source_youtube.py` requires `BASHY_TRANSCRIBE_PYTHON` to name the Python
