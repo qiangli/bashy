@@ -1,0 +1,177 @@
+name: S503 native whisper.cpp source build
+
+# This is a build and dependency evidence gate. It does not download a model or
+# run media inference. A reviewer must dispatch it after the candidate is ready.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-build:
+    name: ${{ matrix.label }} pinned source build
+    runs-on: ${{ matrix.label }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: ubuntu-24.04
+            expected_os: Linux
+            expected_arch: amd64
+            python_arch: x64
+            cmake_platform: ''
+          - label: ubuntu-24.04-arm
+            expected_os: Linux
+            expected_arch: arm64
+            python_arch: arm64
+            cmake_platform: ''
+          - label: macos-15-intel
+            expected_os: macOS
+            expected_arch: amd64
+            python_arch: x64
+            cmake_platform: ''
+          - label: macos-15
+            expected_os: macOS
+            expected_arch: arm64
+            python_arch: arm64
+            cmake_platform: ''
+          - label: windows-2025
+            expected_os: Windows
+            expected_arch: amd64
+            python_arch: x64
+            cmake_platform: x64
+          - label: windows-11-arm
+            expected_os: Windows
+            expected_arch: arm64
+            python_arch: arm64
+            cmake_platform: ARM64
+    env:
+      EXPECTED_OS: ${{ matrix.expected_os }}
+      EXPECTED_ARCH: ${{ matrix.expected_arch }}
+      RUNNER_LABEL: ${{ matrix.label }}
+      COMMIT_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.python_arch }}
+
+      - name: Record and verify native runner identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          python - <<'PY'
+          import json
+          import os
+          import platform
+          import subprocess
+          import sys
+          from pathlib import Path
+
+          actual_os = {'Linux': 'Linux', 'Darwin': 'macOS', 'Windows': 'Windows'}.get(platform.system(), platform.system())
+          process_arch = platform.machine()
+          if actual_os == 'Windows':
+              raw_arch = subprocess.check_output(
+                  ['pwsh', '-NoProfile', '-Command',
+                   '[System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture.ToString()'],
+                  text=True).strip()
+          else:
+              raw_arch = platform.uname().machine
+          arch = {'x86_64': 'amd64', 'AMD64': 'amd64', 'X64': 'amd64',
+                  'aarch64': 'arm64', 'arm64': 'arm64', 'ARM64': 'arm64',
+                  'Arm64': 'arm64'}
+          actual_arch = arch.get(raw_arch, raw_arch)
+          python_arch = arch.get(process_arch, process_arch)
+          translated = '0'
+          if actual_os == 'macOS':
+              result = subprocess.run(['sysctl', '-n', 'sysctl.proc_translated'],
+                                      capture_output=True, text=True)
+              if result.returncode == 0:
+                  translated = result.stdout.strip()
+          evidence = {
+              'schema': 's503-runner-identity-v1',
+              'runner_label': os.environ['RUNNER_LABEL'],
+              'expected_os': os.environ['EXPECTED_OS'],
+              'expected_arch': os.environ['EXPECTED_ARCH'],
+              'actual_os': actual_os,
+              'actual_arch': actual_arch,
+              'os_arch_raw': raw_arch,
+              'process_arch': process_arch,
+              'python_arch': python_arch,
+              'translated': translated,
+              'python': sys.version.split()[0],
+              'commit_sha': os.environ['COMMIT_SHA'],
+          }
+          Path('evidence/runner-identity.json').write_text(json.dumps(evidence, indent=2) + '\n')
+          print(json.dumps(evidence, indent=2))
+          if (actual_os != evidence['expected_os'] or
+                  actual_arch != evidence['expected_arch'] or
+                  python_arch != evidence['expected_arch'] or
+                  translated == '1'):
+              raise SystemExit('runner or Python process is not the expected native target')
+          PY
+
+      - name: Build pinned whisper.cpp and record dependency audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EXPECTED_OS" == Windows ]]; then
+            export CMAKE_GENERATOR='Visual Studio 17 2022'
+            export CMAKE_GENERATOR_PLATFORM='${{ matrix.cmake_platform }}'
+          fi
+          cmake --version
+          python examples/transcribe/dependencies/build_whisper.py \
+            --work-dir "$RUNNER_TEMP/s503-whisper-build" \
+            --report-file evidence/build-report.json \
+            --parallel 4
+
+      - name: Verify artifact SHA-256 against the build report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          report = json.loads(Path('evidence/build-report.json').read_text())
+          expected_platform = {'Linux': 'linux', 'macOS': 'darwin', 'Windows': 'windows'}[os.environ['EXPECTED_OS']]
+          assert report['platform'] == f"{expected_platform}/{os.environ['EXPECTED_ARCH']}"
+          assert report['runner_label'] == os.environ['RUNNER_LABEL']
+          assert report['whisper_version'] == '1.9.5'
+          assert report['source_archive_sha256'] == 'ff1a9053feb509ff9d7729703355541ae9690073a6b1c40eb692c962e0dc1720'
+          assert report['status'] == 'built_and_cached'
+          assert report['cpu_only'] and report['openmp_disabled'] and report['gpl_free']
+          source = Path(report['cached_executable_path'])
+          artifact = Path('evidence') / source.name
+          shutil.copy2(source, artifact)
+          digest = hashlib.sha256(artifact.read_bytes()).hexdigest()
+          assert digest == report['executable_sha256']
+          assert artifact.stat().st_size == report['executable_bytes']
+          Path('evidence/binary-sha256.txt').write_text(f'{digest}  {artifact.name}\n')
+          print(Path('evidence/binary-sha256.txt').read_text(), end='')
+          PY
+
+      - name: Attest native binary provenance
+        uses: actions/attest@v4
+        with:
+          subject-path: evidence/whisper-cli${{ matrix.expected_os == 'Windows' && '.exe' || '' }}
+
+      - name: Upload build evidence and binary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-native-build-${{ matrix.label }}
+          path: evidence/
+          if-no-files-found: warn
+          retention-days: 14
