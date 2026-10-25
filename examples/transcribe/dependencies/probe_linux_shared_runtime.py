@@ -25,6 +25,7 @@ import build_whisper as pinned
 
 
 RUNTIME_ARCHIVES = ("libstdc++", "libsupc++", "libgcc")
+GLIBC_STARTUP_NAMES = ("Scrt1.o", "crti.o", "crtn.o")
 NEEDED = re.compile(r"\(NEEDED\).*Shared library: \[([^\]]+)\]")
 VERSION_NAME = re.compile(r"\bName: ((?:GLIBCXX|GCC|GLIBC|CXXABI)_[A-Za-z0-9_.]+)")
 LDD_PROVIDER = re.compile(r"^\s*(lib(?:stdc\+\+|gcc_s)\.so\.[0-9]+)\s+=>\s+(/\S+)", re.M)
@@ -56,14 +57,90 @@ def package_receipt(path: Path) -> dict[str, str]:
     """Bind an observed runtime file to the installed Ubuntu package bytes."""
     resolved = path.resolve(strict=True)
     owners = run_checked(["dpkg-query", "-S", str(resolved)]).strip()
-    if ": " not in owners:
+    if owners.count("\n") or owners.count(": ") != 1:
         raise RuntimeError(f"package owner missing for {resolved}")
-    package = owners.split(": ", 1)[0].split(",", 1)[0]
+    package, owned_path = owners.split(": ", 1)
+    if "," in package or owned_path != str(resolved):
+        raise RuntimeError(f"ambiguous package owner for {resolved}: {owners}")
     version = run_checked(["dpkg-query", "-W", "-f=${Version}", package]).strip()
     if not version:
         raise RuntimeError(f"package version missing for {resolved}")
     return {"path": str(resolved), "sha256": pinned.compute_sha256(resolved),
             "package": package, "package_version": version}
+
+
+def dpkg_source_receipt(package: str) -> dict[str, str]:
+    fields = run_checked(["dpkg-query", "-W",
+                          "-f=${binary:Package}\t${Version}\t${source:Package}\t${source:Version}\t${db:Status-Status}",
+                          package]).strip().split("\t")
+    if (len(fields) != 5 or fields[0] != package or not fields[1] or
+            fields[2] != "glibc" or not fields[3] or fields[4] != "installed"):
+        raise RuntimeError(f"unexpected glibc package/source metadata: {fields}")
+    return {"package": fields[0], "package_version": fields[1],
+            "source_package": fields[2], "source_package_version": fields[3]}
+
+
+def glibc_startup_receipts(direct_objects: list[str], arch: str,
+                           root: Path = Path("/")) -> dict:
+    """Bind the three direct glibc inputs to installed files and source metadata.
+
+    This is provenance, not a file-level LGPL ruling or a product admission.
+    """
+    root = root.resolve(strict=True)
+    triplet = {"amd64": "x86_64-linux-gnu", "arm64": "aarch64-linux-gnu"}[arch]
+    dpkg_arch = {"amd64": "amd64", "arm64": "arm64"}[arch]
+    expected_dir = root / "usr/lib" / triplet
+    objects = {}
+    for raw in direct_objects:
+        name = Path(raw).name
+        if name not in GLIBC_STARTUP_NAMES:
+            continue
+        if name in objects:
+            raise RuntimeError(f"duplicate glibc startup object: {name}")
+        resolved = Path(raw).resolve(strict=True)
+        if resolved != expected_dir / name:
+            raise RuntimeError(f"unexpected glibc startup path: {raw} -> {resolved}")
+        receipt = package_receipt(resolved)
+        if receipt["package"] != f"libc6-dev:{dpkg_arch}":
+            raise RuntimeError(f"unexpected glibc startup owner for {name}: {receipt['package']}")
+        objects[name] = receipt
+    if set(objects) != set(GLIBC_STARTUP_NAMES):
+        raise RuntimeError(f"glibc startup objects incomplete: {sorted(objects)}")
+    versions = {receipt["package_version"] for receipt in objects.values()}
+    if len(versions) != 1:
+        raise RuntimeError(f"glibc startup package versions disagree: {sorted(versions)}")
+
+    package = f"libc6-dev:{dpkg_arch}"
+    source = dpkg_source_receipt(package)
+    if source["package_version"] not in versions:
+        raise RuntimeError("glibc object package version differs from source receipt")
+
+    copyright_path = (root / "usr/share/doc/libc6-dev/copyright").resolve(strict=True)
+    if not copyright_path.is_file() or not 0 < copyright_path.stat().st_size <= 2 << 20:
+        raise RuntimeError(f"glibc package copyright missing or oversized: {copyright_path}")
+    copyright_text = copyright_path.read_text(encoding="utf-8")
+    if "GNU C Library" not in copyright_text or "Lesser General Public License" not in copyright_text:
+        raise RuntimeError("glibc package copyright lacks expected library/license markers")
+    copyright_receipt = package_receipt(copyright_path)
+    copyright_source = dpkg_source_receipt(copyright_receipt["package"])
+    if (copyright_receipt["package_version"] != source["package_version"] or
+            copyright_source["source_package_version"] != source["source_package_version"]):
+        raise RuntimeError("glibc copyright package version differs from object package")
+    return {
+        "schema": "s503-glibc-startup-provenance-v1",
+        "platform": f"linux/{arch}",
+        "binary_package": package,
+        "binary_package_version": source["package_version"],
+        "source_package": source["source_package"],
+        "source_package_version": source["source_package_version"],
+        "copyright": {**copyright_receipt,
+                      "source_package": copyright_source["source_package"],
+                      "source_package_version": copyright_source["source_package_version"],
+                      "bytes": copyright_path.stat().st_size},
+        "objects": objects,
+        "license_review_status": "open; file-level LGPL and linked-byte review required",
+        "product_admitted": False,
+    }
 
 
 def main() -> int:
@@ -175,6 +252,20 @@ def main() -> int:
         }
         if set(startup_objects) != {"crtbeginS.o", "crtendS.o"}:
             raise RuntimeError("direct GCC startup objects missing from map")
+        glibc_startup = glibc_startup_receipts(inventory["direct_objects"], arch)
+        glibc_startup.update({
+            "candidate_commit": os.environ.get("GITHUB_SHA", ""),
+            "runner_label": runner_label,
+            "binary_sha256": pinned.compute_sha256(output / "whisper-cli"),
+            "link_map_sha256": pinned.compute_sha256(output / "whisper-cli.link.map"),
+        })
+        copyright_copy = output / "glibc-package-copyright"
+        shutil.copyfile(glibc_startup["copyright"]["path"], copyright_copy)
+        if pinned.compute_sha256(copyright_copy) != glibc_startup["copyright"]["sha256"]:
+            raise RuntimeError("retained glibc copyright bytes changed during capture")
+        glibc_startup["copyright"]["artifact"] = copyright_copy.name
+        glibc_startup_path = output / "glibc-startup-provenance.json"
+        glibc_startup_path.write_text(json.dumps(glibc_startup, indent=2) + "\n")
         # The compiler driver can still add direct GCC startup objects. The
         # claim here is limited to archive members; retain direct objects too.
         compiler_versions = {
@@ -202,6 +293,8 @@ def main() -> int:
             "dynamic_needed": needed,
             "host_gcc_runtime_providers": providers,
             "gcc_startup_objects": startup_objects,
+            "glibc_startup_objects": glibc_startup,
+            "glibc_startup_provenance_sha256": pinned.compute_sha256(glibc_startup_path),
             "version_requirements": required_versions,
             "gcc_archive_members": retained_runtime,
             "gcc_direct_objects": [obj for obj in inventory["direct_objects"]
