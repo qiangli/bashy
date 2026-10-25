@@ -96,11 +96,19 @@ jobs:
               require(isinstance(a.get(key), (int, float)) and 0.5 <= a[key] <= 1,
                       key + ' reviewed transcript tolerance')
           require(a.get('review_evidence'), 'reviewed source for both excerpts')
-          require(a.get('controlled_webm_sha256') ==
+          require(digest.fullmatch(a.get('controlled_webm_sha256', '')) and
+                  a['controlled_webm_sha256'] !=
                   'dfa1a92759f3ab64c793d16140204efcd9e7c8b84e367a28efd31548da1f04b4',
-                  'controlled fixture pin')
+                  'separate reviewed speech fixture SHA-256, not two-second codec test')
           require(isinstance(a.get('controlled_duration_ms'), int) and
-                  a['controlled_duration_ms'] > 0, 'controlled fixture duration')
+                  a['controlled_duration_ms'] >= 5000, 'controlled speech fixture duration')
+          fixture = a.get('controlled_fixture', {})
+          require(isinstance(fixture.get('run_id'), int) and fixture['run_id'] > 0 and
+                  fixture.get('artifact_name') == 's503-controlled-speech' and
+                  isinstance(fixture.get('bytes'), int) and fixture['bytes'] > 0 and
+                  digest.fullmatch(fixture.get('source_commit', '')) and
+                  fixture.get('license_evidence') and fixture.get('review_evidence'),
+                  'reviewed licensed controlled speech artifact coordinates')
           offline = a.get('offline_canary', {})
           require(set(offline) == labels, 'external offline canary plan for all six targets')
           for label, item in offline.items():
@@ -115,7 +123,7 @@ jobs:
     needs: admission
     name: ${{ matrix.label }} online and offline transcription
     runs-on: ${{ matrix.label }}
-    timeout-minutes: 90
+    timeout-minutes: 240
     strategy:
       fail-fast: false
       matrix:
@@ -356,6 +364,44 @@ jobs:
           Path('evidence/built-binaries.json').write_text(json.dumps(built, indent=2) + '\n')
           PY
 
+      - name: Download and verify reviewed long controlled speech fixture
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id=$(python -c 'import json; print(json.load(open("docs/sprint-503/evidence/native-transcription-admission.json"))["controlled_fixture"]["run_id"])')
+          mkdir -p "$RUNNER_TEMP/s503-native/controlled"
+          gh run view "$run_id" --repo qiangli/bashy --json headSha,conclusion \
+            > evidence/controlled-fixture-run.json
+          gh run download "$run_id" --repo qiangli/bashy --name s503-controlled-speech \
+            --dir "$RUNNER_TEMP/s503-native/controlled"
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          fixture = json.loads(Path('docs/sprint-503/evidence/native-transcription-admission.json').read_text())
+          run = json.loads(Path('evidence/controlled-fixture-run.json').read_text())
+          if (run.get('headSha') != fixture['controlled_fixture']['source_commit'] or
+                  run.get('conclusion') != 'success'):
+              raise SystemExit('controlled speech run source commit or conclusion mismatch')
+          path = Path(os.environ['RUNNER_TEMP']) / 's503-native/controlled/speech-long.webm'
+          files = list(path.parent.rglob('*'))
+          if not path.is_file() or [p for p in files if p.is_file()] != [path]:
+              raise SystemExit('controlled speech artifact must contain only speech-long.webm')
+          actual = hashlib.sha256(path.read_bytes()).hexdigest()
+          if (actual != fixture['controlled_webm_sha256'] or
+                  path.stat().st_size != fixture['controlled_fixture']['bytes']):
+              raise SystemExit('controlled speech artifact SHA-256 or bytes mismatch')
+          Path('evidence/controlled-fixture.json').write_text(json.dumps({
+              'artifact_run_id': fixture['controlled_fixture']['run_id'],
+              'artifact_name': 's503-controlled-speech', 'path': str(path.resolve()),
+              'sha256': actual, 'bytes': path.stat().st_size,
+              'license_evidence': fixture['controlled_fixture']['license_evidence'],
+              'review_evidence': fixture['controlled_fixture']['review_evidence']}, indent=2) + '\n')
+          PY
+
       - name: Acquire independent operator URLs and write candidate-bound manifest
         shell: bash
         run: |
@@ -403,11 +449,14 @@ jobs:
               (workspace / 'evidence' / ('acquire-' + label + '-result.json')).write_text(
                   json.dumps(result, indent=2) + '\n')
               media = result['media']
+              if len(result.get('artifacts', [])) != 1 or result.get('version') != 'bashy-transcribe-stage-v1':
+                  raise SystemExit(label + ' acquisition stage artifact count or schema mismatch')
               artifact = result['artifacts'][0]
               path = Path(artifact['path']).resolve(strict=True)
               expected = admission['operator_media'][label]['sha256']
               if not (path.parent == work.resolve() and path.suffix.lower() == '.webm' and
-                      media['video_id'] == '_j_PixI3Muo' and
+                      media['source'] == url and media['video_id'] == '_j_PixI3Muo' and
+                      artifact['media_type'] == 'audio/webm' and
                       media['duration_ms'] == admission['operator_duration_ms'] and
                       artifact['sha256'] == expected and gate.digest(path) == expected):
                   raise SystemExit(label + ' acquired media identity or SHA-256 mismatch')
@@ -421,7 +470,7 @@ jobs:
           decoder = (binaries / ('transcribe-webm-opus' + suffix)).resolve(strict=True)
           whisper = (root / 'cache/tools/whisper-cpp/v1.9.5' /
                      ('whisper-cli' + suffix)).resolve(strict=True)
-          controlled = (workspace / 'examples/transcribe/webm-opus/testdata/speech.webm').resolve(strict=True)
+          controlled = (root / 'controlled/speech-long.webm').resolve(strict=True)
           manifest = {
               'schema': 's503-youtube-pipeline-v1',
               'candidate_commit': os.environ['CANDIDATE_COMMIT'],
@@ -482,17 +531,212 @@ jobs:
               'connected': True}, indent=2) + '\n')
           PY
 
-      - name: Block until external offline replay is implemented
+      - name: Verify admitted network enforcer and prepare offline driver
         shell: bash
         run: |
-          echo 'BLOCKED: externally contained offline replay is required' >&2
-          exit 1
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import shutil
+          admission = json.loads(Path('docs/sprint-503/evidence/native-transcription-admission.json').read_text())
+          plan = admission['offline_canary'][os.environ['TARGET_LABEL']]
+          choices = {'Linux': ('linux-unshare-net', '/usr/bin/unshare'),
+                     'macOS': ('macos-sandbox-deny-network', '/usr/bin/sandbox-exec'),
+                     'Windows': ('windows-firewall-program-block', shutil.which('pwsh'))}
+          method, binary = choices[os.environ['TARGET_OS']]
+          if not binary or not Path(binary).is_file():
+              raise SystemExit('BLOCKED: native OS network enforcer is unavailable')
+          actual = hashlib.sha256(Path(binary).read_bytes()).hexdigest()
+          if plan['method'] != method or plan['enforcer_sha256'] != actual:
+              raise SystemExit('BLOCKED: native OS network enforcer differs from reviewed admission')
+          Path('evidence/offline-enforcer.json').write_text(json.dumps({
+              'method': method, 'path': str(Path(binary).resolve()), 'sha256': actual,
+              'probe_command': plan['probe_command']}, indent=2) + '\n')
+          PY
+          cat > "$RUNNER_TEMP/s503-native/offline-runner.py" <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          import platform
+          import subprocess
+          import sys
 
-      - name: Upload partial identity and dependency evidence
+          workspace, root = map(Path, sys.argv[1:3])
+          evidence = workspace / 'evidence'
+          online = json.loads((root / 'manifest-online.json').read_text())
+          if (sys.executable != online['python'] or
+                  hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest() !=
+                  online['python_sha256']):
+              raise SystemExit('Python executable changed before offline replay')
+          enforcer = json.loads((evidence / 'offline-enforcer.json').read_text())
+          expected_probe = ['python-socket-connect', '1.1.1.1:443']
+          if enforcer['probe_command'] != expected_probe:
+              raise SystemExit('unreviewed network probe')
+          probe_code = (
+              'import socket,sys\n'
+              'try:\n'
+              '    socket.create_connection(("1.1.1.1",443),timeout=5)\n'
+              'except OSError as exc:\n'
+              '    print("DENIED_ERRNO=%s ERROR=%s" % (exc.errno,exc))\n'
+              '    sys.exit(23)\n'
+              'sys.exit(0)\n')
+          def probe(phase):
+              proc = subprocess.run([sys.executable, '-c', probe_code],
+                                    capture_output=True, text=True, timeout=10)
+              error = (proc.stdout + proc.stderr).strip()
+              allowed = {'Linux': ('1', '13', '101'),
+                         'Darwin': ('1', '13', '51'),
+                         'Windows': ('10013', '10051', '10060')}
+              os_name = platform.system()
+              if proc.returncode != 23 or not any(
+                      'DENIED_ERRNO=' + n + ' ' in error for n in allowed[os_name]):
+                  raise SystemExit('external network canary did not prove OS denial: ' +
+                                   str(proc.returncode) + ' ' + error)
+              report = {'schema': 's503-network-denial-v1',
+                        'os': online['os'], 'arch': online['arch'],
+                        'candidate_commit': online['candidate_commit'],
+                        'network_denied': True, 'probe_command': expected_probe,
+                        'actual_argv': [sys.executable, '-c', probe_code],
+                        'exit_code': proc.returncode, 'error': error,
+                        'method': enforcer['method'],
+                        'enforcer_sha256': enforcer['sha256'], 'phase': phase}
+              path = evidence / ('network-denial-' + phase + '.json')
+              path.write_text(json.dumps(report, indent=2) + '\n')
+              return path
+          first = probe('before')
+          online['offline_enforcement'] = {
+              'method': enforcer['method'], 'canary_report': str(first.resolve()),
+              'canary_sha256': hashlib.sha256(first.read_bytes()).hexdigest()}
+          manifest = root / 'manifest-offline.json'
+          manifest.write_text(json.dumps(online, indent=2) + '\n')
+          (evidence / 'manifest-offline.json').write_text(json.dumps(online, indent=2) + '\n')
+          command = [sys.executable,
+                     str(workspace / 'examples/transcribe/verify-youtube-pipeline.py'),
+                     str(manifest), '--offline', '--output-dir',
+                     str(root / 'pipeline-offline')]
+          try:
+              result = subprocess.run(command, cwd=workspace)
+          finally:
+              probe('after')
+          if result.returncode:
+              raise SystemExit('offline pipeline gate failed: ' + str(result.returncode))
+          PY
+          cp "$RUNNER_TEMP/s503-native/offline-runner.py" evidence/offline-runner.py
+
+      - name: Replay offline in a Linux network namespace
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          enforcer=$(python -c 'import json; print(json.load(open("evidence/offline-enforcer.json"))["path"])')
+          interpreter=$(python -c 'import json; print(json.load(open("evidence/dependencies.json"))["python"])')
+          sudo "$enforcer" --net -- "$interpreter" \
+            "$RUNNER_TEMP/s503-native/offline-runner.py" \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/s503-native"
+
+      - name: Replay offline under macOS sandbox network denial
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          enforcer=$(python -c 'import json; print(json.load(open("evidence/offline-enforcer.json"))["path"])')
+          interpreter=$(python -c 'import json; print(json.load(open("evidence/dependencies.json"))["python"])')
+          "$enforcer" -p '(version 1) (allow default) (deny network*)' \
+            "$interpreter" "$RUNNER_TEMP/s503-native/offline-runner.py" \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/s503-native"
+
+      - name: Replay offline with temporary Windows program firewall rules
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:RUNNER_TEMP 's503-native'
+          $m = Get-Content (Join-Path $root 'manifest-online.json') -Raw | ConvertFrom-Json
+          $suffix = '.exe'
+          $programs = @($m.python, $m.bashy, $m.helper, $m.decoder.exec[0],
+                        $m.whisper, $m.deno, (Get-Command bash.exe).Source,
+                        (Get-Command pwsh.exe).Source, (Get-Command curl.exe).Source)
+          $programs = @($programs | Sort-Object -Unique)
+          $rules = @()
+          $expectedPrograms = @{}
+          try {
+            foreach ($program in $programs) {
+              if (-not (Test-Path -LiteralPath $program -PathType Leaf)) {
+                throw "Cannot firewall missing executable: $program"
+              }
+              $name = 'S503-native-offline-' + [guid]::NewGuid().ToString('N')
+              New-NetFirewallRule -Name $name -DisplayName $name -Enabled True `
+                -Direction Outbound -Action Block -Profile Any -Program $program | Out-Null
+              $rules += $name
+              $expectedPrograms[$name] = $program
+            }
+            $active = @()
+            foreach ($name in $rules) {
+              $rule = Get-NetFirewallRule -Name $name
+              $filter = Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $rule
+              if ($rule.Enabled -ne 'True' -or $rule.Direction -ne 'Outbound' -or
+                  $rule.Action -ne 'Block' -or
+                  $filter.Program -ne $expectedPrograms[$name]) {
+                throw "Firewall rule inactive: $name"
+              }
+              $active += [pscustomobject]@{ name = $name; program = $filter.Program;
+                                             action = $rule.Action.ToString();
+                                             enabled = $rule.Enabled.ToString() }
+            }
+            $active | ConvertTo-Json -Depth 4 | Set-Content evidence/windows-firewall-active.json
+            & $m.python (Join-Path $root 'offline-runner.py') $env:GITHUB_WORKSPACE $root
+            if ($LASTEXITCODE -ne 0) { throw "Offline runner failed: $LASTEXITCODE" }
+            foreach ($name in $rules) {
+              $rule = Get-NetFirewallRule -Name $name
+              if ($rule.Enabled -ne 'True') { throw "Firewall rule disabled during replay: $name" }
+            }
+          } finally {
+            foreach ($name in $rules) {
+              Remove-NetFirewallRule -Name $name -ErrorAction Stop
+            }
+          }
+
+      - name: Check native result evidence and unresolved cancellation gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          root = Path(os.environ['RUNNER_TEMP']) / 's503-native'
+          evidence = Path('evidence')
+          for phase in ('before', 'after'):
+              report = json.loads((evidence / ('network-denial-' + phase + '.json')).read_text())
+              if report['network_denied'] is not True or report['exit_code'] != 23:
+                  raise SystemExit('network denial failed in ' + phase + ' canary')
+          for mode, count in (('online', 8), ('offline', 4)):
+              report = json.loads((root / ('pipeline-' + mode) / 'result.json').read_text())
+              if (report['candidate_commit'] != os.environ['CANDIDATE_COMMIT'] or
+                  report['online_acquisition'] != (mode == 'online') or
+                  report['offline'] != (mode == 'offline') or
+                  report['failure_cleanup'] != 'pass' or
+                  len(report['results']) != count or
+                  report['function_receipts']['count'] < 2):
+                  raise SystemExit(mode + ' pipeline result is incomplete')
+              if report['download_cancellation'] != 'pass':
+                  raise SystemExit('BLOCKED: native URL download cancellation remains untested')
+              if report['local_pipeline_cancellation'] != 'pass':
+                  raise SystemExit('BLOCKED: native local pipeline cancellation remains untested')
+          PY
+
+      - name: Upload native identity, transcripts and denial evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: s503-native-transcription-${{ matrix.label }}
-          path: evidence/
+          path: |
+            evidence/
+            ${{ runner.temp }}/s503-native/pipeline-online/
+            ${{ runner.temp }}/s503-native/pipeline-offline/
           if-no-files-found: warn
           retention-days: 14
