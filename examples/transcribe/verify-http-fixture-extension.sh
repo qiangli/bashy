@@ -184,7 +184,22 @@ test "$(cat "$work/script.txt")" = 'fixture media decoded'
 grep -F 'GET /index.html' "$work/server.log" >/dev/null
 grep -F 'GET /episode.fpcm' "$work/server.log" >/dev/null
 
-if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" != 1 ]; then
+if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" = 1 ]; then
+    bashy transcribe --output "$work/automatic.txt" "$fixture_url" > "$work/automatic-path.txt"
+    cmp "$work/script.txt" "$work/automatic.txt"
+    "$BASHY_BIN" commands add fixture-site-duplicate --set exec.0=/bin/sh \
+        --set "exec.1=$work/fixture-stage.sh" --set exec.2=fixture-site \
+        --set effects.0=read --set effects.1=write --set effects.2=net \
+        --set provides.0=transcribe.acquire >/dev/null
+    if bashy transcribe --output "$work/ambiguous.txt" "$fixture_url" >"$work/ambiguous.out" 2>"$work/ambiguous.err"; then
+        echo 'ambiguous native fixture adapters were accepted' >&2; exit 1
+    fi
+    grep -F 'ambiguous acquire adapters' "$work/ambiguous.err" >/dev/null
+    test ! -e "$work/ambiguous.txt"
+    # Explicit registration remains deterministic with an ambiguous source set.
+    bashy transcribe $common --output "$work/explicit.txt" "$fixture_url" > "$work/explicit-path.txt"
+    cmp "$work/script.txt" "$work/explicit.txt"
+else
     # The shim only fills the pre-S503.2 selection front door; it still selects
     # the registered providers and the pipeline still does all four stage calls.
     bashy transcribe --output "$work/automatic.txt" "$fixture_url" > "$work/automatic-path.txt"
@@ -235,6 +250,10 @@ cmp "$work/script.txt" "$work/override.txt"
 if bashy transcribe --source fixture-site-source --decoder unavailable-fpcm --provider fixture-infer --exporter fixture-export --output "$work/unavailable.txt" "$fixture_url" >"$work/unavailable.out" 2>"$work/unavailable.err"; then
     echo 'unavailable decoder was accepted' >&2; exit 1
 fi
-grep -F 'provider "unavailable-fpcm" is unavailable' "$work/unavailable.err" >/dev/null
+if [ "${BASHY_TRANSCRIBE_NATIVE:-0}" = 1 ]; then
+    grep -F 'provider "unavailable-fpcm" is not registered' "$work/unavailable.err" >/dev/null
+else
+    grep -F 'provider "unavailable-fpcm" is unavailable' "$work/unavailable.err" >/dev/null
+fi
 test ! -e "$work/unavailable.txt"
 printf 'http fixture extension PASS; acquired FPCM -> decoded PCM -> infer/export, script/skill parity, local override, unavailable adapter refusal\n'
