@@ -92,6 +92,9 @@ jobs:
               require(isinstance(value, str) and len(value.split()) >= 6 and
                       'FILL' not in value and 'TODO' not in value,
                       key + ' human-reviewed excerpt')
+          for key in ('operator_min_score', 'controlled_min_score'):
+              require(isinstance(a.get(key), (int, float)) and 0.5 <= a[key] <= 1,
+                      key + ' reviewed transcript tolerance')
           require(a.get('review_evidence'), 'reviewed source for both excerpts')
           require(a.get('controlled_webm_sha256') ==
                   'dfa1a92759f3ab64c793d16140204efcd9e7c8b84e367a28efd31548da1f04b4',
@@ -103,8 +106,7 @@ jobs:
           for label, item in offline.items():
               require(isinstance(item.get('method'), str) and item['method'].strip() and
                       digest.fullmatch(item.get('enforcer_sha256', '')) and
-                      isinstance(item.get('probe_command'), list) and item['probe_command'] and
-                      all(isinstance(arg, str) and arg for arg in item['probe_command']),
+                      item.get('probe_command') == ['python-socket-connect', '1.1.1.1:443'],
                       label + ' reviewed OS network-denial enforcer and probe')
           print('PASS: reviewed exact-hash and excerpt admission record has six targets')
           PY
@@ -118,23 +120,24 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - {label: ubuntu-24.04, os: Linux, arch: amd64, python_arch: x64, whisper_sha256: e4be4bfdd6d9a97dc059a515468e4e9190359960dedff2971643b9e454c08e1c}
-          - {label: ubuntu-24.04-arm, os: Linux, arch: arm64, python_arch: arm64, whisper_sha256: 9f16af5e93ebbe3621be2e60338109d9f4d41f2a8fe7a39d30c390680da450b0}
-          - {label: macos-15-intel, os: macOS, arch: amd64, python_arch: x64, whisper_sha256: d72f0bcdf516912f6e915005ec12cfc640edb7079ad9611e58d9526eac082a90}
-          - {label: macos-15, os: macOS, arch: arm64, python_arch: arm64, whisper_sha256: 1af8eb29d5478143212de7d9aef1eee174c0f904ee5aece8b80c24b5db3974de}
-          - {label: windows-2025, os: Windows, arch: amd64, python_arch: x64, whisper_sha256: 0f2505d8bcd7a2c3a299f3061ce6bab1b180a6fc493ab17c1920e395672e4106}
-          - {label: windows-11-arm, os: Windows, arch: arm64, python_arch: arm64, whisper_sha256: 5fa6aa37bf80e12d713d14228ff73a04b05ee730da228d691a513e63fdd926bf}
+          - {label: ubuntu-24.04, os: Linux, arch: amd64, python_arch: x64, python_version: '3.12.15', whisper_sha256: e4be4bfdd6d9a97dc059a515468e4e9190359960dedff2971643b9e454c08e1c}
+          - {label: ubuntu-24.04-arm, os: Linux, arch: arm64, python_arch: arm64, python_version: '3.12.15', whisper_sha256: 9f16af5e93ebbe3621be2e60338109d9f4d41f2a8fe7a39d30c390680da450b0}
+          - {label: macos-15-intel, os: macOS, arch: amd64, python_arch: x64, python_version: '3.12.10', whisper_sha256: d72f0bcdf516912f6e915005ec12cfc640edb7079ad9611e58d9526eac082a90}
+          - {label: macos-15, os: macOS, arch: arm64, python_arch: arm64, python_version: '3.12.10', whisper_sha256: 1af8eb29d5478143212de7d9aef1eee174c0f904ee5aece8b80c24b5db3974de}
+          - {label: windows-2025, os: Windows, arch: amd64, python_arch: x64, python_version: '3.12.10', whisper_sha256: 0f2505d8bcd7a2c3a299f3061ce6bab1b180a6fc493ab17c1920e395672e4106}
+          - {label: windows-11-arm, os: Windows, arch: arm64, python_arch: arm64, python_version: '3.12.10', whisper_sha256: 5fa6aa37bf80e12d713d14228ff73a04b05ee730da228d691a513e63fdd926bf}
     env:
       TARGET_LABEL: ${{ matrix.label }}
       TARGET_OS: ${{ matrix.os }}
       TARGET_ARCH: ${{ matrix.arch }}
       EXPECTED_WHISPER_SHA256: ${{ matrix.whisper_sha256 }}
+      EXPECTED_PYTHON_VERSION: ${{ matrix.python_version }}
       CANDIDATE_COMMIT: ${{ github.sha }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ matrix.python_version }}
           architecture: ${{ matrix.python_arch }}
       - uses: actions/setup-go@v6
         with:
@@ -147,9 +150,11 @@ jobs:
           mkdir -p evidence
           python - <<'PY'
           import json
+          import hashlib
           import os
           import platform
           import subprocess
+          import sys
           from pathlib import Path
           names = {'Linux': 'Linux', 'Darwin': 'macOS', 'Windows': 'Windows'}
           os_name = names.get(platform.system(), platform.system())
@@ -172,10 +177,14 @@ jobs:
           identity = {'schema': 's503-runner-identity-v1',
                       'runner_label': os.environ['TARGET_LABEL'], 'actual_os': os_name,
                       'actual_arch': os_arch, 'process_arch': raw, 'go_host_arch': go_arch,
+                      'python_version': platform.python_version(),
+                      'python_executable': sys.executable,
+                      'python_sha256': hashlib.sha256(Path(sys.executable).read_bytes()).hexdigest(),
                       'translated': translated, 'commit_sha': os.environ['CANDIDATE_COMMIT']}
           Path('evidence/runner-identity.json').write_text(json.dumps(identity, indent=2) + '\n')
           if (os_name != os.environ['TARGET_OS'] or os_arch != os.environ['TARGET_ARCH'] or
-                  process_arch != os_arch or go_arch != os_arch or translated == '1'):
+                  process_arch != os_arch or go_arch != os_arch or translated == '1' or
+                  platform.python_version() != os.environ['EXPECTED_PYTHON_VERSION']):
               raise SystemExit('non-native runner, Python, or Go toolchain')
           PY
 
@@ -264,6 +273,8 @@ jobs:
           import os
           from pathlib import Path
           import shutil
+          import subprocess
+          import sys
           import urllib.request
           import zipfile
 
@@ -306,9 +317,24 @@ jobs:
               raise SystemExit('Deno executable SHA-256 mismatch')
           deno.chmod(0o755)
           yt.chmod(0o755)
+          yt_version = subprocess.check_output([sys.executable, '-I', str(yt), '--version'], text=True).strip()
+          if yt_version != '2026.10.21':
+              raise SystemExit('yt-dlp version mismatch')
+          with zipfile.ZipFile(yt) as zipapp:
+              ejs_version = zipapp.read('yt_dlp_ejs/_version.py').decode()
+          if "__version__ = version = '0.8.0'" not in ejs_version:
+              raise SystemExit('yt-dlp EJS v0.8.0 is not bundled')
+          deno_version = subprocess.check_output([str(deno), '--version'], text=True).splitlines()[0]
+          if not deno_version.startswith('deno 2.9.8 '):
+              raise SystemExit('Deno v2.9.8 mismatch')
           resolved = {'yt_dlp': str(yt.resolve()), 'yt_dlp_sha256': sha(yt),
                       'model': str(model.resolve()), 'model_sha256': sha(model),
-                      'deno': str(deno.resolve()), 'deno_sha256': sha(deno)}
+                      'deno': str(deno.resolve()), 'deno_sha256': sha(deno),
+                      'python': sys.executable,
+                      'python_version': sys.version.split()[0],
+                      'python_sha256': sha(Path(sys.executable)),
+                      'yt_dlp_version': yt_version, 'yt_dlp_ejs_version': '0.8.0',
+                      'deno_version': deno_version}
           Path('evidence/dependencies.json').write_text(json.dumps(resolved, indent=2) + '\n')
           PY
           python - <<'PY'
@@ -329,9 +355,137 @@ jobs:
           built['whisper-cli'] = {'sha256': expected, 'bytes': report['executable_bytes']}
           Path('evidence/built-binaries.json').write_text(json.dumps(built, indent=2) + '\n')
           PY
-          # Subsequent work is gated by the operator fixture preparation and
-          # externally enforced offline policy described in the companion note.
-          echo 'BLOCKED: native operator fixture and offline policy wiring await reviewed admission' >&2
+
+      - name: Acquire independent operator URLs and write candidate-bound manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib
+          import importlib.util
+          import json
+          import os
+          from pathlib import Path
+          import platform
+          import subprocess
+          import sys
+
+          workspace = Path(os.environ['GITHUB_WORKSPACE']).resolve()
+          root = Path(os.environ['RUNNER_TEMP']) / 's503-native'
+          source = workspace / 'examples/transcribe/source_youtube.py'
+          gate_path = workspace / 'examples/transcribe/verify-youtube-pipeline.py'
+          spec = importlib.util.spec_from_file_location('s503_gate', gate_path)
+          gate = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(gate)
+          admission = json.loads((workspace / 'docs/sprint-503/evidence/native-transcription-admission.json').read_text())
+          dependencies = json.loads((workspace / 'evidence/dependencies.json').read_text())
+          built = json.loads((workspace / 'evidence/built-binaries.json').read_text())
+          if sys.executable != dependencies['python'] or gate.digest(sys.executable) != dependencies['python_sha256']:
+              raise SystemExit('Python executable changed after dependency admission')
+          if gate.digest(dependencies['deno']) != dependencies['deno_sha256']:
+              raise SystemExit('Deno executable changed before acquisition')
+          env = dict(os.environ, BASHY_TRANSCRIBE_YTDLP=dependencies['yt_dlp'],
+                     BASHY_TRANSCRIBE_JS_RUNTIME=dependencies['deno'],
+                     BASHY_TRANSCRIBE_PYTHON=sys.executable)
+          retained = {}
+          for label, url in gate.URLS.items():
+              work = root / ('operator-' + label)
+              work.mkdir(parents=True, exist_ok=False)
+              request = {'version': 'bashy-transcribe-stage-v1', 'stage': 'acquire',
+                         'input': url, 'work_dir': str(work.resolve())}
+              request_path = workspace / 'evidence' / ('acquire-' + label + '-request.json')
+              request_path.write_text(json.dumps(request, indent=2) + '\n')
+              proc = subprocess.run([sys.executable, str(source), str(request_path)],
+                                    env=env, capture_output=True, text=True, timeout=900)
+              if proc.returncode:
+                  raise SystemExit(label + ' acquisition failed: ' + proc.stderr[-3000:])
+              result = json.loads(proc.stdout)
+              (workspace / 'evidence' / ('acquire-' + label + '-result.json')).write_text(
+                  json.dumps(result, indent=2) + '\n')
+              media = result['media']
+              artifact = result['artifacts'][0]
+              path = Path(artifact['path']).resolve(strict=True)
+              expected = admission['operator_media'][label]['sha256']
+              if not (path.parent == work.resolve() and path.suffix.lower() == '.webm' and
+                      media['video_id'] == '_j_PixI3Muo' and
+                      media['duration_ms'] == admission['operator_duration_ms'] and
+                      artifact['sha256'] == expected and gate.digest(path) == expected):
+                  raise SystemExit(label + ' acquired media identity or SHA-256 mismatch')
+              retained[label] = {'url': url, 'video_id': media['video_id'],
+                                 'path': str(path), 'duration_ms': media['duration_ms'],
+                                 'sha256': expected}
+          suffix = '.exe' if os.environ['TARGET_OS'] == 'Windows' else ''
+          binaries = root / 'bin'
+          bashy = (binaries / ('bashy' + suffix)).resolve(strict=True)
+          helper = (binaries / ('transcribe-adapter' + suffix)).resolve(strict=True)
+          decoder = (binaries / ('transcribe-webm-opus' + suffix)).resolve(strict=True)
+          whisper = (root / 'cache/tools/whisper-cpp/v1.9.5' /
+                     ('whisper-cli' + suffix)).resolve(strict=True)
+          controlled = (workspace / 'examples/transcribe/webm-opus/testdata/speech.webm').resolve(strict=True)
+          manifest = {
+              'schema': 's503-youtube-pipeline-v1',
+              'candidate_commit': os.environ['CANDIDATE_COMMIT'],
+              'source_sha256': {name: gate.digest(workspace / name) for name in gate.SOURCE_FILES},
+              'os': platform.system().lower(), 'arch': platform.machine().lower(),
+              'acquisition_evidence': {'windows_amd64': 'run165', 'darwin_arm64': 'run168'},
+              'bashy': str(bashy), 'bashy_sha256': built['bashy']['sha256'],
+              'helper': str(helper), 'helper_sha256': built['transcribe-adapter']['sha256'],
+              'python': sys.executable, 'python_sha256': dependencies['python_sha256'],
+              'python_version': dependencies['python_version'],
+              'yt_dlp': dependencies['yt_dlp'], 'yt_dlp_sha256': dependencies['yt_dlp_sha256'],
+              'deno': dependencies['deno'], 'deno_sha256': dependencies['deno_sha256'],
+              'whisper': str(whisper), 'whisper_sha256': built['whisper-cli']['sha256'],
+              'model_id': 'tiny', 'model': dependencies['model'],
+              'model_sha256': dependencies['model_sha256'],
+              'decoder': {'name': 'transcribe-webm-opus', 'exec': [str(decoder)],
+                          'sha256': built['transcribe-webm-opus']['sha256'],
+                          'license_evidence': 'examples/transcribe/webm-opus/THIRD_PARTY_LICENSES at candidate commit'},
+              'controlled_webm': str(controlled),
+              'controlled_webm_sha256': admission['controlled_webm_sha256'],
+              'controlled': {'duration_ms': admission['controlled_duration_ms'],
+                             'reference': admission['controlled_reference'],
+                             'min_score': admission['controlled_min_score']},
+              'operator': {'duration_ms': admission['operator_duration_ms'],
+                           'reference': admission['operator_reference'],
+                           'min_score': admission['operator_min_score']},
+              'operator_media': retained,
+              'case_timeout_seconds': 1800, 'cancel_after_seconds': 0.05,
+          }
+          if gate.digest(controlled) != admission['controlled_webm_sha256']:
+              raise SystemExit('controlled fixture SHA-256 mismatch')
+          manifest_path = root / 'manifest-online.json'
+          manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+          (workspace / 'evidence/manifest-online.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+
+      - name: Run real online script and skill transcription gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest="$RUNNER_TEMP/s503-native/manifest-online.json"
+          python examples/transcribe/verify-youtube-pipeline.py "$manifest" --validate-only
+          python examples/transcribe/verify-youtube-pipeline.py "$manifest" \
+            --online --output-dir "$RUNNER_TEMP/s503-native/pipeline-online"
+
+      - name: Prove online canary connectivity before offline containment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import socket
+          from pathlib import Path
+          with socket.create_connection(('1.1.1.1', 443), timeout=8):
+              pass
+          Path('evidence/network-baseline.json').write_text(json.dumps({
+              'schema': 's503-network-baseline-v1', 'target': '1.1.1.1:443',
+              'connected': True}, indent=2) + '\n')
+          PY
+
+      - name: Block until external offline replay is implemented
+        shell: bash
+        run: |
+          echo 'BLOCKED: externally contained offline replay is required' >&2
           exit 1
 
       - name: Upload partial identity and dependency evidence
