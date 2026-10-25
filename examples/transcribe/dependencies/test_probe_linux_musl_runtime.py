@@ -2,6 +2,8 @@
 
 import tempfile
 import unittest
+import os
+import stat
 from pathlib import Path
 from unittest.mock import patch
 
@@ -90,6 +92,22 @@ class LinkInputPolicyTest(unittest.TestCase):
             probe.assert_no_undefined_symbols(nm + "                 U _Unwind_Resume\n", symbols)
         with self.assertRaisesRegex(RuntimeError, "absent from nm"):
             probe.assert_no_undefined_symbols("$ nm -u whisper-cli\n", symbols)
+
+    def test_retained_cli_keeps_executable_mode_and_exact_bytes(self):
+        source = self.build / "whisper-cli"
+        retained = self.root / "evidence" / "whisper-cli"
+        retained.parent.mkdir()
+        sentinel = retained.parent / "notice.txt"
+        source.write_bytes(b"\x7fELF\x00example")
+        source.chmod(0o751)
+        sentinel.write_bytes(b"notice")
+        mode = probe.retain_executable(source, retained)
+        self.assertEqual(mode, 0o751)
+        self.assertEqual(retained.read_bytes(), source.read_bytes())
+        self.assertEqual(stat.S_IMODE(retained.stat().st_mode), 0o751)
+        self.assertTrue(os.access(retained, os.X_OK))
+        self.assertEqual(stat.S_IMODE(source.stat().st_mode), 0o751)
+        self.assertEqual(sentinel.read_bytes(), b"notice")
 
     def test_supported_print_map_is_extracted_from_final_build_log(self):
         source = (

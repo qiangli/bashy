@@ -15,6 +15,7 @@ import platform
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -81,6 +82,19 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: stream.read(1 << 20), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def retain_executable(source: Path, destination: Path) -> int:
+    """Copy the linked CLI bytes and its executable mode into evidence."""
+    source_mode = stat.S_IMODE(source.stat().st_mode)
+    if not source_mode & 0o111:
+        raise RuntimeError(f"linked CLI is not executable: {source}")
+    source_sha = sha256(source)
+    shutil.copyfile(source, destination)
+    destination.chmod(source_mode)
+    if stat.S_IMODE(destination.stat().st_mode) != source_mode or sha256(destination) != source_sha:
+        raise RuntimeError("retained CLI bytes or executable mode differ from linked binary")
+    return source_mode
 
 
 def run(command: list[str], record: Path, *, timeout: int = 300) -> str:
@@ -431,7 +445,7 @@ def main() -> int:
         binary = build / "bin" / "whisper-cli"
         if not binary.is_file() or not map_file.is_file():
             raise RuntimeError("binary or LLD map missing")
-        shutil.copyfile(binary, output / "whisper-cli")
+        report["binary_mode"] = format(retain_executable(binary, output / "whisper-cli"), "04o")
         report["binary_sha256"] = sha256(output / "whisper-cli")
         report["link_map_sha256"] = sha256(map_file)
         report["link_inputs"] = check_link_inputs(map_file, build_log, build, zig.parent,
