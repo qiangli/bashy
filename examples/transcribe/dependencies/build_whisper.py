@@ -119,20 +119,32 @@ def verify_source_archive(archive_path: Path) -> None:
 
 def download_source_archive(dest_path: Path, timeout_seconds: int = 120) -> None:
     dest_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_dest = dest_path.with_suffix(".tmp")
-    if temp_dest.exists():
-        temp_dest.unlink()
-
-    req = urllib.request.Request(
-        PINNED_SOURCE_URL,
-        headers={"User-Agent": "bashy-whisper-build/1.0"},
-    )
-    with urllib.request.urlopen(req, timeout=timeout_seconds) as resp, open(
-        temp_dest, "wb"
-    ) as out:
-        shutil.copyfileobj(resp, out)
-
-    temp_dest.replace(dest_path)
+    # Each invocation owns its temporary file. Verify the bytes before the
+    # atomic replace so a failed or concurrent download never poisons cache.
+    fd, name = tempfile.mkstemp(prefix=".whisper-source-", dir=dest_path.parent)
+    temp_dest = Path(name)
+    try:
+        size = 0
+        sha = hashlib.sha256()
+        req = urllib.request.Request(
+            PINNED_SOURCE_URL, headers={"User-Agent": "bashy-whisper-build/1.0"}
+        )
+        with os.fdopen(fd, "wb") as out, urllib.request.urlopen(
+            req, timeout=timeout_seconds
+        ) as resp:
+            while chunk := resp.read(65536):
+                size += len(chunk)
+                if size > PINNED_SOURCE_BYTES:
+                    raise ValueError("source archive exceeds pinned byte size")
+                out.write(chunk)
+                sha.update(chunk)
+            out.flush()
+            os.fsync(out.fileno())
+        if size != PINNED_SOURCE_BYTES or sha.hexdigest() != PINNED_SOURCE_SHA256:
+            raise ValueError("downloaded source archive fails pinned size/SHA-256")
+        os.replace(temp_dest, dest_path)
+    finally:
+        temp_dest.unlink(missing_ok=True)
 
 
 def default_cache_dir(os_name: str) -> Path:
@@ -170,37 +182,36 @@ def find_toolchain(os_name: str) -> Dict[str, str]:
     if not cmake_bin:
         raise RuntimeError("cmake executable not found on PATH or bashy cache")
 
-    # Detect C / C++ compiler
+    # Select a coherent C/C++ pair. CMake must receive these exact paths;
+    # merely reporting a compiler found on PATH does not prove it was used.
     c_compiler = None
     cxx_compiler = None
     if os_name == "windows":
         # Check llvm-mingw in bashy bin
         local_app_data = os.environ.get("LOCALAPPDATA", "")
         clang_candidate = Path(local_app_data) / "bashy/bin/clang/20260616/llvm-mingw-20260616-ucrt-x86_64/bin/clang.exe"
-        if clang_candidate.is_file():
+        if normalize_arch() == "amd64" and clang_candidate.is_file():
             c_compiler = str(clang_candidate)
             cxx_candidate = clang_candidate.parent / "clang++.exe"
             if cxx_candidate.is_file():
                 cxx_compiler = str(cxx_candidate)
+            else:
+                c_compiler = None
 
     if not c_compiler:
-        for candidate in ("clang", "gcc", "cl"):
-            found = shutil.which(candidate)
-            if found:
-                c_compiler = found
+        for c_name, cxx_name in (("clang", "clang++"), ("gcc", "g++"), ("cl", "cl")):
+            c_path, cxx_path = shutil.which(c_name), shutil.which(cxx_name)
+            if c_path and cxx_path:
+                c_compiler, cxx_compiler = c_path, cxx_path
                 break
 
-    if not cxx_compiler:
-        for candidate in ("clang++", "g++", "cl"):
-            found = shutil.which(candidate)
-            if found:
-                cxx_compiler = found
-                break
+    if not c_compiler or not cxx_compiler:
+        raise RuntimeError("complete C/C++ compiler pair not found")
 
     return {
-        "cmake": cmake_bin,
-        "c_compiler": c_compiler or "",
-        "cxx_compiler": cxx_compiler or "",
+        "cmake": str(Path(cmake_bin).resolve()),
+        "c_compiler": str(Path(c_compiler).resolve()),
+        "cxx_compiler": str(Path(cxx_compiler).resolve()),
     }
 
 
@@ -208,6 +219,8 @@ def get_cmake_build_flags(os_name: str, arch_name: str, toolchain: Dict[str, str
     """Generates strictly CPU-only, no-OpenMP, fail-closed CMake configuration arguments."""
     flags = [
         "-DCMAKE_BUILD_TYPE=Release",
+        f"-DCMAKE_C_COMPILER={toolchain['c_compiler']}",
+        f"-DCMAKE_CXX_COMPILER={toolchain['cxx_compiler']}",
         "-DBUILD_SHARED_LIBS=OFF",
         "-DWHISPER_BUILD_EXAMPLES=ON",
         "-DWHISPER_BUILD_TESTS=OFF",
@@ -239,67 +252,77 @@ def audit_dynamic_libraries(executable_path: Path, os_name: str) -> List[str]:
     imported: List[str] = []
     if os_name == "darwin":
         otool = shutil.which("otool")
-        if otool:
-            res = subprocess.run(
-                [otool, "-L", str(executable_path)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            )
-            if res.returncode == 0:
-                for line in res.stdout.splitlines()[1:]:
-                    line = line.strip()
-                    if line:
-                        lib = line.split()[0]
-                        imported.append(lib)
-                        # Verify no GPL / OpenMP libraries
-                        lib_lower = lib.lower()
-                        if "gomp" in lib_lower or "omp" in lib_lower:
-                            raise RuntimeError(f"audit failure: OpenMP dynamic library found: {lib}")
+        command = [otool, "-L", str(executable_path)] if otool else None
     elif os_name == "linux":
         ldd = shutil.which("ldd")
-        if ldd:
-            res = subprocess.run(
-                [ldd, str(executable_path)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                check=False,
-            )
-            if res.returncode == 0:
-                for line in res.stdout.splitlines():
-                    line = line.strip()
-                    if line:
-                        parts = line.split("=>")
-                        lib = parts[0].strip().split()[0]
-                        imported.append(lib)
-                        lib_lower = lib.lower()
-                        if "libgomp" in lib_lower:
-                            raise RuntimeError(f"audit failure: OpenMP dynamic library found: {lib}")
+        command = [ldd, str(executable_path)] if ldd else None
     elif os_name == "windows":
-        # Check objdump or llvm-objdump
-        for dumper in ("llvm-objdump", "objdump"):
-            dump_bin = shutil.which(dumper)
-            if dump_bin:
-                res = subprocess.run(
-                    [dump_bin, "-p", str(executable_path)],
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
-                    text=True,
-                    check=False,
-                )
-                if res.returncode == 0:
-                    for line in res.stdout.splitlines():
-                        if "DLL Name:" in line:
-                            dll = line.split("DLL Name:")[1].strip()
-                            imported.append(dll)
-                            dll_lower = dll.lower()
-                            if "gomp" in dll_lower or "omp" in dll_lower:
-                                raise RuntimeError(f"audit failure: OpenMP dynamic library found: {dll}")
-                break
+        dump_bin = shutil.which("llvm-objdump") or shutil.which("objdump")
+        command = [dump_bin, "-p", str(executable_path)] if dump_bin else None
+    else:
+        raise RuntimeError(f"audit failure: unsupported OS {os_name}")
+
+    if command is None:
+        raise RuntimeError(f"audit failure: dynamic library inspection tool unavailable on {os_name}")
+    res = subprocess.run(command, capture_output=True, text=True, check=False)
+    if res.returncode != 0:
+        raise RuntimeError(f"audit failure: {' '.join(command[:2])} exited {res.returncode}: {res.stderr.strip()}")
+    lines = res.stdout.splitlines()[1:] if os_name == "darwin" else res.stdout.splitlines()
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        if "not found" in line.lower():
+            raise RuntimeError(f"audit failure: unresolved dynamic library: {line}")
+        if os_name == "windows":
+            if "DLL Name:" not in line:
+                continue
+            lib = line.split("DLL Name:", 1)[1].strip()
+        elif os_name == "darwin":
+            lib = line.split()[0]
+        else:
+            if line.startswith("linux-vdso") or line.startswith("statically linked"):
+                continue
+            lib = line.split("=>", 1)[0].strip().split()[0]
+        if not lib:
+            raise RuntimeError(f"audit failure: malformed dependency line: {line}")
+        imported.append(lib)
+        name = Path(lib).name.lower()
+        if any(token in name for token in ("gomp", "libomp", "iomp", "vcomp")):
+            raise RuntimeError(f"audit failure: OpenMP dynamic library found: {lib}")
+    if not imported and "statically linked" not in res.stdout.lower():
+        raise RuntimeError("audit failure: no dynamic library information returned")
 
     return imported
+
+
+def publish_cached_executable(built_exe: Path, destination: Path, expected_sha: str) -> None:
+    """Verify a private staged copy before atomically publishing it."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    fd, staged_name = tempfile.mkstemp(prefix=".whisper-cli-", dir=destination.parent)
+    staged_cli = Path(staged_name)
+    try:
+        with os.fdopen(fd, "wb") as out, built_exe.open("rb") as src:
+            shutil.copyfileobj(src, out)
+            out.flush()
+            os.fsync(out.fileno())
+        os.chmod(staged_cli, 0o755)
+        if compute_sha256(staged_cli) != expected_sha:
+            raise RuntimeError("cache installation failed: staged SHA mismatch")
+        os.replace(staged_cli, destination)
+    finally:
+        staged_cli.unlink(missing_ok=True)
+
+
+def verify_cmake_compilers(cache_file: Path, toolchain: Dict[str, str]) -> None:
+    """Reject a configure result that silently chose different compilers."""
+    cache_text = cache_file.read_text()
+    for key, expected in (("CMAKE_C_COMPILER", toolchain["c_compiler"]),
+                          ("CMAKE_CXX_COMPILER", toolchain["cxx_compiler"])):
+        actual = next((line.split("=", 1)[1] for line in cache_text.splitlines()
+                       if line.startswith(key + ":")), None)
+        if actual is None or Path(actual).resolve() != Path(expected).resolve():
+            raise RuntimeError(f"CMake compiler provenance mismatch for {key}: expected {expected}, got {actual}")
 
 
 def build_whisper(
@@ -322,13 +345,35 @@ def build_whisper(
     # Fail-closed source verification before unpack
     verify_source_archive(archive_file)
 
+    with tempfile.TemporaryDirectory(prefix="whisper-build-", dir=work_dir) as run_name:
+        # Pin the bytes used by this build. An externally supplied archive can
+        # otherwise change between verification and extraction.
+        owned_archive = Path(run_name) / "source.tar.gz"
+        shutil.copyfile(archive_file, owned_archive)
+        verify_source_archive(owned_archive)
+        return _build_verified_source(
+            Path(run_name), owned_archive, cache_dir, parallel, dest_cli,
+            os_name, arch_name, runner_label,
+        )
+
+
+def _build_verified_source(
+    run_dir: Path,
+    archive_file: Path,
+    cache_dir: Optional[Path],
+    parallel: int,
+    dest_cli: Optional[Path],
+    os_name: str,
+    arch_name: str,
+    runner_label: str,
+) -> Dict[str, Any]:
+    """Build in an invocation-owned tree; cleanup is handled by the caller."""
+
     # Unpack into isolated source directory
-    src_dir = work_dir / f"whisper.cpp-{PINNED_VERSION}"
-    if src_dir.exists():
-        shutil.rmtree(src_dir)
+    src_dir = run_dir / f"whisper.cpp-{PINNED_VERSION}"
 
     with tarfile.open(archive_file, "r:gz") as tar:
-        tar.extractall(path=work_dir)
+        tar.extractall(path=run_dir)
 
     if not src_dir.is_dir():
         raise RuntimeError(f"unpacked directory not found at {src_dir}")
@@ -337,8 +382,6 @@ def build_whisper(
     toolchain = find_toolchain(os_name)
     cmake_bin = toolchain["cmake"]
     build_dir = src_dir / "build-static"
-    if build_dir.exists():
-        shutil.rmtree(build_dir)
 
     cmake_flags = get_cmake_build_flags(os_name, arch_name, toolchain)
 
@@ -355,6 +398,27 @@ def build_whisper(
         raise RuntimeError(
             f"CMake configure failed (exit {conf_res.returncode}):\nSTDOUT:\n{conf_res.stdout}\nSTDERR:\n{conf_res.stderr}"
         )
+
+    # Confirm CMake used the compilers we requested rather than an implicit
+    # generator default or a compiler inherited from ambient configuration.
+    verify_cmake_compilers(build_dir / "CMakeCache.txt", toolchain)
+
+    cmake_ver_res = subprocess.run(
+        [cmake_bin, "--version"], capture_output=True, text=True, check=False
+    )
+    if cmake_ver_res.returncode != 0 or not cmake_ver_res.stdout.strip():
+        raise RuntimeError("CMake version probe failed")
+    cmake_ver = cmake_ver_res.stdout.splitlines()[0]
+
+    compiler_versions = {}
+    for kind in ("c_compiler", "cxx_compiler"):
+        compiler = toolchain[kind]
+        version_arg = "/Bv" if Path(compiler).name.lower() in ("cl", "cl.exe") else "--version"
+        res = subprocess.run([compiler, version_arg], capture_output=True, text=True, check=False)
+        output = (res.stdout or res.stderr).strip()
+        if res.returncode != 0 or not output:
+            raise RuntimeError(f"compiler version probe failed for {compiler} (exit {res.returncode})")
+        compiler_versions[kind] = output.splitlines()[0]
 
     # Build whisper-cli target
     build_cmd = [
@@ -404,34 +468,15 @@ def build_whisper(
     # Audit dynamic libraries
     imported_libs = audit_dynamic_libraries(built_exe, os_name)
 
-    # Install into cache
+    # Install into cache through an invocation-owned file in the same directory.
+    # Concurrent builders publish complete identical binaries, never partial copies.
     target_cache_cli = dest_cli or get_default_coordination_cli_path(os_name, cache_dir)
-    target_cache_cli.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(built_exe, target_cache_cli)
-    os.chmod(target_cache_cli, 0o755)
+    publish_cached_executable(built_exe, target_cache_cli, exe_sha256)
 
     # Verify cached file matches
     cached_sha = compute_sha256(target_cache_cli)
     if cached_sha != exe_sha256:
         raise RuntimeError(f"cache installation failed: SHA mismatch on {target_cache_cli}")
-
-    # Inspect versions
-    cmake_ver_res = subprocess.run(
-        [cmake_bin, "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False
-    )
-    cmake_ver = cmake_ver_res.stdout.splitlines()[0] if cmake_ver_res.stdout else "unknown"
-
-    compiler_ver = "unknown"
-    if toolchain["c_compiler"]:
-        c_res = subprocess.run(
-            [toolchain["c_compiler"], "--version"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=False,
-        )
-        if c_res.stdout:
-            compiler_ver = c_res.stdout.splitlines()[0]
 
     report: Dict[str, Any] = {
         "platform": f"{os_name}/{arch_name}",
@@ -447,7 +492,9 @@ def build_whisper(
         "cmake_path": cmake_bin,
         "cmake_version": cmake_ver,
         "compiler_path": toolchain["c_compiler"],
-        "compiler_version": compiler_ver,
+        "compiler_version": compiler_versions["c_compiler"],
+        "cxx_compiler_path": toolchain["cxx_compiler"],
+        "cxx_compiler_version": compiler_versions["cxx_compiler"],
         "build_flags": cmake_flags,
         "executable_built_path": str(built_exe),
         "executable_sha256": exe_sha256,

@@ -16,6 +16,7 @@ Enforces:
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import platform
@@ -24,7 +25,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
 # Add current directory to path to import build_whisper
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -134,14 +137,120 @@ class TestWhisperBuildRecipe(unittest.TestCase):
             )
 
     def test_dynamic_library_audit_mock(self):
-        """Dynamic library audit must reject OpenMP/GPL libraries."""
-        # Simulated audit failure
-        with self.assertRaises(RuntimeError) as ctx:
-            # Test direct logic check
-            lib = "/usr/lib/libgomp.so.1"
-            if "libgomp" in lib.lower() or "omp" in lib.lower():
-                raise RuntimeError(f"audit failure: OpenMP dynamic library found: {lib}")
-        self.assertIn("OpenMP dynamic library found", str(ctx.exception))
+        """Exercise the actual platform parser and its failure paths."""
+        samples = {
+            "linux": ("/usr/bin/ldd", "libgomp.so.1 => /usr/lib/libgomp.so.1\n"),
+            "darwin": ("/usr/bin/otool", "whisper-cli:\n\t/usr/lib/libomp.dylib (compatibility version 1.0)\n"),
+            "windows": ("C:/objdump.exe", "DLL Name: libgomp-1.dll\n"),
+        }
+        for os_name, (tool, output) in samples.items():
+            with self.subTest(os_name=os_name), patch("build_whisper.shutil.which", return_value=tool), patch(
+                "build_whisper.subprocess.run", return_value=subprocess.CompletedProcess([], 0, output, "")
+            ):
+                with self.assertRaisesRegex(RuntimeError, "OpenMP dynamic library"):
+                    build_whisper.audit_dynamic_libraries(Path("whisper-cli"), os_name)
+
+            with self.subTest(os_name=os_name, failure="missing tool"), patch(
+                "build_whisper.shutil.which", return_value=None
+            ):
+                with self.assertRaisesRegex(RuntimeError, "tool unavailable"):
+                    build_whisper.audit_dynamic_libraries(Path("whisper-cli"), os_name)
+
+            with self.subTest(os_name=os_name, failure="tool exit"), patch(
+                "build_whisper.shutil.which", return_value=tool
+            ), patch("build_whisper.subprocess.run", return_value=subprocess.CompletedProcess([], 1, "", "broken")):
+                with self.assertRaisesRegex(RuntimeError, "exited 1"):
+                    build_whisper.audit_dynamic_libraries(Path("whisper-cli"), os_name)
+
+        with patch("build_whisper.shutil.which", return_value="ldd"), patch(
+            "build_whisper.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, "libc.so.6 => not found\n", ""),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "unresolved"):
+                build_whisper.audit_dynamic_libraries(Path("whisper-cli"), "linux")
+
+    def test_concurrent_cache_publication(self):
+        """Readers see a complete old or new binary during concurrent publication."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            destination = root / "cache" / "whisper-cli"
+            destination.parent.mkdir()
+            destination.write_bytes(b"old complete binary")
+            payload = b"new complete binary" * 10000
+            source = root / "built-cli"
+            source.write_bytes(payload)
+            expected = hashlib.sha256(payload).hexdigest()
+            with ThreadPoolExecutor(max_workers=4) as pool:
+                futures = [pool.submit(build_whisper.publish_cached_executable, source, destination, expected)
+                           for _ in range(4)]
+                for future in futures:
+                    future.result()
+            self.assertEqual(destination.read_bytes(), payload)
+            self.assertFalse(list(destination.parent.glob(".whisper-cli-*")))
+
+            with self.assertRaisesRegex(RuntimeError, "staged SHA mismatch"):
+                build_whisper.publish_cached_executable(source, destination, "bad hash")
+            self.assertEqual(destination.read_bytes(), payload)
+
+    def test_unique_build_tree_and_cleanup(self):
+        """Concurrent builds receive separate source trees and remove them on exit."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "source.tar.gz"
+            archive.write_bytes(b"fixture")
+            seen = []
+
+            def inspect_run(run_dir, *args):
+                self.assertTrue(run_dir.is_dir())
+                seen.append(run_dir)
+                return {"run_dir": str(run_dir)}
+
+            with patch("build_whisper.detect_target", return_value=("linux", "amd64", "ubuntu-24.04")), patch(
+                "build_whisper.verify_source_archive"
+            ), patch("build_whisper._build_verified_source", side_effect=inspect_run):
+                with ThreadPoolExecutor(max_workers=2) as pool:
+                    futures = [pool.submit(build_whisper.build_whisper, root, source_archive=archive) for _ in range(2)]
+                    for future in futures:
+                        future.result()
+            self.assertEqual(len(set(seen)), 2)
+            self.assertTrue(all(not path.exists() for path in seen))
+
+    def test_toolchain_provenance_flags(self):
+        """A complete pair is required and both absolute compiler paths reach CMake."""
+        tools = {"cmake": "/tools/cmake", "clang": "/tools/clang", "clang++": "/tools/clang++"}
+        with patch("build_whisper.shutil.which", side_effect=tools.get):
+            toolchain = build_whisper.find_toolchain("linux")
+        self.assertEqual(toolchain["c_compiler"], "/tools/clang")
+        flags = build_whisper.get_cmake_build_flags("linux", "amd64", toolchain)
+        self.assertIn("-DCMAKE_C_COMPILER=/tools/clang", flags)
+        self.assertIn("-DCMAKE_CXX_COMPILER=/tools/clang++", flags)
+        with patch("build_whisper.shutil.which", side_effect={"cmake": "/tools/cmake", "clang": "/tools/clang"}.get):
+            with self.assertRaisesRegex(RuntimeError, "complete C/C\\+\\+ compiler pair"):
+                build_whisper.find_toolchain("linux")
+
+        with tempfile.TemporaryDirectory() as td:
+            cache = Path(td) / "CMakeCache.txt"
+            cache.write_text("CMAKE_C_COMPILER:FILEPATH=/tools/clang\n"
+                             "CMAKE_CXX_COMPILER:FILEPATH=/tools/clang++\n")
+            build_whisper.verify_cmake_compilers(cache, toolchain)
+            cache.write_text("CMAKE_C_COMPILER:FILEPATH=/tools/other\n"
+                             "CMAKE_CXX_COMPILER:FILEPATH=/tools/clang++\n")
+            with self.assertRaisesRegex(RuntimeError, "provenance mismatch"):
+                build_whisper.verify_cmake_compilers(cache, toolchain)
+
+    def test_download_failure_preserves_existing_archive(self):
+        """A bad new download cannot replace a previously verified archive."""
+        payload = b"pinned fixture bytes"
+        with tempfile.TemporaryDirectory() as td:
+            destination = Path(td) / "source.tar.gz"
+            destination.write_bytes(payload)
+            with patch.object(build_whisper, "PINNED_SOURCE_BYTES", len(payload)), patch.object(
+                build_whisper, "PINNED_SOURCE_SHA256", hashlib.sha256(payload).hexdigest()
+            ), patch("build_whisper.urllib.request.urlopen", return_value=io.BytesIO(b"bad")):
+                with self.assertRaisesRegex(ValueError, "fails pinned"):
+                    build_whisper.download_source_archive(destination)
+            self.assertEqual(destination.read_bytes(), payload)
+            self.assertFalse(list(destination.parent.glob(".whisper-source-*")))
 
     def test_no_false_six_target_pass(self):
         """Execution on a single host must never claim all six targets passed."""
