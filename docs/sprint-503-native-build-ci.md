@@ -1,7 +1,8 @@
 # S503 native whisper.cpp build gate
 
-`.github/workflows/s503-native-build.yml` is a manual `workflow_dispatch`
-gate for the six public runner labels established by the S503.8 identity
+`.github/workflows/s503-native-build.yml` runs on integration-branch changes to
+the build recipe and also supports manual `workflow_dispatch` once the file is
+on the default branch. It gates the six public runner labels established by the S503.8 identity
 preflight: Linux amd64/arm64, macOS amd64/arm64, and Windows amd64/arm64.
 It builds the pinned whisper.cpp v1.9.5 source with
 `examples/transcribe/dependencies/build_whisper.py` on each native runner.

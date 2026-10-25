@@ -1,8 +1,16 @@
 name: S503 native whisper.cpp source build
 
 # This is a build and dependency evidence gate. It does not download a model or
-# run media inference. A reviewer must dispatch it after the candidate is ready.
+# run media inference. The branch push trigger permits first execution before
+# this new workflow exists on the default branch.
 on:
+  push:
+    branches: [s503-contract-integration]
+    paths:
+      - .github/workflows/s503-native-build.yml
+      - examples/transcribe/dependencies/build_whisper.py
+      - examples/transcribe/dependencies/build-whisper.sh
+      - examples/transcribe/dependencies/build-whisper.ps1
   workflow_dispatch:
 
 permissions:
