@@ -28,10 +28,11 @@ The script's `--skill` flag prints its code-facing `~~~skill` guidance.
   directory. Its cap is read, write, destroy (owned temporary cleanup), and
   network. The Bash# body also declares exec because adapters are commands.
   Adapter-specific dependencies and effects remain in their registered records.
-- Automatic selection calls `bashy transcribe select STAGE REQUEST.json`
-  for each omitted provider. S503.2 supplies that selector's declared
-  applicability, ambiguity errors and local overrides. Explicit names take
-  precedence. Until S503.2 is integrated, pass all four names explicitly.
+- Stage selection calls `bashy transcribe select STAGE REQUEST.json`;
+  an explicit name is sent as `--provider NAME` to the same selector and
+  takes precedence. S503.2 supplies declared applicability, ambiguity
+  errors and local overrides. Until S503.2 is integrated, the fixture shim
+  is the only selector; the production command cannot run.
   S503.4 and S503.6 supply real inference and verified dependencies.
 - The pipeline passes optional `work_dir` in acquire, decode and infer
   requests. Adapters should put owned intermediates there so the unit removes

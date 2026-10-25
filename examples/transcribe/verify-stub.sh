@@ -81,10 +81,21 @@ case "${1:-}" in
         fi
         if [ "${1:-}" = select ]; then
             shift
-            stage=$1 request=$2
+            stage=$1
+            shift
+            explicit=
+            if [ "${1:-}" = --provider ]; then
+                explicit=$2
+                shift 2
+            fi
+            request=$1
             STUB_STAGE=$stage
             export STUB_STAGE
             "$BASHY_BIN" jq -e '.stage == env.STUB_STAGE' "$request" >/dev/null
+            if [ -n "$explicit" ]; then
+                echo "$explicit"
+                exit 0
+            fi
             if [ "${STUB_SELECT_AMBIGUOUS:-0}" = 1 ]; then
                 echo "ambiguous $stage adapters in fixture" >&2
                 exit 3

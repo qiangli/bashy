@@ -59,16 +59,20 @@ parent=$(dirname -- "$final") || exit 2
 [[ -d $parent ]] || { echo "transcribe-pipeline: output directory does not exist: $parent" >&2; exit 2; }
 
 # S503.2 owns the generic selector. Its interface takes the same request JSON
-# as the stage and prints exactly one registered name. Explicit selection wins.
+# as the stage and prints exactly one registered name. Explicit selection is
+# passed through --provider so the selector can check the chosen declaration.
 select_stage() {
     local stage=$1 explicit=$2 request=$3 chosen
     if [[ -n $explicit ]]; then
-        echo "$explicit"
-        return 0
-    fi
-    if ! chosen=$(bashy transcribe select "$stage" "$request"); then
-        echo "transcribe-pipeline: no usable $stage adapter; register one or pass its name explicitly (S503.2)" >&2
-        return 126
+        if ! chosen=$(bashy transcribe select "$stage" --provider "$explicit" "$request"); then
+            echo "transcribe-pipeline: selected $stage adapter $explicit is unavailable or inapplicable" >&2
+            return 126
+        fi
+    else
+        if ! chosen=$(bashy transcribe select "$stage" "$request"); then
+            echo "transcribe-pipeline: no usable $stage adapter; register one or pass its name explicitly" >&2
+            return 126
+        fi
     fi
     if [[ -z $chosen || $chosen == *[[:space:]]* ]]; then
         echo "transcribe-pipeline: $stage selector did not return one provider name" >&2
@@ -124,6 +128,7 @@ agentic function transcribe_pipeline() {
     published=0
     work=$(mktemp -d) || return 1
     trap cleanup EXIT
+    work=$(realpath -m -s -- "$work") || return 1
     outdir=$(mktemp -d "$parent/.transcribe.XXXXXXXX") || return 1
     trap 'exit 130' INT TERM HUP
     export TRANSCRIBE_JSON_WORK_DIR="$work"
