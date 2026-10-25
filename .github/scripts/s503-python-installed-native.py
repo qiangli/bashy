@@ -125,7 +125,14 @@ $installed = foreach ($path in $paths) {
             "python_registry_command": registry_receipt}
 
 
-def notice_inventory(roots, evidence):
+def third_party_notice_candidate(path):
+    parts = {part.lower() for part in Path(path).parts}
+    return (bool(parts & {"vendor", "_vendor", "third_party", "third-party",
+                          "site-packages"}) or "notice" in Path(path).name.lower())
+
+
+def notice_inventory(roots, evidence, *, phase="after"):
+    require(phase in ("before", "after"), "unknown notice inventory phase")
     matches = []
     for root in roots:
         if not root.exists():
@@ -138,9 +145,10 @@ def notice_inventory(roots, evidence):
                     path = Path(parent) / name
                     if path.is_file() and not path.is_symlink():
                         matches.append(path)
-    require(matches, "installed Python license or notice files not found")
+    if phase == "after":
+        require(matches, "installed Python license or notice files not found")
     require(len(matches) <= MAX_NOTICES, "notice inventory exceeds bounded limit")
-    notice_dir = evidence / "notices"
+    notice_dir = evidence / ("notices-before" if phase == "before" else "notices")
     notice_dir.mkdir(exist_ok=True)
     copied = 0
     inventory = []
@@ -160,10 +168,33 @@ def notice_inventory(roots, evidence):
                                         "licence" in Path(row["path"]).name.lower()
                                         for row in inventory),
             "third_party_notice_candidates": sum(
-                "vendor" in Path(row["path"]).parts or
-                "third_party" in Path(row["path"]).parts or
-                "notice" in Path(row["path"]).name.lower() for row in inventory),
+                third_party_notice_candidate(row["path"]) for row in inventory),
             "all_files_retained": all(row["retained_copy"] for row in inventory)}
+
+
+def classify_notice_delta(before, after):
+    """Record observed file changes without attributing them to the installer."""
+    previous = {row["path"]: row for row in before["files"]}
+    current = {row["path"]: row for row in after["files"]}
+    require(len(previous) == len(before["files"]) and
+            len(current) == len(after["files"]), "duplicate notice path in inventory")
+    counts = {"unchanged_from_preinstall": 0, "changed_from_preinstall": 0,
+              "new_path_after_install": 0, "removed_after_install": 0}
+    for row in after["files"]:
+        prior = previous.get(row["path"])
+        if prior is None:
+            status = "new_path_after_install"
+        elif prior["sha256"] == row["sha256"]:
+            status = "unchanged_from_preinstall"
+        else:
+            status = "changed_from_preinstall"
+            row["preinstall_sha256"] = prior["sha256"]
+        row["change_from_preinstall"] = status
+        counts[status] += 1
+    removed = [previous[path] for path in sorted(previous.keys() - current.keys())]
+    counts["removed_after_install"] = len(removed)
+    return {"counts": counts, "removed": removed,
+            "attribution": "file delta only; new or changed paths are not proven installer payload"}
 
 
 PROBE = r'''
@@ -317,6 +348,8 @@ def main():
                        "PrependPath=0", "TargetDir=" + str(prefix)]
         report["install_prefix"] = str(prefix)
         report["before"] = host_state(target, prefix, args.evidence, "before")
+        report["notices_before"] = notice_inventory(notice_roots, args.evidence,
+                                                     phase="before")
         if prefix.exists():
             require(target.startswith("darwin/"), "preexisting Windows install path on runner")
             prior = report["before"]["watched_paths"][1]
@@ -324,6 +357,8 @@ def main():
             require(prior.get("sha256") and
                     framework_id in report["before"]["python_312_package_info"],
                     "preexisting macOS Python is not an identified framework install")
+            require(report["notices_before"]["python_license_found"],
+                    "preexisting macOS framework license inventory is missing")
             report["installation_kind"] = "reinstall_over_existing_ci_framework"
             report["prior_installed_python"] = prior
         else:
@@ -383,6 +418,8 @@ def main():
         require(all(probe["stdlib_roundtrip"].values()) and probe["openssl_version"],
                 "installed compression or SSL probe failed")
         report["notices"] = notice_inventory(notice_roots, args.evidence)
+        report["notice_delta"] = classify_notice_delta(report["notices_before"],
+                                                        report["notices"])
         require(report["notices"]["python_license_found"],
                 "installed Python license notice not found")
         if target.startswith("windows/"):
