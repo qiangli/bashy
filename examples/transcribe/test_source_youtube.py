@@ -43,7 +43,7 @@ if "--dump-single-json" in args:
     elif mode == "live":
         print(json.dumps({"id": "fixture01", "is_live": True}))
     else:
-        print(json.dumps({"id": "fixture01", "title": "controlled fixture"}))
+        print(json.dumps({"id": "fixture01", "title": "controlled fixture", "duration": 12.345}))
     raise SystemExit(0)
 if mode == "download_fail":
     pathlib.Path.cwd().joinpath("fixture01.webm.part").write_bytes(b"partial")
@@ -59,6 +59,9 @@ if mode == "multiple_outputs":
 path = pathlib.Path.cwd() / "fixture01.webm"
 path.write_bytes(b"controlled audio bytes")
 print(str(path))
+print("251")
+print("12.345")
+print("en")
 '''
 
 
@@ -123,6 +126,10 @@ class YouTubeSourceTests(unittest.TestCase):
         self.assertEqual(media_path.parent, self.work.resolve())
         self.assertEqual(artifact["media_type"], "audio/webm")
         self.assertEqual(artifact["sha256"], hashlib.sha256(media_path.read_bytes()).hexdigest())
+        self.assertEqual(payload["media"]["video_id"], "fixture01")
+        self.assertEqual(payload["media"]["format_id"], "251")
+        self.assertEqual(payload["media"]["duration_ms"], 12345)
+        self.assertEqual(payload["media"]["language"], "en")
         calls = [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
         self.assertEqual(calls[0][-1], url)
         self.assertEqual(calls[1][-1], url)

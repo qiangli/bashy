@@ -9,6 +9,7 @@ this adapter never constructs shell source.
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
 import hashlib
 import json
 import os
@@ -85,7 +86,7 @@ def _youtube_host(url: str) -> bool:
     return host in {"youtube.com", "www.youtube.com", "m.youtube.com", "youtu.be", "www.youtu.be"}
 
 
-def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
+def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> tuple[Path, str, str, int, str | None]:
     zipapp = os.environ.get("BASHY_TRANSCRIBE_YTDLP", "")
     if not zipapp:
         raise AcquisitionError(
@@ -122,10 +123,11 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
             str(zipapp_path),
             "--ignore-config",
             "--no-cookies",
-            "--no-netrc",
             "--no-cache-dir",
             *js_options,
             "--no-playlist",
+            "--format",
+            "bestaudio",
             "--dump-single-json",
             "--skip-download",
             "--no-warnings",
@@ -166,7 +168,6 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
                 str(zipapp_path),
                 "--ignore-config",
                 "--no-cookies",
-                "--no-netrc",
                 "--no-cache-dir",
                 *js_options,
                 "--no-playlist",
@@ -178,6 +179,12 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
                 "%(id)s.%(ext)s",
                 "--print",
                 "after_move:filepath",
+                "--print",
+                "after_move:format_id",
+                "--print",
+                "after_move:duration",
+                "--print",
+                "after_move:language",
                 "--no-progress",
                 "--no-warnings",
                 url,
@@ -192,11 +199,20 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
         remove_partial_downloads()
         raise AcquisitionError("download_failed", message or "yt-dlp failed to download this video", True)
 
-    # Require exactly one reported artifact, matching the probed video ID.
+    # The post-move fields describe the selected download, not yt-dlp's
+    # default metadata selection from the earlier inspection.
     lines = [line.strip() for line in downloaded.stdout.splitlines() if line.strip()]
-    if len(lines) != 1:
+    if len(lines) != 4:
         remove_partial_downloads()
-        raise AcquisitionError("download_failed", "yt-dlp did not report exactly one media file", True)
+        raise AcquisitionError("download_failed", "yt-dlp did not report one media file with format and duration", True)
+    format_id, duration, language = lines[1:]
+    try:
+        duration_ms = int(Decimal(duration) * 1000)
+    except InvalidOperation:
+        duration_ms = 0
+    if not format_id or format_id == "NA" or duration_ms <= 0:
+        remove_partial_downloads()
+        raise AcquisitionError("download_failed", "yt-dlp did not report a selected format and positive duration", True)
     candidate = Path(lines[0])
     if not candidate.is_absolute():
         candidate = work_dir / candidate
@@ -212,7 +228,7 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> Path:
     if resolved.parent != work_dir.resolve() or resolved.stem != video_id:
         remove_partial_downloads()
         raise AcquisitionError("download_failed", "yt-dlp output does not match the resolved video", True)
-    return resolved
+    return resolved, video_id, format_id, duration_ms, None if language == "NA" else language
 
 
 def acquire(request: dict[str, Any]) -> dict[str, Any]:
@@ -235,7 +251,7 @@ def acquire(request: dict[str, Any]) -> dict[str, Any]:
     directory = Path(work_dir).expanduser().resolve()
     if not directory.is_dir():
         raise AcquisitionError("invalid_request", "acquire work_dir must be an existing directory")
-    media_path = _yt_dlp(request, directory, url)
+    media_path, video_id, format_id, duration_ms, language = _yt_dlp(request, directory, url)
     return {
         "version": VERSION,
         "stage": STAGE,
@@ -246,7 +262,13 @@ def acquire(request: dict[str, Any]) -> dict[str, Any]:
                 "sha256": _sha256(media_path),
             }
         ],
-        "media": {"source": url},
+        "media": {
+            "source": url,
+            "video_id": video_id,
+            "format_id": format_id,
+            "duration_ms": duration_ms,
+            "language": language,
+        },
     }
 
 

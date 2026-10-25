@@ -14,6 +14,8 @@ type TranscribeArtifact struct {
 
 type TranscribeMedia struct {
 	DurationMS   int64  `json:"duration_ms,omitempty"`
+	VideoID      string `json:"video_id,omitempty"`
+	FormatID     string `json:"format_id,omitempty"`
 	SampleRateHz int    `json:"sample_rate_hz,omitempty"`
 	Channels     int    `json:"channels,omitempty"`
 	Language     string `json:"language,omitempty"`
