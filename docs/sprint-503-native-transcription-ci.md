@@ -24,14 +24,19 @@ offline replay. Linux used a network namespace, macOS used a sandbox, and
 Windows used eight active per-program firewall rules with Winsock 10013
 denial. The controlled fixture includes real audio and WebM video speech.
 
-As of 2026-10-25 15:02 UTC, the identical controlled workflow and harness
-files were pushed with canonical
-Bashy `4512d073` and pinned by umbrella `bc051e97d`. Its direct
+The canonical Bashy `4512d073` candidate was pushed and pinned by umbrella
+`bc051e97d`. Its separate direct
 [run 40204707322](https://github.com/qiangli/bashy/actions/runs/40204707322)
-is collecting separate candidate-linked evidence. The controlled result does
-not establish operator YouTube acquisition, a product dependency installer, or
-the final six-target YouTube acceptance. The operator gate remains at zero
-accepted native targets after GitHub-hosted egress received a bot challenge.
+completed successfully on all six native targets. The manager and a separate
+reviewer downloaded and checked every artifact. The [direct-run ledger](sprint-503/evidence/controlled-native-40204707322.json)
+ties the candidate to native job and artifact IDs, fixture provenance, online
+and OS-enforced offline transcripts, receipt projections, reference and timing
+checks, cleanup and cancellation, and before/after network-denial probes. The
+later dependency and documentation changes do not alter the controlled
+workflow, pipeline or seed adapter files tested by this run. These local-media
+results do not establish operator YouTube acquisition or product dependency
+installation. The operator gate remains at zero accepted native targets after
+GitHub-hosted egress received a bot challenge.
 
 As of 2026-10-25 13:45 UTC, [run 40198584884](https://github.com/qiangli/bashy/actions/runs/40198584884)
 passed admission and started all six jobs. Windows ARM stopped at the runner

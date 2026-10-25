@@ -1,0 +1,623 @@
+{
+  "candidate_commit": "4512d07339e6d6d40aa24729067bd58aea6e83c8",
+  "fixture_manifest_sha256": "e08522cfbad255435de5a7cc8086ed2fa8898b9bacf86d4e9492890610f53992",
+  "fixture_provenance": {
+    "cases": {
+      "en-audio": {
+        "authoring": "examples/transcribe/webm-opus/testdata/generate.py; remux all 533 Opus packets without re-encoding",
+        "license_evidence": "https://commons.wikimedia.org/w/index.php?title=File:Wikispeech-sample2.opus&oldid=1042404750",
+        "sha256": "ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090",
+        "source_sha256": "9744230eb367b00f1aa5d0c64572c24b2cc533d5f893294bcaabdd912ed1b5a3"
+      },
+      "en-video": {
+        "authoring": "Hosted run 40199530099, exact command and FFmpeg version in video-authoring.json; VP9 black video plus unchanged Opus speech",
+        "license_evidence": "https://commons.wikimedia.org/w/index.php?title=File:Wikispeech-sample2.opus&oldid=1042404750",
+        "sha256": "36c7fb05a66ec3f29d498fb0c97b8b72de0e9243092b51d2f34e02751bcc93de",
+        "source_sha256": "ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090"
+      },
+      "es-audio": {
+        "authoring": "python3 examples/transcribe/fixtures/generate_spanish.py; three unchanged PCM copies with 500 ms silence between",
+        "license_evidence": "https://commons.wikimedia.org/wiki/File:LL-Q1321_(spa)-Rodrigo5260-de_todo_hay_en_la_vi%C3%B1a_del_Se%C3%B1or.wav",
+        "sha256": "df23f58c95b54215e136bd6b1865a9aba360010a02822ec56e8854bc8074e2bb",
+        "source_sha256": "bf2168307813beb1037c3ee4e9efceee62bfbd0e4920adcc09f74d03e4b5118b"
+      }
+    },
+    "video_authoring": {
+      "artifact_name": "s503-controlled-video",
+      "report_sha256": "2554d44051f3fd262598ba39954f67fe75718bd8b5e8a523892d5fa51ca4d699",
+      "run_id": 40199530099,
+      "source_commit": "10d88eb38c89beeb0d4324425a08b084c401c82d"
+    }
+  },
+  "fixture_sha256": {
+    "en-audio": "ad06a00c9331152d8a1e16277b086f3639a30335a5ad9becfd921891c4165090",
+    "en-video": "36c7fb05a66ec3f29d498fb0c97b8b72de0e9243092b51d2f34e02751bcc93de",
+    "es-audio": "df23f58c95b54215e136bd6b1865a9aba360010a02822ec56e8854bc8074e2bb"
+  },
+  "run_conclusion": "success",
+  "run_id": 40204707322,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40204707322",
+  "schema": "s503-controlled-native-direct-run-ledger-v1",
+  "targets": [
+    {
+      "artifact_id": 12603298664,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40204707322/artifacts/12603298664",
+      "candidate_binary_sha256": "a074d13cdc60d0588670c4218c286c16bca8290bcd60816db21907f31bb240fe",
+      "job_conclusion": "success",
+      "job_id": 121203077081,
+      "modes": {
+        "offline": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "8d1a898cb8fce912d71ef84938553641ab80399f8393c76c895bcd9750d08f8b",
+              "source_ledger_sha256": "872c27124aec1208ec047527c7eda2fe38e3fc6df6b3d8a1dc2f661e2d2cb033"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "19c31262c52109037c223af70b704505601ccfccfdbe0a813d581866119ac22c",
+              "source_ledger_sha256": "e75e2414a974d09f321c6256d99618b52a834d04a172672aa95af866cfee1572"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "396fd6094d9c3dd573de06207ccf8d790fec35d9bd6cdf3a51fba154f5fd7337",
+          "transcript_count": 18
+        },
+        "online": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "520a87686ab0347db83aca8a181e73b34f689394a8702b90aff1198fb60a2523",
+              "source_ledger_sha256": "00853779af5a88a35ad9fdbfd295b3aec02f42b5bf1cb9a39797ba36a3f83ba6"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "c15af0fa4a33e61fdac97c67254255fb4fd97768d61c3e2ed89713c4ba773d72",
+              "source_ledger_sha256": "66e12b97df7d9a6f4897f6e1115fa02aacade4167afdd2fd03ebb93313699ac9"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "a15981adcf9800905b92a88b6c59003ec6a156fce672212a6f16871237ab9e21",
+          "transcript_count": 18
+        }
+      },
+      "network": {
+        "after": {
+          "canary_sha256": "b38c3dc544f4ccc96e100e3f0de4810d2b635531c1fa5bcfed1b0bd7b9a77059",
+          "exit_code": 23,
+          "method": "linux-unshare-net"
+        },
+        "baseline_connected": true,
+        "baseline_sha256": "0b39a65739bda5bc2cfc1cd19e713d1005c50a176b6e4257eaa643d28147d8a1",
+        "before": {
+          "canary_sha256": "e03bdd6bee0f2db2c7f08915e6c22a21cbccc9686776cf6265ed305a262ed9a0",
+          "exit_code": 23,
+          "method": "linux-unshare-net"
+        }
+      },
+      "target": "ubuntu-24.04",
+      "whisper_binary_sha256": "1b3a836f005dc98e315baf9009ed7268472b66afcbbbb57fd655764971bc8977"
+    },
+    {
+      "artifact_id": 12603147897,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40204707322/artifacts/12603147897",
+      "candidate_binary_sha256": "103f4bab86c875d06c99089b02fe932713b9c368da3f5e2ba3e690fc63a27eba",
+      "job_conclusion": "success",
+      "job_id": 121203077241,
+      "modes": {
+        "offline": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "0cb01371dd826ad58511ef30b8142b0708dacb87975d5611edfb30b1f5293e23",
+              "source_ledger_sha256": "7ff60ece934bbdf597c591b58c34ed9432554e9e781c6c72e70acb712dcc9495"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "14c1a997f949e59d9f70772a8bda59f259dae7dd07d6c41402db8037fb185357",
+              "source_ledger_sha256": "bcbc57a68927800f4a5a187f1016430a578d7efdcd0db3a96390439ed33a80b8"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "461d4a351f16d40583c525a962b0f80049d16fabfee7e3e276ab21d05adfe927",
+          "transcript_count": 18
+        },
+        "online": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "58f5cea68c3a5088189ad57097b719c2196cb26906b52df3a1a7b2598272e00c",
+              "source_ledger_sha256": "1ec12b2f1059b1ab63880a20ceafdd2416d1fa0fbdf7aa273aff7cbdbfdaedf0"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "639d399c04ced4693562c7b52cf3371fc8c552e9d62173b2008d28783c6c7b6b",
+              "source_ledger_sha256": "9c1a5624890781889db37dd497231d99269eeab7dda260649726797cbb817532"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "af8fd382ed64dc0627d625b08340219d29aca521e45ca82ab5f25ecf1dcd0bb1",
+          "transcript_count": 18
+        }
+      },
+      "network": {
+        "after": {
+          "canary_sha256": "e5aef108dc09e1d02adcb5a2a998c3e239c811622a5e6bb270eade3a7fdcb089",
+          "exit_code": 23,
+          "method": "linux-unshare-net"
+        },
+        "baseline_connected": true,
+        "baseline_sha256": "0b39a65739bda5bc2cfc1cd19e713d1005c50a176b6e4257eaa643d28147d8a1",
+        "before": {
+          "canary_sha256": "70277b1b717fd500da04ea98805b67a2dc382c5bd147635a683dac79bab8b63f",
+          "exit_code": 23,
+          "method": "linux-unshare-net"
+        }
+      },
+      "target": "ubuntu-24.04-arm",
+      "whisper_binary_sha256": "318f972f6ca306d5ab47f2ab267d758d21f72a4e4f33dd56cc8a59ef8014fa87"
+    },
+    {
+      "artifact_id": 12603971255,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40204707322/artifacts/12603971255",
+      "candidate_binary_sha256": "c009cc51102d4f93498a76f5cc405c29a0365a5aeb364cac24487d8ded1588da",
+      "job_conclusion": "success",
+      "job_id": 121203077177,
+      "modes": {
+        "offline": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "e88d4f2ef8032bfc35d99403e4a81a8c7caf93ace6f5a7a47cdfb7a37085fc4b",
+              "source_ledger_sha256": "28c574e423cf6d4c8b59132711ad7d996c15bddeb90b9d0449781ca838fd5563"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "812058f7b75bef859f4556bf794bc6746c7bd4063a6c0835882ed3858ba0f605",
+              "source_ledger_sha256": "c51108de13911b9113785d627ffd78a979abcfd50024cff8ae3f836830da19a6"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "bf5e9f4fd26892b9a143c7a0fa482445af8fd0eaec81702236da447c7921067d",
+          "transcript_count": 18
+        },
+        "online": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "0a6897f9b312e1f8093e206776d1d6eea5f4f5948bb96c9a037397bc6c016e25",
+              "source_ledger_sha256": "e4af7db59d285e79e565fe0387732219f702ee83bae5dfd65ffb4d4696f988f1"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "86fca03c26afb37858db7dc74b8e0af894f847c5f7b89a87bf854a023cda2ba7",
+              "source_ledger_sha256": "308043ea4e5482cf4d8a93cd670a6f61c774d0b708e20caa244ebb7a03d3303e"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "35f9c53377840d360ec0f1ea1bc235d2469bbf590f8da5ddd06c74bc178096d4",
+          "transcript_count": 18
+        }
+      },
+      "network": {
+        "after": {
+          "canary_sha256": "52ae6b5baa2e808952868bd90e292eaf9668a65b3cf418ddb00356aa37090b66",
+          "exit_code": 23,
+          "method": "macos-sandbox-deny-network"
+        },
+        "baseline_connected": true,
+        "baseline_sha256": "0b39a65739bda5bc2cfc1cd19e713d1005c50a176b6e4257eaa643d28147d8a1",
+        "before": {
+          "canary_sha256": "c94ee9e87d5e9c16420863a65064d19a426b628bc009494ad670cfa2206aa2d8",
+          "exit_code": 23,
+          "method": "macos-sandbox-deny-network"
+        }
+      },
+      "target": "macos-15-intel",
+      "whisper_binary_sha256": "0c902c37efcf1e03815163cf25000b169cd31bdcf8d348a4612d8d77abf047f5"
+    },
+    {
+      "artifact_id": 12603875889,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40204707322/artifacts/12603875889",
+      "candidate_binary_sha256": "ea50ae831d464d91c546097df9e034ed942d80fd01a30f0dc791b9964283fb7a",
+      "job_conclusion": "success",
+      "job_id": 121203076970,
+      "modes": {
+        "offline": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "7b2e1f047f3b47d5e4a43fe5377cd7c90aecf837b86fb8fb70e49fabeb7c4f18",
+              "source_ledger_sha256": "7db92369888d7eee68a53a04b5094ac2c5a5a84879f23d6daa65bdac8d958ccb"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "db58a5af9ce896918660e58e5d6c5818b731889294b4e03a4055aa1539fd37e1",
+              "source_ledger_sha256": "71c14ce98e5d80783199883f568971047941692052170fec4ee02e091e434f56"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "d4ab87603df75e6dfee45256244b167a5f627fb74e0058e71f40ae846c456b9d",
+          "transcript_count": 18
+        },
+        "online": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "4d246b864d709c20d82a33f82e8273a0ae58f65c95f2e07b0f30ccab5c56dc8b",
+              "source_ledger_sha256": "a70f28c132a5640a9a700ae0f319f823c8080b30b4492871f8f90caa9ab67401"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "da4a66fa877fc98b45e4fc4c76ce1a354ed48ed0c3736ba90dc02426f1bbfac6",
+              "source_ledger_sha256": "e00edc27a2fa316770ef5fe949d7394f55412ff6fde503e9cd84ca2f80de42f3"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "1e56a2e94c8cc6978f627bacf74fcb5d24518884953c7754919167f59b858612",
+          "transcript_count": 18
+        }
+      },
+      "network": {
+        "after": {
+          "canary_sha256": "f06c7b4fcf4550a7855d1c0773c4f234ef72fab44eb996fe6af6e34e25e714d4",
+          "exit_code": 23,
+          "method": "macos-sandbox-deny-network"
+        },
+        "baseline_connected": true,
+        "baseline_sha256": "0b39a65739bda5bc2cfc1cd19e713d1005c50a176b6e4257eaa643d28147d8a1",
+        "before": {
+          "canary_sha256": "a53d2eebee18934ce039fbe5a1de9d15100a6497e5aeaf2cfdf78031631afb07",
+          "exit_code": 23,
+          "method": "macos-sandbox-deny-network"
+        }
+      },
+      "target": "macos-15",
+      "whisper_binary_sha256": "20675eeaca1fed471ab7adc5e23c0dc48159c19e81111e38124da47b7b1af0b0"
+    },
+    {
+      "artifact_id": 12602814828,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40204707322/artifacts/12602814828",
+      "candidate_binary_sha256": "71ad9237e85c18dd8926a4ee446f470f618bdb2890073ccf5c93b7f855a834a2",
+      "job_conclusion": "success",
+      "job_id": 121203077098,
+      "modes": {
+        "offline": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "176501b1a5b7bbba5c94561df8c1c78ae418f34ea6e70476203d8d4cbb8fe8ad",
+              "source_ledger_sha256": "a0c6f71afa0dc1384675af423d6a0ca5e4d9e5e8426798a4c335c7aba354170d"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "3377ef3a34c0b06d4129d3b4caee2997f6a25d98e2489ebcac69111232bfaac8",
+              "source_ledger_sha256": "2dd5e1692d13daccb8262117e76a8ffea1f7ba80b328328cee87fe2ad5e16ef3"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "f660bf99bd96426928d22ac569257513baa60cd5d0dd2c7008232695e4bcd065",
+          "transcript_count": 18
+        },
+        "online": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "4f93711d39afddde7edf666b3bdb9ee372085078f6774fd27a4d0fdc4a39068f",
+              "source_ledger_sha256": "578a994198c3222ae053235b8d6961d13f1e3613c0d17fbf20e702805e6f984b"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "b6e4395beb706c55ed4dee3a46529a210271bc08cb79853289cbe5f9a35a18b8",
+              "source_ledger_sha256": "b7812e9b48c02fd7b3fd4f9d862c9afeb7d3233a815f6b4c85449da2c5e866ab"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "0d2a3a1ea6e16d4b0d225b85c3eb6b916871f4a7f20d13908770b5b08bfc38fb",
+          "transcript_count": 18
+        }
+      },
+      "network": {
+        "after": {
+          "canary_sha256": "8e7440070a1cc55b1c1d9892c0c852d5cd9d6d460b1667e89e6da0b3e7da2bec",
+          "exit_code": 23,
+          "method": "windows-firewall-program-block"
+        },
+        "baseline_connected": true,
+        "baseline_sha256": "a19880bd93ce07a29949b8badbf137d53890f786d7c4740eeade1b426d993afd",
+        "before": {
+          "canary_sha256": "182976ed3005c14b696bd78bbb8b587628397e41af379177e9a8013832ec542f",
+          "exit_code": 23,
+          "method": "windows-firewall-program-block"
+        },
+        "firewall_active": {
+          "enabled_block_rule_count": 8,
+          "sha256": "41e6a92f6ace9a6e32b936ebe1abc627aed23fd35d3a8fcf6199abd2cbb1e54b"
+        }
+      },
+      "target": "windows-2025",
+      "whisper_binary_sha256": "f842ae94d0cd86350ba3c22563316b1a9f8a3dfc17745d240f5a791546c04551"
+    },
+    {
+      "artifact_id": 12602849076,
+      "artifact_url": "https://github.com/qiangli/bashy/actions/runs/40204707322/artifacts/12602849076",
+      "candidate_binary_sha256": "19e8b0d5d70d746fa838c941ee1045fcda14ebd343719f8ffad90a0e79db160a",
+      "job_conclusion": "success",
+      "job_id": 121203077140,
+      "modes": {
+        "offline": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "d504afb65d687d02999d351d3a2c6f79984b6c660fa5d6ddd6bcbc8539cd830a",
+              "source_ledger_sha256": "04591abd8bcac9bb0658fdee3db8a16d629a31898481a7bb8453e98b1770cb80"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "daf1171f4495b69842f1aa6647e278b7c562b05951efd7f6f2cd94b76c6a7025",
+              "source_ledger_sha256": "65793faa09b4988a72eaac5e21a495ff858247f6d3daabe7a3978a7684e997a8"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "7688a04666e1fc1ee90408d1b7ac97815163a36530d97fdf48fe6d00410f3939",
+          "transcript_count": 18
+        },
+        "online": {
+          "detected_languages": {
+            "en-audio": {
+              "language": "en",
+              "segments": 2
+            },
+            "es-audio": {
+              "language": "es",
+              "segments": 1
+            }
+          },
+          "failure_cleanup": "pass",
+          "local_pipeline_cancellation": "pass",
+          "path_receipt_count": 18,
+          "receipt_projections": {
+            "function": {
+              "count": 18,
+              "projection_sha256": "c70746745664ba57a2c9296a7486817729da65ce470c6d9939cedfa1440e8f87",
+              "source_ledger_sha256": "2812b2d32f6797494f8ea67677f8a7c1f31ea1644d004c47ac84e506a40d2d38"
+            },
+            "skill": {
+              "count": 9,
+              "projection_sha256": "8e6c2f02d90795fae6b698fc61186836ca8ddbd940ab2b67cc140689e8a05d74",
+              "source_ledger_sha256": "450a87df1d01dbde75f77622dede21dea01253de941eda6840027101613ba0a4"
+            }
+          },
+          "reference_and_subtitle_timing_check": "pass",
+          "reference_scores": {
+            "en-audio": 0.818,
+            "en-video": 0.818,
+            "es-audio": 0.875
+          },
+          "result_sha256": "15bf460fc1d27c399989a173617d1614d9e425f93bc56e90a3666189d1b859a8",
+          "transcript_count": 18
+        }
+      },
+      "network": {
+        "after": {
+          "canary_sha256": "b5a55e4764713c36ee6b8666c9e0a98084cbb53487a5f0e841bacbca71c05713",
+          "exit_code": 23,
+          "method": "windows-firewall-program-block"
+        },
+        "baseline_connected": true,
+        "baseline_sha256": "a19880bd93ce07a29949b8badbf137d53890f786d7c4740eeade1b426d993afd",
+        "before": {
+          "canary_sha256": "641fcf08be56f5315bb999d3a0d7a763bbc894794bbb0ae44c61ddb288a1db1a",
+          "exit_code": 23,
+          "method": "windows-firewall-program-block"
+        },
+        "firewall_active": {
+          "enabled_block_rule_count": 8,
+          "sha256": "a6fdaabf7092a8c9309d60505323c7ce3219e47519bd8424e5b15b5884030913"
+        }
+      },
+      "target": "windows-11-arm",
+      "whisper_binary_sha256": "fef0a20eb2189cad86e40b4ef21d79f319da910b13a7d6ca361cbb096f6ddf16"
+    }
+  ],
+  "umbrella_pin_commit": "bc051e97d",
+  "verified_at_utc": "2026-10-25T15:18:06+00:00"
+}
