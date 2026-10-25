@@ -35,7 +35,6 @@ jobs:
             python_arch: arm64
     env:
       PILOT_TARGET: ${{ matrix.target }}
-      PILOT_WORK_DIR: ${{ runner.temp }}/s503-quickjs-pilot
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,6 +47,8 @@ jobs:
           python -m unittest discover -s .github/scripts -p 'test_s503_quickjs_native_pilot.py' -v
       - name: Build native qjs and capture fail-closed source/link/EJS evidence
         shell: pwsh
+        env:
+          PILOT_WORK_DIR: ${{ runner.temp }}/s503-quickjs-pilot
         run: |
           python .github/scripts/s503_quickjs_native_pilot.py `
             --target "$env:PILOT_TARGET" `
