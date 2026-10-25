@@ -209,6 +209,18 @@ jobs:
                                     env=env, capture_output=True, text=True, timeout=60)
           require(rejected.returncode != 0 and 'SHA-256 differs' in rejected.stderr and
                   not rejected.stdout, 'changed interpreter was not rejected before exec')
+          host_prep = pathlib.Path('examples/transcribe/dependencies/prepare_python_host.sh').resolve()
+          plan = subprocess.run([str(bashy), str(host_prep), '--plan'],
+                                env=env, capture_output=True, text=True, timeout=60)
+          expected_status = 'local_source_build_unadmitted' if actual_os == 'Linux' else 'unadmitted'
+          require(plan.returncode == 0 and f'target={target}' in plan.stdout and
+                  f'status={expected_status}' in plan.stdout,
+                  'native operator Python plan failed: ' + plan.stderr[:1200])
+          guarded = subprocess.run([str(bashy), str(host_prep), '--install', str(root / 'absent-installer')],
+                                   env=env, capture_output=True, text=True, timeout=60)
+          require(guarded.returncode != 0 and not guarded.stdout and
+                  'artifact path is absent' not in guarded.stderr,
+                  'unadmitted operator Python install was not rejected before artifact access')
           report = {'schema': 's503-python-launcher-native-v1',
                     'target': target, 'runner_label': os.environ['TARGET_LABEL'],
                     'candidate_commit': os.environ['CANDIDATE_COMMIT'],
@@ -216,6 +228,8 @@ jobs:
                         pathlib.Path('examples/transcribe/dependencies/external-python-runtime.json').read_bytes()).hexdigest(),
                     'verified_interpreter_reached_adapter': True,
                     'changed_interpreter_rejected_before_exec': True,
+                    'operator_host_plan_status': expected_status,
+                    'unadmitted_host_install_rejected_before_artifact_access': True,
                     'scope': 'external CI Python and local pre-exec byte guard; no product install or license admission'}
           (root / 'result.json').write_text(json.dumps(report, indent=2) + '\n')
           print(json.dumps(report))

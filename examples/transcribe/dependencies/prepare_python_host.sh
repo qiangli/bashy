@@ -27,7 +27,15 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$mode" ] || usage
 
-script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)
+script_source=${BASH_SOURCE[0]}
+case "$(uname -s)" in
+    Windows*|MINGW*|MSYS*)
+        # Native Bashy supplies a drive path with backslashes on Windows.
+        # POSIX dirname would treat that whole path as one filename.
+        script_source=${script_source//\\//}
+        script_dir=$(dirname -- "$script_source") ;;
+    *) script_dir=$(cd -- "$(dirname -- "$script_source")" && pwd -P) ;;
+esac
 policy=$script_dir/external-python-runtime.json
 windows_policy=$script_dir/windows-external-runtime.json
 admission=$script_dir/operator-python-admission.json

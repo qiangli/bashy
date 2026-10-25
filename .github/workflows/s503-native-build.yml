@@ -11,6 +11,7 @@ on:
       - examples/transcribe/dependencies/build_whisper.py
       - examples/transcribe/dependencies/build_whisper_notices.py
       - examples/transcribe/dependencies/notices/**
+      - .gitattributes
       - examples/transcribe/dependencies/prepare_llvm_mingw.py
       - examples/transcribe/dependencies/build-whisper.sh
       - examples/transcribe/dependencies/build-whisper.ps1
@@ -252,12 +253,16 @@ jobs:
                      --inventory evidence/whisper-link-inventory.json
                      --link-map evidence/whisper-cli.link.map)
           fi
+          # macOS runners use Bash 3.2, where an empty array under nounset
+          # raises an error even after options=(). Limit the relaxation to this call.
+          set +u
           python examples/transcribe/dependencies/build_whisper_notices.py \
             --build-report evidence/build-report.json \
             --binary "$binary" \
             --source-archive "$RUNNER_TEMP/s503-whisper-build/whisper.cpp-1.9.5.tar.gz" \
             --output-dir evidence/whisper-notices \
             "${options[@]}"
+          set -u
 
       - name: Upload build evidence and binary
         if: always()
