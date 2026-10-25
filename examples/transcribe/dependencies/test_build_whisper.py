@@ -238,6 +238,27 @@ class TestWhisperBuildRecipe(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "provenance mismatch"):
                 build_whisper.verify_cmake_compilers(cache, toolchain)
 
+    def test_linux_prefers_complete_gcc_pair(self):
+        """Linux uses GCC/G++ together even when Clang is also available."""
+        tools = {
+            "cmake": "/tools/cmake", "clang": "/tools/clang", "clang++": "/tools/clang++",
+            "gcc": "/tools/gcc", "g++": "/tools/g++",
+        }
+        with patch("build_whisper.shutil.which", side_effect=tools.get):
+            selected = build_whisper.find_toolchain("linux")
+        self.assertEqual(selected["c_compiler"], "/tools/gcc")
+        self.assertEqual(selected["cxx_compiler"], "/tools/g++")
+        flags = build_whisper.get_cmake_build_flags("linux", "arm64", selected)
+        self.assertIn("-DCMAKE_C_COMPILER=/tools/gcc", flags)
+        self.assertIn("-DCMAKE_CXX_COMPILER=/tools/g++", flags)
+
+        # An incomplete GCC installation must fall back to a complete pair.
+        del tools["g++"]
+        with patch("build_whisper.shutil.which", side_effect=tools.get):
+            selected = build_whisper.find_toolchain("linux")
+        self.assertEqual(selected["c_compiler"], "/tools/clang")
+        self.assertEqual(selected["cxx_compiler"], "/tools/clang++")
+
     def test_download_failure_preserves_existing_archive(self):
         """A bad new download cannot replace a previously verified archive."""
         payload = b"pinned fixture bytes"

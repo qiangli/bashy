@@ -199,7 +199,12 @@ def find_toolchain(os_name: str) -> Dict[str, str]:
                 c_compiler = None
 
     if not c_compiler:
-        for c_name, cxx_name in (("clang", "clang++"), ("gcc", "g++"), ("cl", "cl")):
+        # Linux native runners ship a matched GCC/G++ runtime. Prefer that
+        # pair so whisper's C++ objects link against their intended runtime.
+        pairs = (("gcc", "g++"), ("clang", "clang++"), ("cl", "cl")) if os_name == "linux" else (
+            ("clang", "clang++"), ("gcc", "g++"), ("cl", "cl")
+        )
+        for c_name, cxx_name in pairs:
             c_path, cxx_path = shutil.which(c_name), shutil.which(cxx_name)
             if c_path and cxx_path:
                 c_compiler, cxx_compiler = c_path, cxx_path
