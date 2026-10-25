@@ -1,0 +1,108 @@
+{
+  "artifact_integrity": "independently rehashed six binaries, reports, notice bundles, notice source files and retained maps",
+  "candidate_commit": "b5a4e8bc0a655c83153b11928820d0b5df4ce250",
+  "product_admitted": false,
+  "run_conclusion": "success",
+  "run_id": 40212402578,
+  "run_url": "https://github.com/qiangli/bashy/actions/runs/40212402578",
+  "schema": "s503-whisper-notices-review-v1",
+  "signed_provenance": "gh attestation verify passed for all six binaries; certificate bound to candidate commit and run 40212402578",
+  "targets": [
+    {
+      "artifact_name": "s503-native-build-macos-15",
+      "binary_sha256": "898f7429c7464415a1f864db8867835b96a38f1fe67ed18f4c2d8c020df9d852",
+      "build_report_sha256": "b83b5ea10e354f1f7daaebbe4d7e4bc563e460d251b4aa74b5a7263b4bba48b5",
+      "notice_bundle_sha256": "bf8ffe007238d25f4508f4074f92961cda31d59f434d903d53cca15337e09f85",
+      "notice_count": 1,
+      "notice_manifest_sha256": "66f13680b7332925397be341b4e179ea545ba1854f33a7b0409cf1466727709c",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "Verify macOS linked system framework and runtime inventory and applicable host license notices before product admission."
+      ],
+      "target": "darwin/arm64"
+    },
+    {
+      "artifact_name": "s503-native-build-macos-15-intel",
+      "binary_sha256": "9ebcde9795ad93f78297ba392a4c9d44166cf4b7959fb01edaba4606c71f04a0",
+      "build_report_sha256": "0348bf28adeba5a6dfdb5149b33e38d48e25f59230e0c695705a5dd7ed64f001",
+      "notice_bundle_sha256": "bf8ffe007238d25f4508f4074f92961cda31d59f434d903d53cca15337e09f85",
+      "notice_count": 1,
+      "notice_manifest_sha256": "66534c6dcf2220b6095e6172c59daae26378b031f8da4e8a13cbddf9aa540b94",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "Verify macOS linked system framework and runtime inventory and applicable host license notices before product admission."
+      ],
+      "target": "darwin/amd64"
+    },
+    {
+      "artifact_name": "s503-native-build-ubuntu-24.04",
+      "binary_sha256": "1a08031cb5acf6381bbba7c1b7ed702d9f02f3016b116262f1486adb4823d271",
+      "build_report_sha256": "cccd2e7d677d3fae2b82baf526ae414c11359184d66aae2fd4c29946e08677c7",
+      "link_inventory_sha256": "0fbaac70088b9cb20c6f2b1f92d2cdf310a56d826a9b3a2c4ed3f641617b51de",
+      "linked_archive_member_count": 123,
+      "map_sha256": "9f87c5334da9b95abe71e71f16177eb440ccb912e1ed0e1f25fa14bc8a8e4155",
+      "notice_bundle_sha256": "b40b4c764d5aa15bf613b0ceb5ba1305ee33077b88ad4e0f303cf98248d0da79",
+      "notice_count": 1,
+      "notice_manifest_sha256": "87e4c41b74e333366d4700e0cbc5f7252aeebb48198bd22cd0861026a32cf431",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "Retain Linux linker map and static GCC runtime object inventory; inspect exact GPLv3 GCC Runtime Library Exception applicability, or rebuild with host-provided dynamic libstdc++ and verify imports."
+      ],
+      "runtime_archive_member_count": 100,
+      "target": "linux/amd64"
+    },
+    {
+      "artifact_name": "s503-native-build-ubuntu-24.04-arm",
+      "binary_sha256": "cc3d1d7177e178a8f3df74eb3f8afc9d1b9a552cf4b135cb670ef459693d9124",
+      "build_report_sha256": "cdae7cdaf9dd244ed8f8b307c750ccb85ffb8a35ff9aad51d152eb616763638d",
+      "link_inventory_sha256": "f2a6a6b1e7568a332b94f7dfb353cb6eea740b66e3421a72585c81b916d4bc97",
+      "linked_archive_member_count": 134,
+      "map_sha256": "b886f4f1c2ce6cffc8646b733232141c4e9485518b5f8fb41486e6caf7efe3f1",
+      "notice_bundle_sha256": "b40b4c764d5aa15bf613b0ceb5ba1305ee33077b88ad4e0f303cf98248d0da79",
+      "notice_count": 1,
+      "notice_manifest_sha256": "2b0483e4f854fb3c9b04b98f92c8bc8a42b86b20086af7ab6beb76ad9a76efc1",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "Retain Linux linker map and static GCC runtime object inventory; inspect exact GPLv3 GCC Runtime Library Exception applicability, or rebuild with host-provided dynamic libstdc++ and verify imports."
+      ],
+      "runtime_archive_member_count": 111,
+      "target": "linux/arm64"
+    },
+    {
+      "artifact_name": "s503-native-build-windows-11-arm",
+      "binary_sha256": "61e3c2d76a0dace47fafe84dcbcf8ba4472980ff4e77e5467fe613c98c97f80b",
+      "build_report_sha256": "d167010b622222c55f71357b66271a62a7ebe1cfee486ccd3d92d891dc6c93c9",
+      "link_inventory_sha256": "b6f890fbd13204c6e8d88bae8baabfc4d4e769bf5ab1a6a246e15edece3f1bcf",
+      "linked_archive_member_count": 131,
+      "map_sha256": "2639fd586fe652d6bcee3a2b1022ea05b4dfcfeeac445549bd29f953ddd318f3",
+      "notice_bundle_sha256": "aba6e4b5ac2a618e550a310c22eb55c11109a7a64f13f31ad3754a115a94f2eb",
+      "notice_count": 8,
+      "notice_manifest_sha256": "330fb0dee08669186b43d21bf3bbc00e08299a6b208804da2ef9b13167c30707",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "MinGW runtime notice itself flags Cephes math source licensing as uncertain; verify linked member source lineage.",
+        "Verify source-to-prebuilt llvm-mingw archive provenance and all linked MinGW member licenses before product admission."
+      ],
+      "runtime_archive_member_count": 0,
+      "target": "windows/arm64"
+    },
+    {
+      "artifact_name": "s503-native-build-windows-2025",
+      "binary_sha256": "be8d0b96a18b0fb01ea75da4461aa05650a752d92b31385c4b97774992c3bb14",
+      "build_report_sha256": "ec6e1271ed27f1c014ae8219e36f82f5bf904921454bb811ab39aca5298fa362",
+      "link_inventory_sha256": "ccad4017796605adc124c8005a1a9c099c144067efcf08595f64474b90a4e79b",
+      "linked_archive_member_count": 141,
+      "map_sha256": "492d869f01ce5a8afb23edffd51b3fe4a53626cfd16ee14ce910cd4f3019746e",
+      "notice_bundle_sha256": "aba6e4b5ac2a618e550a310c22eb55c11109a7a64f13f31ad3754a115a94f2eb",
+      "notice_count": 8,
+      "notice_manifest_sha256": "e76cbaf8af20a43bdf3fa1c8d265bd85f6395d6f88f26ebf11be4df739b2859a",
+      "open_gates": [
+        "Map linked Whisper and ggml objects to exact source files and check file-level license notices before admission.",
+        "MinGW runtime notice itself flags Cephes math source licensing as uncertain; verify linked member source lineage.",
+        "Verify source-to-prebuilt llvm-mingw archive provenance and all linked MinGW member licenses before product admission."
+      ],
+      "runtime_archive_member_count": 0,
+      "target": "windows/amd64"
+    }
+  ]
+}
