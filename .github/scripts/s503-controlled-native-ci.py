@@ -40,12 +40,12 @@ def sha(path):
 
 
 def read(path):
-    return json.loads(Path(path).read_text())
+    return json.loads(Path(path).read_text(encoding='utf-8'))
 
 
 def save(name, document):
     EVIDENCE.mkdir(exist_ok=True)
-    (EVIDENCE / name).write_text(json.dumps(document, indent=2) + '\n')
+    (EVIDENCE / name).write_text(json.dumps(document, indent=2) + '\n', encoding='utf-8')
 
 
 def admission():
@@ -245,7 +245,7 @@ def prepare():
                 'whisper': str(whisper.resolve()), 'whisper_sha256': digest,
                 'model': str(model.resolve()), 'model_sha256': sha(model), 'model_id': 'tiny',
                 'cases': cases, 'case_timeout_seconds': 1800, 'cancel_after_seconds': 0.05}
-    (root / 'manifest-online.json').write_text(json.dumps(manifest, indent=2) + '\n')
+    (root / 'manifest-online.json').write_text(json.dumps(manifest, indent=2) + '\n', encoding='utf-8')
     save('manifest-online.json', manifest)
 
 
@@ -301,7 +301,7 @@ def offline():
         'method': enforcer_record['method'], 'canary_report': str(before.resolve()),
         'canary_sha256': sha(before)})
     path = root / 'manifest-offline.json'
-    path.write_text(json.dumps(offline_manifest, indent=2) + '\n')
+    path.write_text(json.dumps(offline_manifest, indent=2) + '\n', encoding='utf-8')
     save('manifest-offline.json', offline_manifest)
     try:
         proc = subprocess.run([sys.executable,
