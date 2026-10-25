@@ -15,6 +15,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 from typing import Any
@@ -63,7 +64,11 @@ def _run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     try:
         stdout, stderr = proc.communicate()
     except KeyboardInterrupt:
-        proc.terminate()
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+            except ProcessLookupError:
+                pass
         try:
             proc.wait(timeout=3)
         except subprocess.TimeoutExpired:
@@ -114,6 +119,10 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> tuple[Path, st
         js_options += ["--no-js-runtimes", "--js-runtimes", "deno:" + str(runtime_path)]
 
     python = os.environ.get("BASHY_TRANSCRIBE_PYTHON") or sys.executable
+    rate = os.environ.get("BASHY_TRANSCRIBE_DOWNLOAD_RATE", "")
+    if rate and not re.fullmatch(r"[1-9][0-9]{0,6}[KMG]?", rate):
+        raise AcquisitionError("invalid_request", "download rate limit must be a positive yt-dlp rate")
+    rate_options = ["--limit-rate", rate] if rate else []
     # Probe metadata without downloading. This rejects playlist-only and live
     # inputs before yt-dlp can create partial media files.
     inspect = _run(
@@ -175,6 +184,7 @@ def _yt_dlp(request: dict[str, Any], work_dir: Path, url: str) -> tuple[Path, st
                 "!is_live",
                 "--format",
                 "bestaudio",
+                *rate_options,
                 "--output",
                 "%(id)s.%(ext)s",
                 "--print",
@@ -273,6 +283,13 @@ def acquire(request: dict[str, Any]) -> dict[str, Any]:
 
 
 def main(argv: list[str]) -> int:
+    if hasattr(signal, "SIGBREAK"):
+        # CTRL_BREAK_EVENT is the Windows process-group equivalent of SIGINT.
+        # Raise the same exception that _run handles so the yt-dlp child is
+        # reaped and partial files are removed before reporting cancellation.
+        def interrupt(_signum: int, _frame: Any) -> None:
+            raise KeyboardInterrupt
+        signal.signal(signal.SIGBREAK, interrupt)
     if len(argv) != 2:
         print("usage: source_youtube.py REQUEST.json", file=sys.stderr)
         return 2

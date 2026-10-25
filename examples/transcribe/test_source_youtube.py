@@ -203,6 +203,14 @@ class YouTubeSourceTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(json.loads(result.stdout)["error"]["code"], "download_failed")
 
+    def test_native_gate_rate_limit_is_argv_only_on_download(self) -> None:
+        self.env["BASHY_TRANSCRIBE_DOWNLOAD_RATE"] = "32K"
+        result = self.invoke("https://youtu.be/fixture01")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = [json.loads(line) for line in self.log.read_text().splitlines()]
+        self.assertNotIn("--limit-rate", calls[0])
+        self.assertEqual(calls[1][calls[1].index("--limit-rate") + 1], "32K")
+
     def test_cancellation_terminates_yt_dlp_child_and_reports_cancelled(self) -> None:
         self.env["BASHY_TEST_MODE"] = "hold"
         self.request.write_text(

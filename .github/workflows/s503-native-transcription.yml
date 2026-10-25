@@ -581,19 +581,24 @@ jobs:
               'try:\n'
               '    socket.create_connection(("1.1.1.1",443),timeout=5)\n'
               'except OSError as exc:\n'
-              '    print("DENIED_ERRNO=%s ERROR=%s" % (exc.errno,exc))\n'
+          '    print("DENIED_ERRNO=%s DENIED_WINERROR=%s ERROR=%s" % '
+          '          (exc.errno,getattr(exc,"winerror",None),exc))\n'
               '    sys.exit(23)\n'
               'sys.exit(0)\n')
           def probe(phase):
               proc = subprocess.run([sys.executable, '-c', probe_code],
                                     capture_output=True, text=True, timeout=10)
               error = (proc.stdout + proc.stderr).strip()
-              allowed = {'Linux': ('1', '13', '101'),
-                         'Darwin': ('1', '13', '51'),
-                         'Windows': ('10013', '10051', '10060')}
+              allowed = {'Linux': ('DENIED_ERRNO=1 ', 'DENIED_ERRNO=13 ',
+                                   'DENIED_ERRNO=101 '),
+                         'Darwin': ('DENIED_ERRNO=1 ', 'DENIED_ERRNO=13 ',
+                                    'DENIED_ERRNO=51 '),
+                         'Windows': ('DENIED_WINERROR=10013 ',
+                                     'DENIED_WINERROR=10051 ',
+                                     'DENIED_WINERROR=10060 ')}
               os_name = platform.system()
               if proc.returncode != 23 or not any(
-                      'DENIED_ERRNO=' + n + ' ' in error for n in allowed[os_name]):
+                      code in error for code in allowed[os_name]):
                   raise SystemExit('external network canary did not prove OS denial: ' +
                                    str(proc.returncode) + ' ' + error)
               report = {'schema': 's503-network-denial-v1',
@@ -723,8 +728,9 @@ jobs:
                   len(report['results']) != count or
                   report['function_receipts']['count'] < 2):
                   raise SystemExit(mode + ' pipeline result is incomplete')
-              if report['download_cancellation'] != 'pass':
-                  raise SystemExit('BLOCKED: native URL download cancellation remains untested')
+              expected_download = 'pass' if mode == 'online' else 'not_tested_offline'
+              if report['download_cancellation'] != expected_download:
+                  raise SystemExit('BLOCKED: native URL download cancellation proof is incomplete')
               if report['local_pipeline_cancellation'] != 'pass':
                   raise SystemExit('BLOCKED: native local pipeline cancellation remains untested')
           PY

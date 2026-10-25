@@ -43,9 +43,15 @@ These two crossed checks prove URL acquisition is independent of orientation
 and downstream format selection without 12 downloads per native target. The
 shortened retained file is independently hashed and identity checked; the gate
 does not transcribe that retained file separately.
-The source adapter's focused tests cover unavailable URLs and download child
-cancellation. This gate also checks one invalid URL in online mode and local
-pipeline cancellation in every mode.
+The source adapter's focused tests cover unavailable URLs and child
+cancellation. In online mode, the native gate starts an additional admitted
+yt-dlp download at 32 KiB/s, waits for a nonempty partial file, interrupts the
+process group, and requires a structured `cancelled` result with no media or
+partial files left. Every mode starts a local pipeline, waits until its infer
+request exists, interrupts the process group, and requires a failed result with
+no published output or owned temporary files. Windows sends CTRL_BREAK_EVENT;
+POSIX sends SIGINT. The native run, rather than unit tests, decides whether
+these operations work on each host.
 
 After setup, use a native OS policy to disable network access outside this
 process. While that policy is active, run an external network canary and save a
@@ -59,9 +65,10 @@ report is external evidence; native OS policy logs and proof that it remained
 active through the run must accompany the result. Offline mode uses only
 retained local media and does not call the YouTube source.
 
-Windows local pipeline cancellation is reported `not_tested_windows_no_native_process_group`;
-download cancellation is reported `not_tested_by_native_gate` on every target.
-Those remain separate native acceptance gaps, even when transcript checks pass.
+Offline replay reports download cancellation as `not_tested_offline`, because
+network access is disabled. Its online counterpart must report `pass`. A native
+host that cannot interrupt its process group or clean the partial download
+fails the gate; no status shortcut converts that failure into a pass.
 
 The gate refuses missing, changed, or unreviewed inputs before invoking the
 pipeline. `--validate-only` checks the manifest and media without inference.

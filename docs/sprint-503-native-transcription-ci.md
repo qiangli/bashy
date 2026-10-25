@@ -54,7 +54,9 @@ bytes and media identity with the reviewed admission. It writes the exact
 candidate-bound private manifest and runs `verify-youtube-pipeline.py --online`.
 That harness exercises script and skill paths, controlled and operator
 TXT/SRT/VTT, both URL forms, reviewed transcript excerpts, Bash# function
-receipts, failure cleanup and local cancellation where supported. The job
+receipts, failure cleanup and native process-group cancellation. Its online
+mode also interrupts an admitted, rate-limited yt-dlp download after a partial
+file appears, requiring a structured cancellation and complete cleanup. The job
 then proves the same runner can connect to `1.1.1.1:443` before isolation.
 
 The offline phase runs the harness again on retained media under an OS policy
@@ -78,9 +80,10 @@ Linux permits `sudo unshare --net`, whether macOS `sandbox-exec` behaves on both
 GitHub images, and whether Windows program rules deny the canary on x64 and
 ARM64 without disrupting the runner. Any unsupported target stays red.
 
-The current harness reports URL download cancellation as
-`not_tested_by_native_gate` on every target, and Windows local process-group
-cancellation as `not_tested_windows_no_native_process_group`. The final job
-check requires `pass` for both. Until the harness exercises and proves these
-cases, the required fixture and operator review exist, and all six native
-artifacts are inspected, S503.8 remains **0/6 full native passes**.
+The final job requires `pass` for online download cancellation and local
+pipeline cancellation in both modes. Offline replay records
+`not_tested_offline` for download cancellation while network access is denied.
+The Windows CTRL_BREAK_EVENT path and the controlled partial-download probe
+still need native execution on all six runners. Until those results, the
+required fixture and operator review, and all six artifacts are inspected,
+S503.8 remains **0/6 full native passes**.

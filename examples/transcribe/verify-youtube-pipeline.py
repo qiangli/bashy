@@ -304,6 +304,81 @@ def verify_function_receipts(env):
             "effects": records[0]["attest"]["Effects"]}
 
 
+def cancellable_process(argv, env):
+    kwargs = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt" else {
+        "start_new_session": True}
+    return subprocess.Popen(argv, env=env, stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE, text=True, **kwargs)
+
+
+def stop_process_group(proc, force=False):
+    if os.name == "nt":
+        if force:
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                           capture_output=True, check=False)
+        else:
+            proc.send_signal(signal.CTRL_BREAK_EVENT)
+    else:
+        os.killpg(proc.pid, signal.SIGKILL if force else signal.SIGINT)
+
+
+def await_stage(proc, ready, description, timeout=120):
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if ready():
+            require(proc.poll() is None, description + " completed before cancellation")
+            return
+        require(proc.poll() is None, description + " exited before cancellation checkpoint")
+        time.sleep(0.02)
+    raise ValueError(description + " never reached cancellation checkpoint")
+
+
+def finish_cancel(proc, description):
+    stop_process_group(proc)
+    try:
+        stdout, _ = proc.communicate(timeout=30)
+    except subprocess.TimeoutExpired:
+        stop_process_group(proc, force=True)
+        proc.communicate()
+        raise ValueError(description + " did not stop promptly")
+    require(proc.returncode != 0, description + " returned success after cancellation")
+    return stdout
+
+
+def download_cancellation(m, env, outdir, tempdir):
+    work = tempdir / "download-cancel"
+    work.mkdir()
+    request = outdir / "download-cancel-request.json"
+    request.write_text(json.dumps({"version": "bashy-transcribe-stage-v1", "stage": "acquire",
+                                   "input": URLS["canonical"], "work_dir": str(work)}))
+    limited = dict(env, BASHY_TRANSCRIBE_DOWNLOAD_RATE="32K")
+    proc = cancellable_process([m["python"], str(HERE / "source_youtube.py"), str(request)], limited)
+    def partial_started():
+        for path in work.glob("*.part*"):
+            try:
+                if path.is_file() and path.stat().st_size > 0:
+                    return True
+            except FileNotFoundError:
+                continue
+        return False
+    try:
+        await_stage(proc, partial_started, "admitted yt-dlp download")
+        stdout = finish_cancel(proc, "admitted yt-dlp download")
+        result = json.loads(stdout)
+        require(proc.returncode == 130 and result.get("error", {}).get("code") == "cancelled",
+                "source adapter did not report cancellation")
+        require(not list(work.iterdir()), "cancelled download left media or partial files")
+    finally:
+        if proc.poll() is None:
+            stop_process_group(proc, force=True)
+            proc.communicate()
+        request.unlink(missing_ok=True)
+        if not list(work.iterdir()):
+            work.rmdir()
+    assert_no_owned_temp(outdir, tempdir)
+    return "pass"
+
+
 def failure_and_cancel(m, env, outdir, tempdir, online):
     bad = outdir / "invalid-url.txt"
     args = [m["bashy"], "transcribe", "--source", "transcribe-youtube" if online else "transcribe-local",
@@ -314,24 +389,21 @@ def failure_and_cancel(m, env, outdir, tempdir, online):
     require(failed.returncode != 0 and not bad.exists() and not failed.stdout.strip(),
             "invalid URL produced a success artifact")
     assert_no_owned_temp(outdir, tempdir)
-    if os.name != "posix":
-        return "not_tested_windows_no_native_process_group"
     cancel = outdir / "cancelled.txt"
     cmd = [m["bashy"], "transcribe", "--source", "transcribe-local",
            "--decoder", m["decoder"]["name"], "--provider", "transcribe-whisper",
            "--exporter", "transcribe-export", "--model", m["model_id"],
            "--output", str(cancel), m["controlled_webm"]]
-    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True, start_new_session=True)
-    time.sleep(m.get("cancel_after_seconds", 2))
-    require(proc.poll() is None, "cancel case completed before signal; no cancellation was tested")
-    os.killpg(proc.pid, signal.SIGINT)
+    proc = cancellable_process(cmd, env)
     try:
-        stdout, _ = proc.communicate(timeout=15)
-    except subprocess.TimeoutExpired:
-        os.killpg(proc.pid, signal.SIGKILL)
-        proc.communicate()
-        raise ValueError("cancelled pipeline did not stop promptly")
+        await_stage(proc, lambda: any(tempdir.rglob("infer-in.json")), "local inference", timeout=60)
+        time.sleep(m.get("cancel_after_seconds", 0.05))
+        require(proc.poll() is None, "local inference completed before cancellation signal")
+        stdout = finish_cancel(proc, "local inference")
+    finally:
+        if proc.poll() is None:
+            stop_process_group(proc, force=True)
+            proc.communicate()
     require(proc.returncode != 0 and not cancel.exists() and not stdout.strip(),
             "cancelled pipeline published success")
     assert_no_owned_temp(outdir, tempdir)
@@ -401,6 +473,7 @@ def main():
                                         "sha256": digest(path), "bytes": path.stat().st_size}}})
         function_receipts = verify_function_receipts(env)
         cancellation = failure_and_cancel(m, env, outdir, tempdir, args.online)
+        download_cancel = download_cancellation(m, env, outdir, tempdir) if args.online else "not_tested_offline"
         summary = {"schema": "s503-youtube-pipeline-result-v1", "candidate_commit": m["candidate_commit"],
                           "candidate_sha256": digest(m["bashy"]),
                           "os": m["os"], "arch": m["arch"], "offline": args.offline,
@@ -412,7 +485,7 @@ def main():
                           "function_receipts": function_receipts,
                           "results": results, "failure_cleanup": "pass",
                           "local_pipeline_cancellation": cancellation,
-                          "download_cancellation": "not_tested_by_native_gate"}
+                          "download_cancellation": download_cancel}
         (outdir / "result.json").write_text(json.dumps(summary, indent=2) + "\n")
         print(json.dumps(summary, indent=2))
 
