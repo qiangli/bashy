@@ -1,0 +1,66 @@
+name: S503 QuickJS-NG six-target retained native evidence
+
+# Research only: native build bytes are retained for independent notice review.
+# A green job never admits a product dependency or proves YouTube acquisition.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - s503-contract-integration
+    paths:
+      - .github/workflows/s503-quickjs-six-target.yml
+      - .github/scripts/s503_quickjs_six_target.py
+      - .github/scripts/test_s503_quickjs_six_target.py
+      - .github/scripts/s503_quickjs_native_pilot.py
+
+permissions:
+  contents: read
+
+concurrency:
+  group: s503-quickjs-six-target-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  quickjs-native:
+    name: QuickJS-NG v0.17.0 ${{ matrix.target }} retained evidence
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {runner: ubuntu-24.04, target: linux/amd64, python_arch: x64}
+          - {runner: ubuntu-24.04-arm, target: linux/arm64, python_arch: arm64}
+          - {runner: macos-15-intel, target: darwin/amd64, python_arch: x64}
+          - {runner: macos-15, target: darwin/arm64, python_arch: arm64}
+          - {runner: windows-2025, target: windows/amd64, python_arch: x64}
+          - {runner: windows-11-vs2026-arm, target: windows/arm64, python_arch: arm64}
+    env:
+      RESEARCH_TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.python_arch }}
+      - name: Check six-target source and artifact guards
+        shell: pwsh
+        run: |
+          python -m unittest discover -s .github/scripts -p 'test_s503_quickjs_six_target.py' -v
+      - name: Build, inspect, retain bytes and run pinned EJS
+        shell: pwsh
+        env:
+          RESEARCH_WORK_DIR: ${{ runner.temp }}/s503-quickjs-six-target
+        run: |
+          python .github/scripts/s503_quickjs_six_target.py `
+            --target "$env:RESEARCH_TARGET" `
+            --work-dir "$env:RESEARCH_WORK_DIR" `
+            --evidence-dir evidence/quickjs-six-target
+      - name: Retain research bytes on success or failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-quickjs-six-target-${{ matrix.runner }}
+          path: evidence/quickjs-six-target/
+          if-no-files-found: warn
+          retention-days: 14
