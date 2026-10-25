@@ -1,0 +1,96 @@
+name: S503 runner identity preflight
+
+on:
+  push:
+    branches: [s503-contract-integration]
+    paths:
+      - .github/workflows/s503-runner-identity.yml
+      - docs/sprint-503/S503.8-runner-identity.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  runner-identity:
+    name: ${{ matrix.label }} identity
+    runs-on: ${{ matrix.label }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: ubuntu-24.04
+            expected_os: Linux
+            expected_arch: amd64
+          - label: ubuntu-24.04-arm
+            expected_os: Linux
+            expected_arch: arm64
+          - label: macos-15-intel
+            expected_os: macOS
+            expected_arch: amd64
+          - label: macos-15
+            expected_os: macOS
+            expected_arch: arm64
+          - label: windows-2025
+            expected_os: Windows
+            expected_arch: amd64
+          - label: windows-11-arm
+            expected_os: Windows
+            expected_arch: arm64
+
+    steps:
+      - name: Record runner identity and toolchain
+        id: identity
+        shell: bash
+        env:
+          RUNNER_LABEL: ${{ matrix.label }}
+          EXPECTED_OS: ${{ matrix.expected_os }}
+          EXPECTED_ARCH: ${{ matrix.expected_arch }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p evidence
+          ACTUAL_OS="$(node -p 'process.platform === "win32" ? "Windows" : process.platform === "darwin" ? "macOS" : "Linux"')"
+          ACTUAL_ARCH="$(node -p 'process.arch === "x64" ? "amd64" : process.arch === "arm64" ? "arm64" : process.arch')"
+          NODE_VERSION="$(node --version)"
+          GO_VERSION="$(go version)"
+          BASH_VERSION="$(bash --version | head -n 1)"
+          export ACTUAL_OS ACTUAL_ARCH NODE_VERSION GO_VERSION BASH_VERSION
+
+          node <<'NODE'
+          const fs = require('fs');
+          const evidence = {
+            schema: 's503-runner-identity-v1',
+            runner_label: process.env.RUNNER_LABEL,
+            expected_os: process.env.EXPECTED_OS,
+            expected_arch: process.env.EXPECTED_ARCH,
+            actual_os: process.env.ACTUAL_OS,
+            actual_arch: process.env.ACTUAL_ARCH,
+            node: process.env.NODE_VERSION,
+            go: process.env.GO_VERSION,
+            bash: process.env.BASH_VERSION,
+            commit_sha: process.env.COMMIT_SHA,
+          };
+          fs.writeFileSync('evidence/runner-identity.json', JSON.stringify(evidence, null, 2) + '\n');
+          NODE
+
+          cat evidence/runner-identity.json
+          if [[ "$ACTUAL_OS" != "$EXPECTED_OS" ]]; then
+            echo "OS mismatch: expected $EXPECTED_OS, got $ACTUAL_OS" >&2
+            exit 1
+          fi
+          if [[ "$ACTUAL_ARCH" != "$EXPECTED_ARCH" ]]; then
+            echo "Architecture mismatch: expected $EXPECTED_ARCH, got $ACTUAL_ARCH" >&2
+            exit 1
+          fi
+
+      - name: Upload identity evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-runner-identity-${{ matrix.label }}
+          path: evidence/runner-identity.json
+          if-no-files-found: error
+          retention-days: 14
