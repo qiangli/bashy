@@ -1,0 +1,61 @@
+name: S503 Linux permissive musl runtime experiment
+
+# Manual evidence only. This workflow cannot publish or admit a product binary.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-musl-whisper:
+    name: ${{ matrix.platform }} static musl link and ELF audit
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            platform: linux/amd64
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            platform: linux/arm64
+            arch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install native signature, build and ELF tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends minisign cmake ninja-build binutils
+      - name: Build pinned static musl candidate and retain link evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python examples/transcribe/dependencies/probe_linux_musl_runtime.py \
+            --work-dir "$RUNNER_TEMP/s503-musl-runtime" \
+            --output-dir evidence/musl-runtime \
+            --expected-arch '${{ matrix.arch }}' \
+            --parallel 4
+      - name: Attest experimental binary
+        if: success()
+        uses: actions/attest@v4
+        with:
+          subject-path: evidence/musl-runtime/whisper-cli
+      - name: Retain evidence including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: s503-musl-runtime-${{ matrix.arch }}
+          path: evidence/musl-runtime/
+          if-no-files-found: warn
+          retention-days: 14

@@ -99,6 +99,9 @@ bytes and a manifest tying each to the archive digest and ELF digest.
    limit and `product_admitted: false` in the report. It cannot publish or
    feed the installer. Coordinate the branch and pins with the sprint manager
    before dispatch. No runner is a container or emulated architecture.
+   The first run of `.github/workflows/s503-linux-musl-runtime-probe.yml`
+   performs only the source/link/notice/ELF checks and a bounded CLI help
+   smoke. It makes no inference or installation claim.
 2. Assert `uname -m`, `dpkg --print-architecture`, runner label, commit SHA,
    and known source/target constants. Fetch Zig 0.15.2 from its exact official
    URL. Compare size and SHA-256 above; verify its `.minisig` with the public
@@ -122,7 +125,8 @@ bytes and a manifest tying each to the archive digest and ELF digest.
    version requirement, and no unexpected unresolved symbol. Retain the raw
    output and binary SHA-256. A `static-pie` result is acceptable only if it
    satisfies these exact checks.
-6. Execute native `whisper-cli --help`; then run the already pinned tiny
+6. After manager review of the first build artifacts, extend the native
+   acceptance lane to run the already pinned tiny
    English and Spanish WAV/model fixtures with automatic language detection.
    Compare nonempty transcript and timing against the existing controlled
    baseline, run script and skill orientations plus TXT/SRT/VTT export, and
