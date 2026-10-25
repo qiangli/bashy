@@ -1,0 +1,16 @@
+{
+  "isolated_network_namespace": "net:[4026532263]",
+  "parent_network_namespace": "net:[4026531833]",
+  "schema": "s503-python-source-native-offline-v1",
+  "status": "PASS",
+  "tcp_denial": {
+    "errno": 101,
+    "reason": "[Errno 101] Network is unreachable"
+  },
+  "verify_existing": {
+    "executable": "/home/runner/s503-python-i31MZ0/prefix/bin/python3.12",
+    "executable_sha256": "371ccc45354ef578446d2fbae6cfcfc3ec183a84fa08de72044face74b7e7711",
+    "receipt": "/home/runner/s503-python-i31MZ0/prefix/source-build-receipt.json",
+    "status": "local_source_build_unadmitted"
+  }
+}

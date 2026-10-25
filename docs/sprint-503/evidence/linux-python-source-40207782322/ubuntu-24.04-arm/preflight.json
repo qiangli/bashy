@@ -1,0 +1,12 @@
+{
+  "candidate_commit": "91abf1609c614c774c83b01e4de6671e7a7203af",
+  "identity": {
+    "machine": "aarch64",
+    "runner_python": "3.12.3",
+    "system": "Linux",
+    "target": "linux/arm64"
+  },
+  "schema": "s503-python-source-native-preflight-v1",
+  "source_setup_sha256": "8572e7498c404fb23d8e1609562bc13cbe1e7ee43bd6e20a50eb6fd51648ff76",
+  "status": "PASS"
+}

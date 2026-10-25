@@ -93,8 +93,14 @@ macOS/Windows executable bytes and their independently checked archive
 provenance. It is a prerequisite check, not an installer or permission to
 redistribute Python or Microsoft DLLs. The Linux `actions/python-versions`
 archive setup script is specific to the CI tool cache and is not an admitted
-product install path. An explicit Linux source build is now available below;
-it is local operator evidence and has not passed native admission. Python.org's macOS and Windows installers have archive
+product install path. The explicit Linux source build below passed native
+source-build and offline byte-recheck gates on amd64 and arm64 in
+[run 40207782322](https://github.com/qiangli/bashy/actions/runs/40207782322).
+The [retained evidence](../../../docs/sprint-503/evidence/linux-python-source-40207782322/review.json)
+records 3,356 installed files, 71 extension modules, and exact system-library
+closure for each target. Its status remains `local_source_build_unadmitted`:
+library licenses, operator-host installation, and product distribution still
+need review. Python.org's macOS and Windows installers have archive
 provenance but no six-target operator-host installation proof. `elephant` had no
 installed Python and older VC runtime bytes at the read-only probe. Because the
 adapter itself runs under Python, this check gates its child yt-dlp invocation;
@@ -162,9 +168,12 @@ inventory before yt-dlp. Without the source prefix opt-in, the existing six
 CI-observed executable pins continue to apply. A changed system library causes
 reverification to fail until the host's build and license review is repeated.
 
-Outstanding native gates: execute and inspect this path on Linux amd64 and
-arm64, verify the native compiler and OpenSSL closure and every loaded library's
-license, and decide product distribution policy. This source recipe does not
+The two Linux native jobs verified the source signature, built on their native
+architectures, enumerated compiler/OpenSSL and loaded libraries, and repeated
+the complete installed-byte check with OS network access disabled. Outstanding
+gates: review each loaded library's license against the recorded package
+copyright, prove an operator-host installation and pre-execution integrity
+launcher, and decide product distribution policy. This source recipe does not
 close macOS, Windows, FFmpeg, or the six-target transcription gates.
 
 ## Runner Invocation

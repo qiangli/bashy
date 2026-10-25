@@ -1,0 +1,22 @@
+{
+  "gpg_signature": "PASS",
+  "inputs": {
+    "archive": {
+      "bytes": 20829824,
+      "sha256": "c2c4321961fab0fb999d66e0cecf521c2ab3994c7992873ea99e306c1094fd5a",
+      "url": "https://www.python.org/ftp/python/3.12.15/Python-3.12.15.tar.xz"
+    },
+    "key": {
+      "bytes": 7127,
+      "sha256": "33c3af79f23a83c2a8a569bfd546601be400cb26dd7eb31f6d5e5b621667c391",
+      "url": "https://github.com/Yhg1s.gpg"
+    },
+    "signature": {
+      "bytes": 833,
+      "sha256": "e80124b35dabf82264f254dbb291697df96768f6e4ee0e43d7e8f110a9ea50b6",
+      "url": "https://www.python.org/ftp/python/3.12.15/Python-3.12.15.tar.xz.asc"
+    }
+  },
+  "schema": "s503-python-source-native-inputs-v1",
+  "status": "PASS"
+}
