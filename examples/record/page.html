@@ -45,8 +45,8 @@ body.full .prompter::before{display:none}
    under the camera, the script fills the space below it; nothing overlaps. */
 body.pm .stage{position:relative;top:auto;right:auto;width:auto;height:16vh;aspect-ratio:16/9;margin:0 auto;flex:none;border:2px solid #2b2b28;z-index:auto}
 body.pm header,body.pm .prompt{padding-right:0}
-body.pm .prompter::before{top:45%}
-body.pm .stage{order:2} body.pm .main{order:3} body.pm .controls{order:4}
+body.pm .prompter::before{top:calc(45% - 10px)}
+body.pm .main{order:2} body.pm .stage{order:3;margin-top:4px} body.pm .controls{order:4}
 #playback.enhanced{filter:brightness(1.04) contrast(1.06) saturate(1.05)}
 button.on{background:var(--accent);color:#1a1a18}
 </style></head><body><div class="wrap">
