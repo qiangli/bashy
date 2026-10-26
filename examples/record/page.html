@@ -45,7 +45,7 @@ body.full .prompter::before{display:none}
    under the camera, the script fills the space below it; nothing overlaps. */
 body.pm .stage{position:relative;top:auto;right:auto;width:auto;height:30vh;aspect-ratio:16/9;margin:0 auto;flex:none;border:2px solid #2b2b28;z-index:auto}
 body.pm header,body.pm .prompt{padding-right:0}
-body.pm .prompter::before{top:14%}
+body.pm .prompter::before{top:45%}
 body.pm .stage{order:2} body.pm .main{order:3} body.pm .controls{order:4}
 </style></head><body><div class="wrap">
 <header><b>bashy record · {{KIND}}</b><span>requested by {{REQUESTER}} · stays on this computer until you press “Use this”</span></header>
@@ -86,7 +86,7 @@ const preview=$("preview"), playback=$("playback"), still=$("still"), badge=$("b
 let stream, rec, chunks=[], blob=null, timer=null, scrollY=0, rafId=0, t0=0;
 if (KIND==="photo") $("start").textContent="Take photo";
 if (SCRIPT) { if ("speechSynthesis" in window) $("listen").style.display="inline-block"; $("full").style.display="inline-block"; document.body.classList.add("pm"); $("prompter").style.display="block"; $("speedl").style.display="flex"; renderLines(); resetPrompter(); }
-function resetPrompter(){ scrollY=0; $("ptext").style.top=$("prompter").clientHeight*0.14+"px"; $("ptext").style.transform="translateY(0)"; }
+function resetPrompter(){ scrollY=0; $("ptext").style.top=$("prompter").clientHeight*0.45+"px"; $("ptext").style.transform="translateY(0)"; }
 function scrollPrompter(ts){ const dt=(ts-(scrollPrompter.last||ts))/1000; scrollPrompter.last=ts; scrollY+=dt*Number($("speed").value); $("ptext").style.transform=`translateY(${-scrollY}px)`; rafId=requestAnimationFrame(scrollPrompter); }
 function msg(t){ $("msg").textContent=t; }
 async function camera(){
