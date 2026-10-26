@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -30,6 +31,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/pathconv"
 
 	"github.com/qiangli/bashy/internal/agentos/session"
 	"github.com/qiangli/bashy/internal/cli"
@@ -1877,8 +1879,15 @@ func dispatch() {
 	case "kubectl":
 		// Kubernetes CLI (Apache-2.0) via binmgr (dl.k8s.io) — targets the DKS
 		// cluster by default (external/kube: KUBECONFIG → outpost's DKS kubeconfig).
+		if runtime.GOOS == "windows" {
+			adaptKubeEnvironment()
+		}
 		cmd := kubectl.NewKubectlCmd()
-		setCobraArgs(cmd, os.Args[2:])
+		args := os.Args[2:]
+		if runtime.GOOS == "windows" {
+			args = pathconv.NativeArgs(args)
+		}
+		setCobraArgs(cmd, args)
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -1887,8 +1896,15 @@ func dispatch() {
 		// Helm — the kubernetes package manager (Apache-2.0) via binmgr
 		// (get.helm.sh) — installs charts onto the DKS cluster (same default
 		// kubeconfig as `bashy kubectl`).
+		if runtime.GOOS == "windows" {
+			adaptKubeEnvironment()
+		}
 		cmd := helm.NewHelmCmd()
-		setCobraArgs(cmd, os.Args[2:])
+		args := os.Args[2:]
+		if runtime.GOOS == "windows" {
+			args = pathconv.NativeArgs(args)
+		}
+		setCobraArgs(cmd, args)
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
@@ -2600,4 +2616,19 @@ func liveProbeAgent(ctx context.Context, agent string, timeout time.Duration) (s
 		fmt.Fprintf(os.Stderr, "warning: could not record probe result for %s: %v\n", key, err)
 	}
 	return string(status), note, status.OK()
+}
+
+// adaptKubeEnvironment converts KUBECONFIG and related plane path variables
+// from MSYS/POSIX drive forms (/c/...) to native Windows path lists (C:\...).
+func adaptKubeEnvironment() {
+	for _, key := range []string{
+		"KUBECONFIG",
+		"OUTPOST_KUBECONFIG_PATH",
+		"DKS_PEER_KUBECONFIG",
+		"DKS_FEDERATION_KUBECONFIG",
+	} {
+		if val := os.Getenv(key); val != "" {
+			_ = os.Setenv(key, pathconv.NativePathList(val))
+		}
+	}
 }
