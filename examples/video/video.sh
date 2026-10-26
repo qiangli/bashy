@@ -91,7 +91,7 @@ camera() {
 		ffmpeg -hide_banner -loglevel error -y -f avfoundation -framerate 30 -video_size 1280x720 \
 			-i "$CAMERA" -t "$secs" -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k "$src"
 	fi
-	local target=${3:-0} d r
+	local target=${3:-0} d r take=$src
 	d=$(dur "$src")
 	if [ "${target%.*}" -gt 0 ] 2>/dev/null && awk -v d="$d" -v t="$target" 'BEGIN{exit !(d>t)}'; then
 		# Speed picture and voice up together; atempo keeps the voice's pitch.
@@ -103,7 +103,8 @@ camera() {
 		src="$B/camera-$name-fit.mp4"
 	fi
 	local opts=" ${4:-} " vf="" af=""
-	grep -qs '"enhance": *true' "$src.json" && opts+=" enhance "
+	# The choice file sits next to the original take, not the fitted copy.
+	grep -qs '"enhance": *true' "$take.json" && opts+=" enhance "
 	case $opts in *" reframe "*) vf="crop=iw*0.8:ih*0.8:iw*0.1:ih*0.2," ;; esac
 	case $opts in *" enhance "*)
 		vf+="hqdn3d=1.5:1.5:4:4,eq=brightness=0.03:contrast=1.06:saturation=1.05,unsharp=5:5:0.6,"
