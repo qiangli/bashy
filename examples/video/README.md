@@ -68,8 +68,8 @@ fails, the recording shows the failure, so rehearse first.
 ## Knobs
 
 `VIDEO_COLS`/`VIDEO_ROWS` (100x24, a 16:9 frame), `VIDEO_PAIR_COLS`/`ROWS`
-(64x30), `VIDEO_FONT_SIZE` (28), `VIDEO_THEME` (monokai), `VIDEO_IDLE` (1.5 s
-cap on pauses), `TYPE_DELAY` (0.035 s per character), `VIDEO_CAMERA` (`0:0`,
+(64x30), `VIDEO_FONT_SIZE` (28), `VIDEO_THEME` (monokai), `VIDEO_IDLE` (4 s
+cap on pauses; keep it above the longest caption hold), `TYPE_DELAY` (0.012 s per character), `SAY_WPM` (240: captions are held for their reading time), `VIDEO_CAMERA` (`0:0`,
 see `bashy dag cameras`), `VIDEO_SHELL` (bashy).
 
 ## Notes from making real videos with it
