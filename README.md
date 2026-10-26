@@ -16,6 +16,11 @@
 >
 > One download, every machine, every agent. **bashy is all you need.**
 
+**Demo (3.5 min): bashy unifies all systems, Bash# unifies all languages.**
+Every terminal step in it really ran, on our own machines.
+
+[![bashy demo](https://img.youtube.com/vi/2eRX3ZJuYeM/hqdefault.jpg)](https://youtu.be/2eRX3ZJuYeM)
+
 - **bash + coreutils in pure Go**: one executable per platform, no system bash,
   no GNU-vs-BSD drift.
 - **GNU Bash 5.3 compatible**: Bash's own 5.3 suite, 86/86.
