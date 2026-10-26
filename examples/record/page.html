@@ -65,7 +65,7 @@ body.pm .stage{order:2} body.pm .main{order:3} body.pm .controls{order:4}
   <button class="rec" id="stop" disabled>Stop</button>
   <button id="retake" disabled>Retake</button>
   <button class="ok" id="use" disabled>Use this</button>
-  <label id="pbl" style="display:none">replay speed <select id="pbrate"><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option><option>2</option></select></label>
+  <label id="pbl" style="display:none">replay speed <select id="pbrate"><option value="fit" id="fitopt" hidden>fit</option><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option><option>2</option></select> <span id="durinfo"></span></label>
   <label id="speedl" style="display:none">prompter speed <input id="speed" type="range" min="2" max="120" value="30" style="width:220px"> <b id="speedv">30</b> <span>(↑/↓ while reading)</span></label>
   <span id="look" style="display:none">
     <label>size <input id="fsize" type="range" min="1.4" max="5" step="0.1" value="3.2" style="width:110px"></label>
@@ -77,7 +77,7 @@ body.pm .stage{order:2} body.pm .main{order:3} body.pm .controls{order:4}
 </div>
 </div>
 <script>
-const KIND = "{{KIND}}", SCRIPT = {{SCRIPT_JSON}}, MAX = {{MAX}};
+const KIND = "{{KIND}}", SCRIPT = {{SCRIPT_JSON}}, MAX = {{MAX}}, FIT = {{FIT}};
 const $ = id => document.getElementById(id);
 const LINES = SCRIPT ? SCRIPT.split("\n") : [];
 function renderLines(){ const t=$("ptext"); t.innerHTML=""; LINES.forEach((l,i)=>{ const d=document.createElement("div"); d.className="ln"; d.dataset.i=i; d.textContent=l||"\u00a0"; t.appendChild(d); }); }
@@ -111,7 +111,7 @@ $("start").onclick = async ()=>{
   resetPrompter(); await countdown(3);
   chunks=[]; const type=pickType(); rec=new MediaRecorder(stream, type?{mimeType:type}:{});
   rec.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
-  rec.onstop=()=>{ $("pbl").style.display="flex"; playback.playbackRate=+$("pbrate").value; $("full").disabled=false; $("listen").disabled=false; if(SCRIPT){document.body.classList.remove("pm"); $("prompter").style.display="none";} blob=new Blob(chunks,{type:rec.mimeType||type||"video/webm"}); playback.src=URL.createObjectURL(blob); playback.style.display="block"; preview.style.display="none"; badge.className="badge"; badge.textContent="review"; cancelAnimationFrame(rafId); scrollPrompter.last=0; $("retake").disabled=false; $("use").disabled=false; msg("Watch it back. “Use this” sends it; “Retake” starts over."); };
+  rec.onstop=()=>{ $("pbl").style.display="flex"; $("full").disabled=false; $("listen").disabled=false; if(SCRIPT){document.body.classList.remove("pm"); $("prompter").style.display="none";} blob=new Blob(chunks,{type:rec.mimeType||type||"video/webm"}); playback.src=URL.createObjectURL(blob); playback.style.display="block"; preview.style.display="none"; badge.className="badge"; badge.textContent="review"; cancelAnimationFrame(rafId); scrollPrompter.last=0; $("retake").disabled=false; $("use").disabled=false; msg("Watch it back. “Use this” sends it; “Retake” starts over."); };
   rec.start(1000); t0=Date.now(); badge.className="badge rec"; $("stop").disabled=false;
   if (SCRIPT) rafId=requestAnimationFrame(scrollPrompter);
   timer=setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000); badge.textContent="● "+Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); if(MAX>0&&s>=MAX) $("stop").click(); },250);
@@ -181,7 +181,15 @@ if (SCRIPT) {
   $("voice").onchange=()=>store.set("voice",$("voice").value);
   if("speechSynthesis" in window){ fillVoices(); speechSynthesis.onvoiceschanged=fillVoices; }
 }
-$("pbrate").onchange=()=>{ playback.playbackRate=+$("pbrate").value; };
+function fitRate(){ const d=playback.duration; return (FIT>0 && isFinite(d) && d>FIT) ? Math.min(2, d/FIT) : 1; }
+function applyRate(){ playback.playbackRate = $("pbrate").value==="fit" ? fitRate() : +$("pbrate").value; }
+$("pbrate").onchange=applyRate;
+playback.addEventListener("loadedmetadata",()=>{
+  const d=playback.duration; if(!isFinite(d)) return;
+  let t=Math.round(d)+" s";
+  if(FIT>0){ const o=$("fitopt"); o.hidden=false; const r=fitRate(); o.textContent="fit to "+FIT+" s ("+r.toFixed(2)+"×)"; if(d>FIT){ $("pbrate").value="fit"; t+=", over "+FIT+" s by "+Math.round(d-FIT)+" s"+(r>1.35?" (above 1.35× speech may sound rushed)":""); } }
+  $("durinfo").textContent=t; applyRate();
+});
 $("vrate").onchange=()=>store.set("vrate",$("vrate").value);
 if(store.get("vrate")) $("vrate").value=store.get("vrate");
 camera();

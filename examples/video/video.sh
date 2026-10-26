@@ -9,8 +9,10 @@
 #   storyboard.txt   one segment per line (# comments allowed):
 #                      card NAME [SECONDS]   cards/NAME.txt, first line bold
 #                      step NAME             steps/NAME.sh, recorded headless
-#                      camera NAME [SECONDS] camera/NAME.mov, or record the
-#                                            webcam + mic now (macOS)
+#                      camera NAME [SECONDS] [FIT]
+#                                            camera/NAME.mov|.mp4, or record the
+#                                            webcam + mic now (macOS); FIT speeds
+#                                            a longer take up to FIT seconds
 #                      pair LEFT RIGHT       two steps side by side; RIGHT
 #                                            waits on its first frame until
 #                                            LEFT has finished
@@ -84,6 +86,17 @@ camera() {
 		ffmpeg -hide_banner -loglevel error -y -f avfoundation -framerate 30 -video_size 1280x720 \
 			-i "$CAMERA" -t "$secs" -c:v libx264 -preset veryfast -crf 18 -pix_fmt yuv420p -c:a aac -b:a 192k "$src"
 	fi
+	local target=${3:-0} d r
+	d=$(dur "$src")
+	if [ "${target%.*}" -gt 0 ] 2>/dev/null && awk -v d="$d" -v t="$target" 'BEGIN{exit !(d>t)}'; then
+		# Speed picture and voice up together; atempo keeps the voice's pitch.
+		r=$(awk -v d="$d" -v t="$target" 'BEGIN{r=d/t; if(r>2)r=2; printf "%.4f", r}')
+		echo "video: camera $name ${d%.*}s -> ${target}s (x$r)" >&2
+		awk -v r="$r" 'BEGIN{exit !(r>1.35)}' && echo "video: warning: x$r is above 1.35; speech may sound rushed" >&2
+		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$src" -filter_complex \
+			"[0:v]setpts=PTS/$r[v];[0:a]atempo=$r[a]" -map "[v]" -map "[a]" "${VENC[@]}" "${AENC[@]}" "$B/camera-$name-fit.mp4"
+		src="$B/camera-$name-fit.mp4"
+	fi
 	fit "$src" "$B/seg-$SEQ.mp4"
 }
 
@@ -152,15 +165,15 @@ build() {
 	doctor >/dev/null || { doctor; die "install the missing tools first"; }
 	mkdir -p "$B"; rm -f "$B"/seg-*.mp4 "$B/segments.txt"
 	SEQ=100
-	local kind a b
-	while read -r kind a b; do
+	local kind a b c
+	while read -r kind a b c; do
 		case $kind in '' | '#'*) continue ;; esac
 		SEQ=$((SEQ + 1))
 		echo "video: [$SEQ] $kind $a ${b:-}"
 		case $kind in
 		card) card "$a" "${b:-4}" ;;
 		step) step "$a" ;;
-		camera) camera "$a" "${b:-75}" ;;
+		camera) camera "$a" "${b:-75}" "${c:-0}" ;;
 		pair) pair "$a" "$b" ;;
 		*) die "unknown segment kind: $kind" ;;
 		esac

@@ -3,7 +3,7 @@
 # take, and print the path of the take.
 #
 #   record photo|video|audio [--prompt TEXT] [--script FILE]
-#          [--max-seconds N] [--out PATH] [--timeout SECONDS] [--lang TAG]
+#          [--max-seconds N] [--fit-seconds N] [--out PATH] [--timeout SECONDS] [--lang TAG]
 #
 # It opens a one-time page on loopback in the person's own browser: a small
 # live preview, a 3-second countdown, Start / Stop / Retake / "Use this". With
@@ -38,6 +38,9 @@ allowing the camera or microphone once in the browser and pressing buttons.
   es-ES; default en-US) with the browser's voice on this computer.
   Write the script for them in their language: short sentences, one idea
   per line.
+- Recording runs until the person presses Stop (`--max-seconds N` sets a
+  cap). `--fit-seconds 60` adds a "fit to 60 s" replay that plays a longer
+  take faster, as it will sound after examples/video speeds it up.
 - Only the path of the take is printed (mode 0600), so it composes:
   `ffprobe "$(record video --script s.txt)"`. A failure exits non-zero.
 - Tell the person in chat what is about to open and what to press, then
@@ -119,7 +122,7 @@ func openURL(u string) error {
 }
 
 // Record serves page for one take and returns the path it was written to.
-func Record(kind, prompt, script, maxSecs, out, timeoutSecs, lang, page string) (string, error) {
+func Record(kind, prompt, script, maxSecs, fitSecs, out, timeoutSecs, lang, page string) (string, error) {
 	if kind != "photo" && kind != "video" && kind != "audio" {
 		return "", fmt.Errorf("record: first argument must be photo, video or audio (got %q)", kind)
 	}
@@ -133,7 +136,10 @@ func Record(kind, prompt, script, maxSecs, out, timeoutSecs, lang, page string) 
 	base := "/" + hex.EncodeToString(tok) + "/"
 	sj, _ := json.Marshal(script)
 	if _, err := strconv.Atoi(maxSecs); err != nil {
-		maxSecs = "180"
+		maxSecs = "0"
+	}
+	if _, err := strconv.Atoi(fitSecs); err != nil {
+		fitSecs = "0"
 	}
 	who := os.Getenv("BASHY_AGENT")
 	if who == "" {
@@ -144,6 +150,7 @@ func Record(kind, prompt, script, maxSecs, out, timeoutSecs, lang, page string) 
 		"{{PROMPT}}", html.EscapeString(prompt),
 		"{{SCRIPT_JSON}}", string(sj),
 		"{{MAX}}", maxSecs,
+		"{{FIT}}", fitSecs,
 		"{{REQUESTER}}", html.EscapeString(who),
 		"{{LANG}}", langTag(lang),
 	).Replace(page)
@@ -238,7 +245,7 @@ for a in "$@"; do
 done
 set -- "${args[@]}"
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-kind="" prompt="" script="" max=180 out="" timeout=1200 lang=en-US
+kind="" prompt="" script="" max=0 out="" timeout=1200 lang=en-US fit=0
 # The kind is the one positional; the registry passes it after the flags.
 while [ $# -gt 0 ]; do
 	case $1 in
@@ -248,6 +255,7 @@ while [ $# -gt 0 ]; do
 	--out) out=$2; shift 2 ;;
 	--timeout) timeout=$2; shift 2 ;;
 	--lang) lang=$2; shift 2 ;;
+	--fit-seconds) fit=$2; shift 2 ;;
 	--skill) sed -n '/^~~~skill/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d'; exit 0 ;;
 	-h | --help) sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	-*) echo "record: unknown option: $1" >&2; exit 2 ;;
@@ -256,7 +264,7 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$kind" ] || { sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 2; }
 page=$(<"$here/page.html")
-path := go.Record(kind, prompt, script, max, out, timeout, lang, page)
+path := go.Record(kind, prompt, script, max, fit, out, timeout, lang, page)
 # A failed foreign call leaves path empty (its message is already on stderr).
 [ -n "$path" ] || exit 1
 echo "$path"
