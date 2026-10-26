@@ -12,7 +12,12 @@
 #                      camera NAME [SECONDS] [FIT]
 #                                            camera/NAME.mov|.mp4, or record the
 #                                            webcam + mic now (macOS); FIT speeds
-#                                            a longer take up to FIT seconds
+#                                            a longer take up to FIT seconds;
+#                                            then words: enhance (voice cleanup,
+#                                            -16 LUFS, light denoise/colour, fades;
+#                                            also when camera/NAME.*.json says
+#                                            "enhance": true) and reframe (drop
+#                                            the top 20%, centre the subject)
 #                      pair LEFT RIGHT       two steps side by side; RIGHT
 #                                            waits on its first frame until
 #                                            LEFT has finished
@@ -97,6 +102,20 @@ camera() {
 			"[0:v]setpts=PTS/$r[v];[0:a]atempo=$r[a]" -map "[v]" -map "[a]" "${VENC[@]}" "${AENC[@]}" "$B/camera-$name-fit.mp4"
 		src="$B/camera-$name-fit.mp4"
 	fi
+	local opts=" ${4:-} " vf="" af=""
+	grep -qs '"enhance": *true' "$src.json" && opts+=" enhance "
+	case $opts in *" reframe "*) vf="crop=iw*0.8:ih*0.8:iw*0.1:ih*0.2," ;; esac
+	case $opts in *" enhance "*)
+		vf+="hqdn3d=1.5:1.5:4:4,eq=brightness=0.03:contrast=1.06:saturation=1.05,unsharp=5:5:0.6,"
+		af="highpass=f=80,afftdn=nf=-25,acompressor=threshold=-20dB:ratio=3:attack=5:release=80,loudnorm=I=-16:TP=-1.5:LRA=11"
+		;;
+	esac
+	if [ -n "$vf$af" ]; then
+		echo "video: camera $name:${opts// /,}" | tr -s , >&2
+		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$src" \
+			-vf "${vf}null" ${af:+-af "$af"} "${VENC[@]}" "${AENC[@]}" "$B/camera-$name-touch.mp4"
+		src="$B/camera-$name-touch.mp4"
+	fi
 	fit "$src" "$B/seg-$SEQ.mp4"
 }
 
@@ -165,15 +184,15 @@ build() {
 	doctor >/dev/null || { doctor; die "install the missing tools first"; }
 	mkdir -p "$B"; rm -f "$B"/seg-*.mp4 "$B/segments.txt"
 	SEQ=100
-	local kind a b c
-	while read -r kind a b c; do
+	local kind a b c d
+	while read -r kind a b c d; do
 		case $kind in '' | '#'*) continue ;; esac
 		SEQ=$((SEQ + 1))
 		echo "video: [$SEQ] $kind $a ${b:-}"
 		case $kind in
 		card) card "$a" "${b:-4}" ;;
 		step) step "$a" ;;
-		camera) camera "$a" "${b:-75}" "${c:-0}" ;;
+		camera) camera "$a" "${b:-75}" "${c:-0}" "${d:-}" ;;
 		pair) pair "$a" "$b" ;;
 		*) die "unknown segment kind: $kind" ;;
 		esac

@@ -47,6 +47,8 @@ body.pm .stage{position:relative;top:auto;right:auto;width:auto;height:16vh;aspe
 body.pm header,body.pm .prompt{padding-right:0}
 body.pm .prompter::before{top:45%}
 body.pm .stage{order:2} body.pm .main{order:3} body.pm .controls{order:4}
+#playback.enhanced{filter:brightness(1.04) contrast(1.06) saturate(1.05)}
+button.on{background:var(--accent);color:#1a1a18}
 </style></head><body><div class="wrap">
 <header><b>bashy record · {{KIND}}</b><span>requested by {{REQUESTER}} · stays on this computer until you press “Use this”</span></header>
 <div class="prompt">{{PROMPT}}</div>
@@ -65,6 +67,7 @@ body.pm .stage{order:2} body.pm .main{order:3} body.pm .controls{order:4}
   <button class="rec" id="stop" disabled>Stop</button>
   <button id="retake" disabled>Retake</button>
   <button class="ok" id="use" disabled>Use this</button>
+  <button id="enh" style="display:none" title="cleaner voice and picture; your take is kept as recorded">Enhance</button>
   <label id="pbl" style="display:none">replay speed <select id="pbrate"><option value="fit" id="fitopt" hidden>fit</option><option>0.75</option><option selected>1</option><option>1.25</option><option>1.5</option><option>2</option></select> <span id="durinfo"></span></label>
   <label id="speedl" style="display:none">prompter speed <input id="speed" type="range" min="2" max="22" value="12" style="width:220px"> <b id="speedv">12</b> <span>(↑/↓ while reading)</span></label>
   <span id="look" style="display:none">
@@ -111,16 +114,16 @@ $("start").onclick = async ()=>{
   resetPrompter(); await countdown(3);
   chunks=[]; const type=pickType(); rec=new MediaRecorder(stream, type?{mimeType:type}:{});
   rec.ondataavailable=e=>{ if(e.data.size) chunks.push(e.data); };
-  rec.onstop=()=>{ $("pbl").style.display="flex"; $("full").disabled=false; $("listen").disabled=false; if(SCRIPT){document.body.classList.remove("pm"); $("prompter").style.display="none";} blob=new Blob(chunks,{type:rec.mimeType||type||"video/webm"}); playback.src=URL.createObjectURL(blob); playback.style.display="block"; preview.style.display="none"; badge.className="badge"; badge.textContent="review"; cancelAnimationFrame(rafId); scrollPrompter.last=0; $("retake").disabled=false; $("use").disabled=false; msg("Watch it back. “Use this” sends it; “Retake” starts over."); };
+  rec.onstop=()=>{ if(KIND!=="photo") $("enh").style.display="inline-block"; $("pbl").style.display="flex"; $("full").disabled=false; $("listen").disabled=false; if(SCRIPT){document.body.classList.remove("pm"); $("prompter").style.display="none";} blob=new Blob(chunks,{type:rec.mimeType||type||"video/webm"}); playback.src=URL.createObjectURL(blob); playback.style.display="block"; preview.style.display="none"; badge.className="badge"; badge.textContent="review"; cancelAnimationFrame(rafId); scrollPrompter.last=0; $("retake").disabled=false; $("use").disabled=false; msg("Watch it back. “Use this” sends it; “Retake” starts over."); };
   rec.start(1000); t0=Date.now(); badge.className="badge rec"; $("stop").disabled=false;
   if (SCRIPT) rafId=requestAnimationFrame(scrollPrompter);
   timer=setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000); badge.textContent="● "+Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); if(MAX>0&&s>=MAX) $("stop").click(); },250);
 };
 $("stop").onclick=()=>{ clearInterval(timer); $("stop").disabled=true; if(rec&&rec.state!=="inactive") rec.stop(); };
-$("retake").onclick=()=>{ $("pbl").style.display="none"; if(SCRIPT){document.body.classList.add("pm"); $("prompter").style.display="block";} blob=null; playback.pause(); playback.style.display="none"; still.style.display="none"; preview.style.display="block"; badge.className="badge"; badge.textContent="camera ready"; resetPrompter(); $("start").disabled=false; $("retake").disabled=true; $("use").disabled=true; msg(""); };
+$("retake").onclick=()=>{ $("enh").style.display="none"; $("pbl").style.display="none"; if(SCRIPT){document.body.classList.add("pm"); $("prompter").style.display="block";} blob=null; playback.pause(); playback.style.display="none"; still.style.display="none"; preview.style.display="block"; badge.className="badge"; badge.textContent="camera ready"; resetPrompter(); $("start").disabled=false; $("retake").disabled=true; $("use").disabled=true; msg(""); };
 $("use").onclick=async ()=>{
   if(!blob) return; $("use").disabled=true; $("retake").disabled=true; msg("Sending…");
-  try{ const r=await fetch("upload",{method:"POST",headers:{"Content-Type":blob.type||"application/octet-stream"},body:blob}); if(!r.ok) throw new Error(await r.text());
+  try{ const r=await fetch("upload",{method:"POST",headers:{"Content-Type":blob.type||"application/octet-stream","X-Record-Enhance":enhance?"1":"0"},body:blob}); if(!r.ok) throw new Error(await r.text());
     if(stream) stream.getTracks().forEach(t=>t.stop());
     document.querySelector(".controls").innerHTML='<span class="done">Sent. You can close this tab.</span>';
   }catch(e){ msg("Could not send: "+e.message); $("use").disabled=false; $("retake").disabled=false; }
@@ -192,5 +195,10 @@ playback.addEventListener("loadedmetadata",()=>{
 });
 $("vrate").onchange=()=>store.set("vrate",$("vrate").value);
 if(store.get("vrate")) $("vrate").value=store.get("vrate");
+// Enhance: the person's choice for post-production (voice cleanup and
+// loudness, light denoise/colour). The playback previews the look; the take
+// itself is kept as recorded and the choice travels with the upload.
+let enhance=false;
+$("enh").onclick=()=>{ enhance=!enhance; $("enh").classList.toggle("on",enhance); $("enh").textContent=enhance?"Enhance ✓":"Enhance"; playback.classList.toggle("enhanced",enhance); };
 camera();
 </script></body></html>

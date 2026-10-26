@@ -41,6 +41,9 @@ allowing the camera or microphone once in the browser and pressing buttons.
 - Recording runs until the person presses Stop (`--max-seconds N` sets a
   cap). `--fit-seconds 60` adds a "fit to 60 s" replay that plays a longer
   take faster, as it will sound after examples/video speeds it up.
+- In review the person may press "Enhance" (cleaner voice and picture);
+  the take stays as recorded and the choice is written to PATH.json
+  ({"enhance": true}) for examples/video to apply.
 - Only the path of the take is printed (mode 0600), so it composes:
   `ffprobe "$(record video --script s.txt)"`. A failure exits non-zero.
 - Tell the person in chat what is about to open and what to press, then
@@ -156,8 +159,9 @@ func Record(kind, prompt, script, maxSecs, fitSecs, out, timeoutSecs, lang, page
 	).Replace(page)
 
 	type take struct {
-		b  []byte
-		ct string
+		b       []byte
+		ct      string
+		enhance bool
 	}
 	got := make(chan take, 1)
 	mux := http.NewServeMux()
@@ -181,7 +185,7 @@ func Record(kind, prompt, script, maxSecs, fitSecs, out, timeoutSecs, lang, page
 			return
 		}
 		select {
-		case got <- take{b, r.Header.Get("Content-Type")}:
+		case got <- take{b, r.Header.Get("Content-Type"), r.Header.Get("X-Record-Enhance") == "1"}:
 			io.WriteString(w, "received\n")
 		default:
 			http.Error(w, "already answered", http.StatusConflict)
@@ -231,6 +235,9 @@ func Record(kind, prompt, script, maxSecs, fitSecs, out, timeoutSecs, lang, page
 	if err := f.Close(); err != nil {
 		return "", err
 	}
+	// The person's choices travel next to the take, never inside it.
+	meta, _ := json.Marshal(map[string]any{"kind": kind, "lang": lang, "enhance": t.enhance})
+	_ = os.WriteFile(out+".json", append(meta, '\n'), 0o600)
 	return filepath.Abs(out)
 }
 ~~~
