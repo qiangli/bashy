@@ -53,7 +53,7 @@ func loadForTest(dir string) (*app, error) {
 	a := &app{dir: dir, sessions: map[string]*Session{}}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if _, err := a.loadLocked("main"); err != nil {
+	if _, err := a.ensureMainLocked(); err != nil {
 		return nil, err
 	}
 	return a, nil
@@ -422,6 +422,45 @@ func TestCorruptStateIsPreserved(t *testing.T) {
 		t.Fatal("corrupt state overwritten")
 	}
 }
+func TestUnknownSessionReadsDoNotReserve(t *testing.T) {
+	a := fresh(t)
+	// A guest read of an unknown session must not mint it: state, export,
+	// and non-create actions return 404 without touching disk.
+	if w := request(a, token(), "", "chosen", "/api/state", nil); w.Code != 404 {
+		t.Fatalf("state reserved unknown session: %d %s", w.Code, w.Body.String())
+	}
+	if w := request(a, token(), "", "chosen", "/api/export", nil); w.Code != 404 {
+		t.Fatalf("export reserved unknown session: %d %s", w.Code, w.Body.String())
+	}
+	if w := request(a, token(), "", "chosen", "/api/action", map[string]any{"action": "add", "text": "squat", "column": 0}); w.Code != 404 {
+		t.Fatalf("action reserved unknown session: %d %s", w.Code, w.Body.String())
+	}
+	if _, err := os.Stat(sessionPath(a.dir, "chosen")); !os.IsNotExist(err) {
+		t.Fatal("guest read persisted a session file")
+	}
+	a.mu.Lock()
+	_, reserved := a.sessions["chosen"]
+	a.mu.Unlock()
+	if reserved {
+		t.Fatal("guest read cached a session")
+	}
+	// The facilitator can still create the name and receives the only
+	// copy of the facilitator capability.
+	fac := create(t, a, "chosen", "Chosen Topic", 2)
+	good(t, request(a, token(), "", "chosen", "/api/state", nil))
+	if w := request(a, token(), "", "chosen", "/api/export", nil); w.Code != 403 {
+		t.Fatalf("participant exported: %d %s", w.Code, w.Body.String())
+	}
+	phase(t, a, "chosen", "discuss")
+	w := request(a, token(), fac, "chosen", "/api/export", nil)
+	good(t, w)
+	for _, leak := range []string{fac, "facilitatorKey"} {
+		if strings.Contains(w.Body.String(), leak) {
+			t.Fatalf("export leaked facilitator capability: %q", leak)
+		}
+	}
+}
+
 func TestPrefixRouting(t *testing.T) {
 	a := fresh(t)
 	a.prefix = "/brainstorm"
@@ -433,6 +472,13 @@ func TestPrefixRouting(t *testing.T) {
 	a.ServeHTTP(w, r)
 	if w.Code != 200 {
 		t.Fatalf("prefixed state failed: %d %s", w.Code, w.Body.String())
+	}
+	// Unknown names stay 404 behind a prefix too; nothing is minted.
+	r404 := httptest.NewRequest("GET", "/brainstorm/api/state?session=missing", nil)
+	w404 := httptest.NewRecorder()
+	a.ServeHTTP(w404, r404)
+	if w404.Code != 404 {
+		t.Fatalf("prefixed unknown read did not return 404: %d %s", w404.Code, w404.Body.String())
 	}
 	if a.stripFails() {
 		t.Fatal("strip helper broken")
