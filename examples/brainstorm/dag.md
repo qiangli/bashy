@@ -1,11 +1,11 @@
 ---
 name: brainstorm
-description: Native LAN brainstorming for a classroom
+description: Native LAN brainstorming for any team or classroom
 type: dag
 default: serve
 ---
 
-# Classroom brainstorming
+# Team brainstorming
 
 Run from this directory with `bashy dag serve`, or use `bashy awd PATH -- bashy dag serve`.
 
@@ -20,7 +20,7 @@ Effects: read, write, exec, net
 ```
 
 ### test
-Check privacy, teacher control, persistence and concurrent participants.
+Check privacy, facilitator control, sessions, vote budgets, persistence and concurrent participants.
 Effects: read, write, exec
 
 ```bash

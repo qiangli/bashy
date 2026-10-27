@@ -4,34 +4,43 @@
 ~~~skill as guide
 ---
 name: brainstorm
-description: Run or support a local classroom brainstorming board with private writing, teacher reveal, voting and saved ideas. Use for student idea sessions on a shared LAN, or to check and back up an existing session without interrupting it.
+description: Run or support a local team brainstorming board with private writing, facilitator reveal, voting and saved sessions. Use for meeting or classroom idea sessions on a shared LAN, or to check and back up existing sessions without interrupting them.
 metadata:
   requires: "has=bashy"
   step-porota: 'bashy brainstorm "${BRAINSTORM_ACTION:-status}"'
   check-tests: 'bashy brainstorm status'
 ---
-# Classroom brainstorming
+# Team brainstorming
 
 This is the prose face of `brainstorm.bsh`, the same executable body used by
 the registered `brainstorm` command. `bashy commands show brainstorm` exposes
 the executable argv and source path; `bashy skill show brainstorm` reads this face.
 
-- `bashy brainstorm status` checks the running service and saved board; output
-  is JSON without student text or the teacher key. Check before starting a server.
+- `bashy brainstorm status` checks the running service and saved sessions; output
+  is JSON without idea text or facilitator keys. Check before starting a server.
 - `bashy brainstorm serve` starts the native foreground service and prints
-  student links and a separate private teacher link. Students need no account.
-  Keep the host awake and use its LAN address; localhost is host-only.
-- `bashy brainstorm backup` prints the path of a private, verified snapshot.
-  Run it before fixes. Never delete or replace a classroom's data to fix code.
-- The teacher guides Write privately → Reveal/discuss → Vote → Results.
-  Reveal ends editing. Three votes belong to each browser participant.
+  participant links and a separate private facilitator link. Participants need
+  no account. Keep the host awake and use its LAN address; localhost is
+  host-only. Runs independently of whiteboard and Matrix; all three can share
+  a host on different ports.
+- `bashy brainstorm backup` prints the path of a private, verified snapshot of
+  every saved session. Run it before fixes. Never delete or replace a team's
+  sessions to fix code.
+- `bashy brainstorm stop` stops a server started for the same data directory.
+  Ctrl-C stops a foreground server; restart resumes the saved sessions.
+- The facilitator creates named sessions with a title, columns and vote
+  budget, then guides Write privately → Reveal/discuss → Vote → Results.
+  Reveal ends editing. Each browser participant gets the session's vote
+  budget, one vote per card; clicking an existing vote removes it.
 - `bashy skill run brainstorm` executes `status` through this same command
   and records an attestation. Set `BRAINSTORM_ACTION=backup` for a snapshot
-  followed by a service check. It does not start a second classroom service.
+  followed by a service check. It does not start a second brainstorming service.
 - `BRAINSTORM_DATA` selects the data directory; default is
   `${XDG_DATA_HOME:-$HOME/.local/share}/bashy/brainstorm`.
   `BRAINSTORM_ADDR` selects the listener; default `0.0.0.0:18091`.
-  Preserve both when supporting an existing class. Never publish the teacher key.
+  `BRAINSTORM_PREFIX` selects a URL sub-path when served behind one
+  (for example `/brainstorm`); default empty. Preserve all three when
+  supporting an existing session. Never publish a facilitator key.
 
 No containers, accounts, external database, web assets, or AI service. The
 native Go server is a supporting implementation; the orchestration and this
@@ -51,37 +60,73 @@ import (
  "time"
 )
 
+func sessionFiles(data string) ([]string, error) {
+ files, err := filepath.Glob(filepath.Join(data, "sessions", "*.json"))
+ if err != nil { return nil, err }
+ if len(files) == 0 {
+  if _, serr := os.Stat(filepath.Join(data, "sessions")); serr != nil {
+   if _, lerr := os.Stat(filepath.Join(data, "board.json")); lerr != nil { return nil, serr }
+  }
+ }
+ return files, nil
+}
+
 func Inspect(action, data, addr string) (string, error) {
- path := filepath.Join(data, "board.json")
- raw, err := os.ReadFile(path)
+ files, err := sessionFiles(data)
  if err != nil { return "", err }
- var saved struct { Version int `json:"version"`; Phase string `json:"phase"`; Revision int `json:"revision"`; Cards []json.RawMessage `json:"cards"` }
- if err = json.Unmarshal(raw, &saved); err != nil { return "", err }
- if saved.Version != 1 { return "", fmt.Errorf("unsupported saved board version") }
  if action == "backup" {
-  dir := filepath.Join(data,"backups")
-  if err = os.MkdirAll(dir,0700); err != nil { return "",err }
-  f,err := os.CreateTemp(dir,"board-"+time.Now().UTC().Format("20060102T150405Z")+"-*.json")
-  if err != nil { return "",err }
-  name:=f.Name(); ok:=false
-  defer func(){if !ok {os.Remove(name)}}()
-  if _,err=f.Write(raw);err!=nil {f.Close();return "",err}
-  if err=f.Sync();err!=nil {f.Close();return "",err}
-  if err=f.Close();err!=nil {return "",err}
-  copied,err:=os.ReadFile(name);if err!=nil{return "",err}
-  if !bytes.Equal(raw,copied){return "",fmt.Errorf("backup verification failed")}
-  ok=true;return name,nil
+  dir := filepath.Join(data,"backups",time.Now().UTC().Format("20060102T150405Z"))
+  for i := 1; ; i++ {
+   if merr := os.MkdirAll(dir,0700); merr != nil { return "",merr }
+   entries, rerr := os.ReadDir(dir)
+   if rerr != nil { return "",rerr }
+   if len(entries) == 0 { break }
+   dir = filepath.Join(data,"backups",fmt.Sprintf("%s-%d", time.Now().UTC().Format("20060102T150405Z"), i))
+  }
+  for _, src := range files {
+   raw, rerr := os.ReadFile(src)
+   if rerr != nil { return "",rerr }
+   dst := filepath.Join(dir, filepath.Base(src))
+   if werr := os.WriteFile(dst, raw, 0600); werr != nil { return "",werr }
+   copied, rerr := os.ReadFile(dst)
+   if rerr != nil { return "",rerr }
+   if !bytes.Equal(raw,copied){return "",fmt.Errorf("backup verification failed for %s", src)}
+  }
+  if legacy, lerr := os.ReadFile(filepath.Join(data, "board.json")); lerr == nil {
+   dst := filepath.Join(dir, "board.json")
+   if werr := os.WriteFile(dst, legacy, 0600); werr != nil { return "",werr }
+   copied, rerr := os.ReadFile(dst)
+   if rerr != nil { return "",rerr }
+   if !bytes.Equal(legacy,copied){return "",fmt.Errorf("backup verification failed for board.json")}
+  }
+  return dir,nil
  }
  host,port,err:=net.SplitHostPort(addr);if err!=nil{return "",err}
  if host==""||host=="0.0.0.0"||host=="::" {host="127.0.0.1"}
  client:=http.Client{Timeout:3*time.Second,Transport:&http.Transport{Proxy:nil}}
  res,err:=client.Get("http://"+net.JoinHostPort(host,port)+"/healthz")
- if err!=nil{return "",fmt.Errorf("board is not reachable: %w",err)}
+ if err!=nil{return "",fmt.Errorf("brainstorm is not reachable: %w",err)}
  defer res.Body.Close()
  var health struct{OK bool `json:"ok"`}
- if res.StatusCode!=200||json.NewDecoder(res.Body).Decode(&health)!=nil||!health.OK{return "",fmt.Errorf("board health check failed")}
- summary,err:=json.Marshal(map[string]any{"running":true,"phase":saved.Phase,"cards":len(saved.Cards),"revision":saved.Revision,"data":path})
- return string(summary),err
+ if res.StatusCode!=200||json.NewDecoder(res.Body).Decode(&health)!=nil||!health.OK{return "",fmt.Errorf("brainstorm health check failed")}
+ type summary struct {
+  Session string `json:"session"`
+  Title string `json:"title"`
+  Phase string `json:"phase"`
+  Cards int `json:"cards"`
+  Revision int `json:"revision"`
+ }
+ out := []summary{}
+ for _, src := range files {
+  raw, rerr := os.ReadFile(src)
+  if rerr != nil { return "",rerr }
+  var saved struct { Version int `json:"version"`; Name string `json:"name"`; Title string `json:"title"`; Phase string `json:"phase"`; Revision int `json:"revision"`; Cards []json.RawMessage `json:"cards"` }
+  if jerr := json.Unmarshal(raw, &saved); jerr != nil { return "",jerr }
+  if saved.Version != 1 && saved.Version != 2 { return "", fmt.Errorf("unsupported saved session version") }
+  out = append(out, summary{saved.Name, saved.Title, saved.Phase, len(saved.Cards), saved.Revision})
+ }
+ result,err:=json.Marshal(map[string]any{"running":true,"sessions":out,"data":filepath.Join(data,"sessions")})
+ return string(result),err
 }
 ~~~
 
@@ -90,8 +135,9 @@ export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 data=${BRAINSTORM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy/brainstorm}
 addr=${BRAINSTORM_ADDR:-0.0.0.0:18091}
+prefix=${BRAINSTORM_PREFIX:-}
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/brainstorm
-if (( $# > 1 )); then echo 'Usage: brainstorm [serve|status|backup|test|--skill|--contract]' >&2; exit 2; fi
+if (( $# > 1 )); then echo 'Usage: brainstorm [serve|status|backup|stop|test|--skill|--contract]' >&2; exit 2; fi
 case ${1:-serve} in
 --skill)
   copying=false
@@ -102,11 +148,12 @@ case ${1:-serve} in
   done < "${BASH_SOURCE[0]}"
   ;;
 --contract) echo 'sokilili burainisutoromu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
--h|--help) echo 'brainstorm [serve|status|backup|test] — native LAN board; --skill prints its embedded skill' ;;
+-h|--help) echo 'brainstorm [serve|status|backup|stop|test] — native LAN board; --skill prints its embedded skill' ;;
 serve)
   mkdir -p "$cache"
   (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/brainstorm" .)
-  exec "$cache/brainstorm" -data "$data" -addr "$addr"
+  if [[ -n $prefix ]]; then exec "$cache/brainstorm" -data "$data" -addr "$addr" -prefix "$prefix"
+  else exec "$cache/brainstorm" -data "$data" -addr "$addr"; fi
   ;;
 status|backup)
   action=$1
@@ -114,6 +161,9 @@ status|backup)
   [[ -n $result ]] || exit 1
   printf '%s\n' "$result"
   ;;
+stop)
+  if pkill -f "$cache/brainstorm -data $data" 2>/dev/null; then echo "stopped brainstorm ($data)"; else echo "no brainstorm server matched $data"; fi
+  ;;
 test) cd "$here/server"; GOWORK=off go test -race ./... ;;
-*) echo 'Usage: brainstorm [serve|status|backup|test|--skill|--contract]' >&2; exit 2 ;;
+*) echo 'Usage: brainstorm [serve|status|backup|stop|test|--skill|--contract]' >&2; exit 2 ;;
 esac

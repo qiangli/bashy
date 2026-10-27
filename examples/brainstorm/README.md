@@ -1,13 +1,17 @@
-# Classroom brainstorm
+# Team brainstorm
 
 A first-party LAN brainstorming board under the repository's permissive
 [BSD-3-Clause license](../../LICENSE). No accounts, containers,
-database service, external web assets, or AI calls. Students use a browser.
+database service, external web assets, or AI calls. Participants use a browser.
 
 `brainstorm.bsh` is the canonical Bash# body: an embedded `~~~skill` face,
 a Go fence for status/verified backups, and orchestration of the native board.
 The Go HTTP server and browser page are supporting resources. The `.sh` entry
 point is a compatibility shim, not another implementation.
+
+Brainstorm is independent of whiteboard and Matrix: its own command/skill,
+server, default port (`18091`), URLs and data directory. It starts and works
+with either absent, and runs alongside both.
 
 Register once from this directory:
 
@@ -41,42 +45,50 @@ core registration. Re-run registration after editing embedded guidance.
 The optional DAG target is `bashy dag serve`; some Bashy versions buffer DAG
 output, so the direct command above is preferred for immediately seeing links.
 The first launch builds a small native Go server (Go 1.27+ required). The server
-stays in the foreground; Ctrl-C stops it. Restart resumes the saved board.
+stays in the foreground; Ctrl-C stops it. Restart resumes the saved sessions.
 
 ## Run a session
 
-1. Keep the host awake and connected to the students' LAN. Open the printed
-   teacher link privately. Share a printed **Student** LAN URL with students;
-   `127.0.0.1` works only on the host. Use the same LAN URL for the teacher page
-   when copying its student link (keep the teacher fragment).
-2. Give students 5–10 minutes to write. Nicknames are optional. Only the author
-   sees their cards during this phase, including in API responses.
-3. Select **Reveal all ideas**, then discuss the board. Revealing ends editing.
-4. Select **Open voting**. Each browser participant gets three votes, one per
-   card; clicking an existing vote removes it.
-5. Select **Close voting** and download JSON or Markdown. Phase changes are
-   irreversible. The teacher can export after reveal.
+1. Keep the host awake and connected to the participants' LAN. Open the printed
+   facilitator link privately. Share a printed **Participant** LAN URL;
+   `127.0.0.1` works only on the host. Use the same LAN URL for the facilitator
+   page when copying its participant link (keep the facilitator fragment).
+2. Create a named session from the facilitator panel (title, columns and vote
+   budget are configurable; defaults suit a classroom). Or use the `main`
+   session the server prints links for.
+3. Give participants 5–10 minutes to write. Nicknames are optional. Only the
+   author sees their cards during this phase, including in API responses.
+4. Select **Reveal all ideas**, then discuss the board. Revealing ends editing.
+5. Select **Open voting**. Each browser participant gets the session's vote
+   budget (default three), one per card; clicking an existing vote removes it.
+6. Select **Close voting** and download JSON or Markdown. Phase changes are
+   irreversible. The facilitator can export after reveal.
 
 Browser cookies identify participants; clearing cookies or using another browser
-creates a new participant, so vote limits are suitable for a cooperative class,
-not a verified election. Do not share the teacher link. Private writing prevents
-other browsers from reading ideas, but the host operator can read the saved file.
+creates a new participant, so vote limits suit a cooperative group,
+not a verified election. Do not share the facilitator link. Private writing
+prevents other browsers from reading ideas, but the host operator can read the
+saved files. A legacy classroom `board.json` is honored as session `main`
+without modification.
 
-Data defaults to `~/.local/share/bashy/brainstorm/board.json` (respects
-`XDG_DATA_HOME`). No automatic deletion. Start a fresh session without deleting
+Sessions persist as `sessions/<name>.json` under the data directory, which
+defaults to `~/.local/share/bashy/brainstorm` (respects `XDG_DATA_HOME`).
+No automatic deletion. Start a fresh data directory without deleting
 the old one:
 
 ```bash
 BRAINSTORM_DATA="$HOME/.local/share/bashy/brainstorm/session-2" bashy ./brainstorm.sh
 ```
 
-Set `BRAINSTORM_ADDR=0.0.0.0:18092` to use another port. Host firewall rules and
-Wi-Fi client isolation can prevent student access even on the same Wi-Fi.
-Everything works without internet once Go and the executable are available.
+Set `BRAINSTORM_ADDR=0.0.0.0:18092` to use another port, and
+`BRAINSTORM_PREFIX=/brainstorm` when serving behind a sub-path. Host firewall
+rules and Wi-Fi client isolation can prevent participant access even on the
+same Wi-Fi. Everything works without internet once Go and the executable are
+available.
 
 Run focused tests with `bashy dag test`. There is no change to the Bashy binary.
 Run `python3 verify-duality.py` after registration to check direct script,
-registered command and attested skill against an isolated temporary board,
+registered command and attested skill against isolated temporary sessions,
 including equivalent status, byte-identical backup contents and rejection of
 failed steps without a passing attestation.
 For the optional browser test, install Playwright separately and set
