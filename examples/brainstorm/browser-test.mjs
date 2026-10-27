@@ -6,6 +6,7 @@ import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
+import {hold} from '../../tests/collaboration-e2e/barrier.mjs';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
 
 async function startServer(dir,args){
@@ -120,5 +121,6 @@ try {
  const pexp=await pCtx.request.get(second.origin+'/bs/api/export?session=e2e&format=json',{headers:{'X-Facilitator-Key':savedKey}});
  assert.equal(pexp.status(),200);assert.equal((await pexp.json()).cards.length,4);
  await q.screenshot({path:'/tmp/brainstorm-browser-prefix.png',fullPage:true});
+ await hold('brainstorm', second.origin, '/bs/api/state?session=e2e');
  console.log('PASS: create session, 3-context private writing, reveal, budget-constrained votes, close, JSON/markdown export, restart persistence, standalone + prefix paths');
 } finally {await browser?.close();if(first?.server&&!first.server.killed&&first.server.exitCode===null)try{await stopServer(first.server)}catch{}if(second)try{await stopServer(second.server)}catch{}await rm(dir,{recursive:true,force:true})}

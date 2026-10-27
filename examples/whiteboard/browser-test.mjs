@@ -5,6 +5,7 @@ import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
+import {hold} from '../../tests/collaboration-e2e/barrier.mjs';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
 const PNG_SIG=Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a]);
 
@@ -125,5 +126,6 @@ try {
  assert.equal(ppng.headers.get('content-type'),'image/png');
  assert.ok(Buffer.from(await ppng.arrayBuffer()).subarray(0,8).equals(PNG_SIG));
  await q.screenshot({path:'/tmp/whiteboard-browser-prefix.png',fullPage:true});
+ await hold('whiteboard', second.origin, '/wb/api/state?board=e2e');
  console.log('PASS: create board, 3-browser draw/note sync, reconnect, lock/clear permission, restart persistence, valid PNG/JSON exports, standalone + prefix paths');
 } finally {await browser?.close();if(first?.server&&!first.server.killed&&first.server.exitCode===null)try{await stopServer(first.server)}catch{}if(second)try{await stopServer(second.server)}catch{}await rm(dir,{recursive:true,force:true})}
