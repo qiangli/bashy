@@ -13,6 +13,8 @@ Run `bashy matrix-chat setup CONFIG.json` after choosing the permanent
 `server_name`. The command admits Bashy's signed tuwunel, declares the
 optional service, creates vault-backed users, and reconciles private rooms.
 `status`, `start`, `stop`, `backup`, and `restore` use the same config.
+`cloudbox` attaches the Cloudbox account shim (appservice-scoped `@cb_`
+accounts; vault-held credentials) after setup.
 Configuration and restore instructions are in `examples/matrix-chat/README.md`.
 Never put a password in the config or in a command line.
 ~~~
@@ -34,7 +36,7 @@ if [[ ${1:-} == --contract ]]; then
   exit
 fi
 if (( $# != 2 )); then
-  echo 'Usage: matrix-chat setup|provision|status|start|stop|backup|restore CONFIG.json' >&2
+  echo 'Usage: matrix-chat setup|provision|cloudbox|status|start|stop|backup|restore CONFIG.json' >&2
   exit 2
 fi
 exec python3 "$here/provision.py" "$1" "$2"
