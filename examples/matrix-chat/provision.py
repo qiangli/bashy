@@ -270,20 +270,38 @@ def setup(cfg):
     # The offline admin console takes a RocksDB lock. Stop before provisioning.
     subprocess.run(["bashy", "service", "stop", "matrix-chat"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(50):
+        stat = subprocess.run(["bashy", "service", "status", "matrix-chat"],
+                              capture_output=True, text=True)
+        if "inactive" in stat.stdout or "failed" in stat.stdout:
+            break
+        time.sleep(0.1)
+    time.sleep(0.2)
     admin_env = os.environ.copy()
     admin_env.update(TUWUNEL_SERVER_NAME=cfg["server_name"],
                      TUWUNEL_DATABASE_PATH=str(Path(cfg["data_dir"]) / "db"),
                      TUWUNEL_ALLOW_REGISTRATION="false",
                      TUWUNEL_ALLOW_FEDERATION="false",
                      TUWUNEL_ADDRESS="127.0.0.1", TUWUNEL_PORT=str(cfg["port"]))
+    list_res = subprocess.run([binary, "--test=smoke", "--execute", "users list-users"],
+                              env=admin_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    existing = set()
+    if list_res.returncode:
+        fail("tuwunel user enumeration failed; refusing account changes")
+    for line in list_res.stdout.splitlines():
+        clean = re.sub(r"\x1b\[[0-9;]*[mGKF]", "", line).strip()
+        if clean.startswith("@") and ":" in clean:
+            existing.add(clean[1:].split(":")[0])
     commands = []
     for i, user in enumerate(cfg["users"]):
-        commands.extend(["--execute", "users create-user %s %s" %
-                         (user["localpart"], vault(user["password_secret"]))])
-        if i == 0:
-            commands.extend(["--execute", "users make-user-admin @%s:%s" %
-                             (user["localpart"], cfg["server_name"])])
-    result = subprocess.run([binary, "--test=smoke", "-O", "admin_execute_errors_ignore=true",
+        u = user["localpart"]
+        pw = vault(user["password_secret"])
+        if u not in existing:
+            commands.extend(["--execute", f"users create-user {u} {pw}"])
+            if i == 0:
+                commands.extend(["--execute", "users make-user-admin @%s:%s" %
+                                 (u, cfg["server_name"])])
+    result = subprocess.run([binary, "--test=smoke",
                              *commands], env=admin_env, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
     if result.returncode:
