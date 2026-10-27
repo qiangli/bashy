@@ -3,18 +3,20 @@ id: ccd61831dddc
 kind: bug
 title: S514.R1 bashy test workflow green on macOS, Linux and Windows
 seq: 2728
-status: todo
+status: done
 priority: p0
 labels:
     - release
     - ci
 created: 2026-10-27T07:53:02.492313Z
+weave: 289
 assignee: claude-sonnet5.5
 sprint: 514
 sprint_id: fadd1a46-0368-50f1-a65d-4ed147b17629
 sprint_title: 'invitation email + scoped satellites (KISS/MVP: scope + expiry on the one-time pairing code; no outpost change)'
+closed: 2026-10-27T09:57:59.708697Z
 resolution: fixed
-closed_by: claude-sonnet5.5-b
+closed_by: claude-sonnet5.5-c
 ---
 
 Release bar (runbook #3 kb:release-bashy): bashy test workflow must be GREEN on all three OS on the candidate commit; never tag around a red lane. Red on main 23e00d4c (run 40468480618 / 40466576387).
