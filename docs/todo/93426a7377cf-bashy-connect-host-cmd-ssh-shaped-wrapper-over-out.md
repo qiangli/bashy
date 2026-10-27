@@ -3,14 +3,15 @@ id: 93426a7377cf
 kind: feature
 title: 'bashy connect <host> [-- cmd]: ssh-shaped wrapper over outpost ssh (interactive shell or TTY command on the remote host; WSL default on Windows)'
 seq: 1952
-status: assigned
+status: done
 priority: p1
 created: 2026-10-25T12:58:13.775422Z
-weave: 282
 assignee: codex-gpt6-astra
 sprint: 505
 sprint_id: 4354bb44-85fc-5fff-b997-58e305948c09
 sprint_title: 'v1.0 user-path gaps: master lists every host a user owns across satellites; a release reaches every host and satellite'
+closed: 2026-10-27T06:48:57.595213Z
+closed_by: s505-manager
 ---
 
 status    assigned
