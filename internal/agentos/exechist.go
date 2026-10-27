@@ -33,6 +33,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -198,6 +199,11 @@ func (r *recorder) writeEpisode(ctx context.Context, argv []string, status int, 
 	// Best effort by design: a record that cannot be written is a missed
 	// lesson, never a failed command.
 	_ = r.log.Append(rec, body, onceEpisode())
+	// An open handle locks the file on Windows (no deletion, no rename), so
+	// release it per record there; unix keeps the cached handle.
+	if runtime.GOOS == "windows" {
+		_ = r.log.Close()
+	}
 }
 
 // observeSpace folds what the command taught into the SPACE plane.

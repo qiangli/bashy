@@ -3,7 +3,6 @@ package agentos
 import (
 	"crypto/fips140"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -106,22 +105,10 @@ func TestDoctorReportsFIPSState(t *testing.T) {
 
 func TestDispatchDoctorJSONIncludesSelfChecks(t *testing.T) {
 	t.Setenv("BASHY_AGENTIC", "")
-	prevStdout := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stdout = w
-	defer func() { os.Stdout = prevStdout }()
-	code := dispatchDoctor([]string{"--json"})
-	_ = w.Close()
-	os.Stdout = prevStdout
+	var code int
+	data := []byte(captureStdout(t, func() { code = dispatchDoctor([]string{"--json"}) }))
 	if code != 0 {
 		t.Fatalf("dispatchDoctor = %d", code)
-	}
-	data, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal(err)
 	}
 	var payload struct {
 		SchemaVersion string        `json:"schema_version"`

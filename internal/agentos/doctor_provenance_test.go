@@ -2,8 +2,6 @@ package agentos
 
 import (
 	"encoding/json"
-	"io"
-	"os"
 	"strings"
 	"testing"
 
@@ -76,19 +74,11 @@ func TestBashyToolRecordCarriesProvenanceFields(t *testing.T) {
 	}
 
 	// The JSON record carries the same fields as the doctor rows.
-	prev := os.Stdout
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	os.Stdout = w
-	okShow, _ := tryBashyToolShow([]string{"show", "bashy", "--json"})
-	_ = w.Close()
-	os.Stdout = prev
+	var okShow bool
+	data := []byte(captureStdout(t, func() { okShow, _ = tryBashyToolShow([]string{"show", "bashy", "--json"}) }))
 	if !okShow {
 		t.Fatal("tool show bashy was not intercepted")
 	}
-	data, _ := io.ReadAll(r)
 	var doc struct {
 		Name     string `json:"name"`
 		SrcState string `json:"src_state"`

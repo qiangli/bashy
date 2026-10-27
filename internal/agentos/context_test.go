@@ -191,6 +191,18 @@ func TestInspectContextRedirectedStdio(t *testing.T) {
 	}
 	os.Stdout = w
 
+	// Drain concurrently: Windows pipes buffer ~4KB, so a reader that waits
+	// for the command to return deadlocks any larger report.
+	type readResult struct {
+		b   []byte
+		err error
+	}
+	read := make(chan readResult, 1)
+	go func() {
+		b, err := io.ReadAll(r)
+		read <- readResult{b, err}
+	}()
+
 	done := make(chan int, 1)
 	go func() {
 		done <- dispatchContext([]string{"--json"})
@@ -208,8 +220,9 @@ func TestInspectContextRedirectedStdio(t *testing.T) {
 
 	w.Close()
 	os.Stdout = oldStdout
-	out, err := io.ReadAll(r)
+	rr := <-read
 	r.Close()
+	out, err := rr.b, rr.err
 	if err != nil {
 		t.Fatal(err)
 	}
