@@ -294,7 +294,8 @@ func TestAdoptionThroughWireExecHonorsHintsOff(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			script := "grep -r zzz_no_match " + tree + "; grep -r --json zzz_no_match " + tree + "; true\n"
+			shTree := "'" + filepath.ToSlash(tree) + "'"
+			script := "grep -r zzz_no_match " + shTree + "; grep -r --json zzz_no_match " + shTree + "; true\n"
 			prog, perr := syntax.NewParser().Parse(strings.NewReader(script), "")
 			if perr != nil {
 				t.Fatal(perr)

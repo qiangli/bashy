@@ -16,7 +16,7 @@ func readRepoFile(t *testing.T, rel string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(b)
+	return strings.ReplaceAll(string(b), "\r\n", "\n")
 }
 
 func TestVocabularyMatchesAuditedMatrixScope(t *testing.T) {
@@ -204,7 +204,7 @@ func TestShimAgentEnvMarkers(t *testing.T) {
 	for agent, want := range map[string]string{"agy": "AGENT='agy'", "muse": "AGENT='muse'", "gemini": ""} {
 		dir := t.TempDir()
 		t.Setenv("BASHY_SHIM_DIR", dir)
-		msg, err := shimInstaller(agent).install("/bin/bash", false)
+		msg, err := shimInstaller(agent).install(filepath.Join(t.TempDir(), "bashy"), false)
 		if err != nil {
 			t.Fatalf("install %s: %v", agent, err)
 		}
