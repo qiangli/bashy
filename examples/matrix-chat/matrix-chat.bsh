@@ -1,0 +1,40 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Native Bash# command face; protocol and JSON handling live in provision.py.
+~~~skill as guide
+---
+name: matrix-chat
+description: Set up and administer an independent, private Matrix chat homeserver using Bashy's signed tuwunel tool and optional service.
+metadata:
+  requires: "has=bashy"
+---
+# Matrix chat
+
+Run `bashy matrix-chat setup CONFIG.json` after choosing the permanent
+`server_name`. The command admits Bashy's signed tuwunel, declares the
+optional service, creates vault-backed users, and reconciles private rooms.
+`status`, `start`, `stop`, `backup`, and `restore` use the same config.
+Configuration and restore instructions are in `examples/matrix-chat/README.md`.
+Never put a password in the config or in a command line.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ ${1:-} == --skill ]]; then
+  inside=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then inside=true; continue; fi
+    if [[ $inside == true && $line == '~~~' ]]; then break; fi
+    if [[ $inside == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  exit
+fi
+if [[ ${1:-} == --contract ]]; then
+  echo 'sokilili meitorikusu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini'
+  exit
+fi
+if (( $# != 2 )); then
+  echo 'Usage: matrix-chat setup|provision|status|start|stop|backup|restore CONFIG.json' >&2
+  exit 2
+fi
+exec python3 "$here/provision.py" "$1" "$2"
