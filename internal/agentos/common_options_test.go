@@ -170,7 +170,7 @@ func readGolden(t *testing.T, file string) []string {
 	if err != nil {
 		t.Fatalf("reviewed golden %s: %v", file, err)
 	}
-	return strings.Split(strings.TrimSpace(string(data)), "\n")
+	return strings.Split(strings.ReplaceAll(strings.TrimSpace(string(data)), "\r\n", "\n"), "\n")
 }
 
 func lineDiff(want, got []string) string {
