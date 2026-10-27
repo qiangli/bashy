@@ -3,7 +3,7 @@ id: 6e1d64aee4a8
 kind: feature
 title: 'S227.6 macOS: an offline bundle, not an image — bashy + launcher pair + seeded cache as one archive that runs a .bsh with networking disabled; record the decision'
 seq: 310
-status: blocked
+status: todo
 priority: p2
 labels:
     - macos

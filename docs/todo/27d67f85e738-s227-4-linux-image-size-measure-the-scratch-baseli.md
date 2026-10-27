@@ -3,7 +3,7 @@ id: 27d67f85e738
 kind: enhancement
 title: 'S227.4 Linux image size: measure the scratch baseline, then cut — drop meet SPA embed, treesitter grammar set, CJK charset tables; record per-variant compressed/uncompressed sizes'
 seq: 308
-status: blocked
+status: todo
 priority: p1
 labels:
     - linux

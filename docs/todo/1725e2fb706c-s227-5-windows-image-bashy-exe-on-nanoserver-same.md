@@ -3,7 +3,7 @@ id: 1725e2fb706c
 kind: feature
 title: 'S227.5 Windows image: bashy.exe on nanoserver, same build-image target, proven on a real Windows container host'
 seq: 309
-status: blocked
+status: todo
 priority: p1
 labels:
     - windows

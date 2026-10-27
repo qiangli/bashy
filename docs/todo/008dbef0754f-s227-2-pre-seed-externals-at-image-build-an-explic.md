@@ -3,7 +3,7 @@ id: 008dbef0754f
 kind: feature
 title: 'S227.2 Pre-seed externals at image build: an explicit manifest bakes bashy go / python island / node into BASHY_BIN_CACHE; runtime resolves from cache only, fails closed by name'
 seq: 306
-status: blocked
+status: todo
 priority: p0
 labels:
     - oci

@@ -3,7 +3,7 @@ id: 86a76bf6b433
 kind: task
 title: 'DEFERRED INVESTIGATION: audit the six name and identity resolvers in pkg/weave'
 seq: 232
-status: blocked
+status: todo
 priority: p3
 created: 2026-09-06T01:03:37.2693Z
 ---

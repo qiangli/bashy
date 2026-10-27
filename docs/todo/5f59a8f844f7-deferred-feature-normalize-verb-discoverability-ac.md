@@ -3,7 +3,7 @@ id: 5f59a8f844f7
 kind: task
 title: 'DEFERRED FEATURE: normalize verb discoverability across sprint, weave, and todo'
 seq: 229
-status: blocked
+status: todo
 priority: p3
 created: 2026-09-06T01:03:37.197207Z
 ---
