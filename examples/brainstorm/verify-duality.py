@@ -1,4 +1,4 @@
-"""Check the actual script/command/skill paths without touching classroom data."""
+"""Check the actual script/command/skill paths without touching team data."""
 import json
 import os
 from pathlib import Path
@@ -15,6 +15,7 @@ BASHY = os.environ.get("BASHY_BIN", "bashy")
 with tempfile.TemporaryDirectory(prefix="brainstorm-duality-") as root:
     root = Path(root)
     data = root / "board"
+    sessions = data / "sessions"
     env = dict(os.environ, BRAINSTORM_DATA=str(data), XDG_CACHE_HOME=str(root / "cache"))
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))
@@ -49,22 +50,23 @@ with tempfile.TemporaryDirectory(prefix="brainstorm-duality-") as root:
                 assert json.load(r)["total"] == 1
             script = json.loads(run("--bashsharp", str(HERE / "brainstorm.bsh"), "status").stdout)
             command = json.loads(run("brainstorm", "status").stdout)
-            assert script == command and command["cards"] == 1
+            assert script == command and command["sessions"][0]["cards"] == 1
             receipt = json.loads(run("skill", "run", "brainstorm", "--json").stdout)
             assert receipt["valid"] is True
             guidance = run("--bashsharp", str(HERE / "brainstorm.bsh"), "--skill").stdout
             assert guidance.strip() == run("skill", "show", "brainstorm").stdout.strip()
-            expected = (data / "board.json").read_bytes()
+            expected = (sessions / "main.json").read_bytes()
             for args in [("--bashsharp", str(HERE / "brainstorm.bsh"), "backup"), ("brainstorm", "backup")]:
                 snapshot = Path(run(*args).stdout.strip())
-                assert snapshot.read_bytes() == expected
+                assert (snapshot / "main.json").read_bytes() == expected
                 assert snapshot.stat().st_mode & 0o077 == 0
+                assert (snapshot / "main.json").stat().st_mode & 0o077 == 0
             before = set((data / "backups").iterdir())
             receipt = json.loads(run("skill", "run", "brainstorm", "--json",
                                      extra={"BRAINSTORM_ACTION": "backup"}).stdout)
             assert receipt["valid"] is True
             created = set((data / "backups").iterdir()) - before
-            assert len(created) == 1 and created.pop().read_bytes() == expected
+            assert len(created) == 1 and (created.pop() / "main.json").read_bytes() == expected
             run("brainstorm", "unknown-action", success=False)
             missing = {"BRAINSTORM_DATA": str(root / "missing")}
             run("brainstorm", "status", extra=missing, success=False)
@@ -74,8 +76,8 @@ with tempfile.TemporaryDirectory(prefix="brainstorm-duality-") as root:
             if failed.stdout.strip():
                 assert json.loads(failed.stdout)["valid"] is False
             assert "no such file" in failed.stderr.lower(), failed.stderr
-            assert (data / "board.json").read_bytes() == expected
-            print("PASS: script/command/skill parity, skill projection, verified backups, failed step cannot attest success; classroom untouched")
+            assert (sessions / "main.json").read_bytes() == expected
+            print("PASS: script/command/skill parity, skill projection, verified backups, failed step cannot attest success; team sessions untouched")
         finally:
             try:
                 os.killpg(server.pid, signal.SIGTERM)

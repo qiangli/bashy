@@ -13,19 +13,29 @@ import (
 	"testing"
 )
 
-func request(a *app, who, key, path string, body any) *httptest.ResponseRecorder {
+func request(a *app, who, key, session, path string, body any) *httptest.ResponseRecorder {
 	method := "GET"
 	var b bytes.Buffer
 	if body != nil {
 		method = "POST"
+		if m, ok := body.(map[string]any); ok {
+			if _, has := m["session"]; !has {
+				m["session"] = session
+			}
+		}
 		json.NewEncoder(&b).Encode(body)
+	}
+	if strings.Contains(path, "?") {
+		path += "&session=" + session
+	} else {
+		path += "?session=" + session
 	}
 	r := httptest.NewRequest(method, path, &b)
 	if who != "" {
 		r.AddCookie(&http.Cookie{Name: "brainstorm-participant", Value: who})
 	}
 	if key != "" {
-		r.Header.Set("X-Teacher-Key", key)
+		r.Header.Set("X-Facilitator-Key", key)
 	}
 	w := httptest.NewRecorder()
 	a.ServeHTTP(w, r)
@@ -33,11 +43,20 @@ func request(a *app, who, key, path string, body any) *httptest.ResponseRecorder
 }
 func fresh(t *testing.T) *app {
 	t.Helper()
-	a, e := load(t.TempDir())
+	a, e := loadForTest(t.TempDir())
 	if e != nil {
 		t.Fatal(e)
 	}
 	return a
+}
+func loadForTest(dir string) (*app, error) {
+	a := &app{dir: dir, sessions: map[string]*Session{}}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if _, err := a.loadLocked("main"); err != nil {
+		return nil, err
+	}
+	return a, nil
 }
 func good(t *testing.T, w *httptest.ResponseRecorder) {
 	t.Helper()
@@ -45,92 +64,275 @@ func good(t *testing.T, w *httptest.ResponseRecorder) {
 		t.Fatalf("status %d: %s", w.Code, w.Body.String())
 	}
 }
-func phase(t *testing.T, a *app, name string) {
+func phase(t *testing.T, a *app, session, name string) {
 	t.Helper()
-	good(t, request(a, token(), a.board.Teacher, "/api/action", map[string]any{"action": "phase", "phase": name}))
+	s, err := func() (*Session, error) { a.mu.Lock(); defer a.mu.Unlock(); return a.loadLocked(session) }()
+	if err != nil {
+		t.Fatal(err)
+	}
+	good(t, request(a, token(), s.Facilitator, session, "/api/action", map[string]any{"action": "phase", "phase": name}))
 }
-func add(t *testing.T, a *app, who, text string) string {
+func add(t *testing.T, a *app, session, who, text string) string {
 	t.Helper()
-	good(t, request(a, who, "", "/api/action", map[string]any{"action": "add", "text": text, "column": 0}))
-	return a.board.Cards[len(a.board.Cards)-1].ID
+	good(t, request(a, who, "", session, "/api/action", map[string]any{"action": "add", "text": text, "column": 0}))
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	s, _ := a.loadLocked(session)
+	return s.Cards[len(s.Cards)-1].ID
+}
+func create(t *testing.T, a *app, name, title string, budget int) string {
+	t.Helper()
+	body := map[string]any{"action": "create", "session": name, "voteBudget": budget}
+	if title != "" {
+		body["title"] = title
+	}
+	w := request(a, token(), "", "main", "/api/action", body)
+	good(t, w)
+	var v struct {
+		FacilitatorKey string `json:"facilitatorKey"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || v.FacilitatorKey == "" {
+		t.Fatalf("create did not reveal facilitator key: %s", w.Body.String())
+	}
+	return v.FacilitatorKey
 }
 
-func TestClassroomFlowPrivacyAndOwnership(t *testing.T) {
+func TestSessionFlowPrivacyAndOwnership(t *testing.T) {
 	a := fresh(t)
 	alice, bob := token(), token()
-	id := add(t, a, alice, "PRIVATE IDEA <script>alert(1)</script>")
-	other := request(a, bob, "", "/api/state", nil)
+	id := add(t, a, "main", alice, "PRIVATE IDEA <script>alert(1)</script>")
+	other := request(a, bob, "", "main", "/api/state", nil)
 	good(t, other)
 	if strings.Contains(other.Body.String(), "PRIVATE IDEA") {
 		t.Fatal("private idea leaked")
 	}
-	if !strings.Contains(request(a, alice, "", "/api/state", nil).Body.String(), "PRIVATE IDEA") {
+	if !strings.Contains(request(a, alice, "", "main", "/api/state", nil).Body.String(), "PRIVATE IDEA") {
 		t.Fatal("owner cannot read own card")
 	}
-	if strings.Contains(other.Body.String(), a.board.Teacher) || strings.Contains(other.Body.String(), alice) {
+	a.mu.Lock()
+	key := a.sessions["main"].Facilitator
+	a.mu.Unlock()
+	if strings.Contains(other.Body.String(), key) || strings.Contains(other.Body.String(), alice) {
 		t.Fatal("capability leaked")
 	}
 	for _, op := range []string{"edit", "delete"} {
-		w := request(a, bob, "", "/api/action", map[string]any{"action": op, "id": id, "text": "changed"})
+		w := request(a, bob, "", "main", "/api/action", map[string]any{"action": op, "id": id, "text": "changed"})
 		if w.Code != 403 {
 			t.Fatalf("ownership bypass: %s %d", op, w.Code)
 		}
 	}
-	if request(a, bob, "", "/api/action", map[string]any{"action": "phase", "phase": "discuss"}).Code != 403 {
-		t.Fatal("student changed phase")
+	if request(a, bob, "", "main", "/api/action", map[string]any{"action": "phase", "phase": "discuss"}).Code != 403 {
+		t.Fatal("participant changed phase")
 	}
-	if request(a, alice, a.board.Teacher, "/api/export", nil).Code != 409 {
+	if request(a, alice, key, "main", "/api/export", nil).Code != 409 {
 		t.Fatal("export exposed private writing")
 	}
-	phase(t, a, "discuss")
-	if !strings.Contains(request(a, bob, "", "/api/state", nil).Body.String(), "PRIVATE IDEA") {
+	phase(t, a, "main", "discuss")
+	if !strings.Contains(request(a, bob, "", "main", "/api/state", nil).Body.String(), "PRIVATE IDEA") {
 		t.Fatal("reveal failed")
 	}
-	if request(a, alice, "", "/api/action", map[string]any{"action": "edit", "id": id, "text": "late"}).Code != 409 {
+	if request(a, alice, "", "main", "/api/action", map[string]any{"action": "edit", "id": id, "text": "late"}).Code != 409 {
 		t.Fatal("late edit allowed")
 	}
-	if request(a, alice, "", "/api/export", nil).Code != 403 {
-		t.Fatal("student exported")
+	if request(a, alice, "", "main", "/api/export", nil).Code != 403 {
+		t.Fatal("participant exported")
 	}
-	w := request(a, alice, a.board.Teacher, "/api/export", nil)
+	w := request(a, alice, key, "main", "/api/export", nil)
 	good(t, w)
-	if strings.Contains(w.Body.String(), a.board.Teacher) || strings.Contains(w.Body.String(), alice) || strings.Contains(w.Body.String(), "\"owner\"") {
+	if strings.Contains(w.Body.String(), key) || strings.Contains(w.Body.String(), alice) || strings.Contains(w.Body.String(), "\"owner\"") {
 		t.Fatal("export leaked capability")
 	}
-	good(t, request(a, alice, a.board.Teacher, "/api/export?format=markdown", nil))
-	if request(a, alice, a.board.Teacher, "/api/action", map[string]any{"action": "phase", "phase": "write"}).Code != 409 {
+	good(t, request(a, alice, key, "main", "/api/export?format=markdown", nil))
+	if request(a, alice, key, "main", "/api/action", map[string]any{"action": "phase", "phase": "write"}).Code != 409 {
 		t.Fatal("phase regressed")
 	}
 }
+
+func TestCreateSessionConfigAndIsolation(t *testing.T) {
+	a := fresh(t)
+	key := create(t, a, "retro", "October Retro", 5)
+	if request(a, token(), "", "main", "/api/action", map[string]any{"action": "create", "session": "retro"}).Code != 409 {
+		t.Fatal("duplicate session accepted")
+	}
+	if request(a, token(), "", "main", "/api/action", map[string]any{"action": "create", "session": ""}).Code != 409 {
+		t.Fatal("empty session name did not default to existing main")
+	}
+	for _, bad := range []string{"has space", "../x", strings.Repeat("x", 65)} {
+		if request(a, token(), "", "main", "/api/action", map[string]any{"action": "create", "session": bad}).Code != 400 {
+			t.Fatalf("bad session name accepted: %q", bad)
+		}
+	}
+	if request(a, token(), "", "main", "/api/action", map[string]any{"action": "create", "session": "big", "voteBudget": 11}).Code != 400 {
+		t.Fatal("vote budget 11 accepted")
+	}
+	if request(a, token(), "", "main", "/api/action", map[string]any{"action": "create", "session": "wide", "columns": []string{}}).Code != 400 {
+		t.Fatal("empty columns accepted")
+	}
+	who := token()
+	id := add(t, a, "retro", who, "retro idea")
+	other := request(a, token(), "", "main", "/api/state", nil)
+	good(t, other)
+	if strings.Contains(other.Body.String(), "retro idea") {
+		t.Fatal("idea leaked across sessions")
+	}
+	st := request(a, who, key, "retro", "/api/state", nil)
+	good(t, st)
+	var v struct {
+		Title      string   `json:"title"`
+		Columns    []string `json:"columns"`
+		VoteBudget int      `json:"voteBudget"`
+	}
+	if err := json.Unmarshal(st.Body.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	if v.Title != "October Retro" || v.VoteBudget != 5 {
+		t.Fatalf("session config lost: %+v", v)
+	}
+	for i := 0; i < 5; i++ {
+		add(t, a, "retro", who, fmt.Sprintf("option %d", i))
+	}
+	phase(t, a, "retro", "discuss")
+	phase(t, a, "retro", "vote")
+	a.mu.Lock()
+	s := a.sessions["retro"]
+	ids := make([]string, len(s.Cards))
+	for i, c := range s.Cards {
+		ids[i] = c.ID
+	}
+	a.mu.Unlock()
+	_ = id
+	for _, cid := range ids[:5] {
+		good(t, request(a, who, "", "retro", "/api/action", map[string]any{"action": "vote", "id": cid}))
+	}
+	if request(a, who, "", "retro", "/api/action", map[string]any{"action": "vote", "id": ids[5]}).Code != 409 {
+		t.Fatal("vote beyond budget accepted")
+	}
+	left := request(a, who, "", "retro", "/api/state", nil)
+	if !strings.Contains(left.Body.String(), `"votesLeft":0`) {
+		t.Fatalf("votesLeft wrong: %s", left.Body.String())
+	}
+}
+
+func TestCustomColumnsAndPrompts(t *testing.T) {
+	a := fresh(t)
+	w := request(a, token(), "", "main", "/api/action", map[string]any{
+		"action": "create", "session": "plan", "title": "Sprint Plan",
+		"columns": []string{"Keep", "Drop"}, "prompts": []string{"What works?", "What slows us?"},
+		"voteBudget": 2,
+	})
+	good(t, w)
+	var v struct {
+		Columns []string `json:"columns"`
+		Prompts []string `json:"prompts"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	if len(v.Columns) != 2 || v.Prompts[1] != "What slows us?" {
+		t.Fatalf("custom columns/prompts lost: %+v", v)
+	}
+	who := token()
+	if request(a, who, "", "plan", "/api/action", map[string]any{"action": "add", "text": "x", "column": 2}).Code != 400 {
+		t.Fatal("out-of-range column accepted for custom columns")
+	}
+	good(t, request(a, who, "", "plan", "/api/action", map[string]any{"action": "add", "text": "keep shipping", "column": 0}))
+	if request(a, token(), "", "main", "/api/action", map[string]any{
+		"action": "create", "session": "mismatch", "columns": []string{"A", "B"}, "prompts": []string{"only one"},
+	}).Code != 400 {
+		t.Fatal("mismatched prompts accepted")
+	}
+}
+
+func TestLegacyClassroomBoardCompat(t *testing.T) {
+	dir := t.TempDir()
+	teacher := token()
+	owner := token()
+	legacy := fmt.Sprintf(`{"version":1,"phase":"write","teacher":%q,"cards":[{"id":"c1","column":0,"text":"legacy private","name":"Sam","owner":%q,"votes":{}}],"revision":4}`, teacher, owner)
+	before := filepath.Join(dir, "board.json")
+	if err := os.WriteFile(before, []byte(legacy), 0600); err != nil {
+		t.Fatal(err)
+	}
+	a, err := loadForTest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(before); string(got) != legacy {
+		t.Fatal("legacy board.json was modified")
+	}
+	raw, _ := os.ReadFile(sessionPath(dir, "main"))
+	var s Session
+	if err := json.Unmarshal(raw, &s); err != nil {
+		t.Fatal(err)
+	}
+	if s.Facilitator != teacher || s.Phase != "write" || len(s.Cards) != 1 || s.VoteBudget != 3 || s.Title == "" || len(s.Columns) != 5 {
+		t.Fatalf("legacy board not honored: %+v", s)
+	}
+	other := request(a, token(), "", "main", "/api/state", nil)
+	good(t, other)
+	if strings.Contains(other.Body.String(), "legacy private") {
+		t.Fatal("legacy private idea leaked")
+	}
+	if !strings.Contains(request(a, owner, "", "main", "/api/state", nil).Body.String(), "legacy private") {
+		t.Fatal("legacy owner cannot read own card")
+	}
+	// The old teacher header still authorizes facilitator actions.
+	r := httptest.NewRequest("GET", "/api/state?session=main", nil)
+	r.Header.Set("X-Teacher-Key", teacher)
+	rec := httptest.NewRecorder()
+	a.ServeHTTP(rec, r)
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"facilitator":true`) {
+		t.Fatalf("legacy teacher key rejected: %d %s", rec.Code, rec.Body.String())
+	}
+	good(t, request(a, token(), teacher, "main", "/api/action", map[string]any{"action": "phase", "phase": "discuss"}))
+	if !strings.Contains(request(a, token(), "", "main", "/api/state", nil).Body.String(), "legacy private") {
+		t.Fatal("legacy reveal failed")
+	}
+}
+
 func TestVotingAndPersistence(t *testing.T) {
 	a := fresh(t)
 	who := token()
 	ids := []string{}
 	for i := 0; i < 4; i++ {
-		ids = append(ids, add(t, a, who, fmt.Sprintf("idea %d", i)))
+		ids = append(ids, add(t, a, "main", who, fmt.Sprintf("idea %d", i)))
 	}
-	phase(t, a, "discuss")
-	phase(t, a, "vote")
+	phase(t, a, "main", "discuss")
+	phase(t, a, "main", "vote")
 	for _, id := range ids[:3] {
-		good(t, request(a, who, "", "/api/action", map[string]any{"action": "vote", "id": id}))
+		good(t, request(a, who, "", "main", "/api/action", map[string]any{"action": "vote", "id": id}))
 	}
-	if request(a, who, "", "/api/action", map[string]any{"action": "vote", "id": ids[3]}).Code != 409 {
+	if request(a, who, "", "main", "/api/action", map[string]any{"action": "vote", "id": ids[3]}).Code != 409 {
 		t.Fatal("fourth vote accepted")
 	}
-	good(t, request(a, who, "", "/api/action", map[string]any{"action": "vote", "id": ids[0]}))
-	good(t, request(a, who, "", "/api/action", map[string]any{"action": "vote", "id": ids[3]}))
-	b, e := load(filepath.Dir(a.path))
-	if e != nil {
-		t.Fatal(e)
+	good(t, request(a, who, "", "main", "/api/action", map[string]any{"action": "vote", "id": ids[0]}))
+	good(t, request(a, who, "", "main", "/api/action", map[string]any{"action": "vote", "id": ids[3]}))
+	c, e2 := loadSessionFromDir(a.dir, "main")
+	if e2 != nil {
+		t.Fatal(e2)
 	}
-	if len(b.board.Cards) != 4 || b.board.Phase != "vote" || b.board.Teacher != a.board.Teacher || !b.board.Cards[3].Votes[who] {
+	a.mu.Lock()
+	teacher := a.sessions["main"].Facilitator
+	a.mu.Unlock()
+	if len(c.Cards) != 4 || c.Phase != "vote" || c.Facilitator != teacher || !c.Cards[3].Votes[who] {
 		t.Fatal("restart lost state")
 	}
-	phase(t, b, "closed")
-	if request(b, who, "", "/api/action", map[string]any{"action": "vote", "id": ids[1]}).Code != 409 {
+	phase(t, a, "main", "closed")
+	if request(a, who, "", "main", "/api/action", map[string]any{"action": "vote", "id": ids[1]}).Code != 409 {
 		t.Fatal("closed vote accepted")
 	}
 }
+func loadSessionFromDir(dir, name string) (*Session, error) {
+	raw, err := os.ReadFile(sessionPath(dir, name))
+	if err != nil {
+		return nil, err
+	}
+	var s Session
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
 func TestThirtyConcurrentParticipants(t *testing.T) {
 	a := fresh(t)
 	var wg sync.WaitGroup
@@ -139,40 +341,55 @@ func TestThirtyConcurrentParticipants(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 			who := token()
-			w := request(a, who, "", "/api/action", map[string]any{"action": "add", "text": fmt.Sprintf("student-%d", i), "column": i % 5})
+			w := request(a, who, "", "main", "/api/action", map[string]any{"action": "add", "text": fmt.Sprintf("student-%d", i), "column": i % 5})
 			if w.Code != 200 {
 				t.Errorf("student %d: %d", i, w.Code)
 			}
 			var state struct {
 				Cards []any `json:"cards"`
 			}
-			json.Unmarshal(request(a, who, "", "/api/state", nil).Body.Bytes(), &state)
+			json.Unmarshal(request(a, who, "", "main", "/api/state", nil).Body.Bytes(), &state)
 			if len(state.Cards) != 1 {
 				t.Errorf("student %d saw %d private cards", i, len(state.Cards))
 			}
 		}(i)
 	}
 	wg.Wait()
-	if len(a.board.Cards) != 30 {
-		t.Fatalf("lost writes: %d", len(a.board.Cards))
+	a.mu.Lock()
+	n := len(a.sessions["main"].Cards)
+	a.mu.Unlock()
+	if n != 30 {
+		t.Fatalf("lost writes: %d", n)
 	}
-	b, e := load(filepath.Dir(a.path))
-	if e != nil || len(b.board.Cards) != 30 {
+	c, e := loadSessionFromDir(a.dir, "main")
+	if e != nil || len(c.Cards) != 30 {
 		t.Fatal("disk state differs")
 	}
 }
 func TestSaveFailureIsNotAcknowledged(t *testing.T) {
 	a := fresh(t)
-	a.path = filepath.Join(t.TempDir(), "missing", "board.json")
-	w := request(a, token(), "", "/api/action", map[string]any{"action": "add", "text": "keep draft"})
-	if w.Code != 500 || len(a.board.Cards) != 0 || a.board.Revision != 0 {
+	key := create(t, a, "doomed", "", 0)
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, []byte("block"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	a.dir = blocker
+	w := request(a, token(), "", "doomed", "/api/action", map[string]any{"action": "add", "text": "keep draft"})
+	if w.Code != 500 {
+		t.Fatalf("expected 500, got %d: %s", w.Code, w.Body.String())
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	s, _ := a.loadLocked("doomed")
+	_ = key
+	if len(s.Cards) != 0 || s.Revision != 0 {
 		t.Fatal("failed save changed state")
 	}
 }
 func TestInvalidInputAndCrossOrigin(t *testing.T) {
 	a := fresh(t)
 	for _, body := range []map[string]any{{"action": "add", "text": ""}, {"action": "add", "text": strings.Repeat("x", 1001)}, {"action": "add", "text": "valid", "column": 5}, {"action": "add", "text": "valid", "name": strings.Repeat("x", 41)}} {
-		if request(a, token(), "", "/api/action", body).Code != 400 {
+		if request(a, token(), "", "main", "/api/action", body).Code != 400 {
 			t.Fatal("invalid input accepted")
 		}
 	}
@@ -183,7 +400,7 @@ func TestInvalidInputAndCrossOrigin(t *testing.T) {
 	if w.Code != 403 {
 		t.Fatal("cross-origin write accepted")
 	}
-	w = request(a, "", "", "/", nil)
+	w = request(a, "", "", "main", "/", nil)
 	good(t, w)
 	if len(w.Result().Cookies()) != 1 || !w.Result().Cookies()[0].HttpOnly {
 		t.Fatal("missing participant cookie")
@@ -194,13 +411,42 @@ func TestInvalidInputAndCrossOrigin(t *testing.T) {
 }
 func TestCorruptStateIsPreserved(t *testing.T) {
 	dir := t.TempDir()
-	p := filepath.Join(dir, "board.json")
+	p := sessionPath(dir, "main")
+	os.MkdirAll(filepath.Dir(p), 0700)
 	os.WriteFile(p, []byte("corrupt"), 0600)
-	if _, e := load(dir); e == nil {
+	if _, e := loadForTest(dir); e == nil {
 		t.Fatal("corruption ignored")
 	}
 	b, _ := os.ReadFile(p)
 	if string(b) != "corrupt" {
 		t.Fatal("corrupt state overwritten")
 	}
+}
+func TestPrefixRouting(t *testing.T) {
+	a := fresh(t)
+	a.prefix = "/brainstorm"
+	if got := request(a, token(), "", "main", "/api/state", nil); got.Code != 404 {
+		t.Fatalf("unprefixed path accepted under prefix: %d", got.Code)
+	}
+	r := httptest.NewRequest("GET", "/brainstorm/api/state?session=main", nil)
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, r)
+	if w.Code != 200 {
+		t.Fatalf("prefixed state failed: %d %s", w.Code, w.Body.String())
+	}
+	if a.stripFails() {
+		t.Fatal("strip helper broken")
+	}
+}
+func (a *app) stripFails() bool {
+	if _, ok := a.stripPrefix("/brainstorm/api/state"); !ok {
+		return true
+	}
+	if p, ok := a.stripPrefix("/brainstorm"); !ok || p != "/" {
+		return true
+	}
+	if _, ok := a.stripPrefix("/other/api/state"); ok {
+		return true
+	}
+	return false
 }
