@@ -79,7 +79,9 @@ func TestInstallAgentOpencodeMCPPrefsWritten(t *testing.T) {
 }
 
 func TestInstallAgentMCPMalformedPrefsFailsClosed(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home) // os.UserHomeDir reads USERPROFILE on Windows
 	t.Setenv("BASHY_PREFS", `{"budget`)
 	if rc := dispatchInstallAgentMCP("codex", false, false, false, false, false); rc == 0 {
 		t.Fatal("expected failure")
