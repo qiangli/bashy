@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-startup-linux test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-isolated-lanes test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-powershell smoke-dag-csharp smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands govulncheck license-gate tidy clean help
+.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-startup-linux test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-isolated-lanes test-release-qa-lane test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-powershell smoke-dag-csharp smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands govulncheck license-gate tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -218,7 +218,7 @@ test-awd-installed-stress:
 # test-meet-spa-fresh(-regression) run FIRST, before any recipe that could
 # rebuild-and-promote the tracked meet SPA artifact and thereby mask a stale
 # bundle the freshness gate exists to catch.
-test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-isolated-lanes test-build-tag-matrix test-bash-container-mode verify-bashy-scratch test-startup-linux
+test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-isolated-lanes test-release-qa-lane test-build-tag-matrix test-bash-container-mode verify-bashy-scratch test-startup-linux
 	go test ./...
 
 ## test-startup-linux: Gate package initialization and 100 background jobs on Linux.
@@ -249,6 +249,11 @@ test-meet-spa-fresh-regression:
 ## test-isolated-lanes: Verify concurrent test-lane naming and ownership wiring.
 test-isolated-lanes:
 	scripts/test-isolated-lanes.sh
+
+## test-release-qa-lane: Focused test for the release QA lane (xfail-card
+## rule + known-failing/skipped summary counts). Hermetic fixtures only.
+test-release-qa-lane:
+	scripts/test-release-qa-lane.sh
 
 ## test-build-fail-closed: Prove a failed Go build cannot fall through to the
 ## native launcher compiler or the installer and reuse stale binaries.
