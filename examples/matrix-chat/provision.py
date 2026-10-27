@@ -179,6 +179,9 @@ def cloudbox(cfg):
     unit.write_text(json.dumps(shim_unit(cfg), indent=2) + "\n")
     run("bashy", "service", "add", "--force", "-f", str(unit))
     run("bashy", "service", "verify", "matrix-chat-cloudbox")
+    # A fresh optional unit is disabled. Restart alone does not activate it.
+    run("bashy", "service", "enable", "matrix-chat")
+    run("bashy", "service", "enable", "matrix-chat-cloudbox")
     run("bashy", "service", "restart", "matrix-chat")
     wait_ready(cfg)
     run("bashy", "service", "restart", "matrix-chat-cloudbox")
@@ -306,6 +309,7 @@ def setup(cfg):
                             stderr=subprocess.PIPE)
     if result.returncode:
         fail("tuwunel offline account provisioning failed (output withheld to protect secrets)")
+    run("bashy", "service", "enable", "matrix-chat")
     run("bashy", "service", "start", "matrix-chat")
     wait_ready(cfg)
     provision(cfg)

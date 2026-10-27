@@ -81,10 +81,17 @@ matrix-chat cloudbox CONFIG.json`. It:
 - writes `data_dir/cloudbox-appservice.toml`, which declares a tuwunel
   application service with the exclusive namespace
   `@cb_[0-9a-f]{32}:<server_name>`, and points the `matrix-chat` unit at it.
-  The tokens reach tuwunel only as vault-injected unit secrets;
+  The unit names vault references, but the service monitor needs host bindings
+  for them. Bind `MATRIX_CHAT_APPSERVICE_AS_TOKEN` to
+  `@matrix-chat/appservice/as-token` and `MATRIX_CHAT_APPSERVICE_HS_TOKEN` to
+  `@matrix-chat/appservice/hs-token` in `~/.config/bashy/secrets.map` (mode
+  `0600`) before running `matrix-chat cloudbox`. The shim also needs
+  `MATRIX_CHAT_CLOUDBOX_TUNNEL_TOKEN=@matrix-chat/cloudbox/tunnel-token`.
+  These are references, not secret values. The monitor can alternatively
+  receive the declared unit environment names through its own environment;
 - declares the separate `matrix-chat-cloudbox` unit (`cloudbox_shim.py`) on
   loopback `port`, exposed as the outpost app `matrix-chat` with
-  `require_login: false`, and restarts both units.
+  `require_login: false`, enables both units and restarts them.
 
 The appservice can create and act for `@cb_…` accounts only. It is not a
 server admin. No admin password is shared, and registration stays disabled.

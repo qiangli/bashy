@@ -61,7 +61,7 @@ class ConfigTest(unittest.TestCase):
                 return subprocess.CompletedProcess(args, 0, "", "")
 
             with mock.patch.object(module, "installed_binary", return_value=str(binary)), \
-                 mock.patch.object(module, "run"), \
+                 mock.patch.object(module, "run") as service_run, \
                  mock.patch.object(module.subprocess, "run", side_effect=fake_run), \
                  mock.patch.object(module, "vault", side_effect=lambda ref: "secret-" + ref), \
                  mock.patch.object(module, "request", return_value={}), \
@@ -72,6 +72,31 @@ class ConfigTest(unittest.TestCase):
             self.assertNotIn("users reset-password alice", account_args)
             self.assertNotIn("users reset-password bob", account_args)
             self.assertNotIn("users make-user-admin @alice:localhost", account_args)
+            service_calls = [call.args for call in service_run.call_args_list]
+            self.assertLess(service_calls.index(("bashy", "service", "enable", "matrix-chat")),
+                            service_calls.index(("bashy", "service", "start", "matrix-chat")))
+
+    def test_cloudbox_enables_fresh_units_before_restart(self):
+        with tempfile.TemporaryDirectory() as temp:
+            data = Path(temp) / "data"
+            (data / "db").mkdir(parents=True)
+            (data / "server-name").write_text("localhost\n")
+            cfg = {"server_name": "localhost", "data_dir": str(data), "port": 6167,
+                   "cloudbox": {"port": 6168,
+                                "tunnel_token_secret": "matrix-chat/cloudbox/tunnel-token",
+                                "appservice_token_secret": "matrix-chat/appservice/as-token",
+                                "homeserver_token_secret": "matrix-chat/appservice/hs-token",
+                                "account_secret_prefix": "matrix-chat/accounts"}}
+            with mock.patch.object(module, "bound", return_value=True), \
+                 mock.patch.object(module, "ensure_generated"), \
+                 mock.patch.object(module, "run") as service_run, \
+                 mock.patch.object(module, "wait_ready"), \
+                 mock.patch.object(module.urllib.request, "urlopen"):
+                module.cloudbox(cfg)
+            service_calls = [call.args for call in service_run.call_args_list]
+            for unit in ("matrix-chat", "matrix-chat-cloudbox"):
+                self.assertLess(service_calls.index(("bashy", "service", "enable", unit)),
+                                service_calls.index(("bashy", "service", "restart", unit)))
 
     def test_setup_fails_closed_on_user_enumeration_error(self):
         with tempfile.TemporaryDirectory() as temp:
