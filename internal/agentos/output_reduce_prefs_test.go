@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -160,7 +161,11 @@ func TestReaderPrefsBudget(t *testing.T) {
 		isolateOutputReduction(t)
 		t.Setenv("BASHY_OUTPUT_REDUCE", "on")
 		t.Setenv("BASHY_PREFS", `{"budget_bytes":2048}`)
-		home := os.Getenv("HOME")
+		// Windows deliberately performs no $HOME canonicalization (see
+		// displayHome), so only the credential contract applies there.
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		wantHome := displayHome(home, runtime.GOOS) != ""
 		// Synthetic github-token-shaped value: shape masking replaces it
 		// with [redacted:github-token] without needing vault env.
 		credential := "ghp_" + strings.Repeat("x", 36)
@@ -178,10 +183,10 @@ func TestReaderPrefsBudget(t *testing.T) {
 			t.Fatalf("budgeted view is %d bytes, want <= 2048", len(out))
 		}
 		for name, got := range map[string]string{"view": out, "artifact": string(recoverMarker(t, out))} {
-			if strings.Contains(got, home) || strings.Contains(got, credential) {
+			if (wantHome && strings.Contains(got, home)) || strings.Contains(got, credential) {
 				t.Fatalf("%s leaked raw home or credential", name)
 			}
-			if !strings.Contains(got, "$HOME") || !strings.Contains(got, "[redacted:github-token]") {
+			if (wantHome && !strings.Contains(got, "$HOME")) || !strings.Contains(got, "[redacted:github-token]") {
 				t.Fatalf("%s lacks canonical/redacted form", name)
 			}
 		}

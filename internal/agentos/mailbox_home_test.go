@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -73,10 +74,10 @@ func TestMailboxDirFollowsBashyHomeThenIsolatedHome(t *testing.T) {
 	if got := runMailboxDirHelper(t, home, bashyHome); got != want {
 		t.Fatalf("with BASHY_HOME: mailboxDir=%q, want %q", got, want)
 	}
-	if fi, err := os.Stat(want); err != nil || fi.Mode().Perm() != 0o700 {
+	if fi, err := os.Stat(want); err != nil || !permIs(fi, 0o700) {
 		t.Fatalf("BASHY_HOME inbox not created 0700: %v %v", fi, err)
 	}
-	if fi, err := os.Stat(decoy); err != nil || fi.Mode().Perm() != 0o755 {
+	if fi, err := os.Stat(decoy); err != nil || !permIs(fi, 0o755) {
 		t.Fatalf("decoy HOME inbox touched: %v %v", fi, err)
 	}
 
@@ -85,7 +86,12 @@ func TestMailboxDirFollowsBashyHomeThenIsolatedHome(t *testing.T) {
 	if got := runMailboxDirHelper(t, home2, ""); got != want2 {
 		t.Fatalf("with HOME only: mailboxDir=%q, want %q", got, want2)
 	}
-	if fi, err := os.Stat(want2); err != nil || fi.Mode().Perm() != 0o700 {
+	if fi, err := os.Stat(want2); err != nil || !permIs(fi, 0o700) {
 		t.Fatalf("HOME inbox not created 0700: %v %v", fi, err)
 	}
+}
+
+// permIs compares unix mode bits; Windows has none, so any existing entry passes.
+func permIs(fi os.FileInfo, want os.FileMode) bool {
+	return runtime.GOOS == "windows" || fi.Mode().Perm() == want
 }
