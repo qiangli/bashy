@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/qiangli/coreutils/tool"
+	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
 const (
@@ -52,6 +53,121 @@ var customGrammarTools = map[string]bool{
 	"nm": true, "strip": true, "test": true, "time": true, "vi": true, "xargs": true,
 }
 
+// binManagedExternalTools names tools whose --help is served by a
+// binmgr-managed external binary rather than in-process flag declarations.
+// Running such a handler without a cached binary downloads the pinned release
+// from GitHub, which makes the audit network-dependent: on a cold CI cache a
+// slow or rate-limited download returns truncated (or empty) help inside the
+// toolHelp timeout, and the audit fails spuriously (Sprint 514: 'why' parsed
+// 0 flags on macos/windows runners while passing locally and on rerun).
+//
+// When the managed binary is not already cached, the audit reads the pinned
+// --help captured below instead of touching the network, and records the
+// substitution with its reason; the golden stays stable and a silent 0-flag
+// help can never slip through. Every entry must carry a non-empty reason
+// (pinned by TestBinManagedExternalPins): no reason-free skips.
+type binManagedExternal struct {
+	// upstream is the managed binary name probed with binmgr.CachedBinary.
+	upstream string
+	// version is the pinned upstream release the captured help belongs to.
+	// It must match the tool's pin (whycmd.PinnedVersion for "why"); bumping
+	// the pin means re-capturing help below.
+	version string
+	// reason justifies the network-free substitution for this tool.
+	reason string
+	// help is the captured `$upstream --help` output for version.
+	help string
+}
+
+var binManagedExternalTools = map[string]binManagedExternal{
+	"why": {
+		upstream: "witr",
+		version:  "v0.3.3",
+		reason:   "cmds/why/why.go forwards --help to the binmgr-pinned witr binary, so uncached help requires a GitHub download",
+		help:     pinnedWitrHelp,
+	},
+}
+
+// pinnedWitrHelp is `witr --help` for the pinned witr v0.3.3 release
+// (pranshuparmar/witr), captured from a cached binary. Only the Flags section
+// feeds the audit; the header and examples are kept so a reviewer can diff
+// this against a fresh `witr --help` when the pin moves.
+const pinnedWitrHelp = `witr explains why a process or port is running by tracing its ancestry.
+
+Usage:
+  witr [process name...] [flags]
+
+Examples:
+
+  # Inspect a running process by name
+  witr nginx
+
+  # Look up a process by PID
+  witr --pid 1234
+
+  # Find the process listening on a specific port
+  witr --port 5432
+
+  # Find the process holding a file open
+  witr --file /var/lib/dpkg/lock
+
+  # Inspect a container by name
+  witr --container redis
+
+  # Inspect a process by name with exact matching (no fuzzy search)
+  witr bun --exact
+
+  # Show the full process ancestry (who started whom)
+  witr postgres --tree
+
+  # Show only warnings (suspicious env, arguments, parents)
+  witr docker --warnings
+
+  # Display only environment variables of the process
+  witr node --env
+
+  # Short, single-line output (useful for scripts)
+  witr sshd --short
+
+  # Disable colorized output (CI or piping)
+  witr redis --no-color
+
+  # Output machine-readable JSON
+  witr chrome --json
+
+  # Show extended process information (memory, I/O, file descriptors)
+  witr mysql --verbose
+
+  # Combine flags: inspect port, show environment variables, output JSON
+  witr --port 8080 --env --json
+
+  # Multiple inputs
+  witr nginx node
+  witr --port 8080 --port 3000
+  witr --pid 1234 --pid 5678
+
+  # Mixed inputs
+  witr nginx --pid 1234 --port 8080
+
+
+Flags:
+  -c, --container strings   container(s) to look up (repeatable)
+      --env                 show environment variables for the process
+  -x, --exact               use exact name matching (no substring search)
+  -f, --file strings        file(s) held open by a process (repeatable)
+  -h, --help                help for witr
+  -i, --interactive         interactive mode (TUI)
+      --json                show result as JSON
+      --no-color            disable colorized output
+  -p, --pid strings         pid(s) to look up (repeatable)
+  -o, --port strings        port(s) to look up (repeatable)
+  -s, --short               show only ancestry
+  -t, --tree                show only ancestry as a tree
+      --verbose             show extended process information
+  -v, --version             version for witr
+      --warnings            show only warnings
+`
+
 // Certification-profile signals are the bashy_cert build tag and applet-specific
 // POSIXLY_CORRECT presence checks (see tool.SchemaFromFlags). This lint neither
 // changes those signals nor normalizes flags.
@@ -69,7 +185,7 @@ var customGrammarTools = map[string]bool{
 // (refused while violations exist).
 func TestCommonOptionsVocabularyReport(t *testing.T) {
 	ringDir(t)
-	var shorts, violations, matrix []string
+	var shorts, violations, matrix, skipped []string
 	record := func(path string, flag tool.ArgFlag) {
 		for _, finding := range commonOptionFindings(flag) {
 			violations = append(violations, path+": "+finding)
@@ -102,10 +218,21 @@ func TestCommonOptionsVocabularyReport(t *testing.T) {
 			}
 			continue
 		}
-		help, err := toolHelp(name)
-		if err != nil {
-			t.Errorf("%s: help unavailable (%v); audit incomplete for this tool", name, err)
-			continue
+		var help string
+		if ext, managed := binManagedExternalTools[name]; managed && binmgr.CachedBinary(ext.upstream) == "" {
+			// Deterministic without network: audit the pinned help for the
+			// pinned release and record the substitution with its reason.
+			// The child process is never started, so no download can make
+			// the help come back truncated or empty.
+			skipped = append(skipped, name+": live --help skipped ("+ext.reason+")")
+			help = ext.help
+		} else {
+			var err error
+			help, err = toolHelp(name)
+			if err != nil {
+				t.Errorf("%s: help unavailable (%v); audit incomplete for this tool", name, err)
+				continue
+			}
 		}
 		flags := vocabularyHelpFlags(help)
 		if custom := customGrammarTools[name]; custom != (len(flags) == 0) {
@@ -127,6 +254,9 @@ func TestCommonOptionsVocabularyReport(t *testing.T) {
 	violations = slices.Compact(violations)
 	slices.Sort(matrix)
 	t.Logf("inspected %d registered tools and %d cobra command paths", len(names), cobraCount)
+	for _, s := range skipped {
+		t.Logf("bin-managed external help substitution: %s", s)
+	}
 
 	for _, v := range violations {
 		t.Errorf("common-option vocabulary violation: %s", v)
@@ -335,6 +465,60 @@ func TestHelpExcludedToolsAreUnsupported(t *testing.T) {
 	}
 	if len(helpExcludedTools) != 2 {
 		t.Errorf("help exclusion list changed; review: %v", helpExcludedTools)
+	}
+}
+
+// TestBinManagedExternalPins keeps the network-free substitutions honest:
+// every entry names a registered tool with a reason, its pinned help parses
+// to real flags (never a silent 0-flag help), and the pinned help reproduces
+// the golden matrix and short-baseline rows for that tool, so the pin cannot
+// rot unnoticed on warm caches where the substitution never runs.
+func TestBinManagedExternalPins(t *testing.T) {
+	registered := tool.Names()
+	goldenMatrix := readGolden(t, commonOptionsMatrixFile)
+	goldenShorts := readGolden(t, commonOptionsBaselineFile)
+	for name, ext := range binManagedExternalTools {
+		if !slices.Contains(registered, name) {
+			t.Errorf("bin-managed external %q is not a registered tool", name)
+		}
+		if ext.upstream == "" || ext.version == "" || ext.reason == "" {
+			t.Errorf("bin-managed external %q needs an upstream, version, and reason", name)
+		}
+		if _, excluded := helpExcludedTools[name]; excluded {
+			t.Errorf("bin-managed external %q is also help-excluded; pick one", name)
+		}
+		if customGrammarTools[name] {
+			t.Errorf("bin-managed external %q is a custom-grammar tool; pinned help must not parse flags", name)
+		}
+		flags := vocabularyHelpFlags(ext.help)
+		if len(flags) == 0 {
+			t.Errorf("bin-managed external %q: pinned %s %s help parses to 0 flags", name, ext.upstream, ext.version)
+			continue
+		}
+		byName := map[string]helpFlag{}
+		var shorts []string
+		for _, f := range flags {
+			for _, finding := range commonOptionFindings(f.ArgFlag) {
+				t.Errorf("bin-managed external %q pinned help: %s", name, finding)
+			}
+			if f.Shorthand != "" {
+				shorts = append(shorts, shortBaselineEntry(name, f.ArgFlag))
+			}
+			byName[strings.ReplaceAll(f.Name, "_", "-")] = f
+		}
+		for _, opt := range commonOptionNames {
+			if want := matrixEntry(name, opt, commonOptionStatus(opt, byName)); !slices.Contains(goldenMatrix, want) {
+				t.Errorf("bin-managed external %q pinned help: golden lacks %q", name, want)
+			}
+		}
+		for _, s := range shorts {
+			if !slices.Contains(goldenShorts, s) {
+				t.Errorf("bin-managed external %q pinned help: baseline lacks %q", name, s)
+			}
+		}
+	}
+	if len(binManagedExternalTools) == 0 {
+		t.Errorf("bin-managed external table is empty; add the tool or drop the machinery")
 	}
 }
 
