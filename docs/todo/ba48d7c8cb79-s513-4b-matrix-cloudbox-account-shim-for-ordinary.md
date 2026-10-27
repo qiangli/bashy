@@ -3,9 +3,11 @@ id: ba48d7c8cb79
 kind: feature
 title: S513.4b Matrix Cloudbox account shim for ordinary users
 seq: 2740
-status: todo
+status: assigned
 priority: p0
 created: 2026-10-27T17:23:53.907255Z
+weave: 301
+assignee: claude-opus5.5
 sprint: 513
 sprint_id: 8bb3bd0b-2aa9-5952-92ca-6dda0194fca6
 sprint_title: 'Bashy collaboration: Matrix chat + whiteboard/brainstorm for everyone; lern live UAT'

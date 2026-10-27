@@ -3,9 +3,11 @@ id: 9123b96d282d
 kind: bug
 title: S513.5b brainstorm missing-session reads must not create sessions
 seq: 2741
-status: todo
+status: assigned
 priority: p0
 created: 2026-10-27T17:32:23.965835Z
+weave: 300
+assignee: muse-conductor
 sprint: 513
 sprint_id: 8bb3bd0b-2aa9-5952-92ca-6dda0194fca6
 sprint_title: 'Bashy collaboration: Matrix chat + whiteboard/brainstorm for everyone; lern live UAT'
