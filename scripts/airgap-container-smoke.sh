@@ -116,7 +116,7 @@ names coreutils | grep -vxF -f "$work/builtins.txt" >"$work/coreutils.txt"
 
 # verbs whose offline failure is by design: engines, remote-by-design verbs
 # (philosophy.md §3), bin-managed externals, and the ones that talk to a host.
-by_design='podman docker oci sandbox ollama otel dks kubectl helm aws azure gcloud doctl login tessaro sphere peer git gh act act-runner rclone loom zot seaweedfs kopia mirror go cmake clang node npm npx pnpm yarn python pip uv mise cargo rustc rustup rust git-scm curl fetch browser web ask chat delegate coach foreman supervise meet app upgrade bootstrap self release rg'
+by_design='podman docker oci sandbox ollama otel dks kubectl helm aws az azure gcloud doctl login tessaro sphere peer git gh act act-runner rclone loom zot seaweedfs kopia mirror go cmake clang node npm npx pnpm yarn python pip uv mise cargo rustc rustup rust git-scm curl fetch browser web ask chat delegate coach foreman supervise meet app upgrade bootstrap self release rg'
 
 cat >"$work/probe.sh" <<'EOF'
 # runs INSIDE the image. $1 = list file; verbs.txt is probed as `/bashy <name>`
@@ -177,7 +177,7 @@ table=$work/table.md
   # notes are informational: arch / version / commit tokens are normalized so
   # the same table is measured on amd64 and arm64, dev and release builds
   # normalize FIRST (tokens differ in length), then cut the note to 70 chars
-  sort -t "$T" -k1,1 -k2,2 "$out" |
+  LC_ALL=C sort -t "$T" -k1,1 -k2,2 "$out" |
     sh "$repo/scripts/airgap-normalize-notes.sh" |
     tr -cd '\011\012\040-\176' |
     awk -F'\t' '{ gsub(/\|/, "\\|"); printf "| %s | `%s` | %s | %s |\n", $1, $2, $3, substr($4, 1, 70) }'
