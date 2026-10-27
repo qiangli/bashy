@@ -57,6 +57,11 @@ Before assigning work to a shared test host, droplet, device, or account, take
 its host-local advisory hold with `bashy claim NAME --intent TEXT`; release it
 when done and never force another holder off without contacting them.
 
+Sprint managers coordinate through `bashy mb send <seat>` and announce before
+using a shared host, committing in a shared checkout with another lane's runs
+(prefer a scratch worktree), or bumping a pin another lane depends on. Release a
+held claim another lane asks for, or explain the hold promptly.
+
 ```text
 bashy sprint edit ID --primary-goal "ONE OUTCOME" --spec docs/sprint-ID-master-execution-plan.md
 ```

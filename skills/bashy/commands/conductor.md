@@ -129,6 +129,11 @@ uncommitted changes, or disposable state. The manager proactively reclaims only
 resources its own sprint owns or has explicitly accepted into that sprint after
 review and integration; coordination alone never grants deletion authority.
 
+Sprint managers coordinate through `bashy mb send <seat>` and announce before
+using a shared host, committing in a shared checkout with another lane's runs
+(prefer a scratch worktree), or bumping a pin another lane depends on. Release a
+held claim another lane asks for, or explain the hold promptly.
+
 ## Seat authority — you are APPOINTED, you are not self-selected
 
 **The steward appoints and qualifies conductor seats.** A conductor never selects

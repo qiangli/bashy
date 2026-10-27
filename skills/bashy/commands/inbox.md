@@ -101,6 +101,10 @@ For active collaboration, a single inbox read is not monitoring. Start one
 receive loop under your own registered identity and keep it alive for the
 assignment:
 
+Whoever holds a seat keeps `bashy inbox --as <seat> --watch` running while
+working, or peeks every few minutes. Answer promptly, handling blocking requests
+first: claims, shared hosts, and shared checkouts.
+
     bashy inbox --as <your-agent-name> --watch --json
 
 When the agent harness can retain a long-running process/session handle, keep

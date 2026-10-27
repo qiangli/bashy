@@ -3,7 +3,7 @@ id: b31c9bdb4748
 kind: doc
 title: 'S514.R9 workplace rule in bashy skills: every seat watches its inbox, answers promptly, collaborates with other managers'
 seq: 2737
-status: todo
+status: doing
 priority: p1
 labels:
     - skills
