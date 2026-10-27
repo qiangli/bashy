@@ -126,9 +126,13 @@ func saveBoard(path string, b Board) error {
 	return os.Rename(tmp, path)
 }
 
-// loadLocked returns the named board, creating it on first use. Callers must
-// hold a.mu. Creation mints the private facilitator capability; it is
-// revealed only in the create-action response, never in state or exports.
+var errBoardNotFound = errors.New("board not found")
+var errBoardExists = errors.New("board already exists")
+
+// loadLocked returns the named board without creating it. Callers must hold
+// a.mu. Only the explicit create action mints a new board (see createLocked);
+// reads of unknown names return errBoardNotFound so guests cannot reserve
+// names or fill disk. Saved boards on disk are still loaded on first read.
 func (a *app) loadLocked(name string) (*Board, error) {
 	if !boardNameRe.MatchString(name) {
 		return nil, errors.New("use 1-64 letters, digits, - or _ for a board name")
@@ -137,27 +141,55 @@ func (a *app) loadLocked(name string) (*Board, error) {
 		return b, nil
 	}
 	path := boardPath(a.dir, name)
-	b := &Board{Version: 1, Name: name, Facilitator: token(), Strokes: []Stroke{}, Notes: []Note{}}
-	if raw, err := os.ReadFile(path); err == nil {
-		if err = json.Unmarshal(raw, b); err != nil {
-			return nil, fmt.Errorf("saved board %q is invalid; preserve it for recovery: %w", name, err)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, errBoardNotFound
 		}
-		if b.Version != 1 || !validToken(b.Facilitator) || b.Name != name {
-			return nil, fmt.Errorf("unsupported or invalid saved board %q", name)
-		}
-		if b.Strokes == nil {
-			b.Strokes = []Stroke{}
-		}
-		if b.Notes == nil {
-			b.Notes = []Note{}
-		}
+		return nil, err
+	}
+	b := &Board{}
+	if err = json.Unmarshal(raw, b); err != nil {
+		return nil, fmt.Errorf("saved board %q is invalid; preserve it for recovery: %w", name, err)
+	}
+	if b.Version != 1 || !validToken(b.Facilitator) || b.Name != name {
+		return nil, fmt.Errorf("unsupported or invalid saved board %q", name)
+	}
+	if b.Strokes == nil {
+		b.Strokes = []Stroke{}
+	}
+	if b.Notes == nil {
+		b.Notes = []Note{}
+	}
+	a.boards[name] = b
+	return b, nil
+}
+
+// createLocked mints and persists a new board. Callers must hold a.mu and
+// have verified the name is valid and unused. The minted facilitator
+// capability is revealed only in the create-action response, never in state
+// or exports.
+func (a *app) createLocked(name string) (*Board, error) {
+	if !boardNameRe.MatchString(name) {
+		return nil, errors.New("use 1-64 letters, digits, - or _ for a board name")
+	}
+	if _, ok := a.boards[name]; ok {
+		return nil, errBoardExists
+	}
+	if _, err := os.Stat(boardPath(a.dir, name)); err == nil {
+		return nil, errBoardExists
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
-	} else if err := saveBoard(path, *b); err != nil {
+	}
+	b := &Board{Version: 1, Name: name, Facilitator: token(), Strokes: []Stroke{}, Notes: []Note{}}
+	if err := saveBoard(boardPath(a.dir, name), *b); err != nil {
 		return nil, err
 	}
 	a.boards[name] = b
 	return b, nil
+}
+func boardNotFound(w http.ResponseWriter) {
+	fail(w, 404, "Board not found. Ask the facilitator to create it.")
 }
 func (a *app) facilitator(r *http.Request, b *Board) bool {
 	return subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Facilitator-Key")), []byte(b.Facilitator)) == 1
@@ -242,7 +274,11 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		b, err := a.loadLocked(name)
 		if err != nil {
-			fail(w, 400, err.Error())
+			if errors.Is(err, errBoardNotFound) {
+				boardNotFound(w)
+			} else {
+				fail(w, 400, err.Error())
+			}
 			return
 		}
 		respond(w, a.view(id, b, a.facilitator(r, b)))
@@ -255,7 +291,11 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		b, err := a.loadLocked(name)
 		if err != nil {
-			fail(w, 400, err.Error())
+			if errors.Is(err, errBoardNotFound) {
+				boardNotFound(w)
+			} else {
+				fail(w, 400, err.Error())
+			}
 			return
 		}
 		if r.URL.Query().Get("format") == "png" {
@@ -303,13 +343,16 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Action == "create" {
-		if _, err := os.Stat(boardPath(a.dir, req.Board)); err == nil || a.boards[req.Board] != nil {
-			fail(w, 409, "A board with that name already exists")
-			return
-		}
-		b, err := a.loadLocked(req.Board)
+		b, err := a.createLocked(req.Board)
 		if err != nil {
-			fail(w, 400, err.Error())
+			if errors.Is(err, errBoardExists) {
+				fail(w, 409, "A board with that name already exists")
+			} else if !boardNameRe.MatchString(req.Board) {
+				fail(w, 400, err.Error())
+			} else {
+				log.Printf("create failed: %v", err)
+				fail(w, 500, "Could not save. Your change was not accepted; keep your work and ask the facilitator.")
+			}
 			return
 		}
 		v := a.view(id, b, true)
@@ -319,7 +362,11 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	b, err := a.loadLocked(req.Board)
 	if err != nil {
-		fail(w, 400, err.Error())
+		if errors.Is(err, errBoardNotFound) {
+			boardNotFound(w)
+		} else {
+			fail(w, 400, err.Error())
+		}
 		return
 	}
 	isFac := a.facilitator(r, b)
@@ -620,6 +667,9 @@ func main() {
 	a := &app{dir: *data, prefix: *prefix, boards: map[string]*Board{}}
 	a.mu.Lock()
 	mainBoard, err := a.loadLocked("main")
+	if errors.Is(err, errBoardNotFound) {
+		mainBoard, err = a.createLocked("main")
+	}
 	a.mu.Unlock()
 	if err != nil {
 		log.Fatal(err)

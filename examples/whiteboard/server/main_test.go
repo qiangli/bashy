@@ -291,6 +291,44 @@ func TestExportsAreValid(t *testing.T) {
 	}
 }
 
+func TestUnknownBoardReadsDoNotReserve(t *testing.T) {
+	a := fresh(t)
+	// A guest read of an unknown board must not mint it: state, export,
+	// and non-create actions return 404 without touching disk.
+	if w := request(a, token(), "", "/api/state?board=chosen", nil); w.Code != 404 {
+		t.Fatalf("state reserved unknown board: %d %s", w.Code, w.Body.String())
+	}
+	if w := request(a, token(), "", "/api/export?board=chosen&format=json", nil); w.Code != 404 {
+		t.Fatalf("export reserved unknown board: %d %s", w.Code, w.Body.String())
+	}
+	if w := request(a, token(), "", "/api/action", map[string]any{
+		"action": "stroke", "board": "chosen",
+		"points": []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, "color": "#000000", "width": 2,
+	}); w.Code != 404 {
+		t.Fatalf("action reserved unknown board: %d %s", w.Code, w.Body.String())
+	}
+	if _, err := os.Stat(filepath.Join(a.dir, "boards", "chosen.json")); !os.IsNotExist(err) {
+		t.Fatal("guest read persisted a board file")
+	}
+	a.mu.Lock()
+	_, reserved := a.boards["chosen"]
+	a.mu.Unlock()
+	if reserved {
+		t.Fatal("guest read cached a board")
+	}
+	// The facilitator can still create the name and receives the only
+	// copy of the facilitator capability.
+	fac := create(t, a, "chosen")
+	good(t, request(a, token(), "", "/api/state?board=chosen", nil))
+	w := request(a, token(), "", "/api/export?board=chosen&format=json", nil)
+	good(t, w)
+	for _, leak := range []string{fac, "facilitatorKey"} {
+		if strings.Contains(w.Body.String(), leak) {
+			t.Fatalf("export leaked facilitator capability: %q", leak)
+		}
+	}
+}
+
 func TestPrefixRouting(t *testing.T) {
 	a := fresh(t)
 	a.prefix = "/wb"
@@ -298,6 +336,13 @@ func TestPrefixRouting(t *testing.T) {
 		t.Fatal("unprefixed API reachable on a prefixed server")
 	}
 	good(t, request(a, "", "", "/wb/", nil))
+	// Reads mint nothing: the default board answers only once created,
+	// mirroring server startup which ensures "main" before serving.
+	if request(a, token(), "", "/wb/api/state?board=main", nil).Code != 404 {
+		t.Fatal("unknown board read did not return 404")
+	}
+	w := request(a, token(), "", "/wb/api/action", map[string]any{"action": "create", "board": "main"})
+	good(t, w)
 	good(t, request(a, token(), "", "/wb/api/state?board=main", nil))
 	good(t, request(a, token(), "", "/wb/api/action", map[string]any{"action": "create", "board": "prefixed"}))
 }
