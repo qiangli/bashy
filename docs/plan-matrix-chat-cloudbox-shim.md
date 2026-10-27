@@ -29,6 +29,13 @@ gates native clients at its edge and calls a host shim to create accounts.
   the homeserver (password login) whether the new password is live. The gate
   removes every run account via `Provisioner.ref` on any exit and accepts a
   `MATRIX_CHAT_TUWUNEL` override only when it is the signed admitted binary.
+- **Read-only gate preflight (S513, review of #304).** The #304 preflight
+  called `provision.installed_binary()`, i.e. `bashy tool install tuwunel`,
+  which can fetch bytes during an automated E2E. The gate now reads the
+  binary path and the platform asset sha256 from `bashy tool show tuwunel
+  --json`, hashes the installed file, and fails closed when it is absent, the
+  platform has no asset, or the digest differs. It never installs or
+  downloads; setup still installs.
 - **Contract.** It is exact to Cloudbox's `Provisioner`. `reset` on a missing
   account creates it, because Cloudbox's live E2E opens with `reset`. `ensure`
   on an existing account returns no password. A reset logs out all other
@@ -45,8 +52,8 @@ gates native clients at its edge and calls a host shim to create accounts.
 
 | gate | where | status |
 |---|---|---|
-| unit tests (`test_cloudbox_shim.py`, `test_provision.py`) | any host | PASS (27, after S513.4c repair) |
-| `cloudbox_gate.py`: signed tuwunel, real shim, synthetic test vault | dev host (darwin/arm64) | PASS (56 checks, after S513.4c repair); arbitrary `MATRIX_CHAT_TUWUNEL` refused |
+| unit tests (`test_cloudbox_shim.py`, `test_provision.py`) | any host | PASS (after the read-only preflight repair; missing, unsigned, wrong-platform and install-attempt cases fail closed) |
+| `cloudbox_gate.py`: signed tuwunel, real shim, synthetic test vault | dev host (darwin/arm64) | PASS (56 checks, read-only digest-verified preflight); `MATRIX_CHAT_TUWUNEL=/usr/bin/true` and a missing install refused |
 | `cloudbox_gate.py` with `MATRIX_CHAT_GATE_VAULT=bashy` (production vault) | claimed host | **not rerun after the repair**: the earlier PASS predates the cleanup fix; rerun on the claimed host after the S514 R11 novidesign release |
 | `cloudbox_e2e.py`: live Cloudbox HTTPS, 3 users, outsider, revocation | disposable Cloudbox and chat host | **BLOCKED**: no test Cloudbox origin or tokens were available |
 | `bashy matrix-chat cloudbox` under a running supervisord | manager chat host | not run (declarations verified with `bashy service add/verify` in an isolated fleet dir) |

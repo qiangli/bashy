@@ -1,8 +1,10 @@
+import hashlib
 import importlib.util
 import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 
@@ -254,20 +256,75 @@ class GateTest(unittest.TestCase):
         self.assertEqual(gate.cleanup(prov, vault, accounts), [prov.ref(first)])
         self.assertNotIn(prov.ref(second), vault.values)
 
-    def test_tuwunel_override_must_be_the_admitted_binary(self):
+    def tuwunel_meta(self, path, data, key=None):
+        return {"cli": {"binary": str(path), "managed": {"assets": {
+            key or gate.platform_key(): {"url": "https://example.invalid/tuwunel",
+                                         "sha256": hashlib.sha256(data).hexdigest()}}}}}
+
+    def test_tuwunel_override_must_be_the_verified_binary(self):
         with tempfile.TemporaryDirectory() as temp:
             admitted, other = Path(temp) / "tuwunel", Path(temp) / "other"
             admitted.write_bytes(b"signed")
             other.write_bytes(b"signed")
             link = Path(temp) / "link"
             os.symlink(admitted, link)
-            self.assertEqual(gate.tuwunel_binary("", str(admitted)), str(admitted))
-            self.assertEqual(gate.tuwunel_binary(str(link), str(admitted)), str(admitted))
-            for bad in (str(other), str(Path(temp) / "missing")):
+            meta = self.tuwunel_meta(admitted, b"signed")
+            self.assertEqual(gate.tuwunel_binary("", meta), str(admitted))
+            self.assertEqual(gate.tuwunel_binary(str(link), meta), str(admitted))
+            for bad in (str(other), str(Path(temp) / "missing"), "/usr/bin/true"):
                 with self.assertRaises(SystemExit):
-                    gate.tuwunel_binary(bad, str(admitted))
+                    gate.tuwunel_binary(bad, meta)
+
+    def test_tuwunel_preflight_fails_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            binary = Path(temp) / "tuwunel"
+            binary.write_bytes(b"unsigned")
+            cases = {
+                "missing": self.tuwunel_meta(Path(temp) / "missing", b"signed"),
+                "unsigned": self.tuwunel_meta(binary, b"signed"),
+                "other platform": self.tuwunel_meta(binary, b"unsigned", "plan9/mips"),
+                "relative": self.tuwunel_meta("tuwunel", b"unsigned"),
+                "unexpanded": self.tuwunel_meta("$XDG/tuwunel", b"unsigned"),
+                "no assets": {"cli": {"binary": str(binary)}},
+                "empty": {},
+            }
+            for name, meta in cases.items():
+                with self.subTest(name), self.assertRaises(SystemExit):
+                    gate.tuwunel_binary("", meta)
+
+    def test_tuwunel_home_path_is_expanded(self):
+        with tempfile.TemporaryDirectory() as temp:
+            binary = Path(temp) / "tools" / "tuwunel"
+            binary.parent.mkdir()
+            binary.write_bytes(b"signed")
+            old = os.environ.get("HOME")
+            os.environ["HOME"] = temp
+            try:
+                meta = self.tuwunel_meta("$HOME/tools/tuwunel", b"signed")
+                self.assertEqual(gate.tuwunel_binary("", meta), str(binary))
+            finally:
+                if old is None:
+                    os.environ.pop("HOME")
+                else:
+                    os.environ["HOME"] = old
+
+    def test_tuwunel_preflight_never_installs(self):
+        calls = []
+
+        def run(argv, **kwargs):
+            calls.append(list(argv))
+            return subprocess.CompletedProcess(argv, 1, b"", b"")
+
+        def install():
+            raise AssertionError("gate preflight must not install tuwunel")
+        real_run, real_install = gate.subprocess.run, gate.provision.installed_binary
+        gate.subprocess.run, gate.provision.installed_binary = run, install
+        try:
             with self.assertRaises(SystemExit):
-                gate.tuwunel_binary("", str(Path(temp) / "missing"))
+                gate.tuwunel_binary("")
+        finally:
+            gate.subprocess.run, gate.provision.installed_binary = real_run, real_install
+        self.assertEqual(calls, [["bashy", "tool", "show", "tuwunel", "--json"]])
 
 
 class ForwardTest(unittest.TestCase):

@@ -140,9 +140,12 @@ python3 examples/matrix-chat/cloudbox_e2e.py            # live Cloudbox over HTT
 
 `cloudbox_gate.py` starts the signed tuwunel directly and runs the real
 shim. It covers the shim protocol, four accounts, DM and group text and
-image, room privacy, reset and deactivation. It always runs the tuwunel that
-`bashy tool install tuwunel` admits; `MATRIX_CHAT_TUWUNEL` is accepted only
-when it names that same file. By default its account passwords
+image, room privacy, reset and deactivation. Its preflight is read-only and
+never installs or downloads: it reads the tuwunel path and this platform's
+signed asset sha256 from `bashy tool show tuwunel`, and runs the installed
+file only if its digest matches. A missing or mismatched binary fails the
+gate (install it beforehand with `bashy tool install tuwunel`), and
+`MATRIX_CHAT_TUWUNEL` is accepted only when it names that same verified file. By default its account passwords
 go to an in-memory adapter that exists only in the test. Every account the run
 mints is removed from the vault through `Provisioner.ref` on every exit,
 failures included; a credential left behind fails the gate. The production shim

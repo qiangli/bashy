@@ -12,12 +12,18 @@ MATRIX_CHAT_GATE_VAULT=bashy it uses the production BashyVault instead, under
 a per-run prefix that is removed afterwards. Cloudbox's edge (share ACL,
 revocation, HTTPS route) is not exercised here; cloudbox_e2e.py covers it.
 
-A missing signed tuwunel fails the gate, and MATRIX_CHAT_TUWUNEL may only
-name the binary Bashy's signed admission reports. No containers are used.
+The preflight is read-only: it never installs or downloads tuwunel. It reads
+the binary path and this platform's signed asset sha256 from `bashy tool show
+tuwunel`, and runs the installed file only if its digest matches. A missing or
+mismatched binary fails the gate, and MATRIX_CHAT_TUWUNEL may only name that
+same verified file. No containers are used.
 """
+import hashlib
 import importlib.util
+import json
 import os
 from pathlib import Path
+import platform
 import secrets
 import socket
 import subprocess
@@ -67,20 +73,72 @@ def free_port():
         return sock.getsockname()[1]
 
 
-def tuwunel_binary(explicit=None, admitted=None):
-    """The signed tuwunel to run; an override must be that same admitted file."""
+def platform_key():
+    """Bashy's asset key (os/arch) for this host."""
+    arch = {"x86_64": "amd64", "amd64": "amd64", "aarch64": "arm64",
+            "arm64": "arm64"}.get(platform.machine().lower(), platform.machine().lower())
+    return "%s/%s" % (sys.platform, arch)
+
+
+def tool_metadata():
+    """Bashy's tuwunel definition, read-only: `tool show` never installs or downloads."""
+    try:
+        result = subprocess.run(["bashy", "tool", "show", "tuwunel", "--json"],
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        raise SystemExit("FAIL: bashy tool show tuwunel is unavailable")
+    if result.returncode:
+        raise SystemExit("FAIL: bashy tool show tuwunel failed")
+    try:
+        return json.loads(result.stdout)
+    except ValueError:
+        raise SystemExit("FAIL: bashy tool show tuwunel returned malformed metadata")
+
+
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for block in iter(lambda: fh.read(1 << 20), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def tuwunel_binary(explicit=None, metadata=None):
+    """The signed tuwunel to run, verified read-only; never installs or downloads.
+
+    The path and the platform asset's sha256 come from Bashy's tool
+    definition; the installed file must exist and match that digest. An
+    override must be that same verified file. Anything else fails closed.
+    """
     explicit = os.environ.get("MATRIX_CHAT_TUWUNEL") if explicit is None else explicit
-    # The same signed-admission path setup uses; it fails closed.
-    admitted = admitted or provision.installed_binary()
+    metadata = tool_metadata() if metadata is None else metadata
+    try:
+        cli = metadata["cli"]
+        admitted = cli["binary"]
+        expected = cli["managed"]["assets"][platform_key()]["sha256"]
+    except (KeyError, TypeError):
+        raise SystemExit("FAIL: no signed tuwunel asset for %s in Bashy's tool metadata"
+                         % platform_key())
+    if not isinstance(admitted, str) or not isinstance(expected, str) or len(expected) != 64:
+        raise SystemExit("FAIL: Bashy's tuwunel metadata is malformed")
+    for prefix in ("$HOME/", "${HOME}/"):
+        if admitted.startswith(prefix):
+            admitted = str(Path.home() / admitted[len(prefix):])
+    if "$" in admitted or not os.path.isabs(admitted):
+        # A bare name means Bashy has no installed version to point at.
+        raise SystemExit("FAIL: signed tuwunel is not installed (no absolute path in Bashy's metadata)")
     if not Path(admitted).is_file():
-        raise SystemExit("FAIL: signed tuwunel binary is missing")
+        raise SystemExit("FAIL: signed tuwunel is not installed; run `bashy tool install tuwunel` first")
+    if sha256_file(admitted) != expected.lower():
+        raise SystemExit("FAIL: installed tuwunel does not match the signed %s asset digest"
+                         % platform_key())
     if explicit:
         try:
             same = os.path.samefile(explicit, admitted)
         except OSError:
             same = False
         if not same:
-            raise SystemExit("FAIL: MATRIX_CHAT_TUWUNEL is not the signed tuwunel Bashy admitted")
+            raise SystemExit("FAIL: MATRIX_CHAT_TUWUNEL is not the verified signed tuwunel")
     return admitted
 
 
