@@ -150,10 +150,14 @@ func normalizeSession(s *Session) error {
 	return nil
 }
 
-// loadLocked returns the named session, creating it on first use. Callers
-// must hold a.mu. A legacy classroom board.json (version 1, no session
-// fields) is honored as session "main" without touching the old file;
-// new saves always go to sessions/<name>.json.
+var errSessionNotFound = errors.New("session not found")
+var errSessionExists = errors.New("session already exists")
+
+// loadLocked returns the named session without creating it. Callers must
+// hold a.mu. Only the explicit create action mints a new session (see
+// createLocked); reads of unknown names return errSessionNotFound so guests
+// cannot reserve names or fill disk. Saved sessions on disk still load on
+// first read.
 func (a *app) loadLocked(name string) (*Session, error) {
 	if !sessionNameRe.MatchString(name) {
 		return nil, errors.New("use 1-64 letters, digits, - or _ for a session name")
@@ -161,52 +165,100 @@ func (a *app) loadLocked(name string) (*Session, error) {
 	if s, ok := a.sessions[name]; ok {
 		return s, nil
 	}
-	s := &Session{Version: 2, Name: name, Title: "Team Brainstorm",
-		Columns:    append([]string{}, defaultColumns...),
-		Prompts:    append([]string{}, defaultPrompts...),
-		VoteBudget: defaultVoteBudget, Facilitator: token(), Phase: "write", Cards: []Card{}}
-	path := sessionPath(a.dir, name)
-	if raw, err := os.ReadFile(path); err == nil {
-		if err = json.Unmarshal(raw, s); err != nil {
-			return nil, fmt.Errorf("saved session %q is invalid; preserve it for recovery: %w", name, err)
+	raw, err := os.ReadFile(sessionPath(a.dir, name))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, errSessionNotFound
 		}
-		if err = normalizeSession(s); err != nil {
-			return nil, fmt.Errorf("unsupported or invalid saved session %q", name)
-		}
-	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
-	} else if name == "main" {
-		if legacy, lerr := os.ReadFile(filepath.Join(a.dir, "board.json")); lerr == nil {
-			var old struct {
-				Version  int    `json:"version"`
-				Phase    string `json:"phase"`
-				Teacher  string `json:"teacher"`
-				Cards    []Card `json:"cards"`
-				Revision int    `json:"revision"`
-			}
-			if jerr := json.Unmarshal(legacy, &old); jerr != nil {
-				return nil, fmt.Errorf("saved board is invalid; preserve it for recovery: %w", jerr)
-			}
-			if old.Version != 1 || !validToken(old.Teacher) || !validPhase(old.Phase) {
-				return nil, errors.New("unsupported or invalid saved board")
-			}
-			s.Facilitator = old.Teacher
-			s.Phase = old.Phase
-			s.Cards = old.Cards
-			if s.Cards == nil {
-				s.Cards = []Card{}
-			}
-			s.Revision = old.Revision
-			s.Title = "Community Challenge Brainstorm"
-		}
-		if err := saveSession(path, *s); err != nil {
-			return nil, err
-		}
-	} else if err := saveSession(path, *s); err != nil {
-		return nil, err
+	}
+	s := &Session{}
+	if err = json.Unmarshal(raw, s); err != nil {
+		return nil, fmt.Errorf("saved session %q is invalid; preserve it for recovery: %w", name, err)
+	}
+	if err = normalizeSession(s); err != nil {
+		return nil, fmt.Errorf("unsupported or invalid saved session %q", name)
 	}
 	a.sessions[name] = s
 	return s, nil
+}
+
+// createLocked persists a prepared new session. Callers must hold a.mu and
+// have validated the session fields. The minted facilitator capability is
+// revealed only in the create-action response, never in state or exports.
+func (a *app) createLocked(s *Session) (*Session, error) {
+	if !sessionNameRe.MatchString(s.Name) {
+		return nil, errors.New("use 1-64 letters, digits, - or _ for a session name")
+	}
+	if _, ok := a.sessions[s.Name]; ok {
+		return nil, errSessionExists
+	}
+	if _, err := os.Stat(sessionPath(a.dir, s.Name)); err == nil {
+		return nil, errSessionExists
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	if s.Name == "main" {
+		if _, err := os.Stat(filepath.Join(a.dir, "board.json")); err == nil {
+			return nil, errSessionExists
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, err
+		}
+	}
+	if err := saveSession(sessionPath(a.dir, s.Name), *s); err != nil {
+		return nil, err
+	}
+	a.sessions[s.Name] = s
+	return s, nil
+}
+
+// ensureMainLocked returns the default session, minting it at startup when
+// absent. A legacy classroom board.json (version 1, no session fields) is
+// honored as session "main" without touching the old file; new saves always
+// go to sessions/main.json. Callers must hold a.mu.
+func (a *app) ensureMainLocked() (*Session, error) {
+	if s, err := a.loadLocked("main"); err == nil {
+		return s, nil
+	} else if !errors.Is(err, errSessionNotFound) {
+		return nil, err
+	}
+	s := &Session{Version: 2, Name: "main", Title: "Team Brainstorm",
+		Columns:    append([]string{}, defaultColumns...),
+		Prompts:    append([]string{}, defaultPrompts...),
+		VoteBudget: defaultVoteBudget, Facilitator: token(), Phase: "write", Cards: []Card{}}
+	if legacy, lerr := os.ReadFile(filepath.Join(a.dir, "board.json")); lerr == nil {
+		var old struct {
+			Version  int    `json:"version"`
+			Phase    string `json:"phase"`
+			Teacher  string `json:"teacher"`
+			Cards    []Card `json:"cards"`
+			Revision int    `json:"revision"`
+		}
+		if jerr := json.Unmarshal(legacy, &old); jerr != nil {
+			return nil, fmt.Errorf("saved board is invalid; preserve it for recovery: %w", jerr)
+		}
+		if old.Version != 1 || !validToken(old.Teacher) || !validPhase(old.Phase) {
+			return nil, errors.New("unsupported or invalid saved board")
+		}
+		s.Facilitator = old.Teacher
+		s.Phase = old.Phase
+		s.Cards = old.Cards
+		if s.Cards == nil {
+			s.Cards = []Card{}
+		}
+		s.Revision = old.Revision
+		s.Title = "Community Challenge Brainstorm"
+	} else if !errors.Is(lerr, os.ErrNotExist) {
+		return nil, lerr
+	}
+	if err := saveSession(sessionPath(a.dir, s.Name), *s); err != nil {
+		return nil, err
+	}
+	a.sessions[s.Name] = s
+	return s, nil
+}
+func sessionNotFound(w http.ResponseWriter) {
+	fail(w, 404, "Session not found. Ask the facilitator to create it.")
 }
 func (a *app) facilitator(r *http.Request, s *Session) bool {
 	got := r.Header.Get("X-Facilitator-Key")
@@ -291,7 +343,11 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if path == "/api/state" && r.Method == "GET" {
 		s, err := a.loadLocked(sessionName)
 		if err != nil {
-			fail(w, 400, err.Error())
+			if errors.Is(err, errSessionNotFound) {
+				sessionNotFound(w)
+			} else {
+				fail(w, 400, err.Error())
+			}
 			return
 		}
 		respond(w, a.view(id, s, a.facilitator(r, s)))
@@ -300,7 +356,11 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if path == "/api/export" && r.Method == "GET" {
 		s, err := a.loadLocked(sessionName)
 		if err != nil {
-			fail(w, 400, err.Error())
+			if errors.Is(err, errSessionNotFound) {
+				sessionNotFound(w)
+			} else {
+				fail(w, 400, err.Error())
+			}
 			return
 		}
 		if !a.facilitator(r, s) {
@@ -365,15 +425,9 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Action == "create" {
-		if _, err := os.Stat(sessionPath(a.dir, req.Session)); err == nil || a.sessions[req.Session] != nil {
+		if _, exists := a.sessions[req.Session]; exists {
 			fail(w, 409, "A session with that name already exists")
 			return
-		}
-		if req.Session == "main" {
-			if _, err := os.Stat(filepath.Join(a.dir, "board.json")); err == nil {
-				fail(w, 409, "A session with that name already exists")
-				return
-			}
 		}
 		title := strings.TrimSpace(req.Title)
 		if title == "" {
@@ -425,12 +479,17 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s := &Session{Version: 2, Name: req.Session, Title: title, Columns: columns,
 			Prompts: prompts, VoteBudget: budget, Facilitator: token(), Phase: "write", Cards: []Card{}}
-		if err := saveSession(sessionPath(a.dir, s.Name), *s); err != nil {
-			log.Printf("save failed: %v", err)
-			fail(w, 500, "Could not save. Try again.")
+		if _, err := a.createLocked(s); err != nil {
+			if errors.Is(err, errSessionExists) {
+				fail(w, 409, "A session with that name already exists")
+			} else if !sessionNameRe.MatchString(req.Session) {
+				fail(w, 400, err.Error())
+			} else {
+				log.Printf("create failed: %v", err)
+				fail(w, 500, "Could not save. Try again.")
+			}
 			return
 		}
-		a.sessions[s.Name] = s
 		v := a.view(id, s, true)
 		v["facilitatorKey"] = s.Facilitator
 		respond(w, v)
@@ -438,7 +497,11 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	s, err := a.loadLocked(req.Session)
 	if err != nil {
-		fail(w, 400, err.Error())
+		if errors.Is(err, errSessionNotFound) {
+			sessionNotFound(w)
+		} else {
+			fail(w, 400, err.Error())
+		}
 		return
 	}
 	isFac := a.facilitator(r, s)
@@ -570,7 +633,7 @@ func main() {
 	}
 	a := &app{dir: *data, prefix: *prefix, sessions: map[string]*Session{}}
 	a.mu.Lock()
-	mainSession, err := a.loadLocked("main")
+	mainSession, err := a.ensureMainLocked()
 	a.mu.Unlock()
 	if err != nil {
 		log.Fatal(err)
