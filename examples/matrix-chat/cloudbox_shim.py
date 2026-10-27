@@ -111,7 +111,7 @@ class Homeserver:
             conn.request(method, url, payload, headers)
             response = conn.getresponse()
             raw = response.read()
-        except OSError:
+        except (OSError, http.client.HTTPException):
             raise ShimError(502, "M_UNKNOWN", "homeserver unreachable")
         finally:
             conn.close()
@@ -165,6 +165,20 @@ class Homeserver:
     def logout(self, token):
         self.call("POST", "/_matrix/client/v3/logout", token, {})
 
+    def password_works(self, localpart, password):
+        """True/False when a password login settles it; None when the homeserver cannot say."""
+        try:
+            status, data = self.call("POST", "/_matrix/client/v3/login", None, {
+                "type": "m.login.password", "password": password,
+                "identifier": {"type": "m.id.user", "user": localpart},
+                "initial_device_display_name": "cloudbox provisioning"})
+        except ShimError:
+            return None
+        if status == 200 and data.get("access_token"):
+            safe_logout(self, data["access_token"])
+            return True
+        return False if status == 403 else None
+
     def with_password_auth(self, localpart, token, path, body, password):
         """Run a UIA-protected request, answering its m.login.password stage."""
         status, data = self.call("POST", path, token, body)
@@ -177,6 +191,14 @@ class Homeserver:
                 "identifier": {"type": "m.id.user", "user": localpart}}
         status, _ = self.call("POST", path, token, dict(body, auth=auth))
         return status == 200
+
+
+def safe_logout(homeserver, token):
+    """Close a provisioning device without masking the outcome it was opened for."""
+    try:
+        homeserver.logout(token)
+    except Exception as exc:  # the result (or the original error) is what Cloudbox must see
+        log.warning("provisioning device logout failed: %s", type(exc).__name__)
 
 
 class Provisioner:
@@ -217,8 +239,24 @@ class Provisioner:
             else:
                 result = {"user_id": self.hs.user_id(localpart), "created": False}
             if name and name.strip():
-                self.hs.set_display_name(localpart, name.strip())
+                self.display_name(localpart, name.strip(), result)
             return result
+
+    def display_name(self, localpart, name, result):
+        """Apply a display name; never at the cost of a password already minted.
+
+        create and reset have committed a new password to the homeserver and the
+        vault by now, and the response is the only time Cloudbox receives it.
+        Failing the request would lose that one-time password (create) or report
+        a completed reset as failed. The name is cosmetic and retried by the
+        next ensure, so here a failure is logged, not raised.
+        """
+        try:
+            self.hs.set_display_name(localpart, name)
+        except Exception as exc:
+            if "password" not in result:
+                raise
+            log.warning("display name for %s not applied: %s", localpart, type(exc).__name__)
 
     def create(self, localpart):
         password = secrets.token_urlsafe(24)
@@ -255,10 +293,15 @@ class Provisioner:
                                                      {"new_password": password, "logout_devices": True},
                                                      current)
             except ShimError:
-                self.vault.set(ref, current)
-                raise
+                # The change may have landed before the transport failed: ask the
+                # homeserver which password is live before deciding what the vault holds.
+                if self.hs.password_works(localpart, password):
+                    changed = True
+                else:
+                    self.vault.set(ref, current)
+                    raise
         finally:
-            self.hs.logout(token)
+            safe_logout(self.hs, token)
         if not changed:
             self.vault.set(ref, current)
             raise ShimError(409, "M_FORBIDDEN",
@@ -278,7 +321,7 @@ class Provisioner:
                                               {"erase": False}, current)
         finally:
             # Deactivation already ended the session; a failed attempt must not leave it open.
-            self.hs.logout(token)
+            safe_logout(self.hs, token)
         if not done:
             raise ShimError(409, "M_FORBIDDEN", "deactivate unavailable: host credential is stale")
         self.vault.remove(ref)

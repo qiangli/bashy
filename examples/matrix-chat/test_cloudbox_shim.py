@@ -1,6 +1,8 @@
 import importlib.util
 import json
+import os
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 
@@ -16,6 +18,8 @@ def load(name, file):
 
 shim = load("cloudbox_shim", "cloudbox_shim.py")
 provision = load("matrix_provision", "provision.py")
+sys.path.insert(0, str(here))
+gate = load("cloudbox_gate", "cloudbox_gate.py")
 LP = "cb_" + "0" * 32
 
 
@@ -39,8 +43,12 @@ class Vault:
 class FakeHomeserver:
     """Records calls; behavior is set per test."""
 
-    def __init__(self, exists=False, register=True, auth_ok=True):
+    def __init__(self, exists=False, register=True, auth_ok=True, name_fails=False, logout_fails=False,
+                 auth_drops=False, live=None):
         self._exists, self._register, self._auth_ok = exists, register, auth_ok
+        self._name_fails, self._logout_fails = name_fails, logout_fails
+        # auth_drops: the password change lands, then the transport fails.
+        self._auth_drops, self._live = auth_drops, live
         self.calls = []
 
     def user_id(self, localpart):
@@ -55,16 +63,27 @@ class FakeHomeserver:
 
     def set_display_name(self, localpart, name):
         self.calls.append(("displayname", name))
+        if self._name_fails:
+            raise shim.ShimError(502, "M_UNKNOWN", "display name update failed")
 
     def session(self, localpart):
         return "device-token"
 
     def logout(self, token):
         self.calls.append(("logout", token))
+        if self._logout_fails:
+            raise shim.ShimError(502, "M_UNKNOWN", "homeserver unreachable")
 
     def with_password_auth(self, localpart, token, path, body, password):
         self.calls.append(("uia", path, password))
+        if self._auth_drops:
+            if self._live is not None:
+                self._live = body["new_password"]
+            raise shim.ShimError(502, "M_UNKNOWN", "homeserver unreachable")
         return self._auth_ok
+
+    def password_works(self, localpart, password):
+        return None if self._live is None else password == self._live
 
 
 class ProvisionerTest(unittest.TestCase):
@@ -146,6 +165,109 @@ class ProvisionerTest(unittest.TestCase):
         out = self.provisioner(FakeHomeserver(exists=True), vault).handle({"localpart": LP, "action": "deactivate"})
         self.assertEqual(out, {"user_id": "@%s:test" % LP, "created": False})
         self.assertEqual(vault.values, {})
+
+
+    def test_display_name_failure_keeps_created_password(self):
+        ref = "acct/%s" % LP
+        vault, hs = Vault(), FakeHomeserver(name_fails=True)
+        out = self.provisioner(hs, vault).handle({"localpart": LP, "action": "ensure", "display_name": "A"})
+        self.assertTrue(out["created"])
+        self.assertEqual(vault.values[ref], out["password"])
+
+    def test_display_name_failure_keeps_completed_reset(self):
+        ref = "acct/%s" % LP
+        vault, hs = Vault({ref: "old"}), FakeHomeserver(exists=True, name_fails=True)
+        out = self.provisioner(hs, vault).handle({"localpart": LP, "action": "reset", "display_name": "A"})
+        self.assertEqual(vault.values[ref], out["password"])
+        self.assertNotEqual(out["password"], "old")
+
+    def test_display_name_failure_without_password_still_reports(self):
+        hs = FakeHomeserver(exists=True, name_fails=True)
+        with self.assertRaises(shim.ShimError) as ctx:
+            self.provisioner(hs, Vault()).handle({"localpart": LP, "action": "ensure", "display_name": "A"})
+        self.assertEqual(ctx.exception.status, 502)
+
+    def test_logout_failure_does_not_mask_completed_reset(self):
+        ref = "acct/%s" % LP
+        vault, hs = Vault({ref: "old"}), FakeHomeserver(exists=True, logout_fails=True)
+        out = self.provisioner(hs, vault).handle({"localpart": LP, "action": "reset"})
+        self.assertEqual(vault.values[ref], out["password"])
+
+    def test_logout_failure_does_not_mask_refused_reset(self):
+        ref = "acct/%s" % LP
+        vault = Vault({ref: "old"})
+        hs = FakeHomeserver(exists=True, auth_ok=False, logout_fails=True)
+        with self.assertRaises(shim.ShimError) as ctx:
+            self.provisioner(hs, vault).handle({"localpart": LP, "action": "reset"})
+        self.assertEqual(ctx.exception.status, 409)
+        self.assertEqual(vault.values[ref], "old")
+
+    def test_logout_failure_does_not_mask_deactivate(self):
+        ref = "acct/%s" % LP
+        vault = Vault({ref: "pw"})
+        out = self.provisioner(FakeHomeserver(exists=True, logout_fails=True), vault).handle(
+            {"localpart": LP, "action": "deactivate"})
+        self.assertFalse(out["created"])
+        self.assertEqual(vault.values, {})
+
+    def test_reset_landed_before_transport_failure_is_completed(self):
+        ref = "acct/%s" % LP
+        vault, hs = Vault({ref: "old"}), FakeHomeserver(exists=True, auth_drops=True, live="old")
+        out = self.provisioner(hs, vault).handle({"localpart": LP, "action": "reset"})
+        self.assertEqual(vault.values[ref], out["password"])
+        self.assertEqual(hs._live, out["password"])
+
+    def test_reset_unknown_outcome_restores_and_reports(self):
+        ref = "acct/%s" % LP
+        vault = Vault({ref: "old"})
+        hs = FakeHomeserver(exists=True, auth_drops=True)  # password_works cannot tell
+        with self.assertRaises(shim.ShimError) as ctx:
+            self.provisioner(hs, vault).handle({"localpart": LP, "action": "reset"})
+        self.assertEqual(ctx.exception.status, 502)
+        self.assertEqual(vault.values[ref], "old")
+
+
+class GateTest(unittest.TestCase):
+    def test_cleanup_uses_provisioner_ref_for_every_account(self):
+        accounts = gate.Accounts()
+        users = [accounts() for _ in range(3)]
+        vault = gate.MemoryVault()
+        prov = shim.Provisioner(FakeHomeserver(), vault, "gate/accounts/")
+        for user in users:
+            vault.set(prov.ref(user), "pw")
+        vault.set("unrelated", "keep")
+        self.assertEqual(gate.cleanup(prov, vault, accounts), [])
+        self.assertEqual(vault.values, {"unrelated": "keep"})
+
+    def test_cleanup_continues_past_a_failing_remove_and_reports_it(self):
+        class Flaky(gate.MemoryVault):
+            def remove(self, ref):
+                if ref.endswith(first):
+                    raise OSError("vault down")
+                super().remove(ref)
+        accounts = gate.Accounts()
+        first, second = accounts(), accounts()
+        vault = Flaky()
+        prov = shim.Provisioner(FakeHomeserver(), vault, "gate/accounts")
+        vault.set(prov.ref(first), "pw")
+        vault.set(prov.ref(second), "pw")
+        self.assertEqual(gate.cleanup(prov, vault, accounts), [prov.ref(first)])
+        self.assertNotIn(prov.ref(second), vault.values)
+
+    def test_tuwunel_override_must_be_the_admitted_binary(self):
+        with tempfile.TemporaryDirectory() as temp:
+            admitted, other = Path(temp) / "tuwunel", Path(temp) / "other"
+            admitted.write_bytes(b"signed")
+            other.write_bytes(b"signed")
+            link = Path(temp) / "link"
+            os.symlink(admitted, link)
+            self.assertEqual(gate.tuwunel_binary("", str(admitted)), str(admitted))
+            self.assertEqual(gate.tuwunel_binary(str(link), str(admitted)), str(admitted))
+            for bad in (str(other), str(Path(temp) / "missing")):
+                with self.assertRaises(SystemExit):
+                    gate.tuwunel_binary(bad, str(admitted))
+            with self.assertRaises(SystemExit):
+                gate.tuwunel_binary("", str(Path(temp) / "missing"))
 
 
 class ForwardTest(unittest.TestCase):

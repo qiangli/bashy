@@ -12,7 +12,8 @@ MATRIX_CHAT_GATE_VAULT=bashy it uses the production BashyVault instead, under
 a per-run prefix that is removed afterwards. Cloudbox's edge (share ACL,
 revocation, HTTPS route) is not exercised here; cloudbox_e2e.py covers it.
 
-A missing signed tuwunel fails the gate. No containers are used.
+A missing signed tuwunel fails the gate, and MATRIX_CHAT_TUWUNEL may only
+name the binary Bashy's signed admission reports. No containers are used.
 """
 import importlib.util
 import os
@@ -66,26 +67,53 @@ def free_port():
         return sock.getsockname()[1]
 
 
-def tuwunel_binary():
-    explicit = os.environ.get("MATRIX_CHAT_TUWUNEL")
-    if explicit:
-        return explicit
+def tuwunel_binary(explicit=None, admitted=None):
+    """The signed tuwunel to run; an override must be that same admitted file."""
+    explicit = os.environ.get("MATRIX_CHAT_TUWUNEL") if explicit is None else explicit
     # The same signed-admission path setup uses; it fails closed.
-    return provision.installed_binary()
+    admitted = admitted or provision.installed_binary()
+    if not Path(admitted).is_file():
+        raise SystemExit("FAIL: signed tuwunel binary is missing")
+    if explicit:
+        try:
+            same = os.path.samefile(explicit, admitted)
+        except OSError:
+            same = False
+        if not same:
+            raise SystemExit("FAIL: MATRIX_CHAT_TUWUNEL is not the signed tuwunel Bashy admitted")
+    return admitted
 
 
-USED = []
+class Accounts:
+    """Every localpart this run mints, so cleanup can reach each vault entry."""
+
+    def __init__(self):
+        self.used = []
+
+    def __call__(self):
+        self.used.append("cb_" + secrets.token_hex(16))
+        return self.used[-1]
 
 
-def localpart():
-    USED.append("cb_" + secrets.token_hex(16))
-    return USED[-1]
+def cleanup(prov, vault, accounts):
+    """Remove each run account's credential through Provisioner.ref; return any left behind."""
+    left = []
+    for user in accounts.used:
+        ref = prov.ref(user)
+        try:
+            vault.remove(ref)
+        except Exception as exc:
+            print("cleanup: %s not removed: %s" % (ref, type(exc).__name__))
+        try:
+            if vault.get(ref) is not None:
+                left.append(ref)
+        except Exception:
+            left.append(ref)
+    return left
 
 
 def main():
     binary = tuwunel_binary()
-    if not Path(binary).is_file():
-        raise SystemExit("FAIL: signed tuwunel binary is missing")
     server_name = "cloudbox-gate.test"
     as_token, hs_token, tunnel = (secrets.token_urlsafe(32) for _ in range(3))
     with tempfile.TemporaryDirectory(prefix="matrix-cloudbox-gate-") as temp:
@@ -103,7 +131,8 @@ def main():
         log = open(root / "tuwunel.log", "wb")
         proc = subprocess.Popen([binary], env=env, stdout=log, stderr=subprocess.STDOUT)
         hs = mxclient.Client("http://127.0.0.1:%d" % hs_port)
-        httpd = None
+        httpd = prov = vault = None
+        accounts = Accounts()
         try:
             for _ in range(60):
                 try:
@@ -128,25 +157,26 @@ def main():
             # Cloudbox reaches the shim at <outpost>/app/matrix-chat; outpost strips the mount.
             front = mxclient.Client("http://127.0.0.1:%d" % shim_port)
             cloudbox = mxclient.Client(front.base, tunnel, {"X-Periscope-User": "gate@example.test"})
-            try:
-                run(hs, front, cloudbox, as_token, vault, prefix, server_name)
-            finally:
-                for user in USED:
-                    vault.remove("%s/%s" % (prefix, user))
+            run(hs, front, cloudbox, as_token, vault, prov, accounts, server_name)
         finally:
             if httpd:
                 httpd.shutdown()
+            # Runs on every exit, including a failed check or interrupt mid-run,
+            # after the shim stops so no in-flight request rewrites a credential.
+            left = cleanup(prov, vault, accounts) if prov else []
             proc.terminate()
             try:
                 proc.wait(20)
             except subprocess.TimeoutExpired:
                 proc.kill()
             log.close()
+            if left:
+                raise SystemExit("FAIL: test credentials left in the vault: %s" % ", ".join(left))
     print("PASS: Cloudbox shim protocol gate (signed tuwunel, real shim, %s vault)" %
           ("production" if os.environ.get("MATRIX_CHAT_GATE_VAULT") == "bashy" else "synthetic test"))
 
 
-def run(hs, front, cloudbox, as_token, vault, prefix, server_name):
+def run(hs, front, cloudbox, as_token, vault, prov, localpart, server_name):
     account = shim.ACCOUNT_PATH
     users = [localpart() for _ in range(4)]
     one, two, three, outsider = users
@@ -181,7 +211,7 @@ def run(hs, front, cloudbox, as_token, vault, prefix, server_name):
         status, data = cloudbox.call("POST", account, {"localpart": user, "action": "ensure"})
         check(status == 200 and data.get("created") is False and "password" not in data,
               "second ensure returns no password for " + user)
-    check(vault.get("%s/%s" % (prefix, one)) == passwords[one], "host vault holds the credential")
+    check(vault.get(prov.ref(one)) == passwords[one], "host vault holds the credential")
     fresh = localpart()
     status, data = cloudbox.call("POST", account, {"localpart": fresh, "action": "reset"})
     check(status == 200 and data.get("created") is True and data.get("password"),
@@ -261,7 +291,7 @@ def run(hs, front, cloudbox, as_token, vault, prefix, server_name):
     status, data = cloudbox.call("POST", account, {"localpart": outsider, "action": "deactivate"})
     check(status == 200 and data.get("created") is False and "password" not in data, "deactivate")
     check(mxclient.login(front, outsider, passwords[outsider])[0] in (401, 403), "deactivated login refused")
-    check(vault.get("%s/%s" % (prefix, outsider)) is None, "deactivated credential removed")
+    check(vault.get(prov.ref(outsider)) is None, "deactivated credential removed")
     status, _ = cloudbox.call("POST", account, {"localpart": outsider, "action": "reset"})
     check(status == 409, "deactivated account cannot be reset")
     status, _ = cloudbox.call("POST", account, {"localpart": localpart(), "action": "deactivate"})

@@ -21,6 +21,14 @@ gates native clients at its edge and calls a host shim to create accounts.
   `<prefix>/cb_<hex>`. Vault names are limited to 64 characters; this was
   found against the live vault, so the prefix is at most 28. The vault is
   written before register. A failed rotation restores the previous value.
+- **Repair (S513.4c, Story #2745).** The rejected first cut could lose a
+  minted password: a display-name failure after create or reset turned the
+  response into a 502, and a failing logout in a `finally` replaced a
+  completed reset's result. The display name is now best effort once a
+  password exists, logout never masks, and a reset whose transport drops asks
+  the homeserver (password login) whether the new password is live. The gate
+  removes every run account via `Provisioner.ref` on any exit and accepts a
+  `MATRIX_CHAT_TUWUNEL` override only when it is the signed admitted binary.
 - **Contract.** It is exact to Cloudbox's `Provisioner`. `reset` on a missing
   account creates it, because Cloudbox's live E2E opens with `reset`. `ensure`
   on an existing account returns no password. A reset logs out all other
@@ -37,8 +45,8 @@ gates native clients at its edge and calls a host shim to create accounts.
 
 | gate | where | status |
 |---|---|---|
-| unit tests (`test_cloudbox_shim.py`, `test_provision.py`) | any host | PASS (16) |
-| `cloudbox_gate.py`: signed tuwunel, real shim, synthetic test vault | dev host (darwin/arm64) | PASS (56 checks) |
-| `cloudbox_gate.py` with `MATRIX_CHAT_GATE_VAULT=bashy` (production vault) | dev host | PASS (56 checks; refs removed) |
+| unit tests (`test_cloudbox_shim.py`, `test_provision.py`) | any host | PASS (27, after S513.4c repair) |
+| `cloudbox_gate.py`: signed tuwunel, real shim, synthetic test vault | dev host (darwin/arm64) | PASS (56 checks, after S513.4c repair); arbitrary `MATRIX_CHAT_TUWUNEL` refused |
+| `cloudbox_gate.py` with `MATRIX_CHAT_GATE_VAULT=bashy` (production vault) | claimed host | **not rerun after the repair**: the earlier PASS predates the cleanup fix; rerun on the claimed host after the S514 R11 novidesign release |
 | `cloudbox_e2e.py`: live Cloudbox HTTPS, 3 users, outsider, revocation | disposable Cloudbox and chat host | **BLOCKED**: no test Cloudbox origin or tokens were available |
 | `bashy matrix-chat cloudbox` under a running supervisord | manager chat host | not run (declarations verified with `bashy service add/verify` in an isolated fleet dir) |
