@@ -3,11 +3,13 @@ id: b76d48d2b5b9
 kind: doc
 title: S514.R7 generic fast-loop practices in bashy skills/help (conductor, dag, mod/dag sync, sprint)
 seq: 2733
-status: todo
+status: assigned
 priority: p1
 labels:
     - skills
 created: 2026-10-27T15:59:33.303376Z
+weave: 293
+assignee: claude-sonnet5.5
 sprint: 514
 sprint_id: fadd1a46-0368-50f1-a65d-4ed147b17629
 sprint_title: 'invitation email + scoped satellites (KISS/MVP: scope + expiry on the one-time pairing code; no outpost change)'

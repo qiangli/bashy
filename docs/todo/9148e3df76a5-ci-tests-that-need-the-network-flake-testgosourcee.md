@@ -8,4 +8,7 @@ priority: p2
 labels:
     - ci
 created: 2026-10-27T15:42:37.481156Z
+sprint: 515
+sprint_id: e82160ea-95db-5f2a-b69e-b2d784b2996b
+sprint_title: 'satellite loom: private forge + CI + groups (KISS/MVP, reuse loom/act_runner/scopes)'
 ---
