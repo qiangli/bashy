@@ -1,0 +1,159 @@
+#!/usr/bin/env -S bashy --bashsharp
+# One body, two orientations: executable Bash# and its embedded agent skill.
+
+~~~skill as guide
+---
+name: whiteboard
+description: Run or support a local shared whiteboard with freehand drawing, sticky notes, facilitator lock/clear and saved boards. Use for group sketching sessions on a shared LAN, or to check and back up existing boards without interrupting them.
+metadata:
+  requires: "has=bashy"
+  step-porota: 'bashy whiteboard "${WHITEBOARD_ACTION:-status}"'
+  check-tests: 'bashy whiteboard status'
+---
+# Shared whiteboard
+
+This is the prose face of `whiteboard.bsh`, the same executable body used by
+the registered `whiteboard` command. `bashy commands show whiteboard` exposes
+the executable argv and source path; `bashy skill show whiteboard` reads this face.
+
+- `bashy whiteboard status` checks the running service and saved boards; output
+  is JSON without stroke/note contents or facilitator keys. Check before
+  starting a server.
+- `bashy whiteboard serve` starts the native foreground service and prints
+  participant links and a separate private facilitator link. Participants need
+  no account. Keep the host awake and use its LAN address; localhost is
+  host-only. Runs independently of brainstorm and Matrix; all three can share
+  a host on different ports.
+- `bashy whiteboard backup` prints the path of a private, verified snapshot of
+  every saved board. Run it before fixes. Never delete or replace a group's
+  boards to fix code.
+- `bashy whiteboard stop` stops a server started for the same data directory.
+  Ctrl-C stops a foreground server; restart resumes the saved boards.
+- The facilitator creates named boards, locks the board to freeze
+  contributions, and clears it when a session ends. Lock/clear are enforced by
+  the server, not just hidden in the page. Boards persist across restarts and
+  are isolated from each other.
+- `bashy skill run whiteboard` executes `status` through this same command
+  and records an attestation. Set `WHITEBOARD_ACTION=backup` for a snapshot
+  followed by a service check. It does not start a second whiteboard service.
+- `WHITEBOARD_DATA` selects the data directory; default is
+  `${XDG_DATA_HOME:-$HOME/.local/share}/bashy/whiteboard`.
+  `WHITEBOARD_ADDR` selects the listener; default `0.0.0.0:18093`.
+  `WHITEBOARD_PREFIX` selects a URL sub-path when served behind one
+  (for example `/whiteboard`); default empty. Preserve all three when
+  supporting an existing session. Never publish a facilitator key.
+
+No containers, accounts, external database, web assets, or AI service. The
+native Go server is a supporting implementation; the orchestration and this
+guidance have one source in this file. `--skill` projects the guidance and
+`--contract` projects the executable skill contract for ordinary registration.
+~~~
+
+~~~go as boards
+import (
+ "bytes"
+ "encoding/json"
+ "fmt"
+ "net"
+ "net/http"
+ "os"
+ "path/filepath"
+ "time"
+)
+
+func Inspect(action, data, addr string) (string, error) {
+ boards, err := filepath.Glob(filepath.Join(data, "boards", "*.json"))
+ if err != nil { return "", err }
+ if len(boards) == 0 {
+  if _, serr := os.Stat(filepath.Join(data, "boards")); serr != nil { return "", serr }
+ }
+ if action == "backup" {
+  dir := filepath.Join(data, "backups", time.Now().UTC().Format("20060102T150405Z"))
+  if err = os.MkdirAll(dir, 0700); err != nil { return "", err }
+  for _, src := range boards {
+   raw, rerr := os.ReadFile(src)
+   if rerr != nil { return "", rerr }
+   dst := filepath.Join(dir, filepath.Base(src))
+   if werr := os.WriteFile(dst, raw, 0600); werr != nil { return "", werr }
+   copied, rerr := os.ReadFile(dst)
+   if rerr != nil { return "", rerr }
+   if !bytes.Equal(raw, copied) { return "", fmt.Errorf("backup verification failed for %s", src) }
+  }
+  return dir, nil
+ }
+ host, port, err := net.SplitHostPort(addr)
+ if err != nil { return "", err }
+ if host == "" || host == "0.0.0.0" || host == "::" { host = "127.0.0.1" }
+ client := http.Client{Timeout: 3 * time.Second, Transport: &http.Transport{Proxy: nil}}
+ res, err := client.Get("http://" + net.JoinHostPort(host, port) + "/healthz")
+ if err != nil { return "", fmt.Errorf("whiteboard is not reachable: %w", err) }
+ defer res.Body.Close()
+ var health struct{ OK bool `json:"ok"` }
+ if res.StatusCode != 200 || json.NewDecoder(res.Body).Decode(&health) != nil || !health.OK {
+  return "", fmt.Errorf("whiteboard health check failed")
+ }
+ type summary struct {
+  Board string `json:"board"`
+  Revision int `json:"revision"`
+  Strokes int `json:"strokes"`
+  Notes int `json:"notes"`
+  Locked bool `json:"locked"`
+ }
+ out := []summary{}
+ for _, src := range boards {
+  raw, rerr := os.ReadFile(src)
+  if rerr != nil { return "", rerr }
+  var saved struct {
+   Version int `json:"version"`
+   Name string `json:"name"`
+   Revision int `json:"revision"`
+   Locked bool `json:"locked"`
+   Strokes []json.RawMessage `json:"strokes"`
+   Notes []json.RawMessage `json:"notes"`
+  }
+  if jerr := json.Unmarshal(raw, &saved); jerr != nil { return "", jerr }
+  if saved.Version != 1 { return "", fmt.Errorf("unsupported saved board version") }
+  out = append(out, summary{saved.Name, saved.Revision, len(saved.Strokes), len(saved.Notes), saved.Locked})
+ }
+ result, err := json.Marshal(map[string]any{"running": true, "boards": out, "data": filepath.Join(data, "boards")})
+ return string(result), err
+}
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+data=${WHITEBOARD_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy/whiteboard}
+addr=${WHITEBOARD_ADDR:-0.0.0.0:18093}
+prefix=${WHITEBOARD_PREFIX:-}
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/whiteboard
+if (( $# > 1 )); then echo 'Usage: whiteboard [serve|status|backup|stop|test|--skill|--contract]' >&2; exit 2; fi
+case ${1:-serve} in
+--skill)
+  copying=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then copying=true; continue; fi
+    if [[ $copying == true && $line == '~~~' ]]; then break; fi
+    if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  ;;
+--contract) echo 'sokilili howaitobodo efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
+-h|--help) echo 'whiteboard [serve|status|backup|stop|test] — native LAN board; --skill prints its embedded skill' ;;
+serve)
+  mkdir -p "$cache"
+  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/whiteboard" .)
+  if [[ -n $prefix ]]; then exec "$cache/whiteboard" -data "$data" -addr "$addr" -prefix "$prefix"
+  else exec "$cache/whiteboard" -data "$data" -addr "$addr"; fi
+  ;;
+status|backup)
+  action=$1
+  result := boards.Inspect(action, data, addr)
+  [[ -n $result ]] || exit 1
+  printf '%s\n' "$result"
+  ;;
+stop)
+  if pkill -f "$cache/whiteboard -data $data" 2>/dev/null; then echo "stopped whiteboard ($data)"; else echo "no whiteboard server matched $data"; fi
+  ;;
+test) cd "$here/server"; GOWORK=off go test -race ./... ;;
+*) echo 'Usage: whiteboard [serve|status|backup|stop|test|--skill|--contract]' >&2; exit 2 ;;
+esac
