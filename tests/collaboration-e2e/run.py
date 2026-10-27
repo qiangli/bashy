@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Offline, real-service/browser collaboration gate. Exit 2 means BLOCKED."""
+import argparse
 import json
 import hashlib
 import os
@@ -36,14 +37,40 @@ def command(argv, **kwargs):
     return subprocess.run(argv, check=True, **kwargs)
 
 
+GO_ENV = dict(os.environ, GOTOOLCHAIN="local", GOPROXY="off", GOSUMDB="off")
+
+
+def offline_go():
+    """Choose an executable Go 1.27+ without invoking toolchain resolution."""
+    local = shutil.which("go")
+    require(local, "go unavailable")
+    candidates = [Path(local)]
+    try:
+        cache = command([local, "env", "GOMODCACHE"], env=GO_ENV,
+                        capture_output=True, text=True).stdout.strip()
+        if cache:
+            candidates.extend(sorted(Path(cache).glob("golang.org/toolchain@v0.0.1-go*/bin/go"),
+                                     reverse=True))
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    for binary in candidates:
+        if not binary.is_file() or not os.access(binary, os.X_OK):
+            continue
+        try:
+            version = command([str(binary), "version"], env=GO_ENV,
+                              capture_output=True, text=True).stdout.strip()
+        except (OSError, subprocess.CalledProcessError):
+            continue
+        match = re.fullmatch(r"go version go(\d+)\.(\d+)(?:\.\d+)? [^\n]+", version)
+        if match and (int(match.group(1)), int(match.group(2))) >= (1, 27):
+            return binary
+    raise Blocked("Go 1.27+ required offline; no usable local or cached toolchain")
+
+
 def preflight():
-    for program in ("bashy", "go", "node", "python3"):
+    for program in ("bashy", "node", "python3"):
         require(shutil.which(program), program + " unavailable")
-    version = command(["go", "env", "GOVERSION"], env=dict(os.environ, GOTOOLCHAIN="local"),
-                      capture_output=True, text=True).stdout.strip()
-    match = re.fullmatch(r"go(\d+)\.(\d+)(?:\.\d+)?(?:[a-z]+\d+)?", version)
-    require(match and (int(match.group(1)), int(match.group(2))) >= (1, 27),
-            "Go 1.27+ required offline; found " + version)
+    go_binary = offline_go()
     playwright = os.environ.get("PLAYWRIGHT_MODULE")
     require(playwright and Path(playwright).is_file(), "PLAYWRIGHT_MODULE must name an existing Playwright module")
     try:
@@ -72,12 +99,13 @@ def preflight():
     expected = record["cli"]["managed"]["assets"][system + "/" + machine]["sha256"]
     require(hashlib.sha256(binary.read_bytes()).hexdigest() == expected,
             "local tuwunel differs from the signed pinned asset")
+    return go_binary
 
 
-def build(name, output):
-    env = dict(os.environ, GOTOOLCHAIN="local", GOPROXY="off", GOSUMDB="off")
+def build(name, output, go_binary):
     try:
-        command(["go", "build", "-o", str(output), "."], cwd=ROOT / "examples" / name / "server", env=env)
+        command([str(go_binary), "build", "-o", str(output), "."],
+                cwd=ROOT / "examples" / name / "server", env=GO_ENV)
     except subprocess.CalledProcessError as exc:
         raise RuntimeError(name + " offline build failed") from exc
 
@@ -96,11 +124,11 @@ def probe(endpoint, name):
 
 
 def run():
-    preflight()
+    go_binary = preflight()
     with tempfile.TemporaryDirectory(prefix="bashy-collab-e2e-") as temp:
         root = Path(temp)
-        build("whiteboard", root / "whiteboard")
-        build("brainstorm", root / "brainstorm")
+        build("whiteboard", root / "whiteboard", go_binary)
+        build("brainstorm", root / "brainstorm", go_binary)
         env = dict(os.environ, COLLAB_E2E_CONTROL_DIR=str(root),
                    WHITEBOARD_BIN=str(root / "whiteboard"), BRAINSTORM_BIN=str(root / "brainstorm"))
         runners = {
@@ -182,8 +210,15 @@ def run():
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--preflight", action="store_true", help="check installed prerequisites only")
+    args = parser.parse_args()
     try:
-        run()
+        if args.preflight:
+            go_binary = preflight()
+            print("PREFLIGHT OK: offline Go " + str(go_binary) + " and browser/service prerequisites")
+        else:
+            run()
     except Blocked as exc:
         print("BLOCKED: " + str(exc), file=sys.stderr)
         sys.exit(2)

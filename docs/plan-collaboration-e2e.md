@@ -6,6 +6,12 @@ Run `python3 tests/collaboration-e2e/run.py` from this checkout. Set
 local `bashy`, Go 1.27+, Node, Python, and Bashy's signed tuwunel already
 installed. It performs no downloads; Go builds with module and toolchain
 network access disabled. Missing prerequisites return `BLOCKED` (exit 2).
+The Go preflight checks the local executable, then installed toolchain binaries
+in `GOMODCACHE`, and builds with the selected binary. Every Go invocation uses
+`GOTOOLCHAIN=local`, `GOPROXY=off`, and `GOSUMDB=off`; an unavailable or unusable
+cached toolchain blocks the gate.
+Use `python3 tests/collaboration-e2e/run.py --preflight` to check those
+prerequisites without starting the three browser runners.
 
 The entry point builds the two native servers into a temporary directory and
 starts the three existing independent E2E runners at once. Each runner keeps
