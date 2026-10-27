@@ -3,9 +3,11 @@ id: fdcaf986e48a
 kind: feature
 title: S513.2a independent native whiteboard tool and browser E2E
 seq: 2735
-status: todo
+status: assigned
 priority: p0
 created: 2026-10-27T17:00:03.71266Z
+weave: 296
+assignee: muse-conductor
 sprint: 513
 sprint_id: 8bb3bd0b-2aa9-5952-92ca-6dda0194fca6
 sprint_title: 'Bashy collaboration: Matrix chat + whiteboard/brainstorm for everyone; lern live UAT'

@@ -3,9 +3,11 @@ id: 16b9bc2b2dfd
 kind: feature
 title: S513.1a Matrix chat reusable setup skill and happy-path E2E
 seq: 2734
-status: todo
+status: assigned
 priority: p0
 created: 2026-10-27T17:00:03.591659Z
+weave: 295
+assignee: codex-gpt6-sol
 sprint: 513
 sprint_id: 8bb3bd0b-2aa9-5952-92ca-6dda0194fca6
 sprint_title: 'Bashy collaboration: Matrix chat + whiteboard/brainstorm for everyone; lern live UAT'
