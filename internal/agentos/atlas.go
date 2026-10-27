@@ -574,8 +574,13 @@ func lookupEntry(name string) (atlas.Entry, bool) {
 	if e, ok := atlas.Lookup(name); ok {
 		return e, true
 	}
-	e, ok := bashyOwnedVerbAtlas[name]
-	return e, ok
+	if e, ok := bashyOwnedVerbAtlas[name]; ok {
+		return e, true
+	}
+	if rec, ok := registeredLookup(name); ok {
+		return atlas.RegisteredEntry(rec.AtlasSpec()), true
+	}
+	return atlas.Entry{}, false
 }
 
 func fillFromAtlas(r *atlasRecord) {
