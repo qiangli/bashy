@@ -287,6 +287,10 @@ transport (default `ssh <host>`, override with `--remote` or the
 fetches its own code/data. Any `ssh`-compatible transport works, including an
 agent ssh-proxy stanza in `~/.ssh/config` (`ProxyCommand …`).
 
+Pre-flight a candidate on peers in parallel before pushing: one `--mesh` target per OS on
+the peer that has it, the biggest peer for heavy suites, and keep the dev box for edits and
+short unit tests.
+
 ## Windows hosts (mesh targets)
 
 A `--mesh` body runs in the **remote host's** shell, so the "identical on every

@@ -775,6 +775,19 @@ one story:
   it through the steward and wait for the recorded boundary.
 - Holding a steward seat and a conductor seat at once — self-review is not review.
 
+## Fast-loop practices
+- A fix brief for a platform-specific failure carries native host access and requires a
+  native run of the failing test before submit. CI confirms; it is not the debugger.
+- Tests are hermetic (no downloads). Re-run a single failed CI lane once automatically;
+  two failures is a bug, not flakiness.
+- A disposable candidate tag (`-dev`) may be cut as soon as pre-flight is green so release
+  builds overlap CI; promotion still needs every gate green.
+- Pre-flight on peers in parallel (see `bashy dag --mesh`): one target per OS on the peer
+  that has it; the biggest peer takes heavy suites; the dev box keeps edits and short unit tests.
+- Commit record/docs changes in a producer module before bumping its consumers
+  (`mod sync` / `dag sync`): drift compares exact HEADs, so a later docs-only producer
+  commit leaves every consumer pin stale.
+
 ## Command quick-reference
 ```sh
 bashy sprint add/take/checkpoint/link/handoff/show <id>

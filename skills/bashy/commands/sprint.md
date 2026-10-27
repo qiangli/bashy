@@ -89,3 +89,6 @@ sprint story.
 
 Stop and report the command error if launch or instruction delivery fails. Do
 not claim that work was dispatched unless Bashy confirms it.
+
+For manager fast-loop practices (native repro of platform failures, hermetic tests,
+parallel pre-flight, producer-before-consumer pin bumps) see the conductor skill.
