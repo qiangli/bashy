@@ -1,0 +1,299 @@
+#!/usr/bin/env -S bashy --bashsharp
+# outpost-profile: per-satellite outpost profiles (add/use/list).
+# One editable Bash# body for the outpost-profile command and skill.
+# No outpost code change: this only drives `outpost register --out` and
+# `outpost restart` around files under the matrix config directory.
+#
+#   outpost-profile add <name> --code <code> --server <url>
+#   outpost-profile use <name>
+#   outpost-profile list
+#
+# The pairing code on the add command line is visible to local process
+# listing while register runs; prefer a fresh one-time code, as usual.
+
+~~~skill as guide
+---
+name: outpost-profile
+description: Keep one outpost pairing per satellite as a named profile and switch the active one. The executable body is this Bash# file; register it as outpost-profile.
+metadata:
+  requires: "has=bashy"
+---
+# outpost-profile — per-satellite outpost pairings
+
+One machine can pair with several satellites (or a satellite plus the
+portal), one pairing at a time. Each pairing lives in its own profile
+file; `use` copies a profile into the active agent file and restarts
+outpost, so the running outpost always matches the active file. This
+skill changes no outpost code: it only drives `outpost register --out`
+and `outpost restart` around files under the matrix config directory.
+This file is the one executable body for the command and the text-outer
+skill step (`--skill` prints this guidance); run it with
+`bashy --bashsharp`.
+
+## Register
+
+Register the command once from the repo checkout:
+
+```sh
+bashy commands add outpost-profile \
+  --set exec.0=bashy --set exec.1=--bashsharp \
+  --set "exec.2=$PWD/examples/outpost-profile/outpost-profile.bsh" \
+  --set effects.0=read --set effects.1=write --set effects.2=exec
+```
+
+`bashy commands show outpost-profile` identifies the registered body.
+The name stays free for registration: unlike Go front-door verbs, this
+command has no doc under `skills/bashy/commands/` (that ring would
+reserve the name and refuse the registration above).
+
+## Use
+
+Pair once per satellite into a named profile, then switch:
+
+```sh
+outpost-profile add <name> --code <code> --server <url>
+outpost-profile use <name>
+outpost-profile list
+```
+
+- `add` runs `outpost register --server <url> --code <code> --out
+  <config>/matrix/profiles/<name>/agent.json` and leaves the active
+  pairing untouched. Re-adding a name re-pairs it with a fresh
+  one-time code; the code is visible to local process listing while
+  register runs, so use a fresh code as usual.
+- `use` saves the current active file back into its own profile first
+  (so credentials refreshed in place are kept; an active file that
+  matches no profile is kept as profile `previous`), copies the named
+  profile over the active `<config>/matrix/agent.json`, records it as
+  current, and runs `outpost restart`. Unknown names fail without
+  touching anything.
+- `list` prints one profile per line and marks the profile whose file
+  is byte-identical to the active file with `*`. A profile directory
+  without an `agent.json` is shown as `(incomplete)`.
+
+The config directory is `${XDG_CONFIG_HOME:-$HOME/.config}/matrix` on
+macOS, Linux and Windows (Git Bash supplies `$HOME` on Windows; the
+path handed to a native `outpost.exe` is converted at that boundary).
+`OUTPOST_BIN` overrides the outpost executable lookup when set;
+otherwise `outpost` resolves through `PATH`. Profile names become one
+path segment: empty names, `/`, `\`, `..`, and leading `.`/`-` are
+refused.
+
+## Verification
+
+`go test ./examples/outpost-profile/` drives the registered shape with
+a temp `HOME`/`XDG_CONFIG_HOME` and a fake `outpost` on `PATH`: two
+fake profiles, `use` swaps the active file and calls restart, `list`
+marks the active one, plus add/unknown-name/XDG/Windows-path cases.
+It never touches a live outpost. Never point these commands at a live
+outpost from automated tests.
+~~~
+
+set -e
+
+PROG=outpost-profile
+
+usage() {
+    echo "Usage: $PROG add <name> --code <code> --server <url>" >&2
+    echo "       $PROG use <name>" >&2
+    echo "       $PROG list" >&2
+    exit 2
+}
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+# Config base on every OS. XDG_CONFIG_HOME wins when set (even to a
+# relative or Windows-style spelling); otherwise the home config dir.
+config_base() {
+    if [ -n "${XDG_CONFIG_HOME:-}" ]; then
+        printf '%s/matrix\n' "$XDG_CONFIG_HOME"
+    else
+        printf '%s/.config/matrix\n' "$HOME"
+    fi
+}
+
+# Windows detection for the native-outpost boundary. ${OS} is set to
+# Windows_NT by Git Bash, MSYS2, Cygwin and native shells alike; uname
+# covers the rest. (Do not fake uname in tests: bashy resolves it
+# in-process. Simulate Windows with OS=Windows_NT plus a fake cygpath.)
+on_windows() {
+    case "${OS:-}" in
+        Windows_NT) return 0 ;;
+    esac
+    case "$(uname -s 2>/dev/null)" in
+        Windows*|MINGW*|MSYS*|CYGWIN*) return 0 ;;
+    esac
+    return 1
+}
+
+# Path to hand to the outpost executable for --out. The shell keeps its
+# own spelling for copies and comparisons; a native Windows outpost.exe
+# needs the Windows spelling, converted at this boundary only.
+native_path() {
+    if on_windows && command -v cygpath >/dev/null 2>&1; then
+        cygpath -m "$1"
+    else
+        printf '%s\n' "$1"
+    fi
+}
+
+outpost_bin() {
+    if [ -n "${OUTPOST_BIN:-}" ]; then
+        printf '%s\n' "$OUTPOST_BIN"
+    else
+        printf 'outpost\n'
+    fi
+}
+
+# Profile names become one path segment. Refuse separators, parent
+# traversal, and dot/dash leaders (hidden dirs, flag confusion).
+check_name() {
+    case "$1" in
+        ""|.*|-*|*/*|*\\*|*..*) fail "invalid profile name: $1" 2 ;;
+    esac
+}
+
+same_file() {
+    cmp -s -- "$1" "$2" 2>/dev/null
+}
+
+# Name of the profile whose file matches the active file, if any.
+active_profile() {
+    base=$1
+    [ -f "$base/agent.json" ] || return 1
+    for f in "$base"/profiles/*/agent.json; do
+        [ -f "$f" ] || continue
+        if same_file "$base/agent.json" "$f"; then
+            printf '%s\n' "${f%/agent.json}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+profile_name_of() {
+    printf '%s\n' "${1##*/}"
+}
+
+cmd_add() {
+    name=$1; code=$2; server=$3
+    check_name "$name"
+    [ -n "$code" ] || usage
+    [ -n "$server" ] || usage
+    base=$(config_base)
+    [ -n "${HOME:-}" ] || [ -n "${XDG_CONFIG_HOME:-}" ] || fail "HOME is unset" 1
+    out="$base/profiles/$name/agent.json"
+    mkdir -p "$base/profiles/$name" || fail "cannot create profile dir for $name"
+    if ! "$(outpost_bin)" register --server "$server" --code "$code" --out "$(native_path "$out")"; then
+        fail "outpost register failed for profile $name" 1
+    fi
+    code=
+    [ -f "$out" ] || fail "register reported success but wrote no file: $out" 1
+    echo "$PROG: profile $name paired ($out)"
+}
+
+cmd_use() {
+    name=$1
+    check_name "$name"
+    base=$(config_base)
+    target="$base/profiles/$name/agent.json"
+    [ -f "$target" ] || fail "no such profile: $name" 1
+    active="$base/agent.json"
+    if [ -f "$active" ] && ! same_file "$active" "$target"; then
+        current=""
+        if cur=$(active_profile "$base"); then
+            current=$(profile_name_of "$cur")
+        elif [ -f "$base/.active" ]; then
+            # The active file drifted (e.g. refreshed credentials) since
+            # it was copied out: its own profile is the recorded one.
+            current=$(cat "$base/.active")
+            case "$current" in
+                ""|.*|-*|*/*|*\\*|*..*) current="" ;;
+            esac
+            [ -n "$current" ] || current="previous"
+        else
+            current="previous"
+        fi
+        mkdir -p "$base/profiles/$current" || fail "cannot back up current profile" 1
+        cp -f -- "$active" "$base/profiles/$current/agent.json" || fail "cannot back up current profile" 1
+        echo "$PROG: backed up current pairing into profile $current"
+        cp -f -- "$target" "$active" || fail "cannot activate profile $name" 1
+    elif [ ! -f "$active" ]; then
+        mkdir -p "$base" || fail "cannot create config dir" 1
+        cp -f -- "$target" "$active" || fail "cannot activate profile $name" 1
+    fi
+    printf '%s\n' "$name" > "$base/.active" || fail "cannot record active profile" 1
+    "$(outpost_bin)" restart || fail "outpost restart failed after activating $name" 1
+    echo "$PROG: now using profile $name"
+}
+
+cmd_list() {
+    base=$(config_base)
+    if [ ! -d "$base/profiles" ]; then
+        return 0
+    fi
+    for d in "$base"/profiles/*/; do
+        [ -d "$d" ] || continue
+        name=$(profile_name_of "${d%/}")
+        case "$name" in
+            ""|.*) continue ;;
+        esac
+        if [ -f "$base/agent.json" ] && [ -f "$d/agent.json" ] && same_file "$base/agent.json" "$d/agent.json"; then
+            echo "* $name"
+        elif [ -f "$d/agent.json" ]; then
+            echo "  $name"
+        else
+            echo "  $name (incomplete)"
+        fi
+    done
+}
+
+if [ $# -lt 1 ]; then
+    usage
+fi
+case "$1" in
+    --skill)
+        sed -n '/^~~~skill/,/^~~~$/p' "$0" | sed '1d;$d'
+        exit 0
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+esac
+
+sub=$1; shift
+case "$sub" in
+    add)
+        if [ $# -lt 1 ]; then usage; fi
+        name=$1; shift
+        code=""; server=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --code=*) code=${1#--code=} ;;
+                --server=*) server=${1#--server=} ;;
+                --code) [ $# -ge 2 ] || usage; code=$2; shift ;;
+                --server) [ $# -ge 2 ] || usage; server=$2; shift ;;
+                --) shift; break ;;
+                -*) usage ;;
+                *) usage ;;
+            esac
+            shift
+        done
+        [ $# -eq 0 ] || usage
+        cmd_add "$name" "$code" "$server"
+        ;;
+    use)
+        [ $# -eq 1 ] || usage
+        cmd_use "$1"
+        ;;
+    list)
+        [ $# -eq 0 ] || usage
+        cmd_list
+        ;;
+    *)
+        usage
+        ;;
+esac
