@@ -225,3 +225,4 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [setup.md](setup.md) — set up a new Windows/macOS/Linux machine: manual or AI agent, local or remote
 
 - [WebM/Opus transcription adapter plan and outcome](plan-transcribe-webm-opus.md) — S503 bounded synchronous demux, exact Pion codec, fixture gates and native acceptance boundary.
+- [Matrix chat Cloudbox account shim](plan-matrix-chat-cloudbox-shim.md) — S513.4a appservice-scoped `@cb_` accounts, vault-held credentials, shim contract and gate status.
