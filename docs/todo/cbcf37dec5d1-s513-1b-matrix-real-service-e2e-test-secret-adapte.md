@@ -3,9 +3,11 @@ id: cbcf37dec5d1
 kind: test
 title: S513.1b Matrix real-service E2E test secret adapter and repair
 seq: 2738
-status: todo
+status: assigned
 priority: p0
 created: 2026-10-27T17:17:29.268978Z
+weave: 298
+assignee: agy-gemini3.8-flash
 sprint: 513
 sprint_id: 8bb3bd0b-2aa9-5952-92ca-6dda0194fca6
 sprint_title: 'Bashy collaboration: Matrix chat + whiteboard/brainstorm for everyone; lern live UAT'

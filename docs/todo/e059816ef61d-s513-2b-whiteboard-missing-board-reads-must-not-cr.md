@@ -3,9 +3,11 @@ id: e059816ef61d
 kind: bug
 title: S513.2b whiteboard missing-board reads must not create sessions
 seq: 2739
-status: todo
+status: assigned
 priority: p0
 created: 2026-10-27T17:23:43.676332Z
+weave: 299
+assignee: muse-conductor
 sprint: 513
 sprint_id: 8bb3bd0b-2aa9-5952-92ca-6dda0194fca6
 sprint_title: 'Bashy collaboration: Matrix chat + whiteboard/brainstorm for everyone; lern live UAT'
