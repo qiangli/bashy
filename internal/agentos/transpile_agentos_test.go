@@ -151,7 +151,10 @@ func TestTranspileModuleInputDirectory(t *testing.T) {
 			}
 			cmd = exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", binary, output)
 			cmd.Dir = moduleDir
-			cmd.Env = append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOTOOLCHAIN=local")
+			// GOTOOLCHAIN=local pins the installed SDK and GOPROXY=off keeps the
+			// build off the network (same go.dev release-index flake as
+			// TestGoSourceExecutableEnvironment, run 40530939179).
+			cmd.Env = append(os.Environ(), "GOWORK=off", "GO111MODULE=on", "GOTOOLCHAIN=local", "GOPROXY=off")
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("artifact build: %v: %s", err, out)
 			}

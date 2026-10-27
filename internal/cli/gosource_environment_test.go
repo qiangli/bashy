@@ -14,11 +14,34 @@ import (
 	"mvdan.cc/sh/v3/gosource"
 )
 
+// offlineGoEnv forces the installed SDK and the local module cache, making
+// the go.dev release-index path unreachable: GOTOOLCHAIN=local never switches
+// (and so never consults the network for a newer toolchain for go.mod's
+// `toolchain` line), and GOPROXY=off fails a missing-cache lookup instead of
+// dialing out. Every `go` invocation below must use it; a cold CI cache or a
+// slow index fetch otherwise flakes the build (run 40530939179 timed out on
+// macos-latest fetching the index). Entries are appended after os.Environ so
+// the pins win over ambient CI values.
+func offlineGoEnv() []string {
+	return append(os.Environ(), "GOTOOLCHAIN=local", "GOPROXY=off")
+}
+
+// runGoCommand runs the installed go SDK offline and fails the test on error.
+func runGoCommand(ctx context.Context, t *testing.T, what string, args ...string) string {
+	t.Helper()
+	cmd := exec.CommandContext(ctx, filepath.Join(runtime.GOROOT(), "bin", "go"), args...)
+	cmd.Env = offlineGoEnv()
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("%s: %v %s", what, err, output)
+	}
+	return string(output)
+}
+
 // A real default executable is necessary: a package-only test cannot prove
 // startup ordering relative to agentos.init or the cold CLI's shell enrichment.
 func TestGoSourceExecutableEnvironment(t *testing.T) {
 	dir := t.TempDir()
-	sdk := filepath.Join(runtime.GOROOT(), "bin", "go")
 	bashy := filepath.Join(dir, "bashy")
 	bashyPayload := bashy
 	signalIgnore := ""
@@ -27,16 +50,13 @@ func TestGoSourceExecutableEnvironment(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, sdk, "build", "-p", "2", "-o", bashyPayload, "github.com/qiangli/bashy/cmd/bashy")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("default CLI build: %v %s", err, output)
-	}
+	runGoCommand(ctx, t, "default CLI build", "build", "-p", "2", "-o", bashyPayload, "github.com/qiangli/bashy/cmd/bashy")
 	if bashyPayload != bashy {
 		cc, err := exec.LookPath("cc")
 		if err != nil {
 			t.Skip("cc is required to exercise the shipped signal launcher")
 		}
-		cmd = exec.CommandContext(ctx, cc, "-x", "c", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-o", bashy, "../../native/siglaunch.c.in")
+		cmd := exec.CommandContext(ctx, cc, "-x", "c", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-o", bashy, "../../native/siglaunch.c.in")
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("signal launcher build: %v %s", err, output)
 		}
@@ -59,21 +79,14 @@ func TestGoSourceExecutableEnvironment(t *testing.T) {
 		t.Fatal(err)
 	}
 	oracle := filepath.Join(dir, "oracle")
-	cmd = exec.CommandContext(ctx, sdk, "build", "-p", "2", "-o", oracle, path)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("native build: %v %s", err, output)
-	}
-	cache, err := exec.CommandContext(ctx, sdk, "env", "GOCACHE").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	moduleCache, err := exec.CommandContext(ctx, sdk, "env", "GOMODCACHE").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
+	runGoCommand(ctx, t, "native build", "build", "-p", "2", "-o", oracle, path)
+	cache := runGoCommand(ctx, t, "go env GOCACHE", "env", "GOCACHE")
+	moduleCache := runGoCommand(ctx, t, "go env GOMODCACHE", "env", "GOMODCACHE")
 	// The source importer needs an available build cache. Configure it equally
 	// for both executables; the variables under test remain absent or supplied.
-	baseEnv := []string{"HOME=" + dir, "GOCACHE=" + strings.TrimSpace(string(cache)), "GOMODCACHE=" + strings.TrimSpace(string(moduleCache)), "GOTOOLCHAIN=local"}
+	// GOTOOLCHAIN=local pins the installed SDK and GOPROXY=off keeps the
+	// compared runs off the network, matching the builds above.
+	baseEnv := []string{"HOME=" + dir, "GOCACHE=" + strings.TrimSpace(cache), "GOMODCACHE=" + strings.TrimSpace(moduleCache), "GOTOOLCHAIN=local", "GOPROXY=off"}
 	for name, env := range map[string][]string{
 		"absent":        {"LAST=last", "BAR=original-bar", "FIRST=first"},
 		"explicit":      {"LAST=last", "BASH=caller-bash", "SHELL=caller-shell", "SHLVL=17", "UID=caller-uid", "EUID=caller-euid", "IFS=caller-ifs", "OPTIND=caller-optind", "BASH_VERSION=caller-version", "BASHY_AGENT_MANIFEST=caller-manifest", "BASHY_HARD_IGNORE=USR1", "FIRST=first"},
@@ -115,6 +128,29 @@ func TestGoSourceExecutableEnvironment(t *testing.T) {
 	after, err := os.ReadFile(path)
 	if err != nil || !bytes.Equal(after, source) {
 		t.Fatal("original source changed")
+	}
+}
+
+// TestOfflineGoEnvPins keeps the network-free `go` invocations honest: the
+// helper must pin the installed SDK and a dead proxy, and the pins must win
+// over ambient CI values, so no `go` subprocess can reach the go.dev release
+// index even when the ambient environment names a proxy or auto toolchain.
+func TestOfflineGoEnvPins(t *testing.T) {
+	t.Setenv("GOTOOLCHAIN", "auto")
+	t.Setenv("GOPROXY", "https://proxy.golang.org,direct")
+	env := offlineGoEnv()
+	pins := map[string]string{}
+	for _, entry := range env {
+		name, value, _ := strings.Cut(entry, "=")
+		if name == "GOTOOLCHAIN" || name == "GOPROXY" {
+			pins[name] = value
+		}
+	}
+	if pins["GOTOOLCHAIN"] != "local" {
+		t.Errorf("GOTOOLCHAIN=%q, want local", pins["GOTOOLCHAIN"])
+	}
+	if pins["GOPROXY"] != "off" {
+		t.Errorf("GOPROXY=%q, want off", pins["GOPROXY"])
 	}
 }
 
