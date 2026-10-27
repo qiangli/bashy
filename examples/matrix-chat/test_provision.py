@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("matrix_provision", Path(__file__).with_name("provision.py"))
 module = importlib.util.module_from_spec(spec)
@@ -38,6 +39,64 @@ class ConfigTest(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 module.config(path)
 
+    def test_setup_rerun_skips_existing_users_without_reset_or_admin_change(self):
+        with tempfile.TemporaryDirectory() as temp:
+            data = Path(temp) / "data"
+            data.mkdir()
+            binary = Path(temp) / "tuwunel"
+            binary.touch()
+            cfg = {"server_name": "localhost", "data_dir": str(data), "port": 8008,
+                   "users": [{"localpart": "alice", "password_secret": "alice"},
+                             {"localpart": "bob", "password_secret": "bob"}], "rooms": []}
+            calls = []
+
+            def fake_run(args, **kwargs):
+                calls.append(args)
+                if args[0] == str(binary) and args[-1] == "users list-users":
+                    return subprocess.CompletedProcess(args, 0, "@alice:localhost\n@bob:localhost\n", "")
+                if args[0] == str(binary) and args[1:3] == ["--test=smoke", "--execute"]:
+                    return subprocess.CompletedProcess(args, 0, "", "")
+                if args[:3] == ["bashy", "service", "status"]:
+                    return subprocess.CompletedProcess(args, 0, "inactive\n", "")
+                return subprocess.CompletedProcess(args, 0, "", "")
+
+            with mock.patch.object(module, "installed_binary", return_value=str(binary)), \
+                 mock.patch.object(module, "run"), \
+                 mock.patch.object(module.subprocess, "run", side_effect=fake_run), \
+                 mock.patch.object(module, "vault", side_effect=lambda ref: "secret-" + ref), \
+                 mock.patch.object(module, "request", return_value={}), \
+                 mock.patch.object(module, "provision"):
+                module.setup(cfg)
+
+            account_args = [arg for args in calls if args and args[0] == str(binary) for arg in args]
+            self.assertNotIn("users reset-password alice", account_args)
+            self.assertNotIn("users reset-password bob", account_args)
+            self.assertNotIn("users make-user-admin @alice:localhost", account_args)
+
+    def test_setup_fails_closed_on_user_enumeration_error(self):
+        with tempfile.TemporaryDirectory() as temp:
+            data = Path(temp) / "data"
+            data.mkdir()
+            binary = Path(temp) / "tuwunel"
+            binary.touch()
+            cfg = {"server_name": "localhost", "data_dir": str(data), "port": 8008,
+                   "users": [{"localpart": "alice", "password_secret": "alice"}], "rooms": []}
+
+            def fake_run(args, **kwargs):
+                if args[:3] == ["bashy", "service", "status"]:
+                    return subprocess.CompletedProcess(args, 0, "inactive\n", "")
+                if args[0] == str(binary) and args[-1] == "users list-users":
+                    return subprocess.CompletedProcess(args, 1, "", "enumeration failed")
+                return subprocess.CompletedProcess(args, 0, "", "")
+
+            with mock.patch.object(module, "installed_binary", return_value=str(binary)), \
+                 mock.patch.object(module, "run"), \
+                 mock.patch.object(module.subprocess, "run", side_effect=fake_run), \
+                 mock.patch.object(module, "provision") as provision:
+                with self.assertRaises(SystemExit):
+                    module.setup(cfg)
+                provision.assert_not_called()
+
 
 class SyntheticSecretAdapterTest(unittest.TestCase):
     def test_adapter_operations(self):
@@ -69,6 +128,15 @@ class SyntheticSecretAdapterTest(unittest.TestCase):
     def test_fail_closed_missing_tuwunel(self):
         with self.assertRaises(AssertionError):
             e2e.verify_signed_tuwunel_and_service("/nonexistent/bashy/binary")
+
+    def test_missing_tool_lookup_does_not_install(self):
+        result = subprocess.CompletedProcess([], 1, "", "not installed")
+        with mock.patch.object(e2e.subprocess, "run", return_value=result) as run:
+            with self.assertRaises(AssertionError):
+                e2e.signed_installed_tuwunel("/fake/bashy")
+        argv = run.call_args.args[0]
+        self.assertEqual(argv, ["/fake/bashy", "tools", "show", "tuwunel", "--json"])
+        self.assertNotIn("install", argv)
 
 
 if __name__ == "__main__":

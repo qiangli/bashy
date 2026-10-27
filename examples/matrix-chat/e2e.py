@@ -2,9 +2,11 @@
 """Required live Matrix protocol E2E; fails on missing signed tool/service."""
 import base64
 import contextlib
+import hashlib
 import importlib.util
 import json
 import os
+import platform
 from pathlib import Path
 import re
 import secrets
@@ -49,18 +51,14 @@ def find_genuine_bashy():
 
 
 def verify_signed_tuwunel_and_service(real_bashy):
-    # Fails closed if signed tuwunel tool or matrix-chat service is absent
+    # Read the signed managed-tool record and verify the installed bytes locally.
+    # This preflight must never install or download a missing dependency.
     try:
-        tool_proc = subprocess.run([real_bashy, "tool", "install", "tuwunel"],
-                                  capture_output=True, text=True)
+        binary = signed_installed_tuwunel(real_bashy)
     except (OSError, subprocess.SubprocessError) as err:
         raise AssertionError(f"Fail closed: genuine bashy binary execution failed: {err}") from err
-
-    match = re.search(r"installed tuwunel -> (\S+)", tool_proc.stdout)
-    if tool_proc.returncode != 0 or not match or not Path(match.group(1)).is_file():
-        raise AssertionError(
-            f"Fail closed: signed tuwunel tool absent or admission failed: {tool_proc.stderr or tool_proc.stdout}"
-        )
+    if not Path(binary).is_file():
+        raise AssertionError("Fail closed: signed tuwunel binary is absent")
 
     try:
         svc_proc = subprocess.run([real_bashy, "service", "add", "--optional", "matrix-chat", "--help"],
@@ -72,6 +70,30 @@ def verify_signed_tuwunel_and_service(real_bashy):
         raise AssertionError(
             f"Fail closed: optional matrix-chat service unit absent: {svc_proc.stderr or svc_proc.stdout}"
         )
+
+
+def signed_installed_tuwunel(real_bashy):
+    """Resolve the installed signed tool from metadata without downloading."""
+    result = subprocess.run([real_bashy, "tools", "show", "tuwunel", "--json"],
+                            capture_output=True, text=True)
+    if result.returncode:
+        raise AssertionError("Fail closed: signed tuwunel tool record is unavailable")
+    try:
+        record = json.loads(result.stdout)
+        managed = record["cli"]["managed"]
+        goos = {"Darwin": "darwin", "Linux": "linux"}[platform.system()]
+        goarch = {"x86_64": "amd64", "aarch64": "arm64", "arm64": "arm64"}[platform.machine()]
+        asset = managed["assets"][goos + "/" + goarch]
+        sigstore = managed["sigstore"]
+        binary = Path(record["cli"]["binary"])
+        if not (sigstore["identity"] and sigstore["issuer"] and binary.is_file()):
+            raise ValueError("missing signature metadata or installed binary")
+        digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+        if digest != asset["sha256"]:
+            raise ValueError("installed binary digest differs from signed asset")
+        return str(binary)
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        raise AssertionError("Fail closed: installed tuwunel is not the signed platform asset")
 
 
 @contextlib.contextmanager

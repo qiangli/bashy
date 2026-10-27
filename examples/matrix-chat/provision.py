@@ -158,22 +158,21 @@ def setup(cfg):
     list_res = subprocess.run([binary, "--test=smoke", "--execute", "users list-users"],
                               env=admin_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     existing = set()
-    if list_res.returncode == 0:
-        for line in list_res.stdout.splitlines():
-            clean = re.sub(r"\x1b\[[0-9;]*[mGKF]", "", line).strip()
-            if clean.startswith("@") and ":" in clean:
-                existing.add(clean[1:].split(":")[0])
+    if list_res.returncode:
+        fail("tuwunel user enumeration failed; refusing account changes")
+    for line in list_res.stdout.splitlines():
+        clean = re.sub(r"\x1b\[[0-9;]*[mGKF]", "", line).strip()
+        if clean.startswith("@") and ":" in clean:
+            existing.add(clean[1:].split(":")[0])
     commands = []
     for i, user in enumerate(cfg["users"]):
         u = user["localpart"]
         pw = vault(user["password_secret"])
-        if u in existing:
-            commands.extend(["--execute", f"users reset-password {u} {pw}"])
-        else:
+        if u not in existing:
             commands.extend(["--execute", f"users create-user {u} {pw}"])
-        if i == 0:
-            commands.extend(["--execute", "users make-user-admin @%s:%s" %
-                             (u, cfg["server_name"])])
+            if i == 0:
+                commands.extend(["--execute", "users make-user-admin @%s:%s" %
+                                 (u, cfg["server_name"])])
     result = subprocess.run([binary, "--test=smoke",
                              *commands], env=admin_env, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
