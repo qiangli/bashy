@@ -10,6 +10,8 @@ import sys
 import tempfile
 import time
 import urllib.parse
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests" / "collaboration-e2e"))
+from barrier import hold
 
 here = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location("matrix_provision", here / "provision.py")
@@ -111,6 +113,7 @@ def main():
             downloaded = matrix.request(cfg, "GET", "/_matrix/media/v3/download/%s/%s" %
                                         (server, media_id), token, raw=True)
             check(downloaded == image, "image bytes lost after restart")
+            hold("matrix", matrix.endpoint(cfg), "/_matrix/client/versions")
             print("PASS: verified service, two logins, invite/join, text and image, idempotent setup, restart persistence")
         finally:
             subprocess.run(command + ["stop", str(path)], stdout=subprocess.DEVNULL,
