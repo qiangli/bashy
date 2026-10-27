@@ -147,3 +147,21 @@ submission. With the operator present, copy the three files into the fork of
 directory, commit and push one package-version change, and open a pull request
 to `microsoft/winget-pkgs`. Never create or submit that public pull request
 without explicit operator approval.
+
+## Promoting a release candidate (`vX.Y.Z-rc.N`)
+
+`promote.yml` accepts `vX.Y.Z` and `vX.Y.Z-rc.N` (a `-dev` suffix is stripped:
+the candidate `vX.Y.Z-rc.N-dev` promotes to `vX.Y.Z-rc.N`). Bare-tag pushes still
+match only `vX.Y.Z`; an rc is promoted by `workflow_dispatch` with
+`version=vX.Y.Z-rc.N`. Channel manifests carry the rc version string verbatim
+(Homebrew, Scoop and Winget accept prerelease strings); no channel is skipped.
+
+**`tier_verdict` must be an https URL pinned to a commit** (for example a
+`raw.githubusercontent.com/<org>/<repo>/<commit-sha>/...` URL). `promote.yml`
+checks out the candidate commit before the eligibility step, so a repo-relative
+path resolves inside the candidate tree, not the tree that holds the verdict
+record; the verdict is therefore not found (or is the wrong file). A URL not
+pinned to a commit can change under the gate and is not evidence.
+
+Because the workflow uses the candidate commit's release tools, a fix to the
+promote scripts only takes effect for candidates built after it lands.

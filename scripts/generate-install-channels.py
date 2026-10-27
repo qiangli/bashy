@@ -15,8 +15,8 @@ parser.add_argument('tag')
 parser.add_argument('dist', type=pathlib.Path)
 parser.add_argument('output', type=pathlib.Path)
 a = parser.parse_args()
-if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-dev)?', a.tag):
-    parser.error('expected vX.Y.Z or vX.Y.Z-dev')
+if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-rc\.\d+)?(?:-dev)?', a.tag):
+    parser.error('expected vX.Y.Z, vX.Y.Z-rc.N, or either with a -dev suffix')
 version = a.tag[1:]
 base = f'https://github.com/qiangli/bashy/releases/download/{a.tag}/'
 sums = {}
@@ -50,7 +50,7 @@ formula += ['  def install', '    bin.install "bashy", "outpost"',
             '    libexec.install "bash", "sh"', '  end',
             '  service do', '    run [opt_bin/"outpost", "supervisord"]', '    keep_alive true', '  end',
             '  test do', '    require "json"',
-            '    shell = shell_output("#{bin}/bashy --version 2>&1")[/bashy-(v?[0-9]+\\.[0-9]+\\.[0-9]+(?:-dev)?)/, 1]',
+            '    shell = shell_output("#{bin}/bashy --version 2>&1")[/bashy-(v?[0-9]+\\.[0-9]+\\.[0-9]+(?:-rc\\.[0-9]+)?(?:-dev)?)/, 1]',
             '    service = JSON.parse(shell_output("#{bin}/outpost version --json")).fetch("version")',
             '    refute_nil shell',
             '    assert_equal shell.delete_prefix("v").delete_suffix("-dev"), service.delete_prefix("v").delete_suffix("-dev")',
@@ -87,4 +87,6 @@ for arch, winget_arch in [('amd64', 'x64'), ('arm64', 'arm64')]:
     winget += [f'  - Architecture: {winget_arch}', f'    InstallerUrl: {url}', f'    InstallerSha256: {sha.upper()}']
 winget += ['ManifestType: installer', 'ManifestVersion: 1.6.0', '']
 (winget_dir / 'DHNT.bashy.installer.yaml').write_text('\n'.join(winget))
+if '-rc.' in version:
+    print(f'note: rc version {version} published verbatim to Homebrew, Scoop and Winget (all accept prerelease strings); no channel skipped')
 print(f'Generated Homebrew, Scoop and Winget manifests at {out}; publication and native installation remain separate gates.')
