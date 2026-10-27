@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shared whiteboard</title>
+<style>
+:root{font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#24312e;background:#f2efe8}*{box-sizing:border-box}body{margin:0}
+header{padding:24px 4vw 18px;background:#23403b;color:#fff}header h1{margin:6px 0;font-size:clamp(22px,3.6vw,32px);line-height:1.2}header p{margin:6px 0 0;color:#d3e2da}
+main{padding:20px 4vw 50px}button,input,select{font:inherit}button{border:0;border-radius:8px;padding:9px 15px;background:#1f5c53;color:#fff;cursor:pointer;font-weight:650}button:hover{background:#17473f}button:disabled{opacity:.55;cursor:default}button.secondary{background:#e2e7de;color:#24312e}button.danger{background:#f0dcd4;color:#6e3a2d}
+input,select{border:1px solid #a9bcb3;border-radius:8px;padding:9px;background:#fff;color:#24312e}
+label{display:block;font-size:13px;font-weight:650;margin-bottom:4px}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}.pill{display:inline-block;background:#dcebdc;padding:5px 12px;border-radius:20px;font-weight:700;font-size:14px}.muted{color:#5d7068;font-size:14px}
+.panel{background:#fff;border:1px solid #d9e2d9;border-radius:12px;padding:16px 18px;margin-bottom:16px}.tools{display:flex;gap:14px;flex-wrap:wrap;align-items:end}.tools>div{min-width:120px}
+#message{position:sticky;top:8px;z-index:3;background:#fff1d2;color:#68490d;padding:12px;border-radius:8px;margin-bottom:14px}#message:empty{display:none}
+.stage{position:relative;background:#fff;border:1px solid #d9e2d9;border-radius:12px;overflow:hidden}
+#canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair;background:#fff}
+.note{position:absolute;width:180px;min-height:90px;padding:10px 10px 8px;border-radius:4px;box-shadow:0 2px 5px #24312e22;font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap;cursor:move;border:1px solid #00000018}
+.note .x{position:absolute;top:2px;right:6px;border:0;background:none;color:#5d7068;font-size:14px;padding:2px 4px;cursor:pointer}
+.note .mine{display:block;margin-top:6px;font-size:11px;color:#5d7068}
+footer{font-size:13px;color:#607469;margin-top:12px}a{color:inherit}[hidden]{display:none!important}@media(max-width:650px){.tools>div{min-width:44vw}}
+</style></head><body>
+<header><h1 id="boardTitle">Shared whiteboard</h1><p>Draw freehand, pin notes, think together. No account needed — open the participant link to join.</p></header>
+<main>
+<div class="bar"><span class="pill" id="connection">Connecting…</span><span class="muted" id="summary"></span></div>
+<div id="message" role="alert" aria-live="polite"></div>
+<section class="panel"><div class="tools">
+<div><label for="boardInput">Board</label><input id="boardInput" maxlength="64" size="12" autocomplete="off"></div>
+<div><button class="secondary" id="openBoard" type="button">Open</button></div>
+<div><button class="secondary" id="createBoard" type="button">Create board</button></div>
+<div><label for="penColor">Pen</label><input id="penColor" type="color" value="#1f5c53"></div>
+<div><label for="penWidth">Width</label><select id="penWidth"><option>2</option><option selected>4</option><option>8</option><option>14</option></select></div>
+<div><label for="noteText">Note</label><input id="noteText" maxlength="500" placeholder="Pin a note…" autocomplete="off"></div>
+<div><button id="addNote" type="button">Add note</button></div>
+<div><button class="secondary" id="exportJson" type="button">Export JSON</button></div>
+<div><button class="secondary" id="exportPng" type="button">Export PNG</button></div>
+</div></section>
+<section class="panel" id="facilitatorPanel" hidden><strong>Facilitator controls</strong> <span class="muted">Keep your facilitator link private. Share the participant link below.</span>
+<div class="tools" style="margin-top:10px"><div><button id="lockBtn" type="button">Lock board</button></div>
+<div><button class="danger" id="clearBtn" type="button">Clear board</button></div>
+<div><button class="secondary" id="copyLink" type="button">Copy participant link</button></div></div>
+<p class="muted" id="participantLink"></p></section>
+<section class="stage"><canvas id="canvas" width="1600" height="1000"></canvas><div id="notes"></div></section>
+<footer>Local shared board · Strokes and notes sync to every open browser. Locking freezes contributions; clearing removes everything.</footer>
+</main><script>
+const $=id=>document.getElementById(id);
+const canvas=$('canvas'),ctx=canvas.getContext('2d');
+const api=p=>new URL(p,document.baseURI).toString();
+function boardFromURL(){const q=new URLSearchParams(location.search);if(q.has('board'))return q.get('board');const h=new URLSearchParams(location.hash.slice(1));return h.get('board')||'main'}
+let board=boardFromURL();
+let facilitator='';try{facilitator=sessionStorage.getItem('whiteboard-facilitator:'+board)||''}catch{}
+const frag=new URLSearchParams(location.hash.slice(1));
+if(frag.has('facilitator')){facilitator=frag.get('facilitator');try{sessionStorage.setItem('whiteboard-facilitator:'+board,facilitator)}catch{}}
+let state=null,lastRevision=-1,polling=false,drawing=false,current=[];
+function error(msg){$('message').textContent=msg}
+function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n}
+async function apiJSON(path,body){const r=await fetch(api(path),{method:body?'POST':'GET',headers:{'Content-Type':'application/json','X-Facilitator-Key':facilitator},body:body?JSON.stringify(body):undefined,cache:'no-store'});const result=await r.json();if(!r.ok)throw Error(result.error||'Request failed');return result}
+function toLogical(e){const r=canvas.getBoundingClientRect();return{x:(e.clientX-r.left)*1600/r.width,y:(e.clientY-r.top)*1000/r.height}}
+canvas.addEventListener('pointerdown',e=>{if(state&&state.locked&&!state.facilitator){error('The board is locked; ask the facilitator to unlock it.');return}drawing=true;current=[toLogical(e)];canvas.setPointerCapture(e.pointerId)});
+canvas.addEventListener('pointermove',e=>{if(!drawing)return;current.push(toLogical(e));drawPreview()});
+canvas.addEventListener('pointerup',async()=>{if(!drawing)return;drawing=false;const pts=current;current=[];if(pts.length<2)pts.push({...pts[0],x:Math.min(1600,pts[0].x+1)});try{error('');render(await apiJSON('api/action',{action:'stroke',board,points:pts.map(p=>({x:Math.round(p.x*10)/10,y:Math.round(p.y*10)/10})),color:$('penColor').value,width:Number($('penWidth').value)}))}catch(err){error(err.message);refresh(true)}});
+function drawPreview(){render(state||{strokes:[],notes:[]});ctx.strokeStyle=$('penColor').value;ctx.lineWidth=Number($('penWidth').value);ctx.lineCap='round';ctx.beginPath();current.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke()}
+function render(s){
+ if(!s)return;
+ if(state&&s.revision<state.revision)return;state=s;window.__whiteboard=s;
+ document.title='Whiteboard · '+s.board;$('boardTitle').textContent='Whiteboard · '+s.board;$('boardInput').value=s.board;
+ const n=s.strokes.length,m=s.notes.length;
+ $('summary').textContent=`${n} stroke${n===1?'':'s'} · ${m} note${m===1?'':'s'}`+(s.locked?' · locked':'');
+ $('facilitatorPanel').hidden=!s.facilitator;
+ $('lockBtn').textContent=s.locked?'Unlock board':'Lock board';
+ const origin=new URL(api('/')).origin+new URL(api('./')).pathname.replace(/\/$/,'');
+ $('participantLink').textContent='Participant link: '+origin+'/?board='+encodeURIComponent(s.board);
+ if(lastRevision===s.revision&&$('notes').childElementCount)return;lastRevision=s.revision;
+ ctx.fillStyle='#fff';ctx.fillRect(0,0,1600,1000);ctx.strokeStyle='#e9eee9';ctx.lineWidth=1;
+ for(let x=0;x<=1600;x+=100){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,1000);ctx.stroke()}
+ for(let y=0;y<=1000;y+=100){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1600,y);ctx.stroke()}
+ for(const st of s.strokes){ctx.strokeStyle=st.color;ctx.lineWidth=st.width;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();st.points.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke()}
+ const layer=$('notes');layer.replaceChildren();
+ const r=canvas.getBoundingClientRect(),sx=r.width/1600,sy=r.height/1000;
+ for(const n of s.notes){const d=el('div',undefined,'note');d.style.background=n.color;d.style.left=(n.x*sx)+'px';d.style.top=(n.y*sy)+'px';d.style.width=(180)+'px';d.append(el('span',n.text));d.append(el('span',(n.mine?'you · ':'')+'drag to move','mine'));
+  const x=el('button','×','x');x.title='Delete note';x.onclick=async ev=>{ev.stopPropagation();try{error('');render(await apiJSON('api/action',{action:'delete-note',board,id:n.id}))}catch(err){error(err.message)}};d.append(x);
+  d.addEventListener('pointerdown',ev=>{if(ev.target===x)return;ev.stopPropagation();const startX=ev.clientX,startY=ev.clientY,ox=n.x,oy=n.y;const mv=e2=>{d.style.left=(ox*sx+(e2.clientX-startX))+'px';d.style.top=(oy*sy+(e2.clientY-startY))+'px'};const up=e2=>{window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);const nx=Math.round((ox+(e2.clientX-startX)/sx)*10)/10,ny=Math.round((oy+(e2.clientY-startY)/sy)*10)/10;apiJSON('api/action',{action:'move-note',board,id:n.id,x:nx,y:ny}).then(render).catch(err=>error(err.message))};window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up)});
+  d.addEventListener('dblclick',async()=>{const t=prompt('Edit note',n.text);if(t===null)return;try{error('');render(await apiJSON('api/action',{action:'edit-note',board,id:n.id,text:t}))}catch(err){error(err.message)}});
+  layer.append(d)}
+}
+async function refresh(force){if(polling)return;polling=true;try{const s=await apiJSON('api/state?board='+encodeURIComponent(board));if(force)lastRevision=-1;render(s);$('connection').textContent='Connected · '+s.board}catch(e){$('connection').textContent='Disconnected · Reconnecting…'}finally{polling=false}}
+$('openBoard').onclick=()=>{const b=$('boardInput').value.trim()||'main';location.search='?board='+encodeURIComponent(b)};
+$('createBoard').onclick=async()=>{const b=$('boardInput').value.trim()||'main';try{error('');const s=await apiJSON('api/action',{action:'create',board:b});facilitator=s.facilitatorKey;try{sessionStorage.setItem('whiteboard-facilitator:'+b,facilitator)}catch{}board=b;lastRevision=-1;render(s);history.replaceState(null,'',location.pathname+'?board='+encodeURIComponent(b));error('Board created. Your facilitator link is private — bookmark this browser.')}catch(err){error(err.message)}};
+$('addNote').onclick=async()=>{const t=$('noteText').value;if(!t.trim()){error('Write a note first.');return}const k=(state?state.notes.length:0);try{error('');render(await apiJSON('api/action',{action:'note',board,x:120+(k*47)%1100,y:120+(k*37)%640,text:t}));$('noteText').value=''}catch(err){error(err.message)}};
+$('lockBtn').onclick=async()=>{try{error('');render(await apiJSON('api/action',{action:'lock',board,locked:!state.locked}))}catch(err){error(err.message)}};
+$('clearBtn').onclick=async()=>{if(!confirm('Clear every stroke and note on this board?'))return;try{error('');lastRevision=-1;render(await apiJSON('api/action',{action:'clear',board}))}catch(err){error(err.message)}};
+$('copyLink').onclick=async()=>{const origin=new URL(api('/')).origin+new URL(api('./')).pathname.replace(/\/$/,'/');const link=origin+'?board='+encodeURIComponent(board);try{await navigator.clipboard.writeText(link);error('Participant link copied.')}catch{error('Copy this participant link: '+link)}};
+async function download(format){try{const r=await fetch(api('api/export?board='+encodeURIComponent(board)+'&format='+format),{headers:{'X-Facilitator-Key':facilitator}});if(!r.ok){const e=await r.json();throw Error(e.error)}const u=URL.createObjectURL(await r.blob());const a2=el('a');a2.href=u;a2.download='whiteboard-'+board+'.'+(format==='png'?'png':'json');a2.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}catch(e){error(e.message)}}
+$('exportJson').onclick=()=>download('json');$('exportPng').onclick=()=>download('png');
+refresh();setInterval(refresh,1500);
+</script></body></html>
