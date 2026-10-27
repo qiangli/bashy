@@ -49,8 +49,8 @@ expect_fail() {
 TAB=$(printf '\t')
 
 # 1. No markers: tour summary counts are re-printed by the lane.
-STUB_LINES='tour: PASS a' STUB_SUMMARY='3 passed, 0 failed, 1 skipped, 2 known-failing (v)' STUB_RC=0 \
-    mk_tour "a${TAB}run${TAB}f.bsh${TAB}-${TAB}0"
+STUB_LINES='tour: PASS a' STUB_SUMMARY='3 passed, 0 failed, 1 skipped, 2 known-failing (v)' STUB_RC=0
+mk_tour "a${TAB}run${TAB}f.bsh${TAB}-${TAB}0"
 out=$(expect_ok run_lane --binary "$tmp/fake-bashy")
 printf '%s\n' "$out" | grep -q 'qa-lane: 3 passed, 0 failed, 2 known-failing, 1 skipped' ||
     { echo "lane summary must carry known-failing and skipped counts"; printf '%s\n' "$out"; exit 1; }
@@ -82,13 +82,13 @@ rm "$tmp/todo/deadbeef12345678b-story.md" "$tmp/todo/deadbeef12345678c-story.md"
 
 # 5. A tour failure fails the lane even with clean cards; the lane still
 #    prints its counts summary.
-STUB_LINES='tour: FAIL a' STUB_SUMMARY='1 passed, 1 failed, 0 skipped, 0 known-failing (v)' STUB_RC=1 \
-    mk_tour "a${TAB}run${TAB}f.bsh${TAB}-${TAB}0"
+STUB_LINES='tour: FAIL a' STUB_SUMMARY='1 passed, 1 failed, 0 skipped, 0 known-failing (v)' STUB_RC=1
+mk_tour "a${TAB}run${TAB}f.bsh${TAB}-${TAB}0"
 out=$(expect_fail run_lane --binary "$tmp/fake-bashy"); printf '%s\n' "$out" | grep -q 'qa-lane: 1 passed, 1 failed' || exit 1
 
 # 6. A tour that prints no countable summary fails the lane closed.
-STUB_LINES='tour: PASS a' STUB_SUMMARY='all good (no numbers)' STUB_RC=0 \
-    mk_tour "a${TAB}run${TAB}f.bsh${TAB}-${TAB}0"
+STUB_LINES='tour: PASS a' STUB_SUMMARY='all good (no numbers)' STUB_RC=0
+mk_tour "a${TAB}run${TAB}f.bsh${TAB}-${TAB}0"
 out=$(expect_fail run_lane --binary "$tmp/fake-bashy"); printf '%s\n' "$out" | grep -q 'no countable summary' || exit 1
 
 echo 'test-release-qa-lane: PASS'
