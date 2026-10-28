@@ -101,6 +101,10 @@ jobs:
             runner: ubuntu-24.04
           - asset: klatch-v0.1.0-linux-arm64.tar.gz
             runner: ubuntu-24.04-arm
+          - asset: klatch-v0.1.0-darwin-arm64.tar.gz
+            runner: macos-15
+          - asset: klatch-v0.1.0-darwin-amd64.tar.gz
+            runner: macos-15-intel
           - asset: klatch-web-v0.1.0.tar.gz
             runner: ubuntu-24.04
     steps:

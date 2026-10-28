@@ -21,13 +21,24 @@
 # this gate never exercises (it requires a configured account and a real
 # push endpoint) — see files/no-tracking.env.
 #
-# Linux (authoritative, and the only platform the MVP matrix builds for —
-# builds/klatch/README.md #MVP scope): the server runs in a fresh network
+# Linux (authoritative, and the only platform this gate runs the runtime
+# check on — see #Darwin below): the server runs in a fresh network
 # namespace (only `lo`) under
 # `strace -f -e trace=connect,sendto,sendmsg,sendmmsg`, so every attempt —
 # including ones the namespace makes fail (ENETUNREACH) and DNS — is
 # recorded and judged. Needs root via sudo (unshare --net), strace, setpriv,
 # ip, curl, tar.
+#
+# Darwin (klatch-$UPSTREAM_TAG-darwin-{arm64,amd64}.tar.gz server legs): this
+# gate is SKIPPED, not failed. The verdict function it shares with every
+# other tool (builds/_shared/egress-verdict.sh, egress_verdict) parses
+# strace(1)'s syscall log line shapes (sa_family=AF_INET6, sin_port=htons(),
+# ...), which has no macOS equivalent here — unlike zot's no-egress-test.sh,
+# which implements a SEPARATE sandbox-exec-based darwin() check, klatch's
+# darwin legs have not had that written yet (builds/README.md #No-egress
+# gate / builds/klatch/README.md #No-egress gate records this as a known
+# gap, not a silent one). The darwin tarballs still go through every OTHER
+# gate (pin, build, govulncheck/yarn-audit, sign+attest).
 #
 # Env: EGRESS_PORT (default 15000), EGRESS_OBSERVE_SECONDS (default 30),
 #      EGRESS_READY_SECONDS (default 180).
@@ -43,10 +54,16 @@ die() { echo "no-egress: FAIL: $*" >&2; exit 1; }
 [[ -f $asset ]] || die "$asset does not exist"
 asset=$(cd "$(dirname "$asset")" && pwd)/$(basename "$asset")
 
-case $(uname -s) in
-Linux) ;;
-*) die "klatch's MVP build only runs the no-egress gate on Linux (darwin/windows later)" ;;
-esac
+if [[ $(basename "$asset") != klatch-web-* ]]; then
+	case $(uname -s) in
+	Linux) ;;
+	Darwin)
+		echo "no-egress: darwin: SKIPPED for $(basename "$asset") — the shared strace verdict has no macOS equivalent wired up yet (see files/no-egress-test.sh header and README.md #No-egress gate)"
+		exit 0
+		;;
+	*) die "unsupported OS $(uname -s)" ;;
+	esac
+fi
 
 if [[ $(basename "$asset") == klatch-web-* ]]; then
 	# Static web bundle: nothing executes, so there is nothing to trace.

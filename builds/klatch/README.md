@@ -76,11 +76,15 @@ Shared (`../_shared`): the workflow skeleton and `verify-pin.sh`. There is no
 
 ## MVP scope
 
-Linux `amd64`+`arm64` only, server binary + web bundle. Darwin and Windows
-are deferred — the commit's `net/server` has no OS-specific code (`cgo`
-needs only a C compiler, and GitHub ships native `ubuntu-24.04-arm`
-runners, so this build cross-compiles nothing), but a macOS/Windows leg
-needs its own no-egress gate shape and has not been written.
+The MVP deploy host is **macOS arm64**, so the server builds natively for
+linux `amd64`+`arm64` AND darwin `arm64`+`amd64`, plus the one
+architecture-independent web bundle. Windows is deferred — the commit's
+`net/server` has no OS-specific code (`cgo` needs only a C compiler, and
+GitHub ships native `ubuntu-24.04-arm`, `macos-15` and `macos-15-intel`
+runners, so this build cross-compiles nothing on any platform it targets),
+but a Windows leg needs its own no-egress gate shape and has not been
+written. The darwin legs ship WITHOUT the runtime no-egress check — see
+#No-egress gate.
 
 ## Build configuration
 
@@ -92,10 +96,10 @@ runs the Node/Yarn half and every other leg runs the Go half.
 
 | | upstream (`Dockerfile`) | bashy build |
 |---|---|---|
-| `CGO_ENABLED` | `1` (gorm's sqlite driver, `mattn/go-sqlite3`, needs a C compiler) | **same** |
+| `CGO_ENABLED` | `1` (gorm's sqlite driver, `mattn/go-sqlite3`, needs a C compiler) | **same** on every arch, incl. darwin (native Xcode Command Line Tools `clang`, preinstalled on `macos-15`/`macos-15-intel`) |
 | build command | `go build -o databag .` | `go build -trimpath -ldflags "-s -w -buildid=" -o klatch .` — same package, `-trimpath`/`-buildid=` dropped for a reproducible build, output renamed `klatch` |
 | Go toolchain | `go.mod`: `go 1.23.0` / `toolchain go1.24.5`, both EOL minors (Go ships fixes for only its two newest) | **`1.26.9`**, an EOL-minor security override — see `../README.md` "Recorded security overrides" |
-| platforms | whatever `DATABAG_GOOS`/`DATABAG_GOARCH` build args name | linux `amd64`+`arm64` only (#MVP scope) |
+| platforms | whatever `DATABAG_GOOS`/`DATABAG_GOARCH` build args name | linux `amd64`+`arm64` (`ubuntu-24.04`/`ubuntu-24.04-arm`) and darwin `arm64`+`amd64` (`macos-15`/`macos-15-intel`) — the MVP deploy host is macOS arm64 (#MVP scope); `build.yml` is a single step for every one of these legs, gated only on `matrix.asset` being the web leg or not |
 
 **Web** (`app/client/web`, upstream `Dockerfile`'s `node` stage):
 
@@ -108,12 +112,14 @@ runs the Node/Yarn half and every other leg runs the Go half.
 ## Release assets: two shapes
 
 ```
-klatch-v0.1.0-linux-amd64.tar.gz   klatch binary + net/transform/*.sh
-klatch-v0.1.0-linux-arm64.tar.gz   klatch binary + net/transform/*.sh
-klatch-web-v0.1.0.tar.gz           the vite dist/ output (static, same for every arch)
-klatch-v0.1.0.govulncheck.json     klatch-web-v0.1.0.yarn-audit.json
-klatch-pin.txt                     klatch-otel.env
-klatch-no-tracking.env             SHA256SUMS
+klatch-v0.1.0-linux-amd64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v0.1.0-linux-arm64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v0.1.0-darwin-arm64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-v0.1.0-darwin-amd64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-web-v0.1.0.tar.gz            the vite dist/ output (static, same for every arch)
+klatch-v0.1.0.govulncheck.json      klatch-web-v0.1.0.yarn-audit.json
+klatch-pin.txt                      klatch-otel.env
+klatch-no-tracking.env              SHA256SUMS
 ```
 
 The server tarball's binary is already executable when tarred, so
@@ -152,16 +158,31 @@ ever links an SDK, it can only reach bashy's own collector.
   executable code — nothing runs during this build, so there is nothing to
   trace. The gate extracts it and asserts it is a non-empty tree of plain,
   non-executable files.
-- **Server legs**: extracts the tarball, starts `klatch` bound to
-  `127.0.0.1:15000` with an empty sqlite store, probes `/admin/status`
-  (`GetNodeStatus` — unauthenticated, answers from the store) for
-  readiness, then `/account/status`, `/account/available` and `/` over
-  loopback, idles 30 s, probes again and stops it. Linux only (#MVP scope):
-  a fresh network namespace (`sudo unshare --net`, only `lo`), traced with
+- **Server legs, linux** (`klatch-$UPSTREAM_TAG-linux-{amd64,arm64}.tar.gz`):
+  extracts the tarball, starts `klatch` bound to `127.0.0.1:15000` with an
+  empty sqlite store, probes `/admin/status` (`GetNodeStatus` —
+  unauthenticated, answers from the store) for readiness, then
+  `/account/status`, `/account/available` and `/` over loopback, idles 30 s,
+  probes again and stops it. A fresh network namespace (`sudo unshare
+  --net`, only `lo`), traced with
   `strace -f -e trace=connect,sendto,sendmsg,sendmmsg` and run unprivileged
   via `setpriv`. Any AF_INET/AF_INET6 attempt other than loopback to its own
   port or to `127.0.0.1:31415` — including DNS and attempts the namespace
   makes fail — fails the build.
+- **Server legs, darwin** (`klatch-$UPSTREAM_TAG-darwin-{arm64,amd64}.tar.gz`):
+  **skipped**, not failed — `files/no-egress-test.sh` detects `Darwin` and
+  exits 0 with an informational message before extracting anything. The
+  shared verdict (`egress_verdict` in `builds/_shared/egress-verdict.sh`)
+  parses `strace(1)`'s own syscall log-line shapes
+  (`sa_family=AF_INET6`, `sin_port=htons(...)`, ...), which has no macOS
+  equivalent here. `zot`'s `no-egress-test.sh` shows the alternative shape
+  (a `sandbox-exec` deny-by-default profile plus a unified-log check for
+  `network-outbound` denies) — klatch's darwin legs have not had that
+  written. Until then, the darwin tarballs are built, govulncheck/yarn-audit
+  are still produced (tool-wide, not per-leg), and they are still cosign
+  signed and attested like every other asset, but they ship without this ONE
+  runtime check. Tightening this (porting zot's `sandbox-exec` approach) is
+  follow-up work, same shape as the audit-policy note below.
 
 ## Audit
 
