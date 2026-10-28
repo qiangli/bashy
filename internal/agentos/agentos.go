@@ -175,7 +175,7 @@ var (
 	// the one thing an ACP host puts in its `command:` slot. A bare shim would
 	// put a JSON-RPC server behind a three-letter word in every interactive
 	// shell, which no script should ever reach by accident.
-	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "service", "llm", "limit", "proxy", "outpost", "connect", "mod", "explain", "approve", "tmpl", "acp"}
+	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "service", "llm", "limit", "proxy", "outpost", "connect", "linux", "mod", "explain", "approve", "tmpl", "acp"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -1949,6 +1949,8 @@ func dispatch() {
 		dispatchExit(dispatchVuln(os.Args[2:]))
 	case "connect":
 		dispatchExit(dispatchConnect(os.Args[2:]))
+	case "linux":
+		dispatchExit(dispatchLinux(os.Args[2:]))
 	case "outpost":
 		if err := meshagent.Exec(context.Background(), os.Args[2:]...); err != nil {
 			fmt.Fprintln(os.Stderr, err)

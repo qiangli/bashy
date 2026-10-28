@@ -336,6 +336,15 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Effects:   []string{atlas.EffExec, atlas.EffNet},
 		Stability: atlas.StabilityExperimental,
 	},
+	// linux stands up a Linux execution environment (WSL2 / podman) and runs
+	// commands in it. Converging a host enables OS features and may restart
+	// it, which is why its effects name exec, net and the host itself.
+	"linux": {
+		Stage: atlas.StageTest, Group: atlas.GroupPlatform, Tier: atlas.TierSphere,
+		Caps:      []string{atlas.CapSpawnsProcesses, atlas.CapJSON, atlas.CapNeedsNetwork},
+		Effects:   []string{atlas.EffExec, atlas.EffNet, atlas.EffWrite, atlas.EffPriv, atlas.EffRemote, atlas.EffPersist},
+		Stability: atlas.StabilityExperimental,
+	},
 	// dhnt reads pipeline/run/binding JSON and writes JSON or Workflow YAML to
 	// stdout. No network, no mutation — the local-first contract/compiler, not
 	// a transport.

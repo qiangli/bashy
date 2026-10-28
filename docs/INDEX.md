@@ -18,6 +18,7 @@ One line (or a short paragraph) per load-bearing doc under `docs/`, moved verbat
 
 - `agent-adoption/sprint-379-proof.md` — Story 1527: live agent-shell transcripts and blockers, exec-wrapper fix, `out` graduation and recovery contract.
 
+- `plan-linux-runner-any-amd64.md` — Sprint 522 Story 2823: `bashy linux` — probe/plan/up/run a Linux execution environment on any amd64 host (native|wsl|podman), elephant's live findings, and the privileged-step guardrail.
 - `plan-peer-reverse-egress.md` — Sprint 343 Story 370: loopback reverse forwarding, remote exec proxy environment, usage and validation.
 - `plan-bashy-proxy-socks5.md` — Sprint #343 Story #368 scope, CLI, remote DNS,
 - `docs/http-proxy.md` — bashy proxy http: HTTP/1.1 forward proxy + HTTPS CONNECT tunnelling (Sprint 343).
