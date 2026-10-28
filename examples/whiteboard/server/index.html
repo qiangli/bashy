@@ -78,13 +78,13 @@ function render(s){
  if(s.facilitator){
   const codes=(s.invites&&s.invites.length?s.invites:(lastInvite?[lastInvite]:[]));
   const show=codes.length?codes[codes.length-1]:'';
-  $('inviteLink').textContent=s.private?(show?('Invite link: '+origin+'/?board='+encodeURIComponent(s.board)+'&invite='+encodeURIComponent(show)):'Press Create invite, then share the invite link.'):'Main board is open — no invite needed.';
+  $('inviteLink').textContent=s.private?(show?('Invite link: '+origin+'/?board='+encodeURIComponent(s.board)+'#invite='+encodeURIComponent(show)):'Press Create invite, then share the link with one person.'):'Main board is open — no invite needed.';
   const box=$('memberList');box.replaceChildren();
   if(s.private){
    box.append(el('p','Members: '+((s.members&&s.members.length)?s.members.length:0),'muted'));
    for(const m of (s.members||[])){
     const row=el('p',m,'muted');const b=el('button','Revoke');b.className='danger';b.style.marginLeft='8px';
-    b.onclick=(async mid=>async()=>{try{error('');render(await apiJSON('api/action',{action:'revoke',board,id:mid}))}catch(err){error(err.message)}})(m);
+    b.onclick=async()=>{try{error('');render(await apiJSON('api/action',{action:'revoke',board,id:m}))}catch(err){error(err.message)}};
     row.append(b);box.append(row);
    }
   }
@@ -104,7 +104,7 @@ function render(s){
   layer.append(d)}
 }
 async function joinWith(code){const s=await apiJSON('api/action',{action:'join',board,invite:code});lastInvite=code;try{sessionStorage.setItem('whiteboard-invite:'+board,code)}catch{}lastRevision=-1;render(s);return s}
-async function refresh(force){if(polling)return;polling=true;try{const s=await apiJSON('api/state?board='+encodeURIComponent(board));if(force)lastRevision=-1;render(s);$('connection').textContent='Connected · '+s.board;if(pendingInvite){pendingInvite=''}}catch(e){const msg=String(e.message||e);if(pendingInvite&&/private|invite|member/i.test(msg)){try{const s=await joinWith(pendingInvite);pendingInvite='';error('');$('connection').textContent='Connected · '+s.board;return}finally{}}if(/private|invite/i.test(msg)){error(msg+' Paste an invite code and press Join board.');$('connection').textContent='Private board · Invite required'}else{$('connection').textContent='Disconnected · Reconnecting…'}}finally{polling=false}}
+async function refresh(force){if(polling)return;polling=true;try{const s=await apiJSON('api/state?board='+encodeURIComponent(board));if(force)lastRevision=-1;render(s);$('connection').textContent='Connected · '+s.board;if(pendingInvite){pendingInvite=''}}catch(e){const msg=String(e.message||e);if(pendingInvite&&/private|invite|member/i.test(msg)){try{const s=await joinWith(pendingInvite);pendingInvite='';error('');$('connection').textContent='Connected · '+s.board;return}finally{}}if(/private|invite|member|access/i.test(msg)){state=null;window.__whiteboard=null;lastRevision=-1;ctx.clearRect(0,0,1600,1000);$('notes').replaceChildren();$('summary').textContent='No access to this board';$('facilitatorPanel').hidden=true;error(msg+' Paste an invite code and press Join board.');$('connection').textContent='Private board · Invite required'}else{$('connection').textContent='Disconnected · Reconnecting…'}}finally{polling=false}}
 $('openBoard').onclick=()=>{const b=$('boardInput').value.trim()||'main';location.search='?board='+encodeURIComponent(b)};
 $('createBoard').onclick=async()=>{const b=$('boardInput').value.trim()||'main';try{error('');const s=await apiJSON('api/action',{action:'create',board:b});facilitator=s.facilitatorKey;try{sessionStorage.setItem('whiteboard-facilitator:'+b,facilitator)}catch{}board=b;lastRevision=-1;render(s);history.replaceState(null,'',location.pathname+'?board='+encodeURIComponent(b));error('Board created. Your facilitator link is private — bookmark this browser.')}catch(err){error(err.message)}};
 $('addNote').onclick=async()=>{const t=$('noteText').value;if(!t.trim()){error('Write a note first.');return}const k=(state?state.notes.length:0);try{error('');render(await apiJSON('api/action',{action:'note',board,x:120+(k*47)%1100,y:120+(k*37)%640,text:t}));$('noteText').value=''}catch(err){error(err.message)}};
@@ -113,7 +113,7 @@ $('clearBtn').onclick=async()=>{if(!confirm('Clear every stroke and note on this
 $('copyLink').onclick=async()=>{const origin=new URL(api('/')).origin+new URL(api('./')).pathname.replace(/\/$/,'/');const link=origin+'?board='+encodeURIComponent(board);try{await navigator.clipboard.writeText(link);error('Participant link copied.')}catch{error('Copy this participant link: '+link)}};
 $('joinBoard').onclick=async()=>{const code=$('inviteInput').value.trim();if(!code){error('Paste an invite code first.');return}try{error('');const s=await joinWith(code);$('connection').textContent='Connected · '+s.board;pendingInvite=''}catch(err){error(err.message)}};
 $('inviteBtn').onclick=async()=>{try{error('');const s=await apiJSON('api/action',{action:'invite',board});if(s.inviteCode){lastInvite=s.inviteCode;try{sessionStorage.setItem('whiteboard-invite:'+board,s.inviteCode)}catch{}$('inviteInput').value=s.inviteCode}lastRevision=-1;render(s);error('Invite created. Share the invite link; revoke to remove.')}catch(err){error(err.message)}};
-$('copyInvite').onclick=async()=>{const code=lastInvite||$('inviteInput').value.trim();if(!code){error('Create an invite first.');return}const origin=new URL(api('/')).origin+new URL(api('./')).pathname.replace(/\/$/,'/');const link=origin+'?board='+encodeURIComponent(board)+'&invite='+encodeURIComponent(code);try{await navigator.clipboard.writeText(link);error('Invite link copied.')}catch{error('Copy this invite link: '+link)}};
+$('copyInvite').onclick=async()=>{const code=lastInvite||$('inviteInput').value.trim();if(!code){error('Create an invite first.');return}const origin=new URL(api('/')).origin+new URL(api('./')).pathname.replace(/\/$/,'/');const link=origin+'?board='+encodeURIComponent(board)+'#invite='+encodeURIComponent(code);try{await navigator.clipboard.writeText(link);error('Invite link copied.')}catch{error('Copy this invite link: '+link)}};
 async function download(format){try{const r=await fetch(api('api/export?board='+encodeURIComponent(board)+'&format='+format),{headers:{'X-Facilitator-Key':facilitator}});if(!r.ok){const e=await r.json();throw Error(e.error)}const u=URL.createObjectURL(await r.blob());const a2=el('a');a2.href=u;a2.download='whiteboard-'+board+'.'+(format==='png'?'png':'json');a2.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}catch(e){error(e.message)}}
 $('exportJson').onclick=()=>download('json');$('exportPng').onclick=()=>download('png');
 refresh();setInterval(refresh,1500);

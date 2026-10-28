@@ -55,7 +55,7 @@ try {
  await fac.locator('#createBoard').click();
  await fac.locator('#connection').filter({hasText:'e2e'}).waitFor();
  await fac.locator('#inviteBtn').click();
- await fac.locator('#inviteLink').filter({hasText:'invite='}).waitFor();
+ await fac.locator('#inviteLink').filter({hasText:'#invite='}).waitFor();
  const inviteLink=(await fac.locator('#inviteLink').textContent()).match(/http:\/\/[^\s]+/)?.[0];
  assert.ok(inviteLink);
  const participantLink=(await fac.locator('#participantLink').textContent()).match(/http:\/\/[^\s]+/)?.[0];
@@ -70,8 +70,14 @@ try {
  assert.equal((await api(first.origin,'/api/action',{action:'stroke',board:'e2e',points:[{x:1,y:1},{x:2,y:2}],color:'#000000',width:2})).status,403);
  await stranger.close();
  // Invited browsers join through the invite link and sync.
- await Promise.all([a.goto(inviteLink),b.goto(inviteLink)]);
+ await a.goto(inviteLink);
  await a.locator('#connection').filter({hasText:'Connected'}).waitFor();
+ const usedInvite=inviteLink.split('#invite=')[1];
+ assert.equal((await api(first.origin,'/api/action',{action:'join',board:'e2e',invite:usedInvite})).status,403);
+ await fac.locator('#inviteBtn').click();
+ await fac.locator('#inviteLink').filter({hasNotText:inviteLink}).waitFor();
+ const bInvite=(await fac.locator('#inviteLink').textContent()).match(/http:\/\/[^\s]+/)?.[0];
+ await b.goto(bInvite);
  await b.locator('#connection').filter({hasText:'Connected'}).waitFor();
  // Three browsers draw and pin; every member sees every contribution.
  await draw(a,0.1,0.1,0.5,0.4);
@@ -89,23 +95,25 @@ try {
  // Revocation: a joined latecomer loses reads/writes immediately.
  const lateCtx=await browser.newContext();
  const late=await lateCtx.newPage();
- await late.goto(inviteLink);
+ await fac.locator('#inviteBtn').click();
+ await fac.locator('#inviteLink').filter({hasNotText:bInvite}).waitFor();
+ const lateInvite=(await fac.locator('#inviteLink').textContent()).match(/http:\/\/[^\s]+/)?.[0];
+ await late.goto(lateInvite);
  await late.locator('#connection').filter({hasText:'Connected'}).waitFor();
  await synced(late,2,1);
  const lateCookies=await lateCtx.cookies();
  const lateId=(lateCookies.find(c=>c.name==='whiteboard-participant')||{}).value;
  assert.ok(lateId);
+ await fac.locator('#memberList p').filter({hasText:lateId}).locator('button').click();
  const e2eKey=await facKeyOf(fac,'e2e');
- await fac.evaluate(async ({board,key,mid})=>{
-  const r=await fetch(new URL('api/action',document.baseURI).toString(),{method:'POST',headers:{'Content-Type':'application/json','X-Facilitator-Key':key},body:JSON.stringify({action:'revoke',board,id:mid})});
-  if(!r.ok)throw new Error('revoke failed '+r.status);
- }, {board:'e2e',key:e2eKey,mid:lateId});
  await late.waitForFunction(()=>document.getElementById('connection').textContent.includes('Private board')||document.getElementById('message').textContent.includes('private'), null, {timeout:15000}).catch(()=>{});
  const lateState=await late.evaluate(async ()=>{
   const r=await fetch(new URL('api/state?board=e2e',document.baseURI).toString(),{cache:'no-store'});
   return r.status;
  });
  assert.equal(lateState,403);
+ await late.waitForFunction(()=>window.__whiteboard===null&&document.getElementById('notes').childElementCount===0);
+ assert.equal((await api(first.origin,'/api/action',{action:'join',board:'e2e',invite:lateInvite.split('#invite=')[1]})).status,403);
  await late.close();
  // Lock: participants frozen, facilitator still draws, server enforces it.
  await fac.locator('#lockBtn').click();
@@ -119,13 +127,12 @@ try {
  await synced(fac,3,1);
  await fac.locator('#lockBtn').click();
  await a.waitForFunction(()=>window.__whiteboard&&window.__whiteboard.locked===false);
- // Restart with the same data: members and invites resume without re-joining.
+ // Restart with the same data: membership resumes without re-joining.
  await stopServer(first.server);
  first=await startServer(dir,[]);
  const saved=JSON.parse(await readFile(join(dir,'boards','e2e.json'),'utf8'));
  const savedKey=saved.facilitator;
- const savedInvite=(saved.invites&&Object.keys(saved.invites)[0])||inviteLink.match(/invite=([0-9a-f]+)/)?.[1];
- assert.ok(savedKey&&savedInvite);
+ assert.ok(savedKey);
  await fac.goto(first.origin+'/?board=e2e#facilitator='+savedKey);
  await fac.locator('#connection').filter({hasText:'Connected'}).waitFor();
  await synced(fac,3,1);
@@ -156,14 +163,19 @@ try {
  assert.equal(stored.strokes.length,0);assert.equal(stored.notes.length,0);
  await fac.screenshot({path:'/tmp/whiteboard-browser-standalone.png',fullPage:true});
  await stopServer(first.server);
- // --- same data under a sub-path prefix, invite link included ---
+ // --- same data under a sub-path prefix, fresh one-use invite links ---
  second=await startServer(dir,['-prefix','/wb']);
- const persistedInvite=(JSON.parse(await readFile(join(dir,'boards','e2e.json'),'utf8')).invites&&Object.keys(JSON.parse(await readFile(join(dir,'boards','e2e.json'),'utf8')).invites)[0])||savedInvite;
+ await fac.goto(second.origin+'/wb/?board=e2e#facilitator='+savedKey);
+ await fac.locator('#connection').filter({hasText:'Connected'}).waitFor();
  const pCtx=await browser.newContext(),qCtx=await browser.newContext();
  const p=await pCtx.newPage(),q=await qCtx.newPage();
- await p.goto(second.origin+'/wb/?board=e2e&invite='+persistedInvite);
+ const pCode=(await (await api(second.origin,'/wb/api/action',{action:'invite',board:'e2e'},{'X-Facilitator-Key':savedKey})).json()).inviteCode;
+ const pInvite=second.origin+'/wb/?board=e2e#invite='+pCode;
+ await p.goto(pInvite);
  await p.locator('#connection').filter({hasText:'Connected'}).waitFor();
- await q.goto(second.origin+'/wb/?board=e2e&invite='+persistedInvite);
+ const qCode=(await (await api(second.origin,'/wb/api/action',{action:'invite',board:'e2e'},{'X-Facilitator-Key':savedKey})).json()).inviteCode;
+ const qInvite=second.origin+'/wb/?board=e2e#invite='+qCode;
+ await q.goto(qInvite);
  await q.locator('#connection').filter({hasText:'Connected'}).waitFor();
  await draw(p,0.1,0.2,0.4,0.5);
  await synced(q,1,0);

@@ -58,7 +58,9 @@ server started for the same data directory. Restart resumes the saved boards.
 2. Create a named board per group or topic. Boards are persistent, isolated
    sessions: clearing or locking one never touches the others. The `main`
    board is open; every other named board is private — press **Create invite**
-   on the facilitator panel and share that invite link. Anyone with only the
+   once per participant and share each link privately. Each invite is consumed
+   on first join; the code lives in the URL fragment, outside HTTP request
+   paths. Anyone with only the
    board name (a guessed URL) is denied on state, draw/note, sync poll, and
    both exports until they join with a valid invite. Revoking a member or an
    invite takes effect immediately and survives restarts.

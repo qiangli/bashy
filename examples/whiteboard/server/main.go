@@ -447,6 +447,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			next.Invites = map[string]bool{}
 		}
 		next.Members[id] = true
+		delete(next.Invites, code) // An admission link may be used only once.
 		next.Revision++
 		if err := saveBoard(boardPath(a.dir, next.Name), next); err != nil {
 			log.Printf("save failed: %v", err)

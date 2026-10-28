@@ -103,7 +103,10 @@ func TestFacilitatorParticipantIsolation(t *testing.T) {
 	alice, bob := token(), token()
 	code := invite(t, a, fac, "team1")
 	join(t, a, alice, "team1", code)
-	join(t, a, bob, "team1", code)
+	if request(a, bob, "", "/api/action", map[string]any{"action": "join", "board": "team1", "invite": code}).Code != 403 {
+		t.Fatal("used invite admitted a second participant")
+	}
+	join(t, a, bob, "team1", invite(t, a, fac, "team1"))
 	sid := stroke(t, a, alice, "", "team1")
 	nid := note(t, a, alice, "team1", "SECRET <script>alert(1)</script>")
 	// State and exports never carry capabilities or owner tokens.
@@ -196,7 +199,7 @@ func TestPersistenceAcrossRestart(t *testing.T) {
 	if len(got.Strokes) != 1 || len(got.Notes) != 1 || !got.Locked || got.Revision != before || got.Facilitator != fac {
 		t.Fatalf("restart lost state: %+v", got)
 	}
-	if !got.isMember(member) || len(got.Invites) != 1 {
+	if !got.isMember(member) || len(got.Invites) != 0 {
 		t.Fatal("restart lost membership")
 	}
 }
@@ -208,6 +211,9 @@ func TestConcurrentDraw(t *testing.T) {
 	members := make([]string, 30)
 	for i := range members {
 		members[i] = token()
+		if i > 0 {
+			code = invite(t, a, fac, "jam")
+		}
 		join(t, a, members[i], "jam", code)
 	}
 	var wg sync.WaitGroup
@@ -481,7 +487,11 @@ func TestInvitesAndRevocation(t *testing.T) {
 	// Owner mints an invite; invited users can draw, note, and sync.
 	code := invite(t, a, fac, "private1")
 	join(t, a, alice, "private1", code)
-	join(t, a, bob, "private1", code)
+	if request(a, bob, "", "/api/action", map[string]any{"action": "join", "board": "private1", "invite": code}).Code != 403 {
+		t.Fatal("used invite admitted a second participant")
+	}
+	join(t, a, bob, "private1", invite(t, a, fac, "private1"))
+	pendingCode := invite(t, a, fac, "private1")
 	stroke(t, a, alice, "", "private1")
 	note(t, a, bob, "private1", "hello")
 	good(t, request(a, alice, "", "/api/state?board=private1", nil))
@@ -493,7 +503,7 @@ func TestInvitesAndRevocation(t *testing.T) {
 	// Facilitator state carries the roster; member state does not leak it.
 	fw := request(a, token(), fac, "/api/state?board=private1", nil)
 	good(t, fw)
-	if !strings.Contains(fw.Body.String(), alice) || !strings.Contains(fw.Body.String(), code) {
+	if !strings.Contains(fw.Body.String(), alice) || !strings.Contains(fw.Body.String(), pendingCode) {
 		t.Fatal("facilitator roster missing member or invite")
 	}
 	mw := request(a, alice, "", "/api/state?board=private1", nil)
@@ -522,8 +532,8 @@ func TestInvitesAndRevocation(t *testing.T) {
 		t.Fatal("participant revoked a member")
 	}
 	// Revoked invites stop working for new joiners.
-	good(t, request(a, token(), fac, "/api/action", map[string]any{"action": "revoke", "board": "private1", "invite": code}))
-	if request(a, stranger, "", "/api/action", map[string]any{"action": "join", "board": "private1", "invite": code}).Code != 403 {
+	good(t, request(a, token(), fac, "/api/action", map[string]any{"action": "revoke", "board": "private1", "invite": pendingCode}))
+	if request(a, stranger, "", "/api/action", map[string]any{"action": "join", "board": "private1", "invite": pendingCode}).Code != 403 {
 		t.Fatal("revoked invite still joins")
 	}
 	// Membership survives a restart.
