@@ -79,6 +79,8 @@ CLIENT verbs — run anywhere, no engine build needed:
   status [--json]                 cluster-client status: kubeconfig plane, outpost agent, VM note
   kubeconfig [--refresh | --from-satellite [--node NAME] [--output PATH | --stdout]]
                                   show the kubeconfig kubectl/helm use; refresh it, or mint one over the satellite
+  use @scope:<path>               select the matching scope namespace in the current kubeconfig context
+  list [--json]                   list reachable scope namespaces; * marks the current namespace
   shell [--remote NAME] [-c CMD]  open a shell through the outpost agent (a satellite with --remote/--host)
   federation ...                  Karmada federation membership (join/leave/status/...) via the outpost cluster agent
   use|local|run|ps|logs|attach|stop|expose ...

@@ -674,7 +674,7 @@ var verbSynopsis = map[string]string{
 	"curl":               "curl (platform curl; pinned+verified curl.se/windows on a bare Windows node)",
 	"kubectl":            "Kubernetes CLI for the DKS cluster (managed external, Apache-2.0)",
 	"helm":               "Helm chart installer for the DKS cluster (managed external, Apache-2.0)",
-	"dks":                "DKS cluster client: status, kubeconfig, shell, federation (VM provisioning needs the engine build)",
+	"dks":                "DKS cluster client: status, kubeconfig, use, list, shell, federation (VM provisioning needs the engine build)",
 	"sphere":             "tier-word spelling of `bashy peer` (the sphere tier's front door)",
 	"outpost":            "pass commands to the paired outpost service executable",
 	"connect":            "attach the terminal to a remote shell through outpost SSH (command/WSL support pending)",
