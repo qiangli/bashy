@@ -3,12 +3,15 @@ id: d89389e9f180
 kind: bug
 title: S514.R12 release tooling accepts rc versions so rc.20 can be promoted (generate-install-channels + promote path)
 seq: 2749
-status: todo
+status: done
 priority: p0
 created: 2026-10-27T20:57:04.463472Z
+assignee: claude-sonnet5.5
 sprint: 514
 sprint_id: fadd1a46-0368-50f1-a65d-4ed147b17629
 sprint_title: 'invitation email + scoped satellites (KISS/MVP: scope + expiry on the one-time pairing code; no outpost change)'
+closed: 2026-10-27T21:01:27.199052Z
+closed_by: s514-manager
 ---
 
 Operator decision 2026-10-27: fix the release tooling so an rc can be promoted, ship it in rc.20, promote rc.20 (rc.19 stays a pre-release).
