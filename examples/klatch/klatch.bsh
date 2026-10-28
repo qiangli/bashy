@@ -1,0 +1,42 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Native Bash# command face; protocol and JSON handling live in provision.py.
+~~~skill as guide
+---
+name: klatch
+description: Bootstrap and provision a running Klatch chat server, idempotently, with admin, accounts, mutual contacts and groups.
+metadata:
+  requires: "has=bashy"
+---
+# Klatch
+
+Run `bashy klatch setup CONFIG.json` against a running Klatch server reachable
+at the `base_url` of the config. It bootstraps the admin password if needed, sets
+the federation domain and closed access, then provisions accounts, mutual
+contacts between group owner and members and groups. `provision` skips the admin
+steps; `status` reports reachability, account count and groups. Output is JSON
+handles to guids and group keys to ids. Reruns create no duplicates.
+Passwords are vault references via `bashy secret show REF`; never put one in
+the config or on a command line. See `examples/klatch/README.md`.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ ${1:-} == --skill ]]; then
+  inside=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then inside=true; continue; fi
+    if [[ $inside == true && $line == '~~~' ]]; then break; fi
+    if [[ $inside == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  exit
+fi
+if [[ ${1:-} == --contract ]]; then
+  echo 'sokilili meitorikusu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini'
+  exit
+fi
+if (( $# != 2 )); then
+  echo 'Usage: klatch setup|provision|status CONFIG.json' >&2
+  exit 2
+fi
+exec python3 "$here/provision.py" "$1" "$2"
