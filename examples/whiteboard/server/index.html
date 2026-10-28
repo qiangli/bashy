@@ -84,7 +84,7 @@ function render(s){
    box.append(el('p','Members: '+((s.members&&s.members.length)?s.members.length:0),'muted'));
    for(const m of (s.members||[])){
     const row=el('p',m,'muted');const b=el('button','Revoke');b.className='danger';b.style.marginLeft='8px';
-    b.onclick=(async mid=>async()=>{try{error('');render(await apiJSON('api/action',{action:'revoke',board,id:mid})))}catch(err){error(err.message)}})(m);
+    b.onclick=(async mid=>async()=>{try{error('');render(await apiJSON('api/action',{action:'revoke',board,id:mid}))}catch(err){error(err.message)}})(m);
     row.append(b);box.append(row);
    }
   }
