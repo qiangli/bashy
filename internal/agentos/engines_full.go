@@ -34,11 +34,15 @@ func dispatchEngine(arg string) {
 	case "ollama":
 		dispatchOllamaEngine()
 	case "dks":
+		if handled, code := handleDKSScope(os.Args[2:]); handled {
+			dispatchExit(code)
+		}
 		// Provision/manage the dedicated ROOTFUL podman machine that DKS
 		// (k3s) runs in — a uniform VM so outposts in the wild don't each
 		// hit a different podman-machine quirk (rootless → cgroup denial →
 		// pods silently never start). Reuses the engine's EnsureMachine.
 		cmd := podmanengine.NewDKSCmd()
+		cmd.Long += "\n\nScope namespaces: 'bashy dks use @scope:<path>' selects one; 'bashy dks list [--json]' lists reachable ones."
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
