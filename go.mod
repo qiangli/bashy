@@ -19,7 +19,7 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261027072617-211789fadf75
 	github.com/qiangli/ycode v0.3.1-dev.0.20261027073853-917738b53a68
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261028001217-3302a635cddd
+	github.com/qiangli/yoke v0.0.0-20261028183701-fb6c660ba725
 	github.com/qiangli/yoke/external/otel v0.0.0-20261028001217-3302a635cddd
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -35,6 +35,9 @@ require (
 	golang.org/x/term v0.46.0
 	golang.org/x/text v0.42.0
 	gopkg.in/yaml.v3 v3.0.1
+	k8s.io/api v0.35.0
+	k8s.io/apimachinery v0.35.0
+	k8s.io/client-go v0.35.0
 	mvdan.cc/sh/v3 v3.13.1
 )
 
@@ -377,7 +380,7 @@ require (
 	github.com/qiangli/yamux v0.2.0 // indirect
 	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261028001217-3302a635cddd // indirect
 	github.com/qiangli/yoke/pkg/oci v0.0.0-20261028001217-3302a635cddd // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261028001217-3302a635cddd // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261028182845-41aba63e4332 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
@@ -508,9 +511,6 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gorgonia.org/vecf32 v0.9.0 // indirect
 	gorgonia.org/vecf64 v0.9.0 // indirect
-	k8s.io/api v0.35.0 // indirect
-	k8s.io/apimachinery v0.35.0 // indirect
-	k8s.io/client-go v0.35.0 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20250910181357-589584f1c912 // indirect
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4 // indirect
