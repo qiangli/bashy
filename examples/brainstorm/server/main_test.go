@@ -6,12 +6,40 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 )
+
+func TestSameOriginThroughLoopbackProxy(t *testing.T) {
+	r := httptest.NewRequest("POST", "http://127.0.0.1:18191/api/action", nil)
+	r.RemoteAddr = "127.0.0.1:34567"
+	r.Header.Set("X-Forwarded-Host", "example.test")
+	r.Header.Set("X-Forwarded-Proto", "https")
+	for _, tc := range []struct {
+		origin string
+		remote string
+		want   bool
+	}{
+		{"http://127.0.0.1:18191", "127.0.0.1:34567", true},
+		{"https://example.test", "127.0.0.1:34567", true},
+		{"https://other.test", "127.0.0.1:34567", false},
+		{"http://example.test", "127.0.0.1:34567", false},
+		{"https://example.test", "192.0.2.1:34567", false},
+	} {
+		r.RemoteAddr = tc.remote
+		u, err := url.Parse(tc.origin)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := sameOrigin(r, u); got != tc.want {
+			t.Errorf("origin %s remote %s: got %v, want %v", tc.origin, tc.remote, got, tc.want)
+		}
+	}
+}
 
 func request(a *app, who, key, session, path string, body any) *httptest.ResponseRecorder {
 	method := "GET"

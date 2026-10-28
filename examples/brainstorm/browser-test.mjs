@@ -160,10 +160,13 @@ try {
  const key=JSON.parse(await readFile(join(dir,'sessions','club.json'),'utf8')).facilitator;
  await owner.goto(plain+'#facilitator='+key);
  await noah.goto(plain);await noah.locator('#connection').filter({hasText:'Connected · club'}).waitFor();
+ await noah.locator('#text').fill('Noah private idea');await noah.locator('#submit').click();await cards(noah,1);
  await owner.getByText('Member: noah').waitFor();
  owner.on('dialog',d=>d.accept());
  await owner.locator('#people .actions',{hasText:'Member: noah'}).getByRole('button').click();
  await noah.locator('#connection').filter({hasText:'No access'}).waitFor({timeout:8000});
+ assert.equal(await noah.locator('.card').count(),0);
+ assert.equal(await noah.locator('#composer').isHidden(),true);
  assert.equal((await nCtx.request.get(inv.origin+'/bs/api/state?session=club')).status(),404);
  assert.equal((await mCtx.request.get(inv.origin+'/bs/api/state?session=club')).status(),200);
  await hold('brainstorm', second.origin, '/bs/api/state?session=e2e');
