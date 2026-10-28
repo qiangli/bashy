@@ -87,11 +87,23 @@ WHITEBOARD_DATA="$HOME/.local/share/bashy/whiteboard/session-2" bashy ./whiteboa
 ```
 
 Set `WHITEBOARD_ADDR=0.0.0.0:18093` to use another port. Set
-`WHITEBOARD_PREFIX=/whiteboard` when serving behind a sub-path (for example an
-outpost app prefix); all page URLs are relative so the board keeps working
+`WHITEBOARD_PREFIX=/whiteboard` when a proxy preserves that sub-path. Outpost
+strips `/app/<name>` before forwarding, so leave the prefix empty there. Bind
+to loopback and register with
+`outpost apps add whiteboard --url http://127.0.0.1:18093`. Its HTTPS URL is
+`https://<cloudbox>/matrix/h/<host>/app/whiteboard/`. Custom-app add/remove
+are live operations; `outpost apps rm whiteboard` removes the route without
+restarting the daemon. All page URLs are relative so the board keeps working
 there. Host firewall rules and Wi-Fi client isolation can prevent guest access
 even on the same Wi-Fi. Everything works without internet once Go and the
 executable are available.
+
+`bashy whiteboard backup` prints a verified snapshot directory. Stop the
+server, choose a **new, empty** data directory, then run
+`WHITEBOARD_DATA=/new/board-data bashy whiteboard restore /saved/snapshot`
+before serving it again. Restore refuses nonempty destinations, invalid
+records and overwrites. Snapshot JSON contains facilitator capabilities;
+store it privately. Members and revocations survive restore.
 
 Run focused tests with `bashy dag test`. There is no change to the Bashy binary.
 Run `python3 verify-duality.py` after registration to check direct script,
