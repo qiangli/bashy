@@ -792,6 +792,19 @@ one story:
 - Commit record/docs changes in a producer module before bumping its consumers
   (`mod sync` / `dag sync`): drift compares exact HEADs, so a later docs-only producer
   commit leaves every consumer pin stale.
+- After any sibling pin bump, run the fast ratchet and pin tests locally before pushing
+  the candidate; a new flag or vocabulary change from a sibling costs a minute there
+  and a whole release cycle later. Pre-flight also dry-runs the promote path with the
+  candidate's own release tools.
+- Time-box every gate and announce the deadline to whoever shares the hosts or waits on
+  the result. A gate that does not complete is INCOMPLETE, never a pass: keep the previous
+  release, release every host claim, report, and do not start another cycle without a
+  decision. Bound each lane and each host slot; release first, debug second.
+- Size worker runs to their real wall clock (a pointed run has a hard ceiling); start a
+  run that depends on a build only after the build has published.
+- Ship one candidate per cycle; work that lands after the freeze waits for the next
+  train unless it unblocks a live system. Unblock dependent work with the published
+  pre-release on dev/test hosts rather than making it wait for promotion.
 
 ## Command quick-reference
 ```sh
