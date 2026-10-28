@@ -2137,6 +2137,7 @@ func dispatchCoreutilsTool(name string, args []string, stdio tool.Stdio) int {
 // $BASHY_SKILLS_DIR overrides) so local installs/learning shadow all.
 func skillsOptions() []coreskills.Option {
 	opts := []coreskills.Option{
+		coreskills.WithBashSharpRunner(runSkillBashSharp),
 		coreskills.WithSource(coreskills.EmbedSource(skills.FS, coreskills.RingEmbedded)),
 		// Bridges the moved command docs (skills/bashy/commands/*) back in
 		// under their own names, so `skill show/run conductor|sprint|...`
