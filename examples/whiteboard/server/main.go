@@ -66,14 +66,25 @@ type Note struct {
 	Owner string  `json:"owner"`
 }
 type Board struct {
-	Version     int      `json:"version"`
-	Name        string   `json:"name"`
-	Facilitator string   `json:"facilitator"`
-	Locked      bool     `json:"locked"`
-	Strokes     []Stroke `json:"strokes"`
-	Notes       []Note   `json:"notes"`
-	Revision    int      `json:"revision"`
+	Version     int             `json:"version"`
+	Name        string          `json:"name"`
+	Facilitator string          `json:"facilitator"`
+	Locked      bool            `json:"locked"`
+	Strokes     []Stroke        `json:"strokes"`
+	Notes       []Note          `json:"notes"`
+	Revision    int             `json:"revision"`
+	Members     map[string]bool `json:"members,omitempty"`
+	Invites     map[string]bool `json:"invites,omitempty"`
 }
+
+// isPrivate reports whether a board requires an invitation. The default
+// "main" board stays open so legacy hosts keep working; every other named
+// board is owner-controlled: only the facilitator and invited members may
+// read or write.
+func isPrivate(name string) bool { return name != "main" }
+
+func (b *Board) isMember(id string) bool { return b.Members != nil && b.Members[id] }
+
 type app struct {
 	mu     sync.Mutex
 	dir    string
@@ -161,6 +172,12 @@ func (a *app) loadLocked(name string) (*Board, error) {
 	if b.Notes == nil {
 		b.Notes = []Note{}
 	}
+	if b.Members == nil {
+		b.Members = map[string]bool{}
+	}
+	if b.Invites == nil {
+		b.Invites = map[string]bool{}
+	}
 	a.boards[name] = b
 	return b, nil
 }
@@ -181,7 +198,7 @@ func (a *app) createLocked(name string) (*Board, error) {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
-	b := &Board{Version: 1, Name: name, Facilitator: token(), Strokes: []Stroke{}, Notes: []Note{}}
+	b := &Board{Version: 1, Name: name, Facilitator: token(), Strokes: []Stroke{}, Notes: []Note{}, Members: map[string]bool{}, Invites: map[string]bool{}}
 	if err := saveBoard(boardPath(a.dir, name), *b); err != nil {
 		return nil, err
 	}
@@ -193,6 +210,24 @@ func boardNotFound(w http.ResponseWriter) {
 }
 func (a *app) facilitator(r *http.Request, b *Board) bool {
 	return subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Facilitator-Key")), []byte(b.Facilitator)) == 1
+}
+
+// authorized reports whether id may read or write b. The facilitator always
+// passes; the open "main" board admits everyone; every other named board
+// admits only invited members. A guessed URL alone never grants access, and a
+// revoked member fails immediately because membership is checked live.
+func authorized(b *Board, id string, isFac bool) bool {
+	if isFac {
+		return true
+	}
+	if !isPrivate(b.Name) {
+		return true
+	}
+	return b.isMember(id)
+}
+
+func accessDenied(w http.ResponseWriter) {
+	fail(w, 403, "This board is private. Ask the facilitator for an invite.")
 }
 func participant(w http.ResponseWriter, r *http.Request) string {
 	if c, e := r.Cookie("whiteboard-participant"); e == nil && validToken(c.Value) {
@@ -281,7 +316,12 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		respond(w, a.view(id, b, a.facilitator(r, b)))
+		isFac := a.facilitator(r, b)
+		if !authorized(b, id, isFac) {
+			accessDenied(w)
+			return
+		}
+		respond(w, a.view(id, b, isFac))
 		return
 	}
 	if path == "/api/export" && r.Method == "GET" {
@@ -296,6 +336,10 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			} else {
 				fail(w, 400, err.Error())
 			}
+			return
+		}
+		if !authorized(b, id, a.facilitator(r, b)) {
+			accessDenied(w)
 			return
 		}
 		if r.URL.Query().Get("format") == "png" {
@@ -314,16 +358,19 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Action string  `json:"action"`
-		Board  string  `json:"board"`
-		ID     string  `json:"id"`
-		Points []Pt    `json:"points"`
-		Color  string  `json:"color"`
-		Width  float64 `json:"width"`
-		X      float64 `json:"x"`
-		Y      float64 `json:"y"`
-		Text   string  `json:"text"`
-		Locked bool    `json:"locked"`
+		Action     string  `json:"action"`
+		Board      string  `json:"board"`
+		ID         string  `json:"id"`
+		Points     []Pt    `json:"points"`
+		Color      string  `json:"color"`
+		Width      float64 `json:"width"`
+		X          float64 `json:"x"`
+		Y          float64 `json:"y"`
+		Text       string  `json:"text"`
+		Locked     bool    `json:"locked"`
+		Invite     string  `json:"invite"`
+		InviteCode string  `json:"inviteCode"`
+		Code       string  `json:"code"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 65536))
 	dec.DisallowUnknownFields()
@@ -370,6 +417,121 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	isFac := a.facilitator(r, b)
+	// Owner-controlled membership: the open "main" board admits everyone,
+	// the facilitator always passes, and every other named board admits only
+	// invited members on every path. Join/invite/revoke manage membership;
+	// all other actions require it.
+	if req.Action == "join" {
+		if !isPrivate(req.Board) {
+			respond(w, a.view(id, b, isFac))
+			return
+		}
+		code := req.Invite
+		if code == "" {
+			code = req.InviteCode
+		}
+		if code == "" {
+			code = req.Code
+		}
+		if !validToken(code) || !b.Invites[code] {
+			fail(w, 403, "This invite is invalid. Ask the facilitator for a new one.")
+			return
+		}
+		raw, _ := json.Marshal(b)
+		var next Board
+		json.Unmarshal(raw, &next)
+		if next.Members == nil {
+			next.Members = map[string]bool{}
+		}
+		if next.Invites == nil {
+			next.Invites = map[string]bool{}
+		}
+		next.Members[id] = true
+		next.Revision++
+		if err := saveBoard(boardPath(a.dir, next.Name), next); err != nil {
+			log.Printf("save failed: %v", err)
+			fail(w, 500, "Could not save. Your change was not accepted; keep your work and ask the facilitator.")
+			return
+		}
+		*a.boards[next.Name] = next
+		respond(w, a.view(id, &next, isFac))
+		return
+	}
+	if req.Action == "invite" || req.Action == "revoke" {
+		if !isFac {
+			fail(w, 403, "Only the facilitator can manage invites")
+			return
+		}
+		if !isPrivate(req.Board) {
+			fail(w, 400, "The main board is open to everyone; invites are for named boards")
+			return
+		}
+		raw, _ := json.Marshal(b)
+		var next Board
+		json.Unmarshal(raw, &next)
+		if next.Members == nil {
+			next.Members = map[string]bool{}
+		}
+		if next.Invites == nil {
+			next.Invites = map[string]bool{}
+		}
+		if req.Action == "invite" {
+			code := token()
+			next.Invites[code] = true
+			next.Revision++
+			if err := saveBoard(boardPath(a.dir, next.Name), next); err != nil {
+				log.Printf("save failed: %v", err)
+				fail(w, 500, "Could not save. Your change was not accepted; keep your work and ask the facilitator.")
+				return
+			}
+			*a.boards[next.Name] = next
+			v := a.view(id, &next, true)
+			v["invite"] = code
+			v["inviteCode"] = code
+			respond(w, v)
+			return
+		}
+		target := req.ID
+		if target == "" {
+			target = req.Invite
+		}
+		if target == "" {
+			target = req.InviteCode
+		}
+		if target == "" {
+			target = req.Code
+		}
+		if target == "" {
+			fail(w, 400, "Name a member or invite to revoke")
+			return
+		}
+		removed := false
+		if next.Members[target] {
+			delete(next.Members, target)
+			removed = true
+		}
+		if next.Invites[target] {
+			delete(next.Invites, target)
+			removed = true
+		}
+		if !removed {
+			fail(w, 404, "Member or invite not found")
+			return
+		}
+		next.Revision++
+		if err := saveBoard(boardPath(a.dir, next.Name), next); err != nil {
+			log.Printf("save failed: %v", err)
+			fail(w, 500, "Could not save. Your change was not accepted; keep your work and ask the facilitator.")
+			return
+		}
+		*a.boards[next.Name] = next
+		respond(w, a.view(id, &next, true))
+		return
+	}
+	if !authorized(b, id, isFac) {
+		accessDenied(w)
+		return
+	}
 	// Work on a copy: a failed disk save must not acknowledge or retain a mutation.
 	raw, _ := json.Marshal(b)
 	var next Board
@@ -543,9 +705,23 @@ func (a *app) view(id string, b *Board, fac bool) map[string]any {
 	for _, n := range b.Notes {
 		notes = append(notes, map[string]any{"id": n.ID, "x": n.X, "y": n.Y, "text": n.Text, "color": n.Color, "mine": n.Owner == id})
 	}
-	return map[string]any{"board": b.Name, "revision": b.Revision, "locked": b.Locked,
+	v := map[string]any{"board": b.Name, "revision": b.Revision, "locked": b.Locked,
 		"strokes": strokes, "notes": notes, "facilitator": fac,
+		"private": isPrivate(b.Name), "member": fac || !isPrivate(b.Name) || b.isMember(id),
 		"canvas": map[string]float64{"w": canvasW, "h": canvasH}}
+	if fac && isPrivate(b.Name) {
+		members := []string{}
+		for m := range b.Members {
+			members = append(members, m)
+		}
+		invites := []string{}
+		for c := range b.Invites {
+			invites = append(invites, c)
+		}
+		v["members"] = members
+		v["invites"] = invites
+	}
+	return v
 }
 func exportView(b *Board) any {
 	strokes := []map[string]any{}

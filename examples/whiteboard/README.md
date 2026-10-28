@@ -56,7 +56,12 @@ server started for the same data directory. Restart resumes the saved boards.
    facilitator page when copying its participant link (keep the facilitator
    fragment).
 2. Create a named board per group or topic. Boards are persistent, isolated
-   sessions: clearing or locking one never touches the others.
+   sessions: clearing or locking one never touches the others. The `main`
+   board is open; every other named board is private — press **Create invite**
+   on the facilitator panel and share that invite link. Anyone with only the
+   board name (a guessed URL) is denied on state, draw/note, sync poll, and
+   both exports until they join with a valid invite. Revoking a member or an
+   invite takes effect immediately and survives restarts.
 3. Draw freehand on the canvas and pin sticky notes. Every open browser polls
    and re-renders, so contributions appear everywhere within a couple of
    seconds; a dropped connection shows "Reconnecting…" and resumes.

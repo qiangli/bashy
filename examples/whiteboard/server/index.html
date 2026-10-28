@@ -17,7 +17,7 @@ label{display:block;font-size:13px;font-weight:650;margin-bottom:4px}
 .note .mine{display:block;margin-top:6px;font-size:11px;color:#5d7068}
 footer{font-size:13px;color:#607469;margin-top:12px}a{color:inherit}[hidden]{display:none!important}@media(max-width:650px){.tools>div{min-width:44vw}}
 </style></head><body>
-<header><h1 id="boardTitle">Shared whiteboard</h1><p>Draw freehand, pin notes, think together. No account needed — open the participant link to join.</p></header>
+<header><h1 id="boardTitle">Shared whiteboard</h1><p>Draw freehand, pin notes, think together. The main board is open; named boards are private — open the invite link to join.</p></header>
 <main>
 <div class="bar"><span class="pill" id="connection">Connecting…</span><span class="muted" id="summary"></span></div>
 <div id="message" role="alert" aria-live="polite"></div>
@@ -31,23 +31,31 @@ footer{font-size:13px;color:#607469;margin-top:12px}a{color:inherit}[hidden]{dis
 <div><button id="addNote" type="button">Add note</button></div>
 <div><button class="secondary" id="exportJson" type="button">Export JSON</button></div>
 <div><button class="secondary" id="exportPng" type="button">Export PNG</button></div>
+<div><label for="inviteInput">Invite code</label><input id="inviteInput" maxlength="64" size="12" autocomplete="off" placeholder="Paste invite…"></div>
+<div><button class="secondary" id="joinBoard" type="button">Join board</button></div>
 </div></section>
-<section class="panel" id="facilitatorPanel" hidden><strong>Facilitator controls</strong> <span class="muted">Keep your facilitator link private. Share the participant link below.</span>
+<section class="panel" id="facilitatorPanel" hidden><strong>Facilitator controls</strong> <span class="muted">Keep your facilitator link private. Named boards admit only invited members — share an invite link, revoke to remove.</span>
 <div class="tools" style="margin-top:10px"><div><button id="lockBtn" type="button">Lock board</button></div>
 <div><button class="danger" id="clearBtn" type="button">Clear board</button></div>
-<div><button class="secondary" id="copyLink" type="button">Copy participant link</button></div></div>
-<p class="muted" id="participantLink"></p></section>
+<div><button class="secondary" id="copyLink" type="button">Copy participant link</button></div>
+<div><button class="secondary" id="inviteBtn" type="button">Create invite</button></div>
+<div><button class="secondary" id="copyInvite" type="button">Copy invite link</button></div></div>
+<p class="muted" id="participantLink"></p><p class="muted" id="inviteLink"></p><div id="memberList"></div></section>
 <section class="stage"><canvas id="canvas" width="1600" height="1000"></canvas><div id="notes"></div></section>
-<footer>Local shared board · Strokes and notes sync to every open browser. Locking freezes contributions; clearing removes everything.</footer>
+<footer>Local shared board · The main board is open; named boards sync only to invited members. Locking freezes contributions; clearing removes everything.</footer>
 </main><script>
 const $=id=>document.getElementById(id);
 const canvas=$('canvas'),ctx=canvas.getContext('2d');
 const api=p=>new URL(p,document.baseURI).toString();
 function boardFromURL(){const q=new URLSearchParams(location.search);if(q.has('board'))return q.get('board');const h=new URLSearchParams(location.hash.slice(1));return h.get('board')||'main'}
+function inviteFromURL(){const q=new URLSearchParams(location.search);if(q.has('invite'))return q.get('invite');const h=new URLSearchParams(location.hash.slice(1));return h.get('invite')||''}
 let board=boardFromURL();
 let facilitator='';try{facilitator=sessionStorage.getItem('whiteboard-facilitator:'+board)||''}catch{}
 const frag=new URLSearchParams(location.hash.slice(1));
 if(frag.has('facilitator')){facilitator=frag.get('facilitator');try{sessionStorage.setItem('whiteboard-facilitator:'+board,facilitator)}catch{}}
+let pendingInvite=inviteFromURL();
+let lastInvite='';try{lastInvite=sessionStorage.getItem('whiteboard-invite:'+board)||''}catch{}
+if(!pendingInvite&&lastInvite)$('inviteInput').value=lastInvite;else if(pendingInvite)$('inviteInput').value=pendingInvite;
 let state=null,lastRevision=-1,polling=false,drawing=false,current=[];
 function error(msg){$('message').textContent=msg}
 function el(tag,text,cls){const n=document.createElement(tag);if(text!==undefined)n.textContent=text;if(cls)n.className=cls;return n}
@@ -67,6 +75,21 @@ function render(s){
  $('lockBtn').textContent=s.locked?'Unlock board':'Lock board';
  const origin=new URL(api('/')).origin+new URL(api('./')).pathname.replace(/\/$/,'');
  $('participantLink').textContent='Participant link: '+origin+'/?board='+encodeURIComponent(s.board);
+ if(s.facilitator){
+  const codes=(s.invites&&s.invites.length?s.invites:(lastInvite?[lastInvite]:[]));
+  const show=codes.length?codes[codes.length-1]:'';
+  $('inviteLink').textContent=s.private?(show?('Invite link: '+origin+'/?board='+encodeURIComponent(s.board)+'&invite='+encodeURIComponent(show)):'Press Create invite, then share the invite link.'):'Main board is open — no invite needed.';
+  const box=$('memberList');box.replaceChildren();
+  if(s.private){
+   box.append(el('p','Members: '+((s.members&&s.members.length)?s.members.length:0),'muted'));
+   for(const m of (s.members||[])){
+    const row=el('p',m,'muted');const b=el('button','Revoke');b.className='danger';b.style.marginLeft='8px';
+    b.onclick=(async mid=>async()=>{try{error('');render(await apiJSON('api/action',{action:'revoke',board,id:mid})))}catch(err){error(err.message)}})(m);
+    row.append(b);box.append(row);
+   }
+  }
+ }
+ if(s.private)$('summary').textContent+=' · private';
  if(lastRevision===s.revision&&$('notes').childElementCount)return;lastRevision=s.revision;
  ctx.fillStyle='#fff';ctx.fillRect(0,0,1600,1000);ctx.strokeStyle='#e9eee9';ctx.lineWidth=1;
  for(let x=0;x<=1600;x+=100){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,1000);ctx.stroke()}
@@ -80,13 +103,17 @@ function render(s){
   d.addEventListener('dblclick',async()=>{const t=prompt('Edit note',n.text);if(t===null)return;try{error('');render(await apiJSON('api/action',{action:'edit-note',board,id:n.id,text:t}))}catch(err){error(err.message)}});
   layer.append(d)}
 }
-async function refresh(force){if(polling)return;polling=true;try{const s=await apiJSON('api/state?board='+encodeURIComponent(board));if(force)lastRevision=-1;render(s);$('connection').textContent='Connected · '+s.board}catch(e){$('connection').textContent='Disconnected · Reconnecting…'}finally{polling=false}}
+async function joinWith(code){const s=await apiJSON('api/action',{action:'join',board,invite:code});lastInvite=code;try{sessionStorage.setItem('whiteboard-invite:'+board,code)}catch{}lastRevision=-1;render(s);return s}
+async function refresh(force){if(polling)return;polling=true;try{const s=await apiJSON('api/state?board='+encodeURIComponent(board));if(force)lastRevision=-1;render(s);$('connection').textContent='Connected · '+s.board;if(pendingInvite){pendingInvite=''}}catch(e){const msg=String(e.message||e);if(pendingInvite&&/private|invite|member/i.test(msg)){try{const s=await joinWith(pendingInvite);pendingInvite='';error('');$('connection').textContent='Connected · '+s.board;return}finally{}}if(/private|invite/i.test(msg)){error(msg+' Paste an invite code and press Join board.');$('connection').textContent='Private board · Invite required'}else{$('connection').textContent='Disconnected · Reconnecting…'}}finally{polling=false}}
 $('openBoard').onclick=()=>{const b=$('boardInput').value.trim()||'main';location.search='?board='+encodeURIComponent(b)};
 $('createBoard').onclick=async()=>{const b=$('boardInput').value.trim()||'main';try{error('');const s=await apiJSON('api/action',{action:'create',board:b});facilitator=s.facilitatorKey;try{sessionStorage.setItem('whiteboard-facilitator:'+b,facilitator)}catch{}board=b;lastRevision=-1;render(s);history.replaceState(null,'',location.pathname+'?board='+encodeURIComponent(b));error('Board created. Your facilitator link is private — bookmark this browser.')}catch(err){error(err.message)}};
 $('addNote').onclick=async()=>{const t=$('noteText').value;if(!t.trim()){error('Write a note first.');return}const k=(state?state.notes.length:0);try{error('');render(await apiJSON('api/action',{action:'note',board,x:120+(k*47)%1100,y:120+(k*37)%640,text:t}));$('noteText').value=''}catch(err){error(err.message)}};
 $('lockBtn').onclick=async()=>{try{error('');render(await apiJSON('api/action',{action:'lock',board,locked:!state.locked}))}catch(err){error(err.message)}};
 $('clearBtn').onclick=async()=>{if(!confirm('Clear every stroke and note on this board?'))return;try{error('');lastRevision=-1;render(await apiJSON('api/action',{action:'clear',board}))}catch(err){error(err.message)}};
 $('copyLink').onclick=async()=>{const origin=new URL(api('/')).origin+new URL(api('./')).pathname.replace(/\/$/,'/');const link=origin+'?board='+encodeURIComponent(board);try{await navigator.clipboard.writeText(link);error('Participant link copied.')}catch{error('Copy this participant link: '+link)}};
+$('joinBoard').onclick=async()=>{const code=$('inviteInput').value.trim();if(!code){error('Paste an invite code first.');return}try{error('');const s=await joinWith(code);$('connection').textContent='Connected · '+s.board;pendingInvite=''}catch(err){error(err.message)}};
+$('inviteBtn').onclick=async()=>{try{error('');const s=await apiJSON('api/action',{action:'invite',board});if(s.inviteCode){lastInvite=s.inviteCode;try{sessionStorage.setItem('whiteboard-invite:'+board,s.inviteCode)}catch{}$('inviteInput').value=s.inviteCode}lastRevision=-1;render(s);error('Invite created. Share the invite link; revoke to remove.')}catch(err){error(err.message)}};
+$('copyInvite').onclick=async()=>{const code=lastInvite||$('inviteInput').value.trim();if(!code){error('Create an invite first.');return}const origin=new URL(api('/')).origin+new URL(api('./')).pathname.replace(/\/$/,'/');const link=origin+'?board='+encodeURIComponent(board)+'&invite='+encodeURIComponent(code);try{await navigator.clipboard.writeText(link);error('Invite link copied.')}catch{error('Copy this invite link: '+link)}};
 async function download(format){try{const r=await fetch(api('api/export?board='+encodeURIComponent(board)+'&format='+format),{headers:{'X-Facilitator-Key':facilitator}});if(!r.ok){const e=await r.json();throw Error(e.error)}const u=URL.createObjectURL(await r.blob());const a2=el('a');a2.href=u;a2.download='whiteboard-'+board+'.'+(format==='png'?'png':'json');a2.click();setTimeout(()=>URL.revokeObjectURL(u),1000)}catch(e){error(e.message)}}
 $('exportJson').onclick=()=>download('json');$('exportPng').onclick=()=>download('png');
 refresh();setInterval(refresh,1500);
