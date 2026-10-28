@@ -81,7 +81,10 @@ outpost-profile list
 
 The config directory is `${XDG_CONFIG_HOME:-$HOME/.config}/matrix` on
 macOS, Linux and Windows (Git Bash supplies `$HOME` on Windows; the
-path handed to a native `outpost.exe` is converted at that boundary).
+path handed to a native `outpost.exe` is converted at that boundary:
+via `cygpath` when present, else MSYS `/c/x` becomes `C:/x`). `add` checks
+the profile file exists after register and, if not, prints what outpost
+reported.
 `OUTPOST_BIN` overrides the outpost executable lookup when set;
 otherwise `outpost` resolves through `PATH`. Profile names become one
 path segment: empty names, `/`, `\`, `..`, and leading `.`/`-` are
@@ -143,9 +146,26 @@ on_windows() {
 native_path() {
     if on_windows && command -v cygpath >/dev/null 2>&1; then
         cygpath -m "$1"
-    else
-        printf '%s\n' "$1"
+        return
     fi
+    if forced_windows || on_windows; then
+        # No cygpath: convert MSYS-style /x/rest to X:/rest ourselves;
+        # native (C:/x, C:\x) and relative paths pass through.
+        case "$1" in
+            /[a-zA-Z]) d=${1#/}; printf '%s:/\n' "${d^^}"; return ;;
+            /[a-zA-Z]/*)
+                d=${1#/}
+                drive=${d%%/*}
+                printf '%s:/%s\n' "${drive^^}" "${d#*/}"
+                return ;;
+        esac
+    fi
+    printf '%s\n' "$1"
+}
+
+# Test switch: treat the host as Windows without needing one.
+forced_windows() {
+    [ "${OUTPOST_PROFILE_FORCE_WINDOWS:-}" = 1 ]
 }
 
 outpost_bin() {
@@ -203,11 +223,18 @@ cmd_add() {
     if [ -n "$host" ]; then
         regname=(--name "$host")
     fi
-    if ! "$(outpost_bin)" register --server "$server" --code "$code" "${regname[@]}" --out "$(native_path "$out")"; then
+    nout=$(native_path "$out")
+    if ! reg_out=$("$(outpost_bin)" register --server "$server" --code "$code" "${regname[@]}" --out "$nout" 2>&1); then
+        [ -z "$reg_out" ] || printf '%s\n' "$reg_out" >&2
         fail "outpost register failed for profile $name" 1
     fi
     code=
-    [ -f "$out" ] || fail "register reported success but wrote no file: $out" 1
+    [ -z "$reg_out" ] || printf '%s\n' "$reg_out"
+    if [ ! -f "$out" ]; then
+        echo "$PROG: outpost was given --out $nout" >&2
+        echo "$PROG: outpost output: $reg_out" >&2
+        fail "register reported success but wrote no file: $out" 1
+    fi
     printf '%s\n' "$server" > "$base/profiles/$name/server"
     if [ -n "$host" ]; then
         printf '%s\n' "$host" > "$base/profiles/$name/host"
@@ -326,6 +353,9 @@ case "$sub" in
     use)
         [ $# -eq 1 ] || usage
         cmd_use "$1"
+        ;;
+    __native_path)
+        native_path "$1"
         ;;
     list)
         [ $# -eq 0 ] || usage

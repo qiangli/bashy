@@ -626,3 +626,53 @@ func TestSkillFlagPrintsGuidance(t *testing.T) {
 		t.Fatalf("--skill output missing guidance: %q", out)
 	}
 }
+
+// native_path without cygpath: MSYS-style /x/rest becomes X:/rest,
+// native and relative spellings pass through (forced-windows switch).
+func TestNativePathConversionTable(t *testing.T) {
+	f := newFixture(t, nil)
+	f.env = append(f.env, "OUTPOST_PROFILE_FORCE_WINDOWS=1")
+	for in, want := range map[string]string{
+		"/c/Users/a":            "C:/Users/a",
+		"/d/x":                  "D:/x",
+		"/c":                    "C:/",
+		"C:/x":                  "C:/x",
+		"rel/path":              "rel/path",
+		"/tmp/x":                "/tmp/x",
+		"/c/Users/a/agent.json": "C:/Users/a/agent.json",
+	} {
+		out, _, code := f.run("__native_path", in)
+		if code != 0 || strings.TrimSpace(out) != want {
+			t.Errorf("native_path(%q) = %q (exit %d), want %q", in, out, code, want)
+		}
+	}
+	g := newFixture(t, nil)
+	if out, _, _ := g.run("__native_path", "/c/Users/a"); strings.TrimSpace(out) != "/c/Users/a" && runtime.GOOS != "windows" {
+		t.Errorf("non-windows native_path changed path: %q", out)
+	}
+}
+
+// The add flow hands outpost the converted path and succeeds when the
+// fake writes exactly the path it was given.
+func TestAddWindowsForcedWritesGivenPath(t *testing.T) {
+	f := newFixture(t, nil)
+	f.env = append(f.env, "OUTPOST_PROFILE_FORCE_WINDOWS=1")
+	if _, _, code := f.run("add", "w", "--code", "C", "--server", "https://s.example"); code != 0 {
+		t.Fatalf("add: exit %d", code)
+	}
+}
+
+// A register that succeeds but writes elsewhere fails add and says
+// where outpost reported saving it.
+func TestAddMissingFileReportsOutpostOutput(t *testing.T) {
+	f := newFixture(t, map[string]string{
+		"outpost": "#!/bin/sh\necho \"saved to /elsewhere/agent.json\"\nexit 0\n",
+	})
+	_, stderr, code := f.run("add", "w", "--code", "C", "--server", "https://s.example")
+	if code == 0 {
+		t.Fatal("add succeeded with no file written")
+	}
+	if !strings.Contains(stderr, "saved to /elsewhere/agent.json") || !strings.Contains(stderr, "wrote no file") {
+		t.Errorf("stderr = %q, want outpost output and wrote-no-file", stderr)
+	}
+}
