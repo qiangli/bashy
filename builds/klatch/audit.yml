@@ -32,6 +32,17 @@
           node-version: "@@NODE_VERSION@@"
       - name: install yarn (YARN_VERSION, classic)
         run: npm install --global yarn@@@YARN_VERSION@@
+      - name: yarn audit report (app/sdk, databag-client-sdk; informational, never fails the job)
+        working-directory: src/app/sdk
+        run: |
+          set -euo pipefail
+          . ../../../fork/bashy-build/PIN
+          mkdir -p ../../../out
+          report=../../../out/klatch-sdk-$UPSTREAM_TAG.yarn-audit.json
+          yarn install --frozen-lockfile
+          yarn audit --json >"$report" || true
+          [[ -s $report ]] || { echo "yarn audit produced no report"; exit 1; }
+          echo "yarn audit: report-only, not a release gate (tool.env RELEASE_GATES)"
       - name: yarn audit report (app/client/web; informational, never fails the job)
         working-directory: src/app/client/web
         run: |

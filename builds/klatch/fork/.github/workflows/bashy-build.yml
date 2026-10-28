@@ -4,7 +4,7 @@
 # shared skeleton builds/_shared/bashy-build.yml — edit those, not this file.
 # Installed on the `bashy-build` branch of github.com/qiangli/klatch from
 # bashy's builds/klatch/fork/. Triggered ONLY by pushing a tag
-# bashy-<upstream tag>-N (e.g. bashy-v1.2.2-1) at that branch.
+# bashy-<upstream tag>-N (e.g. bashy-v1.2.3-1) at that branch.
 # Upstream tags this release vX.Y.Z, so the trigger is
 # bashy-v* and the pin job holds the tag to exactly that shape.
 #
@@ -97,15 +97,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - asset: klatch-v1.2.2-linux-amd64.tar.gz
+          - asset: klatch-v1.2.3-linux-amd64.tar.gz
             runner: ubuntu-24.04
-          - asset: klatch-v1.2.2-linux-arm64.tar.gz
+          - asset: klatch-v1.2.3-linux-arm64.tar.gz
             runner: ubuntu-24.04-arm
-          - asset: klatch-v1.2.2-darwin-arm64.tar.gz
+          - asset: klatch-v1.2.3-darwin-arm64.tar.gz
             runner: macos-15
-          - asset: klatch-v1.2.2-darwin-amd64.tar.gz
+          - asset: klatch-v1.2.3-darwin-amd64.tar.gz
             runner: macos-15-intel
-          - asset: klatch-web-v1.2.2.tar.gz
+          - asset: klatch-web-v1.2.3.tar.gz
             runner: ubuntu-24.04
     steps:
       # Windows runners check out with core.autocrlf=true by default, which
@@ -159,11 +159,31 @@ jobs:
       - name: install yarn (YARN_VERSION, classic)
         if: startsWith(matrix.asset, 'klatch-web-')
         run: npm install --global yarn@1.22.22
+      - name: sdk dependencies from the frozen lockfile (app/sdk, databag-client-sdk)
+        if: startsWith(matrix.asset, 'klatch-web-')
+        working-directory: src/app/sdk
+        run: yarn install --frozen-lockfile
+      - name: assert the sdk lockfile was not rewritten
+        if: startsWith(matrix.asset, 'klatch-web-')
+        working-directory: src/app/sdk
+        run: |
+          set -euo pipefail
+          # --frozen-lockfile already refuses a stale lockfile; this catches a
+          # yarn version that resolved differently and rewrote it anyway.
+          [[ -z $(git status --porcelain -- yarn.lock) ]] ||
+            { echo "yarn rewrote yarn.lock"; git diff -- yarn.lock; exit 1; }
+      - name: sdk build (tsup, upstream `yarn build`)
+        # app/client/web's package.json depends on "databag-client-sdk":
+        # "file:../../sdk" as of v1.2.3 — the web install below resolves that
+        # path dependency from app/sdk/dist, so the sdk must be built first.
+        if: startsWith(matrix.asset, 'klatch-web-')
+        working-directory: src/app/sdk
+        run: yarn build
       - name: web dependencies from the frozen lockfile
         if: startsWith(matrix.asset, 'klatch-web-')
         working-directory: src/app/client/web
         run: yarn install --frozen-lockfile
-      - name: assert the lockfile was not rewritten
+      - name: assert the web lockfile was not rewritten
         if: startsWith(matrix.asset, 'klatch-web-')
         working-directory: src/app/client/web
         run: |
@@ -288,6 +308,17 @@ jobs:
           node-version: "22"
       - name: install yarn (YARN_VERSION, classic)
         run: npm install --global yarn@1.22.22
+      - name: yarn audit report (app/sdk, databag-client-sdk; informational, never fails the job)
+        working-directory: src/app/sdk
+        run: |
+          set -euo pipefail
+          . ../../../fork/bashy-build/PIN
+          mkdir -p ../../../out
+          report=../../../out/klatch-sdk-$UPSTREAM_TAG.yarn-audit.json
+          yarn install --frozen-lockfile
+          yarn audit --json >"$report" || true
+          [[ -s $report ]] || { echo "yarn audit produced no report"; exit 1; }
+          echo "yarn audit: report-only, not a release gate (tool.env RELEASE_GATES)"
       - name: yarn audit report (app/client/web; informational, never fails the job)
         working-directory: src/app/client/web
         run: |

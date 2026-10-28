@@ -18,16 +18,22 @@ TOOL=klatch
 FORK_REPO=qiangli/klatch
 UPSTREAM_REPO=https://github.com/qiangli/klatch
 UPSTREAM_SLUG=qiangli/klatch
-# v1.2.2 is an annotated tag WE cut on qiangli/klatch at UPSTREAM_COMMIT,
+# v1.2.3 is an annotated tag WE cut on qiangli/klatch at UPSTREAM_COMMIT,
 # with a non-draft, non-prerelease GitHub Release — the same "pin job
 # queries the release API" shape every tool uses, just with us as the
 # release author (balzack/databag itself cuts no releases at all). The fork
 # also carries an unrelated 2022 upstream tag v0.1.0 (pre-rebrand, from
 # before this fork existed) — that tag is NOT this build's pin and must
 # never be used here. See README.md #Pin provenance for the exact operator
-# step that cut v1.2.2.
-UPSTREAM_TAG=v1.2.2
-UPSTREAM_COMMIT=43ba796aa15cfae99858a6872d36b87b33bdeab6
+# step that cut v1.2.3.
+#
+# v1.2.3 splits app/client/web's SDK code out into its own package,
+# app/sdk ("databag-client-sdk", built with tsup into dist/); web's
+# package.json now depends on it as "file:../../sdk", so build.yml builds
+# app/sdk (yarn install --frozen-lockfile && yarn build) before it installs
+# app/client/web's own dependencies — see README.md #Build configuration.
+UPSTREAM_TAG=v1.2.3
+UPSTREAM_COMMIT=51a928ea3d940b3fe9f646b663abb0be57e61481
 # Toolchain kind: the repo builds TWO different artifact shapes from one
 # matrix — a cgo Go server per linux arch (net/server), and one
 # architecture-independent Node/yarn web bundle (app/client/web) — so
@@ -71,8 +77,8 @@ EGRESS_TARGET='out/${{ matrix.asset }}'
 # Release: SRC=ASSET copies from bashy-build/, the assets that must exist,
 # the ones that are executables, and the release-notes lines.
 RELEASE_EXTRA="PIN=klatch-pin.txt otel.env=klatch-otel.env no-tracking.env=klatch-no-tracking.env"
-RELEASE_ASSETS="klatch-$UPSTREAM_TAG-linux-amd64.tar.gz klatch-$UPSTREAM_TAG-linux-arm64.tar.gz klatch-$UPSTREAM_TAG-darwin-arm64.tar.gz klatch-$UPSTREAM_TAG-darwin-amd64.tar.gz klatch-web-$UPSTREAM_TAG.tar.gz klatch-$UPSTREAM_TAG.govulncheck.json klatch-web-$UPSTREAM_TAG.yarn-audit.json klatch-pin.txt klatch-otel.env klatch-no-tracking.env"
+RELEASE_ASSETS="klatch-$UPSTREAM_TAG-linux-amd64.tar.gz klatch-$UPSTREAM_TAG-linux-arm64.tar.gz klatch-$UPSTREAM_TAG-darwin-arm64.tar.gz klatch-$UPSTREAM_TAG-darwin-amd64.tar.gz klatch-web-$UPSTREAM_TAG.tar.gz klatch-$UPSTREAM_TAG.govulncheck.json klatch-sdk-$UPSTREAM_TAG.yarn-audit.json klatch-web-$UPSTREAM_TAG.yarn-audit.json klatch-pin.txt klatch-otel.env klatch-no-tracking.env"
 # Tarballs, not raw binaries: the binary inside is already +x when tarred.
 RELEASE_EXECUTABLES=""
-RELEASE_NOTE="The server links no update checker, telemetry or analytics code (reviewed at net/server/go.mod); OTel points only at bashy's local collector 127.0.0.1:31415, should an SDK ever be added (it has none today, see files/otel.env). Each linux/darwin arch ships the cgo server binary plus the net/transform asset-processing scripts in one tarball; the web UI bundle ships separately as klatch-web-$UPSTREAM_TAG.tar.gz, the same static files for every arch. The no-egress runtime gate (below) only runs on the linux legs; the darwin tarballs ship without it (see README.md #No-egress gate)."
-RELEASE_GATES="pinned commit, CGO sqlite build for linux amd64+arm64 and darwin arm64+amd64 (EOL-minor Go toolchain override go1.26.9; darwin links the runner's native clang), frozen yarn install for the web bundle, govulncheck report (informational: reachable findings are recorded, never gated or waived), yarn audit report (informational, same policy), no-egress (linux server legs only — see README.md #No-egress gate)."
+RELEASE_NOTE="The server links no update checker, telemetry or analytics code (reviewed at net/server/go.mod); OTel points only at bashy's local collector 127.0.0.1:31415, should an SDK ever be added (it has none today, see files/otel.env). Each linux/darwin arch ships the cgo server binary plus the net/transform asset-processing scripts in one tarball; the web UI bundle ships separately as klatch-web-$UPSTREAM_TAG.tar.gz, the same static files for every arch, built against the in-repo app/sdk package (databag-client-sdk, built first with tsup) that app/client/web now depends on via file:../../sdk. The no-egress runtime gate (below) only runs on the linux legs; the darwin tarballs ship without it (see README.md #No-egress gate)."
+RELEASE_GATES="pinned commit, CGO sqlite build for linux amd64+arm64 and darwin arm64+amd64 (EOL-minor Go toolchain override go1.26.9; darwin links the runner's native clang), frozen yarn install + tsup build for the in-repo sdk followed by frozen yarn install for the web bundle, govulncheck report (informational: reachable findings are recorded, never gated or waived), yarn audit reports for both app/sdk and app/client/web (informational, same policy), no-egress (linux server legs only — see README.md #No-egress gate)."

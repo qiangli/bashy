@@ -11,11 +11,31 @@
       - name: install yarn (YARN_VERSION, classic)
         if: startsWith(matrix.asset, 'klatch-web-')
         run: npm install --global yarn@@@YARN_VERSION@@
+      - name: sdk dependencies from the frozen lockfile (app/sdk, databag-client-sdk)
+        if: startsWith(matrix.asset, 'klatch-web-')
+        working-directory: src/app/sdk
+        run: yarn install --frozen-lockfile
+      - name: assert the sdk lockfile was not rewritten
+        if: startsWith(matrix.asset, 'klatch-web-')
+        working-directory: src/app/sdk
+        run: |
+          set -euo pipefail
+          # --frozen-lockfile already refuses a stale lockfile; this catches a
+          # yarn version that resolved differently and rewrote it anyway.
+          [[ -z $(git status --porcelain -- yarn.lock) ]] ||
+            { echo "yarn rewrote yarn.lock"; git diff -- yarn.lock; exit 1; }
+      - name: sdk build (tsup, upstream `yarn build`)
+        # app/client/web's package.json depends on "databag-client-sdk":
+        # "file:../../sdk" as of v1.2.3 — the web install below resolves that
+        # path dependency from app/sdk/dist, so the sdk must be built first.
+        if: startsWith(matrix.asset, 'klatch-web-')
+        working-directory: src/app/sdk
+        run: yarn build
       - name: web dependencies from the frozen lockfile
         if: startsWith(matrix.asset, 'klatch-web-')
         working-directory: src/app/client/web
         run: yarn install --frozen-lockfile
-      - name: assert the lockfile was not rewritten
+      - name: assert the web lockfile was not rewritten
         if: startsWith(matrix.asset, 'klatch-web-')
         working-directory: src/app/client/web
         run: |
