@@ -1,0 +1,69 @@
+# matrix-chat — the OPTIONAL "Matrix chat" homeserver unit (tuwunel; the pin is
+# pkg/fleet/baseline/tools/tuwunel.yaml). Not a built-in seed: the setup skill
+# installs it with `bashy service add -f <this file>` and only on request.
+#
+# Defaults are the safe ones:
+#   - loopback bind (127.0.0.1); no app tunnel, no mesh exposure
+#   - federation off and registration OFF — accounts are created by the setup
+#     skill through tuwunel's admin `--execute`, never by open sign-up
+#   - data under the bashy state dir: ${BASHY_HOME:-$HOME/.bashy}/matrix-chat
+#     unless settings.data_dir names another
+#   - no secrets in this file
+#
+# tool: tuwunel ties the unit to its pin: under the service supply-chain
+# policy it may be enabled or started only once that pin is a bashy-signed
+# build (sigstore declared and verified by binmgr). Today it is refused.
+#
+# settings.binary is the verified, decompressed tuwunel executable (empty = the
+# `tuwunel` on PATH). settings.server_name is baked into the database on first
+# start and cannot change afterwards without wiping it — set it before enabling.
+# Values reach the script as positional arguments, never spliced into its text.
+name: matrix-chat
+kind: service
+description: Matrix chat homeserver (tuwunel) — optional, loopback-only, registration disabled
+tool: tuwunel
+exec:
+  - bashy
+  - -c
+  - |
+    bin=${1:-tuwunel}
+    data=${2:-${BASHY_HOME:-$HOME/.bashy}/matrix-chat}
+    mkdir -p "$data/db" || exit 1
+    export TUWUNEL_SERVER_NAME="$5"
+    export TUWUNEL_DATABASE_PATH="$data/db"
+    export TUWUNEL_ADDRESS="$3"
+    export TUWUNEL_PORT="$4"
+    exec "$bin"
+  - matrix-chat
+  - "{settings.binary}"
+  - "{settings.data_dir}"
+  - "{bind}"
+  - "{port}"
+  - "{settings.server_name}"
+env:
+  TUWUNEL_ALLOW_REGISTRATION: "false"
+  TUWUNEL_ALLOW_FEDERATION: "false"
+  TUWUNEL_NEW_USER_DISPLAYNAME_SUFFIX: ""
+settings:
+  binary: ""
+  data_dir: ""
+  server_name: localhost
+ports:
+  - name: http
+    port: 6167
+    bind: 127.0.0.1
+health:
+  http: /_matrix/client/versions
+  interval: 10s
+  timeout: 3s
+  failures: 3
+  start_period: 30s
+restart:
+  policy: on-failure
+  backoff: {min: 1s, max: 30s, healthy_after: 30s}
+  start_limit: {burst: 5, interval: 5m}
+stop:
+  signal: TERM
+  timeout: 20s
+upgrade: restart
+enabled: false

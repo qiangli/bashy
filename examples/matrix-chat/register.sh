@@ -14,4 +14,7 @@ trap 'rm -rf "$tmp"' EXIT
 printf '%s\n' "$guide" > "$tmp/SKILL.md"
 "$runner" --bashsharp "$here/matrix-chat.bsh" --contract > "$tmp/skill.dhnt"
 "$runner" skill add "$tmp" --force
-echo 'Registered Matrix chat command and skill.'
+# Tool declaration and service unit shipped with this example (no longer built in).
+"$runner" tool add -f "$here/tuwunel.yaml" --force
+"$runner" service add -f "$here/matrix-chat.yaml" --force
+echo 'Registered Matrix chat command, skill, tuwunel tool and matrix-chat service unit.'

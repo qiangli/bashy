@@ -1,0 +1,68 @@
+# tuwunel — the OPTIONAL self-hosted "Matrix chat" homeserver for bashy feed
+# (Sprint 433). User-facing name is always "Matrix chat"; bare "matrix" is the
+# cloudbox matrix tunnel and is not this.
+#
+# Why tuwunel: it is the maintained, Apache-2.0 successor of conduwuit (itself
+# a Conduit fork) — conduwuit's upstream repository was archived in 2025, while
+# tuwunel ships releases on a steady cadence (v1.9.4 on 2026-10-10). It is a
+# single static-ish Rust binary with an embedded RocksDB, so a homeserver is
+# one process and one data directory.
+#
+# Not an agent CLI: kind system keeps it out of the fleet roster, staffing and
+# the managed-recipe roster test; the pin below is what bashy downloads.
+# Nothing is vendored here: download + exec of a release artifact, under the
+# project's licence.
+#
+# SOURCE: upstream matrix-construct/tuwunel v1.9.4 (commit f473d9a4), built
+# unmodified by the bashy build workflow (.github/workflows/bashy-build.yml) on
+# the qiangli/tuwunel mirror fork and released as tag bashy-v1.9.4-2. This is
+# the FIRST bashy-signed tuwunel build; "1.9.4-bashy.2" = upstream 1.9.4,
+# bashy build 2.
+#
+# PLATFORMS: linux/amd64, linux/arm64, darwin/arm64, darwin/amd64 — the bashy
+# build covers macOS natively (upstream publishes Linux binaries only). There
+# is no Windows build; Windows users run it in the bashy podman Linux venue.
+#
+# SIGNING: every asset is signed keylessly with Sigstore by the exact workflow
+# ref below; its bundle sits beside it as <asset>.sigstore.json (binmgr's
+# default). binmgr verifies the sha256 AND the bundle over the downloaded
+# bytes before install.
+#
+# ARTIFACT FORMAT: each asset is the raw executable (no archive, no .zst).
+name: tuwunel
+kind: system
+display: Matrix chat homeserver (tuwunel)
+hidden: true
+cli:
+  binary: tuwunel
+  managed:
+    source: github-release
+    version: 1.9.4-bashy.2
+    license: Apache-2.0
+    license_url: https://github.com/matrix-construct/tuwunel/blob/main/LICENSE
+    # A SERVICE pin: bashy starts this binary, so the supply-chain policy
+    # applies — only a bashy-CI build signed keylessly with Sigstore runs.
+    service: true
+    sigstore:
+      identity: https://github.com/qiangli/tuwunel/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.9.4-2
+      issuer: https://token.actions.githubusercontent.com
+    assets:
+      linux/amd64:
+        url: https://github.com/qiangli/tuwunel/releases/download/bashy-v1.9.4-2/tuwunel-linux-amd64
+        sha256: d4cf0e88e35bbd1687b8d8157947ed1f6a4bba7e6ae2760043fd6c106c7a3eb0
+      linux/arm64:
+        url: https://github.com/qiangli/tuwunel/releases/download/bashy-v1.9.4-2/tuwunel-linux-arm64
+        sha256: 56f945fe5ceec183ea59af1bc6a9ae5a6b344365975263f02e0a2ff692be6cd2
+      darwin/arm64:
+        url: https://github.com/qiangli/tuwunel/releases/download/bashy-v1.9.4-2/tuwunel-darwin-arm64
+        sha256: 5508aaef5039434fd2b355010d9b4870bd8843320e2135e35985c84081a220fe
+      darwin/amd64:
+        url: https://github.com/qiangli/tuwunel/releases/download/bashy-v1.9.4-2/tuwunel-darwin-amd64
+        sha256: 64c452440caddc7f06a00c06379c22d02fc23392eb140e23291c4dcea8674c46
+    notes: >-
+      Bashy-signed build of upstream matrix-construct/tuwunel v1.9.4 (f473d9a4),
+      release bashy-v1.9.4-2 of the qiangli/tuwunel mirror fork. Raw
+      executables for linux/amd64, linux/arm64, darwin/arm64, darwin/amd64,
+      each keylessly signed (bundle = asset URL + .sigstore.json). Service
+      unit: pkg/fleet/optional/matrix-chat.yaml.
+quirks: optional Matrix chat homeserver; bashy-signed build (Linux + macOS); not an agent CLI

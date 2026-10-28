@@ -1,4 +1,10 @@
-# Matrix chat (independent Bashy tool)
+# Matrix chat (community example)
+
+Matrix chat is a community example, not part of bashy core. Bashy's own chat
+is Klatch (`examples/klatch`). This directory is self-contained: `register.sh`
+registers the `matrix-chat` command and skill, the `tuwunel` tool declaration
+(`tuwunel.yaml`, via `bashy tool add -f`) and the `matrix-chat` service unit
+(`matrix-chat.yaml`, via `bashy service add -f`).
 
 This optional command uses Bashy's signed `tuwunel` 1.9.4-bashy.2 tool, the
 shipped `matrix-chat` service unit, and the existing secret vault. It does not

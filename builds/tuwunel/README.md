@@ -1,5 +1,7 @@
 # tuwunel — bashy verified build
 
+> This signed build now serves only the community example `examples/matrix-chat`; bashy's chat is Klatch.
+
 bashy runs the Matrix chat homeserver (tuwunel) only from a **bashy-CI-built,
 keylessly Sigstore-signed build of the official upstream release tag**. This
 directory is the template for that build. `fork/` is installed as the
