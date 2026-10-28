@@ -10,11 +10,18 @@ workflow checks out the pinned commit fresh on every run.
 |---|---|
 | Upstream | `https://github.com/qiangli/klatch` (bashy's own fork; see #Credit) |
 | License at the commit | **Apache-2.0** (`LICENSE`, verified at the pinned commit) |
-| Pinned commit | `45343338582b394f4f5fdb4b7e271ea1dc8dd5fd` (no release tag yet — see #Pin provenance) |
+| Pinned commit | `bcd8f43fdacbf65116907fe34f5f5fbb382a346d` (annotated tag `v1.2.0` — see #Pin provenance) |
 | Toolchain | Go `1.26.9` (EOL-minor security override; the commit's `go.mod` names `go1.23.0`/`toolchain go1.24.5`, see #Build configuration) + Node `22` / Yarn `1.22.22` |
-| Trigger | push of tag `bashy-v0.1.0-N` on `bashy-build` (first: `bashy-v0.1.0-1`) |
-| Signing identity | `https://github.com/qiangli/klatch/.github/workflows/bashy-build.yml@refs/tags/bashy-v0.1.0-1` |
+| Trigger | push of tag `bashy-v1.2.0-N` on `bashy-build` (first: `bashy-v1.2.0-1`) |
+| Signing identity | `https://github.com/qiangli/klatch/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.2.0-1` |
 | Issuer | `https://token.actions.githubusercontent.com` |
+
+`v1.2.0` is Databag upstream `main` `45343338` plus the Klatch rebrand,
+`@mention`, base-path/loopback/`Credentials`/federation-header fixes, and
+Go-native image transforms. The web build now produces a relative `base`
+(portable under any path prefix, not just root) — no build-step change was
+needed here since upstream's own `vite` config carries that, not a bashy
+build flag.
 
 ## Credit
 
@@ -23,13 +30,12 @@ Klatch is bashy's rebrand of **Databag** by Roland Osborne
 that project; its `LICENSE` and the upstream copyright headers are kept
 unmodified.
 
-## Pin provenance: no upstream release tag
+## Pin provenance: our own release tag, not a third-party one
 
 Every other tool in `builds/` names a **third-party** `UPSTREAM_SLUG` whose
 own release the `pin` job queries for draft/pre-release status. Klatch has
-no such upstream release to defer to: `balzack/databag` cuts no GitHub
-releases at all, and `qiangli/klatch` — OUR fork, mid-rebrand — has not cut
-one yet either. So `tool.env` points `UPSTREAM_REPO`/`UPSTREAM_SLUG` at the
+no such third party to defer to: `balzack/databag` cuts no GitHub releases
+at all. So `tool.env` points `UPSTREAM_REPO`/`UPSTREAM_SLUG` at the
 **same** repo as `FORK_REPO` (`qiangli/klatch`): bashy plays both roles,
 the pinned source and the build fork, rather than two different repos the
 way every other tool's upstream/fork split works.
@@ -41,18 +47,20 @@ to `UPSTREAM_COMMIT` over a pristine tree) is unchanged. It changes who
 creates the tag the `pin` job queries: for every other tool that is a
 third-party upstream maintainer; for Klatch it is bashy's own operator, on
 bashy's own fork. The **one** field that pins this build is
-`UPSTREAM_COMMIT` (`tool.env`); bumping to the eventual rebrand commit means
-moving that field and cutting a matching `UPSTREAM_TAG` release to go with
-it (same two edits any tool.env bump needs — see `../README.md` "Adding a
-tool").
+`UPSTREAM_COMMIT` (`tool.env`); bumping to a later commit means moving that
+field and cutting a matching `UPSTREAM_TAG` release to go with it (same two
+edits any tool.env bump needs — see `../README.md` "Adding a tool").
 
-Operator step, once, before the pipeline can run at all (in addition to the
-step every tool needs, below): in a clone of `qiangli/klatch`, tag commit
-`45343338582b394f4f5fdb4b7e271ea1dc8dd5fd` as `v0.1.0` and cut a
-**non-draft, non-prerelease** GitHub Release for it. That is the "upstream
-release" the `pin` job's `official-release` admission queries — satisfied
-here because bashy controls the fork, not because a third party published
-it.
+The fork is tagged through `v1.2.0` at the pinned commit, with a
+**non-draft, non-prerelease** GitHub Release cut for it — that is the
+"upstream release" the `pin` job's `official-release` admission queries,
+satisfied here because bashy controls the fork, not because a third party
+published it. `qiangli/klatch` also carries `v0.1.0`, an **unrelated 2022
+upstream tag** (`fce83936`, dated 2022-07-22) that predates this fork's
+existence — carried over from the repo it was forked from, with no
+connection to Klatch's own rebrand history. That tag is NOT a pin for this
+build and must never be used here — `UPSTREAM_TAG`/`UPSTREAM_COMMIT` in
+`tool.env` are the only source of truth.
 
 ## Layout
 
@@ -112,12 +120,12 @@ runs the Node/Yarn half and every other leg runs the Go half.
 ## Release assets: two shapes
 
 ```
-klatch-v0.1.0-linux-amd64.tar.gz    klatch binary + net/transform/*.sh
-klatch-v0.1.0-linux-arm64.tar.gz    klatch binary + net/transform/*.sh
-klatch-v0.1.0-darwin-arm64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
-klatch-v0.1.0-darwin-amd64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
-klatch-web-v0.1.0.tar.gz            the vite dist/ output (static, same for every arch)
-klatch-v0.1.0.govulncheck.json      klatch-web-v0.1.0.yarn-audit.json
+klatch-v1.2.0-linux-amd64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v1.2.0-linux-arm64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v1.2.0-darwin-arm64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-v1.2.0-darwin-amd64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-web-v1.2.0.tar.gz            the vite dist/ output (static, same for every arch)
+klatch-v1.2.0.govulncheck.json      klatch-web-v1.2.0.yarn-audit.json
 klatch-pin.txt                      klatch-otel.env
 klatch-no-tracking.env              SHA256SUMS
 ```
@@ -126,7 +134,7 @@ The server tarball's binary is already executable when tarred, so
 `RELEASE_EXECUTABLES` is empty — there is no raw executable asset to
 `chmod +x` after the fact. Each asset gets a sibling `<asset>.sigstore.json`
 bundle. URL shape:
-`https://github.com/qiangli/klatch/releases/download/bashy-v0.1.0-1/<asset>`.
+`https://github.com/qiangli/klatch/releases/download/bashy-v1.2.0-1/<asset>`.
 
 ## No tracking
 
@@ -200,17 +208,18 @@ follow-up work once the first reports are read.
 ## Operator steps (not in bashy CI)
 
 Once, before the first build (#Pin provenance): tag
-`45343338582b394f4f5fdb4b7e271ea1dc8dd5fd` as `v0.1.0` on `qiangli/klatch`
-and cut a non-draft, non-prerelease GitHub Release for it.
+`bcd8f43fdacbf65116907fe34f5f5fbb382a346d` as `v1.2.0` on `qiangli/klatch`
+(done) and cut a non-draft, non-prerelease GitHub Release for it. Do not
+reuse the fork's unrelated 2022 `v0.1.0` tag.
 
 ```sh
 # in a clone of github.com/qiangli/klatch
 git switch --orphan bashy-build
 cp -R <bashy>/builds/klatch/fork/. .
 git add .github/workflows/bashy-build.yml bashy-build
-git commit -m "bashy-build: klatch v0.1.0 verified build"
+git commit -m "bashy-build: klatch v1.2.0 verified build"
 git push -u origin bashy-build
-git tag bashy-v0.1.0-1 && git push origin bashy-v0.1.0-1
+git tag bashy-v1.2.0-1 && git push origin bashy-v1.2.0-1
 ```
 
 Then wire the fleet to the signed fork release (outside this repo's
