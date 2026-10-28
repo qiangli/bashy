@@ -126,11 +126,12 @@ type fixture struct {
 // emulating the MSYS equivalence (/c/... and C:/... name one file).
 const fakeOutpost = `#!/bin/sh
 echo "$@" >> "$FAKE_LOG"
-out=""; server=""; prev=""
+out=""; server=""; name=""; prev=""
 for a in "$@"; do
   case "$prev" in
     --out) out="$a" ;;
     --server) server="$a" ;;
+    --name) name="$a" ;;
   esac
   prev="$a"
 done
@@ -138,11 +139,11 @@ case "$1" in
   register)
     [ -n "$out" ] || { echo "fake outpost: register needs --out" >&2; exit 1; }
     mkdir -p "$(dirname "$out")"
-    printf '{"fake":true,"server":"%s"}\n' "$server" > "$out"
+    printf '{"fake":true,"server":"%s","name":"%s"}\n' "$server" "$name" > "$out"
     case "$out" in C:*)
       stripped=${out#C:}
       mkdir -p "$(dirname "$stripped")"
-      printf '{"fake":true,"server":"%s"}\n' "$server" > "$stripped"
+      printf '{"fake":true,"server":"%s","name":"%s"}\n' "$server" "$name" > "$stripped"
       ;;
     esac
     ;;
@@ -288,6 +289,89 @@ func TestAddRunsRegisterWithOut(t *testing.T) {
 			t.Errorf("register call %q missing %q", calls[0], wantArg)
 		}
 	}
+	// Default unchanged: no --name is forwarded, so outpost registers
+	// under this machine's host name.
+	if strings.Contains(calls[0], "--name") {
+		t.Errorf("register call %q has --name, want none by default", calls[0])
+	}
+}
+
+// --name <host> (and --name=<host>) is forwarded as
+// `outpost register --name <host>`: the per-profile host name that lets
+// one machine register with several satellites when its own host name
+// is already taken.
+func TestAddForwardsName(t *testing.T) {
+	f := newFixture(t, nil)
+	_, _, code := f.run("add", "work", "--code", "C", "--server", "https://sat-work.example", "--name", "dragon-work")
+	if code != 0 {
+		t.Fatalf("add --name: exit %d", code)
+	}
+	if got := readFile(t, filepath.Join(f.xcfg(), "matrix", "profiles", "work", "host")); got != "dragon-work\n" {
+		t.Errorf("profile host sidecar = %q, want dragon-work", got)
+	}
+	calls := f.calls()
+	if len(calls) != 1 {
+		t.Fatalf("outpost calls = %v, want one register", calls)
+	}
+	if !strings.Contains(calls[0], "--name dragon-work") {
+		t.Errorf("register call %q missing --name dragon-work", calls[0])
+	}
+
+	f2 := newFixture(t, nil)
+	if _, _, code := f2.run("add", "home", "--code", "C", "--server", "https://sat-home.example", "--name=dragon-home"); code != 0 {
+		t.Fatalf("add --name=: exit %d", code)
+	}
+	calls2 := f2.calls()
+	if len(calls2) != 1 || !strings.Contains(calls2[0], "--name dragon-home") {
+		t.Fatalf("register calls = %v, want one with --name dragon-home", calls2)
+	}
+}
+
+// list shows each profile's server and host name.
+func TestListShowsServerAndHost(t *testing.T) {
+	f := newFixture(t, nil)
+	base := filepath.Join(f.xcfg(), "matrix")
+	writeFile(t, filepath.Join(base, "profiles", "work", "agent.json"), "{\"sat\":\"work\"}\n")
+	writeFile(t, filepath.Join(base, "profiles", "work", "server"), "https://sat-work.example\n")
+	writeFile(t, filepath.Join(base, "profiles", "work", "host"), "dragon-work\n")
+	writeFile(t, filepath.Join(base, "profiles", "home", "agent.json"), "{\"sat\":\"home\"}\n")
+	writeFile(t, filepath.Join(base, "profiles", "home", "server"), "https://sat-home.example\n")
+	writeFile(t, filepath.Join(base, "agent.json"), "{\"sat\":\"work\"}\n")
+
+	out, _, code := f.run("list")
+	if code != 0 {
+		t.Fatalf("list: exit %d", code)
+	}
+	// Profiles list in directory order; home is the active one here.
+	// Every line is "<mark> <name padded> <server>  <host>".
+	got := map[string]string{}
+	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		body := strings.TrimPrefix(line, "* ")
+		if body == line {
+			body = strings.TrimPrefix(line, "  ")
+		}
+		fields := strings.Fields(body)
+		if len(fields) < 3 {
+			t.Fatalf("list line %q: want NAME SERVER HOST", line)
+		}
+		got[fields[0]] = line
+	}
+	work, ok := got["work"]
+	if !ok || !strings.HasPrefix(work, "* work") || !strings.Contains(work, "https://sat-work.example") || !strings.HasSuffix(work, "dragon-work") {
+		t.Errorf("work line = %q, want active work with server and host name dragon-work", work)
+	}
+	home, ok := got["home"]
+	if !ok || !strings.HasPrefix(home, "  home") || !strings.Contains(home, "https://sat-home.example") {
+		t.Errorf("home line = %q, want inactive home with server", home)
+	}
+	// A profile added without --name falls back to the machine host name.
+	hostname, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(home, hostname) {
+		t.Errorf("home line = %q, want host name %q", home, hostname)
+	}
 }
 
 // use copies the profile into the active agent.json (backing up the
@@ -330,10 +414,20 @@ func TestListMarksActive(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("list: exit %d", code)
 	}
-	// Trim only the trailing newline: leading spaces mark inactivity.
+	// One line per profile; the leading mark says active or not.
+	hostname, err := os.Hostname()
+	if err != nil {
+		t.Fatal(err)
+	}
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
-	if len(lines) != 2 || lines[0] != "  alpha" || lines[1] != "* beta" {
-		t.Fatalf("list = %q, want [\"  alpha\" \"* beta\"]", out)
+	if len(lines) != 2 {
+		t.Fatalf("list = %q, want 2 lines", out)
+	}
+	if !strings.HasPrefix(lines[0], "  alpha") || !strings.HasSuffix(lines[0], hostname) {
+		t.Errorf("alpha line = %q, want inactive alpha with host name %q", lines[0], hostname)
+	}
+	if !strings.HasPrefix(lines[1], "* beta") || !strings.HasSuffix(lines[1], hostname) {
+		t.Errorf("beta line = %q, want active beta with host name %q", lines[1], hostname)
 	}
 }
 
@@ -504,7 +598,10 @@ func TestSkillFenceIsComplete(t *testing.T) {
 	for _, want := range []string{
 		"~~~skill as guide",
 		"name: outpost-profile",
-		"add <name> --code <code> --server <url>",
+		"add <name> --code <code> --server <url> [--name <host>]",
+		"--name=<host>",
+		"register --server <url> --code <code> --out",
+		"NAME  SERVER  HOST",
 		"use <name>",
 		"list",
 		"commands add outpost-profile",

@@ -4,7 +4,7 @@
 # No outpost code change: this only drives `outpost register --out` and
 # `outpost restart` around files under the matrix config directory.
 #
-#   outpost-profile add <name> --code <code> --server <url>
+#   outpost-profile add <name> --code <code> --server <url> [--name <host>]
 #   outpost-profile use <name>
 #   outpost-profile list
 #
@@ -51,25 +51,33 @@ reserve the name and refuse the registration above).
 Pair once per satellite into a named profile, then switch:
 
 ```sh
-outpost-profile add <name> --code <code> --server <url>
+outpost-profile add <name> --code <code> --server <url> [--name <host>]
 outpost-profile use <name>
 outpost-profile list
 ```
 
 - `add` runs `outpost register --server <url> --code <code> --out
   <config>/matrix/profiles/<name>/agent.json` and leaves the active
-  pairing untouched. Re-adding a name re-pairs it with a fresh
-  one-time code; the code is visible to local process listing while
-  register runs, so use a fresh code as usual.
+  pairing untouched. Without `--name` the machine registers under this
+  machine's host name, exactly as before; `--name <host>` (or
+  `--name=<host>`) overrides it, so a machine whose host name is
+  already taken on a satellite can still add a profile, and one
+  machine can register under a different host name per satellite (one
+  assignment per host name, so pick a free name per profile).
+  Re-adding a name re-pairs it with a fresh one-time code; the code is
+  visible to local process listing while register runs, so use a fresh
+  code as usual.
 - `use` saves the current active file back into its own profile first
   (so credentials refreshed in place are kept; an active file that
   matches no profile is kept as profile `previous`), copies the named
   profile over the active `<config>/matrix/agent.json`, records it as
   current, and runs `outpost restart`. Unknown names fail without
   touching anything.
-- `list` prints one profile per line and marks the profile whose file
-  is byte-identical to the active file with `*`. A profile directory
-  without an `agent.json` is shown as `(incomplete)`.
+- `list` prints one profile per line as `NAME  SERVER  HOST` (the
+  server and host name the profile was added with) and marks the
+  profile whose file is byte-identical to the active file with `*`. A
+  profile directory without an `agent.json` is shown as
+  `(incomplete)`.
 
 The config directory is `${XDG_CONFIG_HOME:-$HOME/.config}/matrix` on
 macOS, Linux and Windows (Git Bash supplies `$HOME` on Windows; the
@@ -94,7 +102,7 @@ set -e
 PROG=outpost-profile
 
 usage() {
-    echo "Usage: $PROG add <name> --code <code> --server <url>" >&2
+    echo "Usage: $PROG add <name> --code <code> --server <url> [--name <host>]" >&2
     echo "       $PROG use <name>" >&2
     echo "       $PROG list" >&2
     exit 2
@@ -179,7 +187,7 @@ profile_name_of() {
 }
 
 cmd_add() {
-    name=$1; code=$2; server=$3
+    name=$1; code=$2; server=$3; host=$4
     check_name "$name"
     [ -n "$code" ] || usage
     [ -n "$server" ] || usage
@@ -187,11 +195,25 @@ cmd_add() {
     [ -n "${HOME:-}" ] || [ -n "${XDG_CONFIG_HOME:-}" ] || fail "HOME is unset" 1
     out="$base/profiles/$name/agent.json"
     mkdir -p "$base/profiles/$name" || fail "cannot create profile dir for $name"
-    if ! "$(outpost_bin)" register --server "$server" --code "$code" --out "$(native_path "$out")"; then
+    # Without --name outpost registers under this machine's host name
+    # (the default, unchanged); an explicit --name lets a machine whose
+    # host name is already taken join a satellite under another name,
+    # and one machine hold a different host name per profile/satellite.
+    regname=()
+    if [ -n "$host" ]; then
+        regname=(--name "$host")
+    fi
+    if ! "$(outpost_bin)" register --server "$server" --code "$code" "${regname[@]}" --out "$(native_path "$out")"; then
         fail "outpost register failed for profile $name" 1
     fi
     code=
     [ -f "$out" ] || fail "register reported success but wrote no file: $out" 1
+    printf '%s\n' "$server" > "$base/profiles/$name/server"
+    if [ -n "$host" ]; then
+        printf '%s\n' "$host" > "$base/profiles/$name/host"
+    else
+        rm -f -- "$base/profiles/$name/host"
+    fi
     echo "$PROG: profile $name paired ($out)"
 }
 
@@ -241,12 +263,26 @@ cmd_list() {
         case "$name" in
             ""|.*) continue ;;
         esac
+        # The server and host name this profile was added with. A
+        # missing host file means this machine's host name was used
+        # (add without --name); a profile that predates the sidecars
+        # (e.g. the `previous` backup `use` makes) shows '-'.
+        server="-"
+        [ -f "$d/server" ] && server=$(head -n 1 -- "$d/server")
+        host=""
+        [ -f "$d/host" ] && host=$(head -n 1 -- "$d/host")
+        if [ -z "$host" ]; then
+            host=$(hostname 2>/dev/null || printf 'this-host\n')
+        fi
         if [ -f "$base/agent.json" ] && [ -f "$d/agent.json" ] && same_file "$base/agent.json" "$d/agent.json"; then
-            echo "* $name"
-        elif [ -f "$d/agent.json" ]; then
-            echo "  $name"
+            mark="*"
         else
-            echo "  $name (incomplete)"
+            mark=" "
+        fi
+        if [ ! -f "$d/agent.json" ]; then
+            echo "$mark $name (incomplete)"
+        else
+            printf '%s %-16s %s  %s\n' "$mark" "$name" "$server" "$host"
         fi
     done
 }
@@ -269,13 +305,15 @@ case "$sub" in
     add)
         if [ $# -lt 1 ]; then usage; fi
         name=$1; shift
-        code=""; server=""
+        code=""; server=""; host=""
         while [ $# -gt 0 ]; do
             case "$1" in
                 --code=*) code=${1#--code=} ;;
                 --server=*) server=${1#--server=} ;;
+                --name=*) host=${1#--name=} ;;
                 --code) [ $# -ge 2 ] || usage; code=$2; shift ;;
                 --server) [ $# -ge 2 ] || usage; server=$2; shift ;;
+                --name) [ $# -ge 2 ] || usage; host=$2; shift ;;
                 --) shift; break ;;
                 -*) usage ;;
                 *) usage ;;
@@ -283,7 +321,7 @@ case "$sub" in
             shift
         done
         [ $# -eq 0 ] || usage
-        cmd_add "$name" "$code" "$server"
+        cmd_add "$name" "$code" "$server" "$host"
         ;;
     use)
         [ $# -eq 1 ] || usage
