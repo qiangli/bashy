@@ -1,5 +1,10 @@
 # tuwunel — bashy verified build
 
+License review and the currently unresolved MPL dependency are recorded in
+[`LICENSE-AUDIT.md`](LICENSE-AUDIT.md). The source template now stages
+license/notice assets for a future signed release; the existing
+`bashy-v1.9.4-2` binaries have no such companion assets.
+
 bashy runs the Matrix chat homeserver (tuwunel) only from a **bashy-CI-built,
 keylessly Sigstore-signed build of the official upstream release tag**. This
 directory is the template for that build. `fork/` is installed as the
