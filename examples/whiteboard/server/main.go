@@ -262,6 +262,21 @@ func (a *app) stripPrefix(path string) (string, bool) {
 	}
 	return "", false
 }
+
+// sameOrigin accepts the public origin forwarded by a loopback-only outpost.
+// Forwarded headers from a non-loopback client never weaken the direct check.
+func sameOrigin(r *http.Request, u *url.URL) bool {
+	if u.Host == r.Host {
+		return true
+	}
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || !net.ParseIP(remoteHost).IsLoopback() {
+		return false
+	}
+	return u.Host != "" && u.Host == r.Header.Get("X-Forwarded-Host") &&
+		u.Scheme == r.Header.Get("X-Forwarded-Proto")
+}
+
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -274,7 +289,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		if origin := r.Header.Get("Origin"); origin != "" {
 			u, e := url.Parse(origin)
-			if e != nil || u.Host != r.Host {
+			if e != nil || !sameOrigin(r, u) {
 				fail(w, 403, "Use the board's own page")
 				return
 			}
