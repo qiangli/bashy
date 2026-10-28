@@ -348,14 +348,14 @@ func TestPlanElephantIsTheLiveFixture(t *testing.T) {
 	want := []string{
 		"feature:VirtualMachinePlatform",
 		"feature:Microsoft-Windows-Subsystem-Linux",
-		"restart", "wsl-update", "wsl-default-version", "distro", "toolchain",
+		"restart", "wsl-component", "wsl-default-version", "distro", "toolchain",
 	}
 	if strings.Join(ids, ",") != strings.Join(want, ",") {
 		t.Errorf("pending steps = %v\nwant %v", ids, want)
 	}
 	// Exactly the three host-changing steps carry the flags that stop `up`.
 	for _, s := range plan.Steps {
-		priv := strings.HasPrefix(s.ID, "feature:") || s.ID == "restart" || s.ID == "wsl-update"
+		priv := strings.HasPrefix(s.ID, "feature:") || s.ID == "restart" || s.ID == "wsl-component"
 		if s.Privileged != priv {
 			t.Errorf("step %s privileged=%t, want %t", s.ID, s.Privileged, priv)
 		}

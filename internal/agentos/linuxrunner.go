@@ -53,6 +53,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/qiangli/bashy/internal/cli"
+	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
 const (
@@ -70,6 +71,10 @@ const linuxDistro = "Ubuntu-24.04"
 // --no-launch` creates no interactive user, and a runner needs no login
 // account, so bashy drives the distro as root rather than inventing one.
 const linuxWSLUser = "root"
+
+// linuxDistroBashy is where the toolchain step installs bashy's Linux build
+// inside the distribution.
+const linuxDistroBashy = "/usr/local/bin/bashy"
 
 // linuxWindowsFeatures are the Windows optional features WSL2 needs. Order is
 // the order they are enabled in.
@@ -481,12 +486,32 @@ func planWSL(env linuxEnv, f linuxFacts) linuxPlan {
 		Restarts:   true,
 		Done:       f.WSLInstalled || featuresEnabled,
 	})
+	// The component is installed from Microsoft's own MSI, not by wsl.exe.
+	// Until the component exists, the wsl.exe in System32 is only the Windows
+	// inbox STUB, whose entire argument list is --install/--update/--status/
+	// --help — and on elephant (Windows 11 26300, 2026-10-28) EVERY install
+	// route through it, `--update`, `--install`, `--install --no-launch` and
+	// `--install --no-distribution` alike, answered the same
+	//
+	//	The Windows Subsystem for Linux is not installed. You can install by
+	//	running 'wsl.exe --install'.
+	//
+	// and exited 1. The stub's own install path wants the Store, which an
+	// unattended session on a server-shaped host does not have, so it cannot
+	// bootstrap itself and a fleet cannot converge through it.
+	//
+	// Microsoft publishes the component as a plain MSI for exactly this
+	// offline/enterprise case, and `msiexec /quiet` installs it with no Store
+	// and no console. That is a runtime download + exec of a separate program
+	// (WSL is MIT-licensed), so no license propagates — the same standing as
+	// podman or ollama under docs/licensing-supply-chain-policy.md.
 	p.Steps = append(p.Steps, linuxStep{
-		ID:         "wsl-update",
-		Why:        "install/update the WSL component itself",
-		Argv:       []string{"wsl.exe", "--update"},
+		ID:         "wsl-component",
+		Why:        "install the WSL component from Microsoft's MSI (until it exists, wsl.exe is only the Windows inbox stub and cannot install itself)",
+		Argv:       []string{"msiexec.exe", "/i", wslMSIName(env.goarch), "/quiet", "/norestart"},
 		Privileged: true,
 		Done:       f.WSLInstalled,
+		Run:        func(ctx context.Context) error { return installWSLComponent(ctx, env) },
 	})
 	p.Steps = append(p.Steps, linuxStep{
 		ID:   "wsl-default-version",
@@ -531,6 +556,65 @@ func planPodman(env linuxEnv, f linuxFacts) linuxPlan {
 	return p
 }
 
+// wslMSIRepo is where Microsoft publishes the WSL component. The releases
+// there carry a per-asset sha256 in the GitHub API, so binmgr verifies the
+// download the same way `bashy self image` verifies bashy's own artifact.
+const wslMSIRepo = "microsoft/WSL"
+
+// wslMSIName is the asset for one architecture: wsl.<version>.x64.msi. The
+// version sits in the middle of the name, so the match is on the tail.
+func wslMSIName(goarch string) string {
+	return "wsl.<version>." + wslMSIArch(goarch) + ".msi"
+}
+
+func wslMSIArch(goarch string) string {
+	if goarch == "arm64" {
+		return "arm64"
+	}
+	return "x64"
+}
+
+// wslMSIAssetMatch picks the MSI for this architecture out of a release that
+// also ships an msixbundle and a nupkg. x64 and arm64 both end in ".msi", so
+// the architecture token has to be part of the suffix or an arm64 host would
+// take the x64 package.
+func wslMSIAssetMatch(goarch string) func(name, goos, hostArch string) bool {
+	suffix := "." + wslMSIArch(goarch) + ".msi"
+	return func(name, _, _ string) bool {
+		return strings.HasSuffix(strings.ToLower(name), suffix)
+	}
+}
+
+// installWSLComponent downloads Microsoft's WSL MSI and installs it quietly.
+// /norestart is deliberate: the optional features already took their restart,
+// and the MSI does not need another — a step that rebooted here would be
+// outside what `up` was authorized to do.
+func installWSLComponent(ctx context.Context, env linuxEnv) error {
+	tool, err := binmgr.ResolveGitHub(ctx, binmgr.GitHubSpec{
+		Name:       "wsl-msi-" + wslMSIArch(env.goarch),
+		Repo:       wslMSIRepo,
+		AssetMatch: wslMSIAssetMatch(env.goarch),
+	})
+	if err != nil {
+		return fmt.Errorf("resolve the WSL component MSI: %w", err)
+	}
+	msi, err := binmgr.Ensure(ctx, tool)
+	if err != nil {
+		return fmt.Errorf("fetch the WSL component MSI: %w", err)
+	}
+	fmt.Fprintf(env.stderr, "bashy linux: WSL component %s@%s\n", wslMSIRepo, tool.Version)
+	out, exit, err := env.run(ctx, "msiexec.exe", "/i", msi, "/quiet", "/norestart")
+	if err != nil {
+		return err
+	}
+	// 3010 is "succeeded, restart required": the component is in, and the
+	// steps after this one go through wsl.exe, which starts its own services.
+	if exit != 0 && exit != 3010 {
+		return fmt.Errorf("msiexec /i %s exited %d: %s", msi, exit, strings.TrimSpace(decodeConsole(out)))
+	}
+	return nil
+}
+
 // provisionWSLToolchain puts bashy's Linux build inside the distribution and
 // lets it provision its own managed Go. The artifact is the checksum-verified
 // release scratch binary — the same one `bashy self image` uses — so a Windows
@@ -545,8 +629,8 @@ func provisionWSLToolchain(ctx context.Context, env linuxEnv) error {
 		return err
 	}
 	for _, argv := range [][]string{
-		{"wsl.exe", "-d", linuxDistro, "-u", linuxWSLUser, "--", "install", "-m", "0755", inside, "/usr/local/bin/bashy"},
-		{"wsl.exe", "-d", linuxDistro, "-u", linuxWSLUser, "--", "/usr/local/bin/bashy", "go", "version"},
+		{"wsl.exe", "-d", linuxDistro, "-u", linuxWSLUser, "--", "install", "-m", "0755", inside, linuxDistroBashy},
+		{"wsl.exe", "-d", linuxDistro, "-u", linuxWSLUser, "--", linuxDistroBashy, "go", "version"},
 	} {
 		out, exit, err := env.run(ctx, argv[0], argv[1:]...)
 		if err != nil {
@@ -555,6 +639,37 @@ func provisionWSLToolchain(ctx context.Context, env linuxEnv) error {
 		if exit != 0 {
 			return fmt.Errorf("%s exited %d: %s", strings.Join(argv, " "), exit, strings.TrimSpace(decodeConsole(out)))
 		}
+	}
+	return linkDistroGo(ctx, env)
+}
+
+// linkDistroGo puts the managed toolchain's go on PATH inside the distro.
+//
+// Two reasons it is not optional. A gate is written `go test ./...` — the
+// command a peer ran, and the command this verb exists to reproduce — so a go
+// reachable only as `bashy go` would make every caller rewrite its gate.
+// And `command -v go` is the toolchain step's own Done predicate: without the
+// link the step never converges, `up` re-provisions on every run, and the
+// no-op property the whole plan is built on is lost (measured on elephant
+// 2026-10-28: `up` reported "wsl is set up", then `status` still said
+// "1 step(s) left: toolchain").
+func linkDistroGo(ctx context.Context, env linuxEnv) error {
+	out, exit, err := env.run(ctx, "wsl.exe", "-d", linuxDistro, "-u", linuxWSLUser,
+		"--", linuxDistroBashy, "go", "env", "GOROOT")
+	if err != nil {
+		return err
+	}
+	goroot := strings.TrimSpace(decodeConsole(out))
+	if exit != 0 || goroot == "" {
+		return fmt.Errorf("ask the distro's bashy for GOROOT: exited %d: %s", exit, goroot)
+	}
+	out, exit, err = env.run(ctx, "wsl.exe", "-d", linuxDistro, "-u", linuxWSLUser,
+		"--", "ln", "-sfn", goroot+"/bin/go", "/usr/local/bin/go")
+	if err != nil {
+		return err
+	}
+	if exit != 0 {
+		return fmt.Errorf("link %s/bin/go onto PATH: exited %d: %s", goroot, exit, strings.TrimSpace(decodeConsole(out)))
 	}
 	return nil
 }
@@ -651,10 +766,8 @@ func parseLinuxHostSpec(spec string) (linuxHostSpec, error) {
 	return h, nil
 }
 
-// linuxHostArgv re-issues this very invocation on another host over the host
-// OS ssh transport `bashy remote` already bootstraps with — the same way peers
-// run jobs today. --host is stripped so the remote side runs locally.
-func linuxHostArgv(spec linuxHostSpec, args []string) []string {
+// linuxSSHArgv is `ssh [-p PORT] [user@]host` — the prefix every hop shares.
+func linuxSSHArgv(spec linuxHostSpec) []string {
 	argv := []string{"ssh"}
 	if spec.port != "" {
 		argv = append(argv, "-p", spec.port)
@@ -663,8 +776,56 @@ func linuxHostArgv(spec linuxHostSpec, args []string) []string {
 	if spec.user != "" {
 		target = spec.user + "@" + spec.host
 	}
-	argv = append(argv, target, "bashy", "linux")
-	return append(argv, args...)
+	return append(argv, target)
+}
+
+// linuxRemoteBashy is how to run bashy on the host. It is a command, not just
+// a path, and is split into words the way BASHY_OCI already is — so a host
+// whose bashy is not on PATH, or one that needs an `env VAR=V` prefix for a
+// bootstrap, is reachable without a second flag for each case.
+func linuxRemoteBashy(remote string) []string {
+	if f := strings.Fields(remote); len(f) > 0 {
+		return f
+	}
+	return []string{"bashy"}
+}
+
+// linuxHostArgv re-issues this very invocation on another host over the host
+// OS ssh transport `bashy remote` already bootstraps with — the same way peers
+// run jobs today. --host is stripped so the remote side runs locally.
+func linuxHostArgv(spec linuxHostSpec, remote string, args []string) []string {
+	remoteArgv := append(linuxRemoteBashy(remote), "linux")
+	remoteArgv = append(remoteArgv, args...)
+	return append(linuxSSHArgv(spec), shellJoin(remoteArgv))
+}
+
+// shellJoin renders an argv as ONE word-for-word command line for a remote
+// shell. ssh offers no argv: it concatenates its trailing arguments and the
+// remote LOGIN SHELL re-parses the result, so an unquoted hop silently loses
+// a command's own quoting — `run -- sh -lc 'a; b'` arrived as `b` running on
+// the host instead of inside the Linux environment (measured on elephant
+// 2026-10-28). Quoting here is what makes the remote command the same
+// command.
+func shellJoin(argv []string) string {
+	words := make([]string, 0, len(argv))
+	for _, a := range argv {
+		// A word that cannot be reinterpreted is left bare, so the hop a
+		// refusal prints stays the argv an operator can paste back.
+		if a != "" && !strings.ContainsFunc(a, needsShellQuote) {
+			words = append(words, a)
+			continue
+		}
+		words = append(words, shellQuote(a))
+	}
+	return strings.Join(words, " ")
+}
+
+func needsShellQuote(r rune) bool {
+	switch {
+	case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		return false
+	}
+	return !strings.ContainsRune("_@%+=:,./-", r)
 }
 
 // ---------------------------------------------------------------- CLI
@@ -689,9 +850,14 @@ Examples:
   bashy linux -- go test -short ./...
   bashy linux --host liqiang@elephant.local:2222 plan
   bashy linux --host liqiang@elephant.local:2222 -- go test -short ./...
+  bashy linux --host elephant.local --sync -- go test -short ./...
 
 Options:
   --host SPEC          do all of this on another host, over ssh
+  --remote-bashy CMD   how to run bashy on --host (default: bashy; split into
+                       words, so "env VAR=V /path/bashy" works)
+  --sync               copy this workspace to --host first and run in it
+  --dir PATH           the directory to run in (default: the current one)
   --provider P         pin a provider (native|wsl|podman)
   --image REF          podman provider image (third-party refs must be digests)
   --json               machine-readable output for probe/plan/status
@@ -702,6 +868,9 @@ Options:
 
 type linuxOptions struct {
 	host            string
+	remoteBashy     string
+	dir             string
+	sync            bool
 	provider        string
 	image           string
 	asJSON          bool
@@ -746,7 +915,9 @@ func parseLinuxArgs(args []string) (linuxOptions, error) {
 			if o.sub != "run" {
 				return o, fmt.Errorf("%s takes no command after --", o.sub)
 			}
-			return o, nil
+			// -- ends the options, so the checks below the loop are made here
+			// too: an option is not excused from them by a command following.
+			return o, o.validate()
 		case arg == "-h" || arg == "--help":
 			o.help = true
 		case arg == "--json":
@@ -755,12 +926,26 @@ func parseLinuxArgs(args []string) (linuxOptions, error) {
 			o.allowPrivileged = true
 		case arg == "--allow-reboot":
 			o.allowReboot = true
+		case arg == "--sync":
+			o.sync = true
 		case arg == "--host" || strings.HasPrefix(arg, "--host="):
 			v, err := value("--host")
 			if err != nil {
 				return o, err
 			}
 			o.host = v
+		case arg == "--remote-bashy" || strings.HasPrefix(arg, "--remote-bashy="):
+			v, err := value("--remote-bashy")
+			if err != nil {
+				return o, err
+			}
+			o.remoteBashy = v
+		case arg == "--dir" || strings.HasPrefix(arg, "--dir="):
+			v, err := value("--dir")
+			if err != nil {
+				return o, err
+			}
+			o.dir = v
 		case arg == "--provider" || strings.HasPrefix(arg, "--provider="):
 			v, err := value("--provider")
 			if err != nil {
@@ -794,12 +979,35 @@ func parseLinuxArgs(args []string) (linuxOptions, error) {
 	if o.sub == "run" && len(o.command) == 0 && !o.help {
 		return o, errors.New("run needs a command: bashy linux run -- CMD [ARGS...]")
 	}
-	return o, nil
+	return o, o.validate()
+}
+
+// validate holds the checks that are about the options as a WHOLE, so both
+// ways out of the parse loop apply them.
+func (o linuxOptions) validate() error {
+	if o.help {
+		return nil
+	}
+	if o.host == "" {
+		if o.sync {
+			return errors.New("--sync needs --host: there is no other host to copy the workspace to")
+		}
+		if o.remoteBashy != "" {
+			return errors.New("--remote-bashy needs --host: it says how to run bashy on the OTHER host")
+		}
+	}
+	if o.sync && o.dir != "" {
+		return errors.New("--sync chooses the directory on the host, so it cannot be combined with --dir")
+	}
+	return nil
 }
 
 // hostArgs rebuilds this invocation without --host, for the remote side.
 func (o linuxOptions) hostArgs() []string {
 	var args []string
+	if o.dir != "" {
+		args = append(args, "--dir", o.dir)
+	}
 	if o.provider != "" {
 		args = append(args, "--provider", o.provider)
 	}
@@ -888,7 +1096,21 @@ func runLinux(ctx context.Context, env linuxEnv, args []string, execArgv func(co
 			fmt.Fprintln(env.stderr, "bashy linux:", err)
 			return linuxRefusedStatus
 		}
-		return execArgv(ctx, env, linuxHostArgv(spec, opts.hostArgs()))
+		if opts.sync {
+			dir, err := syncLinuxWorkspace(ctx, env, spec, opts.remoteBashy)
+			if err != nil {
+				fmt.Fprintln(env.stderr, "bashy linux: sync:", err)
+				return 1
+			}
+			opts.dir = dir
+		}
+		return execArgv(ctx, env, linuxHostArgv(spec, opts.remoteBashy, opts.hostArgs()))
+	}
+	if opts.dir != "" {
+		// --dir is the workspace to run in. It replaces the cwd outright, so
+		// every provider (the /mnt translation, the bind mount, the child's
+		// own directory) sees one answer.
+		env.cwd = normalizeHostDir(env.goos, opts.dir)
 	}
 
 	facts := probeLinuxHost(ctx, env)
