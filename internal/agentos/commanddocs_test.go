@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/qiangli/bashy/skills"
+	"github.com/qiangli/yoke/pkg/fleet"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 )
 
@@ -21,7 +22,7 @@ import (
 func TestCommandDocSourceNames(t *testing.T) {
 	// Sorted, exact: a new commands/<name>.md (feed shipped with the S431 feed
 	// registry, Sprint 9999 maintenance) must be added here deliberately.
-	want := []string{"adapt", "common-options", "conductor", "feed", "feed-setup", "force-agent-shell", "inbox", "knowledge-transfer", "lens", "sprint", "steward", "supervisor", "transcribe"}
+	want := []string{"adapt", "common-options", "conductor", "dks", "feed", "feed-setup", "force-agent-shell", "inbox", "knowledge-transfer", "lens", "sprint", "steward", "supervisor", "transcribe"}
 	got, err := commandDocSource{}.Names()
 	if err != nil {
 		t.Fatal(err)
@@ -142,6 +143,22 @@ func TestLookupEntryFallsBackToLocalTable(t *testing.T) {
 	// (the local table is a fallback, never a shadow, on a shared-atlas hit).
 	if _, ok := lookupEntry("sprint"); !ok {
 		t.Fatal(`lookupEntry("sprint") not found`)
+	}
+}
+
+func TestLookupEntryRegisteredCommandMCP(t *testing.T) {
+	ringDir(t)
+	writeRecord(t, fleet.Command{
+		Name: "registered-help-probe", Synopsis: "registered help probe",
+		Script: "echo ok", Effects: []string{"pure"},
+	})
+	entry, ok := lookupEntry("registered-help-probe")
+	if !ok || entry.Group == "" || entry.Tier == "" {
+		t.Fatalf("registered atlas entry = %+v, ok=%v", entry, ok)
+	}
+	definition, err := detailedHelpMCPTool("registered-help-probe", entry)
+	if err != nil || definition == nil || definition.Name != "registered-help-probe" {
+		t.Fatalf("registered MCP help = %+v, err=%v", definition, err)
 	}
 }
 

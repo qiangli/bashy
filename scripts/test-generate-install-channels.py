@@ -141,6 +141,29 @@ class GenerateInstallChannelsTest(unittest.TestCase):
         res = self.run_generator("v1.0.0")
         self.assertNotEqual(res.returncode, 0)
 
+    def test_rc_and_stable_tags_produce_valid_manifests(self):
+        for tag in ["v1.0.0", "v1.0.0-rc.19", "v1.0.0-rc.19-dev", "v1.0.0-dev"]:
+            with self.subTest(tag=tag):
+                out = self.out / tag
+                res = self.run_generator(tag, out=out)
+                self.assertEqual(res.returncode, 0, res.stderr)
+                version = tag[1:]
+                scoop = json.loads((out / "bucket" / "bashy.json").read_text())
+                self.assertEqual(scoop["version"], version)
+                self.assertIn(f"/download/{tag}/", scoop["architecture"]["64bit"]["url"])
+                formula = (out / "Formula" / "bashy.rb").read_text()
+                self.assertIn(f'version "{version}"', formula)
+                self.assertIn("(?:-rc\\.[0-9]+)?(?:-dev)?", formula)
+                inst = (out / "winget" / "DHNT.bashy.installer.yaml").read_text()
+                self.assertIn(f'PackageVersion: "{version}"', inst)
+
+    def test_junk_tags_fail(self):
+        for tag in ["1.0.0", "v1.0", "v1.0.0-rc", "v1.0.0-rc.", "v1.0.0-beta.1", "v1.0.0-rc.1-rc.2", "v1.0.0-dev-rc.1", "v1.0.0-rc.1x"]:
+            with self.subTest(tag=tag):
+                res = self.run_generator(tag, out=self.out / "junk")
+                self.assertNotEqual(res.returncode, 0)
+                self.assertIn("expected vX.Y.Z", res.stderr)
+
 
 if __name__ == "__main__":
     unittest.main()

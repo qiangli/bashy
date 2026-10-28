@@ -36,7 +36,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Base version to promote, e.g. v0.13.7 (its v0.13.7-dev pre-release must exist)'
+        description: 'Version to promote, e.g. v0.13.7 or v1.0.0-rc.19 (its v0.13.7-dev pre-release must exist)'
         required: true
       required_os:
         description: 'Space-separated OS gate that must all be green in refs/qa/<version>/<os>'
@@ -65,10 +65,9 @@ jobs:
           IN: ${{ github.event.inputs.version || github.ref_name }}
         run: |
           v="${IN#v}"                     # strip an optional leading v
-          case "$v" in
-            [0-9]*.[0-9]*.[0-9]*) ;;
-            *) echo "::error::version must look like v1.2.3 (got '${IN}')"; exit 1 ;;
-          esac
+          v="${v%-dev}"                   # a -dev candidate name promotes to its base
+          [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || {
+            echo "::error::version must look like v1.2.3 or v1.2.3-rc.4 (got '${IN}')"; exit 1; }
           echo "ver=v${v}"     >> "$GITHUB_OUTPUT"
           echo "dev=v${v}-dev" >> "$GITHUB_OUTPUT"
 

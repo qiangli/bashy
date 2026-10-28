@@ -6,13 +6,14 @@ runner=${BASHY_BIN:-bashy}
 guide=$("$runner" --bashsharp "$here/brainstorm.bsh" --skill)
 "$runner" commands add brainstorm --force \
   --set "exec.0=$runner" --set exec.1=--bashsharp --set "exec.2=$here/brainstorm.bsh" \
-  --set synopsis='Native LAN team brainstorming: serve, status, backup, stop, test' \
+  --set synopsis='Native LAN team brainstorming: serve, status, backup, restore, stop, test' \
   --set "long=$guide" --set group=platform \
   --set effects.0=read --set effects.1=write --set effects.2=exec --set effects.3=net \
   --set args.positionals.0.name=action \
   --set args.positionals.0.enum.0=serve --set args.positionals.0.enum.1=status \
-  --set args.positionals.0.enum.2=backup --set args.positionals.0.enum.3=stop \
-  --set args.positionals.0.enum.4=test
+  --set args.positionals.0.enum.2=backup --set args.positionals.0.enum.3=restore \
+  --set args.positionals.0.enum.4=stop --set args.positionals.0.enum.5=test \
+  --set args.positionals.1.name=snapshot
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 printf '%s\n' "$guide" > "$tmp/SKILL.md"

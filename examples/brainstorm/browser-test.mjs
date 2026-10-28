@@ -6,6 +6,7 @@ import {mkdtemp, readFile, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {spawn} from 'node:child_process';
+import {hold} from '../../tests/collaboration-e2e/barrier.mjs';
 const {chromium}=await import(process.env.PLAYWRIGHT_MODULE||'playwright');
 
 async function startServer(dir,args){
@@ -120,5 +121,54 @@ try {
  const pexp=await pCtx.request.get(second.origin+'/bs/api/export?session=e2e&format=json',{headers:{'X-Facilitator-Key':savedKey}});
  assert.equal(pexp.status(),200);assert.equal((await pexp.json()).cards.length,4);
  await q.screenshot({path:'/tmp/brainstorm-browser-prefix.png',fullPage:true});
- console.log('PASS: create session, 3-context private writing, reveal, budget-constrained votes, close, JSON/markdown export, restart persistence, standalone + prefix paths');
+ // --- invite-only session: invitations, denial, revocation, restart, prefix ---
+ await stopServer(second.server);second=null;
+ let inv=await startServer(dir,['-prefix','/bs']);second=inv;
+ const oCtx=await browser.newContext(),mCtx=await browser.newContext(),nCtx=await browser.newContext(),xCtx=await browser.newContext();
+ const owner=await oCtx.newPage(),mia=await mCtx.newPage(),noah=await nCtx.newPage(),eve=await xCtx.newPage();
+ await owner.goto(inv.facilitator);
+ await owner.locator('#connection').filter({hasText:'Connected'}).waitFor();
+ await owner.locator('#sessionInput').fill('club');
+ await owner.locator('#privateInput').check();
+ await owner.locator('#createSession').click();
+ await owner.locator('#connection').filter({hasText:'Connected · club'}).waitFor();
+ let plain=inv.origin+'/bs/?session=club';
+ await eve.goto(plain);
+ await eve.locator('#connection').filter({hasText:'No access'}).waitFor();
+ assert.equal((await xCtx.request.get(inv.origin+'/bs/api/state?session=club')).status(),404);
+ assert.equal((await xCtx.request.get(inv.origin+'/bs/api/export?session=club')).status(),404);
+ const invLinks=[];
+ for(const who of ['mia','noah']){
+  const before=invLinks.at(-1)||'';
+  await owner.locator('#inviteLabel').fill(who);await owner.locator('#inviteBtn').click();
+  await owner.waitForFunction(b=>{const t=document.getElementById('inviteLink').textContent;return t.includes('#invite=')&&(!b||!t.includes(b))},before);
+  invLinks.push((await owner.locator('#inviteLink').textContent()).match(/http:\/\/[^\s]+/)[0]);
+ }
+ await Promise.all([mia.goto(invLinks[0]),noah.goto(invLinks[1])]);
+ await mia.locator('#connection').filter({hasText:'Connected · club'}).waitFor();
+ await noah.locator('#connection').filter({hasText:'Connected · club'}).waitFor();
+ await mia.locator('#text').fill('Mia private idea');await mia.locator('#submit').click();await cards(mia,1);
+ await noah.waitForTimeout(2300);assert.equal(await noah.locator('.card').count(),0);
+ await eve.goto(invLinks[0]);
+ await eve.locator('#connection').filter({hasText:'No access'}).waitFor();
+ // restart: members persist, nonmembers still denied
+ await stopServer(inv.server);
+ inv=await startServer(dir,['-prefix','/bs']);second=inv;plain=inv.origin+'/bs/?session=club';
+ await mia.goto(plain);await cards(mia,1);
+ await eve.goto(plain);await eve.locator('#connection').filter({hasText:'No access'}).waitFor();
+ // revoke noah: immediate denial
+ const key=JSON.parse(await readFile(join(dir,'sessions','club.json'),'utf8')).facilitator;
+ await owner.goto(plain+'#facilitator='+key);
+ await noah.goto(plain);await noah.locator('#connection').filter({hasText:'Connected · club'}).waitFor();
+ await noah.locator('#text').fill('Noah private idea');await noah.locator('#submit').click();await cards(noah,1);
+ await owner.getByText('Member: noah').waitFor();
+ owner.on('dialog',d=>d.accept());
+ await owner.locator('#people .actions',{hasText:'Member: noah'}).getByRole('button').click();
+ await noah.locator('#connection').filter({hasText:'No access'}).waitFor({timeout:8000});
+ assert.equal(await noah.locator('.card').count(),0);
+ assert.equal(await noah.locator('#composer').isHidden(),true);
+ assert.equal((await nCtx.request.get(inv.origin+'/bs/api/state?session=club')).status(),404);
+ assert.equal((await mCtx.request.get(inv.origin+'/bs/api/state?session=club')).status(),200);
+ await hold('brainstorm', second.origin, '/bs/api/state?session=e2e');
+ console.log('PASS: create session, 3-context private writing, reveal, budget-constrained votes, close, JSON/markdown export, restart persistence, invite-only sessions with revocation, standalone + prefix paths');
 } finally {await browser?.close();if(first?.server&&!first.server.killed&&first.server.exitCode===null)try{await stopServer(first.server)}catch{}if(second)try{await stopServer(second.server)}catch{}await rm(dir,{recursive:true,force:true})}

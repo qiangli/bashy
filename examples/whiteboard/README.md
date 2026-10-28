@@ -56,7 +56,14 @@ server started for the same data directory. Restart resumes the saved boards.
    facilitator page when copying its participant link (keep the facilitator
    fragment).
 2. Create a named board per group or topic. Boards are persistent, isolated
-   sessions: clearing or locking one never touches the others.
+   sessions: clearing or locking one never touches the others. The `main`
+   board is open; every other named board is private — press **Create invite**
+   once per participant and share each link privately. Each invite is consumed
+   on first join; the code lives in the URL fragment, outside HTTP request
+   paths. Anyone with only the
+   board name (a guessed URL) is denied on state, draw/note, sync poll, and
+   both exports until they join with a valid invite. Revoking a member or an
+   invite takes effect immediately and survives restarts.
 3. Draw freehand on the canvas and pin sticky notes. Every open browser polls
    and re-renders, so contributions appear everywhere within a couple of
    seconds; a dropped connection shows "Reconnecting…" and resumes.
@@ -80,11 +87,23 @@ WHITEBOARD_DATA="$HOME/.local/share/bashy/whiteboard/session-2" bashy ./whiteboa
 ```
 
 Set `WHITEBOARD_ADDR=0.0.0.0:18093` to use another port. Set
-`WHITEBOARD_PREFIX=/whiteboard` when serving behind a sub-path (for example an
-outpost app prefix); all page URLs are relative so the board keeps working
+`WHITEBOARD_PREFIX=/whiteboard` when a proxy preserves that sub-path. Outpost
+strips `/app/<name>` before forwarding, so leave the prefix empty there. Bind
+to loopback and register with
+`outpost apps add whiteboard --url http://127.0.0.1:18093`. Its HTTPS URL is
+`https://<cloudbox>/matrix/h/<host>/app/whiteboard/`. Custom-app add/remove
+are live operations; `outpost apps rm whiteboard` removes the route without
+restarting the daemon. All page URLs are relative so the board keeps working
 there. Host firewall rules and Wi-Fi client isolation can prevent guest access
 even on the same Wi-Fi. Everything works without internet once Go and the
 executable are available.
+
+`bashy whiteboard backup` prints a verified snapshot directory. Stop the
+server, choose a **new, empty** data directory, then run
+`WHITEBOARD_DATA=/new/board-data bashy whiteboard restore /saved/snapshot`
+before serving it again. Restore refuses nonempty destinations, invalid
+records and overwrites. Snapshot JSON contains facilitator capabilities;
+store it privately. Members and revocations survive restore.
 
 Run focused tests with `bashy dag test`. There is no change to the Bashy binary.
 Run `python3 verify-duality.py` after registration to check direct script,

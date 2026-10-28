@@ -1,0 +1,45 @@
+      # Report-only: govulncheck and yarn audit need a vulnerability database
+      # on the network (vuln.go.dev, the npm registry audit endpoint), which
+      # is why this runs in the audit job rather than the no-egress-gated
+      # build job. Neither tool GATES the release here (tool.env
+      # RELEASE_GATES says so): both reports are produced and shipped as
+      # release assets, but a reachable or unwaived finding does not fail
+      # this job. That is a deliberate, narrower policy than
+      # builds/_shared/kinds/go's audit (which fails on an unwaived reachable
+      # finding) — see README.md #Audit.
+      - name: pinned Go toolchain (for govulncheck; report-only)
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "@@GO_TOOLCHAIN@@"
+          check-latest: false
+          cache: false
+      - name: govulncheck report (net/server; informational, never fails the job)
+        working-directory: src/net/server
+        env:
+          GOTOOLCHAIN: go@@GO_TOOLCHAIN@@
+        run: |
+          set -euo pipefail
+          . ../../../fork/bashy-build/PIN
+          mkdir -p ../../../out
+          go install "golang.org/x/vuln/cmd/govulncheck@$GOVULNCHECK_VERSION"
+          report=../../../out/$TOOL-$UPSTREAM_TAG.govulncheck.json
+          govulncheck -format json ./... >"$report" || true
+          [[ -s $report ]] || { echo "govulncheck produced no report"; exit 1; }
+          echo "govulncheck: report-only, not a release gate (tool.env RELEASE_GATES)"
+      - name: set up Node (for yarn audit; report-only)
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: "@@NODE_VERSION@@"
+      - name: install yarn (YARN_VERSION, classic)
+        run: npm install --global yarn@@@YARN_VERSION@@
+      - name: yarn audit report (app/client/web; informational, never fails the job)
+        working-directory: src/app/client/web
+        run: |
+          set -euo pipefail
+          . ../../../../fork/bashy-build/PIN
+          mkdir -p ../../../../out
+          report=../../../../out/klatch-web-$UPSTREAM_TAG.yarn-audit.json
+          yarn install --frozen-lockfile
+          yarn audit --json >"$report" || true
+          [[ -s $report ]] || { echo "yarn audit produced no report"; exit 1; }
+          echo "yarn audit: report-only, not a release gate (tool.env RELEASE_GATES)"

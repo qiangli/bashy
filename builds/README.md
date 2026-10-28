@@ -41,6 +41,7 @@ builds/
 | `ollama` | `ollama/ollama` | `v0.21.2` | MIT root; full input review pending | `custom` | [runner recipe, release blocked](ollama/README.md) |
 | `openclaw` | `openclaw/openclaw` | `v2026.10.2` | see its README | `custom` | the OpenClaw gateway |
 | `tuwunel` | `matrix-construct/tuwunel` | `v1.9.4` | Apache-2.0 | `cargo` | the Matrix homeserver |
+| `klatch` | `qiangli/klatch` (bashy's own fork of `balzack/databag`; no upstream release — see [its README](klatch/README.md#pin-provenance-no-upstream-release-tag)) | `v0.1.0` | Apache-2.0 | `custom` (own `build.yml`, `audit.yml`) | the Klatch messaging server |
 | `victoria-logs` | `VictoriaMetrics/VictoriaLogs` | `v1.53.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |
 | `victoria-metrics` | `VictoriaMetrics/VictoriaMetrics` | `v1.154.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |
 | `victoria-traces` | `VictoriaMetrics/VictoriaTraces` | `v0.12.0` | Apache-2.0 | `go` | yoke `external/otel/stack` |

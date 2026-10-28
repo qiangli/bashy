@@ -26,6 +26,9 @@ the executable argv and source path; `bashy skill show brainstorm` reads this fa
 - `bashy brainstorm backup` prints the path of a private, verified snapshot of
   every saved session. Run it before fixes. Never delete or replace a team's
   sessions to fix code.
+- `bashy brainstorm restore SNAPSHOT` restores saved sessions into a fresh,
+  empty `BRAINSTORM_DATA` directory. Stop the old service first, retain the
+  original data and snapshot, then start the restored service.
 - `bashy brainstorm stop` stops a server started for the same data directory.
   Ctrl-C stops a foreground server; restart resumes the saved sessions.
 - The facilitator creates named sessions with a title, columns and vote
@@ -137,7 +140,7 @@ data=${BRAINSTORM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy/brainstorm}
 addr=${BRAINSTORM_ADDR:-0.0.0.0:18091}
 prefix=${BRAINSTORM_PREFIX:-}
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/brainstorm
-if (( $# > 1 )); then echo 'Usage: brainstorm [serve|status|backup|stop|test|--skill|--contract]' >&2; exit 2; fi
+if (( $# > 2 )); then echo 'Usage: brainstorm [serve|status|backup|restore SNAPSHOT|stop|test|--skill|--contract]' >&2; exit 2; fi
 case ${1:-serve} in
 --skill)
   copying=false
@@ -148,7 +151,7 @@ case ${1:-serve} in
   done < "${BASH_SOURCE[0]}"
   ;;
 --contract) echo 'sokilili burainisutoromu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
--h|--help) echo 'brainstorm [serve|status|backup|stop|test] — native LAN board; --skill prints its embedded skill' ;;
+-h|--help) echo 'brainstorm [serve|status|backup|restore SNAPSHOT|stop|test] — native LAN board; --skill prints its embedded skill' ;;
 serve)
   mkdir -p "$cache"
   (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/brainstorm" .)
@@ -161,9 +164,13 @@ status|backup)
   [[ -n $result ]] || exit 1
   printf '%s\n' "$result"
   ;;
+restore)
+  [[ $# == 2 ]] || { echo 'Usage: brainstorm restore SNAPSHOT' >&2; exit 2; }
+  python3 "$here/../restore-board.py" brainstorm "$data" "$2"
+  ;;
 stop)
   if pkill -f "$cache/brainstorm -data $data" 2>/dev/null; then echo "stopped brainstorm ($data)"; else echo "no brainstorm server matched $data"; fi
   ;;
 test) cd "$here/server"; GOWORK=off go test -race ./... ;;
-*) echo 'Usage: brainstorm [serve|status|backup|stop|test|--skill|--contract]' >&2; exit 2 ;;
+*) echo 'Usage: brainstorm [serve|status|backup|restore SNAPSHOT|stop|test|--skill|--contract]' >&2; exit 2 ;;
 esac

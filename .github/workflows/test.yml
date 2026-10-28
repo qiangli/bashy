@@ -47,6 +47,9 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: ./scripts/test-build-fail-closed.sh
+      - name: Release QA lane xfail-card rule and summary counts
+        shell: bash
+        run: ./scripts/test-release-qa-lane.sh
       - name: Build + vet + test (shell core + lean agentos)
         shell: bash
         # Windows: build + vet + agentos (~2m tests) + bash53suite exceeds 10m

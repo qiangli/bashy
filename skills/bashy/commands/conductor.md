@@ -129,6 +129,11 @@ uncommitted changes, or disposable state. The manager proactively reclaims only
 resources its own sprint owns or has explicitly accepted into that sprint after
 review and integration; coordination alone never grants deletion authority.
 
+Sprint managers coordinate through `bashy mb send <seat>` and announce before
+using a shared host, committing in a shared checkout with another lane's runs
+(prefer a scratch worktree), or bumping a pin another lane depends on. Release a
+held claim another lane asks for, or explain the hold promptly.
+
 ## Seat authority — you are APPOINTED, you are not self-selected
 
 **The steward appoints and qualifies conductor seats.** A conductor never selects
@@ -774,6 +779,32 @@ one story:
 - Handing scope to, or accepting scope from, a sibling conductor directly — route
   it through the steward and wait for the recorded boundary.
 - Holding a steward seat and a conductor seat at once — self-review is not review.
+
+## Fast-loop practices
+- A fix brief for a platform-specific failure carries native host access and requires a
+  native run of the failing test before submit. CI confirms; it is not the debugger.
+- Tests are hermetic (no downloads). Re-run a single failed CI lane once automatically;
+  two failures is a bug, not flakiness.
+- A disposable candidate tag (`-dev`) may be cut as soon as pre-flight is green so release
+  builds overlap CI; promotion still needs every gate green.
+- Pre-flight on peers in parallel (see `bashy dag --mesh`): one target per OS on the peer
+  that has it; the biggest peer takes heavy suites; the dev box keeps edits and short unit tests.
+- Commit record/docs changes in a producer module before bumping its consumers
+  (`mod sync` / `dag sync`): drift compares exact HEADs, so a later docs-only producer
+  commit leaves every consumer pin stale.
+- After any sibling pin bump, run the fast ratchet and pin tests locally before pushing
+  the candidate; a new flag or vocabulary change from a sibling costs a minute there
+  and a whole release cycle later. Pre-flight also dry-runs the promote path with the
+  candidate's own release tools.
+- Time-box every gate and announce the deadline to whoever shares the hosts or waits on
+  the result. A gate that does not complete is INCOMPLETE, never a pass: keep the previous
+  release, release every host claim, report, and do not start another cycle without a
+  decision. Bound each lane and each host slot; release first, debug second.
+- Size worker runs to their real wall clock (a pointed run has a hard ceiling); start a
+  run that depends on a build only after the build has published.
+- Ship one candidate per cycle; work that lands after the freeze waits for the next
+  train unless it unblocks a live system. Unblock dependent work with the published
+  pre-release on dev/test hosts rather than making it wait for promotion.
 
 ## Command quick-reference
 ```sh

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	_ "embed"
 	"encoding/hex"
@@ -61,6 +62,18 @@ type Session struct {
 	Phase       string   `json:"phase"`
 	Cards       []Card   `json:"cards"`
 	Revision    int      `json:"revision"`
+	// Private sessions admit only the facilitator and invited members.
+	// Sessions saved before this field existed decode as open (false).
+	Private bool              `json:"private,omitempty"`
+	Members map[string]Member `json:"members,omitempty"` // participant cookie -> member
+	Invites map[string]string `json:"invites,omitempty"` // single-use invite code -> label
+}
+
+// Member is an invited participant; Handle is the public, non-secret
+// identifier the facilitator uses to revoke them.
+type Member struct {
+	Handle string `json:"handle"`
+	Label  string `json:"label"`
 }
 type app struct {
 	mu       sync.Mutex
@@ -257,6 +270,19 @@ func (a *app) ensureMainLocked() (*Session, error) {
 	a.sessions[s.Name] = s
 	return s, nil
 }
+func handleOf(id string) string {
+	h := sha256.Sum256([]byte("brainstorm-member:" + id))
+	return hex.EncodeToString(h[:6])
+}
+
+// allowed reports whether the caller may touch the session at all.
+func (s *Session) allowed(id string, fac bool) bool {
+	if !s.Private || fac {
+		return true
+	}
+	_, ok := s.Members[id]
+	return ok
+}
 func sessionNotFound(w http.ResponseWriter) {
 	fail(w, 404, "Session not found. Ask the facilitator to create it.")
 }
@@ -296,6 +322,21 @@ func (a *app) stripPrefix(path string) (string, bool) {
 	}
 	return "", false
 }
+
+// sameOrigin accepts the public origin forwarded by a loopback-only outpost.
+// Forwarded headers from a non-loopback client never weaken the direct check.
+func sameOrigin(r *http.Request, u *url.URL) bool {
+	if u.Host == r.Host {
+		return true
+	}
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || !net.ParseIP(remoteHost).IsLoopback() {
+		return false
+	}
+	return u.Host != "" && u.Host == r.Header.Get("X-Forwarded-Host") &&
+		u.Scheme == r.Header.Get("X-Forwarded-Proto")
+}
+
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -308,7 +349,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		if origin := r.Header.Get("Origin"); origin != "" {
 			u, e := url.Parse(origin)
-			if e != nil || u.Host != r.Host {
+			if e != nil || !sameOrigin(r, u) {
 				fail(w, 403, "Use the session's own page")
 				return
 			}
@@ -350,7 +391,12 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		respond(w, a.view(id, s, a.facilitator(r, s)))
+		isFac := a.facilitator(r, s)
+		if !s.allowed(id, isFac) {
+			sessionNotFound(w)
+			return
+		}
+		respond(w, a.view(id, s, isFac))
 		return
 	}
 	if path == "/api/export" && r.Method == "GET" {
@@ -361,6 +407,10 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			} else {
 				fail(w, 400, err.Error())
 			}
+			return
+		}
+		if !s.allowed(id, a.facilitator(r, s)) {
+			sessionNotFound(w)
 			return
 		}
 		if !a.facilitator(r, s) {
@@ -406,6 +456,8 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		Columns    []string `json:"columns"`
 		Prompts    []string `json:"prompts"`
 		VoteBudget int      `json:"voteBudget"`
+		Private    bool     `json:"private"`
+		Invite     string   `json:"invite"`
 	}
 	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384))
 	dec.DisallowUnknownFields()
@@ -479,6 +531,11 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		s := &Session{Version: 2, Name: req.Session, Title: title, Columns: columns,
 			Prompts: prompts, VoteBudget: budget, Facilitator: token(), Phase: "write", Cards: []Card{}}
+		if req.Private {
+			s.Private = true
+			s.Members = map[string]Member{}
+			s.Invites = map[string]string{}
+		}
 		if _, err := a.createLocked(s); err != nil {
 			if errors.Is(err, errSessionExists) {
 				fail(w, 409, "A session with that name already exists")
@@ -505,6 +562,46 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	isFac := a.facilitator(r, s)
+	if req.Action == "join" {
+		if !s.Private {
+			respond(w, a.view(id, s, isFac))
+			return
+		}
+		if s.allowed(id, isFac) {
+			respond(w, a.view(id, s, isFac))
+			return
+		}
+		label, ok := s.Invites[req.Invite]
+		if req.Invite == "" || !ok {
+			sessionNotFound(w)
+			return
+		}
+		next := *s
+		next.Members = map[string]Member{}
+		for k, v := range s.Members {
+			next.Members[k] = v
+		}
+		next.Invites = map[string]string{}
+		for k, v := range s.Invites {
+			if k != req.Invite {
+				next.Invites[k] = v
+			}
+		}
+		next.Members[id] = Member{Handle: handleOf(id), Label: label}
+		next.Revision++
+		if err := saveSession(sessionPath(a.dir, next.Name), next); err != nil {
+			log.Printf("save failed: %v", err)
+			fail(w, 500, "Could not save. Try again.")
+			return
+		}
+		*s = next
+		respond(w, a.view(id, s, false))
+		return
+	}
+	if !s.allowed(id, isFac) {
+		sessionNotFound(w)
+		return
+	}
 	// Work on a copy: a failed disk save must not acknowledge or retain a mutation.
 	raw, _ := json.Marshal(s)
 	var next Session
@@ -578,6 +675,60 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			c.Votes[id] = true
 		}
+	case "invite", "revoke":
+		if !isFac {
+			fail(w, 403, "Facilitator link required")
+			return
+		}
+		if !next.Private {
+			fail(w, 409, "This session is open to everyone with the link")
+			return
+		}
+		if next.Members == nil {
+			next.Members = map[string]Member{}
+		}
+		if next.Invites == nil {
+			next.Invites = map[string]string{}
+		}
+		if req.Action == "invite" {
+			label := strings.TrimSpace(req.Name)
+			if len([]rune(label)) > 40 {
+				fail(w, 400, "Keep the invitee label within 40 characters")
+				return
+			}
+			if len(next.Invites)+len(next.Members) >= 500 {
+				fail(w, 409, "This session has reached its participant limit")
+				return
+			}
+			code := token()
+			next.Invites[code] = label
+			next.Revision++
+			if err := saveSession(sessionPath(a.dir, next.Name), next); err != nil {
+				log.Printf("save failed: %v", err)
+				fail(w, 500, "Could not save. Try again.")
+				return
+			}
+			*s = next
+			v := a.view(id, s, true)
+			v["inviteCode"] = code
+			respond(w, v)
+			return
+		}
+		found := false
+		for k, m := range next.Members {
+			if m.Handle == req.ID {
+				delete(next.Members, k)
+				found = true
+			}
+		}
+		if _, ok := next.Invites[req.ID]; ok {
+			delete(next.Invites, req.ID)
+			found = true
+		}
+		if !found {
+			fail(w, 404, "No such participant or invitation")
+			return
+		}
 	case "phase":
 		if !isFac {
 			fail(w, 403, "Facilitator link required")
@@ -614,7 +765,24 @@ func (a *app) view(id string, s *Session, facilitator bool) map[string]any {
 		}
 		cards = append(cards, map[string]any{"id": c.ID, "column": c.Column, "text": c.Text, "name": c.Name, "mine": c.Owner == id, "votes": len(c.Votes), "voted": c.Votes[id]})
 	}
-	return map[string]any{"session": s.Name, "title": s.Title, "phase": s.Phase, "revision": s.Revision,
+	v := a.baseView(id, s, facilitator, cards, used)
+	if facilitator && s.Private {
+		members, invites := []map[string]string{}, []map[string]string{}
+		for _, m := range s.Members {
+			members = append(members, map[string]string{"handle": m.Handle, "label": m.Label})
+		}
+		for code, label := range s.Invites {
+			invites = append(invites, map[string]string{"code": code, "label": label})
+		}
+		sort.Slice(members, func(i, j int) bool { return members[i]["handle"] < members[j]["handle"] })
+		sort.Slice(invites, func(i, j int) bool { return invites[i]["code"] < invites[j]["code"] })
+		v["members"] = members
+		v["invites"] = invites
+	}
+	return v
+}
+func (a *app) baseView(id string, s *Session, facilitator bool, cards []map[string]any, used int) map[string]any {
+	return map[string]any{"session": s.Name, "private": s.Private, "title": s.Title, "phase": s.Phase, "revision": s.Revision,
 		"columns": s.Columns, "prompts": s.Prompts, "voteBudget": s.VoteBudget,
 		"cards": cards, "total": len(s.Cards), "facilitator": facilitator, "teacher": facilitator,
 		"votesLeft": s.VoteBudget - used}

@@ -27,6 +27,9 @@ the executable argv and source path; `bashy skill show whiteboard` reads this fa
 - `bashy whiteboard backup` prints the path of a private, verified snapshot of
   every saved board. Run it before fixes. Never delete or replace a group's
   boards to fix code.
+- `bashy whiteboard restore SNAPSHOT` restores saved boards into a fresh,
+  empty `WHITEBOARD_DATA` directory. Stop the old service first, retain the
+  original data and snapshot, then start the restored service.
 - `bashy whiteboard stop` stops a server started for the same data directory.
   Ctrl-C stops a foreground server; restart resumes the saved boards.
 - The facilitator creates named boards, locks the board to freeze
@@ -127,7 +130,7 @@ data=${WHITEBOARD_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy/whiteboard}
 addr=${WHITEBOARD_ADDR:-0.0.0.0:18093}
 prefix=${WHITEBOARD_PREFIX:-}
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/whiteboard
-if (( $# > 1 )); then echo 'Usage: whiteboard [serve|status|backup|stop|test|--skill|--contract]' >&2; exit 2; fi
+if (( $# > 2 )); then echo 'Usage: whiteboard [serve|status|backup|restore SNAPSHOT|stop|test|--skill|--contract]' >&2; exit 2; fi
 case ${1:-serve} in
 --skill)
   copying=false
@@ -138,7 +141,7 @@ case ${1:-serve} in
   done < "${BASH_SOURCE[0]}"
   ;;
 --contract) echo 'sokilili howaitobodo efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
--h|--help) echo 'whiteboard [serve|status|backup|stop|test] — native LAN board; --skill prints its embedded skill' ;;
+-h|--help) echo 'whiteboard [serve|status|backup|restore SNAPSHOT|stop|test] — native LAN board; --skill prints its embedded skill' ;;
 serve)
   mkdir -p "$cache"
   (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/whiteboard" .)
@@ -151,9 +154,13 @@ status|backup)
   [[ -n $result ]] || exit 1
   printf '%s\n' "$result"
   ;;
+restore)
+  [[ $# == 2 ]] || { echo 'Usage: whiteboard restore SNAPSHOT' >&2; exit 2; }
+  python3 "$here/../restore-board.py" whiteboard "$data" "$2"
+  ;;
 stop)
   if pkill -f "$cache/whiteboard -data $data" 2>/dev/null; then echo "stopped whiteboard ($data)"; else echo "no whiteboard server matched $data"; fi
   ;;
 test) cd "$here/server"; GOWORK=off go test -race ./... ;;
-*) echo 'Usage: whiteboard [serve|status|backup|stop|test|--skill|--contract]' >&2; exit 2 ;;
+*) echo 'Usage: whiteboard [serve|status|backup|restore SNAPSHOT|stop|test|--skill|--contract]' >&2; exit 2 ;;
 esac

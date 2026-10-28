@@ -80,11 +80,24 @@ the old one:
 BRAINSTORM_DATA="$HOME/.local/share/bashy/brainstorm/session-2" bashy ./brainstorm.sh
 ```
 
-Set `BRAINSTORM_ADDR=0.0.0.0:18092` to use another port, and
-`BRAINSTORM_PREFIX=/brainstorm` when serving behind a sub-path. Host firewall
+Set `BRAINSTORM_ADDR=0.0.0.0:18091` to use another port, and
+`BRAINSTORM_PREFIX=/brainstorm` when a proxy preserves that sub-path. Outpost
+strips `/app/<name>` before forwarding, so leave the prefix empty there. Bind
+to loopback and register with
+`outpost apps add brainstorm --url http://127.0.0.1:18091`. Its HTTPS URL is
+`https://<cloudbox>/matrix/h/<host>/app/brainstorm/`. Custom-app add/remove
+are live operations; `outpost apps rm brainstorm` removes the route without
+restarting the daemon. Host firewall
 rules and Wi-Fi client isolation can prevent participant access even on the
 same Wi-Fi. Everything works without internet once Go and the executable are
 available.
+
+`bashy brainstorm backup` prints a verified snapshot directory. Stop the
+server, choose a **new, empty** data directory, then run
+`BRAINSTORM_DATA=/new/session-data bashy brainstorm restore /saved/snapshot`
+before serving it again. Restore refuses nonempty destinations, invalid
+records and overwrites. Snapshot JSON contains facilitator capabilities;
+store it privately. Members and revocations survive restore.
 
 Run focused tests with `bashy dag test`. There is no change to the Bashy binary.
 Run `python3 verify-duality.py` after registration to check direct script,
@@ -94,3 +107,14 @@ failed steps without a passing attestation.
 For the optional browser test, install Playwright separately and set
 `PLAYWRIGHT_MODULE` to its module path and `BRAINSTORM_BIN` to the built server,
 then run `node browser-test.mjs`. `CHROMIUM_PATH` can select an existing browser.
+
+## Invite-only sessions
+
+Tick **Invite-only** when creating a named session (API: `"private": true`).
+The facilitator then creates single-use invite links
+(`?session=NAME#invite=CODE`); opening one makes that browser a member. Members
+keep the usual private-writing semantics. Non-members, guessed URLs, and
+revoked members get the same 404 as an unknown session on state, polling,
+write, vote and export. The facilitator can revoke a member or a pending
+invite at any time; access ends on the next request. Sessions created without
+the option, the legacy main board, and records saved earlier stay open.

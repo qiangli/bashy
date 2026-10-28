@@ -1,0 +1,73 @@
+      # One MATRIX, two unrelated artifact shapes: the klatch-web-* leg builds
+      # the Node/yarn web bundle (architecture-independent, built once on the
+      # amd64 runner); every other leg builds the cgo Go server for its own
+      # linux arch. Each half is gated by matrix.asset so the other half's
+      # toolchain steps are skipped rather than run uselessly.
+      - name: set up Node (NODE_VERSION, upstream Dockerfile node:22-alpine)
+        if: startsWith(matrix.asset, 'klatch-web-')
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: @@NODE_VERSION@@
+      - name: install yarn (YARN_VERSION, classic)
+        if: startsWith(matrix.asset, 'klatch-web-')
+        run: npm install --global yarn@@@YARN_VERSION@@
+      - name: web dependencies from the frozen lockfile
+        if: startsWith(matrix.asset, 'klatch-web-')
+        working-directory: src/app/client/web
+        run: yarn install --frozen-lockfile
+      - name: assert the lockfile was not rewritten
+        if: startsWith(matrix.asset, 'klatch-web-')
+        working-directory: src/app/client/web
+        run: |
+          set -euo pipefail
+          # --frozen-lockfile already refuses a stale lockfile; this catches a
+          # yarn version that resolved differently and rewrote it anyway.
+          [[ -z $(git status --porcelain -- yarn.lock) ]] ||
+            { echo "yarn rewrote yarn.lock"; git diff -- yarn.lock; exit 1; }
+      - name: web build (vite, upstream `yarn run build`)
+        if: startsWith(matrix.asset, 'klatch-web-')
+        working-directory: src/app/client/web
+        run: yarn run build
+      - name: package the web asset (static files, no executable code)
+        if: startsWith(matrix.asset, 'klatch-web-')
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          tar -C src/app/client/web/dist -czf "out/$ASSET" .
+      - name: pinned Go toolchain (GO_TOOLCHAIN)
+        if: ${{ !startsWith(matrix.asset, 'klatch-web-') }}
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: "@@GO_TOOLCHAIN@@"
+          check-latest: false
+          cache: false
+      - name: go build (CGO_ENABLED=1, gorm sqlite driver needs cgo)
+        if: ${{ !startsWith(matrix.asset, 'klatch-web-') }}
+        working-directory: src/net/server
+        env:
+          # GOTOOLCHAIN pins the exact release regardless of go.mod's own
+          # `toolchain go1.24.5` directive (an EOL minor, see tool.env), the
+          # same mechanism builds/_shared/kinds/go/setup.yml uses.
+          GOTOOLCHAIN: go@@GO_TOOLCHAIN@@
+        run: |
+          set -euo pipefail
+          . ../../../fork/bashy-build/PIN
+          mkdir -p ../../../out
+          # Upstream Dockerfile: CGO_ENABLED=1 go build -o databag . (no
+          # ldflags, no tags). -trimpath and -buildid= drop the build path
+          # and the action id, so the same bashy tag rebuilds the same bytes.
+          env CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -buildid=" -o ../../../out/klatch .
+      - name: package the server asset (binary + net/transform scripts)
+        if: ${{ !startsWith(matrix.asset, 'klatch-web-') }}
+        env:
+          ASSET: ${{ matrix.asset }}
+        run: |
+          set -euo pipefail
+          mkdir -p out/payload/transform
+          cp out/klatch out/payload/klatch
+          cp src/net/transform/*.sh out/payload/transform/
+          chmod +x out/payload/klatch out/payload/transform/*.sh
+          tar -C out/payload -czf "out/$ASSET" .
+          rm -rf out/payload out/klatch

@@ -58,6 +58,9 @@ def config(path):
     rooms = cfg.get("rooms", [])
     if len({r["key"] for r in rooms}) != len(rooms):
         fail("room keys must be distinct")
+    cloudbox = cfg.get("cloudbox")
+    if cloudbox is not None:
+        cloudbox_config(cfg, cloudbox)
     known = {u["localpart"] for u in users}
     for room in rooms:
         if not re.fullmatch(r"[a-z0-9._=-]+", room["key"]):
@@ -65,6 +68,134 @@ def config(path):
         if room["creator"] not in known or any(u not in known for u in room.get("invitees", [])):
             fail("room participants must be configured users")
     return cfg
+
+
+CLOUDBOX_DEFAULTS = {
+    "port": 6168,
+    "tunnel_token_secret": "matrix-chat/cloudbox/tunnel-token",
+    "appservice_token_secret": "matrix-chat/appservice/as-token",
+    "homeserver_token_secret": "matrix-chat/appservice/hs-token",
+    "account_secret_prefix": "matrix-chat/accounts",
+}
+
+
+def cloudbox_config(cfg, cloudbox):
+    if not isinstance(cloudbox, dict) or set(cloudbox) - set(CLOUDBOX_DEFAULTS):
+        fail("cloudbox accepts only: " + ", ".join(sorted(CLOUDBOX_DEFAULTS)))
+    for key, value in CLOUDBOX_DEFAULTS.items():
+        cloudbox.setdefault(key, value)
+    port = cloudbox["port"]
+    if not isinstance(port, int) or not 1 <= port <= 65535 or port == cfg["port"]:
+        fail("cloudbox.port must be a valid port distinct from the homeserver port")
+    for key in CLOUDBOX_DEFAULTS:
+        if key != "port" and not re.fullmatch(r"[A-Za-z0-9_./-]{1,64}", cloudbox[key]):
+            fail("cloudbox.%s must be a vault reference" % key)
+    # Each account password lives at <prefix>/cb_<32 hex>; vault names stop at 64.
+    if len(cloudbox["account_secret_prefix"].rstrip("/")) > 28:
+        fail("cloudbox.account_secret_prefix must be at most 28 characters")
+
+
+def appservice_toml(cfg):
+    """Non-secret appservice registration: the exclusive @cb_ namespace only.
+
+    The tokens reach tuwunel as vault-injected environment variables."""
+    regex = "@cb_[0-9a-f]{32}:" + re.escape(cfg["server_name"])
+    return ("[global.appservice.cloudbox]\n"
+            "sender_localpart = \"_cloudbox\"\n"
+            "rate_limited = false\n\n"
+            "[[global.appservice.cloudbox.users]]\n"
+            "regex = %s\n"
+            "exclusive = true\n") % json.dumps(regex)
+
+
+def shim_unit(cfg):
+    cloudbox = cfg["cloudbox"]
+    # JSON is YAML; the unit names vault references, never a value.
+    return {
+        "name": "matrix-chat-cloudbox",
+        "kind": "service",
+        "description": "Cloudbox account shim and client front for the matrix-chat homeserver",
+        "exec": ["python3", str(Path(__file__).resolve().with_name("cloudbox_shim.py")), "serve",
+                 "--listen", "127.0.0.1:{port}",
+                 "--upstream", "http://127.0.0.1:{settings.homeserver_port}",
+                 "--server-name", "{settings.server_name}",
+                 "--account-prefix", "{settings.account_prefix}"],
+        "settings": {"homeserver_port": str(cfg["port"]), "server_name": cfg["server_name"],
+                     "account_prefix": cloudbox["account_secret_prefix"]},
+        "ports": [{"name": "http", "port": cloudbox["port"], "bind": "127.0.0.1"}],
+        "secrets": [{"env": "MATRIX_CHAT_CLOUDBOX_TOKEN", "ref": cloudbox["tunnel_token_secret"]},
+                    {"env": "MATRIX_CHAT_AS_TOKEN", "ref": cloudbox["appservice_token_secret"]}],
+        "requires": ["matrix-chat"],
+        "health": {"http": "/_cloudbox/v1/health", "interval": "10s", "timeout": "3s",
+                   "failures": 3, "start_period": "10s"},
+        "restart": {"policy": "on-failure"},
+        "stop": {"signal": "TERM", "timeout": "10s"},
+        # Native clients carry Matrix tokens, not a Cloudbox login; Cloudbox's
+        # edge gates every request before the tunnel (cloudbox docs/matrix-chat.md).
+        "expose": {"app": {"name": "matrix-chat", "port": "http", "require_login": False}},
+        "enabled": False,
+    }
+
+
+def bound(ref):
+    result = subprocess.run(["bashy", "secret", "show", ref], stdout=subprocess.PIPE,
+                            stderr=subprocess.DEVNULL)
+    return result.returncode == 0 and bool(result.stdout.strip())
+
+
+def ensure_generated(ref):
+    if bound(ref):
+        return
+    generated = run("bashy", "secret", "gen", capture=True).stdout
+    subprocess.run(["bashy", "secret", "set", ref], input=generated, text=True, check=True,
+                   stdout=subprocess.DEVNULL)
+
+
+def cloudbox(cfg):
+    """Attach the Cloudbox account shim to an existing setup (S513.4a)."""
+    if "cloudbox" not in cfg:
+        fail("config has no cloudbox section")
+    identity(cfg)
+    data = Path(cfg["data_dir"])
+    if not (data / "db").exists():
+        fail("run setup first; the homeserver has no database yet")
+    cb = cfg["cloudbox"]
+    if not bound(cb["tunnel_token_secret"]):
+        fail("bind the host tunnel secret first: bashy ask --name MATRIX_TOKEN --stdout | "
+             "bashy secret set " + cb["tunnel_token_secret"])
+    ensure_generated(cb["appservice_token_secret"])
+    ensure_generated(cb["homeserver_token_secret"])
+    registration = data / "cloudbox-appservice.toml"
+    registration.write_text(appservice_toml(cfg))
+    registration.chmod(0o600)
+    run("bashy", "service", "set", "matrix-chat",
+        "--set", "env.TUWUNEL_CONFIG=" + str(registration),
+        "--set", "secrets.0.env=TUWUNEL_APPSERVICE__CLOUDBOX__AS_TOKEN",
+        "--set", "secrets.0.ref=" + cb["appservice_token_secret"],
+        "--set", "secrets.1.env=TUWUNEL_APPSERVICE__CLOUDBOX__HS_TOKEN",
+        "--set", "secrets.1.ref=" + cb["homeserver_token_secret"])
+    run("bashy", "service", "verify", "matrix-chat")
+    unit = data / "matrix-chat-cloudbox.yaml"
+    unit.write_text(json.dumps(shim_unit(cfg), indent=2) + "\n")
+    run("bashy", "service", "add", "--force", "-f", str(unit))
+    run("bashy", "service", "verify", "matrix-chat-cloudbox")
+    # A fresh optional unit is disabled. Restart alone does not activate it.
+    run("bashy", "service", "enable", "matrix-chat")
+    run("bashy", "service", "enable", "matrix-chat-cloudbox")
+    run("bashy", "service", "restart", "matrix-chat")
+    wait_ready(cfg)
+    run("bashy", "service", "restart", "matrix-chat-cloudbox")
+    for _ in range(30):
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:%d/_cloudbox/v1/health" % cb["port"],
+                                        timeout=3):
+                break
+        except (urllib.error.URLError, OSError):
+            time.sleep(1)
+    else:
+        fail("Cloudbox shim did not become ready")
+    print(json.dumps({"app": "matrix-chat", "shim_port": cb["port"],
+                      "namespace": "@cb_*:" + cfg["server_name"]}, sort_keys=True))
 
 
 def identity(cfg, create=False):
@@ -142,34 +273,56 @@ def setup(cfg):
     # The offline admin console takes a RocksDB lock. Stop before provisioning.
     subprocess.run(["bashy", "service", "stop", "matrix-chat"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    for _ in range(50):
+        stat = subprocess.run(["bashy", "service", "status", "matrix-chat"],
+                              capture_output=True, text=True)
+        if "inactive" in stat.stdout or "failed" in stat.stdout:
+            break
+        time.sleep(0.1)
+    time.sleep(0.2)
     admin_env = os.environ.copy()
     admin_env.update(TUWUNEL_SERVER_NAME=cfg["server_name"],
                      TUWUNEL_DATABASE_PATH=str(Path(cfg["data_dir"]) / "db"),
                      TUWUNEL_ALLOW_REGISTRATION="false",
                      TUWUNEL_ALLOW_FEDERATION="false",
                      TUWUNEL_ADDRESS="127.0.0.1", TUWUNEL_PORT=str(cfg["port"]))
+    list_res = subprocess.run([binary, "--test=smoke", "--execute", "users list-users"],
+                              env=admin_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    existing = set()
+    if list_res.returncode:
+        fail("tuwunel user enumeration failed; refusing account changes")
+    for line in list_res.stdout.splitlines():
+        clean = re.sub(r"\x1b\[[0-9;]*[mGKF]", "", line).strip()
+        if clean.startswith("@") and ":" in clean:
+            existing.add(clean[1:].split(":")[0])
     commands = []
     for i, user in enumerate(cfg["users"]):
-        commands.extend(["--execute", "users create-user %s %s" %
-                         (user["localpart"], vault(user["password_secret"]))])
-        if i == 0:
-            commands.extend(["--execute", "users make-user-admin @%s:%s" %
-                             (user["localpart"], cfg["server_name"])])
-    result = subprocess.run([binary, "--test=smoke", "-O", "admin_execute_errors_ignore=true",
+        u = user["localpart"]
+        pw = vault(user["password_secret"])
+        if u not in existing:
+            commands.extend(["--execute", f"users create-user {u} {pw}"])
+            if i == 0:
+                commands.extend(["--execute", "users make-user-admin @%s:%s" %
+                                 (u, cfg["server_name"])])
+    result = subprocess.run([binary, "--test=smoke",
                              *commands], env=admin_env, stdout=subprocess.PIPE,
                             stderr=subprocess.PIPE)
     if result.returncode:
         fail("tuwunel offline account provisioning failed (output withheld to protect secrets)")
+    run("bashy", "service", "enable", "matrix-chat")
     run("bashy", "service", "start", "matrix-chat")
+    wait_ready(cfg)
+    provision(cfg)
+
+
+def wait_ready(cfg):
     for _ in range(30):
         try:
             request(cfg, "GET", "/_matrix/client/versions")
-            break
+            return
         except (urllib.error.URLError, OSError):
             time.sleep(1)
-    else:
-        fail("Matrix service did not become ready")
-    provision(cfg)
+    fail("Matrix service did not become ready")
 
 
 def provision(cfg):
@@ -227,6 +380,8 @@ def main():
         setup(cfg)
     elif action == "provision":
         provision(cfg)
+    elif action == "cloudbox":
+        cloudbox(cfg)
     elif action == "status":
         run("bashy", "service", "status", "matrix-chat")
     elif action == "start":

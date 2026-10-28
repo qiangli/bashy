@@ -13,6 +13,7 @@ if [[ -z $pin ]]; then
  pin=$(curl -fsSL "${auth[@]}" "https://api.github.com/repos/qiangli/outpost/commits/$rev" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("sha",""))')
 fi
 [[ $pin =~ ^[0-9a-f]{40}$ ]] || { echo 'invalid outpost source pin' >&2; exit 1; }
+[[ $TAG =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?(-dev)?$ ]] || { echo "invalid release tag: $TAG" >&2; exit 2; }
 base=${TAG%-dev}
 artifacts='{}'
 for os in darwin linux windows; do

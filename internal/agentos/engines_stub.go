@@ -41,6 +41,9 @@ func dispatchEngine(arg string) {
 		fmt.Fprint(os.Stderr, engineNotFoundMessage(name))
 		dispatchExit(127)
 	case "dks":
+		if handled, code := handleDKSScope(os.Args[2:]); handled {
+			dispatchExit(code)
+		}
 		// Stock-build client surface (dks_stock.go): top-level help and the
 		// client verbs (status/kubeconfig/shell) run without the engine.
 		// They ride the engine-free yoke packages, so the stock binary
