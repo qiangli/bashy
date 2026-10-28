@@ -1,6 +1,7 @@
 import base64
 import importlib.util
 import json
+import re
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -24,7 +25,10 @@ class State:
         self.cards = {}         # app token -> [{id, data}]
         self.channels = {}      # app token -> [{id, data}]
         self.profile_headers = []
+        self.origins = set()
+        self.resets = {}        # reset token -> handle
         self.next = 0
+        self.connected_calls = []
 
     def nid(self):
         self.next += 1
@@ -49,6 +53,12 @@ def make_handler(st):
             n = int(self.headers.get("Content-Length") or 0)
             body = json.loads(self.rfile.read(n)) if n else None
             p = u.path
+            st.origins.add(self.headers.get("Origin"))
+            by_agent = {t: h for h, (_, _, t) in st.accounts.items()}
+            guid_agent = {g: t for _, (_, g, t) in st.accounts.items()}
+
+            def find_card(agent, cid):
+                return next(c for c in st.cards.get(agent, []) if c["id"] == cid)
             by_token = {t: h for h, (_, _, t) in st.accounts.items()}
             if p == "/admin/status" and method == "GET":
                 return self.reply(st.admin is None)
@@ -61,7 +71,23 @@ def make_handler(st):
                 st.config = (q, body)
                 return self.reply(None)
             if p == "/admin/accounts" and method == "GET":
-                return self.reply([{"username": h} for h in st.accounts])
+                return self.reply([{"username": h, "accountId": i + 1} for i, h in enumerate(st.accounts)])
+            if p.startswith("/admin/accounts/") and p.endswith("/reset"):
+                if q.get("token") != st.admin:
+                    return self.reply(None, 401)
+                handle = list(st.accounts)[int(p.split("/")[3]) - 1]
+                tok = "reset-" + st.nid()
+                st.resets[tok] = handle
+                return self.reply(tok)
+            if p == "/account/auth" and method == "PUT":
+                handle = st.resets.pop(self.headers["Authorization"].split()[1], None)
+                if not handle:
+                    return self.reply(None, 401)
+                user, pw = base64.b64decode(self.headers["Credentials"].split()[1]).decode().split(":", 1)
+                assert user == handle
+                _, guid, tok = st.accounts[handle]
+                st.accounts[handle] = (pw, guid, tok)
+                return self.reply(None)
             if p == "/admin/accounts" and method == "POST":
                 tok = "create-" + st.nid()
                 st.creates[tok] = True
@@ -73,7 +99,7 @@ def make_handler(st):
                 st.accounts[user] = (pw, "guid-" + user, "tok-" + user)
                 return self.reply(None)
             if p == "/account/apps":
-                user, pw = base64.b64decode(self.headers["Authorization"].split()[1]).decode().split(":", 1)
+                user, pw = base64.b64decode(self.headers["Credentials"].split()[1]).decode().split(":", 1)
                 acct = st.accounts.get(user)
                 if not acct or acct[0] != pw:
                     return self.reply(None, 401)
@@ -85,8 +111,38 @@ def make_handler(st):
             if p == "/contact/cards" and method == "POST":
                 cid = st.nid()
                 st.cards.setdefault(q["agent"], []).append(
-                    {"id": cid, "data": {"cardProfile": {"guid": body["guid"]}}})
+                    {"id": cid, "in": "in-" + cid, "data": {"cardProfile": {"guid": body["guid"]},
+                                                           "cardDetail": {"status": "confirmed"}}})
                 return self.reply({"id": cid})
+            m = re.fullmatch(r"/contact/cards/([^/]+)/status", p)
+            if m and method == "PUT":
+                c = find_card(q["agent"], m.group(1))
+                if body == "connected" and not q.get("token"):
+                    return self.reply(None, 400)
+                if body == "connected":
+                    c["out"] = q["token"]
+                    st.connected_calls.append(dict(q))
+                c["data"]["cardDetail"]["status"] = body
+                return self.reply(c)
+            m = re.fullmatch(r"/contact/cards/([^/]+)/openMessage", p)
+            if m:
+                c = find_card(q["agent"], m.group(1))
+                if c["data"]["cardDetail"]["status"] not in ("connecting", "connected"):
+                    return self.reply(None, 405)
+                return self.reply({"from": by_agent[q["agent"]], "to": c["data"]["cardProfile"]["guid"],
+                                   "token": c["in"]})
+            if p == "/contact/openMessage" and method == "PUT":
+                agent = guid_agent[body["to"]]
+                src = "guid-" + body["from"]
+                c = next(c for c in st.cards[agent] if c["data"]["cardProfile"]["guid"] == src)
+                d = c["data"]["cardDetail"]
+                if d["status"] == "confirmed":
+                    d["status"] = "requested"
+                elif d["status"] == "connecting":
+                    d["status"] = "connected"
+                c["out"] = body["token"]
+                return self.reply({"token": c["in"], "viewRevision": 1, "articleRevision": 2,
+                                   "channelRevision": 3, "profileRevision": 4})
             if p == "/content/channels" and method == "GET":
                 return self.reply(st.channels.get(q["agent"], []))
             if p == "/content/channels" and method == "POST":
@@ -144,6 +200,50 @@ class ProvisionTest(unittest.TestCase):
         self.assertEqual(len(self.st.cards["tok-alice"]), 2)
         self.assertEqual(len(self.st.cards["tok-bob"]), 1)
         self.assertEqual(len(self.st.channels["tok-alice"][0]["cards"]), 2)
+
+    def statuses(self):
+        return {(a, i): c["data"]["cardDetail"]["status"]
+                for a, cs in self.st.cards.items() for i, c in enumerate(cs)}
+
+    def test_handshake_connects_all_pairs(self):
+        self.run_setup()
+        self.assertEqual(set(self.statuses().values()), {"connected"})
+        self.assertEqual(len(self.statuses()), 4)
+        self.assertEqual(len(self.st.connected_calls), 2)
+        call = self.st.connected_calls[0]
+        self.assertTrue(call["token"].startswith("in-"))
+        self.assertEqual((call["viewRevision"], call["profileRevision"]), ("1", "4"))
+        self.assertEqual(self.st.origins, {self.cfg["base_url"]})
+
+    def test_handshake_idempotent(self):
+        self.run_setup()
+        before = json.dumps(self.st.cards, sort_keys=True)
+        calls = len(self.st.connected_calls)
+        self.run_setup()
+        self.assertEqual(json.dumps(self.st.cards, sort_keys=True), before)
+        self.assertEqual(len(self.st.connected_calls), calls)
+
+    def test_reset_passwords(self):
+        session, _ = module.admin_session(self.client, self.cfg, bootstrap=True)
+        self.client.set_config(session, self.cfg["domain"])
+        module.provision(self.client, self.cfg, session)
+        rotated = []
+
+        def rotate(ref):
+            rotated.append(ref)
+            SECRETS[ref] = "new-" + ref
+
+        try:
+            out = module.reset_passwords(self.client, self.cfg, session, ADMIN, ["bob", "carol"], rotate)
+            self.assertEqual(out, {"reset": ["bob", "carol"]})
+            self.assertEqual(rotated, ["klatch/bob", "klatch/carol"])
+            self.assertEqual(self.st.accounts["bob"][0], "new-klatch/bob")
+            self.assertEqual(self.st.accounts["alice"][0], "apw")
+            self.assertTrue(self.client.login("bob", "new-klatch/bob"))
+            with self.assertRaises(SystemExit):
+                module.reset_passwords(self.client, self.cfg, session, ADMIN, ["zed"], rotate)
+        finally:
+            SECRETS.update({"klatch/bob": "bpw", "klatch/carol": "cpw"})
 
     def test_credentials_header_not_authorization(self):
         self.run_setup()
