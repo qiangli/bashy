@@ -3,11 +3,13 @@ id: ebbdaf9f21e4
 kind: bug
 title: S513.4c Cloudbox Matrix shim credential and signed-gate repair
 seq: 2745
-status: assigned
+status: todo
 priority: p0
+labels:
+    - deferred
+    - operator-stop
 created: 2026-10-27T18:03:59.36545Z
 weave: 304
-assignee: claude-opus5.5
 sprint: 513
 sprint_id: 8bb3bd0b-2aa9-5952-92ca-6dda0194fca6
 sprint_title: 'Bashy collaboration: Matrix chat + whiteboard/brainstorm for everyone; lern live UAT'
