@@ -496,3 +496,123 @@ func (a *app) stripFails() bool {
 	}
 	return false
 }
+
+func createPrivate(t *testing.T, a *app, name string) string {
+	t.Helper()
+	w := request(a, token(), "", name, "/api/action", map[string]any{"action": "create", "private": true})
+	good(t, w)
+	var v struct {
+		FacilitatorKey string `json:"facilitatorKey"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &v)
+	return v.FacilitatorKey
+}
+func invite(t *testing.T, a *app, fac, name, label string) string {
+	t.Helper()
+	w := request(a, token(), fac, name, "/api/action", map[string]any{"action": "invite", "name": label})
+	good(t, w)
+	var v struct {
+		Code string `json:"inviteCode"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &v)
+	if v.Code == "" {
+		t.Fatal("no invite code")
+	}
+	return v.Code
+}
+func denied(t *testing.T, w *httptest.ResponseRecorder, what string) {
+	t.Helper()
+	if w.Code != 404 && w.Code != 403 {
+		t.Fatalf("%s not denied: %d %s", what, w.Code, w.Body.String())
+	}
+}
+
+func TestPrivateSessionInvitesAndRevocation(t *testing.T) {
+	dir := t.TempDir()
+	a, _ := loadForTest(dir)
+	fac := createPrivate(t, a, "club")
+	alice, bob, eve := token(), token(), token()
+	add404 := map[string]any{"action": "add", "text": "x", "column": 0}
+
+	// Nonmember / guessed URL: every surface denied, indistinguishable from unknown.
+	denied(t, request(a, eve, "", "club", "/api/state", nil), "state")
+	denied(t, request(a, eve, "", "club", "/api/export", nil), "export")
+	denied(t, request(a, eve, "", "club", "/api/action", add404), "write")
+	denied(t, request(a, eve, "", "club", "/api/action", map[string]any{"action": "vote", "id": "x"}), "vote")
+	denied(t, request(a, eve, "", "club", "/api/action", map[string]any{"action": "join", "invite": token()}), "bad join")
+	denied(t, request(a, eve, "", "club", "/api/action", map[string]any{"action": "invite"}), "nonowner invite")
+	missing := request(a, eve, "", "nosuch", "/api/state", nil).Body.String()
+	if request(a, eve, "", "club", "/api/state", nil).Body.String() != missing {
+		t.Fatal("private session distinguishable from unknown")
+	}
+
+	// Invited distinct users keep private-writing semantics.
+	ca, cb := invite(t, a, fac, "club", "alice"), invite(t, a, fac, "club", "bob")
+	good(t, request(a, alice, "", "club", "/api/action", map[string]any{"action": "join", "invite": ca}))
+	good(t, request(a, bob, "", "club", "/api/action", map[string]any{"action": "join", "invite": cb}))
+	denied(t, request(a, eve, "", "club", "/api/action", map[string]any{"action": "join", "invite": ca}), "reused invite")
+	good(t, request(a, alice, "", "club", "/api/action", map[string]any{"action": "add", "text": "ALICE SECRET", "column": 0}))
+	if strings.Contains(request(a, bob, "", "club", "/api/state", nil).Body.String(), "ALICE SECRET") {
+		t.Fatal("member saw another member's private card")
+	}
+	if !strings.Contains(request(a, alice, "", "club", "/api/state", nil).Body.String(), "ALICE SECRET") {
+		t.Fatal("author lost own card")
+	}
+	if strings.Contains(request(a, alice, "", "club", "/api/state", nil).Body.String(), "members") {
+		t.Fatal("member view lists members")
+	}
+	fv := request(a, token(), fac, "club", "/api/state", nil).Body.String()
+	if !strings.Contains(fv, "alice") || !strings.Contains(fv, handleOf(bob)) {
+		t.Fatalf("owner cannot see members: %s", fv)
+	}
+
+	// Survives restart.
+	a2, err := loadForTest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	good(t, request(a2, bob, "", "club", "/api/state", nil))
+	denied(t, request(a2, eve, "", "club", "/api/state", nil), "post-restart nonmember")
+
+	// Revoke: immediate denial everywhere, and only the owner may revoke.
+	denied(t, request(a2, bob, "", "club", "/api/action", map[string]any{"action": "revoke", "id": handleOf(alice)}), "member revoke")
+	good(t, request(a2, token(), fac, "club", "/api/action", map[string]any{"action": "revoke", "id": handleOf(bob)}))
+	denied(t, request(a2, bob, "", "club", "/api/state", nil), "revoked state")
+	denied(t, request(a2, bob, "", "club", "/api/export", nil), "revoked export")
+	denied(t, request(a2, bob, "", "club", "/api/action", add404), "revoked write")
+	denied(t, request(a2, bob, "", "club", "/api/action", map[string]any{"action": "vote", "id": "x"}), "revoked vote")
+	good(t, request(a2, alice, "", "club", "/api/state", nil))
+	// Revoking a pending invite kills it.
+	cc := invite(t, a2, fac, "club", "carol")
+	good(t, request(a2, token(), fac, "club", "/api/action", map[string]any{"action": "revoke", "id": cc}))
+	denied(t, request(a2, eve, "", "club", "/api/action", map[string]any{"action": "join", "invite": cc}), "revoked invite")
+	a3, _ := loadForTest(dir)
+	denied(t, request(a3, bob, "", "club", "/api/state", nil), "revoked after restart")
+}
+
+func TestOpenSessionsAndLegacyStayOpen(t *testing.T) {
+	a := fresh(t)
+	good(t, request(a, token(), "", "main", "/api/state", nil))
+	fac := create(t, a, "pub", "", 3)
+	good(t, request(a, token(), "", "pub", "/api/state", nil))
+	if w := request(a, token(), fac, "pub", "/api/action", map[string]any{"action": "invite"}); w.Code != 409 {
+		t.Fatalf("invite on open session: %d", w.Code)
+	}
+	good(t, request(a, token(), "", "pub", "/api/action", map[string]any{"action": "join"}))
+}
+
+func TestPrivateSessionPrefix(t *testing.T) {
+	a := fresh(t)
+	fac := createPrivate(t, a, "px")
+	a.prefix = "/bs"
+	r := httptest.NewRequest("GET", "/bs/api/state?session=px", nil)
+	r.AddCookie(&http.Cookie{Name: "brainstorm-participant", Value: token()})
+	w := httptest.NewRecorder()
+	a.ServeHTTP(w, r)
+	denied(t, w, "prefixed nonmember")
+	r = httptest.NewRequest("GET", "/bs/api/state?session=px", nil)
+	r.Header.Set("X-Facilitator-Key", fac)
+	w = httptest.NewRecorder()
+	a.ServeHTTP(w, r)
+	good(t, w)
+}

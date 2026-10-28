@@ -94,3 +94,14 @@ failed steps without a passing attestation.
 For the optional browser test, install Playwright separately and set
 `PLAYWRIGHT_MODULE` to its module path and `BRAINSTORM_BIN` to the built server,
 then run `node browser-test.mjs`. `CHROMIUM_PATH` can select an existing browser.
+
+## Invite-only sessions
+
+Tick **Invite-only** when creating a named session (API: `"private": true`).
+The facilitator then creates single-use invite links
+(`?session=NAME#invite=CODE`); opening one makes that browser a member. Members
+keep the usual private-writing semantics. Non-members, guessed URLs, and
+revoked members get the same 404 as an unknown session on state, polling,
+write, vote and export. The facilitator can revoke a member or a pending
+invite at any time; access ends on the next request. Sessions created without
+the option, the legacy main board, and records saved earlier stay open.
