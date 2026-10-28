@@ -505,6 +505,7 @@ logger	-s	--stderr
 logger	-t	--tag
 logname	-V	--version
 logname	-h	--help
+loom remote refresh	-C	--dir
 lp	-V	--version
 lp	-d	--d
 lp	-h	--help
