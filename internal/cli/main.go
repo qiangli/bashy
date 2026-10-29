@@ -27,6 +27,7 @@ import (
 
 	"mvdan.cc/sh/v3/expand"
 	"mvdan.cc/sh/v3/interp"
+	"mvdan.cc/sh/v3/pathconv"
 	"mvdan.cc/sh/v3/polyglot"
 	"mvdan.cc/sh/v3/syntax"
 )
@@ -4676,9 +4677,10 @@ func runPath(r *interp.Runner, path string) error {
 	orig := path
 	// The operand is in the shell's spelling — on Windows that is the MSYS
 	// drive form bashy itself hands out for $HOME, $TEMP and pwd (/c/Users/…),
-	// which the OS cannot open as given. Resolve it the way the engine
-	// resolves every other path; on Unix this is the identity.
-	f, err := os.Open(interp.ShellPathToOS(r.Dir, path))
+	// which the OS cannot open as given. Join relative operands to the
+	// runner's cwd too: ShellPathToOS only converts their spelling and would
+	// leave os.Open resolving them against the embedding process's cwd.
+	f, err := os.Open(pathconv.JoinAbs(r.Dir, path))
 	if err != nil {
 		// Bash falls back to a $PATH search for a bare (no-slash) name.
 		if !strings.Contains(path, "/") {
@@ -4688,7 +4690,7 @@ func runPath(r *interp.Runner, path string) error {
 				// keeps a POSIX PATH (for example /bin:/usr/bin), so a bare
 				// script operand may resolve to /bin/ls on Windows. Open through
 				// the same mount conversion as the original operand.
-				f, err = os.Open(interp.ShellPathToOS(r.Dir, path))
+				f, err = os.Open(pathconv.JoinAbs(r.Dir, path))
 			}
 		}
 		if err != nil {
