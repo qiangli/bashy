@@ -17,16 +17,18 @@ var gitNoopGlobals = map[string]bool{
 // are valid real-git syntax, so they get a pointer to --external instead of
 // cobra's "unknown flag".
 var gitValueGlobals = map[string]bool{
-	"-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true,
+	"--git-dir": true, "--work-tree": true, "--namespace": true,
 	"--config-env": true, "--exec-path": true, "--super-prefix": true,
 }
 
 // splitGitGlobals consumes git's global options that precede the verb the
 // way real git does. -C DIR is returned (in order) for the caller to apply;
-// no-op options are dropped; options the native engine cannot apply fail
+// no-op options are dropped; -c k=v overrides stay at the front of the returned argv for the engine;
+// options the native engine cannot apply fail
 // with a hint naming --external. Parsing stops at the first non-option, and
 // at options it does not know (--version, --help, …), which pass through.
 func splitGitGlobals(args []string) (dirs, rest []string, err error) {
+	var confs []string
 	i := 0
 	for i < len(args) {
 		a := args[i]
@@ -37,15 +39,24 @@ func splitGitGlobals(args []string) (dirs, rest []string, err error) {
 			}
 			dirs = append(dirs, args[i+1])
 			i += 2
+		case a == "-c":
+			if i+1 >= len(args) {
+				return nil, nil, fmt.Errorf("error: switch 'c' requires a value")
+			}
+			confs = append(confs, a, args[i+1])
+			i += 2
+		case strings.HasPrefix(a, "-c") && len(a) > 2:
+			confs = append(confs, a)
+			i++
 		case gitNoopGlobals[a]:
 			i++
 		case gitValueGlobals[a] || gitValueGlobals[strings.SplitN(a, "=", 2)[0]]:
 			return nil, nil, fmt.Errorf("git %s is not applied by bashy's native git engine; retry with --external to run it on a host git", a)
 		default:
-			return dirs, args[i:], nil
+			return dirs, append(confs, args[i:]...), nil
 		}
 	}
-	return dirs, args[i:], nil
+	return dirs, append(confs, args[i:]...), nil
 }
 
 // gitAwdRun runs `bashy awd` (a seam: tests must not re-exec the binary).

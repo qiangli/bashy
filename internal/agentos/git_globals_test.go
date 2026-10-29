@@ -2,6 +2,7 @@ package agentos
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/qiangli/yoke/external/gitscm"
+	outgit "github.com/qiangli/yoke/git"
 )
 
 func gitGlobalsRepo(t *testing.T) string {
@@ -69,7 +71,7 @@ func TestGitDashCExternalStillWorks(t *testing.T) {
 
 func TestGitUnappliableGlobalNamesExternal(t *testing.T) {
 	repo := gitGlobalsRepo(t)
-	_, errOut, code := runGitDoor(t, repo, "-c", "core.quotepath=off", "status", "--short")
+	_, errOut, code := runGitDoor(t, repo, "--git-dir=x", "status", "--short")
 	if code == 0 || !strings.Contains(errOut, "--external") {
 		t.Fatalf("-c natively: want refusal naming --external, code=%d stderr=%q", code, errOut)
 	}
@@ -87,7 +89,8 @@ func TestSplitGitGlobals(t *testing.T) {
 		{[]string{"--no-pager", "-P", "log"}, []string{"log"}, nil, ""},
 		{[]string{"log", "-C", "x"}, []string{"log", "-C", "x"}, nil, ""},
 		{[]string{"-C"}, nil, nil, "no directory given"},
-		{[]string{"-c", "a=b", "log"}, nil, nil, "--external"},
+		{[]string{"-c", "a=b", "-ck=v", "log", "-1"}, []string{"-c", "a=b", "-ck=v", "log", "-1"}, nil, ""},
+		{[]string{"-c"}, nil, nil, "requires a value"},
 		{[]string{"--git-dir=/x", "log"}, nil, nil, "--external"},
 		{[]string{"--work-tree", "/x", "log"}, nil, nil, "--external"},
 		{[]string{"--version"}, []string{"--version"}, nil, ""},
@@ -121,5 +124,33 @@ func TestGitDashCRewritesToAwd(t *testing.T) {
 		if strings.Join(got, "\x00") != strings.Join(tc.want, "\x00") {
 			t.Errorf("dirs=%q rest=%q: got %q want %q", tc.dirs, tc.rest, got, tc.want)
 		}
+	}
+}
+
+func TestHasGitConfigOverride(t *testing.T) {
+	for in, want := range map[string]bool{"-c": true, "-ck=v": true, "log": false, "--version": false} {
+		if got := hasGitConfigOverride([]string{in}); got != want {
+			t.Errorf("%q: got %v want %v", in, got, want)
+		}
+	}
+}
+
+func TestGitConfigOverrideAndInitQuiet(t *testing.T) {
+	dir := t.TempDir()
+	res, err := outgit.ExecOrExternal(context.Background(), dir, []string{"init", "-q", "."}, false)
+	if err != nil || res.ExitCode != 0 || res.Stdout != "" {
+		t.Fatalf("init -q: res=%+v err=%v", res, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, argv := range [][]string{{"add", "a"}, {"-c", "user.name=d3", "-c", "user.email=d3@local", "commit", "-q", "-m", "first"}, {"log", "--oneline"}} {
+		res, err = outgit.ExecOrExternal(context.Background(), dir, argv, false)
+		if err != nil || res.ExitCode != 0 {
+			t.Fatalf("%v: res=%+v err=%v", argv, res, err)
+		}
+	}
+	if !strings.Contains(res.Stdout, "first") {
+		t.Fatalf("log: %q", res.Stdout)
 	}
 }

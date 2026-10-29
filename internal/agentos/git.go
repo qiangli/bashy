@@ -1,6 +1,7 @@
 package agentos
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -278,12 +279,25 @@ func gitCloneCmd() *cobra.Command {
 
 func gitInitCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "init [directory]",
-		Short: "Initialize a git repository",
-		Args:  cobra.MaximumNArgs(1),
+		Use:                "init [directory]",
+		Short:              "Initialize a git repository",
+		DisableFlagParsing: true,
+		Args:               cobra.ArbitraryArgs,
 		Example: `  bashy git init
   bashy git init ./my-project`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			for _, a := range args {
+				if a == "-h" || a == "--help" {
+					return cmd.Help()
+				}
+			}
+			if len(args) > 1 || len(args) == 1 && strings.HasPrefix(args[0], "-") {
+				res, err := outgit.ExecOrExternal(cmd.Context(), ".", append([]string{"init"}, args...), false)
+				if err != nil {
+					return err
+				}
+				return renderGitResult(cmd, res)
+			}
 			path := "."
 			if len(args) > 0 {
 				path = args[0]
@@ -876,6 +890,28 @@ func dispatchGit(args []string) {
 		dispatchExit(code)
 	}
 	dispatchExit(0)
+}
+
+// hasGitConfigOverride reports whether argv leads with a -c k=v global.
+func hasGitConfigOverride(args []string) bool {
+	return len(args) > 0 && (args[0] == "-c" || strings.HasPrefix(args[0], "-c") && len(args[0]) > 2)
+}
+
+// gitRunEngineArgv hands argv (leading -c overrides included) to the native
+// engine verbatim and returns the exit status.
+func gitRunEngineArgv(argv []string) int {
+	res, err := outgit.ExecOrExternal(context.Background(), ".", argv, false)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 128
+	}
+	if res.Stdout != "" {
+		fmt.Fprint(os.Stdout, res.Stdout)
+	}
+	if res.Stderr != "" {
+		fmt.Fprint(os.Stderr, res.Stderr)
+	}
+	return res.ExitCode
 }
 
 // gitEngineCmd is a `bashy git <verb>` whose argv reaches the engine
