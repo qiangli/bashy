@@ -1,7 +1,9 @@
 package agentos
 
 import (
+	"io"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -47,5 +49,48 @@ func TestAccountIsAlwaysShimmedAndSchemaed(t *testing.T) {
 	}
 	if !isFrontDoorInvocation("account") {
 		t.Fatal("account is not a front-door verb")
+	}
+}
+
+func captureAccountDoor(t *testing.T, args ...string) (string, int) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	done := make(chan string)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+	code := runAccountDoor(t, args...)
+	os.Stdout = old
+	w.Close()
+	return <-done, code
+}
+
+func TestAccountBuiltinAdaptersLinked(t *testing.T) {
+	const sentinel = "S524-SECRET-SENTINEL-do-not-leak"
+	t.Setenv("BASHY_HOME", t.TempDir())
+	t.Setenv("AWS_SECRET_ACCESS_KEY", sentinel)
+	t.Setenv("DIGITALOCEAN_TOKEN", sentinel)
+
+	disc, code := captureAccountDoor(t, "discover", "--dry-run", "--json")
+	if code != 0 {
+		t.Fatalf("account discover --dry-run --json exited %d", code)
+	}
+	schema, code := captureAccountDoor(t, "schema", "--json")
+	if code != 0 {
+		t.Fatalf("account schema --json exited %d", code)
+	}
+	for _, name := range []string{"cloudbox", "llm", "digitalocean", "aws"} {
+		if !strings.Contains(schema, `"`+name+`"`) {
+			t.Errorf("schema does not list adapter %q", name)
+		}
+	}
+	if strings.Contains(disc+schema, sentinel) {
+		t.Error("secret sentinel leaked into account output")
 	}
 }

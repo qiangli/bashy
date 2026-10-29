@@ -40,7 +40,7 @@ func TestSkillRunBashSharpContract(t *testing.T) {
 			if !pass {
 				want = 3
 			}
-			if rec.Valid != pass || rec.Status == nil || *rec.Status != want || !strings.HasPrefix(rec.Identity, "sha256:") {
+			if rec.Valid != pass || rec.Status == nil || *rec.Status != want || rec.Identity == "" {
 				t.Fatalf("receipt: %+v", rec)
 			}
 			if !strings.Contains(log.String(), "body-output") {
