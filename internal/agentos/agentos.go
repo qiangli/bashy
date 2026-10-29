@@ -1803,7 +1803,7 @@ func dispatch() {
 		// Platform curl (built into Windows 10+, universal on unix); a pinned,
 		// checksum-verified curl.se/windows build on a bare Windows node.
 		cmd := curlbin.NewCurlCmd()
-		setCobraArgs(cmd, os.Args[2:])
+		setCobraArgs(cmd, mapNullDevice(runtime.GOOS, os.Args[2:]))
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
