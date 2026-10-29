@@ -57,7 +57,7 @@ var featuredRows = []featuredRow{
 	{"fleet", []string{"agent", "model", "tool", "skill", "person", "whois", "capability"}},
 	{"session", []string{"chat", "delegate", "foreman", "coach", "handoff", "resume", "claim"}},
 	{"work", []string{"sprint", "todo", "dag", "weave", "gate"}},
-	{"knowledge", []string{"kb", "graph", "craft", "secret"}},
+	{"knowledge", []string{"kb", "graph", "craft", "secret", "account"}},
 	{"comms", []string{"inbox", "mb", "meet", "ping", "notify", "bus", "activity"}},
 	{"human", []string{"app", "ask", "browser", "fetch"}},
 	{"discovery", []string{"commands"}},

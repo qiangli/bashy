@@ -53,6 +53,7 @@ import (
 	"github.com/qiangli/yoke/pkg/resources"
 	"github.com/qiangli/yoke/pkg/sdlc"
 	"github.com/qiangli/yoke/pkg/search"
+	"github.com/qiangli/yoke/pkg/accounts"
 	"github.com/qiangli/yoke/pkg/secrets"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 	"github.com/qiangli/yoke/pkg/sota"
@@ -143,6 +144,8 @@ func cobraVerb(name string) *cobra.Command {
 		return search.NewSearchCmd()
 	case "sota":
 		return sota.NewSotaCmd()
+	case "account":
+		return accounts.NewAccountCmd()
 	case "secret", "secrets":
 		return secrets.NewSecretsCmd()
 	case "bus":
