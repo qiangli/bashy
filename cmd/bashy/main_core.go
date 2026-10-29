@@ -70,6 +70,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(126)
 	}
+	cli.NormalizeHostEnv()
 	if adoptingOwnedFrame {
 		cli.AdoptGoSourceProcessEnvironment()
 	}

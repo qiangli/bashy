@@ -58,7 +58,3 @@ func windowsPathToShell(path string) string {
 	}
 	return p
 }
-
-func asciiLetter(c byte) bool {
-	return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z')
-}
