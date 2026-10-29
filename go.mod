@@ -19,7 +19,7 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261027072617-211789fadf75
 	github.com/qiangli/ycode v0.3.1-dev.0.20261027073853-917738b53a68
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261029181313-03a9446ec966
+	github.com/qiangli/yoke v0.0.0-20261029182643-8694ad81950d
 	github.com/qiangli/yoke/external/otel v0.0.0-20261029161406-fb444e239fa1
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
