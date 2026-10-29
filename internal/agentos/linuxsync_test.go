@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -248,7 +249,9 @@ func TestWriteTarStreamSendsExactlyTheNamedFiles(t *testing.T) {
 	if got["go.work"] != "use ./hub\n" || got["hub/go.mod"] != "module hub\n" {
 		t.Errorf("contents = %v", got)
 	}
-	if modes["hub/go.mod"].Perm()&0o100 == 0 {
+	// Windows filesystems carry no execute bit (the Chmod above is a no-op
+	// there), so the mode can only round-trip where the source has one.
+	if runtime.GOOS != "windows" && modes["hub/go.mod"].Perm()&0o100 == 0 {
 		t.Errorf("hub/go.mod lost its execute bit: %v", modes["hub/go.mod"])
 	}
 	if _, bad := got["hub/bin/huge"]; bad {
