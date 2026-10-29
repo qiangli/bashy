@@ -217,3 +217,98 @@ func TestAppBoundaryCommand(t *testing.T) {
 		}
 	}
 }
+
+// TestAppBoundaryInProcessTools: what bashy runs without a new process
+// works under the boundary — awk included, which the guard alone would
+// refuse as a spawner — while a genuinely external program is still
+// refused, and awk's own file access and process spawning stay confined.
+func TestAppBoundaryInProcessTools(t *testing.T) {
+	root := t.TempDir()
+	home := filepath.Join(root, "home")
+	own := filepath.Join(home, "shape", "notes", "alice", "data")
+	otherApp := filepath.Join(home, "shape", "todo", "alice", "data")
+	outside := filepath.Join(root, "outside")
+	for _, d := range []string{own, otherApp, outside} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(otherApp, "secret.txt"), []byte("todo-secret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	policy, err := boundary.Env(boundary.Policy{App: "notes", Principal: "device:alice", Data: own, Home: home})
+	if err != nil {
+		t.Fatal(err)
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := func(p string) string { return "'" + filepath.ToSlash(p) + "'" }
+	const seed = `printf 'b,2\na,1\n' > n.txt && printf '{"k":"v"}' > j.json && `
+
+	tests := []struct {
+		name   string
+		body   string
+		ok     bool
+		stdout string // OK: exact stdout
+		reason string // DENIED: substring of stderr
+	}{
+		{"awk notes list", `printf 'n1\n' >> "$BASHY_APP_DATA/notes.txt"; awk '{print}' "$BASHY_APP_DATA/notes.txt"`, true, "n1\n", ""},
+		{"awk", seed + `awk -F, -v p=x '{print p $2}' n.txt`, true, "x2\nx1\n", ""},
+		{"awk program file", seed + `printf '{print $1}\n' > p.awk && awk -F, -f p.awk n.txt`, true, "b\na\n", ""},
+		{"awk getline and print redirect", seed + `awk 'BEGIN{getline l < "n.txt"; print l > "o.txt"; close("o.txt")}' && cat o.txt`, true, "b,2\n", ""},
+		{"sed", seed + `sed s/b/B/ n.txt`, true, "B,2\na,1\n", ""},
+		{"grep", seed + `grep a n.txt`, true, "a,1\n", ""},
+		{"sort", seed + `sort n.txt`, true, "a,1\nb,2\n", ""},
+		{"head", seed + `head -n 1 n.txt`, true, "b,2\n", ""},
+		{"tail", seed + `tail -n 1 n.txt`, true, "a,1\n", ""},
+		{"wc", seed + `wc -l < n.txt`, true, "2\n", ""},
+		{"cut", seed + `cut -d, -f1 n.txt`, true, "b\na\n", ""},
+		{"tr", seed + `tr ab AB < n.txt`, true, "B,2\nA,1\n", ""},
+		{"jq", seed + `jq -r .k j.json`, true, "v\n", ""},
+		{"date", `date -u -d @0 +%Y`, true, "1970\n", ""},
+		{"external program", q(self) + " -test.run=^$", false, "", "undeclared external program"},
+		{"awk other app read", "awk '{print}' " + q(filepath.Join(otherApp, "secret.txt")), false, "", "another app's data"},
+		{"awk getline other app", `awk 'BEGIN{while ((getline l < "` + filepath.ToSlash(filepath.Join(otherApp, "secret.txt")) + `") > 0) print l}'`, false, "", "another app's data"},
+		{"awk write outside grants", `awk 'BEGIN{print "x" > "` + filepath.ToSlash(filepath.Join(outside, "f.txt")) + `"}'`, false, "", "outside the app's own data"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := []string{boundary.EnvVar + "=" + policy, "BASHY_APP_DATA=" + own}
+			stdout, stderr, code := runBashyEntry(t, own, env, "-c", tt.body, "api/"+strings.ReplaceAll(tt.name, " ", "-"))
+			if tt.ok {
+				if code != 0 || stdout != tt.stdout {
+					t.Fatalf("want OK %q, got exit %d stdout %q stderr %q", tt.stdout, code, stdout, stderr)
+				}
+				return
+			}
+			if code == 0 || strings.Contains(stdout, "todo-secret") {
+				t.Fatalf("want DENIED, got exit %d stdout %q stderr %q", code, stdout, stderr)
+			}
+			if !strings.Contains(stderr, "denied") || !strings.Contains(stderr, tt.reason) {
+				t.Fatalf("want DENIED with reason %q, got exit %d stderr %q", tt.reason, code, stderr)
+			}
+		})
+	}
+	if _, err := os.Stat(filepath.Join(outside, "f.txt")); err == nil {
+		t.Error("denied awk write still created the file")
+	}
+
+	// awk never starts a process under the boundary: system() and pipes
+	// fail instead of running the command.
+	marker := filepath.Join(own, "spawned.txt")
+	for _, body := range []string{
+		`awk 'BEGIN{system("echo x > spawned.txt")}'`,
+		`awk 'BEGIN{print "x" | "cat > spawned.txt"}'`,
+		`awk 'BEGIN{"echo x > spawned.txt" | getline l}'`,
+	} {
+		_, stderr, code := runBashyEntry(t, own, []string{boundary.EnvVar + "=" + policy}, "-c", body, "api/awk-exec")
+		if code == 0 || !strings.Contains(stderr, "NoExec") {
+			t.Errorf("%s: want refusal, got exit %d stderr %q", body, code, stderr)
+		}
+		if _, err := os.Stat(marker); err == nil {
+			t.Fatalf("%s: awk spawned a process under the boundary", body)
+		}
+	}
+}
