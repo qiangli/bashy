@@ -513,6 +513,7 @@ externals variant is a separate story.
 | verbs | `kubectl` | not usable offline | engine / remote-by-design (by design): Error: kubectl: resolve stable  |
 | verbs | `lexicon` | works | lexicon is the project's jargon, projected from the registries that al |
 | verbs | `limit` | works | usage: bashy limit [--memory Q] [--pids N] [--disk Q] -- command [args |
+| verbs | `linux` | works | Usage: bashy linux [--host [user@]HOST[:PORT]] <command> |
 | verbs | `llm` | works | llm is the host's one door to its model capacity (port 24556, "AILLM"  |
 | verbs | `login` | not usable offline | engine / remote-by-design (by design): tessaro: this machine isn't con |
 | verbs | `loom` | not usable offline | bin-managed external: would download - loom runs Gitea  downloaded, sh |
