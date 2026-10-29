@@ -3,14 +3,17 @@ id: 3ed1cc765596
 kind: bug
 title: S521.5 Windows agentos tests fail in hermetic release-preflight (CI skips them on bare clones)
 seq: 2818
-status: todo
+status: done
 priority: p0
 labels:
     - known-failures
 created: 2026-10-28T06:18:22.261574Z
+assignee: codex-gpt6-sol
 sprint: 521
 sprint_id: 8215f52e-1496-5a0f-b6f6-729bf3056119
 sprint_title: 'Fleet upgrade fix release + ivy deploy: ship outpost upgrade-ordering fix (cd8b98c4) as bashy rc.22, move every host incl. ivy (lern, lj2ivy) onto it once, then promotions auto-flow'
+closed: 2026-10-29T09:23:38.131302Z
+closed_by: s521-manager
 ---
 
 From S514 hermetic preflight (bashy eff3625e, rc.20): ./internal/agentos on the Windows peer failed TestGenieRecipeGeneratesCallerWorkspaceAndModel (274s, timeout class), TestInboxHookSeededDeliveryEnvelope, TestSprintInboxAckCommitsRenderedRoleBatchOnly, then "panic: test timed out after 10m" (sbom_test.go:221, TestReleaseSbomCLI building ./cmd/bashy). CI windows-latest is green only because these skip without umbrella siblings. The original log was cleaned up: reproduce first.

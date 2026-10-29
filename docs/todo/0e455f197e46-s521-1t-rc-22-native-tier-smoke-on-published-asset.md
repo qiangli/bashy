@@ -3,14 +3,17 @@ id: 0e455f197e46
 kind: task
 title: S521.1t rc.22 native tier smoke on published assets -> tier verdict b5bf7a47
 seq: 2831
-status: todo
+status: done
 priority: p0
 labels:
     - release
 created: 2026-10-29T10:09:40.109992Z
+assignee: codex-gpt6-sol
 sprint: 521
 sprint_id: 8215f52e-1496-5a0f-b6f6-729bf3056119
 sprint_title: 'Fleet upgrade fix release + ivy deploy: ship outpost upgrade-ordering fix (cd8b98c4) as bashy rc.22, move every host incl. ivy (lern, lj2ivy) onto it once, then promotions auto-flow'
+closed: 2026-10-29T10:52:10.961712Z
+closed_by: s521-manager
 ---
 
 Part of S521.1 (bashy rc.22 fast loop rule 6): native tier smoke on the PUBLISHED v1.0.0-rc.22-dev assets, producing the release tier verdict that promote takes as tier_verdict.
