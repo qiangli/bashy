@@ -85,6 +85,12 @@ func main() {
 		multicall.Main("coreutils")
 		return
 	}
+	// A shaped app's unit (`bashy -c BODY NAME` with $BASHY_APP_BOUNDARY)
+	// runs under yoke's data boundary, before any AgentOS surface or
+	// telemetry starts; unset leaves every path below unchanged.
+	if code, handled := appBoundaryMain(os.Args, os.Stdin, os.Stdout, os.Stderr); handled {
+		os.Exit(code)
+	}
 	if shellInvocation(os.Args[0]) {
 		installInheritedSignalIgnores()
 		cli.Main()
