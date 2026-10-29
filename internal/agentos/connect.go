@@ -11,21 +11,23 @@ import (
 	"github.com/qiangli/yoke/external/meshagent"
 )
 
-const connectHelp = `Usage: bashy connect <host> [--native] [-- <cmd> [args...]]
+const connectHelp = `Usage: bashy connect [user@]host[:port] [--native] [-- <cmd> [args...]]
+       bashy connect [user@]host[:port] -- <cmd> [args...]
 
 Attach your terminal to a remote host through outpost SSH.
 Outpost resolves the host, chooses the user, and handles authentication,
-elevation, LAN-direct access and tunnel fallback. The shell runs remotely.
+elevation, LAN-direct access and tunnel fallback. Without a command the
+shell runs remotely and interactively; with a command after -- the remote
+command runs non-interactively.
+
+Outpost joins the remote argv with spaces like ssh, so quote accordingly.
+Agents can set $OUTPOST_SSH_PASSWORD for non-interactive password auth;
+never put a password on the command line.
 
 Examples:
-  bashy connect elephant
-  bashy connect dev@elephant
-  bashy connect dev@192.168.1.5:2222
-
-Current outpost compatibility: only its interactive shell is available.
-TTY commands, login-shell selection and automatic WSL Ubuntu selection
-require an outpost SSH extension. --native and commands after -- are
-recognized but refused until that extension is available.
+  bashy connect owl
+  bashy connect dev@owl -- uptime
+  bashy connect otter -- df -h /tmp
 
 Options:
   -h, --help  Show this help
@@ -46,14 +48,17 @@ func runConnect(ctx context.Context, args []string, transport func(context.Conte
 		fmt.Fprint(os.Stdout, connectHelp)
 		return 0
 	}
-	// Do not silently run an agent without a PTY or promise WSL behavior the
-	// current outpost CLI cannot provide. Keep the transport boundary honest.
-	if opts.native || len(opts.command) != 0 {
-		fmt.Fprintln(os.Stderr, "bashy connect: TTY commands and WSL/native selection require an outpost SSH extension; only the interactive shell is currently available")
+	// Do not promise WSL behavior the current outpost CLI cannot provide.
+	// Keep the transport boundary honest.
+	if opts.native {
+		fmt.Fprintln(os.Stderr, "bashy connect: --native (WSL/native selection) requires an outpost SSH extension and is not yet available")
 		return 2
 	}
 	// -- also protects hosts named like outpost subcommands (e.g. list).
-	if err := transport(ctx, "ssh", "--", opts.host); err != nil {
+	// The remote command stays as separate argv entries; outpost joins them
+	// with spaces like ssh.
+	argv := append([]string{"ssh", "--", opts.host}, opts.command...)
+	if err := transport(ctx, argv...); err != nil {
 		var exit *exec.ExitError
 		if !errors.As(err, &exit) {
 			fmt.Fprintln(os.Stderr, "bashy connect:", err)
