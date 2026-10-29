@@ -26,6 +26,12 @@
 // RESULT (a typed function's first result value, else empty). A check's own
 // assignments never leak back.
 //
+// Call accounting: each clause records the call (yoke pkg/shape/verify
+// RecordCall) BEFORE the body runs, so a verification run can tell "the
+// checks passed" from "the checks exercised the contract" — an early exit
+// inside the body still counts as reached. It is a no-op unless
+// BASHY_SHAPE_CALLLOG names a log file.
+//
 // Both are source-only (D6): an advised @require/@ensure is refused here, as
 // @retry is, until the tighten-only advice ratchet has its own gate.
 package agentos
@@ -41,6 +47,7 @@ import (
 	"mvdan.cc/sh/v3/interp"
 
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	"github.com/qiangli/yoke/pkg/shape/verify"
 )
 
 // contractDecorators returns the two clauses bound to the shell's stderr,
@@ -59,6 +66,7 @@ func requireDecorator(stderr io.Writer) nativeDecoratorFunc {
 		if err != nil {
 			return err
 		}
+		verify.RecordCall(c.Name)
 		if failed := runContractChecks(ctx, c, "require", checks, false); failed != "" {
 			contractFail(stderr, c, "precondition", failed)
 			return nil
@@ -74,6 +82,7 @@ func ensureDecorator(stderr io.Writer) nativeDecoratorFunc {
 		if err != nil {
 			return err
 		}
+		verify.RecordCall(c.Name)
 		c.Next(ctx)
 		if c.Status != 0 {
 			// The body did not complete (a failure, or a yield): its status
