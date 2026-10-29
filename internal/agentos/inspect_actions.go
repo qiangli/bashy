@@ -74,14 +74,21 @@ func lexiconSkillRows() []lexicon.SkillRow {
 }
 
 // lexiconSkillRow fills one SkillRow from a skills.Skill: name, description,
-// the SKILL.md metadata, and the parsed face only when it is valid — an
-// invalid face carries no identity, so the row must not claim one.
+// the SKILL.md metadata, and the skill's ONE unit (yoke pkg/unit, resolved by
+// the catalog from whichever face carries it — Bash# fences or skill.dhnt).
+// Identity, capability and effect cap are the unit's, never re-derived here;
+// a refused or invalid unit carries no identity, so the row must not claim
+// one. Judge latitude is a dhnt-step property, read from that face alone.
 func lexiconSkillRow(sk coreskills.Skill) lexicon.SkillRow {
-	row := lexicon.SkillRow{Name: sk.Name, Description: sk.Description, Meta: sk.Meta}
-	if sk.Dhnt.Valid() {
+	row := lexicon.SkillRow{Name: sk.Name, Description: sk.Description, Meta: sk.Meta,
+		Face: sk.Unit.Face, Capability: sk.Unit.Capability, UnitErr: sk.Unit.Err}
+	if sk.Unit.Valid() {
 		row.FaceValid = true
-		row.Identity = sk.Dhnt.Identity
-		row.EffectCap = sk.Dhnt.EffectCap
+		row.Identity = sk.Unit.Identity
+		row.EffectCap = sk.Unit.Contract.EffectCap()
+		row.Uncontracted = sk.Unit.Capability == ""
+	}
+	if sk.Dhnt.Valid() {
 		row.HasJudgeStep = sk.Dhnt.HasJudgeStep
 	}
 	return row

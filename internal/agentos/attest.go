@@ -22,6 +22,8 @@
 //	Attest.Passed  every clause check that held, as "<clause>:<check>"
 //	Attest.Failed  the check that failed, the same way
 //	Attest.Valid   the call completed (status 0) and no check failed
+//	Attestation    the same verdict in the one unit receipt vocabulary
+//	               (yoke pkg/unit, via skills.Receipt) dag targets seal with
 //	Status         the call's exit status — 6 (skills.AttestYield) is an
 //	               agentic yield, recorded as a HANDOFF, never as a completion
 //	ContextKey     this host's environment coordinate (skills.HostCoordinate)
@@ -232,6 +234,7 @@ func (s *attestSink) append(c *nativeDecoratorCall, f *attestFrame) {
 		Tier:          s.tier,
 		ContextKey:    s.coordinate(),
 		Attest:        att,
+		Attestation:   coreskills.Receipt("fn:"+c.Name, att),
 		Status:        &status,
 		StoreRevision: craft.Revision(s.storeDir).String(),
 	}

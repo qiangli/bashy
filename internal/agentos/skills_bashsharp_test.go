@@ -9,6 +9,7 @@ import (
 	"testing/fstest"
 
 	coreskills "github.com/qiangli/yoke/pkg/skills"
+	"github.com/qiangli/yoke/pkg/unit"
 )
 
 func TestSkillRunBashSharpContract(t *testing.T) {
@@ -40,7 +41,7 @@ func TestSkillRunBashSharpContract(t *testing.T) {
 			if !pass {
 				want = 3
 			}
-			if rec.Valid != pass || rec.Status == nil || *rec.Status != want || !strings.HasPrefix(rec.Identity, "sha256:") {
+			if rec.Valid != pass || rec.Status == nil || *rec.Status != want || rec.Identity != unit.BodyIdentity([]byte(unit.BashSharpBody(doc))) {
 				t.Fatalf("receipt: %+v", rec)
 			}
 			if !strings.Contains(log.String(), "body-output") {
