@@ -2,9 +2,13 @@ package agentos
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/qiangli/yoke/external/gotoolchain"
+	"github.com/qiangli/yoke/pkg/binmgr"
 	"github.com/qiangli/yoke/pkg/policy/advice"
 )
 
@@ -53,6 +57,17 @@ func TestFenceToolsAnswerWithSelf(t *testing.T) {
 		if err != nil || len(argv) != 2 || argv[1] != tool || !strings.Contains(why, "bashy "+tool) {
 			t.Errorf("%s: argv=%v why=%q err=%v", tool, argv, why, err)
 		}
+	}
+	cache, err := binmgr.CacheDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	goBin := filepath.Join(cache, "go", gotoolchain.DefaultVersion, "go", "bin", binmgr.BinaryName("go"))
+	if _, err := os.Stat(goBin); os.IsNotExist(err) {
+		t.Log("Go SDK is not provisioned in this home; skipping the go-row call")
+		return
+	} else if err != nil {
+		t.Fatal(err)
 	}
 	if argv, _, err := islandToolchains["go"](context.Background()); err != nil || len(argv) != 1 {
 		t.Errorf("go row must stay the provisioned single binary: %v %v", argv, err)

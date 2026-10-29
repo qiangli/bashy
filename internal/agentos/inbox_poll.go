@@ -286,8 +286,11 @@ func (f *sourceFingerprinter) file(path string) {
 	f.stat(path, info)
 }
 
-// dir hashes the directory entry list and each entry's metadata. With children
-// true, it additionally hashes state.json and transcript.jsonl in every room.
+// dir hashes the directory entry list and file metadata. Directory mtimes can
+// settle after a read on Windows without any new mail; hashing them makes a
+// repeated hook announce the same unread batch. Child names still detect
+// additions/removals, while file metadata detects changed source records.
+// With children true, it also hashes state.json and transcript.jsonl.
 func (f *sourceFingerprinter) dir(path string, children bool) {
 	entries, err := os.ReadDir(path)
 	if err != nil {
@@ -298,11 +301,7 @@ func (f *sourceFingerprinter) dir(path string, children bool) {
 		}
 		return
 	}
-	if info, err := os.Stat(path); err == nil {
-		f.stat(path, info)
-	} else {
-		f.ok = false
-	}
+	f.string(path)
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
@@ -310,7 +309,11 @@ func (f *sourceFingerprinter) dir(path string, children bool) {
 			continue
 		}
 		entryPath := filepath.Join(path, entry.Name())
-		f.stat(entryPath, info)
+		if entry.IsDir() {
+			f.string(entryPath)
+		} else {
+			f.stat(entryPath, info)
+		}
 		if children && entry.IsDir() {
 			f.file(filepath.Join(entryPath, "state.json"))
 			f.file(filepath.Join(entryPath, "transcript.jsonl"))

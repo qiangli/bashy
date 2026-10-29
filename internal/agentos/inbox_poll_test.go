@@ -188,6 +188,41 @@ func TestInboxPollGateFailsOpenOnFingerprintError(t *testing.T) {
 	}
 }
 
+func TestInboxDirectoryMtimeDoesNotLookLikeNewMail(t *testing.T) {
+	root := t.TempDir()
+	room := filepath.Join(root, "room")
+	if err := os.Mkdir(room, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(room, "transcript.jsonl"), []byte("mail\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	fingerprint := func() uint64 {
+		f := sourceFingerprinter{h: fnv.New64a(), ok: true}
+		f.dir(root, true)
+		if !f.ok {
+			t.Fatal("fingerprint unavailable")
+		}
+		return f.h.Sum64()
+	}
+	want := fingerprint()
+	changed := time.Unix(946684800, 0)
+	for _, dir := range []string{root, room} {
+		if err := os.Chtimes(dir, changed, changed); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := fingerprint(); got != want {
+		t.Fatalf("directory metadata changed unread fingerprint: %d -> %d", want, got)
+	}
+	if err := os.WriteFile(filepath.Join(room, "transcript.jsonl"), []byte("new mail\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := fingerprint(); got == want {
+		t.Fatal("new transcript content did not change unread fingerprint")
+	}
+}
+
 func TestInboxSourceFingerprintMovesForEverySource(t *testing.T) {
 	isolateUnifiedInbox(t)
 	reader := inboxTestReader

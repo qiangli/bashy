@@ -212,8 +212,16 @@ func TestVerifyPermissiveClosureDeps(t *testing.T) {
 	}
 }
 
-func TestReleaseSbomCLI(t *testing.T) {
-	// Build or locate bashy binary to test `bashy release sbom`
+// The release preflight provides its already-built candidate explicitly. A
+// standalone checkout builds its own fixture from source.
+func releaseSBOMTestBinary(t *testing.T) string {
+	t.Helper()
+	if path := os.Getenv("BASHY_RELEASE_CANDIDATE"); path != "" {
+		if info, err := os.Stat(path); err != nil || info.IsDir() {
+			t.Fatalf("BASHY_RELEASE_CANDIDATE %q is not a binary: %v", path, err)
+		}
+		return path
+	}
 	binPath := filepath.Join(t.TempDir(), "test_bashy")
 	buildCmd := exec.Command("go", "build", "-o", binPath, "./cmd/bashy")
 	buildCmd.Dir = filepath.Join("..", "..")
@@ -221,6 +229,11 @@ func TestReleaseSbomCLI(t *testing.T) {
 	if out, err := buildCmd.CombinedOutput(); err != nil {
 		t.Fatalf("build test binary: %v\n%s", err, out)
 	}
+	return binPath
+}
+
+func TestReleaseSbomCLI(t *testing.T) {
+	binPath := releaseSBOMTestBinary(t)
 
 	outFile := filepath.Join(t.TempDir(), "sbom.spdx.json")
 	stdout, stderr, err := runReleaseCmd(t, "sbom", "--binary", binPath, "-o", outFile)
@@ -269,19 +282,16 @@ func TestReleaseSbomCLI(t *testing.T) {
 // matrix (lean bashy, engine build, outpost) gets an SBOM mapped to its exact
 // digest, and `--verify` fails on digest drift or a missing SBOM.
 func TestReleaseSbomMatrixVerify(t *testing.T) {
-	root := filepath.Join("..", "..")
 	dist := t.TempDir()
-	build := func(name, pkg string) {
-		cmd := exec.Command("go", "build", "-o", filepath.Join(dist, name), pkg)
-		cmd.Dir = root
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("build %s: %v\n%s", name, err, out)
-		}
+	data, err := os.ReadFile(releaseSBOMTestBinary(t))
+	if err != nil {
+		t.Fatal(err)
 	}
-	build("bashy", "./cmd/bashy")
+	if err := os.WriteFile(filepath.Join(dist, "bashy"), data, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	// stand-ins: the same program under the other matrix names keeps the test
 	// hermetic; real engine/outpost binaries are produced by release CI.
-	data, _ := os.ReadFile(filepath.Join(dist, "bashy"))
 	for _, n := range []string{"bashy-engines", "outpost"} {
 		if err := os.WriteFile(filepath.Join(dist, n), data, 0o755); err != nil {
 			t.Fatal(err)
