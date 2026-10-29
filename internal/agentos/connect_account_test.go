@@ -70,10 +70,18 @@ func TestConnectAccount(t *testing.T) {
 	st := accounts.Open(filepath.Join(t.TempDir(), "accounts.json"))
 	hostAccount(t, st, "owl", "alice", "owl.example:2222", "secret:owl-pw", accounts.HostLogin)
 	hostAccount(t, st, "otter", "bob", "otter.example", "secret:otter-pw", accounts.HostLogin)
-	hostAccount(t, st, "keyed", "alice", "owl.example", "ssh-key:SHA256:abc", accounts.HostLogin)
-	hostAccount(t, st, "nocred", "alice", "owl.example", "", accounts.HostLogin)
-	hostAccount(t, st, "badpw", "alice", "owl.example", "secret:missing", accounts.HostLogin)
+	hostAccount(t, st, "keyed", "carol", "owl.example", "ssh-key:SHA256:abc", accounts.HostLogin)
+	hostAccount(t, st, "nocred", "dave", "owl.example", "", accounts.HostLogin)
+	hostAccount(t, st, "badpw", "erin", "owl.example", "secret:missing", accounts.HostLogin)
 	hostAccount(t, st, "llm", "alice", "owl.example", "secret:owl-pw", accounts.LLM)
+
+	// a host-login identity is (endpoint, user): a second alias for it is refused
+	if _, err := st.Add(accounts.Account{
+		Alias: "owl2", Category: accounts.HostLogin, Provider: "ssh", Username: "alice", Status: accounts.Resolved,
+		Connections: []accounts.Connection{{ID: "c1", Endpoint: "owl.example:2222", CredentialRef: "secret:owl-pw"}},
+	}); err == nil {
+		t.Fatal("duplicate endpoint+user alias accepted")
+	}
 	var calls []connectCall
 	var mu sync.Mutex
 	deps := testDeps(st, &calls, &mu)
