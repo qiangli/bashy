@@ -53,6 +53,7 @@ func init() {
 	// typed there (ladder rung 0/1) runs on bashy itself, byte-identically.
 	ycodecli.LiteralShell = cli.LiteralCommand
 	ycodecli.LiteralCommands = tool.Names
+	agentos.RunningAsBashy = true
 	cli.AgentOSDispatch = agentos.Dispatch
 	cli.AgentOSWireExec = agentos.WireExec
 	cli.AgentOSShellStartup = agentos.ShellStartup

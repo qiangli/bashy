@@ -410,6 +410,10 @@ func maybeAdvertiseSkillHint() {
 // Go test binary, which stands in for it in this package's tests); bashy on
 // PATH; else the bare name, so a missing bashy fails loudly instead of
 // silently re-entering the host.
+// RunningAsBashy is set by cmd/bashy: the running executable is a bashy
+// build under any file name, so os.Executable() is the right self path.
+var RunningAsBashy bool
+
 func bashySelfPath() string {
 	if self := strings.TrimSpace(os.Getenv("BASHY_SELF")); self != "" {
 		return self
@@ -420,7 +424,7 @@ func bashySelfPath() string {
 			exe = os.Args[0]
 		}
 	}
-	if exe != "" && (isBashyExecutable(exe) || strings.HasSuffix(strings.TrimSuffix(filepath.Base(exe), ".exe"), ".test")) {
+	if exe != "" && (RunningAsBashy || isBashyExecutable(exe) || strings.HasSuffix(strings.TrimSuffix(filepath.Base(exe), ".exe"), ".test")) {
 		return exe
 	}
 	if path, err := exec.LookPath("bashy"); err == nil {
