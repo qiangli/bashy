@@ -84,6 +84,8 @@ import (
 	"github.com/qiangli/yoke/external/tessaro"
 	"github.com/qiangli/yoke/external/zigcc"
 	"github.com/qiangli/yoke/external/zot"
+	"github.com/qiangli/yoke/pkg/accounts"
+	_ "github.com/qiangli/yoke/pkg/accounts/builtin"
 	"github.com/qiangli/yoke/pkg/adapt"
 	"github.com/qiangli/yoke/pkg/ask"
 	"github.com/qiangli/yoke/pkg/atlas"
@@ -154,7 +156,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile", "transcribe",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "account", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile", "transcribe",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -1367,6 +1369,13 @@ func dispatch() {
 		// construction), or --hitchhike on the agent's own web-search tool. See
 		// dhnt docs/bashy-sota-research-design.md.
 		cmd := sota.NewSotaCmd()
+		setCobraArgs(cmd, os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "account":
+		cmd := accounts.NewAccountCmd()
 		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
