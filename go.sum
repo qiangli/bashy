@@ -1061,8 +1061,8 @@ github.com/qiangli/ycode v0.3.1-dev.0.20261027073853-917738b53a68 h1:HvhHTOdSnIu
 github.com/qiangli/ycode v0.3.1-dev.0.20261027073853-917738b53a68/go.mod h1:gLyKYqfVDxrsMxNCe/Xl2N/0EZPZW8qrBxBZD3ljNUo=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2 h1:bFDhUDkjVspcsLYaKnlN4hZAja61IZdNQ+0YYoGoTJc=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2/go.mod h1:+ZCbIbIbjxqk8derYesSoxwxIMOylG87DtzJqzOUGGM=
-github.com/qiangli/yoke v0.0.0-20261029165400-c9e589164fb2 h1:GfQgBMtc+uWRBmEzAusjBjqRVlUqXYglh5ckyxBdhEc=
-github.com/qiangli/yoke v0.0.0-20261029165400-c9e589164fb2/go.mod h1:1iYVqkJaq5rxfhGPrDJUtYWNj+jvrq+jdu3sT+jjA2k=
+github.com/qiangli/yoke v0.0.0-20261029170630-e2842bb57cec h1:ce4wPPx4XRZyTVom9B6OLc/1NLBV6bA4NreoBTb1Xws=
+github.com/qiangli/yoke v0.0.0-20261029170630-e2842bb57cec/go.mod h1:1iYVqkJaq5rxfhGPrDJUtYWNj+jvrq+jdu3sT+jjA2k=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261021004834-b008dcc14dfa h1:tvU9VJSqqtYJ/uc/IOLNMPQ5n4uZiC5nJp+x7lOI7xs=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261021004834-b008dcc14dfa/go.mod h1:Q0Q5T6VFoIzC2QCjcH2DnKhvD6lvneoJKxG0TYasq8E=
 github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9 h1:0pOjHOylgAWaCVmImyqwOBhA8xx5EZ/WxrddpBiVF+E=
