@@ -10,24 +10,29 @@ workflow checks out the pinned commit fresh on every run.
 |---|---|
 | Upstream | `https://github.com/qiangli/klatch` (bashy's own fork; see #Credit) |
 | License at the commit | **Apache-2.0** (`LICENSE`, verified at the pinned commit) |
-| Pinned commit | `51a928ea3d940b3fe9f646b663abb0be57e61481` (annotated tag `v1.2.3` — see #Pin provenance) |
+| Pinned commit | `eab650e49de34e11b36450d848611ff826b702df` (annotated tag `v1.2.4` — see #Pin provenance) |
 | Toolchain | Go `1.26.9` (EOL-minor security override; the commit's `go.mod` names `go1.23.0`/`toolchain go1.24.5`, see #Build configuration) + Node `22` / Yarn `1.22.22` |
-| Trigger | push of tag `bashy-v1.2.3-N` on `bashy-build` (first: `bashy-v1.2.3-1`) |
-| Signing identity | `https://github.com/qiangli/klatch/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.2.3-1` |
+| Trigger | push of tag `bashy-v1.2.4-N` on `bashy-build` (first: `bashy-v1.2.4-1`) |
+| Signing identity | `https://github.com/qiangli/klatch/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.2.4-1` |
 | Issuer | `https://token.actions.githubusercontent.com` |
 
-`v1.2.3` splits the web client's SDK code out into its own in-repo package,
-`app/sdk` (`databag-client-sdk`, built with `tsup` into `dist/`);
-`app/client/web/package.json` now depends on it as `file:../../sdk` instead
-of carrying that code inline. No server or web *behavior* changed — this is
-purely the source-layout split — but the build now has an extra step: the
-web leg builds `app/sdk` (frozen `yarn install` + `yarn build`) before it
-installs `app/client/web`'s own dependencies, since yarn resolves the
-`file:` dependency from `app/sdk/dist` at install time (see #Build
-configuration). `v1.2.2` is `v1.2.1` plus same-node contact notifications
-over the local listener. `v1.2.1` itself is `v1.2.0` plus one web client
-fix: the browser client now copies its same-origin Basic auth credentials
-onto the `Credentials` header. `v1.2.0` itself is Databag upstream `main`
+`v1.2.4` is `v1.2.3` plus one `app/sdk` fix: the fetch helper now retries on
+HTTP `429` responses and timeouts, and the contact-sync path re-syncs
+contacts that fell offsync. No server or web-client code changed — only
+`app/sdk/src/net/fetchUtil.ts` and `app/sdk/src/contact.ts`, plus new
+`app/sdk` unit tests — so no build-step changed either. `v1.2.3` splits the
+web client's SDK code out into its own in-repo package, `app/sdk`
+(`databag-client-sdk`, built with `tsup` into `dist/`); `app/client/web/package.json`
+depends on it as `file:../../sdk` instead of carrying that code inline. No
+server or web *behavior* changed there either — that was purely the
+source-layout split — but the build has an extra step since: the web leg
+builds `app/sdk` (frozen `yarn install` + `yarn build`) before it installs
+`app/client/web`'s own dependencies, since yarn resolves the `file:`
+dependency from `app/sdk/dist` at install time (see #Build configuration).
+`v1.2.2` is `v1.2.1` plus same-node contact notifications over the local
+listener. `v1.2.1` itself is `v1.2.0` plus one web client fix: the browser
+client now copies its same-origin Basic auth credentials onto the
+`Credentials` header. `v1.2.0` itself is Databag upstream `main`
 `45343338` plus the Klatch rebrand, `@mention`,
 base-path/loopback/`Credentials`/federation-header fixes, and Go-native
 image transforms. The web build still produces a relative `base`
@@ -63,7 +68,7 @@ bashy's own fork. The **one** field that pins this build is
 field and cutting a matching `UPSTREAM_TAG` release to go with it (same two
 edits any tool.env bump needs — see `../README.md` "Adding a tool").
 
-The fork is tagged through `v1.2.3` at the pinned commit, with a
+The fork is tagged through `v1.2.4` at the pinned commit, with a
 **non-draft, non-prerelease** GitHub Release cut for it — that is the
 "upstream release" the `pin` job's `official-release` admission queries,
 satisfied here because bashy controls the fork, not because a third party
@@ -146,13 +151,13 @@ run build` (`tsc && vite build`) succeeds unchanged.
 ## Release assets: two shapes
 
 ```
-klatch-v1.2.3-linux-amd64.tar.gz    klatch binary + net/transform/*.sh
-klatch-v1.2.3-linux-arm64.tar.gz    klatch binary + net/transform/*.sh
-klatch-v1.2.3-darwin-arm64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
-klatch-v1.2.3-darwin-amd64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
-klatch-web-v1.2.3.tar.gz            the vite dist/ output (static, same for every arch)
-klatch-v1.2.3.govulncheck.json      klatch-sdk-v1.2.3.yarn-audit.json
-klatch-web-v1.2.3.yarn-audit.json   klatch-pin.txt
+klatch-v1.2.4-linux-amd64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v1.2.4-linux-arm64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v1.2.4-darwin-arm64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-v1.2.4-darwin-amd64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-web-v1.2.4.tar.gz            the vite dist/ output (static, same for every arch)
+klatch-v1.2.4.govulncheck.json      klatch-sdk-v1.2.4.yarn-audit.json
+klatch-web-v1.2.4.yarn-audit.json   klatch-pin.txt
 klatch-otel.env                     klatch-no-tracking.env
 SHA256SUMS
 ```
@@ -161,7 +166,7 @@ The server tarball's binary is already executable when tarred, so
 `RELEASE_EXECUTABLES` is empty — there is no raw executable asset to
 `chmod +x` after the fact. Each asset gets a sibling `<asset>.sigstore.json`
 bundle. URL shape:
-`https://github.com/qiangli/klatch/releases/download/bashy-v1.2.3-1/<asset>`.
+`https://github.com/qiangli/klatch/releases/download/bashy-v1.2.4-1/<asset>`.
 
 ## No tracking
 
@@ -235,7 +240,7 @@ follow-up work once the first reports are read.
 ## Operator steps (not in bashy CI)
 
 Once, before the first build (#Pin provenance): tag
-`51a928ea3d940b3fe9f646b663abb0be57e61481` as `v1.2.3` on `qiangli/klatch`
+`eab650e49de34e11b36450d848611ff826b702df` as `v1.2.4` on `qiangli/klatch`
 (done) and cut a non-draft, non-prerelease GitHub Release for it. Do not
 reuse the fork's unrelated 2022 `v0.1.0` tag.
 
@@ -244,9 +249,9 @@ reuse the fork's unrelated 2022 `v0.1.0` tag.
 git switch --orphan bashy-build
 cp -R <bashy>/builds/klatch/fork/. .
 git add .github/workflows/bashy-build.yml bashy-build
-git commit -m "bashy-build: klatch v1.2.3 verified build"
+git commit -m "bashy-build: klatch v1.2.4 verified build"
 git push -u origin bashy-build
-git tag bashy-v1.2.3-1 && git push origin bashy-v1.2.3-1
+git tag bashy-v1.2.4-1 && git push origin bashy-v1.2.4-1
 ```
 
 Then wire the fleet to the signed fork release (outside this repo's

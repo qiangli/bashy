@@ -4,7 +4,7 @@
 # shared skeleton builds/_shared/bashy-build.yml — edit those, not this file.
 # Installed on the `bashy-build` branch of github.com/qiangli/klatch from
 # bashy's builds/klatch/fork/. Triggered ONLY by pushing a tag
-# bashy-<upstream tag>-N (e.g. bashy-v1.2.3-1) at that branch.
+# bashy-<upstream tag>-N (e.g. bashy-v1.2.4-1) at that branch.
 # Upstream tags this release vX.Y.Z, so the trigger is
 # bashy-v* and the pin job holds the tag to exactly that shape.
 #
@@ -97,15 +97,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - asset: klatch-v1.2.3-linux-amd64.tar.gz
+          - asset: klatch-v1.2.4-linux-amd64.tar.gz
             runner: ubuntu-24.04
-          - asset: klatch-v1.2.3-linux-arm64.tar.gz
+          - asset: klatch-v1.2.4-linux-arm64.tar.gz
             runner: ubuntu-24.04-arm
-          - asset: klatch-v1.2.3-darwin-arm64.tar.gz
+          - asset: klatch-v1.2.4-darwin-arm64.tar.gz
             runner: macos-15
-          - asset: klatch-v1.2.3-darwin-amd64.tar.gz
+          - asset: klatch-v1.2.4-darwin-amd64.tar.gz
             runner: macos-15-intel
-          - asset: klatch-web-v1.2.3.tar.gz
+          - asset: klatch-web-v1.2.4.tar.gz
             runner: ubuntu-24.04
     steps:
       # Windows runners check out with core.autocrlf=true by default, which
