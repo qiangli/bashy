@@ -870,6 +870,11 @@ func dispatchGit(args []string) {
 			dispatchExit(code)
 		}
 		rest = stripped
+		// A leading -c k=v global stays in rest (splitGitGlobals stops
+		// there); the native engine applies it, cobra would reject it.
+		if hasGitConfigOverride(rest) {
+			dispatchExit(gitRunEngineArgv(rest))
+		}
 		cmd = gitCmd()
 	}
 	cmd.SilenceErrors = true
