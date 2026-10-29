@@ -38,12 +38,23 @@ import (
 type genieExternal struct {
 	Name, ModelID, BaseURL, Key string
 	Context                     int64
+	SharedDoor                  bool
 }
 
 // resolveGenieExternal looks name up in the model registry. ok is false for a
 // name that is not a registered API model (a local Ollama tag, say), which
 // keeps genie's own model server.
 func resolveGenieExternal(name string) (genieExternal, bool, error) {
+	// Door sources precede legacy YAML entries so a copied key cannot shadow a
+	// freshly imported grant. Resolve on every invocation, including in WSL.
+	if m, ok, err := broker.ResolveDoorModel(context.Background(), name); ok {
+		if err != nil {
+			return genieExternal{}, true, err
+		}
+		return genieExternal{Name: name, ModelID: m.ModelID, BaseURL: m.BaseURL,
+			Key: m.Key, Context: genieContextFallback, SharedDoor: true}, true, nil
+	}
+
 	m, found := fleet.New().Model(name)
 	if !found || m.Kind != fleet.ModelKindAPI {
 		return genieExternal{}, false, nil
@@ -160,6 +171,9 @@ var genieEnsureDoor = broker.EnsureUp
 // not, and a request to a door that is not listening stalls the turn at
 // llm.requested with no output.
 func (g genieExternal) viaDoor() bool {
+	if g.SharedDoor {
+		return false
+	}
 	u, err := url.Parse(g.BaseURL)
 	if err != nil {
 		return false
