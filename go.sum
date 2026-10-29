@@ -1065,6 +1065,8 @@ github.com/qiangli/ycode v0.3.1-dev.0.20261029190306-79b348adea87 h1:LZ1dv7iZTLu
 github.com/qiangli/ycode v0.3.1-dev.0.20261029190306-79b348adea87/go.mod h1:ZJUE5VuMb1NAOcaapEzGMCCSKjcg058rOm4MNiseUMw=
 github.com/qiangli/ycode v0.3.1-dev.0.20261029212712-3af6fc3658bc h1:IKMuHrR3Hoz3Nsl2G5E5hGpRmtKaH1Q9eags1c5Dwno=
 github.com/qiangli/ycode v0.3.1-dev.0.20261029212712-3af6fc3658bc/go.mod h1:ZJUE5VuMb1NAOcaapEzGMCCSKjcg058rOm4MNiseUMw=
+github.com/qiangli/ycode v0.3.1-dev.0.20261029230636-9392338234d3 h1:BAlTuXsb6e35MG/N2Xt4WnRZaKSqKJyE9xmN9xRFXQk=
+github.com/qiangli/ycode v0.3.1-dev.0.20261029230636-9392338234d3/go.mod h1:ZJUE5VuMb1NAOcaapEzGMCCSKjcg058rOm4MNiseUMw=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2 h1:bFDhUDkjVspcsLYaKnlN4hZAja61IZdNQ+0YYoGoTJc=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2/go.mod h1:+ZCbIbIbjxqk8derYesSoxwxIMOylG87DtzJqzOUGGM=
 github.com/qiangli/yoke v0.0.0-20261029182643-8694ad81950d h1:3NYYb8BpwM+UViFwGIVik/+iZ1pV8jlNJ7BF8Vy14q0=
@@ -1079,6 +1081,8 @@ github.com/qiangli/yoke v0.0.0-20261029205353-6ddc2920f549 h1:Kba6r8+Y30S83UgdZM
 github.com/qiangli/yoke v0.0.0-20261029205353-6ddc2920f549/go.mod h1:1iYVqkJaq5rxfhGPrDJUtYWNj+jvrq+jdu3sT+jjA2k=
 github.com/qiangli/yoke v0.0.0-20261029221605-ffe2de462761 h1:VCtwg/4AX+n0fu+8rmfppwLr43o+cB8M+RqhdN/vsJA=
 github.com/qiangli/yoke v0.0.0-20261029221605-ffe2de462761/go.mod h1:1iYVqkJaq5rxfhGPrDJUtYWNj+jvrq+jdu3sT+jjA2k=
+github.com/qiangli/yoke v0.0.0-20261029230714-35d5cb56dd5b h1:hEsAe4Ti7JRBW/JV8Y7frYGAZ6y6/Fv46txBjwa0Dok=
+github.com/qiangli/yoke v0.0.0-20261029230714-35d5cb56dd5b/go.mod h1:1iYVqkJaq5rxfhGPrDJUtYWNj+jvrq+jdu3sT+jjA2k=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261021004834-b008dcc14dfa h1:tvU9VJSqqtYJ/uc/IOLNMPQ5n4uZiC5nJp+x7lOI7xs=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261021004834-b008dcc14dfa/go.mod h1:Q0Q5T6VFoIzC2QCjcH2DnKhvD6lvneoJKxG0TYasq8E=
 github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9 h1:0pOjHOylgAWaCVmImyqwOBhA8xx5EZ/WxrddpBiVF+E=
