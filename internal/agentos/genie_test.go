@@ -4,6 +4,7 @@ package agentos
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -134,8 +135,16 @@ func TestGenieRecipeGeneratesCallerWorkspaceAndModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(state), sessionID) || !strings.Contains(string(state), workspace) {
-		t.Fatalf("ACP session %q missing caller repository %q: %s", sessionID, workspace, state)
+	var sessions struct {
+		Sessions map[string]struct {
+			CWD string `json:"cwd"`
+		} `json:"sessions"`
+	}
+	if err := json.Unmarshal(state, &sessions); err != nil {
+		t.Fatalf("ACP session state: %v: %s", err, state)
+	}
+	if got := sessions.Sessions[sessionID].CWD; got != workspace {
+		t.Fatalf("ACP session %q repository = %q, want %q: %s", sessionID, got, workspace, state)
 	}
 }
 

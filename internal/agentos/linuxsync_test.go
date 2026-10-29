@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -249,10 +248,14 @@ func TestWriteTarStreamSendsExactlyTheNamedFiles(t *testing.T) {
 	if got["go.work"] != "use ./hub\n" || got["hub/go.mod"] != "module hub\n" {
 		t.Errorf("contents = %v", got)
 	}
-	// Windows filesystems carry no execute bit (the Chmod above is a no-op
-	// there), so the mode can only round-trip where the source has one.
-	if runtime.GOOS != "windows" && modes["hub/go.mod"].Perm()&0o100 == 0 {
-		t.Errorf("hub/go.mod lost its execute bit: %v", modes["hub/go.mod"])
+	// Windows accepts Chmod but does not expose Unix execute bits in Stat.
+	// Compare against the mode the sending filesystem actually reports.
+	source, err := os.Stat(filepath.Join(root, "hub", "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := modes["hub/go.mod"].Perm(), source.Mode().Perm(); got != want {
+		t.Errorf("hub/go.mod mode = %v, want source mode %v", got, want)
 	}
 	if _, bad := got["hub/bin/huge"]; bad {
 		t.Error("an unnamed file was sent")

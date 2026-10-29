@@ -149,7 +149,13 @@ func TestTranspileModuleInputDirectory(t *testing.T) {
 			if runtime.GOOS == "windows" {
 				binary += ".exe"
 			}
-			cmd = exec.Command(filepath.Join(runtime.GOROOT(), "bin", "go"), "build", "-o", binary, output)
+			// A cross-compiled test binary embeds the builder's GOROOT, which
+			// is not a path on the Windows peer. Use the peer's Go from PATH.
+			goBin, err := exec.LookPath("go")
+			if err != nil {
+				t.Fatal(err)
+			}
+			cmd = exec.Command(goBin, "build", "-o", binary, output)
 			cmd.Dir = moduleDir
 			// GOTOOLCHAIN=local pins the installed SDK and GOPROXY=off keeps the
 			// build off the network (same go.dev release-index flake as

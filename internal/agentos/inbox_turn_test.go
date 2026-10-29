@@ -94,9 +94,17 @@ func TestSprintInboxAckCommitsRenderedRoleBatchOnly(t *testing.T) {
 		}
 	}
 	reads := 0
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sawNew := false
 	rt := sprintWatchRuntime{ackEvery: time.Second}
 	rt.poll = sprintWatchTestPoll(func(reader string, limit int, includeBus bool) (inboxBatch, error) {
-		return snapshotUnifiedInbox(reader, limit, includeBus)
+		batch, err := snapshotUnifiedInbox(reader, limit, includeBus)
+		if err == nil && len(batch.events) == 1 && batch.events[0].Body == "new after rendered batch" {
+			sawNew = true
+			cancel()
+		}
+		return batch, err
 	})
 	rt.ackSeq = func(int64, string) (int64, error) {
 		reads++
@@ -111,14 +119,15 @@ func TestSprintInboxAckCommitsRenderedRoleBatchOnly(t *testing.T) {
 		}
 		return 0, nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
-	defer cancel()
 	var out bytes.Buffer
 	if err := runSprintInboxWatch(ctx, &out, &bytes.Buffer{}, 408, inboxTestReader, rt); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(out.String(), "role 0") || !strings.Contains(out.String(), "role 11") {
 		t.Fatalf("watch did not render the batch: %s", out.String())
+	}
+	if !sawNew {
+		t.Fatalf("watch did not finish acknowledging the rendered batch: %s", out.String())
 	}
 	again, err := snapshotUnifiedInbox(inboxTestReader, 0, true)
 	if err != nil || len(again.events) != 1 || again.events[0].Body != "new after rendered batch" {

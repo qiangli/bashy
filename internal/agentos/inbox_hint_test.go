@@ -376,6 +376,8 @@ func TestInboxHookSeededDeliveryEnvelope(t *testing.T) {
 			t.Errorf("envelope context missing %q: %q", want, env.HookSpecificOutput.AdditionalContext)
 		}
 	}
+	firstFP, _ := inboxSourcesFingerprint(reader)
+	firstState := loadInboxHintArrivals()
 
 	// Same turn, same arrival: the hook stays silent (duplicate suppression).
 	stdout.Reset()
@@ -383,7 +385,8 @@ func TestInboxHookSeededDeliveryEnvelope(t *testing.T) {
 		t.Fatalf("second hook exit=%d", rc)
 	}
 	if stdout.String() != "" {
-		t.Fatalf("duplicate notice within the turn: %q", stdout.String())
+		fp, ok := inboxSourcesFingerprint(reader)
+		t.Fatalf("duplicate notice within the turn: %q (first fingerprint=%d state=%+v; second fingerprint=%d valid=%v state=%+v)", stdout.String(), firstFP, firstState, fp, ok, loadInboxHintArrivals())
 	}
 
 	// Newly arrived mail re-hints on the next turn boundary.
