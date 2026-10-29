@@ -63,17 +63,21 @@ func appBoundaryMain(args []string, stdin io.Reader, stdout, stderr io.Writer) (
 // runBounded is boundary.Run plus interp.ServedInProcess, which every bashy
 // runner sets: without it the second call of an in-process tool (cat, ls,
 // ...) is hash-rewritten to its PATH file, and the guard refuses that as an
-// undeclared external program. The guard, its handlers and decorators are
-// yoke's, unchanged.
+// undeclared external program; and boundedAwk ahead of the guard. The
+// guard, its handlers and decorators are yoke's, unchanged.
 func runBounded(ctx context.Context, g *boundary.Guard, script, name, dir string, env []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
 	f, err := syntax.NewParser(syntax.Variant(syntax.LangBashPP)).Parse(strings.NewReader(script), name)
 	if err != nil {
 		return 2, err
 	}
-	opts := append(g.RunnerOptions(shell.Handler()),
+	// g.RunnerOptions' wiring with boundedAwk outside the guard's exec
+	// middleware, which would refuse awk as a spawner.
+	opts := []interp.RunnerOption{
+		interp.OpenHandler(g.OpenHandler(nil)),
+		interp.ExecHandlers(boundedAwk(g), g.ExecMiddleware(), shell.Handler()),
 		interp.ServedInProcess(func(name string) bool { return tool.Lookup(name) != nil }),
 		interp.Decorators(boundary.Decorators()),
-		interp.Dir(dir), interp.Env(expand.ListEnviron(env...)), interp.StdIO(stdin, stdout, stderr))
+		interp.Dir(dir), interp.Env(expand.ListEnviron(env...)), interp.StdIO(stdin, stdout, stderr)}
 	r, err := interp.New(opts...)
 	if err != nil {
 		return 2, err
