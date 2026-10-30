@@ -3,15 +3,19 @@ id: 4fc16f039722
 kind: bug
 title: 'S531.D3a Windows: in-process bashy subcommands see the shell''s POSIX USERPROFILE/HOME'
 seq: 2834
-status: todo
+status: done
 priority: p0
 labels:
     - windows
     - genie
 created: 2026-10-29T16:29:30.916452Z
+weave: 338
+assignee: claude-sonnet5.5
 sprint: 531
 sprint_id: f7bc2570-ca8e-59b0-8163-c3c51ba23610
 sprint_title: 'Genie core harness: drive vendor agent CLIs as tools'
+closed: 2026-10-29T16:53:03.936569Z
+closed_by: s531-manager
 ---
 
 Found in the S531 D3 live run on a native Windows test host (operator principle 2026-10-29: same behavior on every OS, zero setup; a divergence is a bug).
