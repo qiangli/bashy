@@ -1,0 +1,200 @@
+{
+  "resourceMetrics": [
+    {
+      "scopeMetrics": [
+        {
+          "metrics": [
+            {
+              "name": "requests",
+              "unit": "requests",
+              "sum": {
+                "isMonotonic": true,
+                "aggregationTemporality": 2,
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1700000001000000000",
+                    "startTimeUnixNano": "1700000000000000000",
+                    "asDouble": 2,
+                    "attributes": [
+                      {
+                        "key": "service",
+                        "value": {
+                          "stringValue": "demo"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "timeUnixNano": "1700000003000000000",
+                    "startTimeUnixNano": "1700000000000000000",
+                    "asDouble": 8,
+                    "attributes": [
+                      {
+                        "key": "service",
+                        "value": {
+                          "stringValue": "demo"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "timeUnixNano": "1700000005000000000",
+                    "startTimeUnixNano": "1700000000000000000",
+                    "asDouble": 12,
+                    "attributes": [
+                      {
+                        "key": "service",
+                        "value": {
+                          "stringValue": "demo"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "cpu",
+              "unit": "%",
+              "gauge": {
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1700000001000000000",
+                    "startTimeUnixNano": "1700000000000000000",
+                    "asDouble": 20,
+                    "attributes": [
+                      {
+                        "key": "service",
+                        "value": {
+                          "stringValue": "demo"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "timeUnixNano": "1700000002000000000",
+                    "startTimeUnixNano": "1700000000000000000",
+                    "asDouble": 45,
+                    "attributes": [
+                      {
+                        "key": "service",
+                        "value": {
+                          "stringValue": "demo"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "timeUnixNano": "1700000003000000000",
+                    "startTimeUnixNano": "1700000000000000000",
+                    "asDouble": 30,
+                    "attributes": [
+                      {
+                        "key": "service",
+                        "value": {
+                          "stringValue": "demo"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "inflight",
+              "sum": {
+                "isMonotonic": false,
+                "aggregationTemporality": 2,
+                "dataPoints": [
+                  {
+                    "timeUnixNano": "1700000001000000000",
+                    "startTimeUnixNano": "1700000000000000000",
+                    "asDouble": 5,
+                    "attributes": [
+                      {
+                        "key": "service",
+                        "value": {
+                          "stringValue": "demo"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "timeUnixNano": "1700000002000000000",
+                    "startTimeUnixNano": "1700000000000000000",
+                    "asDouble": 3,
+                    "attributes": [
+                      {
+                        "key": "service",
+                        "value": {
+                          "stringValue": "demo"
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "timeUnixNano": "1700000003000000000",
+                    "startTimeUnixNano": "1700000000000000000",
+                    "asDouble": 7,
+                    "attributes": [
+                      {
+                        "key": "service",
+                        "value": {
+                          "stringValue": "demo"
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "latency",
+              "unit": "ms",
+              "histogram": {
+                "dataPoints": [
+                  {
+                    "count": "10",
+                    "explicitBounds": [
+                      0,
+                      10,
+                      20,
+                      40
+                    ],
+                    "bucketCounts": [
+                      "0",
+                      "2",
+                      "6",
+                      "2",
+                      "0"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "name": "size",
+              "unit": "B",
+              "exponentialHistogram": {
+                "dataPoints": [
+                  {
+                    "count": "10",
+                    "scale": 0,
+                    "zeroCount": "2",
+                    "positive": {
+                      "offset": 0,
+                      "bucketCounts": [
+                        "4",
+                        "4"
+                      ]
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
