@@ -113,6 +113,20 @@ the viewer share colours in light/dark; standalone SVGs fall back to the
 light palette. Tool changes follow the existing Software Shaping
 source/version/rollback workflow; no in-page template or layout editor.
 
+## As a shaped app
+
+`shaped.json` declares chart's server, so it can be registered as a
+shaped app and get per-user source history, preview, restore and undo:
+
+```bash
+bashy app add chart --type shaped --source "$PWD"
+```
+
+The console builds that server from each user's active revision and proxies
+`/chart/` to it. Item URLs follow the mount: a request that arrives through
+the app shell (`X-Forwarded-Prefix`) gets `…/chart/?…`, never the server's
+internal loopback address.
+
 ## Verify
 
 ```sh

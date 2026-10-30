@@ -116,11 +116,17 @@ func (a *app) isOwner(r *http.Request, it *item) bool {
 	return kit.Grant(kit.FacilitatorKey(r), it.Owner)
 }
 
-func (a *app) urlFor(id string) string { return kit.ItemURL(a.baseURL+"/", "id", id) }
+// base is the public URL of the tool root for r: its own address, or the app
+// shell mount it was reached through (kit.PublicBase).
+func (a *app) base(r *http.Request) string { return kit.PublicBase(r, a.baseURL) }
+
+func (a *app) urlFor(r *http.Request, id string) string {
+	return kit.ItemURL(a.base(r)+"/", "id", id)
+}
 
 // openView is the contentless re-surface: id + stable URL + status only.
-func (a *app) openView(it *item) map[string]any {
-	v := kit.OpenView(it.ID, a.urlFor(it.ID), it.Status)
+func (a *app) openView(r *http.Request, it *item) map[string]any {
+	v := kit.OpenView(it.ID, a.urlFor(r, it.ID), it.Status)
 
 	return v
 }
@@ -163,7 +169,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		kit.WriteJSON(w, a.openView(it))
+		kit.WriteJSON(w, a.openView(r, it))
 		return
 	}
 	if path == "/api/render" {
@@ -183,9 +189,9 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	me := kit.ParticipantCookie(w, r, "chart-participant")
 	switch req.Action {
 	case "add":
-		a.create(w, req, me)
+		a.create(w, r, req, me)
 	case "open":
-		a.open(w, req)
+		a.open(w, r, req)
 	case "show":
 		a.get(w, r, req, me)
 	case "set":
@@ -193,19 +199,19 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	case "close":
 		a.mutate(w, r, req, me, true)
 	case "list":
-		a.list(w)
+		a.list(w, r)
 	case "share":
 		a.share(w, r, req)
 	case "revoke":
 		a.revoke(w, r, req)
 	case "join":
-		a.join(w, req, me)
+		a.join(w, r, req, me)
 	default:
 		kit.Fail(w, 400, "Unknown action")
 	}
 }
 
-func (a *app) create(w http.ResponseWriter, req request, me string) {
+func (a *app) create(w http.ResponseWriter, r *http.Request, req request, me string) {
 	if kit.SecretRefused(req.Fields) {
 		kit.Fail(w, 400, kit.ErrSecret)
 		return
@@ -245,12 +251,12 @@ func (a *app) create(w http.ResponseWriter, req request, me string) {
 		kit.Fail(w, 500, "Could not save. Your change was not accepted.")
 		return
 	}
-	v := a.openView(it)
+	v := a.openView(r, it)
 	v["ownerKey"] = it.Owner // revealed once, at creation, like a facilitator key
 	kit.WriteJSON(w, v)
 }
 
-func (a *app) open(w http.ResponseWriter, req request) {
+func (a *app) open(w http.ResponseWriter, r *http.Request, req request) {
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -260,7 +266,7 @@ func (a *app) open(w http.ResponseWriter, req request) {
 		}
 		return
 	}
-	kit.WriteJSON(w, a.openView(it))
+	kit.WriteJSON(w, a.openView(r, it))
 }
 
 func (a *app) get(w http.ResponseWriter, r *http.Request, req request, me string) {
@@ -277,7 +283,7 @@ func (a *app) get(w http.ResponseWriter, r *http.Request, req request, me string
 		kit.Fail(w, 403, "Join this chart first; ask the owner for an invite.")
 		return
 	}
-	kit.WriteJSON(w, a.viewData(it))
+	kit.WriteJSON(w, a.viewData(r, it))
 }
 
 func (a *app) mutate(w http.ResponseWriter, r *http.Request, req request, me string, closing bool) {
@@ -329,10 +335,10 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req request, me str
 		kit.Fail(w, 500, "Could not save. Your change was not accepted.")
 		return
 	}
-	kit.WriteJSON(w, a.openView(&next))
+	kit.WriteJSON(w, a.openView(r, &next))
 }
 
-func (a *app) list(w http.ResponseWriter) {
+func (a *app) list(w http.ResponseWriter, r *http.Request) {
 	names, err := filepath.Glob(filepath.Join(a.dir, "items", "*.json"))
 	if err != nil {
 		kit.Fail(w, 500, "Could not list")
@@ -345,7 +351,7 @@ func (a *app) list(w http.ResponseWriter) {
 		if err != nil {
 			continue
 		}
-		out = append(out, a.openView(it)) // ids + statuses, never content
+		out = append(out, a.openView(r, it)) // ids + statuses, never content
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i]["id"].(string) < out[j]["id"].(string) })
 	kit.WriteJSON(w, out)
@@ -375,13 +381,13 @@ func (a *app) share(w http.ResponseWriter, r *http.Request, req request) {
 		kit.Fail(w, 500, "Could not save. Your change was not accepted.")
 		return
 	}
-	v := a.openView(&next)
+	v := a.openView(r, &next)
 	v["invite"] = code
-	v["inviteURL"] = a.urlFor(next.ID) + "#invite=" + code
+	v["inviteURL"] = a.urlFor(r, next.ID) + "#invite=" + code
 	kit.WriteJSON(w, v)
 }
 
-func (a *app) join(w http.ResponseWriter, req request, me string) {
+func (a *app) join(w http.ResponseWriter, r *http.Request, req request, me string) {
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -402,7 +408,7 @@ func (a *app) join(w http.ResponseWriter, req request, me string) {
 		kit.Fail(w, 500, "Could not save. Your change was not accepted.")
 		return
 	}
-	kit.WriteJSON(w, a.openView(&next))
+	kit.WriteJSON(w, a.openView(r, &next))
 }
 
 func serve(addr, data, prefix string) {
@@ -470,7 +476,7 @@ func (a *app) revoke(w http.ResponseWriter, r *http.Request, req request) {
 		kit.Fail(w, 500, "Could not save")
 		return
 	}
-	kit.WriteJSON(w, a.openView(&next))
+	kit.WriteJSON(w, a.openView(r, &next))
 }
 
 // K0 DecodeAction does not reject a second valid JSON value. Keep this guard

@@ -40,10 +40,10 @@ type renderedPage struct {
 	Prev    int // index of the compared page when HasPrev
 }
 
-func (a *app) renderOptions(b *book, p page, inline bool) render.Options {
+func (a *app) renderOptions(r *http.Request, b *book, p page, inline bool) render.Options {
 	return render.Options{
 		AssetDir: assetDir(a.dir, b.ID, p.N),
-		AssetURL: a.prefix + "/assets/" + b.ID + "/" + strconv.Itoa(p.N) + "/",
+		AssetURL: kit.PublicPrefix(r, a.prefix) + "/assets/" + b.ID + "/" + strconv.Itoa(p.N) + "/",
 		Inline:   inline,
 	}
 }
@@ -57,9 +57,9 @@ func unwrap(frag []byte) string {
 // page it marks new or changed blocks with data-changed (in place), unless
 // the document needs whole-document rendering (footnotes, a TOC); then only
 // the counts are reported.
-func (a *app) renderPage(b *book, i int, inline bool) (renderedPage, error) {
+func (a *app) renderPage(r *http.Request, b *book, i int, inline bool) (renderedPage, error) {
 	p := b.Pages[i]
-	opt := a.renderOptions(b, p, inline)
+	opt := a.renderOptions(r, b, p, inline)
 	var rp renderedPage
 	cur := splitBlocks(p.Markdown)
 	rp.Blocks = len(cur)
@@ -156,9 +156,9 @@ func navBtn(label, href, rel string, ok bool) string {
 
 // jumpForm is the shared "go to" field: a book id at the root, a page
 // (p3, 3, first, last, index) inside a book. A plain GET form: no script.
-func (a *app) jumpForm(bookID string) string {
+func (a *app) jumpForm(r *http.Request, bookID string) string {
 	var b strings.Builder
-	b.WriteString(`<form method="get" action="` + html.EscapeString(a.prefix+"/") + `">`)
+	b.WriteString(`<form method="get" action="` + html.EscapeString(kit.PublicPrefix(r, a.prefix)+"/") + `">`)
 	if bookID == "" {
 		b.WriteString(kit.TextField("id", "Open book", "text", "", "id"))
 	} else {
@@ -198,12 +198,12 @@ func (a *app) page(r *http.Request, me string) (int, []byte) {
 	q := r.URL.Query()
 	id := q.Get("id")
 	if id == "" {
-		return http.StatusOK, a.rootPage()
+		return http.StatusOK, a.rootPage(r)
 	}
 	fail := func(code int, title, hint string) (int, []byte) {
-		body := viewerCSS + kit.AppBar(tool, a.baseURL+"/", kit.EmptyItemHeader(id), "") +
+		body := viewerCSS + kit.AppBar(tool, a.base(r)+"/", kit.EmptyItemHeader(id), "") +
 			`<main class="desk-main desk-narrow">` + kit.State("error", title, hint) +
-			`<p class="desk-footer"><a href="` + html.EscapeString(a.baseURL+"/") + `">All books</a> · ` + kit.CopyButton("Copy link", a.baseURL+"/") + `</p></main>`
+			`<p class="desk-footer"><a href="` + html.EscapeString(a.base(r)+"/") + `">All books</a> · ` + kit.CopyButton("Copy link", a.base(r)+"/") + `</p></main>`
 		return code, kit.Page(tool, "Viewer · bashy desk", body)
 	}
 	b, err := a.load(id)
@@ -216,48 +216,48 @@ func (a *app) page(r *http.Request, me string) (int, []byte) {
 	if !a.canRead(r, b, me) {
 		return fail(http.StatusForbidden, "Join this book first", "Ask the owner for an invite link.")
 	}
-	header := kit.ItemHeader(b.ID, b.Status, a.urlFor(b.ID))
+	header := kit.ItemHeader(b.ID, b.Status, a.urlFor(r, b.ID))
 	sel := q.Get("page")
 	if strings.EqualFold(sel, "index") || len(b.Pages) == 0 {
-		return http.StatusOK, a.indexPage(b, header)
+		return http.StatusOK, a.indexPage(r, b, header)
 	}
 	i := b.pageIndex(sel)
 	if i < 0 {
 		return fail(http.StatusNotFound, "No page "+sel, fmt.Sprintf("%s has %d pages: use p1–p%d, first, last or index.", b.ID, len(b.Pages), len(b.Pages)))
 	}
 	p := b.Pages[i]
-	rp, err := a.renderPage(b, i, false)
+	rp, err := a.renderPage(r, b, i, false)
 	if err != nil {
 		return fail(http.StatusInternalServerError, "This page could not be rendered", err.Error())
 	}
 	n := len(b.Pages)
 	pos := fmt.Sprintf(`<span class="vw-pos">%s of %d</span>`, p.id(), n)
 	nav := `<nav class="vw-nav" aria-label="Pages"><div class="desk-row">` +
-		navBtn("⏮ First", a.pageURL(b.ID, 1), "first", i > 0) +
-		navBtn("◀ Prev", a.pageURL(b.ID, i), "prev", i > 0) + pos +
-		navBtn("Next ▶", a.pageURL(b.ID, i+2), "next", i < n-1) +
-		navBtn("Last ⏭", a.pageURL(b.ID, n), "last", i < n-1) +
-		navBtn("Index", a.urlFor(b.ID)+"&page=index", "", true) +
-		`</div>` + a.jumpForm(b.ID) + `</nav>`
+		navBtn("⏮ First", a.pageURL(r, b.ID, 1), "first", i > 0) +
+		navBtn("◀ Prev", a.pageURL(r, b.ID, i), "prev", i > 0) + pos +
+		navBtn("Next ▶", a.pageURL(r, b.ID, i+2), "next", i < n-1) +
+		navBtn("Last ⏭", a.pageURL(r, b.ID, n), "last", i < n-1) +
+		navBtn("Index", a.urlFor(r, b.ID)+"&page=index", "", true) +
+		`</div>` + a.jumpForm(r, b.ID) + `</nav>`
 	prevHref := ""
 	prevLabel := ""
 	if rp.HasPrev {
-		prevHref, prevLabel = a.pageURL(b.ID, rp.Prev+1), b.Pages[rp.Prev].id()
+		prevHref, prevLabel = a.pageURL(r, b.ID, rp.Prev+1), b.Pages[rp.Prev].id()
 	}
-	body := viewerCSS + kit.AppBar(tool, a.baseURL+"/", header, `<span class="vw-pos">`+html.EscapeString(b.Title)+`</span>`) +
+	body := viewerCSS + kit.AppBar(tool, a.base(r)+"/", header, `<span class="vw-pos">`+html.EscapeString(b.Title)+`</span>`) +
 		`<main class="desk-main desk-narrow">` + nav + `<div data-desk-alert class="desk-alert" hidden></div>` +
 		changeSummary(rp, prevLabel, prevHref) +
 		`<article class="vw-page desk-content" id="` + p.id() + `">` + pageMeta(p) + rp.HTML + `</article>` +
-		`<div class="desk-row vw-actions">` + kit.CopyButton("Copy page link", a.pageURL(b.ID, i+1)) +
-		`<a class="desk-btn secondary" href="` + html.EscapeString(a.prefix+"/api/export?id="+b.ID+"&page="+strconv.Itoa(i+1)) + `">Download HTML</a>` +
-		`<a class="desk-btn secondary" href="` + html.EscapeString(a.prefix+"/api/export?id="+b.ID) + `">Download book</a>` +
+		`<div class="desk-row vw-actions">` + kit.CopyButton("Copy page link", a.pageURL(r, b.ID, i+1)) +
+		`<a class="desk-btn secondary" href="` + html.EscapeString(kit.PublicPrefix(r, a.prefix)+"/api/export?id="+b.ID+"&page="+strconv.Itoa(i+1)) + `">Download HTML</a>` +
+		`<a class="desk-btn secondary" href="` + html.EscapeString(kit.PublicPrefix(r, a.prefix)+"/api/export?id="+b.ID) + `">Download book</a>` +
 		`<button type="button" class="desk-btn secondary" data-vw-print title="Print or save as PDF">Print / PDF</button></div>` +
 		`<p class="desk-footer">View-only · ← → turn pages · re-surface with <code>viewer open ` + html.EscapeString(b.ID) + `</code> · edit text in notepad.</p></main>` +
 		viewerScript
 	return http.StatusOK, kit.Page(tool, p.Title+" · "+b.Title+" · Viewer", body)
 }
 
-func (a *app) indexPage(b *book, header string) []byte {
+func (a *app) indexPage(r *http.Request, b *book, header string) []byte {
 	var t strings.Builder
 	if len(b.Pages) == 0 {
 		t.WriteString(kit.State("empty", "No pages yet", "Agents add one with: viewer append "+b.ID+" --body … or --template status --data FILE"))
@@ -275,24 +275,24 @@ func (a *app) indexPage(b *book, header string) []byte {
 				}
 				changed = fmt.Sprintf("%d new/changed, %d removed vs %s", k, rm, b.Pages[j].id())
 			}
-			t.WriteString(`<tr><td><a href="` + html.EscapeString(a.pageURL(b.ID, p.N)) + `">` + p.id() + `</a></td><td>` +
+			t.WriteString(`<tr><td><a href="` + html.EscapeString(a.pageURL(r, b.ID, p.N)) + `">` + p.id() + `</a></td><td>` +
 				html.EscapeString(p.Title) + `</td><td>` + html.EscapeString(p.Template) + `</td><td>` +
 				html.EscapeString(p.Created) + `</td><td>` + changed + `</td></tr>`)
 		}
 		t.WriteString(`</tbody></table>`)
 	}
 	nav := `<nav class="vw-nav" aria-label="Pages"><div class="desk-row">` +
-		navBtn("⏮ First", a.pageURL(b.ID, 1), "first", len(b.Pages) > 0) +
-		navBtn("Last ⏭", a.pageURL(b.ID, len(b.Pages)), "last", len(b.Pages) > 0) +
-		`<span class="vw-pos">Index · ` + strconv.Itoa(len(b.Pages)) + ` pages</span></div>` + a.jumpForm(b.ID) + `</nav>`
-	body := viewerCSS + kit.AppBar(tool, a.baseURL+"/", header, `<span class="vw-pos">`+html.EscapeString(b.Title)+`</span>`) +
+		navBtn("⏮ First", a.pageURL(r, b.ID, 1), "first", len(b.Pages) > 0) +
+		navBtn("Last ⏭", a.pageURL(r, b.ID, len(b.Pages)), "last", len(b.Pages) > 0) +
+		`<span class="vw-pos">Index · ` + strconv.Itoa(len(b.Pages)) + ` pages</span></div>` + a.jumpForm(r, b.ID) + `</nav>`
+	body := viewerCSS + kit.AppBar(tool, a.base(r)+"/", header, `<span class="vw-pos">`+html.EscapeString(b.Title)+`</span>`) +
 		`<main class="desk-main desk-narrow">` + nav + `<h1 class="desk-h2">` + html.EscapeString(b.Title) + `</h1>` + t.String() +
 		`<p class="desk-footer">View-only · re-surface with <code>viewer open ` + html.EscapeString(b.ID) + `</code>.</p></main>` + viewerScript
 	return kit.Page(tool, "Index · "+b.Title+" · Viewer", body)
 }
 
-func (a *app) rootPage() []byte {
-	books, _ := a.list()
+func (a *app) rootPage(r *http.Request) []byte {
+	books, _ := a.list(r)
 	var l strings.Builder
 	l.WriteString(`<section class="desk-panel"><h2 class="desk-h2">Books</h2>`)
 	if len(books) == 0 {
@@ -305,15 +305,15 @@ func (a *app) rootPage() []byte {
 			if b, err := readBook(a.dir, id); err == nil {
 				title = b.Title
 			}
-			l.WriteString(`<tr><td><a href="` + html.EscapeString(a.urlFor(id)) + `">` + html.EscapeString(id) + `</a></td><td>` +
+			l.WriteString(`<tr><td><a href="` + html.EscapeString(a.urlFor(r, id)) + `">` + html.EscapeString(id) + `</a></td><td>` +
 				html.EscapeString(title) + `</td><td>` + strconv.Itoa(v["pages"].(int)) + `</td><td>` + kit.Badge(v["status"].(string)) + `</td></tr>`)
 		}
 		l.WriteString(`</tbody></table>`)
 	}
 	l.WriteString(`</section>`)
-	body := viewerCSS + kit.AppBar(tool, a.baseURL+"/", kit.EmptyItemHeader("all books"), "") +
+	body := viewerCSS + kit.AppBar(tool, a.base(r)+"/", kit.EmptyItemHeader("all books"), "") +
 		`<main class="desk-main desk-narrow"><nav class="vw-nav" aria-label="Open"><div class="desk-row">` +
-		kit.CopyButton("Copy link", a.baseURL+"/") + `</div>` + a.jumpForm("") + `</nav>` + l.String() +
+		kit.CopyButton("Copy link", a.base(r)+"/") + `</div>` + a.jumpForm(r, "") + `</nav>` + l.String() +
 		`<p class="desk-footer">View-only reader for agent reports · loopback only · data in <code>` +
 		html.EscapeString(filepath.Join(a.dir, "items")) + `</code>.</p></main>` + viewerScript
 	return kit.Page(tool, "Viewer · bashy desk", body)
@@ -322,7 +322,7 @@ func (a *app) rootPage() []byte {
 // exportHTML builds a self-contained HTML file for one page or (sel empty
 // or "all") the whole book: kit CSS/JS inlined, local image/video/PDF
 // assets inlined as data: URIs, no request back to this server.
-func (a *app) exportHTML(b *book, sel string) ([]byte, string, error) {
+func (a *app) exportHTML(r *http.Request, b *book, sel string) ([]byte, string, error) {
 	if len(b.Pages) == 0 {
 		return nil, "", &httpError{http.StatusConflict, "This book has no pages to export yet"}
 	}
@@ -339,7 +339,7 @@ func (a *app) exportHTML(b *book, sel string) ([]byte, string, error) {
 	var toc, pages strings.Builder
 	for i := first; i <= last; i++ {
 		p := b.Pages[i]
-		rp, err := a.renderPage(b, i, true)
+		rp, err := a.renderPage(r, b, i, true)
 		if err != nil {
 			return nil, "", err
 		}
@@ -354,8 +354,8 @@ func (a *app) exportHTML(b *book, sel string) ([]byte, string, error) {
 		pages.WriteString(`<article class="vw-page desk-content" id="` + p.id() + `">` + pageMeta(p) +
 			changeSummary(rp, prevLabel, prevHref) + rp.HTML + `</article>`)
 	}
-	header := kit.ItemHeader(b.ID, b.Status, a.urlFor(b.ID))
-	body := viewerCSS + kit.AppBar(tool, a.urlFor(b.ID), header, `<span class="vw-pos">`+html.EscapeString(b.Title)+`</span>`) +
+	header := kit.ItemHeader(b.ID, b.Status, a.urlFor(r, b.ID))
+	body := viewerCSS + kit.AppBar(tool, a.urlFor(r, b.ID), header, `<span class="vw-pos">`+html.EscapeString(b.Title)+`</span>`) +
 		`<main class="desk-main desk-narrow">`
 	if last > first {
 		body += `<nav class="vw-nav desk-panel" aria-label="Contents"><ul>` + toc.String() + `</ul></nav>`

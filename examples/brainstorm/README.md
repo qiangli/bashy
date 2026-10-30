@@ -119,6 +119,20 @@ write, vote and export. The facilitator can revoke a member or a pending
 invite at any time; access ends on the next request. Sessions created without
 the option, the legacy main board, and records saved earlier stay open.
 
+## As a shaped app
+
+`server/shaped.json` declares brainstorm's server, so it can be registered as a
+shaped app and get per-user source history, preview, restore and undo:
+
+```bash
+bashy app add brainstorm --type shaped --source "$PWD/server"
+```
+
+The console builds that server from each user's active revision and proxies
+`/brainstorm/` to it. Item URLs follow the mount: a request that arrives through
+the app shell (`X-Forwarded-Prefix`) gets `…/brainstorm/?…`, never the server's
+internal loopback address. The app root is `server/`, which holds the module.
+
 ## Desk door (agents and scripts)
 
 Brainstorm follows the shared desk contract (`examples/desk/kit`): the page

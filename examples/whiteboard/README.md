@@ -114,6 +114,20 @@ For the optional browser test, install Playwright separately and set
 `PLAYWRIGHT_MODULE` to its module path and `WHITEBOARD_BIN` to the built server,
 then run `node browser-test.mjs`. `CHROMIUM_PATH` can select an existing browser.
 
+## As a shaped app
+
+`server/shaped.json` declares whiteboard's server, so it can be registered as a
+shaped app and get per-user source history, preview, restore and undo:
+
+```bash
+bashy app add whiteboard --type shaped --source "$PWD/server"
+```
+
+The console builds that server from each user's active revision and proxies
+`/whiteboard/` to it. Item URLs follow the mount: a request that arrives through
+the app shell (`X-Forwarded-Prefix`) gets `…/whiteboard/?…`, never the server's
+internal loopback address. The app root is `server/`, which holds the module.
+
 ## Desk door (agents and scripts)
 
 The whiteboard follows the shared desk contract (`examples/desk/kit`): the page

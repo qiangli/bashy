@@ -186,6 +186,20 @@ Go module `form-server` pulls the kit with
 - `examples/` — `contact.json` / `contact.yaml` (identical definitions)
 - `register.sh`, `dag.md`, `browser-test.mjs`
 
+## As a shaped app
+
+`shaped.json` declares form's server, so it can be registered as a
+shaped app and get per-user source history, preview, restore and undo:
+
+```bash
+bashy app add form --type shaped --source "$PWD"
+```
+
+The console builds that server from each user's active revision and proxies
+`/form/` to it. Item URLs follow the mount: a request that arrives through
+the app shell (`X-Forwarded-Prefix`) gets `…/form/?…`, never the server's
+internal loopback address. The app root is this directory (the module); `server/` is the main package.
+
 ## Verify
 
 ```bash

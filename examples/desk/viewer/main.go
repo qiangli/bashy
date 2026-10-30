@@ -100,14 +100,22 @@ func fail(w http.ResponseWriter, err error) {
 	kit.Fail(w, http.StatusBadRequest, err.Error())
 }
 
-func (a *app) urlFor(id string) string { return kit.ItemURL(a.baseURL+"/", "id", id) }
+// base is the public URL of the tool root for r: its own address, or the app
+// shell mount it was reached through (kit.PublicBase).
+func (a *app) base(r *http.Request) string { return kit.PublicBase(r, a.baseURL) }
 
-func (a *app) pageURL(id string, n int) string { return a.urlFor(id) + "&page=" + strconv.Itoa(n) }
+func (a *app) urlFor(r *http.Request, id string) string {
+	return kit.ItemURL(a.base(r)+"/", "id", id)
+}
+
+func (a *app) pageURL(r *http.Request, id string, n int) string {
+	return a.urlFor(r, id) + "&page=" + strconv.Itoa(n)
+}
 
 // openView is the contentless re-surface: id + stable URL + status (+ the
 // page count) only.
-func (a *app) openView(b *book) map[string]any {
-	v := kit.OpenView(b.ID, a.urlFor(b.ID), b.Status)
+func (a *app) openView(r *http.Request, b *book) map[string]any {
+	v := kit.OpenView(b.ID, a.urlFor(r, b.ID), b.Status)
 	v["pages"] = len(b.Pages)
 	if breakMode == "open-emits-content" && len(b.Pages) > 0 {
 		v["markdown"] = b.Pages[0].Markdown // deliberate contract break
@@ -190,7 +198,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			fail(w, err)
 			return
 		}
-		kit.WriteJSON(w, a.openView(b))
+		kit.WriteJSON(w, a.openView(r, b))
 		return
 	case path == "/api/export" && r.Method == "GET":
 		me := kit.ParticipantCookie(w, r, "viewer-participant")
@@ -205,7 +213,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			kit.Fail(w, http.StatusForbidden, "Join this book first; ask the owner for an invite.")
 			return
 		}
-		out, name, err := a.exportHTML(b, r.URL.Query().Get("page"))
+		out, name, err := a.exportHTML(r, b, r.URL.Query().Get("page"))
 		if err != nil {
 			fail(w, err)
 			return
@@ -237,15 +245,15 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	switch req.Action {
 	case "add":
-		v, err = a.add(req, me)
+		v, err = a.add(r, req, me)
 	case "append":
 		v, err = a.appendPage(r, req)
 	case "open":
-		v, err = a.open(req)
+		v, err = a.open(r, req)
 	case "show":
 		v, err = a.show(r, req, me)
 	case "list":
-		items, lerr := a.list()
+		items, lerr := a.list(r)
 		if lerr != nil {
 			fail(w, lerr)
 			return
@@ -257,12 +265,12 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	case "close":
 		v, err = a.close(r, req)
 	case "join":
-		v, err = a.join(req, me)
+		v, err = a.join(r, req, me)
 	case "export":
 		v, err = a.export(r, req, me)
 	case "set", "edit", "put":
 		if breakMode == "accept-set" {
-			v, err = a.open(req) // deliberate contract break: pretends to edit
+			v, err = a.open(r, req) // deliberate contract break: pretends to edit
 			break
 		}
 		err = &httpError{http.StatusBadRequest, "viewer is view-only: pages are never edited. Append a new page with viewer append, or edit the text in notepad."}
@@ -276,7 +284,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	kit.WriteJSON(w, v)
 }
 
-func (a *app) add(req actionRequest, me string) (map[string]any, error) {
+func (a *app) add(r *http.Request, req actionRequest, me string) (map[string]any, error) {
 	if breakMode != "allow-secret" && kit.SecretRefused(req.Fields) {
 		return nil, &httpError{http.StatusBadRequest, kit.ErrSecret}
 	}
@@ -328,7 +336,7 @@ func (a *app) add(req actionRequest, me string) (map[string]any, error) {
 	if err := a.save(b); err != nil {
 		return nil, &httpError{http.StatusInternalServerError, "Could not save. Your change was not accepted."}
 	}
-	v := a.openView(b)
+	v := a.openView(r, b)
 	v["ownerKey"] = b.Owner // revealed once, at creation
 	return v, nil
 }
@@ -355,10 +363,10 @@ func (a *app) appendPage(r *http.Request, req actionRequest) (map[string]any, er
 	if err := a.save(&next); err != nil {
 		return nil, &httpError{http.StatusInternalServerError, "Could not save. Your change was not accepted."}
 	}
-	v := a.openView(&next)
+	v := a.openView(r, &next)
 	n := len(next.Pages)
 	v["page"] = n
-	v["page_url"] = a.pageURL(next.ID, n)
+	v["page_url"] = a.pageURL(r, next.ID, n)
 	return v, nil
 }
 
@@ -433,12 +441,12 @@ func (a *app) addPage(b *book, req actionRequest) error {
 	return nil
 }
 
-func (a *app) open(req actionRequest) (map[string]any, error) {
+func (a *app) open(r *http.Request, req actionRequest) (map[string]any, error) {
 	b, err := a.load(req.ID)
 	if err != nil {
 		return nil, err
 	}
-	return a.openView(b), nil
+	return a.openView(r, b), nil
 }
 
 func pageView(p page) map[string]any {
@@ -463,7 +471,7 @@ func (a *app) show(r *http.Request, req actionRequest, me string) (map[string]an
 	if !a.canRead(r, b, me) {
 		return nil, &httpError{http.StatusForbidden, "Join this book first; ask the owner for an invite."}
 	}
-	v := a.openView(b)
+	v := a.openView(r, b)
 	v["title"] = b.Title
 	v["revision"] = b.Revision
 	if b.Sprint > 0 {
@@ -478,7 +486,7 @@ func (a *app) show(r *http.Request, req actionRequest, me string) (map[string]an
 			return nil, &httpError{http.StatusNotFound, fmt.Sprintf("No page %q in %s (it has %d)", req.Page, b.ID, len(b.Pages))}
 		}
 		v["page"] = pageView(b.Pages[i])
-		v["page_url"] = a.pageURL(b.ID, i+1)
+		v["page_url"] = a.pageURL(r, b.ID, i+1)
 		return v, nil
 	}
 	pages := make([]map[string]any, len(b.Pages))
@@ -489,7 +497,7 @@ func (a *app) show(r *http.Request, req actionRequest, me string) (map[string]an
 	return v, nil
 }
 
-func (a *app) list() ([]map[string]any, error) {
+func (a *app) list(r *http.Request) ([]map[string]any, error) {
 	names, err := filepath.Glob(filepath.Join(a.dir, "items", "*.json"))
 	if err != nil {
 		return nil, &httpError{http.StatusInternalServerError, "Could not list"}
@@ -500,7 +508,7 @@ func (a *app) list() ([]map[string]any, error) {
 		if err != nil {
 			continue
 		}
-		out = append(out, a.openView(b)) // ids + statuses, never content
+		out = append(out, a.openView(r, b)) // ids + statuses, never content
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i]["id"].(string) < out[j]["id"].(string) })
 	return out, nil
@@ -519,9 +527,9 @@ func (a *app) share(r *http.Request, req actionRequest) (map[string]any, error) 
 	if err := a.save(b); err != nil {
 		return nil, &httpError{http.StatusInternalServerError, "Could not save. Your change was not accepted."}
 	}
-	v := a.openView(b)
+	v := a.openView(r, b)
 	v["invite"] = code
-	v["inviteURL"] = a.urlFor(b.ID) + "#invite=" + code
+	v["inviteURL"] = a.urlFor(r, b.ID) + "#invite=" + code
 	return v, nil
 }
 
@@ -540,10 +548,10 @@ func (a *app) close(r *http.Request, req actionRequest) (map[string]any, error) 
 	if err := a.save(b); err != nil {
 		return nil, &httpError{http.StatusInternalServerError, "Could not save. Your change was not accepted."}
 	}
-	return a.openView(b), nil
+	return a.openView(r, b), nil
 }
 
-func (a *app) join(req actionRequest, me string) (map[string]any, error) {
+func (a *app) join(r *http.Request, req actionRequest, me string) (map[string]any, error) {
 	b, err := a.load(req.ID)
 	if err != nil {
 		return nil, err
@@ -556,7 +564,7 @@ func (a *app) join(req actionRequest, me string) (map[string]any, error) {
 	if err := a.save(b); err != nil {
 		return nil, &httpError{http.StatusInternalServerError, "Could not save. Your change was not accepted."}
 	}
-	return a.openView(b), nil
+	return a.openView(r, b), nil
 }
 
 // export writes the self-contained HTML under <data>/exports and returns
@@ -569,7 +577,7 @@ func (a *app) export(r *http.Request, req actionRequest, me string) (map[string]
 	if !a.canRead(r, b, me) {
 		return nil, &httpError{http.StatusForbidden, "Join this book first; ask the owner for an invite."}
 	}
-	out, name, err := a.exportHTML(b, req.Page)
+	out, name, err := a.exportHTML(r, b, req.Page)
 	if err != nil {
 		return nil, err
 	}

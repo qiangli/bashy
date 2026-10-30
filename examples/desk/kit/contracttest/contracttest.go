@@ -87,6 +87,7 @@ func Check(cfg Config) (failures []string) {
 	t.strictDecoding()
 	t.names()
 	t.lifecycle()
+	t.behindShell()
 	t.secrets()
 	t.cliConformance()
 	return t.failures
@@ -577,6 +578,65 @@ func (t *check) lifecycle() {
 		}
 	} else if code != http.StatusConflict {
 		t.fail("put after close: want 409, got %d", code)
+	}
+}
+
+// Behind the app shell (the console's shaped-app proxy, outpost) a tool is
+// reached on loopback with its mount stripped and named in
+// X-Forwarded-Prefix. The item URL it returns, and every link its page
+// carries, must open through that mount: printing the tool's own loopback
+// address hands the user a URL that only works on the serving host.
+func (t *check) behindShell() {
+	u, err := url.Parse(t.cfgBase())
+	if err != nil {
+		return
+	}
+	origin := u.Scheme + "://" + u.Host
+	mount := "/desk-shell/" + t.cfg.Tool
+	want := origin + mount + strings.TrimRight(u.Path, "/") + "/"
+	shell := map[string]string{"X-Forwarded-Prefix": mount}
+	code, raw, _ := t.post("/api/action", `{"action":"add","title":"shell probe","body":"shell probe"}`, shell)
+	if code != http.StatusOK {
+		t.fail("behind shell: new: want 200, got %d", code)
+		return
+	}
+	created := decode(t, raw)
+	if created == nil {
+		return
+	}
+	id, _ := created["id"].(string)
+	if itemURL, _ := created["url"].(string); !strings.HasPrefix(itemURL, want) {
+		t.fail("behind shell: new url %q must open through the mount %q, not the loopback address", itemURL, want)
+	}
+	auth := map[string]string{"X-Forwarded-Prefix": mount}
+	if key, _ := created["ownerKey"].(string); key != "" {
+		auth["X-Facilitator-Key"] = key
+	}
+	code, raw, _ = t.post("/api/action", fmt.Sprintf(`{"action":"open","id":%q}`, id), auth)
+	if code != http.StatusOK {
+		t.fail("behind shell: open: want 200, got %d", code)
+	} else if v := decode(t, raw); v != nil {
+		if s, _ := v["url"].(string); !strings.HasPrefix(s, want) {
+			t.fail("behind shell: open url %q must open through the mount %q", s, want)
+		}
+	}
+	// Reached directly, the same item keeps its loopback URL.
+	delete(auth, "X-Forwarded-Prefix")
+	code, raw, _ = t.post("/api/action", fmt.Sprintf(`{"action":"open","id":%q}`, id), auth)
+	if code == http.StatusOK {
+		if v := decode(t, raw); v != nil {
+			if s, _ := v["url"].(string); strings.HasPrefix(s, origin+mount) {
+				t.fail("behind shell: a direct request must not name the mount (got %q)", s)
+			}
+		}
+	}
+	// The page must not link to the unmounted root.
+	p := t.cfg.param()
+	_, page, _ := t.get("/?"+p+"="+url.QueryEscape(id), shell)
+	for _, leak := range []string{t.cfgBase() + "/?", t.cfgBase() + `/"`, t.cfgBase() + `/'`} {
+		if strings.Contains(string(page), leak) {
+			t.fail("behind shell: page links to the loopback root %q instead of the mount", leak)
+		}
 	}
 }
 

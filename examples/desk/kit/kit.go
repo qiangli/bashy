@@ -236,6 +236,55 @@ func RequestOrigin(r *http.Request) string {
 	return "http://" + r.Host
 }
 
+// forwardedPrefixRE is the shape a mount prefix may take: rooted path
+// segments of URL-safe characters, nothing that could leave the origin
+// ("//host") or break out of an HTML attribute.
+var forwardedPrefixRE = regexp.MustCompile(`^(/[A-Za-z0-9._~%@:+-]+)+$`)
+
+// forwardedPrefix is the mount a loopback-only proxy (the console's app
+// shell, outpost) stripped before forwarding, from X-Forwarded-Prefix, with
+// no trailing slash; "" when reached directly, from a non-loopback client,
+// or when the header is malformed.
+func forwardedPrefix(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	p := strings.TrimRight(r.Header.Get("X-Forwarded-Prefix"), "/")
+	if p == "" || !forwardedPrefixRE.MatchString(p) {
+		return ""
+	}
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || !net.ParseIP(remoteHost).IsLoopback() {
+		return ""
+	}
+	return p
+}
+
+// PublicPrefix is the URL path prefix the browser sees for a tool's root:
+// the proxy's mount (X-Forwarded-Prefix) followed by the tool's own
+// -prefix. Use it for every root-absolute link a page or payload emits.
+func PublicPrefix(r *http.Request, prefix string) string {
+	return forwardedPrefix(r) + prefix
+}
+
+// PublicBase is the public URL of a tool's root for one request, no
+// trailing slash. base is the tool's own origin + -prefix (its loopback
+// address). Behind the app shell the request carries the mount it was
+// served under, and the result is the browser-facing origin + mount +
+// base's path, so item URLs printed by the CLI or copied from the page
+// open through the shell instead of naming the internal loopback.
+func PublicBase(r *http.Request, base string) string {
+	mount := forwardedPrefix(r)
+	if mount == "" {
+		return base
+	}
+	path := ""
+	if u, err := url.Parse(base); err == nil {
+		path = strings.TrimRight(u.Path, "/")
+	}
+	return RequestOrigin(r) + mount + path
+}
+
 // GuardPOST enforces the desk POST preconditions shared by every tool:
 // only GET/POST exist; POST requires a same-origin Origin (when present)
 // and refuses cross-site fetch metadata. It writes the refusal and

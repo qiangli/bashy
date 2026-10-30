@@ -146,7 +146,7 @@ func buildReply(extract, values, refusals json.RawMessage) ([]ReplyRow, error) {
 	return rows, nil
 }
 
-func (a *app) reply(w http.ResponseWriter, req request, me string) {
+func (a *app) reply(w http.ResponseWriter, r *http.Request, req request, me string) {
 	rows, err := buildReply(req.Extract, req.Values, req.Refusals)
 	if err != nil {
 		kit.Fail(w, 400, err.Error())
@@ -157,7 +157,7 @@ func (a *app) reply(w http.ResponseWriter, req request, me string) {
 	req.Fields = nil
 	req.Body = ""
 	req.ReplyRows = rows
-	a.createItem(w, req, me, modeReply)
+	a.createItem(w, r, req, me, modeReply)
 }
 
 func replyAnswers(it *item) map[string]ReplyRow {

@@ -9,7 +9,7 @@ import (
 
 // Called under a.mu. Refresh is demand-driven and bounded; snapshots never
 // access their former source. A failed refresh preserves the last good data.
-func (a *app) viewData(it *item) map[string]any {
+func (a *app) viewData(r *http.Request, it *item) map[string]any {
 	refreshError := ""
 	d, _ := time.ParseDuration(it.Chart.Refresh)
 	if d > 0 && it.Status != kit.StatusClosed && time.Since(it.Chart.Updated) >= d {
@@ -33,13 +33,13 @@ func (a *app) viewData(it *item) map[string]any {
 	if it.Status == kit.StatusClosed {
 		d = 0
 	}
-	return map[string]any{"id": it.ID, "url": a.urlFor(it.ID), "status": it.Status, "title": it.Title, "body": it.Body, "fields": it.Fields, "revision": it.Revision, "chart": it.Chart, "html": rendered, "refreshMS": d.Milliseconds(), "refreshError": refreshError}
+	return map[string]any{"id": it.ID, "url": a.urlFor(r, it.ID), "status": it.Status, "title": it.Title, "body": it.Body, "fields": it.Fields, "revision": it.Revision, "chart": it.Chart, "html": rendered, "refreshMS": d.Milliseconds(), "refreshError": refreshError}
 }
 func (a *app) page(r *http.Request, me string) []byte {
 	body := `<style>
  .chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:var(--desk-space-4)}.chart-widget{min-width:0;box-shadow:var(--desk-shadow-1);border:1px solid var(--desk-line);border-radius:var(--desk-radius-lg)}.chart-intro{max-width:680px}.chart-page h1{font-size:var(--desk-text-2xl);letter-spacing:-.02em;margin:0 0 var(--desk-space-2)}.chart-intro textarea{min-height:150px;font-family:var(--desk-font-mono)}.chart-actions{margin-bottom:var(--desk-space-4)}
- </style>` + kit.AppBar("chart", a.baseURL+"/", kit.ItemHeader("chart", kit.StatusPending, a.baseURL+"/"), "") + `<main class="desk-main">
- <div class="desk-tools chart-actions"><a class="desk-btn secondary" href="` + esc(a.baseURL) + `/">New chart</a><button type="button" class="desk-btn secondary" id="share" hidden>Share</button><button type="button" class="desk-btn secondary" id="revoke" hidden>Revoke sharing</button><button type="button" class="desk-btn danger" id="close" hidden>Close</button></div>
+ </style>` + kit.AppBar("chart", a.base(r)+"/", kit.ItemHeader("chart", kit.StatusPending, a.base(r)+"/"), "") + `<main class="desk-main">
+ <div class="desk-tools chart-actions"><a class="desk-btn secondary" href="` + esc(a.base(r)) + `/">New chart</a><button type="button" class="desk-btn secondary" id="share" hidden>Share</button><button type="button" class="desk-btn secondary" id="revoke" hidden>Revoke sharing</button><button type="button" class="desk-btn danger" id="close" hidden>Close</button></div>
  <p id="message" role="status" class="desk-alert" data-desk-alert></p><div id="charts"></div>
  <form id="unlock" class="desk-panel" hidden>` + kit.TextField("key", "Owner key", "password", "", "") + `<button class="desk-btn">View chart</button></form>
  <form id="create" class="chart-intro desk-panel"><h1 class="desk-h1">Numbers, at a glance.</h1><p class="desk-muted">Paste JSON, CSV, NDJSON or OTLP metrics. One page, saved locally.</p>` +

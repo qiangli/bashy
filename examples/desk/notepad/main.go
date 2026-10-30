@@ -150,11 +150,17 @@ func (a *app) hasWriteAccess(r *http.Request, n *note, me string) bool {
 	return false
 }
 
-func (a *app) urlFor(id string) string { return kit.ItemURL(a.baseURL+"/", "id", id) }
+// base is the public URL of the tool root for r: its own address, or the app
+// shell mount it was reached through (kit.PublicBase).
+func (a *app) base(r *http.Request) string { return kit.PublicBase(r, a.baseURL) }
+
+func (a *app) urlFor(r *http.Request, id string) string {
+	return kit.ItemURL(a.base(r)+"/", "id", id)
+}
 
 // openView is the contentless re-surface: id + stable URL + status only.
-func (a *app) openView(n *note) map[string]any {
-	v := kit.OpenView(n.ID, a.urlFor(n.ID), n.Status)
+func (a *app) openView(r *http.Request, n *note) map[string]any {
+	v := kit.OpenView(n.ID, a.urlFor(r, n.ID), n.Status)
 	if breakMode == "open-emits-content" {
 		v["body"] = n.Body // deliberate contract break for red/green proof
 	}
@@ -201,7 +207,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
-		kit.WriteJSON(w, a.openView(n))
+		kit.WriteJSON(w, a.openView(r, n))
 		return
 	}
 	if path == "/api/export" {
@@ -254,9 +260,9 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	me := kit.ParticipantCookie(w, r, "notepad-participant")
 	switch req.Action {
 	case "add":
-		a.create(w, req, me)
+		a.create(w, r, req, me)
 	case "open":
-		a.open(w, req)
+		a.open(w, r, req)
 	case "show":
 		a.get(w, r, req, me)
 	case "set":
@@ -264,11 +270,11 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	case "close":
 		a.mutate(w, r, req, me, true)
 	case "list":
-		a.list(w)
+		a.list(w, r)
 	case "share":
 		a.share(w, r, req)
 	case "join":
-		a.join(w, req, me)
+		a.join(w, r, req, me)
 	case "convert":
 		a.convert(w, req)
 	case "export":
@@ -278,7 +284,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (a *app) create(w http.ResponseWriter, req actionRequest, me string) {
+func (a *app) create(w http.ResponseWriter, r *http.Request, req actionRequest, me string) {
 	if breakMode != "allow-secret" && kit.SecretRefused(req.Fields) {
 		kit.Fail(w, http.StatusBadRequest, kit.ErrSecret)
 		return
@@ -329,12 +335,12 @@ func (a *app) create(w http.ResponseWriter, req actionRequest, me string) {
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
 		return
 	}
-	v := a.openView(n)
+	v := a.openView(r, n)
 	v["ownerKey"] = n.Owner // revealed once, at creation
 	kit.WriteJSON(w, v)
 }
 
-func (a *app) open(w http.ResponseWriter, req actionRequest) {
+func (a *app) open(w http.ResponseWriter, r *http.Request, req actionRequest) {
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -344,7 +350,7 @@ func (a *app) open(w http.ResponseWriter, req actionRequest) {
 		}
 		return
 	}
-	kit.WriteJSON(w, a.openView(n))
+	kit.WriteJSON(w, a.openView(r, n))
 }
 
 func (a *app) get(w http.ResponseWriter, r *http.Request, req actionRequest, me string) {
@@ -363,7 +369,7 @@ func (a *app) get(w http.ResponseWriter, r *http.Request, req actionRequest, me 
 	}
 	kit.WriteJSON(w, map[string]any{
 		"id":       n.ID,
-		"url":      a.urlFor(n.ID),
+		"url":      a.urlFor(r, n.ID),
 		"status":   n.Status,
 		"title":    n.Title,
 		"body":     n.Body,
@@ -420,10 +426,10 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
 		return
 	}
-	kit.WriteJSON(w, a.openView(&next))
+	kit.WriteJSON(w, a.openView(r, &next))
 }
 
-func (a *app) list(w http.ResponseWriter) {
+func (a *app) list(w http.ResponseWriter, r *http.Request) {
 	names, err := filepath.Glob(filepath.Join(a.dir, "items", "*.json"))
 	if err != nil {
 		kit.Fail(w, http.StatusInternalServerError, "Could not list")
@@ -436,7 +442,7 @@ func (a *app) list(w http.ResponseWriter) {
 		if err != nil {
 			continue
 		}
-		out = append(out, a.openView(n)) // ids + statuses, never content
+		out = append(out, a.openView(r, n)) // ids + statuses, never content
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i]["id"].(string) < out[j]["id"].(string) })
 	kit.WriteJSON(w, out)
@@ -466,13 +472,13 @@ func (a *app) share(w http.ResponseWriter, r *http.Request, req actionRequest) {
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
 		return
 	}
-	v := a.openView(&next)
+	v := a.openView(r, &next)
 	v["invite"] = code
-	v["inviteURL"] = a.urlFor(next.ID) + "#invite=" + code
+	v["inviteURL"] = a.urlFor(r, next.ID) + "#invite=" + code
 	kit.WriteJSON(w, v)
 }
 
-func (a *app) join(w http.ResponseWriter, req actionRequest, me string) {
+func (a *app) join(w http.ResponseWriter, r *http.Request, req actionRequest, me string) {
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -493,7 +499,7 @@ func (a *app) join(w http.ResponseWriter, req actionRequest, me string) {
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
 		return
 	}
-	kit.WriteJSON(w, a.openView(&next))
+	kit.WriteJSON(w, a.openView(r, &next))
 }
 
 func (a *app) convert(w http.ResponseWriter, req actionRequest) {
@@ -582,7 +588,7 @@ func (a *app) page(r *http.Request) []byte {
 	noteBody := ""
 	if id != "" {
 		if n, err := a.loadLocked(id); err == nil {
-			header = kit.ItemHeader(n.ID, n.Status, a.urlFor(n.ID))
+			header = kit.ItemHeader(n.ID, n.Status, a.urlFor(r, n.ID))
 			noteTitle = n.Title
 			noteBody = n.Body
 		}
@@ -596,7 +602,7 @@ func (a *app) page(r *http.Request) []byte {
 		noteLinks.WriteString(`<ul class="np-notes">`)
 		for _, p := range names {
 			nid := strings.TrimSuffix(filepath.Base(p), ".json")
-			u := kit.ItemURL(a.baseURL+"/", "id", nid)
+			u := kit.ItemURL(a.base(r)+"/", "id", nid)
 			noteLinks.WriteString(`<li><a href="` + html.EscapeString(u) + `">` + html.EscapeString(nid) + `</a></li>`)
 		}
 		noteLinks.WriteString(`</ul>`)
@@ -609,7 +615,7 @@ func (a *app) page(r *http.Request) []byte {
 .np-split{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:var(--desk-space-4);align-items:start}
 .np-split .desk-panel{margin-bottom:0}.np-split textarea{min-height:320px;font-family:var(--desk-font-mono);font-size:var(--desk-text-sm)}
 .np-notes{margin:0;padding-left:1.2em;columns:2 220px}
-</style>` + kit.AppBar("notepad", a.baseURL+"/", header, "") + `<main class="desk-main">` +
+</style>` + kit.AppBar("notepad", a.base(r)+"/", header, "") + `<main class="desk-main">` +
 		`<div data-desk-alert class="desk-alert"></div>` +
 		`<form id="noteForm" onsubmit="return false">` +
 		`<div class="desk-row" role="group" aria-label="Editor layout"><span class="desk-muted">Layout</span>` +

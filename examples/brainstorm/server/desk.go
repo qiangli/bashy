@@ -28,7 +28,7 @@ func sessionStatus(s *Session) string {
 }
 
 func (a *app) sessionURL(r *http.Request, name string) string {
-	return kit.ItemURL(kit.RequestOrigin(r)+a.prefix+"/", "session", name)
+	return kit.ItemURL(kit.RequestOrigin(r)+kit.PublicPrefix(r, a.prefix)+"/", "session", name)
 }
 
 func (a *app) openView(r *http.Request, s *Session) map[string]any {

@@ -87,6 +87,20 @@ PDF: humans use the page's **Print / PDF** button (print CSS hides the
 shell). Agents use `export --to pdf`, which prints the self-contained export
 with headless Chrome; `bashy browser` has no print-to-PDF subcommand yet.
 
+## As a shaped app
+
+`shaped.json` declares viewer's server, so it can be registered as a
+shaped app and get per-user source history, preview, restore and undo:
+
+```bash
+bashy app add viewer --type shaped --source "$PWD"
+```
+
+The console builds that server from each user's active revision and proxies
+`/viewer/` to it. Item URLs follow the mount: a request that arrives through
+the app shell (`X-Forwarded-Prefix`) gets `…/viewer/?…`, never the server's
+internal loopback address.
+
 ## Verify
 
 ```bash

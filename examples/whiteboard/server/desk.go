@@ -28,7 +28,7 @@ func boardStatus(b *Board) string {
 }
 
 func (a *app) boardURL(r *http.Request, name string) string {
-	return kit.ItemURL(kit.RequestOrigin(r)+a.prefix+"/", "board", name)
+	return kit.ItemURL(kit.RequestOrigin(r)+kit.PublicPrefix(r, a.prefix)+"/", "board", name)
 }
 
 func (a *app) openView(r *http.Request, b *Board) map[string]any {

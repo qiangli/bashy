@@ -105,3 +105,44 @@ func TestRequestOrigin(t *testing.T) {
 		t.Errorf("forwarded headers from a non-loopback client must be ignored: %q", got)
 	}
 }
+
+// Behind the app shell (the console's shaped-app proxy, or outpost) a tool
+// is reached on loopback with its mount stripped; X-Forwarded-Prefix names
+// the mount. Item URLs must name the mount, not the tool's loopback address.
+func TestPublicBaseBehindAppShell(t *testing.T) {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Host = "127.0.0.1:40123"
+	r.RemoteAddr = "127.0.0.1:5555"
+	if got := PublicBase(r, "http://127.0.0.1:18095"); got != "http://127.0.0.1:18095" {
+		t.Errorf("direct: %q", got)
+	}
+	if got := PublicBase(nil, "http://127.0.0.1:18095/p"); got != "http://127.0.0.1:18095/p" {
+		t.Errorf("no request: %q", got)
+	}
+	r.Header.Set("X-Forwarded-Prefix", "/notepad/")
+	if got := PublicBase(r, "http://127.0.0.1:18095"); got != "http://127.0.0.1:40123/notepad" {
+		t.Errorf("console mount: %q", got)
+	}
+	if got := PublicPrefix(r, ""); got != "/notepad" {
+		t.Errorf("console mount prefix: %q", got)
+	}
+	r.Header.Set("X-Forwarded-Host", "pub.example")
+	r.Header.Set("X-Forwarded-Proto", "https")
+	if got := PublicBase(r, "http://127.0.0.1:18095/sub"); got != "https://pub.example/notepad/sub" {
+		t.Errorf("mount + own prefix: %q", got)
+	}
+	if got := PublicPrefix(r, "/sub"); got != "/notepad/sub" {
+		t.Errorf("mount + own prefix path: %q", got)
+	}
+	for _, bad := range []string{"notepad", "//evil.example", "/a\"b", "/a b"} {
+		r.Header.Set("X-Forwarded-Prefix", bad)
+		if got := PublicPrefix(r, "/sub"); got != "/sub" {
+			t.Errorf("malformed prefix %q must be ignored: %q", bad, got)
+		}
+	}
+	r.Header.Set("X-Forwarded-Prefix", "/notepad")
+	r.RemoteAddr = "10.1.1.1:5555"
+	if got := PublicBase(r, "http://127.0.0.1:18095"); got != "http://127.0.0.1:18095" {
+		t.Errorf("forwarded prefix from a non-loopback client must be ignored: %q", got)
+	}
+}
