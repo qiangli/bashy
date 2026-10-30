@@ -3,11 +3,15 @@ id: d440c5f5a85c
 kind: task
 title: S541.b bashy claim who PATH + agent --json cwd
 seq: 2960
-status: todo
+status: done
 created: 2026-10-30T17:41:36.843212Z
+weave: 360
+assignee: claude-opus5
 sprint: 541
 sprint_id: 3013eae1-4380-53b7-a528-e53732910595
 sprint_title: 'Proactive agent collaboration: collaborate skill, worker preamble, claim who'
+closed: 2026-10-30T19:07:40.634282Z
+closed_by: s541-manager
 ---
 
 Repo: bashy only. Spec: docs/sprint-541-master-execution-plan.md (dhnt umbrella).

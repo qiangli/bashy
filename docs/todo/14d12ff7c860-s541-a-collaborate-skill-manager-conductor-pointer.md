@@ -3,11 +3,15 @@ id: 14d12ff7c860
 kind: task
 title: S541.a collaborate skill + manager/conductor pointers (bashy)
 seq: 2959
-status: todo
+status: done
 created: 2026-10-30T17:41:36.525358Z
+weave: 361
+assignee: codex-gpt6-astra
 sprint: 541
 sprint_id: 3013eae1-4380-53b7-a528-e53732910595
 sprint_title: 'Proactive agent collaboration: collaborate skill, worker preamble, claim who'
+closed: 2026-10-30T19:07:40.071845Z
+closed_by: s541-manager
 ---
 
 Repo: bashy only (yoke worker preamble + sprintReadyLine moved to S541.c, manager-owned).
