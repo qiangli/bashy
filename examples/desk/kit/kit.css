@@ -1,0 +1,100 @@
+/* bashy desk UI kit — one implementation used by every desk tool.
+   Light/dark via prefers-color-scheme plus a manual [data-theme] override;
+   keyboard-first (:focus-visible on every control). */
+:root {
+  --desk-bg: #f2efe8;
+  --desk-ink: #24312e;
+  --desk-muted: #5d7068;
+  --desk-panel: #fff;
+  --desk-line: #d9e2d9;
+  --desk-accent: #1f5c53;
+  --desk-accent-ink: #fff;
+  --desk-warn-bg: #fff1d2;
+  --desk-warn-ink: #68490d;
+  --desk-danger-bg: #f0dcd4;
+  --desk-danger-ink: #6e3a2d;
+  --desk-ok-bg: #dcebdc;
+  --desk-ok-ink: #244b18;
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+  color: var(--desk-ink);
+  background: var(--desk-bg);
+  color-scheme: light dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --desk-bg: #161b1a;
+    --desk-ink: #dce5de;
+    --desk-muted: #9db0a4;
+    --desk-panel: #202725;
+    --desk-line: #35403b;
+    --desk-accent: #5fb3a4;
+    --desk-accent-ink: #10201d;
+    --desk-warn-bg: #3a2f14;
+    --desk-warn-ink: #f2d48a;
+    --desk-danger-bg: #40211b;
+    --desk-danger-ink: #f0b3a3;
+    --desk-ok-bg: #1e3a24;
+    --desk-ok-ink: #b9e2b3;
+  }
+}
+:root[data-theme="dark"] {
+  --desk-bg: #161b1a;
+  --desk-ink: #dce5de;
+  --desk-muted: #9db0a4;
+  --desk-panel: #202725;
+  --desk-line: #35403b;
+  --desk-accent: #5fb3a4;
+  --desk-accent-ink: #10201d;
+  --desk-warn-bg: #3a2f14;
+  --desk-warn-ink: #f2d48a;
+  --desk-danger-bg: #40211b;
+  --desk-danger-ink: #f0b3a3;
+  --desk-ok-bg: #1e3a24;
+  --desk-ok-ink: #b9e2b3;
+}
+* { box-sizing: border-box; }
+.desk-item-header {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  background: var(--desk-panel); border: 1px solid var(--desk-line);
+  border-radius: 12px; padding: 12px 16px; margin-bottom: 16px;
+}
+.desk-item-header .desk-id { font-weight: 700; overflow-wrap: anywhere; }
+.desk-item-header .desk-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.desk-badge {
+  display: inline-block; padding: 4px 12px; border-radius: 20px;
+  font-weight: 700; font-size: 13px; white-space: nowrap;
+  background: var(--desk-ok-bg); color: var(--desk-ok-ink);
+}
+.desk-badge[data-status="pending"] { background: var(--desk-line); color: var(--desk-ink); }
+.desk-badge[data-status="needs-human"] { background: var(--desk-warn-bg); color: var(--desk-warn-ink); }
+.desk-badge[data-status="failed"] { background: var(--desk-danger-bg); color: var(--desk-danger-ink); }
+.desk-badge[data-status="filled-by-agent"] { background: var(--desk-ok-bg); color: var(--desk-ok-ink); }
+.desk-badge[data-status="answered"] { background: var(--desk-accent); color: var(--desk-accent-ink); }
+.desk-badge[data-status="closed"] { background: transparent; border: 1px solid var(--desk-muted); color: var(--desk-muted); }
+button.desk-copy {
+  border: 0; border-radius: 8px; padding: 8px 14px;
+  background: var(--desk-accent); color: var(--desk-accent-ink);
+  cursor: pointer; font-weight: 650; font: inherit;
+}
+button.desk-copy:hover { filter: brightness(0.92); }
+button.desk-copy[data-copied="true"] { background: var(--desk-ok-bg); color: var(--desk-ok-ink); }
+button.desk-copy:focus-visible, input:focus-visible, select:focus-visible,
+textarea:focus-visible, a:focus-visible { outline: 2px solid var(--desk-accent); outline-offset: 2px; }
+.desk-field { margin-bottom: 12px; }
+.desk-field > label { display: block; font-size: 14px; font-weight: 650; margin-bottom: 4px; }
+.desk-field input, .desk-field select, .desk-field textarea {
+  border: 1px solid var(--desk-muted); border-radius: 8px; padding: 9px;
+  background: var(--desk-panel); color: var(--desk-ink); width: 100%; font: inherit;
+}
+.desk-field textarea { resize: vertical; min-height: 90px; }
+.desk-question { border: 1px solid var(--desk-line); border-radius: 12px; padding: 14px 16px; margin-bottom: 12px; background: var(--desk-panel); }
+.desk-question .desk-qnum { font-weight: 700; margin-right: 8px; }
+.desk-question .desk-recommended { font-size: 12px; color: var(--desk-accent); font-weight: 700; margin-left: 8px; }
+.desk-alert {
+  position: sticky; top: 8px; z-index: 3;
+  background: var(--desk-warn-bg); color: var(--desk-warn-ink);
+  padding: 12px; border-radius: 8px; margin-bottom: 14px;
+}
+.desk-alert:empty { display: none; }
+.desk-muted { color: var(--desk-muted); font-size: 14px; }
