@@ -18,6 +18,9 @@ func dispatchEngine(arg string) {
 		dispatchExit(code)
 	}
 	arg = engineAlias(arg) // `bashy docker` -> podman engine
+	if code := ensureEngineReady(arg, os.Args[2:]); code != 0 {
+		dispatchExit(code)
+	}
 	switch arg {
 	case "podman":
 		cmd := podmanengine.NewPodmanCmd()

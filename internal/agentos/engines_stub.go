@@ -25,6 +25,9 @@ func dispatchEngine(arg string) {
 		dispatchExit(code)
 	}
 	name := engineAlias(arg) // `bashy docker` -> podman engine
+	if code := ensureEngineReady(name, os.Args[2:]); code != 0 {
+		dispatchExit(code)
+	}
 	switch name {
 	case "ollama":
 		dispatchOllamaEngine()
