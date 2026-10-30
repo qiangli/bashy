@@ -1,4 +1,4 @@
-// The form agent door: new|open|get|put|list|share|close|wait over the
+// The form agent door: new|ask|open|get|put|list|share|close|wait over the
 // same JSON API the page uses. --json prints the raw API object; without
 // it, open/new print only id, URL and status — never content. wait polls
 // get until the human submits (answered) or the form closes.
@@ -39,7 +39,7 @@ func runCLI(args []string, stdout io.Writer) int {
 	// the first non-flag token so flags work on either side.
 	pre, verb, post := splitVerb(args)
 	if verb == "" {
-		fmt.Fprintln(stdout, "Usage: form [serve|new|open|get|put|list|share|close|wait] [--json]")
+		fmt.Fprintln(stdout, "Usage: form [serve|new|ask|open|get|put|list|share|close|wait] [--json]")
 		return 2
 	}
 	gfs := flag.NewFlagSet("form", flag.ContinueOnError)
@@ -196,6 +196,26 @@ func runCLI(args []string, stdout io.Writer) int {
 		return positional[0], true
 	}
 	switch verb {
+	case "ask":
+		def, code := loadDef()
+		if code != 0 {
+			return code
+		}
+		if def == nil {
+			fmt.Fprintln(stdout, "error: form ask needs --def or --definition")
+			return 2
+		}
+		payload := map[string]any{"id": *idFlag, "title": *title, "body": *body, "definition": def}
+		if len(positional) > 0 {
+			payload["id"] = positional[0]
+		} else {
+			payload["create"] = true
+		}
+		obj, _, code := call("ask", payload)
+		if code != 0 {
+			return code
+		}
+		return emit(obj, nil)
 	case "new":
 		def, code := loadDef()
 		if code != 0 {

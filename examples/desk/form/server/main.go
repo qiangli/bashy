@@ -37,6 +37,7 @@ type item struct {
 	Fields     []kit.Field     `json:"fields"`
 	Definition Definition      `json:"definition,omitempty"`
 	Answers    Answers         `json:"answers,omitempty"`
+	Mode       string          `json:"mode,omitempty"`
 	Status     string          `json:"status"`
 	Revision   int             `json:"revision"`
 	Owner      string          `json:"owner"`
@@ -127,7 +128,15 @@ type request struct {
 	Definition json.RawMessage `json:"definition"`
 	Answers    json.RawMessage `json:"answers"`
 	Complete   bool            `json:"complete"`
+	Create     bool            `json:"create"`
 	Invite     string          `json:"invite"`
+}
+
+const modeQuestionnaire = "questionnaire"
+
+type questionAnswer struct {
+	Status string `json:"status"`
+	Answer any    `json:"answer,omitempty"`
 }
 
 func decodeDefinition(raw json.RawMessage) (Definition, bool, error) {
@@ -213,6 +222,8 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch req.Action {
 	case "new":
 		a.create(w, req, me)
+	case "ask":
+		a.ask(w, r, req, me)
 	case "open":
 		a.open(w, req)
 	case "get":
@@ -235,6 +246,10 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) create(w http.ResponseWriter, req request, me string) {
+	a.createItem(w, req, me, "")
+}
+
+func (a *app) createItem(w http.ResponseWriter, req request, me, mode string) {
 	if kit.SecretRefused(req.Fields) {
 		kit.Fail(w, 400, kit.ErrSecret)
 		return
@@ -266,6 +281,7 @@ func (a *app) create(w http.ResponseWriter, req request, me string) {
 	}
 	it := &item{Version: 1, ID: id, Title: title, Body: req.Body,
 		Fields: req.Fields, Definition: def, Answers: Answers{},
+		Mode:   mode,
 		Status: kit.StatusPending, Owner: kit.NewToken(),
 		Members: map[string]bool{me: true}, Invites: map[string]bool{}}
 	if err := a.saveLocked(it); err != nil {
@@ -275,6 +291,67 @@ func (a *app) create(w http.ResponseWriter, req request, me string) {
 	v := a.openView(it)
 	v["ownerKey"] = it.Owner // revealed once, at creation, like a facilitator key
 	kit.WriteJSON(w, v)
+}
+
+// ask creates a questionnaire or appends a follow-up round to one. Agent
+// supplied field ids are validated (including secret-name refusal) and then
+// replaced by stable q1..qn ids owned by the questionnaire.
+func (a *app) ask(w http.ResponseWriter, r *http.Request, req request, me string) {
+	def, hasDef, err := decodeDefinition(req.Definition)
+	if err != nil {
+		kit.Fail(w, 400, err.Error())
+		return
+	}
+	if !hasDef || len(def) == 0 {
+		kit.Fail(w, 400, "A questionnaire needs at least one question definition")
+		return
+	}
+	if req.ID == "" || req.Create {
+		for i := range def {
+			def[i].ID = fmt.Sprintf("q%d", i+1)
+		}
+		raw, _ := json.Marshal(def)
+		req.Definition = raw
+		a.createItem(w, req, me, modeQuestionnaire)
+		return
+	}
+	it, err := a.loadLocked(req.ID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			kit.Fail(w, 404, "Questionnaire not found. Create it with form ask first.")
+		} else {
+			kit.Fail(w, 400, err.Error())
+		}
+		return
+	}
+	if !a.isOwner(r, it) {
+		kit.Fail(w, 403, "Only the owner can append questionnaire questions")
+		return
+	}
+	if it.Mode != modeQuestionnaire {
+		kit.Fail(w, 409, "Follow-up rounds can only be appended to a questionnaire")
+		return
+	}
+	if it.Status == kit.StatusClosed {
+		kit.Fail(w, 409, "This questionnaire is closed")
+		return
+	}
+	next := *it
+	next.Definition = append(Definition(nil), it.Definition...)
+	for i := range def {
+		def[i].ID = fmt.Sprintf("q%d", len(next.Definition)+1)
+		next.Definition = append(next.Definition, def[i])
+	}
+	if err := ValidateDefinition(next.Definition); err != nil {
+		kit.Fail(w, 400, err.Error())
+		return
+	}
+	next.Status = kit.StatusPending
+	if err := a.saveLocked(&next); err != nil {
+		kit.Fail(w, 500, "Could not save. Your change was not accepted.")
+		return
+	}
+	kit.WriteJSON(w, a.openView(&next))
 }
 
 func (a *app) open(w http.ResponseWriter, req request) {
@@ -304,10 +381,23 @@ func (a *app) get(w http.ResponseWriter, r *http.Request, req request, me string
 		kit.Fail(w, 403, "Join this form first; ask the owner for an invite.")
 		return
 	}
+	answers := any(it.Answers)
+	if it.Mode == modeQuestionnaire {
+		byQuestion := make(map[string]questionAnswer, len(it.Definition))
+		for _, q := range it.Definition {
+			answer, ok := it.Answers[q.ID]
+			status := kit.StatusPending
+			if ok && !emptyAnswer(answer) {
+				status = kit.StatusAnswered
+			}
+			byQuestion[q.ID] = questionAnswer{Status: status, Answer: answer}
+		}
+		answers = byQuestion
+	}
 	kit.WriteJSON(w, map[string]any{"id": it.ID, "url": a.urlFor(it.ID),
 		"status": it.Status, "title": it.Title, "body": it.Body,
 		"fields": it.Fields, "definition": it.Definition,
-		"answers": it.Answers, "revision": it.Revision})
+		"answers": answers, "revision": it.Revision, "mode": it.Mode})
 }
 
 func (a *app) mutate(w http.ResponseWriter, r *http.Request, req request, me string, closing bool) {
@@ -411,7 +501,14 @@ func (a *app) answer(w http.ResponseWriter, req request) {
 	if ans == nil {
 		ans = Answers{}
 	}
-	norm, err := NormalizeAnswers(it.Definition, ans, req.Complete)
+	merged := make(Answers, len(it.Answers)+len(ans))
+	for id, answer := range it.Answers {
+		merged[id] = answer
+	}
+	for id, answer := range ans {
+		merged[id] = answer
+	}
+	norm, err := NormalizeAnswers(it.Definition, merged, req.Complete)
 	if err != nil {
 		kit.Fail(w, 400, err.Error())
 		return
@@ -506,7 +603,7 @@ func (a *app) join(w http.ResponseWriter, req request, me string) {
 // fieldHTML renders one declared field with the kit field components: the
 // recommended option of a choice/multi carries a mark, required fields are
 // flagged, and saved answers are pre-filled so partial saves survive reload.
-func fieldHTML(f FormField, saved any) string {
+func fieldHTML(f FormField, saved any, questionnaire bool) string {
 	var b strings.Builder
 	required := ""
 	if f.Required {
@@ -515,7 +612,11 @@ func fieldHTML(f FormField, saved any) string {
 	label := html.EscapeString(f.Label) + required
 	savedStr, _ := saved.(string)
 	open := `<div class="desk-field" data-field="` + html.EscapeString(f.ID) +
-		`" data-kind="` + html.EscapeString(f.Kind) + `"><label>` + label + `</label>`
+		`" data-kind="` + html.EscapeString(f.Kind) + `"`
+	if questionnaire {
+		open += ` data-question-id="` + html.EscapeString(f.ID) + `"`
+	}
+	open += `><label>` + label + `</label>`
 	help := ""
 	if f.Help != "" {
 		help = `<p class="desk-muted">` + html.EscapeString(f.Help) + `</p>`
@@ -615,8 +716,11 @@ func (a *app) page(r *http.Request) []byte {
 		if it, err := a.loadLocked(id); err == nil {
 			header = kit.ItemHeader(it.ID, it.Status, a.urlFor(it.ID))
 			var fb strings.Builder
-			for _, f := range it.Definition {
-				fb.WriteString(fieldHTML(f, it.Answers[f.ID]))
+			for i, f := range it.Definition {
+				if it.Mode == modeQuestionnaire {
+					f.Label = fmt.Sprintf("Q%d. %s", i+1, f.Label)
+				}
+				fb.WriteString(fieldHTML(f, it.Answers[f.ID], it.Mode == modeQuestionnaire))
 			}
 			if len(it.Definition) == 0 {
 				fb.WriteString(`<div class="desk-field"><p class="desk-muted">This form has no fields yet.</p></div>`)

@@ -20,6 +20,34 @@ bashy form get form-9f3a… --json  # definition + answers keyed by field id
 bashy form wait form-9f3a…        # blocks until answered (or closed/timeout)
 ```
 
+## Questionnaires
+
+`ask` creates the questionnaire mode on the same engine. It accepts the same
+definition schema, validates every supplied field (including secret refusal),
+then assigns stable question ids in display order:
+
+```bash
+bashy form ask --def ./questions.json --title "Release decision"
+# form-9f3a… http://127.0.0.1:18107/?id=form-9f3a… pending
+# ownerKey: … (keep private)
+
+# Later, append only the new round; the page now shows Q1..Qn+2.
+bashy form ask form-9f3a… --key "$FORM_KEY" --def ./followup.json
+
+bashy form open form-9f3a…        # id, URL, status only
+bashy form get form-9f3a… --json  # answers keyed by q1..qn, each with status
+bashy form wait form-9f3a… --json
+```
+
+Question labels render as `Q1`, `Q2`, … on one persistent page. Follow-up
+rounds append `qN+1` onward without resending or renumbering earlier questions.
+Partial saves merge, so the human can answer in any order and reload safely.
+For questionnaires, `get` and `wait` return entries such as
+`"q1":{"status":"answered","answer":"yes"}` and
+`"q2":{"status":"pending"}`. Choice questions retain the definition's
+recommended mark. A follow-up round returns an already-completed questionnaire
+to `pending` until it is submitted again.
+
 ## Definition schema (reusable: F2 and F3 build on this)
 
 A definition is a JSON array of fields, or `{"title":…, "fields":[…]}`.
@@ -66,7 +94,7 @@ the human page posts answers under its participant cookie.
 
 ## Contract
 
-Desk seven (`new|open|get|put|list|share|close`, `--json`) plus `wait`,
+Desk seven (`new|open|get|put|list|share|close`, `--json`) plus `ask` and `wait`,
 all over the same `/api/...` operations; `open` prints id, URL, status
 only; loopback bind (`127.0.0.1:18107` default); stable id + loopback URL;
 contentless `list`; single-use share invites; `put` after `close` is 409.

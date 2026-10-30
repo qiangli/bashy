@@ -9,6 +9,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -389,5 +390,115 @@ func TestCLIWaitAnsweredAndTimeout(t *testing.T) {
 	}
 	if got.Status != "answered" || got.Answers["contact"] != "phone" {
 		t.Errorf("wait should return the answered form: %s", out.String())
+	}
+}
+
+const followupDef = `[{"id":"why","label":"Why?","kind":"textarea","required":true},` +
+	`{"id":"route","label":"Which route?","kind":"choice","options":["safe","fast"],"recommended":"safe"}]`
+
+func TestQuestionnaireAppendRoundKeepsStableQuestionIDs(t *testing.T) {
+	base := startServer(t)
+	id, key := newForm(t, base, `{"action":"ask","title":"Plan","definition":`+contactDef+`}`)
+
+	code, raw := post(t, base, `{"action":"answer","id":"`+id+`","answers":{"q1":"Ada"}}`, "")
+	if code != 200 {
+		t.Fatalf("partial q1: want 200, got %d: %s", code, raw)
+	}
+	code, raw = post(t, base, `{"action":"ask","id":"`+id+`","definition":`+followupDef+`}`, key)
+	if code != 200 {
+		t.Fatalf("append: want 200, got %d: %s", code, raw)
+	}
+	code, raw = post(t, base, `{"action":"get","id":"`+id+`"}`, key)
+	if code != 200 {
+		t.Fatalf("get: want 200, got %d: %s", code, raw)
+	}
+	var got struct {
+		Definition []FormField               `json:"definition"`
+		Answers    map[string]questionAnswer `json:"answers"`
+	}
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("get: not questionnaire JSON: %s", raw)
+	}
+	if len(got.Definition) != 6 || got.Definition[0].ID != "q1" || got.Definition[3].ID != "q4" ||
+		got.Definition[4].ID != "q5" || got.Definition[5].ID != "q6" {
+		t.Fatalf("append must retain q1..q4 and add q5..q6: %#v", got.Definition)
+	}
+	if got.Answers["q1"].Status != "answered" || got.Answers["q1"].Answer != "Ada" {
+		t.Errorf("q1 answer/status changed after append: %#v", got.Answers["q1"])
+	}
+	if got.Answers["q5"].Status != "pending" {
+		t.Errorf("new q5 should be pending: %#v", got.Answers["q5"])
+	}
+}
+
+func TestQuestionnairePartialSaveSurvivesReloadAndMerges(t *testing.T) {
+	a, base := serveApp(t)
+	id, _ := newForm(t, base, `{"action":"ask","title":"Plan","definition":`+followupDef+`}`)
+	if code, raw := post(t, base, `{"action":"answer","id":"`+id+`","answers":{"q2":"safe"}}`, ""); code != 200 {
+		t.Fatalf("save q2: want 200, got %d: %s", code, raw)
+	}
+
+	fresh := &app{dir: a.dir, baseURL: base, items: map[string]*item{}}
+	it, err := fresh.loadLocked(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Answers["q2"] != "safe" {
+		t.Fatalf("q2 lost on reload: %#v", it.Answers)
+	}
+	if code, raw := post(t, base, `{"action":"answer","id":"`+id+`","answers":{"q1":"Because"}}`, ""); code != 200 {
+		t.Fatalf("save q1: want 200, got %d: %s", code, raw)
+	}
+	fresh.items = map[string]*item{}
+	it, err = fresh.loadLocked(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if it.Answers["q1"] != "Because" || it.Answers["q2"] != "safe" {
+		t.Fatalf("out-of-order partial saves must merge: %#v", it.Answers)
+	}
+}
+
+func TestQuestionnaireRefusesSecretQuestions(t *testing.T) {
+	base := startServer(t)
+	code, raw := post(t, base, `{"action":"ask","definition":[`+
+		`{"id":"api_key","label":"API key","kind":"text"}]}`, "")
+	if code != 400 || !strings.Contains(strings.ToLower(string(raw)), "bashy ask") {
+		t.Fatalf("secret question: want 400 pointing to bashy ask/vault, got %d: %s", code, raw)
+	}
+}
+
+func TestQuestionnaireOpenHidesContent(t *testing.T) {
+	srvURL := startServer(t)
+	addr := strings.TrimPrefix(srvURL, "http://")
+	var out bytes.Buffer
+	if code := runCLI([]string{"ask", "-addr", addr, "--json", "--id", "questions",
+		"--title", "Private plan", "--def", "../examples/contact.json"}, &out); code != 0 {
+		t.Fatalf("ask: exit %d: %s", code, out.String())
+	}
+	out.Reset()
+	if code := runCLI([]string{"open", "questions", "-addr", addr, "--json"}, &out); code != 0 {
+		t.Fatalf("open: exit %d: %s", code, out.String())
+	}
+	if strings.Contains(out.String(), "Private plan") || strings.Contains(out.String(), "Full name") ||
+		strings.Contains(out.String(), "definition") || strings.Contains(out.String(), "answers") {
+		t.Errorf("open re-emits questionnaire content: %s", out.String())
+	}
+}
+
+func TestQuestionnairePageNumbersQuestionsAndMarksRecommendation(t *testing.T) {
+	_, base := serveApp(t)
+	id, _ := newForm(t, base, `{"action":"ask","title":"Plan","definition":`+followupDef+`}`)
+	r, err := http.Get(base + "/?id=" + id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Body.Close()
+	raw, _ := io.ReadAll(r.Body)
+	page := string(raw)
+	for _, want := range []string{"Q1", "Q2", "recommended", `data-question-id="q1"`} {
+		if !strings.Contains(page, want) {
+			t.Errorf("questionnaire page lacks %q", want)
+		}
 	}
 }
