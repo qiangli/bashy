@@ -3,7 +3,7 @@ id: f0261ec7cae0
 kind: bug
 title: 'S525.A5w-img bashy: publish ghcr.io/qiangli/bashy-scratch:<commit8> for every release (A5w-oci default sandbox image is unpullable)'
 seq: 2845
-status: assigned
+status: done
 priority: p0
 labels:
     - app
@@ -14,6 +14,8 @@ assignee: codex-gpt5.6-sol
 sprint: 525
 sprint_id: 9a9a4443-02c8-53a3-b0bd-96bd67980643
 sprint_title: 'Software Shaping foundation: verified personal features and same-host promotion'
+closed: 2026-10-30T15:52:54.530628Z
+closed_by: s525-manager
 ---
 
 Part of S525.A5w (goal a5w). yoke contain.DefaultSandboxImage resolves a bare/argument-less @sandbox() island to ghcr.io/qiangli/bashy-scratch:<running release's commit8>, documented as 'the FROM-scratch image bashy self image builds, published every release'. Live check 2026-10-29 on elephant: the registry holds only tags v1.0.0-rc.15-dev and c119fd68 (ghcr tags/list); b5bf7a47 (rc.22) and the doc examples b84caaed/756b2c24/13d140c2 are 'manifest unknown'. So on every current release a zero-setup @sandbox() island fails to pull. bashy CI only runs 'make verify-bashy-scratch' (.github/workflows/test.yml); no workflow pushes the image. Fix (small): the release workflow builds the existing build-bashy-scratch / build-image target (linux amd64+arm64, multi-arch manifest) and pushes ghcr.io/qiangli/bashy-scratch:<commit8 of the release binary's self-reported commit> (and the release tag), public, permissive-licence image (FROM scratch, bashy only), signed like the release assets; a release gate fails if the tag is not pullable anonymously. Dev builds keep $BASHY_SANDBOX_IMAGE as the override. Proof: anonymous 'bashy oci pull ghcr.io/qiangli/bashy-scratch:<commit8>' for the next release on Linux + Windows. Live island proof already done with the published c119fd68 tag: bashy 6ce19453 'bashy oci run --rm --network=none ... uname' -> Linux, on elephant native Windows (machine auto-created) and WSL.
