@@ -22,7 +22,7 @@ import (
 func TestCommandDocSourceNames(t *testing.T) {
 	// Sorted, exact: a new commands/<name>.md (feed shipped with the S431 feed
 	// registry, Sprint 9999 maintenance) must be added here deliberately.
-	want := []string{"account", "adapt", "common-options", "conductor", "dks", "feed", "feed-setup", "force-agent-shell", "inbox", "knowledge-transfer", "lens", "sprint", "steward", "supervisor", "transcribe"}
+	want := []string{"account", "adapt", "collaborate", "common-options", "conductor", "dks", "feed", "feed-setup", "force-agent-shell", "inbox", "knowledge-transfer", "lens", "sprint", "steward", "supervisor", "transcribe"}
 	got, err := commandDocSource{}.Names()
 	if err != nil {
 		t.Fatal(err)
@@ -90,7 +90,7 @@ func TestCommandDocSourceBodyAndFiles(t *testing.T) {
 // force-agent-shell` keep working after their folder folded into bashy's.
 func TestCommandDocsResolveThroughSkillsCatalog(t *testing.T) {
 	cat := coreskills.Catalog{Sources: skillsSourcesForTest()}
-	for _, name := range []string{"conductor", "steward", "supervisor", "inbox", "sprint", "knowledge-transfer", "force-agent-shell", "feed"} {
+	for _, name := range []string{"collaborate", "conductor", "steward", "supervisor", "inbox", "sprint", "knowledge-transfer", "force-agent-shell", "feed"} {
 		sk, _, ok := cat.Get(name)
 		if !ok {
 			t.Errorf("%s: not found through the skill catalog", name)
@@ -115,7 +115,7 @@ func skillsSourcesForTest() []coreskills.Source {
 }
 
 func TestIsSkillDocName(t *testing.T) {
-	for _, name := range []string{"bashy", "conductor", "steward", "supervisor", "inbox", "sprint", "knowledge-transfer", "force-agent-shell", "feed"} {
+	for _, name := range []string{"bashy", "collaborate", "conductor", "steward", "supervisor", "inbox", "sprint", "knowledge-transfer", "force-agent-shell", "feed"} {
 		if !isSkillDocName(name) {
 			t.Errorf("isSkillDocName(%q) = false, want true", name)
 		}

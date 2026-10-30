@@ -58,10 +58,7 @@ Before assigning work to a shared test host, droplet, device, or account, take
 its host-local advisory hold with `bashy claim NAME --intent TEXT`; release it
 when done and never force another holder off without contacting them.
 
-Sprint managers coordinate through `bashy mb send <seat>` and announce before
-using a shared host, committing in a shared checkout with another lane's runs
-(prefer a scratch worktree), or bumping a pin another lane depends on. Release a
-held claim another lane asks for, or explain the hold promptly.
+For workplace coordination, follow `bashy skill show collaborate`.
 
 ```text
 bashy sprint edit ID --primary-goal "ONE OUTCOME" --spec docs/sprint-ID-master-execution-plan.md
@@ -275,6 +272,7 @@ Delegation transfers execution, never accountability. While you hold it you must
     worker's prose or exit status ("submitted" and exit 0 are not "done").
   - INTEGRATE sequentially: serialize reviews and merges; push subproject commits
     and bump parent pins per repository policy, one gated step at a time.
+  - For workplace coordination, follow `bashy skill show collaborate`.
   - COORDINATE OWNERSHIP: before touching work held by another sprint manager,
     contact that owner through mb/Meet/chat/ping and request sequencing or merge.
   - CLAIM SHARED RESOURCES before use: a shared host, droplet, device, account or

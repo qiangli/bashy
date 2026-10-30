@@ -33,6 +33,9 @@ a usage string.
   way now; `bashy skill show conductor` (and friends) still read the same
   doc directly.
 
+For foreign changes, resource contention, freezes, and shared-checkout work,
+follow `bashy skill show collaborate`.
+
 ## First hop (do this once per session)
 
     bashy inspect context --json

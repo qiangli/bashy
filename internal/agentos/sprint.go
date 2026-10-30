@@ -158,6 +158,7 @@ Delegation transfers execution, never accountability. While you hold it you must
     worker's prose or exit status ("submitted" and exit 0 are not "done").
   - INTEGRATE sequentially: serialize reviews and merges; push subproject commits
     and bump parent pins per repository policy, one gated step at a time.
+  - For workplace coordination, follow ` + "`bashy skill show collaborate`" + `.
   - COORDINATE OWNERSHIP: before touching work held by another sprint manager,
     contact that owner through mb/Meet/chat/ping and request sequencing or merge.
   - CLAIM SHARED RESOURCES before use: a shared host, droplet, device, account or
