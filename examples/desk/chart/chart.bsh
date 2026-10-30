@@ -38,9 +38,8 @@ case ${1:-} in
  cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-chart
  exe=$(go env GOEXE)
  bin="$cache/chart$exe"
- mkdir -p "$cache"
- rel=$(realpath --relative-to="$here" "$bin")
- (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$rel" .)
+ mkdir -p "$here/.desk-build" "$cache"
+ (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/chart$exe" . && mv -f ".desk-build/chart$exe" "$bin")
  exec "$bin" "$@"
  ;;
 esac

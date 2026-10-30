@@ -32,9 +32,8 @@ set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-viewer
-bin="$cache/viewer"
 exe=$(go env GOEXE)
-bin="$bin$exe"
+bin="$cache/viewer$exe"
 
 case ${1:-serve} in
 --skill)
@@ -57,9 +56,8 @@ test)
     [[ "$src" -nt "$bin" ]] && stale=true
   done
   if [[ $stale == true ]]; then
-    mkdir -p "$cache"
-    rel=$(realpath --relative-to="$here" "$bin")
-    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$rel" .)
+    mkdir -p "$here/.desk-build" "$cache"
+    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/viewer$exe" . && mv -f ".desk-build/viewer$exe" "$bin")
   fi
   exec "$bin" "$@"
   ;;

@@ -22,7 +22,8 @@ Effects: read, write, exec, cred, net
 
 ```bash
 set -euo pipefail
-export BASHY=${BASHY:-${BASHY_EXE:-bashy}}
+export BASHY=${BASHY:-$(command -v bashy || printf %s "$SHELL")}
+exe=$(go env GOEXE)
 root=$(git rev-parse --show-toplevel)
 # Each entry point builds its native CLI/server cache on first dispatch. A
 # deliberately unsupported JSON verb exercises that path without a server.
@@ -49,7 +50,8 @@ Effects: read, write, exec, net, cred, destroy
 
 ```bash
 set -u
-export BASHY=${BASHY:-${BASHY_EXE:-bashy}}
+export BASHY=${BASHY:-$(command -v bashy || printf %s "$SHELL")}
+exe=$(go env GOEXE)
 root=$(git rev-parse --show-toplevel) || exit 1
 work=$("$BASHY" mktemp -d) || exit 1
 evidence=${EVIDENCE:-./desk-roundtrip.json}
@@ -83,12 +85,12 @@ cmd() {
 serve_tool() {
   local cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy
   case "$1" in
-    notepad) exec "$cache/desk-notepad/notepad" serve --addr "$addr" --data "$data" ;;
-    form) exec "$cache/form/form" serve -addr "$addr" -data "$data" ;;
-    chart) exec "$cache/desk-chart/chart" --addr "$addr" --data "$data" serve ;;
-    viewer) exec "$cache/desk-viewer/viewer" serve --addr "$addr" --dir "$data" ;;
-    whiteboard) exec "$cache/whiteboard/whiteboard" -data "$data" -addr "$addr" ;;
-    brainstorm) exec "$cache/brainstorm/brainstorm" -data "$data" -addr "$addr" ;;
+    notepad) exec "$cache/desk-notepad/notepad$exe" serve --addr "$addr" --data "$data" ;;
+    form) exec "$cache/form/form$exe" serve -addr "$addr" -data "$data" ;;
+    chart) exec "$cache/desk-chart/chart$exe" --addr "$addr" --data "$data" serve ;;
+    viewer) exec "$cache/desk-viewer/viewer$exe" serve --addr "$addr" --dir "$data" ;;
+    whiteboard) exec "$cache/whiteboard/whiteboard$exe" -data "$data" -addr "$addr" ;;
+    brainstorm) exec "$cache/brainstorm/brainstorm$exe" -data "$data" -addr "$addr" ;;
   esac
 }
 run_one() (
@@ -242,7 +244,8 @@ Effects: read, write, exec, net
 
 ```bash
 set -euo pipefail
-export BASHY=${BASHY:-${BASHY_EXE:-bashy}}
+export BASHY=${BASHY:-$(command -v bashy || printf %s "$SHELL")}
+exe=$(go env GOEXE)
 root=$(git rev-parse --show-toplevel)
 if [[ -n ${PLAYWRIGHT_MODULE:-} && ! -f $PLAYWRIGHT_MODULE ]]; then
   echo 'SKIP gallery: PLAYWRIGHT_MODULE does not exist'
@@ -271,5 +274,5 @@ Effects: read
 
 ```bash
 set -euo pipefail
-"${BASHY:-bashy}" jq -e '.schema_version == "bashy-desk-roundtrip-v1" and (.tools | length) == 6 and ([.tools[].result] | all(. == "pass"))' "${EVIDENCE:-./desk-roundtrip.json}"
+"${BASHY:-$(command -v bashy || printf %s "$SHELL")}" jq -e '.schema_version == "bashy-desk-roundtrip-v1" and (.tools | length) == 6 and ([.tools[].result] | all(. == "pass"))' "${EVIDENCE:-./desk-roundtrip.json}"
 ```

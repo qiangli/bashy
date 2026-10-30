@@ -141,10 +141,8 @@ data=${WHITEBOARD_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy/whiteboard}
 addr=${WHITEBOARD_ADDR:-0.0.0.0:18093}
 prefix=${WHITEBOARD_PREFIX:-}
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/whiteboard
-mkdir -p "$cache"
 exe=$(go env GOEXE)
 bin="$cache/whiteboard$exe"
-rel=$(realpath --relative-to="$here/server" "$bin")
 usage='Usage: whiteboard [serve|status|backup|restore SNAPSHOT|stop|test|add|open|show|set|list|share|close|--skill|--contract]'
 case ${1:-serve} in add|open|show|set|list|share|close|-*) ;; *) if (( $# > 2 )); then echo "$usage" >&2; exit 2; fi ;; esac
 case ${1:-serve} in
@@ -159,8 +157,8 @@ case ${1:-serve} in
 --contract) echo 'sokilili howaitobodo efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
 -h|--help) echo 'whiteboard [serve|status|backup|restore SNAPSHOT|stop|test|add|open|show|set|list|share|close] — native LAN board with desk verbs; --skill prints its embedded skill' ;;
 serve)
-  mkdir -p "$cache"
-  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$rel" .)
+  mkdir -p "$here/server/.desk-build" "$cache"
+  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/whiteboard$exe" . && mv -f ".desk-build/whiteboard$exe" "$bin")
   if [[ -n $prefix ]]; then exec "$bin" -data "$data" -addr "$addr" -prefix "$prefix"
   else exec "$bin" -data "$data" -addr "$addr"; fi
   ;;
@@ -178,15 +176,15 @@ stop)
   if pkill -f "$bin -data $data" 2>/dev/null; then echo "stopped whiteboard ($data)"; else echo "no whiteboard server matched $data"; fi
   ;;
 -*|add|open|show|set|list|share|close)
-  mkdir -p "$cache"
-  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$rel" .)
+  mkdir -p "$here/server/.desk-build" "$cache"
+  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/whiteboard$exe" . && mv -f ".desk-build/whiteboard$exe" "$bin")
   exec "$bin" cli -addr "$addr" -prefix "$prefix" "$@"
   ;;
 test) cd "$here/server"; GOWORK=off go test -race ./... ;;
 *)
   # Forward unknown verbs so the desk CLI can return a JSON error envelope.
-  mkdir -p "$cache"
-  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$rel" .)
+  mkdir -p "$here/server/.desk-build" "$cache"
+  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/whiteboard$exe" . && mv -f ".desk-build/whiteboard$exe" "$bin")
   exec "$bin" cli -addr "$addr" -prefix "$prefix" "$@"
   ;;
 esac

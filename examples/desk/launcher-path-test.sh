@@ -1,36 +1,19 @@
 #!/usr/bin/env bash
-# Exercise all six Bash# launchers with a Windows-style GOEXE without cross-exec.
+# Guard the native Go output contract without needing a Windows host.
 set -euo pipefail
-root=$(cd "$(dirname "$0")/../.." && pwd)
-tmp=$(mktemp -d)
-trap 'rm -rf "$tmp"' EXIT
-mkdir -p "$tmp/tools" "$tmp/cache"
-cat > "$tmp/tools/go" <<'GO'
-#!/usr/bin/env bash
-set -euo pipefail
-if [[ ${1:-} == env && ${2:-} == GOEXE ]]; then echo .exe; exit; fi
-[[ ${1:-} == build ]] || exit 1
-while (( $# )); do
-  if [[ $1 == -o ]]; then out=$2; break; fi
-  shift
-done
-[[ -n ${out:-} && $out != /* && $out == *.exe ]] || exit 1
-mkdir -p "$(dirname "$out")"
-printf '#!/usr/bin/env bash\nexit 2\n' > "$out"
-chmod +x "$out"
-GO
-chmod +x "$tmp/tools/go"
-export PATH="$tmp/tools:$PATH" XDG_CACHE_HOME="$tmp/cache"
-runner=${BASHY:-${BASHY_EXE:-bashy}}
+root=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+[[ $(GOOS=windows go env GOEXE) == .exe ]]
 for tool in notepad form chart viewer whiteboard brainstorm; do
   case $tool in
-    notepad|form|chart|viewer) entry="$root/examples/desk/$tool/$tool.bsh" ;;
-    *) entry="$root/examples/$tool/$tool.bsh" ;;
+    notepad|form|chart|viewer) launcher=$root/examples/desk/$tool/$tool.bsh; ignore=$root/examples/desk/$tool/.gitignore ;;
+    *) launcher=$root/examples/$tool/$tool.bsh; ignore=$root/examples/$tool/server/.gitignore ;;
   esac
-  status=0
-  "$runner" --bashsharp "$entry" unsupported-desk-verb --json >"$tmp/$tool.log" 2>&1 || status=$?
-  [[ $status == 2 ]] || { echo "$tool: expected exit 2, got $status" >&2; cat "$tmp/$tool.log" >&2; exit 1; }
-  [[ -x "$tmp/cache/bashy/$(case $tool in form|whiteboard|brainstorm) echo "$tool" ;; *) echo "desk-$tool" ;; esac)/$tool.exe" ]] || {
-    echo "$tool: missing .exe in cache" >&2; exit 1;
-  }
+  if grep -q realpath "$launcher"; then echo "$tool uses realpath" >&2; exit 1; fi
+  grep -Fq 'exe=$(go env GOEXE)' "$launcher"
+  grep -Eq 'bin=.*\$exe' "$launcher"
+  grep -Fq -- "-o \".desk-build/$tool\$exe\"" "$launcher"
+  grep -Fq -- "mv -f \".desk-build/$tool\$exe\"" "$launcher"
+  grep -Fq '.desk-build/' "$ignore"
+  grep -Fq 'exec "$bin"' "$launcher"
 done
+printf 'launcher paths: six relative build outputs with GOEXE and cache moves\n'
