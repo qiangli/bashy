@@ -231,3 +231,4 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [Matrix chat Cloudbox account shim](plan-matrix-chat-cloudbox-shim.md) — S513.4a appservice-scoped `@cb_` accounts, vault-held credentials, shim contract and gate status.
 - [Relative script operands](plan-s531-relative-script-operand.md) — S531 story 2840 cwd resolution, focused red/green evidence and pending native Windows reproduction.
 - [Desk family look](plan-desk-family-look.md) — S537.D1 launcher-derived kit tokens, family accents, one app shell + renderer for every desk tool, contracttest kit conformance and light/dark gallery.
+- [Desk viewer](plan-desk-viewer.md) — S537.V1 view-only books of agent reports: template + JSON data (never HTML) through the kit renderer, sprint/session books, changed-since-previous highlight, self-contained export, contracttest ViewOnly.

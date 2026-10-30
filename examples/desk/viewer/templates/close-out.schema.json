@@ -1,0 +1,30 @@
+{
+  "type": "object",
+  "description": "Close-out: the outcome, what was delivered with evidence, gate results and follow-ups.",
+  "required": ["outcome"],
+  "properties": {
+    "sprint": {
+      "type": "object",
+      "x-source": "sprint",
+      "description": "Live sprint card; filled from `bashy sprint show N --json` when omitted",
+      "required": ["id", "title", "goals"],
+      "additionalProperties": true,
+      "properties": {
+        "id": {"type": "integer"},
+        "title": {"type": "string"},
+        "column": {"type": "string"},
+        "primary_goal": {"type": "string"},
+        "stories": {"type": "integer"},
+        "goals": {"type": "array", "items": {"type": "object", "additionalProperties": true,
+          "properties": {"id": {"type": "string"}, "text": {"type": "string"}, "checked": {"type": "boolean"}, "wontfix": {"type": "boolean"}}}}
+      }
+    },
+    "title": {"type": "string", "maxLength": 200},
+    "outcome": {"type": "string", "format": "markdown", "maxLength": 4000},
+    "delivered": {"type": "array", "maxItems": 60, "items": {"type": "object", "required": ["item"],
+      "properties": {"item": {"type": "string", "maxLength": 300}, "evidence": {"type": "string", "maxLength": 300}}}},
+    "gates": {"type": "array", "maxItems": 40, "items": {"type": "object", "required": ["name", "result"],
+      "properties": {"name": {"type": "string", "maxLength": 120}, "result": {"type": "string", "enum": ["pass", "fail", "skip"]}, "note": {"type": "string", "maxLength": 300}}}},
+    "followups": {"type": "array", "maxItems": 50, "items": {"type": "string", "maxLength": 500}}
+  }
+}

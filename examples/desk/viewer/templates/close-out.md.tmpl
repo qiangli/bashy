@@ -1,0 +1,25 @@
+{{- /* close-out: outcome, deliveries with evidence, gates, follow-ups. Data shape: close-out.schema.json. */ -}}
+# {{with .title}}{{.}}{{else}}{{with .sprint}}Sprint {{.id}} close-out{{else}}Close-out{{end}}{{end}}
+{{with .sprint}}
+**{{.title}}** · goals {{count "checked" .goals}}/{{len .goals}} done
+{{end}}
+## Outcome
+
+{{.outcome}}
+{{with .delivered}}
+## Delivered
+
+| Item | Evidence |
+|---|---|
+{{range .}}| {{.item}} | {{default "—" .evidence}} |
+{{end}}{{end}}{{with .gates}}
+## Gates
+
+| Gate | Result | Note |
+|---|---|---|
+{{range .}}| {{.name}} | {{if eq .result "pass"}}✅ pass{{else if eq .result "fail"}}❌ fail{{else}}⏭ skip{{end}} | {{default "—" .note}} |
+{{end}}{{end}}{{with .followups}}
+## Follow-ups
+{{range .}}
+- {{.}}{{end}}
+{{end}}

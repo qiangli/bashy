@@ -1,0 +1,35 @@
+{{- /* status: sprint/session status. Data shape: status.schema.json. Values arrive escaped; summary is Markdown prose. */ -}}
+# {{with .title}}{{.}}{{else}}{{with .sprint}}Sprint {{.id}} status{{else}}Status{{end}}{{end}}
+{{with .sprint}}
+**{{.title}}** · column {{code (default "unknown" .column)}} · goals {{count "checked" .goals}}/{{len .goals}} done{{with .stories}} · {{.}} stories{{end}}
+{{with .primary_goal}}
+> {{.}}
+{{end}}{{end}}
+{{.summary}}
+{{with .done}}
+## Done
+{{range .}}
+- {{.}}{{end}}
+{{end}}{{with .next}}
+## Next
+{{range .}}
+- {{.}}{{end}}
+{{end}}{{with .asks}}
+## Needs a human
+{{range .}}
+- {{.}}{{end}}
+{{end}}{{with .risks}}
+## Risks
+{{range .}}
+- {{.}}{{end}}
+{{end}}{{with .metrics}}
+## Metrics
+
+```chart widget=bar
+{{json .}}
+```
+{{end}}{{with .sprint}}{{with .goals}}
+## Goals
+{{range .}}
+- {{check .checked}} {{.text}}{{if .wontfix}} (won't fix){{end}}{{end}}
+{{end}}{{end}}

@@ -58,6 +58,8 @@ retrofits them); CLI verbs are the desk seven, not serve/status/backup.
   contract.
 - `contracttest/` — `Check(cfg) []string` / `Run(t, cfg)` probing every
   row above over HTTP against `BaseURL` (which must itself be loopback).
+  `Config.ViewOnly` is the read-only variant (viewer): `set` must be
+  refused (400 / CLI exit 2) before and after close.
 - `internal/fixture/` — minimal `memo` tool proving the contract: green on
   the clean server, red on each `-break` variant, plus a CLI/HTTP duality
   check (`open` hides content on both doors).

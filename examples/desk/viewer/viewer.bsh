@@ -1,0 +1,63 @@
+#!/usr/bin/env -S bashy --bashsharp
+# One body, two orientations: executable Bash# and its embedded agent skill.
+
+~~~skill as guide
+---
+name: viewer
+description: View-only reader for reports, recaps, plans and documents agents write for humans. Agent gives Markdown or template data (never HTML); human reads, pages and exports in the loopback page.
+metadata:
+  requires: "has=bashy"
+  step-porota: 'bashy viewer list'
+  check-tests: 'bashy viewer list'
+---
+# Viewer
+
+This is the prose face of `viewer.bsh`, the same executable body used by
+the registered `viewer` command. View-only by construction: there is no
+`set`/`edit` (exit 2). A human edits text in **notepad**; a human READS a
+report, recap or document in **viewer**. In chat, give a 2-4 line summary
+plus the viewer link instead of pasting the full report.
+
+- `bashy viewer add --sprint N` creates the sprint book `sprint-N` (it survives manager handoffs); `--session S` makes `session-S`; `add [ID]` any other book. Content flags add a first page.
+- `bashy viewer append ID --template status --data notes.json` adds a report page; the status template reads the live card (`bashy sprint show N --json`), so the agent writes only the narrative (`{"summary": "...", "done": [...], "next": [...]}`).
+- `bashy viewer append ID -f report.md [--asset chart.csv]` adds a Markdown page (```` ```chart ```` fences, `![](rows.csv)` embeds).
+- Templates: `status`, `plan-summary`, `recap`, `close-out`; each `templates/NAME.schema.json` is its data shape. Bad data is refused (exit 2) with the path of the first bad value; values are shown as text, never HTML.
+- `bashy viewer open ID` prints id, URL, status only — never content. `show ID [--page N]` reads Markdown + data.
+- `bashy viewer export ID [--page N] [--to html|pdf] [-o FILE]` writes self-contained HTML (PDF through headless Chrome; humans use Print / PDF on the page).
+- `bashy viewer list | share ID | close ID`; `bashy viewer serve` starts the loopback server (default 127.0.0.1:18096).
+- The page shows first/prev/next/last (← →), an index, jump-to-page, and highlights blocks changed since the previous page.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-viewer
+bin="$cache/viewer"
+
+case ${1:-serve} in
+--skill)
+  copying=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then copying=true; continue; fi
+    if [[ $copying == true && $line == '~~~' ]]; then break; fi
+    if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  ;;
+--contract) echo 'sokilili viewero efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
+-h|--help) echo 'viewer [serve|add|append|open|show|list|share|close|export|test] — view-only loopback reader; --skill prints its embedded skill' ;;
+test)
+  cd "$here" && GOWORK=off go test -v ./...
+  ;;
+*)
+  stale=false
+  [[ -x "$bin" ]] || stale=true
+  for src in "$here"/*.go "$here"/templates/*; do
+    [[ "$src" -nt "$bin" ]] && stale=true
+  done
+  if [[ $stale == true ]]; then
+    mkdir -p "$cache"
+    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$bin" .)
+  fi
+  exec "$bin" "$@"
+  ;;
+esac

@@ -1,0 +1,27 @@
+{{- /* plan-summary: a plan at a glance. Data shape: plan-summary.schema.json. */ -}}
+# {{with .title}}{{.}}{{else}}{{with .sprint}}Sprint {{.id}} plan{{else}}Plan{{end}}{{end}}
+{{with .sprint}}
+**{{.title}}** · goals {{count "checked" .goals}}/{{len .goals}} done
+{{end}}
+## Goal
+
+{{.goal}}
+
+## Steps
+
+| # | Step | Owner | Status |
+|---|---|---|---|
+{{range $i, $s := .steps}}| {{add1 $i}} | {{$s.title}} | {{default "—" $s.owner}} | {{default "todo" $s.status}} |
+{{end}}{{range $i, $s := .steps}}{{with $s.detail}}
+### {{add1 $i}}. {{$s.title}}
+
+{{.}}
+{{end}}{{end}}{{with .decisions}}
+## Decisions
+{{range .}}
+- {{.}}{{end}}
+{{end}}{{with .risks}}
+## Risks
+{{range .}}
+- {{.}}{{end}}
+{{end}}

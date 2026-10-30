@@ -51,6 +51,11 @@ type Config struct {
 	// may carry (whiteboard pens). The kit data palette (chart series) is
 	// always allowed. Everything else must come from kit.css tokens.
 	AllowColors []string
+	// ViewOnly is the read-only variant (viewer): content is added and
+	// appended, never edited, so `set` (and the legacy edit verbs) must be
+	// refused with 400 over HTTP and exit 2 over the CLI, before and after
+	// close. Every other contract point is unchanged.
+	ViewOnly bool
 }
 
 // Run fails the test once per violated contract point.
@@ -135,7 +140,11 @@ func (t *check) cliConformance() {
 			}
 		}
 	}
-	for _, old := range []string{"new", "get", "put"} {
+	refused := []string{"new", "get", "put"}
+	if t.cfg.ViewOnly {
+		refused = append(refused, "set", "edit")
+	}
+	for _, old := range refused {
 		if exit, _ := t.cfg.CLI(old); exit != 2 {
 			t.fail("non-standard CLI verb %s: want exit 2, got %d", old, exit)
 		}
@@ -462,10 +471,15 @@ func (t *check) lifecycle() {
 		t.fail("get: response must carry the item content")
 	}
 
-	// put: content changes, secrets aside (covered separately).
+	// put: content changes, secrets aside (covered separately). A view-only
+	// tool refuses the edit outright.
 	code, raw, _ = t.post("/api/action",
 		fmt.Sprintf(`{"action":"set","id":%q,"body":"updated probe body"}`, id), auth)
-	if code != http.StatusOK {
+	if t.cfg.ViewOnly {
+		if code != http.StatusBadRequest {
+			t.fail("view-only: set must be refused with 400, got %d", code)
+		}
+	} else if code != http.StatusOK {
 		t.fail("put: want 200, got %d", code)
 	}
 
@@ -530,7 +544,11 @@ func (t *check) lifecycle() {
 	}
 	code, _, _ = t.post("/api/action",
 		fmt.Sprintf(`{"action":"set","id":%q,"body":"after close"}`, id), auth)
-	if code != http.StatusConflict {
+	if t.cfg.ViewOnly {
+		if code != http.StatusBadRequest {
+			t.fail("view-only: set after close must be refused with 400, got %d", code)
+		}
+	} else if code != http.StatusConflict {
 		t.fail("put after close: want 409, got %d", code)
 	}
 }

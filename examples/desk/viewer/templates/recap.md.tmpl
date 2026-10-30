@@ -1,0 +1,21 @@
+{{- /* recap: a period or session in review. Data shape: recap.schema.json. */ -}}
+# {{default "Recap" .title}}
+{{with .period}}
+*{{.}}*
+{{end}}
+{{.summary}}
+{{with .highlights}}
+## Highlights
+{{range .}}
+- {{.}}{{end}}
+{{end}}{{with .metrics}}
+## Metrics
+
+```chart widget=bar
+{{json .}}
+```
+{{end}}{{with .links}}
+## Links
+{{range .}}
+- {{link .label .url}}{{end}}
+{{end}}

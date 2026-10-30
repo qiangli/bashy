@@ -1,0 +1,16 @@
+{
+  "type": "object",
+  "description": "A recap of a period or session: summary, highlights, metrics and links.",
+  "required": ["summary"],
+  "properties": {
+    "title": {"type": "string", "maxLength": 200},
+    "period": {"type": "string", "maxLength": 120},
+    "summary": {"type": "string", "format": "markdown", "maxLength": 4000},
+    "highlights": {"type": "array", "maxItems": 50, "items": {"type": "string", "maxLength": 500}},
+    "metrics": {"type": "array", "maxItems": 24, "description": "Rendered as a bar chart",
+      "items": {"type": "object", "required": ["label", "value"],
+        "properties": {"label": {"type": "string", "maxLength": 60}, "value": {"type": "number"}}}},
+    "links": {"type": "array", "maxItems": 30, "items": {"type": "object", "required": ["label", "url"],
+      "properties": {"label": {"type": "string", "maxLength": 200}, "url": {"type": "string", "maxLength": 2000}}}}
+  }
+}

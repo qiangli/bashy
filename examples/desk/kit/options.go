@@ -70,7 +70,7 @@ func ToolVerbs(tool string) []string {
 		"whiteboard": {"add", "show", "set", "list", "open", "share", "close"},
 		"brainstorm": {"add", "show", "set", "list", "open", "share", "close"},
 		"memo":       {"add", "show", "set", "list", "open", "share", "close"},
-		"viewer":     {"add", "show", "list", "open", "share", "close", "append"},
+		"viewer":     {"serve", "add", "show", "list", "open", "share", "close", "append", "export", "join"},
 	}
 	return verbs[tool]
 }
