@@ -91,6 +91,23 @@ bashy notepad share <id>
 bashy notepad close <id>
 ```
 
+## As a shaped app
+
+`shaped.json` declares notepad's server, so it can be registered as a shaped
+app and get per-user source history, preview, restore and undo:
+
+```bash
+bashy app add notepad --type shaped --source "$PWD"   # from this directory
+bashy src history notepad --user device:alice
+```
+
+The console builds the server from each user's active revision (`go build
+-trimpath`, `GOWORK=off`, `CGO_ENABLED=0`), starts it on a loopback port it
+picks with that user's app data as `-data`, and proxies `/notepad/` to it.
+`app add` vendors the out-of-tree `desk-kit => ../kit` replace into the
+managed checkout so every revision builds from its own tree. The page calls
+`api/action` relative to itself so it works at `/` and under a mount.
+
 ## Testing
 
 ```bash

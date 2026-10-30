@@ -686,7 +686,7 @@ func (a *app) page(r *http.Request) []byte {
     saveBtn.addEventListener('click', async () => {
       const action = currentId ? 'set' : 'add';
       try {
-        const res = await fetch('/api/action', {
+        const res = await fetch('api/action', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
@@ -738,7 +738,7 @@ func (a *app) page(r *http.Request) []byte {
       const reader = new FileReader();
       reader.onload = async () => {
         try {
-          const res = await fetch('/api/action', {
+          const res = await fetch('api/action', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
