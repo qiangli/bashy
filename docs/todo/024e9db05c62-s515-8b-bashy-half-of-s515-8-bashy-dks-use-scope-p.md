@@ -3,7 +3,7 @@ id: 024e9db05c62
 kind: feature
 title: 'S515.8b bashy half of S515.8: bashy dks use @scope:<path> switches the default namespace to scope-<path>; bashy dks list shows the scope namespaces the account can reach'
 seq: 2750
-status: todo
+status: done
 priority: p1
 labels:
     - dks
@@ -12,6 +12,8 @@ assignee: codex-gpt6-sol
 sprint: 515
 sprint_id: e82160ea-95db-5f2a-b69e-b2d784b2996b
 sprint_title: 'satellite loom: private forge + CI + groups (KISS/MVP, reuse loom/act_runner/scopes)'
+closed: 2026-10-29T21:26:53.67025Z
+closed_by: s515r-manager
 ---
 
 Companion of S515.8 (cloudbox 8e6bdb0c; merged cloudbox dev 8e83b95: scopedpairing projects scopes into gated DKS namespaces scope-<path> with RoleBinding edit + quota). Spec: umbrella docs/sprint-515-satellite-loom.md (S515.8: "bashy dks context switching per namespace (use/list), reusing the kubeconfig issuance"). KISS: extend the EXISTING verbs, do not add a parallel command tree.
