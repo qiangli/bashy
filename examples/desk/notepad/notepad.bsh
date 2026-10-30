@@ -1,0 +1,59 @@
+#!/usr/bin/env -S bashy --bashsharp
+# One body, two orientations: executable Bash# and its embedded agent skill.
+
+~~~skill as guide
+---
+name: notepad
+description: View and edit any content as text (txt, md, html, json, PDF->text). Agent drives via command/API; human edits Markdown in loopback page.
+metadata:
+  requires: "has=bashy"
+  step-porota: 'bashy notepad list'
+  check-tests: 'bashy notepad list'
+---
+# Notepad
+
+This is the prose face of `notepad.bsh`, the same executable body used by
+the registered `notepad` command. `bashy commands show notepad` exposes
+the executable argv and source path; `bashy skill show notepad` reads this face.
+
+- `bashy notepad new [--title TITLE] [--body BODY] [-f FILE|-] [--id ID]` creates a new note.
+- `bashy notepad open ID` re-surfaces an item (prints id, URL, status only — never content).
+- `bashy notepad get ID` reads note title and body.
+- `bashy notepad put ID [-f FILE|-] [--title TITLE] [--body BODY]` updates note content.
+- `bashy notepad list` lists saved notes.
+- `bashy notepad share ID` mints a single-use invite link.
+- `bashy notepad close ID` marks a note as closed.
+- `bashy notepad serve` starts the loopback server (default 127.0.0.1:18095).
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+data=${NOTEPAD_DATA:-${BASHY_HOME:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy}/desk/notepad}
+addr=${NOTEPAD_ADDR:-127.0.0.1:18095}
+prefix=${NOTEPAD_PREFIX:-}
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-notepad
+bin="$cache/notepad"
+
+case ${1:-serve} in
+--skill)
+  copying=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then copying=true; continue; fi
+    if [[ $copying == true && $line == '~~~' ]]; then break; fi
+    if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  ;;
+--contract) echo 'sokilili notepado efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
+-h|--help) echo 'notepad [serve|new|open|get|put|list|share|close|join|test] — loopback notepad; --skill prints its embedded skill' ;;
+test)
+  cd "$here" && GOWORK=off go test -v ./...
+  ;;
+*)
+  if [[ ! -x "$bin" || "$here/main.go" -nt "$bin" || "$here/cli.go" -nt "$bin" || "$here/convert.go" -nt "$bin" ]]; then
+    mkdir -p "$cache"
+    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$bin" .)
+  fi
+  exec "$bin" "$@"
+  ;;
+esac
