@@ -105,9 +105,12 @@ Copy `templates/page.html`, edit it, then pass `--template my-page.html` with
 `new` or `put --input ...`. The file is captured in the item so later edits do
 not unexpectedly change existing pages. Template fields: `.Title`,
 `.Description`, `.Widgets` (server-generated SVG). Templates are trusted local
-HTML supplied by the owner; ordinary data and titles are escaped. CSS variables
-`--chart-ink`, `--chart-surface` and `--chart-accent` give every widget the same
-geometry in light/dark. Tool changes follow the existing Software Shaping
+HTML supplied by the owner; ordinary data and titles are escaped. Widgets take
+their look from the desk kit tokens (`--desk-ink`, `--desk-panel`,
+`--desk-font`) and series from the kit data palette (`--desk-data-1..8`,
+`kit.DataPalette`), so a chart and a ```` ```chart ```` embed in notepad or
+the viewer share colours in light/dark; standalone SVGs fall back to the
+light palette. Tool changes follow the existing Software Shaping
 source/version/rollback workflow; no in-page template or layout editor.
 
 ## Verify

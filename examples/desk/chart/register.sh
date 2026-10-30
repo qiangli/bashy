@@ -15,6 +15,6 @@ guide=$("$runner" --bashsharp "$here/chart.bsh" --skill)
  --set args.positionals.0.enum.4=list --set args.positionals.0.enum.5=share \
  --set args.positionals.0.enum.6=close --set args.positionals.0.enum.7=serve \
  --set args.positionals.0.enum.8=revoke --set args.positionals.1.name=id
-"$runner" app add chart --port 18098 --label Chart --icon '▥' \
+"$runner" app add chart --port 18098 --label Chart --icon '📊' \
  --tip 'Quick local statistics' --start "$runner" --start chart --start serve
 printf '%s\n' 'Registered chart command and launcher tile. Start with bashy chart serve.'

@@ -38,12 +38,17 @@ func TestContractGreen(t *testing.T) {
 }
 
 func TestContractRedOnBreak(t *testing.T) {
-	for _, breakM := range []string{"open-emits-content", "no-csp", "allow-secret"} {
+	for _, breakM := range []string{"open-emits-content", "no-csp", "allow-secret", "hex-color", "font-family", "no-shell"} {
 		url := startServer(t, breakM)
 		fails := contracttest.Check(contracttest.Config{BaseURL: url, Tool: "memo"})
 		if len(fails) == 0 {
 			t.Errorf("break %q: contract test stayed green, want red", breakM)
 			continue
+		}
+		if strings.HasPrefix(breakM, "hex") || strings.HasPrefix(breakM, "font") || breakM == "no-shell" {
+			if !strings.Contains(strings.Join(fails, "\n"), "kit conformance") {
+				t.Errorf("break %q: want a kit conformance failure, got %v", breakM, fails)
+			}
 		}
 		t.Logf("break %q correctly fails %d contract point(s), e.g.: %s", breakM, len(fails), fails[0])
 	}

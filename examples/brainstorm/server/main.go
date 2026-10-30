@@ -36,8 +36,16 @@ var indexHTML []byte
 // page is the session page with the desk UI kit CSS/JS inlined.
 var page = buildPage(indexHTML)
 
+// appBar is the kit top bar; the item header carries the session id,
+// phase status, connection pill and summary the page script updates.
+var appBar = kit.AppBar("brainstorm", "./",
+	`<div class="desk-item-header"><span class="desk-id" id="sessionId">main</span>`+
+		`<span class="desk-badge" id="statusBadge" data-status="pending">pending</span>`+
+		`<span class="desk-pill" id="connection">Connecting…</span><span class="muted" id="summary"></span></div>`, "")
+
 func buildPage(src []byte) []byte {
 	p := bytes.Replace(src, []byte("<style>"), []byte("<style>"+kit.CSS()+"\n"), 1)
+	p = bytes.Replace(p, []byte("<!--desk-appbar-->"), []byte(appBar), 1)
 	return bytes.Replace(p, []byte("</main><script>"), []byte("</main><script>"+kit.JS()+"</script><script>"), 1)
 }
 

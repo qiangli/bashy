@@ -202,6 +202,6 @@ func replyHTML(row ReplyRow) string {
 		value = "<pre>" + html.EscapeString(row.Value) + "</pre>" + kit.CopyButton("Copy value", row.Value)
 	}
 	return `<div class="desk-field" data-field="` + html.EscapeString(row.StableID) + `" data-kind="reply"><label>` + html.EscapeString(row.Label) + `</label>` + kit.Badge(row.Status) +
-		`<p class="desk-muted">` + html.EscapeString(row.Reason) + `</p>` + value +
+		`<p class="desk-muted desk-content" data-desk-render="inline">` + html.EscapeString(row.Reason) + `</p>` + value +
 		`<label><input type="checkbox"` + checked + `> Mark done</label></div>`
 }

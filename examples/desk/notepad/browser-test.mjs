@@ -45,7 +45,7 @@ try {
     executablePath: process.env.CHROMIUM_PATH || undefined
   });
 
-  const ctx = await browser.newContext();
+  const ctx = await browser.newContext({permissions: ['clipboard-read', 'clipboard-write']});
   const page = await ctx.newPage();
 
   // 1. Visit notepad root
@@ -81,6 +81,9 @@ try {
   const noteData = await getRes.json();
   assert.equal(noteData.title, 'Browser E2E Note');
   assert.ok(noteData.body.includes('E2E Heading'), 'Body must be saved');
+
+  // Preview goes through the kit renderer (semantic tags, .desk-content).
+  await page.locator('.desk-content h1').filter({hasText: 'E2E Heading'}).waitFor({timeout: 5000});
 
   // 5. Test theme toggle
   const htmlTag = page.locator('html');

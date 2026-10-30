@@ -1,29 +1,27 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en" data-desk-tool="whiteboard"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Shared whiteboard</title>
 <style>
-:root{font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;color:#24312e;background:#f2efe8}*{box-sizing:border-box}body{margin:0}
-header{padding:24px 4vw 18px;background:#23403b;color:#fff}header h1{margin:6px 0;font-size:clamp(22px,3.6vw,32px);line-height:1.2}header p{margin:6px 0 0;color:#d3e2da}
-main{padding:20px 4vw 50px}button,input,select{font:inherit}button{border:0;border-radius:8px;padding:9px 15px;background:#1f5c53;color:#fff;cursor:pointer;font-weight:650}button:hover{background:#17473f}button:disabled{opacity:.55;cursor:default}button.secondary{background:#e2e7de;color:#24312e}button.danger{background:#f0dcd4;color:#6e3a2d}
-input,select{border:1px solid #a9bcb3;border-radius:8px;padding:9px;background:#fff;color:#24312e}
-label{display:block;font-size:13px;font-weight:650;margin-bottom:4px}
-.bar{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px}.pill{display:inline-block;background:#dcebdc;padding:5px 12px;border-radius:20px;font-weight:700;font-size:14px}.muted{color:#5d7068;font-size:14px}
-.panel{background:#fff;border:1px solid #d9e2d9;border-radius:12px;padding:16px 18px;margin-bottom:16px}.tools{display:flex;gap:14px;flex-wrap:wrap;align-items:end}.tools>div{min-width:120px}
-#message{position:sticky;top:8px;z-index:3;background:#fff1d2;color:#68490d;padding:12px;border-radius:8px;margin-bottom:14px}#message:empty{display:none}
-.stage{position:relative;background:#fff;border:1px solid #d9e2d9;border-radius:12px;overflow:hidden}
-#canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair;background:#fff}
-.note{position:absolute;width:180px;min-height:90px;padding:10px 10px 8px;border-radius:4px;box-shadow:0 2px 5px #24312e22;font-size:14px;overflow-wrap:anywhere;white-space:pre-wrap;cursor:move;border:1px solid #00000018}
-.note .x{position:absolute;top:2px;right:6px;border:0;background:none;color:#5d7068;font-size:14px;padding:2px 4px;cursor:pointer}
-.note .mine{display:block;margin-top:6px;font-size:11px;color:#5d7068}
-.bar.desk-item-header{background:none;border:0;border-radius:0;padding:0}.bar .desk-tools{margin-left:auto}
-.tools>.desk-field{margin-bottom:0}.desk-field>label{font-size:13px}.desk-field input{width:auto;border:1px solid #a9bcb3;padding:9px;background:#fff;color:#24312e}
-button.desk-copy.secondary{background:#e2e7de;color:#24312e;padding:9px 15px;font-weight:650}button.desk-copy.secondary[data-copied="true"]{background:#dcebdc}:root{color-scheme:light}
-footer{font-size:13px;color:#607469;margin-top:12px}a{color:inherit}[hidden]{display:none!important}@media(max-width:650px){.tools>div{min-width:44vw}}
+main{max-width:var(--desk-page-width);margin:0 auto;padding:var(--desk-space-5) var(--desk-space-5) var(--desk-space-6)}
+button{border:1px solid transparent;border-radius:var(--desk-radius-md);padding:7px 14px;background:var(--desk-accent);color:var(--desk-accent-ink);cursor:pointer;font-weight:var(--desk-weight-strong);font-size:var(--desk-text-sm)}button:hover{filter:brightness(.94)}button:disabled{opacity:.55;cursor:default}
+button.secondary,button.desk-copy.secondary{background:var(--desk-panel);color:var(--desk-ink);border-color:var(--desk-line-strong)}button.secondary:hover{filter:none;background:var(--desk-subtle)}button.danger{background:var(--desk-danger-bg);color:var(--desk-danger-ink)}
+input,select{border:1px solid var(--desk-line-strong);border-radius:var(--desk-radius-md);padding:7px 9px;background:var(--desk-panel);color:var(--desk-ink)}input[type=color]{padding:2px;width:44px;height:36px}
+label{display:block;font-size:var(--desk-text-xs);font-weight:var(--desk-weight-strong);color:var(--desk-muted);margin-bottom:var(--desk-space-1)}
+.muted{color:var(--desk-muted);font-size:var(--desk-text-sm)}
+.panel{background:var(--desk-panel);border:1px solid var(--desk-line);border-radius:var(--desk-radius-lg);padding:var(--desk-space-4) var(--desk-space-5);margin-bottom:var(--desk-space-4);box-shadow:var(--desk-shadow-1)}.tools{display:flex;gap:var(--desk-space-3);flex-wrap:wrap;align-items:end}.tools>div{min-width:0}
+.stage{position:relative;background:var(--desk-paper);border:1px solid var(--desk-line);border-radius:var(--desk-radius-lg);overflow:hidden;box-shadow:var(--desk-shadow-1)}
+#canvas{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair;background:var(--desk-paper)}
+.note{position:absolute;width:180px;min-height:90px;padding:10px 10px 8px;border-radius:var(--desk-radius-sm);box-shadow:var(--desk-shadow-1);font-size:var(--desk-text-sm);color:var(--desk-paper-ink);overflow-wrap:anywhere;cursor:move;border:1px solid var(--desk-line)}
+.note .x{position:absolute;top:2px;right:6px;border:0;background:none;color:var(--desk-paper-ink);opacity:.6;font-size:var(--desk-text-sm);padding:2px 4px;cursor:pointer}
+.note .mine{display:block;margin-top:6px;font-size:var(--desk-text-xs);opacity:.65}
+.desk-appbar .desk-item-header .desk-pill{margin-left:var(--desk-space-2)}
+.tools>.desk-field{margin-bottom:0}.desk-field input{width:auto}
+footer{font-size:var(--desk-text-sm);color:var(--desk-muted);margin-top:var(--desk-space-3)}@media(max-width:650px){.tools>div{min-width:44vw}main{padding:var(--desk-space-4) var(--desk-space-3)}}
 </style></head><body>
-<header><h1 id="boardTitle">Shared whiteboard</h1><p>Draw freehand, pin notes, think together. The main board is open; named boards are private — open the invite link to join.</p></header>
+<!--desk-appbar-->
 <main>
-<div class="bar desk-item-header"><span class="pill" id="connection">Connecting…</span><span class="muted" id="summary"></span><span class="desk-badge" id="statusBadge" data-status="pending">pending</span></div>
-<div id="message" data-desk-alert role="alert" aria-live="polite"></div>
+<p class="muted">Draw freehand, pin notes, think together. The main board is open; named boards are private — open the invite link to join.</p>
+<div id="message" class="desk-alert" data-kind="error" data-desk-alert role="alert" aria-live="polite"></div>
 <section class="panel"><div class="tools">
 <div><label for="boardInput">Board</label><input id="boardInput" maxlength="64" size="12" autocomplete="off"></div>
 <div><button class="secondary" id="openBoard" type="button">Open</button></div>
@@ -72,7 +70,7 @@ function drawPreview(){render(state||{strokes:[],notes:[]});ctx.strokeStyle=$('p
 function render(s){
  if(!s)return;
  if(state&&s.revision<state.revision)return;state=s;window.__whiteboard=s;
- document.title='Whiteboard · '+s.board;$('boardTitle').textContent='Whiteboard · '+s.board;$('boardInput').value=s.board;
+ document.title='Whiteboard · '+s.board;$('boardTitle').textContent=s.board;$('boardInput').value=s.board;
  const n=s.strokes.length,m=s.notes.length;
  $('summary').textContent=`${n} stroke${n===1?'':'s'} · ${m} note${m===1?'':'s'}`+(s.locked?' · locked':'');
  $('facilitatorPanel').hidden=!s.facilitator;
@@ -89,7 +87,7 @@ function render(s){
   if(s.private){
    box.append(el('p','Members: '+((s.members&&s.members.length)?s.members.length:0),'muted'));
    for(const m of (s.members||[])){
-    const row=el('p',m,'muted');const b=el('button','Revoke');b.className='danger';b.style.marginLeft='8px';
+    const row=el('p',m,'muted');const b=el('button','Revoke');b.className='danger';
     b.onclick=async()=>{try{error('');render(await apiJSON('api/action',{action:'revoke',board,id:m}))}catch(err){error(err.message)}};
     row.append(b);box.append(row);
    }
@@ -97,13 +95,13 @@ function render(s){
  }
  if(s.private)$('summary').textContent+=' · private';
  if(lastRevision===s.revision&&$('notes').childElementCount)return;lastRevision=s.revision;
- ctx.fillStyle='#fff';ctx.fillRect(0,0,1600,1000);ctx.strokeStyle='#e9eee9';ctx.lineWidth=1;
+ const pv=getComputedStyle(document.documentElement);ctx.fillStyle=pv.getPropertyValue('--desk-paper').trim();ctx.fillRect(0,0,1600,1000);ctx.strokeStyle=pv.getPropertyValue('--desk-paper-grid').trim();ctx.lineWidth=1;
  for(let x=0;x<=1600;x+=100){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,1000);ctx.stroke()}
  for(let y=0;y<=1000;y+=100){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(1600,y);ctx.stroke()}
  for(const st of s.strokes){ctx.strokeStyle=st.color;ctx.lineWidth=st.width;ctx.lineCap='round';ctx.lineJoin='round';ctx.beginPath();st.points.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));ctx.stroke()}
  const layer=$('notes');layer.replaceChildren();
  const r=canvas.getBoundingClientRect(),sx=r.width/1600,sy=r.height/1000;
- for(const n of s.notes){const d=el('div',undefined,'note');d.style.background=n.color;d.style.left=(n.x*sx)+'px';d.style.top=(n.y*sy)+'px';d.style.width=(180)+'px';d.append(el('span',n.text));d.append(el('span',(n.mine?'you · ':'')+'drag to move','mine'));
+ for(const n of s.notes){const d=el('div',undefined,'note');d.style.background=n.color;d.style.left=(n.x*sx)+'px';d.style.top=(n.y*sy)+'px';d.style.width=(180)+'px';{const t=el('span');deskRender(t,n.text,{inline:true});d.append(t)}d.append(el('span',(n.mine?'you · ':'')+'drag to move','mine'));
   const x=el('button','×','x');x.title='Delete note';x.onclick=async ev=>{ev.stopPropagation();try{error('');render(await apiJSON('api/action',{action:'delete-note',board,id:n.id}))}catch(err){error(err.message)}};d.append(x);
   d.addEventListener('pointerdown',ev=>{if(ev.target===x)return;ev.stopPropagation();const startX=ev.clientX,startY=ev.clientY,ox=n.x,oy=n.y;const mv=e2=>{d.style.left=(ox*sx+(e2.clientX-startX))+'px';d.style.top=(oy*sy+(e2.clientY-startY))+'px'};const up=e2=>{window.removeEventListener('pointermove',mv);window.removeEventListener('pointerup',up);const nx=Math.round((ox+(e2.clientX-startX)/sx)*10)/10,ny=Math.round((oy+(e2.clientY-startY)/sy)*10)/10;apiJSON('api/action',{action:'move-note',board,id:n.id,x:nx,y:ny}).then(render).catch(err=>error(err.message))};window.addEventListener('pointermove',mv);window.addEventListener('pointerup',up)});
   d.addEventListener('dblclick',async()=>{const t=prompt('Edit note',n.text);if(t===null)return;try{error('');render(await apiJSON('api/action',{action:'edit-note',board,id:n.id,text:t}))}catch(err){error(err.message)}});

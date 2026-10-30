@@ -61,7 +61,7 @@ func renderSVG(s series, widget string) (string, error) {
 		}
 	}
 	var b strings.Builder
-	b.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="0 0 640 ` + fmt.Sprint(height) + `" style="width:100%;color:var(--chart-ink,#24334b);background:var(--chart-surface,#fff);border-radius:16px" aria-label="` + esc(s.Name+" · "+widget) + `"><title>` + esc(s.Name+" · "+widget) + `</title><style>text{font-family:system-ui,sans-serif;fill:currentColor}.muted{opacity:.65}.stat{font-size:28px;font-weight:650}.trace{fill:none;stroke:var(--chart-accent,#286fdb);stroke-width:3;stroke-linejoin:round;stroke-linecap:round}.bar{fill:var(--chart-accent,#286fdb)}</style>`)
+	b.WriteString(`<svg xmlns="http://www.w3.org/2000/svg" role="img" viewBox="0 0 640 ` + fmt.Sprint(height) + `" style="width:100%;color:var(--desk-ink);background:var(--desk-panel);border-radius:var(--desk-radius-lg,12px)" aria-label="` + esc(s.Name+" · "+widget) + `"><title>` + esc(s.Name+" · "+widget) + `</title><style>text{font-family:var(--desk-font,system-ui,sans-serif);fill:currentColor}.muted{opacity:.65}.stat{font-size:28px;font-weight:650}.trace{fill:none;stroke:var(--desk-data-1,#2563eb);stroke-width:3;stroke-linejoin:round;stroke-linecap:round}.bar{fill:var(--desk-data-1,#2563eb)}</style>`)
 	text := func(x, y int, class, value string) {
 		fmt.Fprintf(&b, `<text x="%d" y="%d" class="%s">%s</text>`, x, y, class, esc(value))
 	}

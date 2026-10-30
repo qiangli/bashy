@@ -44,6 +44,10 @@ type Config struct {
 	// the state read may carry item content, so the contentless-state
 	// probe is skipped. open/new/list stay contentless regardless.
 	StateHasContent bool
+	// AllowColors lists user-content colour literals the tool's own page
+	// may carry (whiteboard pens). The kit data palette (chart series) is
+	// always allowed. Everything else must come from kit.css tokens.
+	AllowColors []string
 }
 
 // Run fails the test once per violated contract point.
@@ -68,6 +72,7 @@ func Check(cfg Config) (failures []string) {
 	t.loopback()
 	t.securityHeaders()
 	t.pageKit()
+	t.conformance()
 	t.methods()
 	t.crossSite()
 	t.strictDecoding()
@@ -219,10 +224,24 @@ func (t *check) pageKit() {
 	for _, marker := range []string{
 		kit.MarkerCopyButton, "Copied", kit.MarkerBadge,
 		kit.MarkerItemHeader, kit.MarkerField, "prefers-color-scheme",
+		kit.MarkerTokens, kit.MarkerAppBar, "data-desk-tool=", "data-desk-theme",
 	} {
 		if !strings.Contains(page, marker) {
 			t.fail("GET /: page lacks UI-kit marker %q", marker)
 		}
+	}
+}
+
+// Kit conformance: the page loads kit.css and the shared shell, and the
+// tool's own CSS carries no colour literal or font-family of its own — the
+// look comes from the kit tokens so every desk tool reads as one suite.
+func (t *check) conformance() {
+	code, body, _ := t.get("/", nil)
+	if code != http.StatusOK {
+		return
+	}
+	for _, v := range StyleViolations(string(body), t.cfg.AllowColors) {
+		t.fail("kit conformance: %s", v)
 	}
 }
 

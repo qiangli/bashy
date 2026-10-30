@@ -555,8 +555,7 @@ func (a *app) page(r *http.Request) []byte {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	id := r.URL.Query().Get("id")
-	header := `<div class="desk-item-header"><span class="desk-id">notepad</span>` +
-		kit.Badge(kit.StatusPending) + `<span class="desk-tools"></span></div>`
+	header := kit.EmptyItemHeader("new note")
 	noteTitle := ""
 	noteBody := ""
 	currentURL := a.baseURL + "/"
@@ -580,33 +579,42 @@ func (a *app) page(r *http.Request) []byte {
 	// List of other notes
 	var noteLinks strings.Builder
 	names, _ := filepath.Glob(filepath.Join(a.dir, "items", "*.json"))
+	noteLinks.WriteString(`<section class="desk-panel"><h2 class="desk-h2">All notes</h2>`)
 	if len(names) > 0 {
-		noteLinks.WriteString(`<div style="margin-top:24px"><h3 style="margin-bottom:8px">All notes</h3><ul style="padding-left:20px;margin:0">`)
+		noteLinks.WriteString(`<ul class="np-notes">`)
 		for _, p := range names {
 			nid := strings.TrimSuffix(filepath.Base(p), ".json")
 			u := kit.ItemURL(a.baseURL+"/", "id", nid)
 			noteLinks.WriteString(`<li><a href="` + html.EscapeString(u) + `">` + html.EscapeString(nid) + `</a></li>`)
 		}
-		noteLinks.WriteString(`</ul></div>`)
+		noteLinks.WriteString(`</ul>`)
+	} else {
+		noteLinks.WriteString(kit.State("empty", "No notes yet", "Write something and press Save (⌘/Ctrl+S), or notepad new from the CLI."))
 	}
+	noteLinks.WriteString(`</section>`)
 
-	body := `<main style="max-width:760px;margin:0 auto;padding:24px 16px">` + header +
-		`<div class="desk-tools" style="margin-bottom:16px">` + badges.String() + `</div>` +
+	body := `<style>
+.np-split{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:var(--desk-space-4);align-items:start}
+.np-split .desk-panel{margin-bottom:0}.np-split textarea{min-height:320px;font-family:var(--desk-font-mono);font-size:var(--desk-text-sm)}
+.np-notes{margin:0;padding-left:1.2em;columns:2 220px}
+</style>` + kit.AppBar("notepad", a.baseURL+"/", header, "") + `<main class="desk-main">` +
+		`<div class="desk-statuses">` + badges.String() + `</div>` +
 		`<div data-desk-alert class="desk-alert"></div>` +
-		`<form id="noteForm" onsubmit="return false">` +
+		`<form id="noteForm" onsubmit="return false"><div class="np-split"><section class="desk-panel">` +
 		kit.TextField("title", "Title", "text", noteTitle, "") +
 		kit.TextField("body", "Note content (Markdown)", "textarea", noteBody, "recommended") +
 		`<div class="desk-field"><label>Import file (TXT, MD, HTML, JSON, PDF) <span class="desk-recommended">auto-convert</span></label>` +
 		`<input type="file" id="importFile" accept=".txt,.md,.markdown,.html,.htm,.json,.pdf"></div>` +
-		`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">` +
-		`<button type="button" class="desk-copy" id="saveBtn">Save Note</button>` +
-		`<button type="button" class="desk-copy" id="newBtn">New Note</button>` +
+		`<div class="desk-row">` +
+		`<button type="button" class="desk-copy" id="saveBtn" data-desk-shortcut="save" title="Save (⌘/Ctrl+S)">Save Note</button>` +
+		`<button type="button" class="desk-copy secondary" id="newBtn">New Note</button>` +
 		kit.CopyButton("Copy link", currentURL) +
 		kit.CopyButton("Copy text", noteBody) +
-		`<button type="button" class="desk-copy" data-desk-theme>Toggle theme</button>` +
-		`</div></form>` +
+		`</div></section>` +
+		`<section class="desk-panel"><h2 class="desk-h2">Preview</h2>` +
+		kit.Rendered("div", "block", noteBody) + `</section></div></form>` +
 		noteLinks.String() +
-		`<p class="desk-muted" style="margin-top:24px">Local-first notepad · loopback only · re-surface with <code>notepad open ` + html.EscapeString(id) + `</code>.</p></main>` +
+		`<p class="desk-footer">Local-first notepad · loopback only · re-surface with <code>notepad open ` + html.EscapeString(id) + `</code>.</p></main>` +
 		`<script>
 (function() {
   let currentId = ` + jsonString(id) + `;
@@ -620,8 +628,12 @@ func (a *app) page(r *http.Request) []byte {
   function showAlert(msg, isError) {
     if (!alertBox) return;
     alertBox.textContent = msg;
-    alertBox.style.display = 'block';
-    alertBox.style.color = isError ? '#e00' : 'inherit';
+    alertBox.setAttribute('data-kind', isError ? 'error' : 'ok');
+    if (!isError && window.deskToast) window.deskToast(msg, 'ok');
+  }
+  const preview = document.querySelector('[data-desk-render]');
+  if (bodyInput && preview && window.deskRender) {
+    bodyInput.addEventListener('input', () => window.deskRender(preview, bodyInput.value));
   }
 
   if (saveBtn) {
@@ -660,7 +672,7 @@ func (a *app) page(r *http.Request) []byte {
               btn.setAttribute('data-copy', data.url);
             }
           });
-          const resurface = document.querySelector('.desk-muted code');
+          const resurface = document.querySelector('.desk-footer code');
           if (resurface) resurface.textContent = 'notepad open ' + data.id;
         }
         document.querySelectorAll('button[data-desk-copy]').forEach(btn => {
@@ -699,6 +711,7 @@ func (a *app) page(r *http.Request) []byte {
           const data = await res.json();
           if (res.ok && data.text !== undefined) {
             if (bodyInput) bodyInput.value = data.text;
+            if (bodyInput && preview && window.deskRender) window.deskRender(preview, data.text);
             if (titleInput && !titleInput.value) titleInput.value = file.name;
             showAlert('Imported ' + file.name + ' as ' + (data.format || 'text'), false);
           } else {
@@ -718,7 +731,7 @@ func (a *app) page(r *http.Request) []byte {
 })();
 </script>`
 
-	return kit.Shell("Notepad · bashy desk", body)
+	return kit.Page("notepad", "Notepad · bashy desk", body)
 }
 
 func jsonString(s string) string {

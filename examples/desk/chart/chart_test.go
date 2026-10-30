@@ -406,3 +406,21 @@ func TestOTLPStreamSeparationAndLatest(t *testing.T) {
 		t.Fatalf("latest distribution: %v %+v", e, ss)
 	}
 }
+
+// Widgets carry no colour or font of their own: the kit tokens and the kit
+// data palette only (kit conformance, the chart-series allowlist).
+func TestSVGKitConformance(t *testing.T) {
+	files, _ := filepath.Glob(filepath.Join("testdata", "*.svg"))
+	if len(files) == 0 {
+		t.Fatal("no golden SVGs")
+	}
+	for _, f := range files {
+		raw, e := os.ReadFile(f)
+		if e != nil {
+			t.Fatal(e)
+		}
+		for _, v := range contracttest.FragmentViolations(string(raw), nil) {
+			t.Errorf("%s: %s", f, v)
+		}
+	}
+}

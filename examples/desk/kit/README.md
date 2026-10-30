@@ -52,12 +52,69 @@ retrofits them); CLI verbs are the desk seven, not serve/status/backup.
 - `ui.go` + `kit.css` + `kit.js` (embedded) — copy button with "Copied"
   state, status badges (`pending`, `needs-human`, `filled-by-agent`,
   `answered`, `failed`, `closed`), field/question components, item header,
-  light/dark theme, keyboard-first focus.
+  light/dark theme, keyboard-first focus — plus the family look (D1, below).
+- `contracttest/conformance.go` — `StyleViolations(page, allow)` /
+  `FragmentViolations(markup, allow)`: the kit-conformance half of the
+  contract.
 - `contracttest/` — `Check(cfg) []string` / `Run(t, cfg)` probing every
   row above over HTTP against `BaseURL` (which must itself be loopback).
 - `internal/fixture/` — minimal `memo` tool proving the contract: green on
   the clean server, red on each `-break` variant, plus a CLI/HTTP duality
   check (`open` hides content on both doors).
+
+## One look: tokens, shell, renderer (D1)
+
+Desk tools are parts of bashy and use its conventions; where the kit
+differed from bashy, the kit changed. `kit.css` derives its tokens from the
+launcher design system (`yoke/pkg/webconsole/artifact/app.css`): font stack
+and type scale (`--desk-font`, `--desk-font-mono`, `--desk-text-*`), 4px
+spacing (`--desk-space-1..6`), radius, shadow, zinc neutral surfaces and the
+launcher blue primary, light and dark. Tool CSS uses only these variables.
+
+**Family accents.** One accent + icon per tool, harmonised with the
+launcher primary; `kit.Tools` is the registry and the icon matches the
+launcher tile. `<html data-desk-tool="NAME">` selects the accent.
+
+| Tool | Icon | Accent (light / dark) |
+|---|---|---|
+| notepad | 📝 | blue `#2563eb` / `#60a5fa` |
+| viewer | 👁 | indigo `#4338ca` / `#818cf8` |
+| whiteboard | 🎨 | teal `#0f766e` / `#2dd4bf` |
+| brainstorm | 💡 | amber `#b45309` / `#fbbf24` |
+| form | 📋 | emerald `#047857` / `#34d399` |
+| chart | 📊 | violet `#6d28d9` / `#a78bfa` |
+
+**Data palette.** `--desk-data-1..8` (`kit.DataPalette`) colours chart
+series and ```` ```chart ```` embeds; `.desk-series-N` classes apply it.
+
+**App shell.** `kit.Page(tool, title, body)` + `kit.AppBar(tool, home,
+itemHeader, extra)`: the same top bar in the same place — icon + name, item
+id, status badge, share/copy, theme toggle. Shared states
+(`kit.State("empty"|"error"|"loading", …)`), toasts (`deskToast(msg,
+kind)`), the sticky `[data-desk-alert]` (`data-kind="error|ok"`), and the
+same shortcuts everywhere: ⌘/Ctrl+S `[data-desk-shortcut=save]`,
+⌘/Ctrl+Enter `[data-desk-shortcut=submit]`, `t` theme, `y` copy link, `?`
+help. The theme choice is remembered (`localStorage desk-theme`) and
+applies before first paint.
+
+**Renderer.** `deskRender(el, text, {inline})` in `kit.js` is the one text
+renderer: a safe Markdown subset built with DOM APIs (headings, lists,
+quotes, code, pipe tables, inline marks, links, ```` ```chart ```` fences).
+It emits semantic tags only; `.desk-content` styles them. Server pages mark
+text with `kit.Rendered(tag, mode, text)` / `data-desk-render`. Notepad
+preview, form help, reply reasons, brainstorm cards and whiteboard notes go
+through it.
+
+**Conformance (contracttest).** The page must load `kit.css` and the
+`.desk-appbar` shell; outside the kit, no hex/rgb/hsl colour and no
+font-family in `<style>`, `style=""`, SVG presentation attributes or
+inline-script colour/font assignments. Allowlisted user content: the kit
+data palette (chart series) and `Config.AllowColors` (whiteboard pens). The
+fixture's `-break hex-color|font-family|no-shell` variants prove it red;
+every tool's contract test proves it green.
+
+**Evidence.** `examples/desk/gallery/capture.mjs` screenshots every tool in
+light and dark into `gallery/index.html` (one side-by-side page).
 
 ## Use in a tool
 

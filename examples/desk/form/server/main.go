@@ -638,7 +638,7 @@ func fieldHTML(f FormField, saved any, questionnaire bool) string {
 	open += `><label>` + label + `</label>`
 	help := ""
 	if f.Help != "" {
-		help = `<p class="desk-muted">` + html.EscapeString(f.Help) + `</p>`
+		help = `<p class="desk-muted desk-content" data-desk-render="inline">` + html.EscapeString(f.Help) + `</p>`
 	}
 	req := ""
 	if f.Required {
@@ -728,9 +728,8 @@ func (a *app) page(r *http.Request) []byte {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	id := r.URL.Query().Get("id")
-	header := `<div class="desk-item-header"><span class="desk-id">form</span>` +
-		kit.Badge(kit.StatusPending) + `<span class="desk-tools"></span></div>`
-	formBody := `<div class="desk-field"><p class="desk-muted">Open a form link (form open ID) to fill it here.</p></div>`
+	header := kit.EmptyItemHeader("no form open")
+	formBody := `<div class="desk-field">` + kit.State("empty", "No form open", "Open a form link (form open ID) to fill it here.") + `</div>`
 	if id != "" {
 		if it, err := a.loadLocked(id); err == nil {
 			header = kit.ItemHeader(it.ID, it.Status, a.urlFor(it.ID))
@@ -748,14 +747,14 @@ func (a *app) page(r *http.Request) []byte {
 				}
 			}
 			if len(it.Definition) == 0 && it.Mode != modeReply {
-				fb.WriteString(`<div class="desk-field"><p class="desk-muted">This form has no fields yet.</p></div>`)
+				fb.WriteString(`<div class="desk-field">` + kit.State("empty", "No fields yet", "This form has no fields yet.") + `</div>`)
 			}
 			formBody = `<form id="desk-form" data-form-id="` + html.EscapeString(it.ID) + `">` + fb.String() +
-				`<div style="display:flex;gap:8px;flex-wrap:wrap">` +
-				`<button type="button" class="desk-copy" data-desk-save>Save (partial)</button>` +
-				`<button type="button" class="desk-copy" data-desk-submit>Submit answers</button></div></form>`
+				`<div class="desk-row">` +
+				`<button type="button" class="desk-copy secondary" data-desk-save data-desk-shortcut="save" title="Save (⌘/Ctrl+S)">Save (partial)</button>` +
+				`<button type="button" class="desk-copy" data-desk-submit data-desk-shortcut="submit" title="Submit (⌘/Ctrl+Enter)">Submit answers</button></div></form>`
 		} else {
-			formBody = `<div data-desk-alert class="desk-alert">Form not found. Create it with form new first.</div>`
+			formBody = kit.State("error", "Form not found", "Create it with form new first.")
 		}
 	}
 	var badges strings.Builder
@@ -763,16 +762,14 @@ func (a *app) page(r *http.Request) []byte {
 		kit.StatusAnswered, kit.StatusFailed, kit.StatusClosed} {
 		badges.WriteString(kit.Badge(s))
 	}
-	body := `<main style="max-width:720px;margin:0 auto;padding:20px">` + header +
-		`<div class="desk-tools" style="margin-bottom:12px">` + badges.String() + `</div>` +
+	body := kit.AppBar("form", a.baseURL+"/", header, "") + `<main class="desk-main desk-narrow">` +
+		`<div class="desk-statuses">` + badges.String() + `</div>` +
 		`<div data-desk-alert class="desk-alert"></div>` +
-		formBody +
-		`<div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">` +
-		kit.CopyButton("Copy link", a.baseURL+"/") +
-		`<button type="button" class="desk-copy" data-desk-theme>Toggle theme</button></div>` +
-		`<p class="desk-muted">Local-first form · loopback only · partial saves persist · re-surface with <code>form open ID</code>.</p></main>` +
+		`<section class="desk-panel">` + formBody + `</section>` +
+		`<div class="desk-row">` + kit.CopyButton("Copy link", a.baseURL+"/") + `</div>` +
+		`<p class="desk-footer">Local-first form · loopback only · partial saves persist · re-surface with <code>form open ID</code>.</p></main>` +
 		`<script>` + formPageJS + `</script>`
-	return kit.Shell("Form · bashy desk", body)
+	return kit.Page("form", "Form · bashy desk", body)
 }
 
 // formPageJS collects answers from the kit field components and posts
@@ -826,10 +823,11 @@ const formPageJS = `(function () {
       });
       var body = await r.json();
       if (!r.ok) {
-        if (msg) msg.textContent = (body && body.error) || 'Could not save.';
+        if (msg) { msg.textContent = (body && body.error) || 'Could not save.'; msg.setAttribute('data-kind', 'error'); }
         return;
       }
       if (msg) msg.textContent = '';
+      if (window.deskToast) window.deskToast(complete ? 'Answers submitted.' : 'Saved — partial answers persist.', 'ok');
       var badge = document.querySelector('.desk-item-header .desk-badge');
       if (badge && body.status) {
         badge.setAttribute('data-status', body.status);

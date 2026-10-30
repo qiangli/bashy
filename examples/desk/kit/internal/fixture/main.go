@@ -13,6 +13,9 @@
 //	-break open-emits-content   open re-emits item content
 //	-break no-csp                security headers are dropped
 //	-break allow-secret          secret fields are stored
+//	-break hex-color             page CSS plants a hex colour
+//	-break font-family           page CSS plants its own font-family
+//	-break no-shell              page drops the kit app shell
 package main
 
 import (
@@ -448,8 +451,7 @@ func (a *app) page(r *http.Request) []byte {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	id := r.URL.Query().Get("id")
-	header := `<div class="desk-item-header"><span class="desk-id">memo</span>` +
-		kit.Badge(kit.StatusPending) + `<span class="desk-tools"></span></div>`
+	header := kit.EmptyItemHeader("memo")
 	if id != "" {
 		if it, err := a.loadLocked(id); err == nil {
 			header = kit.ItemHeader(it.ID, it.Status, a.urlFor(it.ID))
@@ -460,16 +462,25 @@ func (a *app) page(r *http.Request) []byte {
 		kit.StatusAnswered, kit.StatusFailed, kit.StatusClosed} {
 		badges.WriteString(kit.Badge(s))
 	}
-	body := `<main style="max-width:720px;margin:0 auto;padding:20px">` + header +
-		`<div class="desk-tools" style="margin-bottom:12px">` + badges.String() + `</div>` +
+	planted := ""
+	switch breakMode { // deliberate kit-conformance breaks for red/green proof
+	case "hex-color":
+		planted = `<style>.memo-note{color:#c0ffee}</style>`
+	case "font-family":
+		planted = `<style>.memo-note{font-family:Georgia,serif}</style>`
+	}
+	appbar := kit.AppBar("memo", a.baseURL+"/", header, "")
+	if breakMode == "no-shell" {
+		appbar = header
+	}
+	body := planted + appbar + `<main class="desk-main desk-narrow">` +
+		`<div class="desk-statuses">` + badges.String() + `</div>` +
 		`<div data-desk-alert class="desk-alert"></div>` +
 		kit.TextField("title", "Title", "text", "", "") +
 		kit.TextField("body", "Body", "textarea", "", "recommended") +
-		`<div style="display:flex;gap:8px">` +
-		kit.CopyButton("Copy link", a.baseURL+"/") +
-		`<button type="button" class="desk-copy" data-desk-theme>Toggle theme</button></div>` +
+		`<div class="desk-row">` + kit.CopyButton("Copy link", a.baseURL+"/") + `</div>` +
 		`<p class="desk-muted">Local-first memo · loopback only · re-surface with <code>memo open ID</code>.</p></main>`
-	return kit.Shell("Memo · desk fixture", body)
+	return kit.Page("memo", "Memo · desk fixture", body)
 }
 
 func serve(addr, data, prefix string) {

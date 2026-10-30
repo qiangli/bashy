@@ -230,3 +230,4 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [WebM/Opus transcription adapter plan and outcome](plan-transcribe-webm-opus.md) — S503 bounded synchronous demux, exact Pion codec, fixture gates and native acceptance boundary.
 - [Matrix chat Cloudbox account shim](plan-matrix-chat-cloudbox-shim.md) — S513.4a appservice-scoped `@cb_` accounts, vault-held credentials, shim contract and gate status.
 - [Relative script operands](plan-s531-relative-script-operand.md) — S531 story 2840 cwd resolution, focused red/green evidence and pending native Windows reproduction.
+- [Desk family look](plan-desk-family-look.md) — S537.D1 launcher-derived kit tokens, family accents, one app shell + renderer for every desk tool, contracttest kit conformance and light/dark gallery.
