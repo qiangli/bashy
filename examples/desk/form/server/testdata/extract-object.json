@@ -1,0 +1,116 @@
+{
+  "data": {
+    "elements": [
+      {
+        "index": 0,
+        "tag": "input",
+        "stable_id": "person:1",
+        "label": "Full name",
+        "selector": "#name",
+        "name": "name",
+        "attrs": {},
+        "visible": true,
+        "box": {},
+        "line": 0,
+        "frame_id": ""
+      },
+      {
+        "index": 1,
+        "tag": "input",
+        "stable_id": "ssn",
+        "label": "SSN",
+        "selector": "#ssn",
+        "name": "ssn",
+        "attrs": {
+          "value": "SENSITIVE"
+        },
+        "visible": true,
+        "box": {},
+        "line": 1,
+        "frame_id": ""
+      },
+      {
+        "index": 2,
+        "tag": "textarea",
+        "stable_id": "bio",
+        "label": "",
+        "selector": "iframe[name=\"profile\"] >>> textarea[name=\"bio\"]",
+        "name": "Biography",
+        "attrs": {},
+        "visible": true,
+        "box": {},
+        "line": 2,
+        "frame_id": "profile"
+      },
+      {
+        "index": 3,
+        "tag": "select",
+        "stable_id": "",
+        "label": "",
+        "selector": "#country",
+        "name": "",
+        "attrs": {
+          "placeholder": "Country"
+        },
+        "visible": true,
+        "box": {},
+        "line": 3,
+        "frame_id": ""
+      },
+      {
+        "index": 4,
+        "tag": "input",
+        "stable_id": "filled",
+        "label": "Email",
+        "selector": "#email",
+        "name": "email",
+        "attrs": {},
+        "visible": true,
+        "box": {},
+        "line": 4,
+        "frame_id": ""
+      },
+      {
+        "index": 5,
+        "tag": "button",
+        "stable_id": "button",
+        "label": "Send",
+        "selector": "#send",
+        "name": "",
+        "attrs": {},
+        "visible": true,
+        "box": {},
+        "line": 5,
+        "frame_id": ""
+      },
+      {
+        "index": 6,
+        "tag": "a",
+        "stable_id": "link",
+        "label": "Help",
+        "selector": "a",
+        "name": "",
+        "attrs": {},
+        "visible": true,
+        "box": {},
+        "line": 6,
+        "frame_id": ""
+      },
+      {
+        "index": 7,
+        "tag": "input",
+        "stable_id": "submit",
+        "label": "Submit",
+        "selector": "#submit",
+        "name": "",
+        "attrs": {
+          "type": "submit"
+        },
+        "visible": true,
+        "box": {},
+        "line": 7,
+        "frame_id": ""
+      }
+    ]
+  }
+}

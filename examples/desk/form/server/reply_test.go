@@ -85,7 +85,7 @@ func TestReplyValidationAndStdin(t *testing.T) {
 		name                      string
 		extract, values, refusals string
 	}{
-		{"object data", `{"data":{"elements":[]}}`, "", ""},
+		{"object data", `{"data":{}}`, "", ""},
 		{"missing elements", `{"data":"{}"}`, "", ""},
 		{"duplicate identity", `{"data":"{\"elements\":[{\"tag\":\"input\",\"stable_id\":\"x\"},{\"tag\":\"input\",\"stable_id\":\"x\"}]}"}`, "", ""},
 		{"unknown refusal", string(extract), "", `{"missing":{"outcome_class":"refused"}}`},
@@ -140,5 +140,89 @@ func TestReplyCompletionAndImmutability(t *testing.T) {
 	code, _ = post(t, base, `{"action":"answer","id":"`+id+`","answers":{"ssn":false}}`, "")
 	if code != 409 {
 		t.Fatal("closed reply accepted completion")
+	}
+}
+
+func TestReplyObjectFormExtract(t *testing.T) {
+	extractString, err := os.ReadFile("testdata/extract.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	extractObject, err := os.ReadFile("testdata/extract-object.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	values, err := os.ReadFile("testdata/values.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	refusals, err := os.ReadFile("testdata/refusals.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	rowsString, err := buildReply(extractString, values, refusals)
+	if err != nil {
+		t.Fatalf("string buildReply: %v", err)
+	}
+	rowsObject, err := buildReply(extractObject, values, refusals)
+	if err != nil {
+		t.Fatalf("object buildReply: %v", err)
+	}
+	if len(rowsString) != len(rowsObject) {
+		t.Fatalf("row count mismatch: string=%d object=%d", len(rowsString), len(rowsObject))
+	}
+	for i := range rowsString {
+		if rowsString[i] != rowsObject[i] {
+			t.Fatalf("row %d mismatch:\nstring: %+v\nobject: %+v", i, rowsString[i], rowsObject[i])
+		}
+	}
+
+	bareString, err := buildReply(extractString, nil, nil)
+	if err != nil {
+		t.Fatalf("bare string buildReply: %v", err)
+	}
+	bareObject, err := buildReply(extractObject, nil, nil)
+	if err != nil {
+		t.Fatalf("bare object buildReply: %v", err)
+	}
+	if len(bareString) != len(bareObject) {
+		t.Fatalf("bare row count mismatch: string=%d object=%d", len(bareString), len(bareObject))
+	}
+	for i := range bareString {
+		if bareString[i] != bareObject[i] {
+			t.Fatalf("bare row %d mismatch:\nstring: %+v\nobject: %+v", i, bareString[i], bareObject[i])
+		}
+	}
+
+	// Verify object containing viewport along with elements.
+	var objEnv struct {
+		Data struct {
+			Elements json.RawMessage `json:"elements"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(extractObject, &objEnv); err != nil {
+		t.Fatal(err)
+	}
+	viewportExtract := []byte(`{"data":{"viewport":{"width":1280,"height":800},"elements":` + string(objEnv.Data.Elements) + `}}`)
+	rowsViewport, err := buildReply(viewportExtract, values, refusals)
+	if err != nil {
+		t.Fatalf("viewport object buildReply: %v", err)
+	}
+	if len(rowsString) != len(rowsViewport) {
+		t.Fatalf("viewport row count mismatch: %d vs %d", len(rowsString), len(rowsViewport))
+	}
+	for i := range rowsString {
+		if rowsString[i] != rowsViewport[i] {
+			t.Fatalf("viewport row %d mismatch:\nstring: %+v\nviewport: %+v", i, rowsString[i], rowsViewport[i])
+		}
+	}
+
+	// Verify with round-trip CLI execution as well.
+	_, base := serveApp(t)
+	var out bytes.Buffer
+	code := runCLI([]string{"reply", "--addr", strings.TrimPrefix(base, "http://"), "--extract", "testdata/extract-object.json", "--values", "testdata/values.json", "--refusals", "testdata/refusals.json", "--json"}, &out)
+	if code != 0 {
+		t.Fatalf("reply with object extract: %d %s", code, out.String())
 	}
 }

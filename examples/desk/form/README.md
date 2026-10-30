@@ -31,7 +31,7 @@ bashy form reply --extract extract.json --values values.json --refusals refusals
 bashy form get form-9f3a… --json --key "$FORM_KEY"
 ```
 
-The extract result's `data` is a JSON **string** containing `elements`.
+The extract result's `data` carries `elements` (as a JSON object, or string in transport form).
 Only input/select/textarea fields are included (button, submit, reset, image,
 and hidden inputs are skipped). Rows use `stable_id`, falling back to the
 verbatim `selector`; frame-qualified selectors remain unchanged. Labels

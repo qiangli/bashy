@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -26,10 +27,24 @@ type ReplyRow struct {
 
 func buildReply(extract, values, refusals json.RawMessage) ([]ReplyRow, error) {
 	var envelope struct {
-		Data string `json:"data"`
+		Data json.RawMessage `json:"data"`
 	}
-	if json.Unmarshal(extract, &envelope) != nil || envelope.Data == "" {
-		return nil, fmt.Errorf("extract must contain a JSON string in data")
+	if json.Unmarshal(extract, &envelope) != nil || len(bytes.TrimSpace(envelope.Data)) == 0 || bytes.Equal(bytes.TrimSpace(envelope.Data), []byte("null")) {
+		return nil, fmt.Errorf("extract must contain data")
+	}
+	raw := bytes.TrimSpace(envelope.Data)
+	var dataBytes []byte
+	switch {
+	case len(raw) > 0 && raw[0] == '{':
+		dataBytes = raw
+	case len(raw) > 0 && raw[0] == '"':
+		var s string
+		if json.Unmarshal(raw, &s) != nil {
+			return nil, fmt.Errorf("extract data must contain elements")
+		}
+		dataBytes = []byte(s)
+	default:
+		return nil, fmt.Errorf("extract data must contain elements")
 	}
 	// stable_id uses the frozen wire spelling.
 	var wire struct {
@@ -42,7 +57,7 @@ func buildReply(extract, values, refusals json.RawMessage) ([]ReplyRow, error) {
 			Attrs    map[string]string `json:"attrs"`
 		} `json:"elements"`
 	}
-	if json.Unmarshal([]byte(envelope.Data), &wire) != nil || wire.Elements == nil {
+	if json.Unmarshal(dataBytes, &wire) != nil || wire.Elements == nil {
 		return nil, fmt.Errorf("extract data must contain elements")
 	}
 	var proposed map[string]json.RawMessage
