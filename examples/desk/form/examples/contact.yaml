@@ -1,0 +1,28 @@
+title: Contact preferences
+fields:
+  - id: name
+    label: Full name
+    kind: text
+    required: true
+  - id: bio
+    label: Short bio
+    kind: textarea
+    help: Two or three sentences.
+  - id: contact
+    label: Preferred contact
+    kind: choice
+    required: true
+    options: [email, phone, post]
+    recommended: email
+  - id: topics
+    label: Topics
+    kind: multi
+    options: [news, events, offers]
+    recommended: news
+  - id: subscribe
+    label: Subscribe?
+    kind: yes-no
+    required: true
+  - id: avatar
+    label: Avatar file
+    kind: file
