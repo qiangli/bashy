@@ -15,5 +15,5 @@ while IFS= read -r row; do atlas_args+=(--set "$row"); done <<< "$atlas_rows"
  --set args.positionals.0.name=verb \
  "${atlas_args[@]}" --set args.positionals.1.name=id
 "$runner" app add chart --port 18098 --label Chart --icon '📊' \
- --tip 'Quick local statistics' --start "$runner" --start chart --start serve
+ --tip 'Quick local statistics' --start "$runner" --start chart --start serve --force
 printf '%s\n' 'Registered chart command and launcher tile. Start with bashy chart serve.'
