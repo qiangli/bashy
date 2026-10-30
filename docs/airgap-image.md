@@ -28,6 +28,15 @@ managed download, writes the five-line Containerfile around it and builds
 through `bashy podman`. From a source checkout, `bashy dag build-image` images
 the candidate instead.
 
+Every release also publishes that exact FROM-scratch, bashy-only filesystem as
+the public multi-architecture image `ghcr.io/qiangli/bashy-scratch`, tagged with
+both the release tag and the first eight characters of the release binary's
+self-reported source commit. The commit tag is the zero-setup default used by
+bare `@sandbox()` islands; `BASHY_SANDBOX_IMAGE` remains the development and
+operator override. The `-dev` candidate workflow builds and attests the manifest;
+stable promotion adds the final release tag to those exact manifest bytes without
+rebuilding the image.
+
 `bashy podman` is the engine bashy provisions for itself — pinned upstream
 releases, sha256 committed in the source, fetched into `$BASHY_BIN_CACHE` and
 exec'd as separate processes, never linked or bundled
