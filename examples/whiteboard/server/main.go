@@ -3,10 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"crypto/subtle"
 	_ "embed"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -14,7 +11,6 @@ import (
 	"image"
 	"image/color"
 	"image/png"
-	"io"
 	"log"
 	"math"
 	"net"
@@ -29,10 +25,23 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	kit "desk-kit"
 )
 
+// defaultAddr is the recorded LAN-default exception to the desk loopback rule.
+const defaultAddr = "0.0.0.0:18093"
+
 //go:embed index.html
-var page []byte
+var indexHTML []byte
+
+// page is the board page with the desk UI kit CSS/JS inlined.
+var page = buildPage(indexHTML)
+
+func buildPage(src []byte) []byte {
+	p := bytes.Replace(src, []byte("<style>"), []byte("<style>"+kit.CSS()+"\n"), 1)
+	return bytes.Replace(p, []byte("</main><script>"), []byte("</main><script>"+kit.JS()+"</script><script>"), 1)
+}
 
 // Logical canvas all browsers share; the page scales it to fit.
 const (
@@ -92,20 +101,8 @@ type app struct {
 	boards map[string]*Board
 }
 
-func token() string {
-	b := make([]byte, 24)
-	if _, err := rand.Read(b); err != nil {
-		panic(err)
-	}
-	return hex.EncodeToString(b)
-}
-func validToken(s string) bool {
-	if len(s) != 48 {
-		return false
-	}
-	_, err := hex.DecodeString(s)
-	return err == nil
-}
+func token() string            { return kit.NewToken() }
+func validToken(s string) bool { return kit.ValidToken(s) }
 func boardPath(dir, name string) string {
 	return filepath.Join(dir, "boards", name+".json")
 }
@@ -114,27 +111,7 @@ func saveBoard(path string, b Board) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".board-*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	defer os.Remove(tmp)
-	if _, err = f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return kit.AtomicWrite(path, data)
 }
 
 var errBoardNotFound = errors.New("board not found")
@@ -209,7 +186,7 @@ func boardNotFound(w http.ResponseWriter) {
 	fail(w, 404, "Board not found. Ask the facilitator to create it.")
 }
 func (a *app) facilitator(r *http.Request, b *Board) bool {
-	return subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Facilitator-Key")), []byte(b.Facilitator)) == 1
+	return kit.Grant(kit.FacilitatorKey(r), b.Facilitator)
 }
 
 // authorized reports whether id may read or write b. The facilitator always
@@ -230,74 +207,26 @@ func accessDenied(w http.ResponseWriter) {
 	fail(w, 403, "This board is private. Ask the facilitator for an invite.")
 }
 func participant(w http.ResponseWriter, r *http.Request) string {
-	if c, e := r.Cookie("whiteboard-participant"); e == nil && validToken(c.Value) {
-		return c.Value
-	}
-	id := token()
-	http.SetCookie(w, &http.Cookie{Name: "whiteboard-participant", Value: id, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 86400 * 30})
-	return id
+	return kit.ParticipantCookie(w, r, "whiteboard-participant")
 }
-func respond(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
-}
-func fail(w http.ResponseWriter, code int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
-}
+func respond(w http.ResponseWriter, v any)             { kit.WriteJSON(w, v) }
+func fail(w http.ResponseWriter, code int, msg string) { kit.Fail(w, code, msg) }
 func validPt(p Pt) bool {
 	return !math.IsNaN(p.X) && !math.IsNaN(p.Y) && !math.IsInf(p.X, 0) && !math.IsInf(p.Y, 0) &&
 		p.X >= 0 && p.X <= canvasW && p.Y >= 0 && p.Y <= canvasH
 }
 func (a *app) stripPrefix(path string) (string, bool) {
-	if a.prefix == "" {
-		return path, true
-	}
-	if path == a.prefix {
-		return "/", true
-	}
-	if strings.HasPrefix(path, a.prefix+"/") {
-		return strings.TrimPrefix(path, a.prefix), true
-	}
-	return "", false
+	return kit.StripPrefix(a.prefix, path)
 }
 
 // sameOrigin accepts the public origin forwarded by a loopback-only outpost.
 // Forwarded headers from a non-loopback client never weaken the direct check.
-func sameOrigin(r *http.Request, u *url.URL) bool {
-	if u.Host == r.Host {
-		return true
-	}
-	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil || !net.ParseIP(remoteHost).IsLoopback() {
-		return false
-	}
-	return u.Host != "" && u.Host == r.Header.Get("X-Forwarded-Host") &&
-		u.Scheme == r.Header.Get("X-Forwarded-Proto")
-}
+func sameOrigin(r *http.Request, u *url.URL) bool { return kit.SameOrigin(r, u) }
 
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-	if r.Method != "GET" && r.Method != "POST" {
-		fail(w, 405, "Method not supported")
+	kit.ApplySecurityHeaders(w)
+	if !kit.GuardPOST(w, r, "board's own") {
 		return
-	}
-	if r.Method == "POST" {
-		if origin := r.Header.Get("Origin"); origin != "" {
-			u, e := url.Parse(origin)
-			if e != nil || !sameOrigin(r, u) {
-				fail(w, 403, "Use the board's own page")
-				return
-			}
-		}
-		if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
-			fail(w, 403, "Cross-site request refused")
-			return
-		}
 	}
 	path, ok := a.stripPrefix(r.URL.Path)
 	if !ok {
@@ -372,29 +301,12 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "Not found")
 		return
 	}
-	var req struct {
-		Action     string  `json:"action"`
-		Board      string  `json:"board"`
-		ID         string  `json:"id"`
-		Points     []Pt    `json:"points"`
-		Color      string  `json:"color"`
-		Width      float64 `json:"width"`
-		X          float64 `json:"x"`
-		Y          float64 `json:"y"`
-		Text       string  `json:"text"`
-		Locked     bool    `json:"locked"`
-		Invite     string  `json:"invite"`
-		InviteCode string  `json:"inviteCode"`
-		Code       string  `json:"code"`
-	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 65536))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		fail(w, 400, "Invalid request")
+	var req actionReq
+	if !kit.DecodeAction(w, r, 65536, &req) {
 		return
 	}
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		fail(w, 400, "Invalid request")
+	if deskActions[req.Action] {
+		a.desk(w, r, id, &req)
 		return
 	}
 	if req.Board == "" {
@@ -842,8 +754,11 @@ func renderPNG(b *Board) []byte {
 	return buf.Bytes()
 }
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "cli" {
+		os.Exit(runCLI(os.Args[2:], os.Stdout))
+	}
 	data := flag.String("data", "", "persistent data directory")
-	addr := flag.String("addr", "0.0.0.0:18093", "listen address")
+	addr := flag.String("addr", defaultAddr, "listen address")
 	prefix := flag.String("prefix", "", "URL prefix when served behind a sub-path (e.g. /whiteboard)")
 	flag.Parse()
 	if *data == "" {

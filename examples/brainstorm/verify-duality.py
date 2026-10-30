@@ -23,6 +23,15 @@ with tempfile.TemporaryDirectory(prefix="brainstorm-duality-") as root:
     env["BRAINSTORM_ADDR"] = f"127.0.0.1:{port}"
     base = f"http://127.0.0.1:{port}"
 
+    def post(path, body, key=None):
+        data_bytes = json.dumps(body).encode()
+        headers = {"Content-Type": "application/json"}
+        if key:
+            headers["X-Facilitator-Key"] = key
+        req = urllib.request.Request(base + path, data=data_bytes, headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return json.load(r)
+
     def run(*args, extra=None, success=True):
         p = subprocess.run([BASHY, *args], env=dict(env, **(extra or {})),
                            text=True, capture_output=True, timeout=60)
@@ -67,6 +76,19 @@ with tempfile.TemporaryDirectory(prefix="brainstorm-duality-") as root:
             assert receipt["valid"] is True
             created = set((data / "backups").iterdir()) - before
             assert len(created) == 1 and (created.pop() / "main.json").read_bytes() == expected
+            # Desk door: the CLI verbs and the HTTP action are one door.
+            made = run("brainstorm", "new", "--id", "duality-desk", "--body", "duality-secret").stdout.splitlines()
+            desk_id, desk_url, desk_status = made[0].split()
+            desk_key = made[1].split()[1]
+            keyed = {"BRAINSTORM_KEY": desk_key}
+            opened = run("brainstorm", "open", desk_id, extra=keyed).stdout
+            assert "duality-secret" not in opened and opened.split() == [desk_id, desk_url, desk_status], opened
+            http_open = post("/api/action", {"action": "open", "id": desk_id}, desk_key)
+            assert [http_open["id"], http_open["url"], http_open["status"]] == [desk_id, desk_url, desk_status], http_open
+            assert "duality-secret" not in json.dumps(http_open)
+            assert "duality-secret" in run("brainstorm", "get", desk_id, extra=keyed).stdout
+            assert desk_id in run("brainstorm", "list", extra=keyed).stdout
+            run("brainstorm", "open", "no-such-session", extra=keyed, success=False)
             run("brainstorm", "unknown-action", success=False)
             missing = {"BRAINSTORM_DATA": str(root / "missing")}
             run("brainstorm", "status", extra=missing, success=False)

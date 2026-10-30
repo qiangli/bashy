@@ -31,6 +31,17 @@ the executable argv and source path; `bashy skill show brainstorm` reads this fa
   original data and snapshot, then start the restored service.
 - `bashy brainstorm stop` stops a server started for the same data directory.
   Ctrl-C stops a foreground server; restart resumes the saved sessions.
+- Desk verbs drive a running service through the same `/api/action` route the
+  page uses (`BRAINSTORM_ADDR` host `0.0.0.0` is reached as `127.0.0.1`;
+  `BRAINSTORM_KEY` or `--key` carries the facilitator key; add `--json` for the
+  raw object). A session is the item and its name is the id:
+  `new [--id NAME] [--title T] [--body TEXT]` creates an invite-only session
+  (an optional first idea) and prints id, URL, status and the private owner
+  key; `open ID` re-surfaces id, URL and status only, never idea text; `get ID`
+  prints the session as JSON (what the caller could see on the page: others'
+  ideas only after reveal); `put ID --body TEXT` adds an idea while writing is
+  open; `list` prints id/status/URL of the sessions the key may read; `share ID`
+  mints a single-use invite; `close ID` ends the session (status `closed`).
 - The facilitator creates named sessions with a title, columns and vote
   budget, then guides Write privately → Reveal/discuss → Vote → Results.
   Reveal ends editing. Each browser participant gets the session's vote
@@ -140,7 +151,8 @@ data=${BRAINSTORM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy/brainstorm}
 addr=${BRAINSTORM_ADDR:-0.0.0.0:18091}
 prefix=${BRAINSTORM_PREFIX:-}
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/brainstorm
-if (( $# > 2 )); then echo 'Usage: brainstorm [serve|status|backup|restore SNAPSHOT|stop|test|--skill|--contract]' >&2; exit 2; fi
+usage='Usage: brainstorm [serve|status|backup|restore SNAPSHOT|stop|test|new|open|get|put|list|share|close|--skill|--contract]'
+case ${1:-serve} in new|open|get|put|list|share|close|-*) ;; *) if (( $# > 2 )); then echo "$usage" >&2; exit 2; fi ;; esac
 case ${1:-serve} in
 --skill)
   copying=false
@@ -151,7 +163,7 @@ case ${1:-serve} in
   done < "${BASH_SOURCE[0]}"
   ;;
 --contract) echo 'sokilili burainisutoromu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
--h|--help) echo 'brainstorm [serve|status|backup|restore SNAPSHOT|stop|test] — native LAN board; --skill prints its embedded skill' ;;
+-h|--help) echo 'brainstorm [serve|status|backup|restore SNAPSHOT|stop|test|new|open|get|put|list|share|close] — native LAN board with desk verbs; --skill prints its embedded skill' ;;
 serve)
   mkdir -p "$cache"
   (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/brainstorm" .)
@@ -171,6 +183,11 @@ restore)
 stop)
   if pkill -f "$cache/brainstorm -data $data" 2>/dev/null; then echo "stopped brainstorm ($data)"; else echo "no brainstorm server matched $data"; fi
   ;;
+-*|new|open|get|put|list|share|close)
+  mkdir -p "$cache"
+  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/brainstorm" .)
+  exec "$cache/brainstorm" cli -addr "$addr" -prefix "$prefix" "$@"
+  ;;
 test) cd "$here/server"; GOWORK=off go test -race ./... ;;
-*) echo 'Usage: brainstorm [serve|status|backup|restore SNAPSHOT|stop|test|--skill|--contract]' >&2; exit 2 ;;
+*) echo "$usage" >&2; exit 2 ;;
 esac

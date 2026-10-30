@@ -112,6 +112,20 @@ func SameOrigin(r *http.Request, u *url.URL) bool {
 		u.Scheme == r.Header.Get("X-Forwarded-Proto")
 }
 
+// RequestOrigin is the public origin of a request: the Host it arrived on,
+// or the origin forwarded by a loopback-only proxy. Forwarded headers from
+// a non-loopback client are ignored.
+func RequestOrigin(r *http.Request) string {
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && net.ParseIP(remoteHost).IsLoopback() {
+		h, p := r.Header.Get("X-Forwarded-Host"), r.Header.Get("X-Forwarded-Proto")
+		if h != "" && (p == "http" || p == "https") {
+			return p + "://" + h
+		}
+	}
+	return "http://" + r.Host
+}
+
 // GuardPOST enforces the desk POST preconditions shared by every tool:
 // only GET/POST exist; POST requires a same-origin Origin (when present)
 // and refuses cross-site fetch metadata. It writes the refusal and
@@ -147,8 +161,7 @@ func DecodeAction(w http.ResponseWriter, r *http.Request, maxBytes int64, v any)
 		Fail(w, http.StatusBadRequest, "Invalid request")
 		return false
 	}
-	var extra struct{}
-	if err := dec.Decode(&extra); err != nil && !errors.Is(err, io.EOF) {
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		Fail(w, http.StatusBadRequest, "Invalid request")
 		return false
 	}

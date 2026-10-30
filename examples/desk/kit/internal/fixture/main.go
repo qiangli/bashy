@@ -58,6 +58,22 @@ type app struct {
 	items   map[string]*item
 }
 
+// clone deep-copies the item so a failed save never leaves the in-memory
+// copy mutated.
+func (it *item) clone() item {
+	c := *it
+	c.Fields = append([]kit.Field(nil), it.Fields...)
+	c.Members = make(map[string]bool, len(it.Members))
+	for k, v := range it.Members {
+		c.Members[k] = v
+	}
+	c.Invites = make(map[string]bool, len(it.Invites))
+	for k, v := range it.Invites {
+		c.Invites[k] = v
+	}
+	return c
+}
+
 func itemPath(dir, id string) string { return filepath.Join(dir, "items", id+".json") }
 
 func (a *app) loadLocked(id string) (*item, error) {
@@ -313,7 +329,7 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req struct {
 		kit.Fail(w, 409, "This memo is closed")
 		return
 	}
-	next := *it
+	next := it.clone()
 	if closing {
 		next.Status = kit.StatusClosed
 	} else {
@@ -379,7 +395,7 @@ func (a *app) share(w http.ResponseWriter, r *http.Request, req struct {
 		kit.Fail(w, 403, "Only the owner can share this memo")
 		return
 	}
-	next := *it
+	next := it.clone()
 	if next.Invites == nil {
 		next.Invites = map[string]bool{}
 	}
@@ -416,7 +432,7 @@ func (a *app) join(w http.ResponseWriter, req struct {
 		kit.Fail(w, 403, "This invite is invalid. Ask the owner for a new one.")
 		return
 	}
-	next := *it
+	next := it.clone()
 	next.Members[me] = true
 	delete(next.Invites, req.Invite) // single use
 	if err := a.saveLocked(&next); err != nil {

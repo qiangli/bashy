@@ -113,3 +113,18 @@ failed steps without a passing attestation.
 For the optional browser test, install Playwright separately and set
 `PLAYWRIGHT_MODULE` to its module path and `WHITEBOARD_BIN` to the built server,
 then run `node browser-test.mjs`. `CHROMIUM_PATH` can select an existing browser.
+
+## Desk door (agents and scripts)
+
+The whiteboard follows the shared desk contract (`examples/desk/kit`): the page
+uses the kit's copy buttons and status badge, and `bashy whiteboard` gains
+`new|open|get|put|list|share|close` over the same `/api/action` route the page
+uses. A board is the item and its name is the id; `open` prints id, URL and
+status only. `new` makes a private board and prints its owner key (pass it as
+`--key` or `WHITEBOARD_KEY`); `put` pins a note; `close` locks the board. A
+launcher tile is added by `register.sh` (`bashy app add`).
+
+Recorded exceptions to the desk defaults: the server keeps its LAN default bind
+(`0.0.0.0:18093`; pinned by `TestDefaultBindStaysLAN`), and the contract test
+runs with `StateHasContent: true` because `/api/state` is the page's full
+board state, not a contentless re-surface.

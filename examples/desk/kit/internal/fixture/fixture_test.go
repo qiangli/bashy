@@ -6,6 +6,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -93,5 +94,61 @@ func TestCLIOpenHidesContent(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "cli-secret-body") {
 		t.Errorf("CLI get must return content: %s", out.String())
+	}
+}
+
+// A failed save must never leave the in-memory item mutated (share/join
+// used to shallow-copy the Invites/Members maps).
+func TestFailedSaveDoesNotMutateItem(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "items"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	a := &app{dir: dir, items: map[string]*item{}}
+	srv := httptest.NewServer(a)
+	t.Cleanup(srv.Close)
+	a.baseURL = srv.URL
+	post := func(key, body string) (int, map[string]any) {
+		req, _ := http.NewRequest("POST", srv.URL+"/api/action", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Facilitator-Key", key)
+		r, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer r.Body.Close()
+		var v map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&v)
+		return r.StatusCode, v
+	}
+	code, created := post("", `{"action":"new","id":"fs","title":"t"}`)
+	if code != 200 {
+		t.Fatalf("new: %d", code)
+	}
+	key := created["ownerKey"].(string)
+	code, shared := post(key, `{"action":"share","id":"fs"}`)
+	if code != 200 {
+		t.Fatalf("share: %d", code)
+	}
+	invite := shared["invite"].(string)
+	// Break storage: items becomes a regular file so every save fails.
+	if err := os.RemoveAll(filepath.Join(dir, "items")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "items"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	invitesBefore, membersBefore := len(a.items["fs"].Invites), len(a.items["fs"].Members)
+	if code, _ := post(key, `{"action":"share","id":"fs"}`); code != 500 {
+		t.Fatalf("share on broken storage: want 500, got %d", code)
+	}
+	if got := len(a.items["fs"].Invites); got != invitesBefore {
+		t.Errorf("failed share leaked an invite into memory: %d -> %d", invitesBefore, got)
+	}
+	if code, _ := post("", `{"action":"join","id":"fs","invite":"`+invite+`"}`); code != 500 {
+		t.Fatalf("join on broken storage: want 500, got %d", code)
+	}
+	if !a.items["fs"].Invites[invite] || len(a.items["fs"].Members) != membersBefore {
+		t.Errorf("failed join mutated memory: invites=%v members=%v", a.items["fs"].Invites, a.items["fs"].Members)
 	}
 }

@@ -39,6 +39,11 @@ type Config struct {
 	// ItemParam is the query parameter naming an item in URLs ("id" ...).
 	// Empty means "id".
 	ItemParam string
+	// StateHasContent records the retrofit exception for tools whose
+	// GET /api/state is the page's full state (whiteboard, brainstorm):
+	// the state read may carry item content, so the contentless-state
+	// probe is skipped. open/new/list stay contentless regardless.
+	StateHasContent bool
 }
 
 // Run fails the test once per violated contract point.
@@ -336,7 +341,7 @@ func (t *check) lifecycle() {
 	code, raw, _ = t.get("/api/state?"+p+"="+url.QueryEscape(id), auth)
 	if code != http.StatusOK {
 		t.fail("GET /api/state: want 200, got %d", code)
-	} else if strings.Contains(string(raw), canary) {
+	} else if !t.cfg.StateHasContent && strings.Contains(string(raw), canary) {
 		t.fail("GET /api/state: must not re-emit content")
 	}
 

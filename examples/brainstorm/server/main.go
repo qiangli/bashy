@@ -1,17 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -25,10 +23,23 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	kit "desk-kit"
 )
 
+// defaultAddr is the recorded LAN-default exception to the desk loopback rule.
+const defaultAddr = "0.0.0.0:18091"
+
 //go:embed index.html
-var page []byte
+var indexHTML []byte
+
+// page is the session page with the desk UI kit CSS/JS inlined.
+var page = buildPage(indexHTML)
+
+func buildPage(src []byte) []byte {
+	p := bytes.Replace(src, []byte("<style>"), []byte("<style>"+kit.CSS()+"\n"), 1)
+	return bytes.Replace(p, []byte("</main><script>"), []byte("</main><script>"+kit.JS()+"</script><script>"), 1)
+}
 
 var defaultColumns = []string{"Problems we notice", "Who needs help?", "Possible solutions", "What could we build?", "How would we test it?"}
 var defaultPrompts = []string{
@@ -82,20 +93,8 @@ type app struct {
 	sessions map[string]*Session
 }
 
-func token() string {
-	b := make([]byte, 24)
-	if _, err := rand.Read(b); err != nil {
-		panic(err)
-	}
-	return hex.EncodeToString(b)
-}
-func validToken(s string) bool {
-	if len(s) != 48 {
-		return false
-	}
-	_, err := hex.DecodeString(s)
-	return err == nil
-}
+func token() string            { return kit.NewToken() }
+func validToken(s string) bool { return kit.ValidToken(s) }
 func sessionPath(dir, name string) string {
 	return filepath.Join(dir, "sessions", name+".json")
 }
@@ -104,27 +103,7 @@ func saveSession(path string, s Session) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".session-*")
-	if err != nil {
-		return err
-	}
-	tmp := f.Name()
-	defer os.Remove(tmp)
-	if _, err = f.Write(data); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Sync(); err != nil {
-		f.Close()
-		return err
-	}
-	if err = f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return kit.AtomicWrite(path, data)
 }
 func validPhase(p string) bool {
 	return p == "write" || p == "discuss" || p == "vote" || p == "closed"
@@ -287,77 +266,27 @@ func sessionNotFound(w http.ResponseWriter) {
 	fail(w, 404, "Session not found. Ask the facilitator to create it.")
 }
 func (a *app) facilitator(r *http.Request, s *Session) bool {
-	got := r.Header.Get("X-Facilitator-Key")
+	got := kit.FacilitatorKey(r)
 	if got == "" {
 		got = r.Header.Get("X-Teacher-Key")
 	}
-	return subtle.ConstantTimeCompare([]byte(got), []byte(s.Facilitator)) == 1
+	return kit.Grant(got, s.Facilitator)
 }
 func participant(w http.ResponseWriter, r *http.Request) string {
-	if c, e := r.Cookie("brainstorm-participant"); e == nil && validToken(c.Value) {
-		return c.Value
-	}
-	id := token()
-	http.SetCookie(w, &http.Cookie{Name: "brainstorm-participant", Value: id, Path: "/", HttpOnly: true, SameSite: http.SameSiteStrictMode, MaxAge: 86400 * 30})
-	return id
+	return kit.ParticipantCookie(w, r, "brainstorm-participant")
 }
-func respond(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
-}
-func fail(w http.ResponseWriter, code int, msg string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(map[string]string{"error": msg})
-}
+func respond(w http.ResponseWriter, v any)             { kit.WriteJSON(w, v) }
+func fail(w http.ResponseWriter, code int, msg string) { kit.Fail(w, code, msg) }
 func (a *app) stripPrefix(path string) (string, bool) {
-	if a.prefix == "" {
-		return path, true
-	}
-	if path == a.prefix {
-		return "/", true
-	}
-	if strings.HasPrefix(path, a.prefix+"/") {
-		return strings.TrimPrefix(path, a.prefix), true
-	}
-	return "", false
+	return kit.StripPrefix(a.prefix, path)
 }
 
-// sameOrigin accepts the public origin forwarded by a loopback-only outpost.
-// Forwarded headers from a non-loopback client never weaken the direct check.
-func sameOrigin(r *http.Request, u *url.URL) bool {
-	if u.Host == r.Host {
-		return true
-	}
-	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil || !net.ParseIP(remoteHost).IsLoopback() {
-		return false
-	}
-	return u.Host != "" && u.Host == r.Header.Get("X-Forwarded-Host") &&
-		u.Scheme == r.Header.Get("X-Forwarded-Proto")
-}
+func sameOrigin(r *http.Request, u *url.URL) bool { return kit.SameOrigin(r, u) }
 
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-	if r.Method != "GET" && r.Method != "POST" {
-		fail(w, 405, "Method not supported")
+	kit.ApplySecurityHeaders(w)
+	if !kit.GuardPOST(w, r, "session's own") {
 		return
-	}
-	if r.Method == "POST" {
-		if origin := r.Header.Get("Origin"); origin != "" {
-			u, e := url.Parse(origin)
-			if e != nil || !sameOrigin(r, u) {
-				fail(w, 403, "Use the session's own page")
-				return
-			}
-		}
-		if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
-			fail(w, 403, "Cross-site request refused")
-			return
-		}
 	}
 	path, ok := a.stripPrefix(r.URL.Path)
 	if !ok {
@@ -444,29 +373,12 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		fail(w, 404, "Not found")
 		return
 	}
-	var req struct {
-		Action     string   `json:"action"`
-		Session    string   `json:"session"`
-		ID         string   `json:"id"`
-		Column     int      `json:"column"`
-		Text       string   `json:"text"`
-		Name       string   `json:"name"`
-		Phase      string   `json:"phase"`
-		Title      string   `json:"title"`
-		Columns    []string `json:"columns"`
-		Prompts    []string `json:"prompts"`
-		VoteBudget int      `json:"voteBudget"`
-		Private    bool     `json:"private"`
-		Invite     string   `json:"invite"`
-	}
-	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16384))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		fail(w, 400, "Invalid request")
+	var req actionReq
+	if !kit.DecodeAction(w, r, 16384, &req) {
 		return
 	}
-	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		fail(w, 400, "Invalid request")
+	if deskActions[req.Action] {
+		a.desk(w, r, id, &req)
 		return
 	}
 	if req.Session == "" {
@@ -788,8 +700,11 @@ func (a *app) baseView(id string, s *Session, facilitator bool, cards []map[stri
 		"votesLeft": s.VoteBudget - used}
 }
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "cli" {
+		os.Exit(runCLI(os.Args[2:], os.Stdout))
+	}
 	data := flag.String("data", "", "persistent data directory")
-	addr := flag.String("addr", "0.0.0.0:18091", "listen address")
+	addr := flag.String("addr", defaultAddr, "listen address")
 	prefix := flag.String("prefix", "", "URL prefix when served behind a sub-path (e.g. /brainstorm)")
 	flag.Parse()
 	if *data == "" {

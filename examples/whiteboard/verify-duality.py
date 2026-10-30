@@ -28,10 +28,12 @@ with tempfile.TemporaryDirectory(prefix="whiteboard-duality-") as root:
         assert (p.returncode == 0) == success, (args, p.returncode, p.stdout, p.stderr)
         return p
 
-    def post(path, body):
+    def post(path, body, key=None):
         data_bytes = json.dumps(body).encode()
-        req = urllib.request.Request(base + path, data=data_bytes,
-                                     headers={"Content-Type": "application/json"})
+        headers = {"Content-Type": "application/json"}
+        if key:
+            headers["X-Facilitator-Key"] = key
+        req = urllib.request.Request(base + path, data=data_bytes, headers=headers)
         with urllib.request.urlopen(req, timeout=5) as r:
             return json.load(r)
 
@@ -74,6 +76,19 @@ with tempfile.TemporaryDirectory(prefix="whiteboard-duality-") as root:
             created = set((data / "backups").iterdir()) - before
             assert len(created) == 1
             assert (created.pop() / "main.json").read_bytes() == expected
+            # Desk door: the CLI verbs and the HTTP action are one door.
+            made = run("whiteboard", "new", "--id", "duality-desk", "--body", "duality-secret").stdout.splitlines()
+            desk_id, desk_url, desk_status = made[0].split()
+            desk_key = made[1].split()[1]
+            keyed = {"WHITEBOARD_KEY": desk_key}
+            opened = run("whiteboard", "open", desk_id, extra=keyed).stdout
+            assert "duality-secret" not in opened and opened.split() == [desk_id, desk_url, desk_status], opened
+            http_open = post("/api/action", {"action": "open", "id": desk_id}, desk_key)
+            assert [http_open["id"], http_open["url"], http_open["status"]] == [desk_id, desk_url, desk_status], http_open
+            assert "duality-secret" not in json.dumps(http_open)
+            assert "duality-secret" in run("whiteboard", "get", desk_id, extra=keyed).stdout
+            assert desk_id in run("whiteboard", "list", extra=keyed).stdout
+            run("whiteboard", "open", "no-such-board", extra=keyed, success=False)
             run("whiteboard", "unknown-action", success=False)
             missing = {"WHITEBOARD_DATA": str(root / "missing")}
             run("whiteboard", "status", extra=missing, success=False)

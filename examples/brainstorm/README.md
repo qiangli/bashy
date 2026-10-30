@@ -118,3 +118,19 @@ revoked members get the same 404 as an unknown session on state, polling,
 write, vote and export. The facilitator can revoke a member or a pending
 invite at any time; access ends on the next request. Sessions created without
 the option, the legacy main board, and records saved earlier stay open.
+
+## Desk door (agents and scripts)
+
+Brainstorm follows the shared desk contract (`examples/desk/kit`): the page
+uses the kit's copy button and status badge, and `bashy brainstorm` gains
+`new|open|get|put|list|share|close` over the same `/api/action` route the page
+uses. A session is the item and its name is the id; `open` prints id, URL and
+status only. `new` makes an invite-only session and prints its owner key (pass
+it as `--key` or `BRAINSTORM_KEY`); `get` returns only what the caller could
+see on the page, so other people's ideas stay hidden until reveal; `close`
+ends the session. A launcher tile is added by `register.sh` (`bashy app add`).
+
+Recorded exceptions to the desk defaults: the server keeps its LAN default bind
+(`0.0.0.0:18091`; pinned by `TestDefaultBindStaysLAN`), and the contract test
+runs with `StateHasContent: true` because `/api/state` is the page's full
+session state, not a contentless re-surface.
