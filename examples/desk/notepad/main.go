@@ -562,22 +562,12 @@ func (a *app) page(r *http.Request) []byte {
 	header := kit.EmptyItemHeader("new note")
 	noteTitle := ""
 	noteBody := ""
-	currentURL := a.baseURL + "/"
 	if id != "" {
 		if n, err := a.loadLocked(id); err == nil {
 			header = kit.ItemHeader(n.ID, n.Status, a.urlFor(n.ID))
 			noteTitle = n.Title
 			noteBody = n.Body
-			currentURL = a.urlFor(n.ID)
 		}
-	}
-
-	var badges strings.Builder
-	for _, s := range []string{
-		kit.StatusPending, kit.StatusNeeds, kit.StatusFilled,
-		kit.StatusAnswered, kit.StatusFailed, kit.StatusClosed,
-	} {
-		badges.WriteString(kit.Badge(s))
 	}
 
 	// List of other notes
@@ -602,7 +592,6 @@ func (a *app) page(r *http.Request) []byte {
 .np-split .desk-panel{margin-bottom:0}.np-split textarea{min-height:320px;font-family:var(--desk-font-mono);font-size:var(--desk-text-sm)}
 .np-notes{margin:0;padding-left:1.2em;columns:2 220px}
 </style>` + kit.AppBar("notepad", a.baseURL+"/", header, "") + `<main class="desk-main">` +
-		`<div class="desk-statuses">` + badges.String() + `</div>` +
 		`<div data-desk-alert class="desk-alert"></div>` +
 		`<form id="noteForm" onsubmit="return false"><div class="np-split"><section class="desk-panel">` +
 		kit.TextField("title", "Title", "text", noteTitle, "") +
@@ -612,7 +601,6 @@ func (a *app) page(r *http.Request) []byte {
 		`<div class="desk-row">` +
 		`<button type="button" class="desk-copy" id="saveBtn" data-desk-shortcut="save" title="Save (⌘/Ctrl+S)">Save Note</button>` +
 		`<button type="button" class="desk-copy secondary" id="newBtn">New Note</button>` +
-		kit.CopyButton("Copy link", currentURL) +
 		kit.CopyButton("Copy text", noteBody) +
 		`</div></section>` +
 		`<section class="desk-panel"><h2 class="desk-h2">Preview</h2>` +
@@ -667,15 +655,8 @@ func (a *app) page(r *http.Request) []byte {
           history.replaceState(null, '', u.toString());
           const headerId = document.querySelector('.desk-item-header .desk-id');
           if (headerId) headerId.textContent = data.id;
-          const headerTools = document.querySelector('.desk-item-header .desk-tools');
-          if (headerTools && data.url) {
-            headerTools.innerHTML = '<button type="button" class="desk-copy" data-desk-copy data-copy="' + data.url.replace(/"/g, '&quot;') + '" data-copied="false">Copy link</button>';
-          }
-          document.querySelectorAll('button[data-desk-copy]').forEach(btn => {
-            if (btn.textContent.includes('Copy link') && data.url) {
-              btn.setAttribute('data-copy', data.url);
-            }
-          });
+          const shareLink = document.getElementById('deskShareLink');
+          if (shareLink && data.url) shareLink.setAttribute('data-copy', data.url);
           const resurface = document.querySelector('.desk-footer code');
           if (resurface) resurface.textContent = 'notepad open ' + data.id;
         }

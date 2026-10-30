@@ -468,11 +468,6 @@ func (a *app) page(r *http.Request) []byte {
 			header = kit.ItemHeader(it.ID, it.Status, a.urlFor(it.ID))
 		}
 	}
-	var badges strings.Builder
-	for _, s := range []string{kit.StatusPending, kit.StatusNeeds, kit.StatusFilled,
-		kit.StatusAnswered, kit.StatusFailed, kit.StatusClosed} {
-		badges.WriteString(kit.Badge(s))
-	}
 	planted := ""
 	switch breakMode { // deliberate kit-conformance breaks for red/green proof
 	case "hex-color":
@@ -485,11 +480,9 @@ func (a *app) page(r *http.Request) []byte {
 		appbar = header
 	}
 	body := planted + appbar + `<main class="desk-main desk-narrow">` +
-		`<div class="desk-statuses">` + badges.String() + `</div>` +
 		`<div data-desk-alert class="desk-alert"></div>` +
 		kit.TextField("title", "Title", "text", "", "") +
 		kit.TextField("body", "Body", "textarea", "", "recommended") +
-		`<div class="desk-row">` + kit.CopyButton("Copy link", a.baseURL+"/") + `</div>` +
 		`<p class="desk-muted">Local-first memo · loopback only · re-surface with <code>memo open ID</code>.</p></main>`
 	return kit.Page("memo", "Memo · desk fixture", body)
 }

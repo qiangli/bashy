@@ -47,9 +47,9 @@ func ItemHeader(id, status, shareURL string) string {
 	var b strings.Builder
 	b.WriteString(`<div class="desk-item-header"><span class="desk-id">`)
 	b.WriteString(html.EscapeString(id))
-	b.WriteString(`</span>` + Badge(status) + `<span class="desk-tools">`)
-	b.WriteString(CopyButton("Copy link", shareURL))
-	b.WriteString(`</span></div>`)
+	b.WriteString(`</span>` + Badge(status) + `<span class="desk-tools" data-share="`)
+	b.WriteString(html.EscapeString(shareURL))
+	b.WriteString(`"></span></div>`)
 	return b.String()
 }
 
@@ -127,7 +127,7 @@ const (
 // id, a pending badge and no share tools.
 func EmptyItemHeader(placeholder string) string {
 	return `<div class="desk-item-header"><span class="desk-id">` + html.EscapeString(placeholder) + `</span>` +
-		Badge(StatusPending) + `<span class="desk-tools"></span></div>`
+		Badge(StatusPending) + `<span class="desk-tools" data-share=""></span></div>`
 }
 
 // AppBar renders the one top bar every tool shows, in the same place:
@@ -143,13 +143,36 @@ func AppBar(tool, homeURL, itemHeader, extra string) string {
 	b.WriteString(`<header class="desk-appbar" data-desk-shell>`)
 	b.WriteString(`<a class="desk-brand" href="` + html.EscapeString(homeURL) + `"><span class="desk-icon" aria-hidden="true">` +
 		t.Icon + `</span><span class="desk-name">` + html.EscapeString(t.Label) + `</span></a>`)
-	b.WriteString(itemHeader)
+	b.WriteString(shellTools(itemHeader))
 	if extra != "" {
 		b.WriteString(`<span class="desk-appbar-extra">` + extra + `</span>`)
 	}
 	b.WriteString(ThemeToggle())
 	b.WriteString(`</header>`)
 	return b.String()
+}
+
+// shellTools puts the one shell action set (Copy link) into the item header.
+// Tools never render their own; the link copies the header's data-share URL,
+// or the page URL when none is given (scripts may update data-copy).
+func shellTools(header string) string {
+	share := ""
+	if i := strings.Index(header, `data-share="`); i >= 0 {
+		rest := header[i+len(`data-share="`):]
+		if j := strings.IndexByte(rest, '"'); j >= 0 {
+			share = html.UnescapeString(rest[:j])
+		}
+	}
+	btn := `<span class="desk-tools">` + strings.Replace(CopyButton("Copy link", share), `<button `, `<button id="deskShareLink" `, 1) + `</span>`
+	if i := strings.Index(header, `<span class="desk-tools"`); i >= 0 {
+		if j := strings.Index(header[i:], `</span>`); j >= 0 {
+			return header[:i] + btn + header[i+j+len(`</span>`):]
+		}
+	}
+	if i := strings.LastIndex(header, `</div>`); i >= 0 {
+		return header[:i] + btn + header[i:]
+	}
+	return header + btn
 }
 
 // ThemeToggle is the shared light/dark switch (also bound to "t").

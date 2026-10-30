@@ -761,16 +761,9 @@ func (a *app) page(r *http.Request) []byte {
 			formBody = kit.State("error", "Form not found", "Create it with form add first.")
 		}
 	}
-	var badges strings.Builder
-	for _, s := range []string{kit.StatusPending, kit.StatusNeeds, kit.StatusFilled,
-		kit.StatusAnswered, kit.StatusFailed, kit.StatusClosed} {
-		badges.WriteString(kit.Badge(s))
-	}
 	body := kit.AppBar("form", a.baseURL+"/", header, "") + `<main class="desk-main desk-narrow">` +
-		`<div class="desk-statuses">` + badges.String() + `</div>` +
 		`<div data-desk-alert class="desk-alert"></div>` +
 		`<section class="desk-panel">` + formBody + `</section>` +
-		`<div class="desk-row">` + kit.CopyButton("Copy link", a.baseURL+"/") + `</div>` +
 		`<p class="desk-footer">Local-first form · loopback only · partial saves persist · re-surface with <code>form open ID</code>.</p></main>` +
 		`<script>` + formPageJS + `</script>`
 	return kit.Page("form", "Form · bashy desk", body)

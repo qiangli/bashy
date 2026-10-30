@@ -63,7 +63,7 @@ function render(s){
  document.title=s.title+' · Brainstorm';
  $('sessionTitle').textContent=s.title;
  $('summary').textContent=`${s.total} idea${s.total===1?'':'s'} collected`+(s.phase==='vote'?` · ${s.votesLeft} votes left`:'');
- $('statusBadge').dataset.status=s.phase==='closed'?'closed':'pending';$('statusBadge').textContent=s.phase==='closed'?'closed':'pending';$('copy').dataset.copy=location.origin+basePath+'/'+sessionQS();
+ $('statusBadge').dataset.status=s.phase==='closed'?'closed':'pending';$('statusBadge').textContent=s.phase==='closed'?'closed':'pending';$('copy').dataset.copy=location.origin+basePath+'/'+sessionQS();$('deskShareLink').dataset.copy=$('copy').dataset.copy;
  $('facilitatorPanel').hidden=!s.facilitator;$('participantLink').textContent='Participant link: '+location.origin+basePath+'/'+sessionQS();
  if(!$('column').options.length){s.columns.forEach((c,i)=>{const o=el('option',c);o.value=i;$('column').append(o)});$('column').value=draft.column||'0'}
  const writing=s.phase==='write';$('submit').disabled=!writing;$('cancel').hidden=!editing;$('submit').textContent=editing?'Save edit':'Add idea';

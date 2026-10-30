@@ -35,7 +35,7 @@
   }
 
   async function copyText(btn) {
-    var text = btn.getAttribute('data-copy') || '';
+    var text = btn.getAttribute('data-copy') || location.href;
     try {
       await navigator.clipboard.writeText(text);
       flashCopied(btn);

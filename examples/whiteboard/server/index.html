@@ -78,7 +78,7 @@ function render(s){
  $('statusBadge').dataset.status=s.locked?'closed':'pending';$('statusBadge').textContent=s.locked?'closed':'pending';
  const origin=new URL(api('/')).origin+new URL(api('./')).pathname.replace(/\/$/,'');
  $('participantLink').textContent='Participant link: '+origin+'/?board='+encodeURIComponent(s.board);
- $('copyLink').dataset.copy=origin+'/?board='+encodeURIComponent(s.board);syncInviteCopy(origin);
+ $('copyLink').dataset.copy=origin+'/?board='+encodeURIComponent(s.board);$('deskShareLink').dataset.copy=$('copyLink').dataset.copy;syncInviteCopy(origin);
  if(s.facilitator){
   const codes=(s.invites&&s.invites.length?s.invites:(lastInvite?[lastInvite]:[]));
   const show=codes.length?codes[codes.length-1]:'';

@@ -92,6 +92,19 @@ async function start(tool, dir) {
   return {server, origin: new URL(url).origin};
 }
 
+const SHELL_ACTIONS = ['Copy link', 'Toggle theme'];
+
+// Every tool page must show the same top-bar actions and exactly one status
+// badge. DESK_PLANT=extra|missing mutates the DOM to prove the check goes red.
+async function assertShell(page, label) {
+  if (process.env.DESK_PLANT === 'extra') await page.evaluate(() => document.querySelector('.desk-appbar').insertAdjacentHTML('beforeend', '<button type="button">Extra</button>'));
+  if (process.env.DESK_PLANT === 'missing') await page.evaluate(() => document.querySelector('#deskShareLink')?.remove());
+  const actions = await page.locator('.desk-appbar button').evaluateAll(bs => bs.map(b => (b.getAttribute('aria-label') || b.textContent).trim()));
+  assert.deepEqual(actions, SHELL_ACTIONS, `${label}: top-bar actions differ`);
+  assert.equal(await page.locator('.desk-badge').count(), 1, `${label}: expected exactly one status badge`);
+  assert.equal(await page.getByRole('button', {name: 'Copy link'}).count(), 1, `${label}: duplicate Copy link`);
+}
+
 const shots = join(here, 'shots');
 await mkdir(shots, {recursive: true});
 const browser = await chromium.launch({headless: true, executablePath: process.env.CHROMIUM_PATH || undefined});
@@ -114,6 +127,7 @@ try {
         if (s.after && scheme === 'light') await s.after(page);
         if (tool.name === 'chart') await page.locator('#charts svg').waitFor();
         await page.waitForTimeout(300);
+        await assertShell(page, `${tool.name}/${scheme}`);
         const file = `${tool.name}-${scheme}.jpg`;
         await page.screenshot({path: join(shots, file), type: 'jpeg', quality: 72});
         assert.deepEqual(errors, [], `${tool.name}/${scheme}: page errors`);
