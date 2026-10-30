@@ -1,0 +1,1 @@
+{"ssn": {"outcome_class": "refused", "reason": "field:label-ssn", "content": "SENSITIVE", "error": "SENSITIVE"}, "bio": {"outcome_class": "failed", "reason": "fill:detached", "content": "SENSITIVE", "error": "SENSITIVE"}}

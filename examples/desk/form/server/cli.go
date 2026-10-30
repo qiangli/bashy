@@ -39,7 +39,7 @@ func runCLI(args []string, stdout io.Writer) int {
 	// the first non-flag token so flags work on either side.
 	pre, verb, post := splitVerb(args)
 	if verb == "" {
-		fmt.Fprintln(stdout, "Usage: form [serve|new|ask|open|get|put|list|share|close|wait] [--json]")
+		fmt.Fprintln(stdout, "Usage: form [serve|new|reply|ask|open|get|put|list|share|close|wait] [--json]")
 		return 2
 	}
 	gfs := flag.NewFlagSet("form", flag.ContinueOnError)
@@ -57,6 +57,9 @@ func runCLI(args []string, stdout io.Writer) int {
 	title := fs.String("title", "", "form title")
 	body := fs.String("body", "", "form body (agent note, returned by get)")
 	idFlag := fs.String("id", "", "form id (new)")
+	extractPath := fs.String("extract", "", "browser extract JSON file (- for stdin)")
+	valuesPath := fs.String("values", "", "proposals keyed by stable_id")
+	refusalsPath := fs.String("refusals", "", "fill results keyed by stable_id")
 	defPath := fs.String("def", "", "form definition file (JSON or YAML; - for stdin)")
 	defInline := fs.String("definition", "", "form definition inline (JSON or YAML)")
 	key := fs.String("key", "", "owner key (FORM_KEY also works)")
@@ -196,6 +199,28 @@ func runCLI(args []string, stdout io.Writer) int {
 		return positional[0], true
 	}
 	switch verb {
+	case "reply":
+		if *extractPath == "" {
+			fmt.Fprintln(stdout, "error: reply requires --extract FILE|-")
+			return 2
+		}
+		payload := map[string]any{"id": *idFlag, "title": *title}
+		for _, input := range []struct{ name, path string }{{"extract", *extractPath}, {"values", *valuesPath}, {"refusals", *refusalsPath}} {
+			if input.path == "" {
+				continue
+			}
+			raw, err := readDefinitionBytes(input.path)
+			if err != nil || !json.Valid(raw) {
+				fmt.Fprintf(stdout, "error: invalid %s JSON input\n", input.name)
+				return 1
+			}
+			payload[input.name] = json.RawMessage(raw)
+		}
+		obj, _, code := call("reply", payload)
+		if code != 0 {
+			return code
+		}
+		return emit(obj, nil)
 	case "ask":
 		def, code := loadDef()
 		if code != 0 {
@@ -379,6 +404,7 @@ func splitVerb(args []string) (pre []string, verb string, post []string) {
 // positional. Unknown flags are an error, never silently ignored.
 func parseVerbArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 	valued := map[string]bool{
+		"extract": true, "values": true, "refusals": true,
 		"addr": true, "data": true, "prefix": true, "title": true,
 		"body": true, "id": true, "def": true, "definition": true,
 		"key": true, "timeout": true, "interval": true, "answer": true,

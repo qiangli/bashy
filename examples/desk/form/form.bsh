@@ -21,6 +21,10 @@ executable argv and source path; `bashy skill show form` reads this face.
   choice, multi, yes-no, file; required; one recommended option per
   choice/multi shown with a mark). Prints the id, loopback URL and status
   plus a one-time owner key — never content.
+- `bashy form reply --extract extract.json --values values.json --refusals refusals.json`
+  creates web-field rows keyed by stable_id (selector fallback), safe copy
+  buttons and fill badges. Refused/failed values are discarded; the human
+  marks rows done. Input maps and the frozen extract schema are in README.md.
 - `bashy form ask --def questions.json --title "Intake"` creates a
   questionnaire with stable `q1..qn` ids and visible `Q1..Qn` labels.
   `bashy form ask ID --key OWNER --def followup.json` appends only the new
@@ -68,7 +72,7 @@ case ${1:-serve} in
   done < "${BASH_SOURCE[0]}"
   ;;
 --contract) echo 'sokilili foromu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
--h|--help) echo 'form [serve|new|ask|open|get|put|list|share|close|wait] [--json] — ad-hoc forms and questionnaires; --skill prints its embedded skill' ;;
+-h|--help) echo 'form [serve|new|reply|ask|open|get|put|list|share|close|wait] [--json] — ad-hoc forms and questionnaires; --skill prints its embedded skill' ;;
 serve)
   shift || true
   data=${FORM_DATA:-}
@@ -84,7 +88,7 @@ stop)
   if pkill -f "$bin serve" 2>/dev/null; then echo "stopped form"; else echo "no form server matched $bin serve"; fi
   ;;
 test) cd "$here"; GOWORK=off go test ./... ;;
-new|ask|open|get|put|list|share|close|wait|join)
+new|reply|ask|open|get|put|list|share|close|wait|join)
   build
   data=${FORM_DATA:-}
   addr=${FORM_ADDR:-127.0.0.1:18107}
@@ -95,5 +99,5 @@ new|ask|open|get|put|list|share|close|wait|join)
   if [[ -n ${prefix:-} ]]; then args+=(-prefix "$prefix"); fi
   exec "$bin" "${args[@]}" "$@"
   ;;
-*) echo 'Usage: form [serve|new|ask|open|get|put|list|share|close|wait] [--json]' >&2; exit 2 ;;
+*) echo 'Usage: form [serve|new|reply|ask|open|get|put|list|share|close|wait] [--json]' >&2; exit 2 ;;
 esac

@@ -37,6 +37,7 @@ type item struct {
 	Fields     []kit.Field     `json:"fields"`
 	Definition Definition      `json:"definition,omitempty"`
 	Answers    Answers         `json:"answers,omitempty"`
+	ReplyRows  []ReplyRow      `json:"reply_rows,omitempty"`
 	Mode       string          `json:"mode,omitempty"`
 	Status     string          `json:"status"`
 	Revision   int             `json:"revision"`
@@ -120,6 +121,10 @@ func (a *app) openView(it *item) map[string]any {
 // raw messages so definition errors can name the offending field instead
 // of failing as a generic "Invalid request".
 type request struct {
+	Extract    json.RawMessage `json:"extract"`
+	Values     json.RawMessage `json:"values"`
+	Refusals   json.RawMessage `json:"refusals"`
+	ReplyRows  []ReplyRow      `json:"-"`
 	Action     string          `json:"action"`
 	ID         string          `json:"id"`
 	Title      string          `json:"title"`
@@ -222,6 +227,8 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch req.Action {
 	case "new":
 		a.create(w, req, me)
+	case "reply":
+		a.reply(w, req, me)
 	case "ask":
 		a.ask(w, r, req, me)
 	case "open":
@@ -281,7 +288,7 @@ func (a *app) createItem(w http.ResponseWriter, req request, me, mode string) {
 	}
 	it := &item{Version: 1, ID: id, Title: title, Body: req.Body,
 		Fields: req.Fields, Definition: def, Answers: Answers{},
-		Mode:   mode,
+		Mode: mode, ReplyRows: req.ReplyRows,
 		Status: kit.StatusPending, Owner: kit.NewToken(),
 		Members: map[string]bool{me: true}, Invites: map[string]bool{}}
 	if err := a.saveLocked(it); err != nil {
@@ -382,6 +389,9 @@ func (a *app) get(w http.ResponseWriter, r *http.Request, req request, me string
 		return
 	}
 	answers := any(it.Answers)
+	if it.Mode == modeReply {
+		answers = replyAnswers(it)
+	}
 	if it.Mode == modeQuestionnaire {
 		byQuestion := make(map[string]questionAnswer, len(it.Definition))
 		for _, q := range it.Definition {
@@ -416,6 +426,10 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req request, me str
 	}
 	if it.Status == kit.StatusClosed {
 		kit.Fail(w, 409, "This form is closed")
+		return
+	}
+	if it.Mode == modeReply && !closing {
+		kit.Fail(w, 409, "Replyform proposals are immutable; mark completion on the page")
 		return
 	}
 	next := *it
@@ -508,7 +522,12 @@ func (a *app) answer(w http.ResponseWriter, req request) {
 	for id, answer := range ans {
 		merged[id] = answer
 	}
-	norm, err := NormalizeAnswers(it.Definition, merged, req.Complete)
+	var norm Answers
+	if it.Mode == modeReply {
+		norm, err = normalizeReply(it.ReplyRows, merged, req.Complete)
+	} else {
+		norm, err = NormalizeAnswers(it.Definition, merged, req.Complete)
+	}
 	if err != nil {
 		kit.Fail(w, 400, err.Error())
 		return
@@ -722,7 +741,13 @@ func (a *app) page(r *http.Request) []byte {
 				}
 				fb.WriteString(fieldHTML(f, it.Answers[f.ID], it.Mode == modeQuestionnaire))
 			}
-			if len(it.Definition) == 0 {
+			if it.Mode == modeReply {
+				for _, row := range it.ReplyRows {
+					row.Done, _ = it.Answers[row.StableID].(bool)
+					fb.WriteString(replyHTML(row))
+				}
+			}
+			if len(it.Definition) == 0 && it.Mode != modeReply {
 				fb.WriteString(`<div class="desk-field"><p class="desk-muted">This form has no fields yet.</p></div>`)
 			}
 			formBody = `<form id="desk-form" data-form-id="` + html.EscapeString(it.ID) + `">` + fb.String() +
@@ -759,11 +784,13 @@ const formPageJS = `(function () {
   function collect() {
     var form = currentForm();
     if (!form) return null;
-    var answers = {};
+    var answers = Object.create(null);
     form.querySelectorAll('[data-field]').forEach(function (wrap) {
       var id = wrap.getAttribute('data-field');
       var kind = wrap.getAttribute('data-kind');
-      if (kind === 'multi') {
+      if (kind === 'reply') {
+        answers[id] = wrap.querySelector('input[type=checkbox]').checked;
+      } else if (kind === 'multi') {
         var vals = [];
         wrap.querySelectorAll('input[type=checkbox]:checked').forEach(function (el) { vals.push(el.value); });
         answers[id] = vals;

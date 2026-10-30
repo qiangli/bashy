@@ -20,6 +20,53 @@ bashy form get form-9f3a… --json  # definition + answers keyed by field id
 bashy form wait form-9f3a…        # blocks until answered (or closed/timeout)
 ```
 
+## Replyforms
+
+Hand a web form back to the human without losing the agent's proposals:
+
+```bash
+bashy browser extract > extract.json
+bashy form reply --extract extract.json --values values.json --refusals refusals.json
+# --extract - reads the extract result from stdin.
+bashy form get form-9f3a… --json --key "$FORM_KEY"
+```
+
+The extract result's `data` is a JSON **string** containing `elements`.
+Only input/select/textarea fields are included (button, submit, reset, image,
+and hidden inputs are skipped). Rows use `stable_id`, falling back to the
+verbatim `selector`; frame-qualified selectors remain unchanged. Labels
+fall back to `name`, then `attrs.placeholder`, then the row key.
+Indexes are never used.
+
+Both optional files are JSON objects keyed by that same row key:
+
+```json
+{"name-id":"Ada","email-id":{"value":"ada@example.test","status":"filled-by-agent"}}
+```
+
+```json
+{"ssn-id":{"outcome_class":"refused","reason":"field:label-ssn","content":"","error":""},
+ "bio-id":{"outcome_class":"failed","reason":"fill:detached","content":"","error":""}}
+```
+
+A string proposal starts as `pending`; an object can specify `pending` or
+`filled-by-agent`. Refusals override proposals and produce `needs-human`;
+failed fills produce `failed`. Only the guard's reason code is retained:
+proposal values, extracted attribute values, result content and errors are
+never stored or displayed for these rows. Password/secret-named inputs are
+also reduced to a needs-human row. Unknown proposal/refusal keys are rejected
+so a mismatched identity cannot silently bypass redaction.
+
+Each safe proposal has the kit CopyButton (with its “Copied” state). The
+human marks rows done and saves; Submit requires every remaining row done.
+`get --json` returns `answers` keyed by stable ID (or selector), each containing
+`stable_id`, `selector`, `label`, `status`, `done`, and optional `value` /
+`reason`. Completion is a separate boolean so the original fill status
+remains visible. Replyforms use the F1 item store, owner key and sharing
+contract. Their proposals are immutable; the human answer API accepts only
+boolean completion marks, including for sensitive rows. `open` stays
+contentless. There is no in-page browser overlay.
+
 ## Questionnaires
 
 `ask` creates the questionnaire mode on the same engine. It accepts the same
