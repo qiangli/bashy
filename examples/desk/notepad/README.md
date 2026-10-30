@@ -20,6 +20,7 @@ the identical `/api/action` JSON API.
   - `open <id>` and `GET /api/state` return ID, URL and status only — never re-emit content
   - `get <id>` returns title, body, status and fields
   - `put <id> -f FILE|-` updates note content from file or stdin with auto-conversion
+  - `export <id> --to pdf|png|html|txt [-o FILE]` exports note content to PDF, PNG, HTML, or plain text
   - `list` returns note summaries without content
   - `share <id>` mints capability invite codes
   - `close <id>` freezes note against further mutations
@@ -38,9 +39,12 @@ the identical `/api/action` JSON API.
 
 ## Dependencies and Licenses
 
-Added to the `notepad` module only:
-1. `github.com/JohannesKaufmann/html-to-markdown/v2` v2.5.2 — **MIT License**
-2. `github.com/ledongthuc/pdf` v0.0.0-20261020125853-5e46805f718e — **BSD-3-Clause License**
+Added to the `notepad` module only (all pure Go, permissive):
+1. `github.com/JohannesKaufmann/html-to-markdown/v2` v2.5.2 — **MIT License** (HTML -> Markdown input conversion)
+2. `github.com/ledongthuc/pdf` v0.0.0-20261020125853-5e46805f718e — **BSD-3-Clause License** (PDF -> text input extraction)
+3. `github.com/russross/blackfriday/v2` v2.1.0 — **BSD-2-Clause License** (Markdown -> HTML export writer)
+4. `github.com/go-pdf/fpdf` v0.9.0 — **MIT License** (text/Markdown -> PDF export writer)
+5. `golang.org/x/image` v0.47.0 — **BSD-3-Clause License** (text/Markdown -> PNG font drawing & export writer)
 
 ## Storage
 
@@ -70,6 +74,12 @@ bashy notepad get <id>
 # Update note content from file or stdin
 bashy notepad put <id> -f summary.html
 cat data.json | bashy notepad put <id> -f - --format json
+
+# Export note content to PDF, PNG, HTML, or TXT
+bashy notepad export <id> --to pdf [-o output.pdf]
+bashy notepad export <id> --to png
+bashy notepad export <id> --to html
+bashy notepad export <id> --to txt
 
 # List notes
 bashy notepad list [--json]

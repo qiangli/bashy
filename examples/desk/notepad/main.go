@@ -51,6 +51,8 @@ type actionRequest struct {
 	Invite   string      `json:"invite,omitempty"`
 	Format   string      `json:"format,omitempty"`
 	Filename string      `json:"filename,omitempty"`
+	To       string      `json:"to,omitempty"`
+	Output   string      `json:"output,omitempty"`
 }
 
 type app struct {
@@ -184,6 +186,34 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		kit.WriteJSON(w, a.openView(n))
 		return
 	}
+	if path == "/api/export" {
+		a.mu.Lock()
+		defer a.mu.Unlock()
+		me := kit.ParticipantCookie(w, r, "notepad-participant")
+		var req actionRequest
+		if r.Method == "GET" {
+			req = actionRequest{
+				Action: "export",
+				ID:     r.URL.Query().Get("id"),
+				To:     r.URL.Query().Get("to"),
+				Format: r.URL.Query().Get("format"),
+				Output: r.URL.Query().Get("output"),
+			}
+			if req.Output == "" {
+				req.Output = r.URL.Query().Get("o")
+			}
+		} else if r.Method == "POST" {
+			if !kit.DecodeAction(w, r, 10<<20, &req) {
+				return
+			}
+			req.Action = "export"
+		} else {
+			kit.Fail(w, http.StatusMethodNotAllowed, "Method not supported")
+			return
+		}
+		a.export(w, r, req, me)
+		return
+	}
 	if path == "/api/action" && r.Method != "POST" {
 		kit.Fail(w, http.StatusMethodNotAllowed, "Method not supported")
 		return
@@ -219,6 +249,8 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.join(w, req, me)
 	case "convert":
 		a.convert(w, req)
+	case "export":
+		a.export(w, r, req, me)
 	default:
 		kit.Fail(w, http.StatusBadRequest, "Unknown action")
 	}
@@ -451,6 +483,72 @@ func (a *app) convert(w http.ResponseWriter, req actionRequest) {
 	kit.WriteJSON(w, map[string]any{"text": conv, "format": format})
 }
 
+func (a *app) export(w http.ResponseWriter, r *http.Request, req actionRequest, me string) {
+	if req.ID == "" {
+		kit.Fail(w, http.StatusBadRequest, "Note id required for export")
+		return
+	}
+	n, err := a.loadLocked(req.ID)
+	if err != nil {
+		if os.IsNotExist(err) {
+			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad new first.")
+		} else {
+			kit.Fail(w, http.StatusBadRequest, err.Error())
+		}
+		return
+	}
+	if !a.hasReadAccess(r, n, me) {
+		kit.Fail(w, http.StatusForbidden, "Join this note first; ask the owner for an invite.")
+		return
+	}
+	toFormat := req.To
+	if toFormat == "" {
+		toFormat = req.Format
+	}
+	if toFormat == "" {
+		kit.Fail(w, http.StatusBadRequest, "Specify export format with --to pdf|png|html|txt")
+		return
+	}
+	data, err := ExportContent(n.Title, n.Body, toFormat)
+	if err != nil {
+		kit.Fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	normFormat := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(toFormat), "."))
+	if normFormat == "text" || normFormat == "md" || normFormat == "markdown" {
+		normFormat = ExportTXT
+	}
+	if normFormat == "htm" {
+		normFormat = ExportHTML
+	}
+
+	outPath := req.Output
+	if outPath == "" {
+		exportDir := filepath.Join(a.dir, "exports")
+		if err := os.MkdirAll(exportDir, 0700); err != nil {
+			kit.Fail(w, http.StatusInternalServerError, fmt.Sprintf("Could not create exports directory: %v", err))
+			return
+		}
+		outPath = filepath.Join(exportDir, fmt.Sprintf("%s.%s", n.ID, normFormat))
+	} else {
+		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
+			kit.Fail(w, http.StatusInternalServerError, fmt.Sprintf("Could not create directory for %s: %v", outPath, err))
+			return
+		}
+	}
+
+	if err := os.WriteFile(outPath, data, 0644); err != nil {
+		kit.Fail(w, http.StatusInternalServerError, fmt.Sprintf("Could not write exported file: %v", err))
+		return
+	}
+
+	kit.WriteJSON(w, map[string]any{
+		"id":     n.ID,
+		"format": normFormat,
+		"path":   outPath,
+	})
+}
+
 // page renders the human door: item header, status badges, copy buttons,
 // markdown editor, file converter and theme toggle, from the kit components.
 func (a *app) page(r *http.Request) []byte {
@@ -511,7 +609,7 @@ func (a *app) page(r *http.Request) []byte {
 		`<p class="desk-muted" style="margin-top:24px">Local-first notepad · loopback only · re-surface with <code>notepad open ` + html.EscapeString(id) + `</code>.</p></main>` +
 		`<script>
 (function() {
-  const currentId = ` + jsonString(id) + `;
+  let currentId = ` + jsonString(id) + `;
   const titleInput = document.querySelector('input[name="title"]');
   const bodyInput = document.querySelector('textarea[name="body"]');
   const alertBox = document.querySelector('[data-desk-alert]');
@@ -528,7 +626,6 @@ func (a *app) page(r *http.Request) []byte {
 
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
-      const idToSave = currentId || prompt('Note ID (leave blank to auto-generate):');
       const action = currentId ? 'put' : 'new';
       try {
         const res = await fetch('/api/action', {
@@ -536,7 +633,7 @@ func (a *app) page(r *http.Request) []byte {
           headers: {'Content-Type': 'application/json'},
           body: JSON.stringify({
             action: action,
-            id: idToSave || undefined,
+            id: currentId || undefined,
             title: titleInput ? titleInput.value : '',
             body: bodyInput ? bodyInput.value : ''
           })
@@ -548,8 +645,29 @@ func (a *app) page(r *http.Request) []byte {
         }
         showAlert('Saved successfully: ' + data.id, false);
         if (!currentId && data.id) {
-          window.location.search = '?id=' + encodeURIComponent(data.id);
+          currentId = data.id;
+          const u = new URL(window.location.href);
+          u.searchParams.set('id', data.id);
+          history.replaceState(null, '', u.toString());
+          const headerId = document.querySelector('.desk-item-header .desk-id');
+          if (headerId) headerId.textContent = data.id;
+          const headerTools = document.querySelector('.desk-item-header .desk-tools');
+          if (headerTools && data.url) {
+            headerTools.innerHTML = '<button type="button" class="desk-copy" data-desk-copy data-copy="' + data.url.replace(/"/g, '&quot;') + '" data-copied="false">Copy link</button>';
+          }
+          document.querySelectorAll('button[data-desk-copy]').forEach(btn => {
+            if (btn.textContent.includes('Copy link') && data.url) {
+              btn.setAttribute('data-copy', data.url);
+            }
+          });
+          const resurface = document.querySelector('.desk-muted code');
+          if (resurface) resurface.textContent = 'notepad open ' + data.id;
         }
+        document.querySelectorAll('button[data-desk-copy]').forEach(btn => {
+          if (btn.textContent.includes('Copy text') && bodyInput) {
+            btn.setAttribute('data-copy', bodyInput.value);
+          }
+        });
       } catch (err) {
         showAlert('Save error: ' + err.message, true);
       }

@@ -20,19 +20,21 @@ import (
 )
 
 type cliOptions struct {
-	addr      string
-	data      string
-	prefix    string
-	asJSON    bool
-	title     string
-	body      string
-	fileFlag  string
-	format    string
-	idFlag    string
-	key       string
-	breakFlag string
-	verb      string
-	args      []string
+	addr       string
+	data       string
+	prefix     string
+	asJSON     bool
+	title      string
+	body       string
+	fileFlag   string
+	format     string
+	toFlag     string
+	outputFlag string
+	idFlag     string
+	key        string
+	breakFlag  string
+	verb       string
+	args       []string
 }
 
 func parseCLIOptions(rawArgs []string) (*cliOptions, error) {
@@ -106,6 +108,14 @@ func parseCLIOptions(rawArgs []string) (*cliOptions, error) {
 				if v, ok := setVal(); ok {
 					opts.format = v
 				}
+			case "to":
+				if v, ok := setVal(); ok {
+					opts.toFlag = v
+				}
+			case "o", "output":
+				if v, ok := setVal(); ok {
+					opts.outputFlag = v
+				}
 			case "id":
 				if v, ok := setVal(); ok {
 					opts.idFlag = v
@@ -142,11 +152,11 @@ func runCLI(args []string, stdout io.Writer) int {
 func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 	opts, err := parseCLIOptions(args)
 	if err != nil {
-		fmt.Fprintln(stdout, "Usage: notepad [serve|new|open|get|put|list|share|close|join] [--json] [-f FILE|-]")
+		fmt.Fprintln(stdout, "Usage: notepad [serve|new|open|get|put|list|share|close|join|export] [--json] [-f FILE|-] [--to FORMAT] [-o FILE]")
 		return 2
 	}
 	if opts.verb == "" {
-		fmt.Fprintln(stdout, "Usage: notepad [serve|new|open|get|put|list|share|close|join] [--json] [-f FILE|-]")
+		fmt.Fprintln(stdout, "Usage: notepad [serve|new|open|get|put|list|share|close|join|export] [--json] [-f FILE|-] [--to FORMAT] [-o FILE]")
 		return 2
 	}
 
@@ -258,6 +268,8 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 		switch opts.verb {
 		case "get":
 			fmt.Fprintf(stdout, "%v\n%v\n", obj["title"], obj["body"])
+		case "export":
+			fmt.Fprintf(stdout, "%v\n", obj["path"])
 		default:
 			// new/open/put/share/close: id, URL, status only — never content.
 			fmt.Fprintf(stdout, "%v %v %v\n", obj["id"], obj["url"], obj["status"])
@@ -387,6 +399,46 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 		}
 		resolveKey(id)
 		obj, _, code := call("close", map[string]any{"id": id})
+		if code != 0 {
+			return code
+		}
+		return emit(obj, nil)
+
+	case "export":
+		id, ok := needID()
+		if !ok {
+			return 2
+		}
+		resolveKey(id)
+		toFormat := opts.toFlag
+		if toFormat == "" {
+			toFormat = opts.format
+		}
+		if toFormat == "" {
+			fmt.Fprintln(stdout, "error: specify export format with --to pdf|png|html|txt")
+			return 2
+		}
+		toFormat = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(toFormat), "."))
+		switch toFormat {
+		case "pdf", "png", "html", "htm", "txt", "text", "md", "markdown":
+			// valid
+		default:
+			fmt.Fprintf(stdout, "error: unsupported export format %q (supported: pdf, png, html, txt)\n", toFormat)
+			return 2
+		}
+		outPath := opts.outputFlag
+		if outPath != "" {
+			abs, err := filepath.Abs(outPath)
+			if err == nil {
+				outPath = abs
+			}
+		}
+		payload := map[string]any{
+			"id":     id,
+			"to":     toFormat,
+			"output": outPath,
+		}
+		obj, _, code := call("export", payload)
 		if code != 0 {
 			return code
 		}

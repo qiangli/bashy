@@ -34,11 +34,14 @@ EOF
   --set args.flags.8.name=prefix --set args.flags.8.type=string \
   --set args.flags.9.name=key --set args.flags.9.type=string \
   --set args.flags.10.name=break --set args.flags.10.type=string \
+  --set args.flags.11.name=to --set args.flags.11.type=string \
+  --set args.flags.12.name=output --set args.flags.12.shorthand=o --set args.flags.12.type=string \
   --set args.positionals.0.name=verb \
   --set args.positionals.0.enum.0=serve --set args.positionals.0.enum.1=new \
   --set args.positionals.0.enum.2=open --set args.positionals.0.enum.3=get \
   --set args.positionals.0.enum.4=put --set args.positionals.0.enum.5=list \
   --set args.positionals.0.enum.6=share --set args.positionals.0.enum.7=close \
+  --set args.positionals.0.enum.8=export \
   --set args.positionals.1.name=id
 
 # Register skill

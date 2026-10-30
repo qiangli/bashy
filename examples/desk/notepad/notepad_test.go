@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -326,5 +327,25 @@ func TestAPIConvertEndpoint(t *testing.T) {
 	}
 	if text, ok := resp["text"].(string); !ok || !strings.Contains(text, "# Header") {
 		t.Errorf("convert text: %v", resp["text"])
+	}
+}
+
+func TestPageScriptNoPromptOrLocationSearch(t *testing.T) {
+	srvURL, _ := startServer(t, "")
+	res, err := http.Get(srvURL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer res.Body.Close()
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatalf("reading body: %v", err)
+	}
+	htmlStr := string(body)
+	if strings.Contains(htmlStr, "prompt(") {
+		t.Errorf("page script contains blocking prompt(, want auto-generated id")
+	}
+	if strings.Contains(htmlStr, "window.location.search") {
+		t.Errorf("page script contains window.location.search assignment, want history.replaceState without reload")
 	}
 }
