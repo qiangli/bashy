@@ -83,6 +83,8 @@ type claimWhoReport struct {
 	// Warnings names a store that could not be read, so an empty answer is
 	// never mistaken for "nobody holds it".
 	Warnings []string `json:"warnings,omitempty"`
+	// HiddenStale counts lapsed/vacant claims left out (see --all).
+	HiddenStale int `json:"hidden_stale,omitempty"`
 }
 
 // claimWhoOptions are the seams: tests point them at throwaway state, and the
@@ -93,6 +95,10 @@ type claimWhoOptions struct {
 	coordDir       string
 	weaveStateRoot string
 	now            time.Time
+	// all keeps lapsed/vacant claims. By default they are hidden: a claim a
+	// successor may take without consent is history, not a holder to contact,
+	// and a busy host carries hundreds of them.
+	all bool
 }
 
 // claimWhoCommit is one committed-but-unpushed commit, with the files it
@@ -108,7 +114,7 @@ type claimWhoCommit struct {
 }
 
 func newClaimWhoCmd() *cobra.Command {
-	var asJSON bool
+	var asJSON, all bool
 	cmd := &cobra.Command{
 		Use:   "who [PATH...]",
 		Short: "who is holding these paths, and how to reach them",
@@ -132,7 +138,7 @@ store can vouch for is reported "unknown" rather than assumed gone.`,
   bashy claim who internal/cli docs    # specific paths
   bashy claim who --json internal/cli  # the bashy-claim-who-v1 document`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			rep, err := claimWhoReportFor(args, claimWhoOptions{})
+			rep, err := claimWhoReportFor(args, claimWhoOptions{all: all})
 			if err != nil {
 				return err
 			}
@@ -143,6 +149,7 @@ store can vouch for is reported "unknown" rather than assumed gone.`,
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "emit the "+claimWhoSchema+" document")
+	cmd.Flags().BoolVar(&all, "all", false, "also list lapsed/vacant claims (hidden by default: nobody to contact)")
 	return cmd
 }
 
@@ -203,7 +210,11 @@ func claimWhoReportFor(args []string, opts claimWhoOptions) (claimWhoReport, err
 			if !coord.Intersects(scope, []string{t.abs}) {
 				continue
 			}
-			entry.Owners = append(entry.Owners, claimWhoClaimOwner(c, now))
+			if !opts.all && c.Stale(now) {
+				rep.HiddenStale++
+				continue
+			}
+			entry.Owners = append(entry.Owners, claimWhoClaimOwner(c, t.abs, now))
 		}
 		for _, card := range members {
 			if !claimWhoWithin(card.Cwd, t.abs) {
@@ -289,10 +300,12 @@ func claimWhoTargets(args []string, cwd string) ([]claimWhoTarget, error) {
 	return out, nil
 }
 
-func claimWhoClaimOwner(c *coord.Claim, now time.Time) claimWhoOwner {
+func claimWhoClaimOwner(c *coord.Claim, target string, now time.Time) claimWhoOwner {
 	scope := c.Resource
 	if scope == "" && len(c.Roots) > 0 {
-		scope = strings.Join(c.Roots, " ")
+		// Name only the root that covers this path: a project claim lists every
+		// sibling it depends on, and the full set buries the one that matters.
+		scope = claimWhoMatchingRoot(c.Roots, target)
 	}
 	age := assignmentAgeAt(c.Heartbeat, now)
 	if age == "" {
@@ -520,6 +533,9 @@ func renderClaimWho(w io.Writer, rep claimWhoReport) error {
 	for _, warning := range rep.Warnings {
 		fmt.Fprintln(w, "claim who: "+warning)
 	}
+	if rep.HiddenStale > 0 {
+		fmt.Fprintf(w, "claim who: %d lapsed claim(s) hidden (--all shows them)\n", rep.HiddenStale)
+	}
 	if len(rep.Paths) == 0 {
 		fmt.Fprintln(w, "claim who: nothing dirty here — name a path to ask about one")
 		return nil
@@ -580,4 +596,19 @@ func claimWhoWhat(o claimWhoOwner) string {
 		parts = append(parts, "["+strings.Join(tags, " · ")+"]")
 	}
 	return strings.Join(parts, " ")
+}
+
+// claimWhoMatchingRoot is the deepest root that contains target (or that
+// target contains), else the first root.
+func claimWhoMatchingRoot(roots []string, target string) string {
+	best := ""
+	for _, r := range roots {
+		if (claimWhoWithin(r, target) || claimWhoWithin(target, r)) && len(r) > len(best) {
+			best = r
+		}
+	}
+	if best == "" && len(roots) > 0 {
+		best = roots[0]
+	}
+	return best
 }

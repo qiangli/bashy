@@ -28,8 +28,8 @@ An ad-hoc session must be addressable: set `BASHY_AGENT=<name>` or use
 
 Dirty paths, unknown commits, a moved HEAD, staged pins, or an isolation violation
 are coordination signals. Identify ownership with `bashy claim who [PATH]`.
-Until S541.b provides that command, use `bashy claim list`, `bashy agent --json`,
-`bashy sprint who`, and `git log` with `Agent:` and `Story-ID:` trailers.
+It joins the claim ledger, live sessions (`bashy agent --json` cwd), weave runs
+(`bashy sprint who`) and unpushed commits (`Agent:` / `Story-ID:` trailers).
 
     bashy mb send <holder> "seen <paths> in <checkout>; yours? I'm doing <X>; propose <sequence/merge>"
 

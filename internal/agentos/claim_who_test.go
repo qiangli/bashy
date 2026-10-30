@@ -347,3 +347,42 @@ func TestClaimWhoDefaultsToDirtyPathsOfThisCheckout(t *testing.T) {
 		t.Fatalf("abs = %q", rep.Paths[0].Abs)
 	}
 }
+
+// A lapsed claim is history, not a holder: on a busy host hundreds of them
+// cover the umbrella, and listing each with its full sibling root set buried the
+// one live owner. Hidden by default, counted, and shown with --all; evidence
+// names only the root that covers the path.
+func TestClaimWhoHidesLapsedClaimsAndNamesOnlyTheMatchingRoot(t *testing.T) {
+	isolateClaimWho(t)
+	repo := t.TempDir()
+	sibling := t.TempDir()
+	target := filepath.Join(repo, "internal")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	holder := principal.Ref{Kind: principal.KindAgent, Name: "old-seat", Episode: "ep-old", Host: "h"}
+	if _, err := coord.Acquire(coord.DefaultDir(), []string{repo, sibling}, holder, "long gone", false); err != nil {
+		t.Fatalf("acquire claim: %v", err)
+	}
+	later := time.Now().Add(48 * time.Hour)
+
+	rep, err := claimWhoReportFor([]string{target}, claimWhoOptions{now: later})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if owners := ownersOfPath(t, rep, target); len(owners) != 0 || rep.HiddenStale != 1 {
+		t.Fatalf("default view: owners=%#v hidden=%d, want none listed and 1 hidden", owners, rep.HiddenStale)
+	}
+
+	rep, err = claimWhoReportFor([]string{target}, claimWhoOptions{now: later, all: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	owners := ownersOfPath(t, rep, target)
+	if len(owners) != 1 || owners[0].Liveness == "live" {
+		t.Fatalf("--all view: owners=%#v, want the one lapsed claim", owners)
+	}
+	if !strings.Contains(owners[0].Evidence, repo) || strings.Contains(owners[0].Evidence, sibling) {
+		t.Fatalf("evidence = %q, want only the covering root %q", owners[0].Evidence, repo)
+	}
+}
