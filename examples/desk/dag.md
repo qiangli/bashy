@@ -22,7 +22,7 @@ Effects: read, write, exec, cred, net
 
 ```bash
 set -euo pipefail
-export BASHY=${BASHY:-bashy}
+export BASHY=${BASHY:-${BASHY_EXE:-bashy}}
 root=$(git rev-parse --show-toplevel)
 # Each entry point builds its native CLI/server cache on first dispatch. A
 # deliberately unsupported JSON verb exercises that path without a server.
@@ -49,7 +49,7 @@ Effects: read, write, exec, net, cred, destroy
 
 ```bash
 set -u
-export BASHY=${BASHY:-bashy}
+export BASHY=${BASHY:-${BASHY_EXE:-bashy}}
 root=$(git rev-parse --show-toplevel) || exit 1
 work=$("$BASHY" mktemp -d) || exit 1
 evidence=${EVIDENCE:-./desk-roundtrip.json}
@@ -242,7 +242,7 @@ Effects: read, write, exec, net
 
 ```bash
 set -euo pipefail
-export BASHY=${BASHY:-bashy}
+export BASHY=${BASHY:-${BASHY_EXE:-bashy}}
 root=$(git rev-parse --show-toplevel)
 if [[ -n ${PLAYWRIGHT_MODULE:-} && ! -f $PLAYWRIGHT_MODULE ]]; then
   echo 'SKIP gallery: PLAYWRIGHT_MODULE does not exist'

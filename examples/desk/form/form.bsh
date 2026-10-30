@@ -58,9 +58,12 @@ export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/form
 bin=$cache/form
+exe=$(go env GOEXE)
+bin="$bin$exe"
 build() {
   mkdir -p "$cache"
-  (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$bin" ./server)
+  rel=$(realpath --relative-to="$here" "$bin")
+  (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$rel" ./server)
 }
 case ${1:-serve} in
 --skill)

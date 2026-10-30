@@ -151,6 +151,10 @@ data=${BRAINSTORM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy/brainstorm}
 addr=${BRAINSTORM_ADDR:-0.0.0.0:18091}
 prefix=${BRAINSTORM_PREFIX:-}
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/brainstorm
+mkdir -p "$cache"
+exe=$(go env GOEXE)
+bin="$cache/brainstorm$exe"
+rel=$(realpath --relative-to="$here/server" "$bin")
 usage='Usage: brainstorm [serve|status|backup|restore SNAPSHOT|stop|test|add|open|show|set|list|share|close|--skill|--contract]'
 case ${1:-serve} in add|open|show|set|list|share|close|-*) ;; *) if (( $# > 2 )); then echo "$usage" >&2; exit 2; fi ;; esac
 case ${1:-serve} in
@@ -166,9 +170,9 @@ case ${1:-serve} in
 -h|--help) echo 'brainstorm [serve|status|backup|restore SNAPSHOT|stop|test|add|open|show|set|list|share|close] — native LAN board with desk verbs; --skill prints its embedded skill' ;;
 serve)
   mkdir -p "$cache"
-  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/brainstorm" .)
-  if [[ -n $prefix ]]; then exec "$cache/brainstorm" -data "$data" -addr "$addr" -prefix "$prefix"
-  else exec "$cache/brainstorm" -data "$data" -addr "$addr"; fi
+  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$rel" .)
+  if [[ -n $prefix ]]; then exec "$bin" -data "$data" -addr "$addr" -prefix "$prefix"
+  else exec "$bin" -data "$data" -addr "$addr"; fi
   ;;
 status|backup)
   action=$1
@@ -181,18 +185,18 @@ restore)
   python3 "$here/../restore-board.py" brainstorm "$data" "$2"
   ;;
 stop)
-  if pkill -f "$cache/brainstorm -data $data" 2>/dev/null; then echo "stopped brainstorm ($data)"; else echo "no brainstorm server matched $data"; fi
+  if pkill -f "$bin -data $data" 2>/dev/null; then echo "stopped brainstorm ($data)"; else echo "no brainstorm server matched $data"; fi
   ;;
 -*|add|open|show|set|list|share|close)
   mkdir -p "$cache"
-  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/brainstorm" .)
-  exec "$cache/brainstorm" cli -addr "$addr" -prefix "$prefix" "$@"
+  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$rel" .)
+  exec "$bin" cli -addr "$addr" -prefix "$prefix" "$@"
   ;;
 test) cd "$here/server"; GOWORK=off go test -race ./... ;;
 *)
   # Forward unknown verbs so the desk CLI can return a JSON error envelope.
   mkdir -p "$cache"
-  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/brainstorm" .)
-  exec "$cache/brainstorm" cli -addr "$addr" -prefix "$prefix" "$@"
+  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$rel" .)
+  exec "$bin" cli -addr "$addr" -prefix "$prefix" "$@"
   ;;
 esac

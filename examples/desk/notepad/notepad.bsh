@@ -35,6 +35,8 @@ addr=${NOTEPAD_ADDR:-127.0.0.1:18095}
 prefix=${NOTEPAD_PREFIX:-}
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-notepad
 bin="$cache/notepad"
+exe=$(go env GOEXE)
+bin="$bin$exe"
 
 case ${1:-serve} in
 --skill)
@@ -53,7 +55,8 @@ test)
 *)
   if [[ ! -x "$bin" || "$here/main.go" -nt "$bin" || "$here/cli.go" -nt "$bin" || "$here/convert.go" -nt "$bin" ]]; then
     mkdir -p "$cache"
-    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$bin" .)
+    rel=$(realpath --relative-to="$here" "$bin")
+    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$rel" .)
   fi
   exec "$bin" "$@"
   ;;
