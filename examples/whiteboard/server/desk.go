@@ -50,7 +50,7 @@ func cloneBoard(b *Board) Board {
 
 func (a *app) commit(w http.ResponseWriter, next *Board) bool {
 	next.Revision++
-	if err := saveBoard(boardPath(a.dir, next.Name), *next); err != nil {
+	if err := a.save(boardPath(a.dir, next.Name), *next); err != nil {
 		log.Printf("save failed: %v", err)
 		fail(w, 500, "Could not save. Your change was not accepted; keep your work and ask the facilitator.")
 		return false

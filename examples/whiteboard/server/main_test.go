@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image/png"
 	"net/http"
@@ -285,11 +286,7 @@ func TestWriteFailureIsNotAcknowledged(t *testing.T) {
 	member := token()
 	join(t, a, member, "fragile", code)
 	rev := a.boards["fragile"].Revision
-	boardsDir := filepath.Join(dir, "boards")
-	if err := os.Chmod(boardsDir, 0500); err != nil {
-		t.Fatal(err)
-	}
-	defer os.Chmod(boardsDir, 0700)
+	a.write = func(string, Board) error { return errors.New("disk full") }
 	w := request(a, member, "", "/api/action", map[string]any{
 		"action": "stroke", "board": "fragile",
 		"points": []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, "color": "#000000", "width": 2,

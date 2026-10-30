@@ -121,6 +121,9 @@ type app struct {
 	dir    string
 	prefix string
 	boards map[string]*Board
+	// write persists a board; nil means saveBoard. Tests swap it to force a
+	// save failure without depending on file permissions (root ignores them).
+	write func(path string, b Board) error
 }
 
 func token() string            { return kit.NewToken() }
@@ -134,6 +137,13 @@ func saveBoard(path string, b Board) error {
 		return err
 	}
 	return kit.AtomicWrite(path, data)
+}
+
+func (a *app) save(path string, b Board) error {
+	if a.write != nil {
+		return a.write(path, b)
+	}
+	return saveBoard(path, b)
 }
 
 var errBoardNotFound = errors.New("board not found")
@@ -198,7 +208,7 @@ func (a *app) createLocked(name string) (*Board, error) {
 		return nil, err
 	}
 	b := &Board{Version: 1, Name: name, Facilitator: token(), Strokes: []Stroke{}, Notes: []Note{}, Members: map[string]bool{}, Invites: map[string]bool{}}
-	if err := saveBoard(boardPath(a.dir, name), *b); err != nil {
+	if err := a.save(boardPath(a.dir, name), *b); err != nil {
 		return nil, err
 	}
 	a.boards[name] = b
@@ -406,7 +416,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		next.Members[id] = true
 		delete(next.Invites, code) // An admission link may be used only once.
 		next.Revision++
-		if err := saveBoard(boardPath(a.dir, next.Name), next); err != nil {
+		if err := a.save(boardPath(a.dir, next.Name), next); err != nil {
 			log.Printf("save failed: %v", err)
 			fail(w, 500, "Could not save. Your change was not accepted; keep your work and ask the facilitator.")
 			return
@@ -437,7 +447,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			code := token()
 			next.Invites[code] = true
 			next.Revision++
-			if err := saveBoard(boardPath(a.dir, next.Name), next); err != nil {
+			if err := a.save(boardPath(a.dir, next.Name), next); err != nil {
 				log.Printf("save failed: %v", err)
 				fail(w, 500, "Could not save. Your change was not accepted; keep your work and ask the facilitator.")
 				return
@@ -477,7 +487,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		next.Revision++
-		if err := saveBoard(boardPath(a.dir, next.Name), next); err != nil {
+		if err := a.save(boardPath(a.dir, next.Name), next); err != nil {
 			log.Printf("save failed: %v", err)
 			fail(w, 500, "Could not save. Your change was not accepted; keep your work and ask the facilitator.")
 			return
@@ -642,7 +652,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	next.Revision++
-	if err := saveBoard(boardPath(a.dir, next.Name), next); err != nil {
+	if err := a.save(boardPath(a.dir, next.Name), next); err != nil {
 		log.Printf("save failed: %v", err)
 		fail(w, 500, "Could not save. Your change was not accepted; keep your work and ask the facilitator.")
 		return
