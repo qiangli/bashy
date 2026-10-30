@@ -110,6 +110,16 @@ managed checkout so every revision builds from its own tree. The page calls
 item URLs follow the mount (`X-Forwarded-Prefix`) instead of naming the
 server's internal loopback address.
 
+A fork is activated only on a passing verdict. `contract.bsh` is the base
+contract `bashy src pr verify` freezes: its `@effects` line is the effect cap
+(read, write, exec, plus net to provision the Go toolchain in the clone), and
+`checks/go.bsh` builds the module and runs its tests:
+
+```bash
+bashy src pr open notepad alice-fork --title "..." && bashy src pr verify 1
+bashy src activate notepad REV --principal device:alice   # bashy src undo notepad rolls back
+```
+
 ## Testing
 
 ```bash

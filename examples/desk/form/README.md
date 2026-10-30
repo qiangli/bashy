@@ -200,6 +200,16 @@ The console builds that server from each user's active revision and proxies
 the app shell (`X-Forwarded-Prefix`) gets `…/form/?…`, never the server's
 internal loopback address. The app root is this directory (the module); `server/` is the main package.
 
+A fork is activated only on a passing verdict. `contract.bsh` is the base
+contract `bashy src pr verify` freezes: its `@effects` line is the effect cap
+(read, write, exec, plus net to provision the Go toolchain in the clone), and
+`checks/go.bsh` builds the module and runs its tests:
+
+```bash
+bashy src pr open form alice-fork --title "..." && bashy src pr verify 1
+bashy src activate form REV --principal device:alice   # bashy src undo form rolls back
+```
+
 ## Verify
 
 ```bash

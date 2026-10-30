@@ -128,6 +128,16 @@ The console builds that server from each user's active revision and proxies
 the app shell (`X-Forwarded-Prefix`) gets `…/whiteboard/?…`, never the server's
 internal loopback address. The app root is `server/`, which holds the module.
 
+A fork is activated only on a passing verdict. `server/contract.bsh` is the base
+contract `bashy src pr verify` freezes: its `@effects` line is the effect cap
+(read, write, exec, plus net to provision the Go toolchain in the clone), and
+`server/checks/go.bsh` builds the module and runs its tests:
+
+```bash
+bashy src pr open whiteboard alice-fork --title "..." && bashy src pr verify 1
+bashy src activate whiteboard REV --principal device:alice   # bashy src undo whiteboard rolls back
+```
+
 ## Desk door (agents and scripts)
 
 The whiteboard follows the shared desk contract (`examples/desk/kit`): the page
