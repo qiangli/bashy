@@ -25,6 +25,20 @@ re-surfaced with `open`, not pasted into chat. No query or layout language.
 set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-chart
+exe=$(go env GOEXE)
+bin="$cache/chart$exe"
+build() {
+ stale=false
+ [[ -f "$bin" ]] || stale=true
+ for src in "$here"/*.go "$here"/go.mod "$here"/go.sum "$here"/templates/*; do
+  [[ "$src" -nt "$bin" ]] && stale=true
+ done
+ if [[ $stale == true ]]; then
+  mkdir -p "$here/.desk-build" "$cache"
+  (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/chart$exe" . && { mv -f ".desk-build/chart$exe" "$bin" || [[ -f "$bin" ]]; })
+ fi
+}
 case ${1:-} in
  --skill)
  copying=false
@@ -35,11 +49,7 @@ case ${1:-} in
  done < "${BASH_SOURCE[0]}"
  ;;
  *)
- cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-chart
- exe=$(go env GOEXE)
- bin="$cache/chart$exe"
- mkdir -p "$here/.desk-build" "$cache"
- (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/chart$exe" . && mv -f ".desk-build/chart$exe" "$bin")
+ build
  exec "$bin" "$@"
  ;;
 esac

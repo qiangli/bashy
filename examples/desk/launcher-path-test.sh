@@ -11,9 +11,14 @@ for tool in notepad form chart viewer whiteboard brainstorm; do
   if grep -q realpath "$launcher"; then echo "$tool uses realpath" >&2; exit 1; fi
   grep -Fq 'exe=$(go env GOEXE)' "$launcher"
   grep -Eq 'bin=.*\$exe' "$launcher"
+  grep -Fq '[[ -f "$bin" ]] || stale=true' "$launcher"
+  grep -Fq '[[ "$src" -nt "$bin" ]] && stale=true' "$launcher"
+  grep -Fq 'if [[ $stale == true ]]; then' "$launcher"
+  [[ $(grep -c 'go build -trimpath' "$launcher") == 1 ]]
   grep -Fq -- "-o \".desk-build/$tool\$exe\"" "$launcher"
   grep -Fq -- "mv -f \".desk-build/$tool\$exe\"" "$launcher"
+  grep -Fq '|| [[ -f "$bin" ]]' "$launcher"
   grep -Fq '.desk-build/' "$ignore"
   grep -Fq 'exec "$bin"' "$launcher"
 done
-printf 'launcher paths: six relative build outputs with GOEXE and cache moves\n'
+printf 'launcher paths: six relative GOEXE outputs, stale checks, and cache moves\n'

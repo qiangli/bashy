@@ -34,6 +34,17 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-viewer
 exe=$(go env GOEXE)
 bin="$cache/viewer$exe"
+build() {
+  stale=false
+  [[ -f "$bin" ]] || stale=true
+  for src in "$here"/*.go "$here"/go.mod "$here"/go.sum "$here"/templates/*; do
+    [[ "$src" -nt "$bin" ]] && stale=true
+  done
+  if [[ $stale == true ]]; then
+    mkdir -p "$here/.desk-build" "$cache"
+    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/viewer$exe" . && { mv -f ".desk-build/viewer$exe" "$bin" || [[ -f "$bin" ]]; })
+  fi
+}
 
 case ${1:-serve} in
 --skill)
@@ -50,15 +61,7 @@ test)
   cd "$here" && GOWORK=off go test -v ./...
   ;;
 *)
-  stale=false
-  [[ -x "$bin" ]] || stale=true
-  for src in "$here"/*.go "$here"/templates/*; do
-    [[ "$src" -nt "$bin" ]] && stale=true
-  done
-  if [[ $stale == true ]]; then
-    mkdir -p "$here/.desk-build" "$cache"
-    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/viewer$exe" . && mv -f ".desk-build/viewer$exe" "$bin")
-  fi
+  build
   exec "$bin" "$@"
   ;;
 esac

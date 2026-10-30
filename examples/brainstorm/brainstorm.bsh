@@ -153,6 +153,17 @@ prefix=${BRAINSTORM_PREFIX:-}
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/brainstorm
 exe=$(go env GOEXE)
 bin="$cache/brainstorm$exe"
+build() {
+  stale=false
+  [[ -f "$bin" ]] || stale=true
+  for src in "$here"/server/*.go "$here"/server/go.mod "$here"/server/go.sum; do
+    [[ "$src" -nt "$bin" ]] && stale=true
+  done
+  if [[ $stale == true ]]; then
+    mkdir -p "$here/server/.desk-build" "$cache"
+    (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/brainstorm$exe" . && { mv -f ".desk-build/brainstorm$exe" "$bin" || [[ -f "$bin" ]]; })
+  fi
+}
 usage='Usage: brainstorm [serve|status|backup|restore SNAPSHOT|stop|test|add|open|show|set|list|share|close|--skill|--contract]'
 case ${1:-serve} in add|open|show|set|list|share|close|-*) ;; *) if (( $# > 2 )); then echo "$usage" >&2; exit 2; fi ;; esac
 case ${1:-serve} in
@@ -167,8 +178,7 @@ case ${1:-serve} in
 --contract) echo 'sokilili burainisutoromu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
 -h|--help) echo 'brainstorm [serve|status|backup|restore SNAPSHOT|stop|test|add|open|show|set|list|share|close] — native LAN board with desk verbs; --skill prints its embedded skill' ;;
 serve)
-  mkdir -p "$here/server/.desk-build" "$cache"
-  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/brainstorm$exe" . && mv -f ".desk-build/brainstorm$exe" "$bin")
+  build
   if [[ -n $prefix ]]; then exec "$bin" -data "$data" -addr "$addr" -prefix "$prefix"
   else exec "$bin" -data "$data" -addr "$addr"; fi
   ;;
@@ -186,15 +196,13 @@ stop)
   if pkill -f "$bin -data $data" 2>/dev/null; then echo "stopped brainstorm ($data)"; else echo "no brainstorm server matched $data"; fi
   ;;
 -*|add|open|show|set|list|share|close)
-  mkdir -p "$here/server/.desk-build" "$cache"
-  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/brainstorm$exe" . && mv -f ".desk-build/brainstorm$exe" "$bin")
+  build
   exec "$bin" cli -addr "$addr" -prefix "$prefix" "$@"
   ;;
 test) cd "$here/server"; GOWORK=off go test -race ./... ;;
 *)
   # Forward unknown verbs so the desk CLI can return a JSON error envelope.
-  mkdir -p "$here/server/.desk-build" "$cache"
-  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/brainstorm$exe" . && mv -f ".desk-build/brainstorm$exe" "$bin")
+  build
   exec "$bin" cli -addr "$addr" -prefix "$prefix" "$@"
   ;;
 esac

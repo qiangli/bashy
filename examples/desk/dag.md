@@ -23,7 +23,6 @@ Effects: read, write, exec, cred, net
 ```bash
 set -euo pipefail
 export BASHY=${BASHY:-$(command -v bashy || printf %s "$SHELL")}
-exe=$(go env GOEXE)
 root=$(git rev-parse --show-toplevel)
 # Each entry point builds its native CLI/server cache on first dispatch. A
 # deliberately unsupported JSON verb exercises that path without a server.
@@ -51,7 +50,6 @@ Effects: read, write, exec, net, cred, destroy
 ```bash
 set -u
 export BASHY=${BASHY:-$(command -v bashy || printf %s "$SHELL")}
-exe=$(go env GOEXE)
 root=$(git rev-parse --show-toplevel) || exit 1
 work=$("$BASHY" mktemp -d) || exit 1
 evidence=${EVIDENCE:-./desk-roundtrip.json}
@@ -83,14 +81,10 @@ cmd() {
   return "$status"
 }
 serve_tool() {
-  local cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy
   case "$1" in
-    notepad) exec "$cache/desk-notepad/notepad$exe" serve --addr "$addr" --data "$data" ;;
-    form) exec "$cache/form/form$exe" serve -addr "$addr" -data "$data" ;;
-    chart) exec "$cache/desk-chart/chart$exe" --addr "$addr" --data "$data" serve ;;
-    viewer) exec "$cache/desk-viewer/viewer$exe" serve --addr "$addr" --dir "$data" ;;
-    whiteboard) exec "$cache/whiteboard/whiteboard$exe" -data "$data" -addr "$addr" ;;
-    brainstorm) exec "$cache/brainstorm/brainstorm$exe" -data "$data" -addr "$addr" ;;
+    notepad|form|viewer) exec "$BASHY" --bashsharp "$root/examples/desk/$1/$1.bsh" serve ;;
+    chart) exec "$BASHY" --bashsharp "$root/examples/desk/chart/chart.bsh" --addr "$addr" --data "$data" serve ;;
+    whiteboard|brainstorm) exec "$BASHY" --bashsharp "$root/examples/$1/$1.bsh" serve ;;
   esac
 }
 run_one() (
@@ -98,7 +92,10 @@ run_one() (
   tool=$1
   data=$work/$tool
   "$BASHY" mkdir -p "$data"
-  addr=127.0.0.1:0
+  # Bash# launchers forward server output when the process exits, so choose
+  # a port before starting and poll health without reading startup text.
+  addr=127.0.0.1:$((30000 + RANDOM % 20000))
+  origin=http://$addr
   case "$tool" in
     notepad) export NOTEPAD_DATA=$data NOTEPAD_ADDR=$addr ;;
     form) export FORM_DATA=$data FORM_ADDR=$addr ;;
@@ -112,15 +109,7 @@ run_one() (
   trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
   ready=false
   for i in $(seq 1 120); do
-    while IFS= read -r line; do
-      case "$line" in Participant:\ http://*) origin=${line#Participant: }; break ;; esac
-    done < "$data/server.log"
-    if [[ -n ${origin:-} ]]; then
-      origin=${origin%%\?*}
-      origin=${origin%/}
-      addr=${origin#http://}
-      if "$BASHY" curl -fsS --max-time 1 "$origin/healthz" >/dev/null 2>&1; then ready=true; break; fi
-    fi
+    if "$BASHY" curl -fsS --max-time 1 "$origin/healthz" >/dev/null 2>&1; then ready=true; break; fi
     sleep 1
   done
   if [[ $ready != true ]]; then cat "$data/server.log" >&2; exit 1; fi

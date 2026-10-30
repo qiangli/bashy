@@ -60,8 +60,15 @@ cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/form
 exe=$(go env GOEXE)
 bin=$cache/form$exe
 build() {
-  mkdir -p "$here/.desk-build" "$cache"
-  (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/form$exe" ./server && mv -f ".desk-build/form$exe" "$bin")
+  stale=false
+  [[ -f "$bin" ]] || stale=true
+  for src in "$here"/server/*.go "$here"/go.mod "$here"/go.sum "$here"/server/templates/*; do
+    [[ "$src" -nt "$bin" ]] && stale=true
+  done
+  if [[ $stale == true ]]; then
+    mkdir -p "$here/.desk-build" "$cache"
+    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/form$exe" ./server && { mv -f ".desk-build/form$exe" "$bin" || [[ -f "$bin" ]]; })
+  fi
 }
 case ${1:-serve} in
 --skill)
