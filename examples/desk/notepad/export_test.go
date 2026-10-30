@@ -93,8 +93,12 @@ func TestExportHTML(t *testing.T) {
 		t.Fatalf("reading exported html: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, "Exported HTML Heading") || !strings.Contains(content, "<h1>") {
+	// The shared renderer adds heading ids, so match the opening tag.
+	if !strings.Contains(content, "Exported HTML Heading") || !strings.Contains(content, "<h1 ") {
 		t.Errorf("HTML output does not contain heading: %s", content)
+	}
+	if !strings.Contains(content, `class="desk-content"`) {
+		t.Errorf("HTML export must use the shared rendered view (desk-content): %s", content)
 	}
 }
 

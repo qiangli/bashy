@@ -81,6 +81,7 @@ func Check(cfg Config) (failures []string) {
 	t.securityHeaders()
 	t.pageKit()
 	t.kitConformance()
+	t.renderEndpoint()
 	t.methods()
 	t.crossSite()
 	t.strictDecoding()
@@ -341,6 +342,32 @@ func (t *check) kitConformance() {
 	}
 	for _, v := range StyleViolations(string(body), t.cfg.AllowColors) {
 		t.fail("kit conformance: %s", v)
+	}
+}
+
+// Every page loads kit.js, whose deskRender POSTs text to /api/render:
+// the tool must mount the shared endpoint and answer with sanitized HTML.
+// A tool that forgets the mount goes red here.
+func (t *check) renderEndpoint() {
+	code, raw, _ := t.post("/api/render", `{"text":"# Probe\n\n<script>alert(1)</script>"}`, nil)
+	if code != http.StatusOK {
+		t.fail("POST /api/render: want 200, got %d", code)
+		return
+	}
+	var v struct {
+		HTML string `json:"html"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil || !strings.Contains(v.HTML, "desk-content") {
+		t.fail("POST /api/render: want sanitized desk-content HTML, got %q", trunc(string(raw), 120))
+		return
+	}
+	for _, banned := range []string{"<script", "alert(1)"} {
+		if strings.Contains(v.HTML, banned) {
+			t.fail("POST /api/render: response not sanitized, contains %q", banned)
+		}
+	}
+	if got := t.method("GET", "/api/render"); got != http.StatusMethodNotAllowed {
+		t.fail("GET /api/render: want 405, got %d", got)
 	}
 }
 

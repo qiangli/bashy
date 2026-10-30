@@ -34,6 +34,45 @@ func ValidWidget(s string) bool {
 	return false
 }
 
+// widgetLabel is the human name of a widget for the subtitle line:
+// "Line chart", never the bare kind key.
+func widgetLabel(widget string) string {
+	switch widget {
+	case "line":
+		return "Line chart"
+	case "bar":
+		return "Bar chart"
+	case "counter":
+		return "Counter"
+	case "sum":
+		return "Sum"
+	case "gauge":
+		return "Gauge"
+	case "updowncounter":
+		return "Up-down counter"
+	case "histogram":
+		return "Histogram"
+	case "exponentialhistogram":
+		return "Exponential histogram"
+	case "table":
+		return "Table"
+	case "stat":
+		return "Stat"
+	default:
+		return "Chart"
+	}
+}
+
+// subtitle is the line under the chart title: the unit when the series
+// carries one, else the human widget name. It never emits a dangling
+// "kind · " separator.
+func subtitle(widget, unit string) string {
+	if unit = strings.TrimSpace(unit); unit != "" {
+		return widgetLabel(widget) + " · " + unit
+	}
+	return widgetLabel(widget)
+}
+
 func fmtNum(v float64) string {
 	if math.IsInf(v, 1) {
 		return "+∞"
@@ -106,6 +145,8 @@ func RenderSVG(s Series, widget string) (string, error) {
 	text := func(x, y int, class, value string) {
 		cls := ""
 		switch class {
+		case "title":
+			cls = ` class="desk-chart-title"`
 		case "muted":
 			cls = ` class="desk-chart-label"`
 		case "stat":
@@ -117,8 +158,8 @@ func RenderSVG(s Series, widget string) (string, error) {
 	if len([]rune(name)) > 72 {
 		name = string([]rune(name)[:69]) + "…"
 	}
-	text(24, 32, "", name)
-	text(24, 54, "muted", widget+" · "+s.Unit)
+	text(24, 32, "title", name)
+	text(24, 54, "muted", subtitle(widget, s.Unit))
 	points := s.Points
 	switch widget {
 	case "counter", "sum":
@@ -137,7 +178,7 @@ func RenderSVG(s Series, widget string) (string, error) {
 	case "histogram", "exponentialhistogram":
 		for i, q := range []float64{.5, .95, .99} {
 			fmt.Fprintf(&b, `<rect x="%d" y="66" width="190" height="36" rx="8" fill="currentColor" opacity=".06"/>`, 16+i*208)
-			text(24+i*208, 90, "", fmt.Sprintf("p%d %s", int(q*100), Quantile(s.Buckets, q)))
+			text(24+i*208, 90, "muted", fmt.Sprintf("p%d %s", int(q*100), Quantile(s.Buckets, q)))
 		}
 		text(24, 113, "muted", "Latest distribution · estimated percentiles")
 		points = nil
@@ -154,15 +195,15 @@ func RenderSVG(s Series, widget string) (string, error) {
 			}
 			for j, row := range s.Rows {
 				for i, c := range row {
-					text(24+int(float64(i)*width), 113+j*24, "", c)
+					text(24+int(float64(i)*width), 113+j*24, "muted", c)
 				}
 			}
 		} else {
 			text(24, 86, "muted", "Time / label")
 			text(460, 86, "muted", "Value")
 			for i, p := range points {
-				text(24, 113+i*24, "", p.Label)
-				text(460, 113+i*24, "", fmtNum(p.Y))
+				text(24, 113+i*24, "muted", p.Label)
+				text(460, 113+i*24, "muted", fmtNum(p.Y))
 			}
 		}
 

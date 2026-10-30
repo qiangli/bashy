@@ -32,7 +32,7 @@ func TestRenderFenceShapes(t *testing.T) {
 		want                              []string
 	}{
 		{"csv-bar", "bar", "", "", "name,value\na,1\nb,2\n", []string{"<svg", "viewBox", "desk-series-1"}},
-		{"json-line", "line", "json", "T", "[1,2,3]\n", []string{"<svg", "desk-chart-trace", "T · line"}},
+		{"json-line", "line", "json", "T", "[1,2,3]\n", []string{"<svg", "desk-chart-trace", "Line chart", `class="desk-chart-title"`}},
 		{"tsv", "bar", "tsv", "", "name\tvalue\na\t1\n", []string{"<svg", "desk-series-1"}},
 		{"table", "table", "", "", "a,b\n1,2\n", []string{"<svg", "table"}},
 	} {

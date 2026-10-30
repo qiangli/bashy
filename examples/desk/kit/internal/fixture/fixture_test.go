@@ -38,7 +38,7 @@ func TestContractGreen(t *testing.T) {
 }
 
 func TestContractRedOnBreak(t *testing.T) {
-	for _, breakM := range []string{"open-emits-content", "no-csp", "allow-secret", "hex-color", "font-family", "no-shell", "no-schema-version", "accept-old-verb"} {
+	for _, breakM := range []string{"open-emits-content", "no-csp", "allow-secret", "hex-color", "font-family", "no-shell", "no-schema-version", "accept-old-verb", "no-render"} {
 		url := startServer(t, breakM)
 		fails := contracttest.Check(contracttest.Config{BaseURL: url, Tool: "memo"})
 		if len(fails) == 0 {

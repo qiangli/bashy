@@ -42,7 +42,7 @@ the identical `/api/action` JSON API.
 Added to the `notepad` module only (all pure Go, permissive):
 1. `github.com/JohannesKaufmann/html-to-markdown/v2` v2.5.2 — **MIT License** (HTML -> Markdown input conversion)
 2. `github.com/ledongthuc/pdf` v0.0.0-20261020125853-5e46805f718e — **BSD-3-Clause License** (PDF -> text input extraction)
-3. `github.com/russross/blackfriday/v2` v2.1.0 — **BSD-2-Clause License** (Markdown -> HTML export writer)
+3. Markdown rendering and HTML export use the shared kit renderer (`desk-kit/render`, goldmark **MIT License**) — the live preview, viewer and export share one implementation, so blackfriday is gone
 4. `github.com/go-pdf/fpdf` v0.9.0 — **MIT License** (text/Markdown -> PDF export writer)
 5. `golang.org/x/image` v0.47.0 — **BSD-3-Clause License** (text/Markdown -> PNG font drawing & export writer)
 

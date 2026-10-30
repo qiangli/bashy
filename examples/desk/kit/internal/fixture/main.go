@@ -16,6 +16,7 @@
 //	-break hex-color             page CSS plants a hex colour
 //	-break font-family           page CSS plants its own font-family
 //	-break no-shell              page drops the kit app shell
+//	-break no-render             POST /api/render is not mounted
 package main
 
 import (
@@ -35,10 +36,16 @@ import (
 	"time"
 
 	kit "desk-kit"
+	"desk-kit/render"
 )
 
 // breakMode is set from -break; empty means contract-clean.
 var breakMode string
+
+// renderMarkdown serves POST /api/render: Markdown in, sanitized HTML out.
+func renderMarkdown(src []byte) ([]byte, error) {
+	return render.Markdown(src, render.Options{})
+}
 
 type item struct {
 	Version  int             `json:"version"`
@@ -183,6 +190,10 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		kit.WriteJSON(w, a.openView(it))
+		return
+	}
+	if path == "/api/render" && breakMode != "no-render" {
+		kit.ServeRender(w, r, renderMarkdown)
 		return
 	}
 	if path != "/api/action" || r.Method != "POST" {

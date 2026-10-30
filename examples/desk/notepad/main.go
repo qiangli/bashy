@@ -23,11 +23,25 @@ import (
 	"syscall"
 	"time"
 
+	"desk-chart/fence"
 	kit "desk-kit"
+	"desk-kit/render"
 )
 
 // breakMode is set from -break; empty means contract-clean.
 var breakMode string
+
+func init() {
+	// Markdown ```chart fences in notes reuse the C1 renderer.
+	render.ChartSVG = fence.RenderFence
+}
+
+// renderMarkdown serves POST /api/render: Markdown in, sanitized HTML out.
+// Notes have no item assets, so local embeds degrade to links and remote
+// embeds stay off.
+func renderMarkdown(src []byte) ([]byte, error) {
+	return render.Markdown(src, render.Options{})
+}
 
 type note struct {
 	Version  int             `json:"version"`
@@ -216,6 +230,10 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		a.export(w, r, req, me)
+		return
+	}
+	if path == "/api/render" {
+		kit.ServeRender(w, r, renderMarkdown)
 		return
 	}
 	if path == "/api/action" && r.Method != "POST" {
@@ -593,7 +611,12 @@ func (a *app) page(r *http.Request) []byte {
 .np-notes{margin:0;padding-left:1.2em;columns:2 220px}
 </style>` + kit.AppBar("notepad", a.baseURL+"/", header, "") + `<main class="desk-main">` +
 		`<div data-desk-alert class="desk-alert"></div>` +
-		`<form id="noteForm" onsubmit="return false"><div class="np-split"><section class="desk-panel">` +
+		`<form id="noteForm" onsubmit="return false">` +
+		`<div class="desk-row" role="group" aria-label="Editor layout"><span class="desk-muted">Layout</span>` +
+		`<button type="button" class="desk-copy secondary" id="modeEdit">Edit</button>` +
+		`<button type="button" class="desk-copy secondary" id="modeSplit">Split</button>` +
+		`<button type="button" class="desk-copy secondary" id="modeView">View</button></div>` +
+		`<div class="np-split"><section class="desk-panel" id="npEdit">` +
 		kit.TextField("title", "Title", "text", noteTitle, "") +
 		kit.TextField("body", "Note content (Markdown)", "textarea", noteBody, "recommended") +
 		`<div class="desk-field"><label>Import file (TXT, MD, HTML, JSON, PDF) <span class="desk-recommended">auto-convert</span></label>` +
@@ -603,7 +626,7 @@ func (a *app) page(r *http.Request) []byte {
 		`<button type="button" class="desk-copy secondary" id="newBtn">New Note</button>` +
 		kit.CopyButton("Copy text", noteBody) +
 		`</div></section>` +
-		`<section class="desk-panel"><h2 class="desk-h2">Preview</h2>` +
+		`<section class="desk-panel" id="npView"><h2 class="desk-h2">Preview</h2>` +
 		kit.Rendered("div", "block", noteBody) + `</section></div></form>` +
 		noteLinks.String() +
 		`<p class="desk-footer">Local-first notepad · loopback only · re-surface with <code>notepad open ` + html.EscapeString(id) + `</code>.</p></main>` +
@@ -627,6 +650,37 @@ func (a *app) page(r *http.Request) []byte {
   if (bodyInput && preview && window.deskRender) {
     bodyInput.addEventListener('input', () => window.deskRender(preview, bodyInput.value));
   }
+
+  // Edit/split/view toggle: the preview is server-rendered through the
+  // tool's POST api/render endpoint, so every mode shares one renderer.
+  const editPane = document.getElementById('npEdit');
+  const viewPane = document.getElementById('npView');
+  const modeBtns = {
+    edit: document.getElementById('modeEdit'),
+    split: document.getElementById('modeSplit'),
+    view: document.getElementById('modeView')
+  };
+  function setMode(m) {
+    if (m !== 'edit' && m !== 'view') m = 'split';
+    try { localStorage.setItem('notepad-mode', m); } catch (e) {}
+    if (editPane) editPane.hidden = (m === 'view');
+    if (viewPane) viewPane.hidden = (m === 'edit');
+    for (const k in modeBtns) {
+      if (modeBtns[k]) modeBtns[k].disabled = (k === m);
+    }
+    if (m !== 'edit' && bodyInput && preview && window.deskRender) {
+      window.deskRender(preview, bodyInput.value);
+    }
+  }
+  if (modeBtns.edit) modeBtns.edit.addEventListener('click', () => setMode('edit'));
+  if (modeBtns.split) modeBtns.split.addEventListener('click', () => setMode('split'));
+  if (modeBtns.view) modeBtns.view.addEventListener('click', () => setMode('view'));
+  let savedMode = 'split';
+  try {
+    const s = localStorage.getItem('notepad-mode');
+    if (s === 'edit' || s === 'split' || s === 'view') savedMode = s;
+  } catch (e) {}
+  setMode(savedMode);
 
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {

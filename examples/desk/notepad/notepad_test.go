@@ -330,6 +330,72 @@ func TestAPIConvertEndpoint(t *testing.T) {
 	}
 }
 
+// TestRenderEndpoint proves deskRender's server half: the mounted POST
+// /api/render returns the shared renderer's sanitized HTML — script
+// stripped, Markdown rendered, chart fences drawn with the C1 renderer.
+func TestRenderEndpoint(t *testing.T) {
+	srvURL, _ := startServer(t, "")
+	body, _ := json.Marshal(map[string]string{"text": "# Preview\n\n<script>alert(1)</script>\n\n```chart widget=bar\nname,value\na,1\nb,2\n```\n"})
+	req, err := http.NewRequest("POST", srvURL+"/api/render", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	if res.StatusCode != 200 {
+		t.Fatalf("render: want 200, got %d: %s", res.StatusCode, raw)
+	}
+	var v struct {
+		HTML string `json:"html"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatalf("render: not JSON: %s", raw)
+	}
+	for _, want := range []string{`<div class="desk-content">`, "<h1", "<svg", `class="desk-chart-title"`, `class="desk-series-1"`} {
+		if !strings.Contains(v.HTML, want) {
+			t.Errorf("rendered HTML lacks %q:\n%s", want, v.HTML)
+		}
+	}
+	for _, banned := range []string{"<script", "alert(1)", "<style", "style=", "font-family"} {
+		if strings.Contains(v.HTML, banned) {
+			t.Errorf("rendered HTML contains banned %q:\n%s", banned, v.HTML)
+		}
+	}
+	// GET is refused; the endpoint is POST-only.
+	get, err := http.Get(srvURL + "/api/render")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer get.Body.Close()
+	if get.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("GET /api/render: got %d, want 405", get.StatusCode)
+	}
+}
+
+// TestPageLayoutToggle proves the edit/split/view switcher: three mode
+// buttons and both panes, so the preview toggle the live renderer feeds
+// is always present.
+func TestPageLayoutToggle(t *testing.T) {
+	srvURL, _ := startServer(t, "")
+	res, err := http.Get(srvURL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	page := string(raw)
+	for _, want := range []string{`id="modeEdit"`, `id="modeSplit"`, `id="modeView"`, `id="npEdit"`, `id="npView"`, "notepad-mode", "data-desk-render"} {
+		if !strings.Contains(page, want) {
+			t.Errorf("page lacks layout toggle marker %q", want)
+		}
+	}
+}
+
 func TestPageScriptNoPromptOrLocationSearch(t *testing.T) {
 	srvURL, _ := startServer(t, "")
 	res, err := http.Get(srvURL + "/")

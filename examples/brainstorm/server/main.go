@@ -24,11 +24,25 @@ import (
 	"syscall"
 	"time"
 
+	"desk-chart/fence"
 	kit "desk-kit"
+	"desk-kit/render"
 )
 
 // defaultAddr is the recorded LAN-default exception to the desk loopback rule.
 const defaultAddr = "0.0.0.0:18091"
+
+func init() {
+	// Markdown ```chart fences in cards reuse the C1 renderer.
+	render.ChartSVG = fence.RenderFence
+}
+
+// renderMarkdown serves POST /api/render: Markdown in, sanitized HTML out.
+// Cards are short plain text with no item assets, so local embeds degrade
+// to links and remote embeds stay off.
+func renderMarkdown(src []byte) ([]byte, error) {
+	return render.Markdown(src, render.Options{})
+}
 
 //go:embed index.html
 var indexHTML []byte
@@ -313,6 +327,10 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if path == "/healthz" && r.Method == "GET" {
 		respond(w, map[string]bool{"ok": true})
+		return
+	}
+	if path == "/api/render" {
+		kit.ServeRender(w, r, renderMarkdown)
 		return
 	}
 	a.mu.Lock()

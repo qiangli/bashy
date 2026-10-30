@@ -3,25 +3,25 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"html"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/png"
 	"strings"
 
+	"desk-kit/render"
 	"github.com/go-pdf/fpdf"
-	"github.com/russross/blackfriday/v2"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"
 )
 
 // Supported export formats:
-// - pdf: via github.com/go-pdf/fpdf (MIT License)
-// - png: via golang.org/x/image (BSD-3-Clause License)
-// - html: via github.com/russross/blackfriday/v2 (BSD-2-Clause License)
-// - txt: standard library
+//   - pdf: via github.com/go-pdf/fpdf (MIT License)
+//   - png: via golang.org/x/image (BSD-3-Clause License)
+//   - html: the shared kit renderer (desk-kit/render, goldmark MIT) with
+//     assets inlined, so export matches the live preview exactly
+//   - txt: standard library
 const (
 	ExportPDF  = "pdf"
 	ExportPNG  = "png"
@@ -55,18 +55,18 @@ func renderTXT(title, body string) ([]byte, error) {
 }
 
 func renderHTML(title, body string) ([]byte, error) {
-	rendered := blackfriday.Run([]byte(body))
+	// The same rendered view as the live preview, self-contained:
+	// Inline assets become data: URIs and the page carries the strict
+	// view CSP with kit CSS/JS only.
+	frag, err := render.Markdown([]byte(body), render.Options{Inline: true})
+	if err != nil {
+		return nil, err
+	}
 	docTitle := title
 	if docTitle == "" {
 		docTitle = "Notepad Export"
 	}
-	var buf bytes.Buffer
-	buf.WriteString("<!doctype html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<title>")
-	buf.WriteString(html.EscapeString(docTitle))
-	buf.WriteString("</title>\n</head>\n<body>\n")
-	buf.Write(rendered)
-	buf.WriteString("</body>\n</html>\n")
-	return buf.Bytes(), nil
+	return render.Page(docTitle, frag), nil
 }
 
 func renderPDF(title, body string) ([]byte, error) {

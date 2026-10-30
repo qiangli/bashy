@@ -344,7 +344,9 @@ kbd.desk-kbd, .desk-kbd {
 .desk-content.desk-inline { white-space: normal; }
 .desk-chart { background: var(--desk-panel); border: 1px solid var(--desk-line); border-radius: var(--desk-radius-lg); padding: var(--desk-space-3); }
 .desk-chart svg { display: block; width: 100%; height: auto; }
-.desk-chart text, svg .desk-chart-label { font-family: var(--desk-font); fill: currentColor; font-size: 11px; }
+.desk-chart text, .desk-embed-chart text, svg text.desk-chart-label { font-family: var(--desk-font); fill: currentColor; font-size: var(--desk-text-sm); }
+svg text.desk-chart-title { font-size: var(--desk-text-lg); font-weight: var(--desk-weight-strong); }
+svg text.desk-chart-stat { font-size: var(--desk-text-2xl); font-weight: var(--desk-weight-strong); }
 .desk-chart figcaption { font-size: var(--desk-text-sm); color: var(--desk-muted); margin-top: var(--desk-space-1); }
 .desk-series-1 { fill: var(--desk-data-1); stroke: var(--desk-data-1); }
 .desk-series-2 { fill: var(--desk-data-2); stroke: var(--desk-data-2); }
