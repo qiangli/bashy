@@ -99,5 +99,9 @@ add|reply|ask|open|show|set|list|share|close|wait|join)
   if [[ -n ${prefix:-} ]]; then args+=(-prefix "$prefix"); fi
   exec "$bin" "${args[@]}" "$@"
   ;;
-*) echo 'Usage: form [serve|add|reply|ask|open|show|set|list|share|close|append|wait] [--json]' >&2; exit 2 ;;
+*)
+  # Let the native CLI produce its versioned JSON usage error for --json.
+  build
+  exec "$bin" "$@"
+  ;;
 esac

@@ -32,6 +32,11 @@ func TestPollPresetCLI(t *testing.T) {
 	if shown["respondents"] != "many" || shown["definition"].([]any)[0].(map[string]any)["id"] != "vote" {
 		t.Fatalf("poll preset: %v", shown)
 	}
+	field := shown["definition"].([]any)[0].(map[string]any)
+	options := field["options"].([]any)
+	if field["label"] != "Lunch?" || len(options) != 3 || options[0] != "a" || options[1] != "b" || options[2] != "c" {
+		t.Fatalf("poll prompt/options changed: %v", field)
+	}
 }
 
 func participant(t *testing.T, base string) *http.Client {

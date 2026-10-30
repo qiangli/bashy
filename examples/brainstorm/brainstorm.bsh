@@ -189,5 +189,10 @@ stop)
   exec "$cache/brainstorm" cli -addr "$addr" -prefix "$prefix" "$@"
   ;;
 test) cd "$here/server"; GOWORK=off go test -race ./... ;;
-*) echo "$usage" >&2; exit 2 ;;
+*)
+  # Forward unknown verbs so the desk CLI can return a JSON error envelope.
+  mkdir -p "$cache"
+  (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/brainstorm" .)
+  exec "$cache/brainstorm" cli -addr "$addr" -prefix "$prefix" "$@"
+  ;;
 esac

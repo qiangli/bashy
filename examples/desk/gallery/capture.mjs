@@ -3,7 +3,7 @@
 // page (styled by kit.css itself) that shows the tools read as one suite.
 //
 //   PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs \
-//   DESK_BIN=/dir/with/{notepad,form,chart,whiteboard,brainstorm} node capture.mjs
+//   DESK_BIN=/dir/with/{notepad,form,chart,viewer,whiteboard,brainstorm} node capture.mjs
 //
 // Build the binaries with each tool's `GOWORK=off go build`. CHROMIUM_PATH
 // may select an existing browser. Output: ./shots/*.jpg + ./index.html.
@@ -12,9 +12,9 @@ import {mkdtemp, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {dirname, join} from 'node:path';
 import {spawn} from 'node:child_process';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 
-const {chromium} = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const {chromium} = await import(process.env.PLAYWRIGHT_MODULE ? pathToFileURL(process.env.PLAYWRIGHT_MODULE).href : 'playwright');
 const here = dirname(fileURLToPath(import.meta.url));
 const bins = process.env.DESK_BIN || assert.fail('DESK_BIN is required');
 
@@ -54,6 +54,11 @@ const TOOLS = [
     async seed(origin) {
       const v = await act(origin, {action: 'add', title: 'Requests', chart: {input: '[12,18,15,24,31,28,35]', widget: 'line', title: 'Requests'}});
       return {url: v.url, init: [`chart-key-${v.id}`, v.ownerKey]};
+    }},
+  {name: 'viewer', args: d => ['serve', '--addr', '127.0.0.1:0', '--dir', d],
+    async seed(origin) {
+      const v = await act(origin, {action: 'add', title: 'Desk status', body: '# Desk status\n\nSix tools ready for review.'});
+      return {url: `${origin}/?id=${v.id}`};
     }},
   {name: 'whiteboard', args: d => ['-data', d, '-addr', '127.0.0.1:0'],
     async seed(origin) { return {url: `${origin}/`, ready: '#connection', async after(page) {

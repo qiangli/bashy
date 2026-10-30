@@ -460,6 +460,7 @@ func parseVerbArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 		"addr": true, "data": true, "prefix": true, "title": true,
 		"body": true, "id": true, "def": true, "definition": true,
 		"key": true, "timeout": true, "interval": true, "answer": true,
+		"poll": true, "options": true, "respondents": true, "close-at": true,
 	}
 	var positional []string
 	i := 0
