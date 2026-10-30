@@ -3,7 +3,7 @@ id: d038cf56a420
 kind: feature
 title: S537.K0 desk contract + UI kit + shared contract test, extracted from whiteboard/brainstorm
 seq: 2931
-status: assigned
+status: done
 priority: p1
 labels:
     - desk
@@ -13,6 +13,8 @@ assignee: muse-conductor
 sprint: 537
 sprint_id: 3ec79210-039c-57d7-a0b5-7abfeeefbb1c
 sprint_title: 'bashy desk: agent-human tool suite (notepad, form, whiteboard, brainstorm) on one contract + UI kit'
+closed: 2026-10-30T17:17:10.186493Z
+closed_by: s537-manager
 ---
 
 8-point desk contract (two front doors: agent CLI/JSON API + human web page; one CLI/JSON API registered in atlas; stable id + URL reopen; any surface; local-first loopback; shapable by Software Shaping; no secrets (desk forms stay separate from yoke/pkg/ask); same tests on every OS).
