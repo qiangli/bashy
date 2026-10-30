@@ -9,8 +9,9 @@
 // ids; raw HTML pass-through DISABLED) with desk overrides for fenced
 // ```chart / ```csv blocks and for file-type image embeds, then a
 // bluemonday allowlist pass, then semantic-class post-processing. The
-// package emits SEMANTIC CLASSES ONLY (desk-md, desk-table, desk-code,
-// desk-embed-*) and no CSS: styling belongs to kit.css, owned by S537.D1.
+// package emits SEMANTIC CLASSES ONLY (desk-content, desk-table, desk-code,
+// desk-toc, desk-embed-*) and no CSS: styling belongs to kit.css, owned by
+// S537.D1.
 //
 // Dependencies (license-checked 2026-10-30, all permissive pure Go):
 //
@@ -86,9 +87,11 @@ func newConverter(opt Options) goldmark.Markdown {
 }
 
 // Markdown renders src to a sanitized HTML fragment wrapped in
-// <div class="desk-md">. It never passes raw HTML through and never
-// fetches remote URLs; failures to read a local asset degrade that embed
-// to a plain link instead of failing the whole render.
+// <div class="desk-content"> — the same class kit.js marks and kit.css
+// styles (D1), so server and client rendering share one look. It never
+// passes raw HTML through and never fetches remote URLs; failures to read
+// a local asset degrade that embed to a plain link instead of failing the
+// whole render.
 func Markdown(src []byte, opt Options) (html []byte, err error) {
 	if len(src) > 1<<20 {
 		src = src[:1<<20]
@@ -99,7 +102,7 @@ func Markdown(src []byte, opt Options) (html []byte, err error) {
 	}
 	out := sanitize(buf.Bytes())
 	out = postProcess(out)
-	return []byte(`<div class="desk-md">` + string(out) + `</div>`), nil
+	return []byte(`<div class="desk-content">` + string(out) + `</div>`), nil
 }
 
 // Page wraps a Markdown fragment in a full view page: strict

@@ -99,6 +99,53 @@ func TestDeskContract(t *testing.T) {
 	contracttest.Run(t, contracttest.Config{BaseURL: base, Tool: "form", CLI: deskCLICallback(base)})
 }
 
+// TestRenderEndpoint proves deskRender's server half: the mounted POST
+// /api/render returns the shared renderer's sanitized HTML — script
+// stripped, Markdown rendered, chart fences drawn with the C1 renderer.
+func TestRenderEndpoint(t *testing.T) {
+	base := startServer(t)
+	body, _ := json.Marshal(map[string]string{"text": "# Help\n\n<script>alert(1)</script>\n\n```chart widget=bar\nname,value\na,1\nb,2\n```\n"})
+	req, err := http.NewRequest("POST", base+"/api/render", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	raw, _ := io.ReadAll(res.Body)
+	if res.StatusCode != 200 {
+		t.Fatalf("render: want 200, got %d: %s", res.StatusCode, raw)
+	}
+	var v struct {
+		HTML string `json:"html"`
+	}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		t.Fatalf("render: not JSON: %s", raw)
+	}
+	for _, want := range []string{`<div class="desk-content">`, "<h1", "<svg", "desk-chart", `class="desk-series-1"`} {
+		if !strings.Contains(v.HTML, want) {
+			t.Errorf("rendered HTML lacks %q:\n%s", want, v.HTML)
+		}
+	}
+	for _, banned := range []string{"<script", "alert(1)", "<style", "style=", "font-family"} {
+		if strings.Contains(v.HTML, banned) {
+			t.Errorf("rendered HTML contains banned %q:\n%s", banned, v.HTML)
+		}
+	}
+	// GET is refused; the endpoint is POST-only.
+	get, err := http.Get(base + "/api/render")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer get.Body.Close()
+	if get.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("GET /api/render: got %d, want 405", get.StatusCode)
+	}
+}
+
 func TestSecretDefinitionRefused(t *testing.T) {
 	base := startServer(t)
 	for _, tc := range []struct {

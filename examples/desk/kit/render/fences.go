@@ -14,15 +14,16 @@ import (
 	"github.com/yuin/goldmark/util"
 )
 
-// ChartSVG renders a ```chart fence body to an SVG fragment. It is a hook
-// so the full desk chart (C1) renderer can be wired in once examples/desk
-// exposes it as an importable func: tools that vendor it set
+// ChartSVG renders a ```chart fence body to a sanitizer-safe SVG fragment
+// (no <style> element, no style/font-family attributes, colours only via
+// the D1 data-palette classes). It is a hook so the single desk chart
+// renderer is reused: examples/desk/chart exports it and each tool that
+// embeds charts sets it at startup:
 //
-//	render.ChartSVG = chart.RenderFence
+//	render.ChartSVG = fence.RenderFence
 //
-// and every chart fence uses the C1 renderer. Until then the built-in
-// compact renderer below (same CSV/JSON input shapes, C1-style geometry)
-// serves fences server-side with no extra dependency.
+// When unset the fence degrades to a plain code block plus a
+// desk-embed-error note — never an error, never raw data passthrough.
 var ChartSVG func(widget, format, title string, data []byte) (string, error)
 
 // renderFence implements the fenced-code half of deskOverrides.
@@ -101,25 +102,18 @@ func splitParams(s string) []string {
 }
 
 // chartFence renders a ```chart fence to a server-side SVG via the ChartSVG
-// hook (or the built-in renderer). Bad input degrades to a marked code
-// block, never an error and never raw data passthrough.
+// hook. A failing hook degrades to a marked code block; an unset hook
+// degrades to a code block plus an unavailable-renderer note. Never an
+// error and never raw data passthrough.
 func (d *deskOverrides) chartFence(info string, data []byte) string {
 	params := chartParams(info)
 	widget, format, title := params["widget"], params["format"], params["title"]
-	svg := ""
-	if ChartSVG != nil {
-		s, err := ChartSVG(widget, format, title, data)
-		if err == nil {
-			svg = s
-		} else {
-			return chartError(title, err.Error(), data)
-		}
-	} else {
-		s, err := renderChartSVG(widget, format, title, data)
-		if err != nil {
-			return chartError(title, err.Error(), data)
-		}
-		svg = s
+	if ChartSVG == nil {
+		return chartError(title, "chart renderer unavailable", data)
+	}
+	svg, err := ChartSVG(widget, format, title, data)
+	if err != nil {
+		return chartError(title, err.Error(), data)
 	}
 	var b strings.Builder
 	b.WriteString(`<div class="desk-embed desk-embed-chart">`)

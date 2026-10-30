@@ -16,13 +16,16 @@ import (
 var policy = func() *bluemonday.Policy {
 	p := bluemonday.UGCPolicy()
 	p.AllowDataURIImages()
-	// Semantic classes ride on ordinary elements.
+	// Semantic classes ride on ordinary elements, including the SVG
+	// descendants our own chart output uses for the D1 data-palette
+	// classes (desk-series-*, desk-chart-*).
 	p.AllowAttrs("class").OnElements(
 		"div", "span", "pre", "code", "table", "thead", "tbody", "tfoot",
 		"tr", "th", "td", "a", "img", "video", "source", "iframe",
 		"figure", "figcaption", "nav", "ul", "ol", "li", "section",
 		"sup", "p", "h1", "h2", "h3", "h4", "h5", "h6", "hr", "dl",
-		"dt", "dd", "input", "svg",
+		"dt", "dd", "input", "svg", "g", "path", "rect", "circle",
+		"line", "polyline", "polygon", "text", "title", "desc",
 	)
 	// Heading ids (goldmark auto ids) so TOC anchors resolve.
 	p.AllowAttrs("id").OnElements(

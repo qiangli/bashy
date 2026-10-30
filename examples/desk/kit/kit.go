@@ -261,6 +261,42 @@ func GuardPOST(w http.ResponseWriter, r *http.Request, pageName string) bool {
 	return true
 }
 
+// RenderRequest is the POST /api/render body: Markdown in.
+type RenderRequest struct {
+	Text string `json:"text"`
+}
+
+// RenderResponse is the POST /api/render answer: sanitized HTML out.
+type RenderResponse struct {
+	HTML string `json:"html"`
+}
+
+// MaxRenderBytes caps a /api/render body (matches the renderer truncation).
+const MaxRenderBytes = 1 << 20
+
+// ServeRender answers the shared Markdown endpoint every tool mounts as
+// POST /api/render: Markdown in, sanitized HTML out. render is the tool's
+// Markdown func (the shared renderer bound to the item's asset options);
+// the kit stays stdlib-only by taking it as a func. Only POST is served
+// (anything else is 405); malformed bodies are 400 and renderer failures
+// are 500. The endpoint never mutates: it renders text and returns HTML.
+func ServeRender(w http.ResponseWriter, r *http.Request, render func(src []byte) ([]byte, error)) {
+	if r.Method != "POST" {
+		Fail(w, http.StatusMethodNotAllowed, "Method not supported")
+		return
+	}
+	var req RenderRequest
+	if !DecodeAction(w, r, MaxRenderBytes, &req) {
+		return
+	}
+	out, err := render([]byte(req.Text))
+	if err != nil {
+		Fail(w, http.StatusInternalServerError, "Could not render")
+		return
+	}
+	WriteJSON(w, RenderResponse{HTML: string(out)})
+}
+
 // DecodeAction decodes exactly one JSON object of at most maxBytes from an
 // action POST, rejecting unknown fields and trailing garbage the way both
 // reference servers do. It writes the 400 and returns false on any error.

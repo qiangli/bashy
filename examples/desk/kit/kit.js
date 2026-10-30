@@ -112,164 +112,36 @@
   });
 
   // ---- deskRender: the one text renderer. ----
-  // A safe Markdown subset built with DOM APIs (never innerHTML of input):
-  // headings, paragraphs, lists, quotes, rules, fenced code, pipe tables,
-  // inline code/strong/em/links, and ```chart fences drawn with the kit
-  // data palette. It emits semantic tags only; kit.css (.desk-content)
-  // styles them. inline mode keeps line breaks and inline marks only.
-  function el(tag, cls, text) {
-    var n = document.createElement(tag);
-    if (cls) n.className = cls;
-    if (text != null) n.textContent = text;
-    return n;
-  }
-  function safeHref(u) {
-    return /^(https?:\/\/|mailto:|\/|\.\/|#|\?)/i.test(u) ? u : '';
-  }
-  function inline(parent, text) {
-    var re = /(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*\s][^*]*\*|_[^_\s][^_]*_)|(\[[^\]]+\]\([^)\s]+\))/;
-    while (text) {
-      var m = re.exec(text);
-      if (!m) { parent.appendChild(document.createTextNode(text)); break; }
-      if (m.index) parent.appendChild(document.createTextNode(text.slice(0, m.index)));
-      var tok = m[0];
-      if (m[1]) parent.appendChild(el('code', '', tok.slice(1, -1)));
-      else if (m[2]) inline(parent.appendChild(el('strong')), tok.slice(2, -2));
-      else if (m[3]) inline(parent.appendChild(el('em')), tok.slice(1, -1));
-      else {
-        var lm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(tok), href = safeHref(lm[2]);
-        if (href) { var a = el('a'); a.href = href; a.rel = 'noopener noreferrer'; inline(a, lm[1]); parent.appendChild(a); }
-        else parent.appendChild(document.createTextNode(lm[1]));
-      }
-      text = text.slice(m.index + tok.length);
-    }
-  }
-  function cells(line) {
-    return line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(function (c) { return c.trim(); });
-  }
-  // Chart data: [1,2,3] · {"a":1} · [{"label":"a","value":1}] · CSV "a,1" lines.
-  function chartData(src) {
-    var rows = [];
-    try {
-      var v = JSON.parse(src);
-      if (Array.isArray(v)) v.forEach(function (x, i) {
-        if (typeof x === 'number') rows.push([String(i + 1), x]);
-        else if (x && typeof x === 'object') rows.push([String(x.label != null ? x.label : x.name != null ? x.name : i + 1), Number(x.value != null ? x.value : x.y)]);
-      });
-      else if (v && typeof v === 'object') Object.keys(v).forEach(function (k) { rows.push([k, Number(v[k])]); });
-    } catch (e) {
-      src.split('\n').forEach(function (line) {
-        var p = line.split(','), n = Number(p[p.length - 1]);
-        if (p.length >= 2 && line.trim() && !isNaN(n)) rows.push([p.slice(0, -1).join(',').trim(), n]);
-      });
-    }
-    return rows.filter(function (r) { return isFinite(r[1]); });
-  }
-  function chart(src) {
-    var rows = chartData(src), fig = el('figure', 'desk-chart');
-    if (!rows.length) { fig.appendChild(el('pre', '', src)); return fig; }
-    var NS = 'http://www.w3.org/2000/svg', W = 640, H = 220, pad = 28;
-    var max = Math.max.apply(null, rows.map(function (r) { return Math.abs(r[1]); })) || 1;
-    var svg = document.createElementNS(NS, 'svg');
-    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
-    svg.setAttribute('role', 'img');
-    var bw = (W - pad * 2) / rows.length;
-    rows.forEach(function (r, i) {
-      var h = Math.abs(r[1]) / max * (H - pad * 2), x = pad + i * bw;
-      var rect = document.createElementNS(NS, 'rect');
-      rect.setAttribute('class', 'desk-series-' + (i % 8 + 1));
-      rect.setAttribute('x', (x + bw * .1).toFixed(1));
-      rect.setAttribute('y', (H - pad - h).toFixed(1));
-      rect.setAttribute('width', (bw * .8).toFixed(1));
-      rect.setAttribute('height', h.toFixed(1));
-      rect.setAttribute('rx', '3');
-      var title = document.createElementNS(NS, 'title');
-      title.textContent = r[0] + ': ' + r[1];
-      rect.appendChild(title);
-      svg.appendChild(rect);
-      var t = document.createElementNS(NS, 'text');
-      t.setAttribute('class', 'desk-chart-label');
-      t.setAttribute('x', (x + bw / 2).toFixed(1));
-      t.setAttribute('y', String(H - 10));
-      t.setAttribute('text-anchor', 'middle');
-      t.textContent = r[0];
-      svg.appendChild(t);
-    });
-    svg.setAttribute('aria-label', rows.map(function (r) { return r[0] + ' ' + r[1]; }).join(', '));
-    fig.appendChild(svg);
-    return fig;
-  }
-  function blocks(parent, text) {
-    var lines = text.replace(/\r\n?/g, '\n').split('\n'), i = 0, para = [];
-    function flush() {
-      if (!para.length) return;
-      inline(parent.appendChild(el('p')), para.join(' '));
-      para = [];
-    }
-    while (i < lines.length) {
-      var line = lines[i], m;
-      if (!line.trim()) { flush(); i++; continue; }
-      if ((m = /^\s*(```|~~~)\s*([\w-]*)/.exec(line))) {
-        flush();
-        var fence = m[1], lang = m[2], body = [];
-        for (i++; i < lines.length && lines[i].trim().indexOf(fence) !== 0; i++) body.push(lines[i]);
-        i++;
-        if (lang === 'chart') parent.appendChild(chart(body.join('\n')));
-        else {
-          var pre = el('pre'), code = el('code', '', body.join('\n'));
-          if (lang) code.setAttribute('data-lang', lang);
-          pre.appendChild(code);
-          parent.appendChild(pre);
-        }
-        continue;
-      }
-      if ((m = /^(#{1,4})\s+(.*)$/.exec(line))) { flush(); inline(parent.appendChild(el('h' + m[1].length)), m[2]); i++; continue; }
-      if (/^\s*([-*_])(\s*\1){2,}\s*$/.test(line)) { flush(); parent.appendChild(el('hr')); i++; continue; }
-      if (/^\s*>/.test(line)) {
-        flush();
-        var q = [];
-        for (; i < lines.length && /^\s*>/.test(lines[i]); i++) q.push(lines[i].replace(/^\s*>\s?/, ''));
-        blocks(parent.appendChild(el('blockquote')), q.join('\n'));
-        continue;
-      }
-      if (/^\s*([-*+]|\d+[.)])\s+/.test(line)) {
-        flush();
-        var ordered = /^\s*\d/.test(line), list = parent.appendChild(el(ordered ? 'ol' : 'ul'));
-        for (; i < lines.length && /^\s*([-*+]|\d+[.)])\s+/.test(lines[i]); i++)
-          inline(list.appendChild(el('li')), lines[i].replace(/^\s*([-*+]|\d+[.)])\s+/, ''));
-        continue;
-      }
-      if (/\|/.test(line) && i + 1 < lines.length && /^\s*\|?\s*:?-{2,}/.test(lines[i + 1])) {
-        flush();
-        var table = parent.appendChild(el('table')), tr = el('tr');
-        cells(line).forEach(function (c) { inline(tr.appendChild(el('th')), c); });
-        table.appendChild(el('thead')).appendChild(tr);
-        var tb = table.appendChild(el('tbody'));
-        for (i += 2; i < lines.length && /\|/.test(lines[i]) && lines[i].trim(); i++) {
-          var row = tb.appendChild(el('tr'));
-          cells(lines[i]).forEach(function (c) { inline(row.appendChild(el('td')), c); });
-        }
-        continue;
-      }
-      para.push(line.trim());
-      i++;
-    }
-    flush();
-  }
-
-  // deskRender(target, text, {inline}) renders text into target (replacing
-  // its children) and marks it .desk-content. Returns target.
+  // A thin client for the tool's POST api/render endpoint (Markdown in,
+  // sanitized server HTML out). There is no client-side Markdown subset
+  // anymore: the endpoint runs the shared server renderer, so previews and
+  // pages share one look and one sanitizer. The server answer is sanitized
+  // HTML, safe to swap in. Same name and signature as before:
+  // deskRender(target, text, {inline}) fills target asynchronously and
+  // returns it; {inline} only adds the .desk-inline styling hint. A slow
+  // or failed render keeps the previous content and toasts once.
+  var renderFailed = false;
   window.deskRender = function (target, text, opts) {
     text = text == null ? '' : String(text);
-    while (target.firstChild) target.removeChild(target.firstChild);
     target.classList.add('desk-content');
-    if (opts && opts.inline) {
-      target.classList.add('desk-inline');
-      text.split('\n').forEach(function (line, i) {
-        if (i) target.appendChild(el('br'));
-        inline(target, line);
-      });
-    } else blocks(target, text);
+    if (opts && opts.inline) target.classList.add('desk-inline');
+    var seq = (target._deskSeq = (target._deskSeq || 0) + 1);
+    fetch('api/render', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text: text})
+    }).then(function (res) {
+      if (!res.ok) throw new Error('render HTTP ' + res.status);
+      return res.json();
+    }).then(function (data) {
+      if (target._deskSeq !== seq) return;
+      if (data && typeof data.html === 'string') target.innerHTML = data.html;
+    }).catch(function () {
+      if (!renderFailed) {
+        renderFailed = true;
+        if (window.deskToast) window.deskToast('Preview unavailable; showing source.', 'error');
+      }
+    });
     return target;
   };
   // Server pages mark text for the renderer: data-desk-render="block|inline";

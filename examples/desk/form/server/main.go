@@ -26,8 +26,22 @@ import (
 	"syscall"
 	"time"
 
+	"desk-chart/fence"
 	kit "desk-kit"
+	"desk-kit/render"
 )
+
+func init() {
+	// Markdown ```chart fences (field help, reply reasons) reuse the C1 renderer.
+	render.ChartSVG = fence.RenderFence
+}
+
+// renderMarkdown serves POST /api/render: Markdown in, sanitized HTML out.
+// Field help and reply reasons have no item assets, so local embeds degrade
+// to links and remote embeds stay off.
+func renderMarkdown(src []byte) ([]byte, error) {
+	return render.Markdown(src, render.Options{})
+}
 
 type item struct {
 	Version        int                `json:"version"`
@@ -304,6 +318,10 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		kit.WriteJSON(w, a.openView(it))
+		return
+	}
+	if path == "/api/render" {
+		kit.ServeRender(w, r, renderMarkdown)
 		return
 	}
 	if path != "/api/action" || r.Method != "POST" {

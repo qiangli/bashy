@@ -1,11 +1,14 @@
 package render
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+var errTestChart = errors.New("test chart failure")
 
 // fixture builds an asset dir with one file per embed type.
 func fixture(t *testing.T) (dir string, opt Options) {
@@ -70,7 +73,7 @@ func TestGFMFeatures(t *testing.T) {
 		`href="https://example.com/x"`,
 		`<dl>`, `<dt>Term</dt>`, `<dd>`, `def`,
 	)
-	mustContain(t, out, `<div class="desk-md">`)
+	mustContain(t, out, `<div class="desk-content">`)
 }
 
 func TestFootnotes(t *testing.T) {
@@ -168,16 +171,24 @@ func TestPDFEmbed(t *testing.T) {
 	)
 }
 
-func TestChartFence(t *testing.T) {
+func TestChartFenceUnset(t *testing.T) {
+	defer func() { ChartSVG = nil }()
+	ChartSVG = nil
 	_, opt := fixture(t)
 	out := render(t, "```chart widget=bar\nname,value\na,1\nb,2\n```\n", opt)
-	mustContain(t, out, `desk-embed-chart`, "<svg", "viewBox")
-	mustLack(t, out, "<style", "style=")
-	// JSON input, default widget.
-	out = render(t, "```chart\n[1,2,3]\n```\n", opt)
-	mustContain(t, out, "<svg", "polyline")
-	// Bad input degrades, never errors.
-	out = render(t, "```chart widget=bogus\nnot data at all {{{\n```\n", opt)
+	// No renderer wired: a code block plus an error note, never an SVG.
+	mustContain(t, out, `desk-embed-chart`, "desk-embed-error",
+		"chart renderer unavailable", `<pre class="desk-code">`)
+	mustLack(t, out, "<svg")
+}
+
+func TestChartFenceHookError(t *testing.T) {
+	defer func() { ChartSVG = nil }()
+	ChartSVG = func(widget, format, title string, data []byte) (string, error) {
+		return "", errTestChart
+	}
+	_, opt := fixture(t)
+	out := render(t, "```chart widget=bogus\nnot data at all {{{\n```\n", opt)
 	mustContain(t, out, "desk-embed-error")
 	mustLack(t, out, "<svg")
 }
@@ -290,12 +301,15 @@ func TestChartHook(t *testing.T) {
 		if widget != "line" || format != "json" {
 			t.Errorf("hook got widget=%q format=%q", widget, format)
 		}
-		return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"></svg>`, nil
+		return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><rect class="desk-series-1" x="1" y="1" width="8" height="8"/><text class="desk-chart-label" x="1" y="9">a</text></svg>`, nil
 	}
 	_, opt := fixture(t)
 	out := render(t, "```chart widget=line format=json\n[1]\n```\n", opt)
 	if !called {
 		t.Fatal("ChartSVG hook was not called")
 	}
-	mustContain(t, out, "desk-embed-chart", "<svg")
+	// Hook SVG passes through, D1 palette classes intact, viewBox case kept.
+	mustContain(t, out, "desk-embed-chart", "<svg", "viewBox",
+		`class="desk-series-1"`, `class="desk-chart-label"`)
+	mustLack(t, out, "viewbox=")
 }

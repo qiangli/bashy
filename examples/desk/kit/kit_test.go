@@ -1,11 +1,15 @@
 package kit
 
 import (
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
+
+var errRenderBoom = errors.New("boom")
 
 func TestDecodeActionRejectsTrailingData(t *testing.T) {
 	type req struct {
@@ -36,6 +40,51 @@ func TestDecodeActionRejectsTrailingData(t *testing.T) {
 		if !c.ok && w.Code != http.StatusBadRequest {
 			t.Errorf("body %q: status %d, want 400", c.body, w.Code)
 		}
+	}
+}
+
+func TestServeRender(t *testing.T) {
+	render := func(src []byte) ([]byte, error) { return append([]byte("<div>"), src...), nil }
+	post := func(body string) (int, string) {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest("POST", "/api/render", strings.NewReader(body))
+		ServeRender(w, r, render)
+		return w.Code, w.Body.String()
+	}
+	code, body := post(`{"text":"# Hi"}`)
+	if code != http.StatusOK {
+		t.Fatalf("status %d, want 200", code)
+	}
+	// encoding/json escapes < > & in strings; decode before asserting.
+	var got RenderResponse
+	if err := json.Unmarshal([]byte(body), &got); err != nil {
+		t.Fatalf("decode: %v (%q)", err, body)
+	}
+	if got.HTML != "<div># Hi" {
+		t.Errorf("unexpected html %q", got.HTML)
+	}
+	// Malformed bodies are 400: unknown fields, trailing data, empty.
+	for _, bad := range []string{`{"text":"x","mode":"y"}`, `{"text":"x"} {}`, ``} {
+		if code, _ := post(bad); code != http.StatusBadRequest {
+			t.Errorf("body %q: status %d, want 400", bad, code)
+		}
+	}
+	// Renderer failures are 500 without leaking internals.
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest("POST", "/api/render", strings.NewReader(`{"text":"x"}`))
+	ServeRender(w, r, func([]byte) ([]byte, error) { return nil, errRenderBoom })
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("render error: status %d, want 500", w.Code)
+	}
+	if strings.Contains(w.Body.String(), "boom") {
+		t.Errorf("error leaked internals: %q", w.Body.String())
+	}
+	// Only POST is served.
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest("GET", "/api/render", nil)
+	ServeRender(w, r, render)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET: status %d, want 405", w.Code)
 	}
 }
 

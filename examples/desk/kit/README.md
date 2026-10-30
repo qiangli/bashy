@@ -100,12 +100,16 @@ help. The theme choice is remembered (`localStorage desk-theme`) and
 applies before first paint.
 
 **Renderer.** `deskRender(el, text, {inline})` in `kit.js` is the one text
-renderer: a safe Markdown subset built with DOM APIs (headings, lists,
-quotes, code, pipe tables, inline marks, links, ```` ```chart ```` fences).
-It emits semantic tags only; `.desk-content` styles them. Server pages mark
-text with `kit.Rendered(tag, mode, text)` / `data-desk-render`. Notepad
-preview, form help, reply reasons, brainstorm cards and whiteboard notes go
-through it.
+renderer: a thin client for the tool's `POST api/render` endpoint
+(`kit.ServeRender`), which runs the shared server renderer
+(`desk-kit/render`: goldmark GFM + file-type embeds, bluemonday-sanitized).
+There is no client-side Markdown subset; server pages mark text with
+`kit.Rendered(tag, mode, text)` / `data-desk-render` and the endpoint swaps
+in sanitized HTML. It emits semantic classes only (`desk-content`,
+`desk-table`, `desk-code`, `desk-toc`, `desk-embed-*`); kit.css styles them.
+Notepad preview, form help, reply reasons, brainstorm cards and whiteboard
+notes go through it. ` ```chart ` fences reuse the chart tool's renderer
+(`desk-chart/fence`, wired as `render.ChartSVG` by tools that embed charts).
 
 **Conformance (contracttest).** The page must load `kit.css` and the
 `.desk-appbar` shell; outside the kit, no hex/rgb/hsl colour and no

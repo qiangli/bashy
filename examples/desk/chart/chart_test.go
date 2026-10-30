@@ -35,7 +35,7 @@ func TestDeskContract(t *testing.T) {
 func TestSVGGoldens(t *testing.T) {
 	for _, kind := range widgetKinds {
 		t.Run(kind, func(t *testing.T) {
-			s := series{Name: "Requests <safe>", Unit: "ms", Kind: kind, Points: []point{{X: 0, Y: 2, Label: "0"}, {X: 2, Y: 6, Label: "2"}, {X: 5, Y: 9, Label: "5"}}, Buckets: []bucket{{0, 10, 2}, {10, 20, 6}, {20, 40, 2}}}
+			s := series{Name: "Requests <safe>", Unit: "ms", Kind: kind, Points: []point{{X: 0, Y: 2, Label: "0"}, {X: 2, Y: 6, Label: "2"}, {X: 5, Y: 9, Label: "5"}}, Buckets: []bucket{{Low: 0, High: 10, Count: 2}, {Low: 10, High: 20, Count: 6}, {Low: 20, High: 40, Count: 2}}}
 			got, e := renderSVG(s, kind)
 			if e != nil {
 				t.Fatal(e)
@@ -163,7 +163,7 @@ func TestHistogramValidation(t *testing.T) {
 			t.Fatal("invalid histogram accepted")
 		}
 	}
-	bs := []bucket{{math.Inf(-1), 10, 1}, {10, 20, 8}, {20, math.Inf(1), 1}}
+	bs := []bucket{{Low: math.Inf(-1), High: 10, Count: 1}, {Low: 10, High: 20, Count: 8}, {Low: 20, High: math.Inf(1), Count: 1}}
 	if quantile(bs, .01) != "≤ 10" || quantile(bs, .99) != "≥ 20" || quantile(bs, .5) != "≈ 15" {
 		t.Fatal("quantile semantics")
 	}

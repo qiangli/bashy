@@ -354,6 +354,37 @@ kbd.desk-kbd, .desk-kbd {
 .desk-series-6 { fill: var(--desk-data-6); stroke: var(--desk-data-6); }
 .desk-series-7 { fill: var(--desk-data-7); stroke: var(--desk-data-7); }
 .desk-series-8 { fill: var(--desk-data-8); stroke: var(--desk-data-8); }
+/* ---- embeds: file-type figures the kit renderer emits ---- */
+.desk-embed-img { display: block; max-width: 100%; height: auto; border-radius: var(--desk-radius-md); }
+.desk-embed-video { display: block; max-width: 100%; border-radius: var(--desk-radius-md); background: var(--desk-subtle); }
+.desk-embed-pdf iframe { display: block; width: 100%; min-height: 420px; border: 1px solid var(--desk-line); border-radius: var(--desk-radius-md); background: var(--desk-panel); }
+.desk-embed-table { overflow-x: auto; }
+.desk-embed-chart { background: var(--desk-panel); border: 1px solid var(--desk-line); border-radius: var(--desk-radius-lg); padding: var(--desk-space-3); }
+.desk-embed-chart svg { display: block; width: 100%; height: auto; }
+.desk-embed-chart text { fill: currentColor; }
+.desk-chart-trace { fill: none; stroke: var(--desk-data-1); }
+.desk-chart-stat { font-size: var(--desk-text-xl); font-weight: var(--desk-weight-strong); fill: currentColor; }
+.desk-embed-link.desk-embed-missing { color: var(--desk-muted); }
+.desk-embed-error { border: 1px dashed var(--desk-line-strong); border-radius: var(--desk-radius-md); padding: var(--desk-space-3); background: var(--desk-subtle); }
+.desk-embed-error .desk-embed-note { color: var(--desk-warn-ink); }
+.desk-embed-caption { font-size: var(--desk-text-sm); font-weight: var(--desk-weight-strong); margin: 0 0 var(--desk-space-1); }
+.desk-embed-note { font-size: var(--desk-text-sm); color: var(--desk-muted); margin: var(--desk-space-1) 0; }
+.desk-download { font-size: var(--desk-text-sm); }
+/* ---- table of contents ---- */
+.desk-toc { background: var(--desk-subtle); border: 1px solid var(--desk-line); border-radius: var(--desk-radius-md); padding: var(--desk-space-3) var(--desk-space-4); }
+.desk-toc ul { margin: 0; padding-left: 1.2em; }
+.desk-toc-l2 { margin-left: var(--desk-space-3); }
+.desk-toc-l3, .desk-toc-l4, .desk-toc-l5, .desk-toc-l6 { margin-left: var(--desk-space-4); }
+/* ---- code blocks outside .desk-content (same paint as inside) ---- */
+pre.desk-code { background: var(--desk-subtle); padding: var(--desk-space-3); border-radius: var(--desk-radius-md); overflow-x: auto; }
+pre.desk-code code { background: none; padding: 0; }
+/* ---- server-side highlighting (chroma desk-hl-* spans) ---- */
+.desk-hl-c, .desk-hl-ch, .desk-hl-cm, .desk-hl-cp, .desk-hl-cpf, .desk-hl-c1, .desk-hl-cs { color: var(--desk-muted); font-style: italic; }
+.desk-hl-k, .desk-hl-kc, .desk-hl-kd, .desk-hl-kn, .desk-hl-kp, .desk-hl-kr, .desk-hl-kt { color: var(--desk-accent); font-weight: var(--desk-weight-strong); }
+.desk-hl-s, .desk-hl-sa, .desk-hl-sb, .desk-hl-sc, .desk-hl-dl, .desk-hl-sd, .desk-hl-s2, .desk-hl-se, .desk-hl-sh, .desk-hl-si, .desk-hl-sx, .desk-hl-sr, .desk-hl-s1, .desk-hl-ss { color: var(--desk-ok-ink); }
+.desk-hl-m, .desk-hl-mb, .desk-hl-mf, .desk-hl-mh, .desk-hl-mi, .desk-hl-mo, .desk-hl-il { color: var(--desk-data-3); }
+.desk-hl-nf, .desk-hl-fm, .desk-hl-ne, .desk-hl-nt { color: var(--desk-data-5); }
+.desk-hl-err { color: var(--desk-danger-ink); background: var(--desk-danger-bg); }
 @media (max-width: 650px) {
   .desk-appbar { padding: var(--desk-space-2) var(--desk-space-3); }
   .desk-main { padding: var(--desk-space-4) var(--desk-space-3); }

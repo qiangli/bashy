@@ -198,9 +198,10 @@ func State(kind, title, hint string) string {
 	return s + `</div>`
 }
 
-// Rendered marks text for the kit renderer (deskRender): kit.js renders the
-// element's text as Markdown-subset content styled by .desk-content.
-// mode is "block" or "inline".
+// Rendered marks text for the kit renderer (deskRender): kit.js POSTs the
+// element's text to the tool's /api/render endpoint and swaps in the
+// sanitized server HTML, styled by .desk-content. mode is "block" or
+// "inline" (a hint sent with the request).
 func Rendered(tag, mode, text string) string {
 	if mode != "inline" {
 		mode = "block"
