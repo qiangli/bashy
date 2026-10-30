@@ -4,12 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
+	"os/exec"
 	"path/filepath"
 	"strings"
-
-	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
-	"github.com/ledongthuc/pdf"
 )
 
 // Supported content formats
@@ -64,27 +61,14 @@ func DetectFormat(data []byte, filenameOrExt string) string {
 func ConvertContent(data []byte, formatOrFilename string) (string, string, error) {
 	format := DetectFormat(data, formatOrFilename)
 	switch format {
-	case FormatPDF:
-		r, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
+	case FormatPDF, FormatHTML:
+		cmd := exec.Command("bashy", "lens", "-f", format, "-t", "md")
+		cmd.Stdin = bytes.NewReader(data)
+		converted, err := cmd.Output()
 		if err != nil {
-			return "", format, fmt.Errorf("reading pdf: %w", err)
+			return "", format, fmt.Errorf("bashy lens %s to markdown: %w", format, err)
 		}
-		pt, err := r.GetPlainText()
-		if err != nil {
-			return "", format, fmt.Errorf("extracting text from pdf: %w", err)
-		}
-		b, err := io.ReadAll(pt)
-		if err != nil {
-			return "", format, fmt.Errorf("reading extracted text: %w", err)
-		}
-		return strings.TrimSpace(string(b)), format, nil
-
-	case FormatHTML:
-		md, err := htmltomarkdown.ConvertString(string(data))
-		if err != nil {
-			return "", format, fmt.Errorf("converting html to markdown: %w", err)
-		}
-		return strings.TrimSpace(md), format, nil
+		return strings.TrimSpace(string(converted)), format, nil
 
 	case FormatJSON:
 		var buf bytes.Buffer

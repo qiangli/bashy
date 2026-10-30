@@ -21,7 +21,7 @@ func TestReplyRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	id, key := created["id"].(string), created["ownerKey"].(string)
-	status, raw := post(t, base, `{"action":"get","id":"`+id+`"}`, key)
+	status, raw := post(t, base, `{"action":"show","id":"`+id+`"}`, key)
 	if status != 200 {
 		t.Fatalf("get: %d %s", status, raw)
 	}
@@ -65,7 +65,7 @@ func TestReplyRoundTrip(t *testing.T) {
 		t.Fatalf("mark done: %d %s", status, raw)
 	}
 	a.items = map[string]*item{}
-	_, raw = post(t, base, `{"action":"get","id":"`+id+`"}`, key)
+	_, raw = post(t, base, `{"action":"show","id":"`+id+`"}`, key)
 	json.Unmarshal(raw, &got)
 	if !got.Answers["ssn"].Done || got.Answers["ssn"].Status != "needs-human" {
 		t.Fatalf("completion lost: %s", raw)
@@ -128,7 +128,7 @@ func TestReplyCompletionAndImmutability(t *testing.T) {
 	if code != 400 {
 		t.Fatal("incomplete reply submitted")
 	}
-	code, _ = post(t, base, `{"action":"put","id":"`+id+`","answers":{"ssn":"SENSITIVE"}}`, key)
+	code, _ = post(t, base, `{"action":"set","id":"`+id+`","answers":{"ssn":"SENSITIVE"}}`, key)
 	if code != 409 {
 		t.Fatal("reply mutated through put")
 	}

@@ -4,7 +4,7 @@
 // retrofit copies only the contract points into whiteboard/brainstorm
 // without changing their behaviour.
 //
-// Doors: `memo new|open|get|put|list|share|close [--json]` (agent) and the
+// Doors: `memo new|open|show|set|list|share|close [--json]` (agent) and the
 // loopback page (human). Storage: $BASHY_HOME/desk/memo/items/<id>.json.
 //
 // The -break flag deliberately violates one contract point at a time so the
@@ -139,6 +139,14 @@ func (a *app) openView(it *item) map[string]any {
 }
 
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if breakMode == "no-schema-version" {
+		a.serveHTTP(w, r)
+		return
+	}
+	kit.ContractHandler("memo", http.HandlerFunc(a.serveHTTP)).ServeHTTP(w, r)
+}
+
+func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if breakMode != "no-csp" {
 		kit.ApplySecurityHeaders(w)
 	}
@@ -192,17 +200,20 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !kit.DecodeAction(w, r, 65536, &req) {
 		return
 	}
+	if breakMode == "accept-old-verb" && req.Action == "new" {
+		req.Action = "add"
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	me := kit.ParticipantCookie(w, r, "memo-participant")
 	switch req.Action {
-	case "new":
+	case "add":
 		a.create(w, req, me)
 	case "open":
 		a.open(w, req)
-	case "get":
+	case "show":
 		a.get(w, r, req, me)
-	case "put":
+	case "set":
 		a.mutate(w, r, req, me, false)
 	case "close":
 		a.mutate(w, r, req, me, true)

@@ -16,10 +16,10 @@ This is the prose face of `notepad.bsh`, the same executable body used by
 the registered `notepad` command. `bashy commands show notepad` exposes
 the executable argv and source path; `bashy skill show notepad` reads this face.
 
-- `bashy notepad new [--title TITLE] [--body BODY] [-f FILE|-] [--id ID]` creates a new note.
+- `bashy notepad add [--title TITLE] [--body BODY] [-f FILE|-] [--id ID]` creates a note.
 - `bashy notepad open ID` re-surfaces an item (prints id, URL, status only — never content).
-- `bashy notepad get ID` reads note title and body.
-- `bashy notepad put ID [-f FILE|-] [--title TITLE] [--body BODY]` updates note content.
+- `bashy notepad show ID` reads note title and body.
+- `bashy notepad set ID [-f FILE|-] [--title TITLE] [--body BODY]` updates note content.
 - `bashy notepad export ID --to pdf|png|html|txt [-o FILE]` exports note content.
 - `bashy notepad list` lists saved notes.
 - `bashy notepad share ID` mints a single-use invite link.
@@ -46,7 +46,7 @@ case ${1:-serve} in
   done < "${BASH_SOURCE[0]}"
   ;;
 --contract) echo 'sokilili notepado efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
--h|--help) echo 'notepad [serve|new|open|get|put|list|share|close|join|export|test] — loopback notepad; --skill prints its embedded skill' ;;
+-h|--help) echo 'notepad [serve|add|open|show|set|list|share|close|join|export|test] — loopback notepad; --skill prints its embedded skill' ;;
 test)
   cd "$here" && GOWORK=off go test -v ./...
   ;;

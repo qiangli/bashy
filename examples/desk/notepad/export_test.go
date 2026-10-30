@@ -16,7 +16,7 @@ func TestExportPDF(t *testing.T) {
 	addr := strings.TrimPrefix(srvURL, "http://")
 
 	var out bytes.Buffer
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "new", "--id", "pdf-note", "--title", "PDF Note Title", "--body", "This is note content for PDF generation."}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "add", "--id", "pdf-note", "--title", "PDF Note Title", "--body", "This is note content for PDF generation."}, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
 	}
 
@@ -49,7 +49,7 @@ func TestExportPNG(t *testing.T) {
 	addr := strings.TrimPrefix(srvURL, "http://")
 
 	var out bytes.Buffer
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "new", "--id", "png-note", "--title", "PNG Note Title", "--body", "Rendering text into PNG via golang.org/x/image."}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "add", "--id", "png-note", "--title", "PNG Note Title", "--body", "Rendering text into PNG via golang.org/x/image."}, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
 	}
 
@@ -78,7 +78,7 @@ func TestExportHTML(t *testing.T) {
 
 	var out bytes.Buffer
 	heading := "# Exported HTML Heading"
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "new", "--id", "html-note", "--title", "HTML Note", "--body", heading + "\n\nParagraph text in markdown."}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "add", "--id", "html-note", "--title", "HTML Note", "--body", heading + "\n\nParagraph text in markdown."}, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
 	}
 
@@ -104,7 +104,7 @@ func TestExportTXT(t *testing.T) {
 
 	var out bytes.Buffer
 	bodyText := "Plain text body\nSecond line"
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "new", "--id", "txt-note", "--title", "TXT Note", "--body", bodyText}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "add", "--id", "txt-note", "--title", "TXT Note", "--body", bodyText}, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
 	}
 
@@ -127,7 +127,7 @@ func TestExportViaAPI(t *testing.T) {
 	srvURL, _ := startServer(t, "")
 
 	// 1. Create note
-	newReq := `{"action":"new","id":"api-export-note","title":"API Note","body":"# API Note Heading\n\nContent"}`
+	newReq := `{"action":"add","id":"api-export-note","title":"API Note","body":"# API Note Heading\n\nContent"}`
 	res, err := http.Post(srvURL+"/api/action", "application/json", strings.NewReader(newReq))
 	if err != nil || res.StatusCode != 200 {
 		t.Fatalf("new note via API failed: %v, status: %v", err, res.StatusCode)

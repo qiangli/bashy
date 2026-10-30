@@ -232,6 +232,10 @@ func (a *app) stripPrefix(path string) (string, bool) {
 func sameOrigin(r *http.Request, u *url.URL) bool { return kit.SameOrigin(r, u) }
 
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	kit.ContractHandler("whiteboard", http.HandlerFunc(a.serveHTTP)).ServeHTTP(w, r)
+}
+
+func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	kit.ApplySecurityHeaders(w)
 	if !kit.GuardPOST(w, r, "board's own") {
 		return

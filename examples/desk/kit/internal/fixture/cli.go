@@ -1,4 +1,4 @@
-// The memo agent door: new|open|get|put|list|share|close over the same
+// The memo agent door: new|open|show|set|list|share|close over the same
 // JSON API the page uses. --json prints the raw API object; without it,
 // open/new print only id, URL and status — never content.
 package main
@@ -36,7 +36,7 @@ func runCLI(args []string, stdout io.Writer) int {
 	}
 	rest := fs.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(stdout, "Usage: memo [serve|new|open|get|put|list|share|close] [--json]")
+		fmt.Fprintln(stdout, "Usage: memo [serve|add|open|show|set|list|share|close] [--json]")
 		return 2
 	}
 	verb := rest[0]
@@ -108,7 +108,7 @@ func runCLI(args []string, stdout io.Writer) int {
 			return 0
 		}
 		switch verb {
-		case "get":
+		case "show":
 			fmt.Fprintf(stdout, "%v\n%v\n", obj["title"], obj["body"])
 		default:
 			// new/open/put/share/close: id, URL, status only — never content.
@@ -134,8 +134,8 @@ func runCLI(args []string, stdout io.Writer) int {
 		return _positional[0], true
 	}
 	switch verb {
-	case "new":
-		obj, _, code := call("new", map[string]any{"id": *idFlag, "title": *title, "body": *body})
+	case "add":
+		obj, _, code := call("add", map[string]any{"id": *idFlag, "title": *title, "body": *body})
 		if code != 0 {
 			return code
 		}
@@ -150,22 +150,22 @@ func runCLI(args []string, stdout io.Writer) int {
 			return code
 		}
 		return emit(obj, nil)
-	case "get":
+	case "show":
 		id, ok := needID()
 		if !ok {
 			return 2
 		}
-		obj, _, code := call("get", map[string]any{"id": id})
+		obj, _, code := call("show", map[string]any{"id": id})
 		if code != 0 {
 			return code
 		}
 		return emit(obj, nil)
-	case "put":
+	case "set":
 		id, ok := needID()
 		if !ok {
 			return 2
 		}
-		obj, _, code := call("put", map[string]any{"id": id, "title": *title, "body": *body})
+		obj, _, code := call("set", map[string]any{"id": id, "title": *title, "body": *body})
 		if code != 0 {
 			return code
 		}

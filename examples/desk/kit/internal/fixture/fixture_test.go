@@ -38,7 +38,7 @@ func TestContractGreen(t *testing.T) {
 }
 
 func TestContractRedOnBreak(t *testing.T) {
-	for _, breakM := range []string{"open-emits-content", "no-csp", "allow-secret", "hex-color", "font-family", "no-shell"} {
+	for _, breakM := range []string{"open-emits-content", "no-csp", "allow-secret", "hex-color", "font-family", "no-shell", "no-schema-version", "accept-old-verb"} {
 		url := startServer(t, breakM)
 		fails := contracttest.Check(contracttest.Config{BaseURL: url, Tool: "memo"})
 		if len(fails) == 0 {
@@ -51,6 +51,16 @@ func TestContractRedOnBreak(t *testing.T) {
 			}
 		}
 		t.Logf("break %q correctly fails %d contract point(s), e.g.: %s", breakM, len(fails), fails[0])
+	}
+}
+
+func TestContractRedOnMissingCommonOption(t *testing.T) {
+	url := startServer(t, "")
+	fails := contracttest.Check(contracttest.Config{BaseURL: url, Tool: "memo", CLI: func(args ...string) (int, string) {
+		return 2, "unsupported common option"
+	}})
+	if !strings.Contains(strings.Join(fails, "\n"), "common option") {
+		t.Fatalf("missing common option stayed green: %v", fails)
 	}
 }
 
@@ -72,7 +82,7 @@ func TestCLIOpenHidesContent(t *testing.T) {
 	srvURL := startServer(t, "")
 	addr := strings.TrimPrefix(srvURL, "http://")
 	var out bytes.Buffer
-	if code := runCLI([]string{"-addr", addr, "--json", "--id", "cli-probe", "--title", "T", "--body", "cli-secret-body", "new"}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "--json", "--id", "cli-probe", "--title", "T", "--body", "cli-secret-body", "add"}, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
 	}
 	var created map[string]any
@@ -94,7 +104,7 @@ func TestCLIOpenHidesContent(t *testing.T) {
 		t.Errorf("CLI open lacks the id: %s", out.String())
 	}
 	out.Reset()
-	if code := runCLI([]string{"-addr", addr, "--key", key, "get", "cli-probe"}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "--key", key, "show", "cli-probe"}, &out); code != 0 {
 		t.Fatalf("get: exit %d: %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "cli-secret-body") {
@@ -126,7 +136,7 @@ func TestFailedSaveDoesNotMutateItem(t *testing.T) {
 		_ = json.NewDecoder(r.Body).Decode(&v)
 		return r.StatusCode, v
 	}
-	code, created := post("", `{"action":"new","id":"fs","title":"t"}`)
+	code, created := post("", `{"action":"add","id":"fs","title":"t"}`)
 	if code != 200 {
 		t.Fatalf("new: %d", code)
 	}

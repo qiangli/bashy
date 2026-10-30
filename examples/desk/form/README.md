@@ -9,14 +9,14 @@ questionnaire (F3).
 ## Quick round-trip
 
 ```bash
-bashy form new --def ./examples/contact.json --title "Contact preferences"
+bashy form add --def ./examples/contact.json --title "Contact preferences"
 # form-9f3a… http://127.0.0.1:18107/?id=form-9f3a… pending
 # ownerKey: … (keep private)
 
 bashy form open form-9f3a…        # id, URL, status only — never content
 # human fills the page (Save = partial, Submit = complete)
 
-bashy form get form-9f3a… --json  # definition + answers keyed by field id
+bashy form show form-9f3a… --json  # definition + answers keyed by field id
 bashy form wait form-9f3a…        # blocks until answered (or closed/timeout)
 ```
 
@@ -28,7 +28,7 @@ Hand a web form back to the human without losing the agent's proposals:
 bashy browser extract > extract.json
 bashy form reply --extract extract.json --values values.json --refusals refusals.json
 # --extract - reads the extract result from stdin.
-bashy form get form-9f3a… --json --key "$FORM_KEY"
+bashy form show form-9f3a… --json --key "$FORM_KEY"
 ```
 
 The extract result's `data` carries `elements` (as a JSON object, or string in transport form).
@@ -59,7 +59,7 @@ so a mismatched identity cannot silently bypass redaction.
 
 Each safe proposal has the kit CopyButton (with its “Copied” state). The
 human marks rows done and saves; Submit requires every remaining row done.
-`get --json` returns `answers` keyed by stable ID (or selector), each containing
+`show --json` returns `answers` keyed by stable ID (or selector), each containing
 `stable_id`, `selector`, `label`, `status`, `done`, and optional `value` /
 `reason`. Completion is a separate boolean so the original fill status
 remains visible. Replyforms use the F1 item store, owner key and sharing
@@ -78,18 +78,18 @@ bashy form ask --def ./questions.json --title "Release decision"
 # form-9f3a… http://127.0.0.1:18107/?id=form-9f3a… pending
 # ownerKey: … (keep private)
 
-# Later, append only the new round; the page now shows Q1..Qn+2.
+# Later, append only the add round; the page now shows Q1..Qn+2.
 bashy form ask form-9f3a… --key "$FORM_KEY" --def ./followup.json
 
 bashy form open form-9f3a…        # id, URL, status only
-bashy form get form-9f3a… --json  # answers keyed by q1..qn, each with status
+bashy form show form-9f3a… --json  # answers keyed by q1..qn, each with status
 bashy form wait form-9f3a… --json
 ```
 
 Question labels render as `Q1`, `Q2`, … on one persistent page. Follow-up
 rounds append `qN+1` onward without resending or renumbering earlier questions.
 Partial saves merge, so the human can answer in any order and reload safely.
-For questionnaires, `get` and `wait` return entries such as
+For questionnaires, `show` and `wait` return entries such as
 `"q1":{"status":"answered","answer":"yes"}` and
 `"q2":{"status":"pending"}`. Choice questions retain the definition's
 recommended mark. A follow-up round returns an already-completed questionnaire
@@ -135,16 +135,16 @@ multi, `"yes"`/`"no"` for yes-no (common spellings and booleans are
 normalised). File answers carry `{name, size}` metadata; bytes never flow
 through the page. Every Save persists, so partial answers survive reload;
 a complete submit with all required fields filled moves the form
-`pending → answered`. The agent door (`get --json`, `wait`) polls
-`pending`/`answered`. The owner key gates `get`/`put`/`share`/`close`;
+`pending → answered`. The agent door (`show --json`, `wait`) polls
+`pending`/`answered`. The owner key gates `show`/`set`/`share`/`close`;
 the human page posts answers under its participant cookie.
 
 ## Contract
 
-Desk seven (`new|open|get|put|list|share|close`, `--json`) plus `ask` and `wait`,
+Desk seven (`add|open|show|set|list|share|close`, `--json`) plus `ask` and `wait`,
 all over the same `/api/...` operations; `open` prints id, URL, status
 only; loopback bind (`127.0.0.1:18107` default); stable id + loopback URL;
-contentless `list`; single-use share invites; `put` after `close` is 409.
+contentless `list`; single-use share invites; `set` after `close` is 409.
 Go module `form-server` pulls the kit with
 `require desk-kit v0.0.0` + `replace desk-kit => ../kit`.
 

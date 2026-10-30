@@ -1,4 +1,4 @@
-// The form agent door: new|ask|open|get|put|list|share|close|wait over the
+// The form agent door: add|ask|open|show|set|list|share|close|wait over the
 // same JSON API the page uses. --json prints the raw API object; without
 // it, open/new print only id, URL and status — never content. wait polls
 // get until the human submits (answered) or the form closes.
@@ -34,12 +34,33 @@ func (a answerFlags) Set(s string) error {
 }
 
 func runCLI(args []string, stdout io.Writer) int {
+	var common kit.CommonOptions
+	var commonErr error
+	args, common, commonErr = kit.ParseCommon(args)
+	if commonErr != nil {
+		fmt.Fprintln(stdout, "error:", commonErr)
+		return 2
+	}
+	if common.HelpMCP {
+		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.MCPHelp("form")))
+		return 0
+	}
+	if common.Explain || common.DryRun {
+		verb := kit.FindVerb("form", args)
+		if verb == "" {
+			fmt.Fprintln(stdout, "error: unknown verb")
+			return 2
+		}
+		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.Envelope("form", map[string]any{"verb": verb, "effects": "desk action", "dry_run": common.DryRun})))
+		return 0
+	}
+
 	// The verb comes first (form get ID --json); connection flags may
 	// precede it (form -addr 127.0.0.1:18107 get ID). Split the argv at
 	// the first non-flag token so flags work on either side.
 	pre, verb, post := splitVerb(args)
 	if verb == "" {
-		fmt.Fprintln(stdout, "Usage: form [serve|new|reply|ask|open|get|put|list|share|close|wait] [--json]")
+		fmt.Fprintln(stdout, "Usage: form [serve|add|reply|ask|open|show|set|list|share|close|wait] [--json]")
 		return 2
 	}
 	gfs := flag.NewFlagSet("form", flag.ContinueOnError)
@@ -53,7 +74,7 @@ func runCLI(args []string, stdout io.Writer) int {
 	addr := fs.String("addr", *gaddr, "tool server address")
 	data := fs.String("data", *gdata, "data directory")
 	prefix := fs.String("prefix", *gprefix, "URL prefix when served behind a sub-path")
-	asJSON := fs.Bool("json", false, "print the raw JSON API object")
+	asJSON := fs.Bool("json", common.JSON, "print the raw JSON API object")
 	title := fs.String("title", "", "form title")
 	body := fs.String("body", "", "form body (agent note, returned by get)")
 	idFlag := fs.String("id", "", "form id (new)")
@@ -109,7 +130,7 @@ func runCLI(args []string, stdout io.Writer) int {
 	call := func(action string, payload map[string]any) (map[string]any, []map[string]any, int) {
 		payload["action"] = action
 		raw, _ := json.Marshal(payload)
-		req, _ := http.NewRequest("POST", base+"/api/action", bytes.NewReader(raw))
+		req, _ := http.NewRequest("POST", base+"/api/action"+commonQuery(common.Fields), bytes.NewReader(raw))
 		req.Header.Set("Content-Type", "application/json")
 		if *key != "" {
 			req.Header.Set("X-Facilitator-Key", *key)
@@ -123,14 +144,14 @@ func runCLI(args []string, stdout io.Writer) int {
 		defer r.Body.Close()
 		buf, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if r.StatusCode != 200 {
-			var e struct {
-				Error string `json:"error"`
+			if *asJSON {
+				fmt.Fprintln(stdout, string(buf))
+			} else {
+				fmt.Fprintf(stdout, "error: %s\n", kit.ErrorMessage(buf))
 			}
-			_ = json.Unmarshal(buf, &e)
-			if e.Error == "" {
-				e.Error = strings.TrimSpace(string(buf))
+			if r.StatusCode == http.StatusBadRequest {
+				return nil, nil, 2
 			}
-			fmt.Fprintf(stdout, "error: %s\n", e.Error)
 			return nil, nil, 1
 		}
 		var arr []map[string]any
@@ -164,7 +185,7 @@ func runCLI(args []string, stdout io.Writer) int {
 			return 0
 		}
 		switch verb {
-		case "get", "wait":
+		case "show", "wait":
 			fmt.Fprintf(stdout, "%v\n", obj["title"])
 			if b, _ := obj["body"].(string); b != "" {
 				fmt.Fprintf(stdout, "%v\n", b)
@@ -241,7 +262,7 @@ func runCLI(args []string, stdout io.Writer) int {
 			return code
 		}
 		return emit(obj, nil)
-	case "new":
+	case "add":
 		def, code := loadDef()
 		if code != 0 {
 			return code
@@ -250,7 +271,7 @@ func runCLI(args []string, stdout io.Writer) int {
 		if def != nil {
 			payload["definition"] = def
 		}
-		obj, _, code := call("new", payload)
+		obj, _, code := call("add", payload)
 		if code != 0 {
 			return code
 		}
@@ -265,12 +286,12 @@ func runCLI(args []string, stdout io.Writer) int {
 			return code
 		}
 		return emit(obj, nil)
-	case "get":
+	case "show":
 		id, ok := needID()
 		if !ok {
 			return 2
 		}
-		obj, _, code := call("get", map[string]any{"id": id})
+		obj, _, code := call("show", map[string]any{"id": id})
 		if code != 0 {
 			return code
 		}
@@ -282,7 +303,7 @@ func runCLI(args []string, stdout io.Writer) int {
 		}
 		deadline := time.Now().Add(*timeout)
 		for {
-			obj, _, code := call("get", map[string]any{"id": id})
+			obj, _, code := call("show", map[string]any{"id": id})
 			if code != 0 {
 				return code
 			}
@@ -299,7 +320,7 @@ func runCLI(args []string, stdout io.Writer) int {
 			}
 			time.Sleep(*interval)
 		}
-	case "put":
+	case "set":
 		id, ok := needID()
 		if !ok {
 			return 2
@@ -319,7 +340,7 @@ func runCLI(args []string, stdout io.Writer) int {
 			}
 			payload["answers"] = ans
 		}
-		obj, _, code := call("put", payload)
+		obj, _, code := call("set", payload)
 		if code != 0 {
 			return code
 		}
@@ -359,8 +380,7 @@ func runCLI(args []string, stdout io.Writer) int {
 		fmt.Fprintln(stdout, u)
 		return 0
 	default:
-		fmt.Fprintf(stdout, "error: unknown verb %q\n", verb)
-		return 2
+		return kit.UsageError(stdout, "form", *asJSON, fmt.Sprintf("unknown verb %q", verb))
 	}
 }
 
@@ -381,7 +401,7 @@ func splitVerb(args []string) (pre []string, verb string, post []string) {
 			return pre, a, args[i+1:]
 		}
 		// A flag=value pair or a boolean flag stands alone; any other
-		// flag consumes the next token, so a value like "new" after
+		// flag consumes the next token, so a value like "add" after
 		// -addr is not mistaken for the verb.
 		if strings.Contains(a, "=") || strings.TrimLeft(a, "-") == "json" {
 			pre = append(pre, a)
@@ -477,4 +497,11 @@ func sortedKeys(m map[string]any) []string {
 		}
 	}
 	return keys
+}
+
+func commonQuery(fields string) string {
+	if fields == "" {
+		return ""
+	}
+	return "?fields=" + url.QueryEscape(fields)
 }

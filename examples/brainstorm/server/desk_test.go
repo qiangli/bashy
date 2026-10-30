@@ -25,7 +25,7 @@ func deskServer(t *testing.T) (*httptest.Server, *app) {
 // session state, so it is exempt from the contentless-state probe.
 func TestDeskContract(t *testing.T) {
 	srv, _ := deskServer(t)
-	contracttest.Run(t, contracttest.Config{BaseURL: srv.URL, Tool: "brainstorm", ItemParam: "session", StateHasContent: true})
+	contracttest.Run(t, contracttest.Config{BaseURL: srv.URL, Tool: "brainstorm", CLI: deskCLICallback(srv.URL), ItemParam: "session", StateHasContent: true})
 }
 
 func TestDefaultBindStaysLAN(t *testing.T) {
@@ -48,7 +48,7 @@ func TestDeskDoorMapsOntoSessions(t *testing.T) {
 	act := func(who, key string, body map[string]any) *httptest.ResponseRecorder {
 		return request(a, who, key, "main", "/api/action", body)
 	}
-	w := act(token(), "", map[string]any{"action": "new", "id": "desk1", "body": "hello-idea"})
+	w := act(token(), "", map[string]any{"action": "add", "id": "desk1", "body": "hello-idea"})
 	good(t, w)
 	var created map[string]any
 	json.Unmarshal(w.Body.Bytes(), &created)
@@ -60,7 +60,7 @@ func TestDeskDoorMapsOntoSessions(t *testing.T) {
 		t.Fatal("new re-emitted content")
 	}
 	// Strangers cannot open/get a private session, nor see it in list.
-	for _, name := range []string{"open", "get"} {
+	for _, name := range []string{"open", "show"} {
 		if c := act(token(), "", map[string]any{"action": name, "id": "desk1"}).Code; c != 404 {
 			t.Errorf("%s by stranger: want 404, got %d", name, c)
 		}
@@ -86,14 +86,14 @@ func TestDeskDoorMapsOntoSessions(t *testing.T) {
 	good(t, request(a, guest, "", "desk1", "/api/action", map[string]any{"action": "join", "invite": invite}))
 	good(t, act(guest, "", map[string]any{"action": "open", "id": "desk1"}))
 	// The existing page API sees the same session and card; put adds another.
-	good(t, act(guest, "", map[string]any{"action": "put", "id": "desk1", "body": "guest-idea"}))
+	good(t, act(guest, "", map[string]any{"action": "set", "id": "desk1", "body": "guest-idea"}))
 	good(t, request(a, token(), key, "desk1", "/api/action", map[string]any{"action": "phase", "phase": "discuss"}))
-	g := act(guest, "", map[string]any{"action": "get", "id": "desk1"})
+	g := act(guest, "", map[string]any{"action": "show", "id": "desk1"})
 	good(t, g)
 	if !strings.Contains(g.Body.String(), "hello-idea") || !strings.Contains(g.Body.String(), "guest-idea") {
 		t.Fatalf("get after reveal lacks cards: %s", g.Body.String())
 	}
-	if c := act(guest, "", map[string]any{"action": "put", "id": "desk1", "body": "late"}).Code; c != 409 {
+	if c := act(guest, "", map[string]any{"action": "set", "id": "desk1", "body": "late"}).Code; c != 409 {
 		t.Errorf("put after writing ended: want 409, got %d", c)
 	}
 	if c := act(guest, "", map[string]any{"action": "close", "id": "desk1"}).Code; c != 403 {
@@ -127,7 +127,7 @@ func TestCLIOpenHidesContent(t *testing.T) {
 	srv, _ := deskServer(t)
 	addr := strings.TrimPrefix(srv.URL, "http://")
 	var out bytes.Buffer
-	if c := runCLI([]string{"-addr", addr, "--json", "new", "--id", "cli1", "--body", "cli-secret-idea"}, &out); c != 0 {
+	if c := runCLI([]string{"-addr", addr, "--json", "add", "--id", "cli1", "--body", "cli-secret-idea"}, &out); c != 0 {
 		t.Fatalf("new: %d %s", c, out.String())
 	}
 	var created map[string]any
@@ -150,5 +150,14 @@ func TestCLIOpenHidesContent(t *testing.T) {
 	out.Reset()
 	if c := runCLI([]string{"-addr", addr, "bogus"}, &out); c != 2 {
 		t.Errorf("unknown verb: want 2, got %d", c)
+	}
+}
+
+func deskCLICallback(base string) func(...string) (int, string) {
+	return func(args ...string) (int, string) {
+		var out bytes.Buffer
+		argv := append([]string{"--addr", strings.TrimPrefix(base, "http://")}, args...)
+		code := runCLI(argv, &out)
+		return code, out.String()
 	}
 }

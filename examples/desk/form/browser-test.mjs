@@ -54,7 +54,7 @@ try {
 
   // Agent defines the form.
   const created = await (await api(first.origin, {
-    action: 'new', title: 'Contact', definition: DEF,
+    action: 'add', title: 'Contact', definition: DEF,
   })).json();
   assert.ok(created.id && created.url, created);
   const key = created.ownerKey;
@@ -86,7 +86,7 @@ try {
   await page.waitForFunction(() => document.querySelector('.desk-item-header .desk-badge')?.textContent === 'answered');
 
   // Agent reads answers back keyed by field id.
-  const got = await (await api(first.origin, { action: 'get', id: created.id }, key)).json();
+  const got = await (await api(first.origin, { action: 'show', id: created.id }, key)).json();
   assert.equal(got.status, 'answered');
   assert.equal(got.answers.name, 'Ada');
   assert.equal(got.answers.contact, 'phone');

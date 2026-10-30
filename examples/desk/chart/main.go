@@ -112,6 +112,10 @@ func (a *app) openView(it *item) map[string]any {
 }
 
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	kit.ContractHandler("chart", http.HandlerFunc(a.serveHTTP)).ServeHTTP(w, r)
+}
+
+func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	kit.ApplySecurityHeaders(w)
 	if !kit.GuardPOST(w, r, "chart") {
 		return
@@ -139,7 +143,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		it, err := a.loadLocked(id)
 		if err != nil {
 			if os.IsNotExist(err) {
-				kit.Fail(w, 404, "Item not found. Create it with chart new first.")
+				kit.Fail(w, 404, "Item not found. Create it with chart add first.")
 			} else {
 				kit.Fail(w, 400, err.Error())
 			}
@@ -160,13 +164,13 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer a.mu.Unlock()
 	me := kit.ParticipantCookie(w, r, "chart-participant")
 	switch req.Action {
-	case "new":
+	case "add":
 		a.create(w, req, me)
 	case "open":
 		a.open(w, req)
-	case "get":
+	case "show":
 		a.get(w, r, req, me)
-	case "put":
+	case "set":
 		a.mutate(w, r, req, me, false)
 	case "close":
 		a.mutate(w, r, req, me, true)
@@ -232,7 +236,7 @@ func (a *app) open(w http.ResponseWriter, req request) {
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, 404, "Item not found. Create it with chart new first.")
+			kit.Fail(w, 404, "Item not found. Create it with chart add first.")
 		} else {
 			kit.Fail(w, 400, err.Error())
 		}
@@ -245,7 +249,7 @@ func (a *app) get(w http.ResponseWriter, r *http.Request, req request, me string
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, 404, "Item not found. Create it with chart new first.")
+			kit.Fail(w, 404, "Item not found. Create it with chart add first.")
 		} else {
 			kit.Fail(w, 400, err.Error())
 		}
@@ -262,7 +266,7 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req request, me str
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, 404, "Item not found. Create it with chart new first.")
+			kit.Fail(w, 404, "Item not found. Create it with chart add first.")
 		} else {
 			kit.Fail(w, 400, err.Error())
 		}
@@ -333,7 +337,7 @@ func (a *app) share(w http.ResponseWriter, r *http.Request, req request) {
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, 404, "Item not found. Create it with chart new first.")
+			kit.Fail(w, 404, "Item not found. Create it with chart add first.")
 		} else {
 			kit.Fail(w, 400, err.Error())
 		}
@@ -363,7 +367,7 @@ func (a *app) join(w http.ResponseWriter, req request, me string) {
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, 404, "Item not found. Create it with chart new first.")
+			kit.Fail(w, 404, "Item not found. Create it with chart add first.")
 		} else {
 			kit.Fail(w, 400, err.Error())
 		}

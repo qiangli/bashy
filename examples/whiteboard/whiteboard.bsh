@@ -36,13 +36,13 @@ the executable argv and source path; `bashy skill show whiteboard` reads this fa
   page uses (`WHITEBOARD_ADDR` host `0.0.0.0` is reached as `127.0.0.1`;
   `WHITEBOARD_KEY` or `--key` carries the facilitator key; add `--json` for the
   raw object). A board is the item and its name is the id:
-  `new [--id NAME] [--body TEXT]` creates a board (an optional first note) and
+  `add [--id NAME] [--body TEXT]` creates a board (an optional first note) and
   prints id, URL, status and the private owner key; `open ID` re-surfaces id,
-  URL and status only, never strokes or notes; `get ID` prints the board as
-  JSON; `put ID --body TEXT` pins a note; `list` prints id/status/URL of the
+  URL and status only, never strokes or notes; `show ID` prints the board as
+  JSON; `set ID --body TEXT` pins a note; `list` prints id/status/URL of the
   boards the key may read; `share ID` mints a single-use invite; `close ID`
   locks the board (status `closed`). Private boards need the owner key or an
-  invited member for `open`/`get`/`put`.
+  invited member for `open`/`show`/`set`.
 - The facilitator creates named boards, locks the board to freeze
   contributions, and clears it when a session ends. Lock/clear are enforced by
   the server, not just hidden in the page. Boards persist across restarts and
@@ -141,8 +141,8 @@ data=${WHITEBOARD_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy/whiteboard}
 addr=${WHITEBOARD_ADDR:-0.0.0.0:18093}
 prefix=${WHITEBOARD_PREFIX:-}
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/whiteboard
-usage='Usage: whiteboard [serve|status|backup|restore SNAPSHOT|stop|test|new|open|get|put|list|share|close|--skill|--contract]'
-case ${1:-serve} in new|open|get|put|list|share|close|-*) ;; *) if (( $# > 2 )); then echo "$usage" >&2; exit 2; fi ;; esac
+usage='Usage: whiteboard [serve|status|backup|restore SNAPSHOT|stop|test|add|open|show|set|list|share|close|--skill|--contract]'
+case ${1:-serve} in add|open|show|set|list|share|close|-*) ;; *) if (( $# > 2 )); then echo "$usage" >&2; exit 2; fi ;; esac
 case ${1:-serve} in
 --skill)
   copying=false
@@ -153,7 +153,7 @@ case ${1:-serve} in
   done < "${BASH_SOURCE[0]}"
   ;;
 --contract) echo 'sokilili howaitobodo efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
--h|--help) echo 'whiteboard [serve|status|backup|restore SNAPSHOT|stop|test|new|open|get|put|list|share|close] — native LAN board with desk verbs; --skill prints its embedded skill' ;;
+-h|--help) echo 'whiteboard [serve|status|backup|restore SNAPSHOT|stop|test|add|open|show|set|list|share|close] — native LAN board with desk verbs; --skill prints its embedded skill' ;;
 serve)
   mkdir -p "$cache"
   (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/whiteboard" .)
@@ -173,7 +173,7 @@ restore)
 stop)
   if pkill -f "$cache/whiteboard -data $data" 2>/dev/null; then echo "stopped whiteboard ($data)"; else echo "no whiteboard server matched $data"; fi
   ;;
--*|new|open|get|put|list|share|close)
+-*|add|open|show|set|list|share|close)
   mkdir -p "$cache"
   (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$cache/whiteboard" .)
   exec "$cache/whiteboard" cli -addr "$addr" -prefix "$prefix" "$@"

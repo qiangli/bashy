@@ -12,13 +12,13 @@ import (
 	kit "desk-kit"
 )
 
-// The desk agent door: new|open|get|put|list|share|close over the same
+// The desk agent door: add|open|show|set|list|share|close over the same
 // /api/action route the page uses, mapped onto the board model. A board is
 // the desk item; its id is the board name. open/new/list/put/close return
 // id + URL + status only, never strokes or note text; get is the one read
 // that returns content.
 
-var deskActions = map[string]bool{"new": true, "open": true, "get": true, "put": true, "list": true, "share": true, "close": true}
+var deskActions = map[string]bool{"add": true, "open": true, "show": true, "set": true, "list": true, "share": true, "close": true}
 
 func boardStatus(b *Board) string {
 	if b.Locked {
@@ -136,7 +136,7 @@ func (a *app) desk(w http.ResponseWriter, r *http.Request, who string, req *acti
 		sort.Slice(out, func(i, j int) bool { return out[i]["id"].(string) < out[j]["id"].(string) })
 		respond(w, out)
 		return
-	case "new":
+	case "add":
 		name := req.ID
 		if name == "" {
 			name = "board-" + token()[:12]
@@ -185,11 +185,11 @@ func (a *app) desk(w http.ResponseWriter, r *http.Request, who string, req *acti
 	switch req.Action {
 	case "open":
 		respond(w, a.openView(r, b))
-	case "get":
+	case "show":
 		v := exportView(b).(map[string]any)
 		v["id"], v["url"], v["status"] = b.Name, a.boardURL(r, b.Name), boardStatus(b)
 		respond(w, v)
-	case "put":
+	case "set":
 		if b.Locked {
 			fail(w, 409, "This board is closed")
 			return

@@ -30,7 +30,7 @@ func startServer(t *testing.T) (*app, *httptest.Server) {
 }
 func TestDeskContract(t *testing.T) {
 	_, s := startServer(t)
-	contracttest.Run(t, contracttest.Config{BaseURL: s.URL, Tool: "chart"})
+	contracttest.Run(t, contracttest.Config{BaseURL: s.URL, Tool: "chart", CLI: deskCLICallback(s.URL)})
 }
 func TestSVGGoldens(t *testing.T) {
 	for _, kind := range widgetKinds {
@@ -205,25 +205,25 @@ func TestCLIAndHTTPDuality(t *testing.T) {
 		}
 		return m
 	}
-	created := run("new", "--id", "probe", "--input", "-", "--widget", "gauge")
+	created := run("add", "--id", "probe", "--input", "-", "--widget", "gauge")
 	key := created["ownerKey"].(string)
 	opened := run("open", "probe")
-	if len(opened) != 3 {
+	if len(opened) != 4 || opened["schema_version"] != kit.SchemaVersion("chart") {
 		t.Fatalf("open leaked content: %v", opened)
 	}
-	got := run("get", "probe", "--key", key)
+	got := run("show", "probe", "--key", key)
 	if !strings.Contains(got["html"].(string), "<svg") {
 		t.Fatal("no SVG")
 	}
-	code, httpGot := post(t, s.Client(), s.URL, key, map[string]any{"action": "get", "id": "probe"})
+	code, httpGot := post(t, s.Client(), s.URL, key, map[string]any{"action": "show", "id": "probe"})
 	if code != 200 || kit.CanonicalJSON(got) != kit.CanonicalJSON(httpGot) {
 		t.Fatal("doors differ")
 	}
-	run("put", "probe", "--key", key, "--input", "-", "--widget", "bar")
+	run("set", "probe", "--key", key, "--input", "-", "--widget", "bar")
 	shared := run("share", "probe", "--key", key)
 	jar, _ := cookiejar.New(nil)
 	guest := &http.Client{Jar: jar}
-	code, _ = post(t, guest, s.URL, "", map[string]any{"action": "get", "id": "probe"})
+	code, _ = post(t, guest, s.URL, "", map[string]any{"action": "show", "id": "probe"})
 	if code != 403 {
 		t.Fatal("anonymous read")
 	}
@@ -231,7 +231,7 @@ func TestCLIAndHTTPDuality(t *testing.T) {
 	if code != 200 {
 		t.Fatal("join")
 	}
-	code, v := post(t, guest, s.URL, "", map[string]any{"action": "get", "id": "probe"})
+	code, v := post(t, guest, s.URL, "", map[string]any{"action": "show", "id": "probe"})
 	if code != 200 || !strings.Contains(v["html"].(string), "bar") {
 		t.Fatal("guest view")
 	}
@@ -240,12 +240,12 @@ func TestCLIAndHTTPDuality(t *testing.T) {
 		t.Fatal("invite reused")
 	}
 	run("revoke", "probe", "--key", key)
-	code, _ = post(t, guest, s.URL, "", map[string]any{"action": "get", "id": "probe"})
+	code, _ = post(t, guest, s.URL, "", map[string]any{"action": "show", "id": "probe"})
 	if code != 403 {
 		t.Fatal("revoke failed")
 	}
 	run("close", "probe", "--key", key)
-	code, _ = post(t, s.Client(), s.URL, key, map[string]any{"action": "put", "id": "probe", "chart": chartConfig{Input: "[99]"}})
+	code, _ = post(t, s.Client(), s.URL, key, map[string]any{"action": "set", "id": "probe", "chart": chartConfig{Input: "[99]"}})
 	if code != 409 {
 		t.Fatal("closed mutation")
 	}
@@ -256,7 +256,7 @@ func TestRefreshAndSnapshot(t *testing.T) {
 	if e := os.WriteFile(path, []byte("[1]"), 0600); e != nil {
 		t.Fatal(e)
 	}
-	code, v := post(t, s.Client(), s.URL, "", map[string]any{"action": "new", "id": "live", "chart": chartConfig{Source: path, Refresh: "1s"}})
+	code, v := post(t, s.Client(), s.URL, "", map[string]any{"action": "add", "id": "live", "chart": chartConfig{Source: path, Refresh: "1s"}})
 	if code != 200 {
 		t.Fatal(v)
 	}
@@ -267,7 +267,7 @@ func TestRefreshAndSnapshot(t *testing.T) {
 	a.mu.Lock()
 	a.items["live"].Chart.Updated = time.Now().Add(-2 * time.Second)
 	a.mu.Unlock()
-	_, v = post(t, s.Client(), s.URL, key, map[string]any{"action": "get", "id": "live"})
+	_, v = post(t, s.Client(), s.URL, key, map[string]any{"action": "show", "id": "live"})
 	if v["chart"].(map[string]any)["input"] != "[9]" {
 		t.Fatal(v)
 	}
@@ -277,7 +277,7 @@ func TestRefreshAndSnapshot(t *testing.T) {
 	a.mu.Lock()
 	a.items["live"].Chart.Updated = time.Now().Add(-2 * time.Second)
 	a.mu.Unlock()
-	_, v = post(t, s.Client(), s.URL, key, map[string]any{"action": "get", "id": "live"})
+	_, v = post(t, s.Client(), s.URL, key, map[string]any{"action": "show", "id": "live"})
 	if v["refreshError"] == "" || v["chart"].(map[string]any)["input"] != "[9]" {
 		t.Fatal("failed refresh lost last good data")
 	}
@@ -324,12 +324,12 @@ func TestShapedTemplateAndEscaping(t *testing.T) {
 }
 func TestPersistenceAndFailedSave(t *testing.T) {
 	a, s := startServer(t)
-	_, v := post(t, s.Client(), s.URL, "", map[string]any{"action": "new", "id": "persist", "chart": chartConfig{Input: "[7]"}})
+	_, v := post(t, s.Client(), s.URL, "", map[string]any{"action": "add", "id": "persist", "chart": chartConfig{Input: "[7]"}})
 	key := v["ownerKey"].(string)
 	a.mu.Lock()
 	a.items = map[string]*item{}
 	a.mu.Unlock()
-	code, v := post(t, s.Client(), s.URL, key, map[string]any{"action": "get", "id": "persist"})
+	code, v := post(t, s.Client(), s.URL, key, map[string]any{"action": "show", "id": "persist"})
 	if code != 200 || v["chart"].(map[string]any)["input"] != "[7]" {
 		t.Fatal(v)
 	}
@@ -422,5 +422,14 @@ func TestSVGKitConformance(t *testing.T) {
 		for _, v := range contracttest.FragmentViolations(string(raw), nil) {
 			t.Errorf("%s: %s", f, v)
 		}
+	}
+}
+
+func deskCLICallback(base string) func(...string) (int, string) {
+	return func(args ...string) (int, string) {
+		var out bytes.Buffer
+		argv := append([]string{"--addr", strings.TrimPrefix(base, "http://")}, args...)
+		code := cli(argv, strings.NewReader("[]"), &out)
+		return code, out.String()
 	}
 }

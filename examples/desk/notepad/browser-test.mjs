@@ -76,7 +76,7 @@ try {
   assert.equal(state.id, noteID);
   assert.equal(state.body, undefined, 'open/state must never emit content');
 
-  const getRes = await api(srv.origin, '/api/action', {action: 'get', id: noteID});
+  const getRes = await api(srv.origin, '/api/action', {action: 'show', id: noteID});
   assert.equal(getRes.status, 200);
   const noteData = await getRes.json();
   assert.equal(noteData.title, 'Browser E2E Note');

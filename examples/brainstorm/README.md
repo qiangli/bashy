@@ -93,8 +93,8 @@ same Wi-Fi. Everything works without internet once Go and the executable are
 available.
 
 `bashy brainstorm backup` prints a verified snapshot directory. Stop the
-server, choose a **new, empty** data directory, then run
-`BRAINSTORM_DATA=/new/session-data bashy brainstorm restore /saved/snapshot`
+server, choose a **add, empty** data directory, then run
+`BRAINSTORM_DATA=/add/session-data bashy brainstorm restore /saved/snapshot`
 before serving it again. Restore refuses nonempty destinations, invalid
 records and overwrites. Snapshot JSON contains facilitator capabilities;
 store it privately. Members and revocations survive restore.
@@ -114,7 +114,7 @@ Tick **Invite-only** when creating a named session (API: `"private": true`).
 The facilitator then creates single-use invite links
 (`?session=NAME#invite=CODE`); opening one makes that browser a member. Members
 keep the usual private-writing semantics. Non-members, guessed URLs, and
-revoked members get the same 404 as an unknown session on state, polling,
+revoked members show the same 404 as an unknown session on state, polling,
 write, vote and export. The facilitator can revoke a member or a pending
 invite at any time; access ends on the next request. Sessions created without
 the option, the legacy main board, and records saved earlier stay open.
@@ -123,10 +123,10 @@ the option, the legacy main board, and records saved earlier stay open.
 
 Brainstorm follows the shared desk contract (`examples/desk/kit`): the page
 uses the kit's copy button and status badge, and `bashy brainstorm` gains
-`new|open|get|put|list|share|close` over the same `/api/action` route the page
+`add|open|show|set|list|share|close` over the same `/api/action` route the page
 uses. A session is the item and its name is the id; `open` prints id, URL and
-status only. `new` makes an invite-only session and prints its owner key (pass
-it as `--key` or `BRAINSTORM_KEY`); `get` returns only what the caller could
+status only. `add` makes an invite-only session and prints its owner key (pass
+it as `--key` or `BRAINSTORM_KEY`); `show` returns only what the caller could
 see on the page, so other people's ideas stay hidden until reveal; `close`
 ends the session. A launcher tile is added by `register.sh` (`bashy app add`).
 

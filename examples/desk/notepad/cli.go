@@ -1,4 +1,4 @@
-// The notepad agent door: new|open|get|put|list|share|close over the same
+// The notepad agent door: add|open|show|set|list|share|close over the same
 // JSON API the page uses. --json prints the raw API object; without it,
 // open/new/put/close/list print only id, URL and status — never content.
 package main
@@ -150,13 +150,37 @@ func runCLI(args []string, stdout io.Writer) int {
 }
 
 func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
+	var common kit.CommonOptions
+	var commonErr error
+	args, common, commonErr = kit.ParseCommon(args)
+	if commonErr != nil {
+		fmt.Fprintln(stdout, "error:", commonErr)
+		return 2
+	}
+	if common.HelpMCP {
+		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.MCPHelp("notepad")))
+		return 0
+	}
+	if common.Explain || common.DryRun {
+		verb := kit.FindVerb("notepad", args)
+		if verb == "" {
+			fmt.Fprintln(stdout, "error: unknown verb")
+			return 2
+		}
+		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.Envelope("notepad", map[string]any{"verb": verb, "effects": "desk action", "dry_run": common.DryRun})))
+		return 0
+	}
+
 	opts, err := parseCLIOptions(args)
+	if opts != nil {
+		opts.asJSON = opts.asJSON || common.JSON
+	}
 	if err != nil {
-		fmt.Fprintln(stdout, "Usage: notepad [serve|new|open|get|put|list|share|close|join|export] [--json] [-f FILE|-] [--to FORMAT] [-o FILE]")
+		fmt.Fprintln(stdout, "Usage: notepad [serve|add|open|show|set|list|share|close|join|export] [--json] [-f FILE|-] [--to FORMAT] [-o FILE]")
 		return 2
 	}
 	if opts.verb == "" {
-		fmt.Fprintln(stdout, "Usage: notepad [serve|new|open|get|put|list|share|close|join|export] [--json] [-f FILE|-] [--to FORMAT] [-o FILE]")
+		fmt.Fprintln(stdout, "Usage: notepad [serve|add|open|show|set|list|share|close|join|export] [--json] [-f FILE|-] [--to FORMAT] [-o FILE]")
 		return 2
 	}
 
@@ -210,7 +234,7 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 	call := func(action string, payload map[string]any) (map[string]any, []map[string]any, int) {
 		payload["action"] = action
 		raw, _ := json.Marshal(payload)
-		req, _ := http.NewRequest("POST", base+"/api/action", bytes.NewReader(raw))
+		req, _ := http.NewRequest("POST", base+"/api/action"+commonQuery(common.Fields), bytes.NewReader(raw))
 		req.Header.Set("Content-Type", "application/json")
 		if opts.key != "" {
 			req.Header.Set("X-Facilitator-Key", opts.key)
@@ -224,14 +248,14 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 		defer r.Body.Close()
 		buf, _ := io.ReadAll(io.LimitReader(r.Body, 10<<20))
 		if r.StatusCode != 200 {
-			var e struct {
-				Error string `json:"error"`
+			if opts.asJSON {
+				fmt.Fprintln(stdout, string(buf))
+			} else {
+				fmt.Fprintf(stdout, "error: %s\n", kit.ErrorMessage(buf))
 			}
-			_ = json.Unmarshal(buf, &e)
-			if e.Error == "" {
-				e.Error = strings.TrimSpace(string(buf))
+			if r.StatusCode == http.StatusBadRequest {
+				return nil, nil, 2
 			}
-			fmt.Fprintf(stdout, "error: %s\n", e.Error)
 			return nil, nil, 1
 		}
 		var arr []map[string]any
@@ -266,7 +290,7 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 			return 0
 		}
 		switch opts.verb {
-		case "get":
+		case "show":
 			fmt.Fprintf(stdout, "%v\n%v\n", obj["title"], obj["body"])
 		case "export":
 			fmt.Fprintf(stdout, "%v\n", obj["path"])
@@ -299,7 +323,7 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 	}
 
 	switch opts.verb {
-	case "new":
+	case "add":
 		content := opts.body
 		noteTitle := opts.title
 		idVal := opts.idFlag
@@ -318,7 +342,7 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 			}
 		}
 		payload := map[string]any{"id": idVal, "title": noteTitle, "body": content}
-		obj, _, code := call("new", payload)
+		obj, _, code := call("add", payload)
 		if code != 0 {
 			return code
 		}
@@ -335,19 +359,19 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 		}
 		return emit(obj, nil)
 
-	case "get":
+	case "show":
 		id, ok := needID()
 		if !ok {
 			return 2
 		}
 		resolveKey(id)
-		obj, _, code := call("get", map[string]any{"id": id})
+		obj, _, code := call("show", map[string]any{"id": id})
 		if code != 0 {
 			return code
 		}
 		return emit(obj, nil)
 
-	case "put":
+	case "set":
 		id, ok := needID()
 		if !ok {
 			return 2
@@ -367,7 +391,7 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 			}
 		}
 		payload := map[string]any{"id": id, "title": noteTitle, "body": content}
-		obj, _, code := call("put", payload)
+		obj, _, code := call("set", payload)
 		if code != 0 {
 			return code
 		}
@@ -454,7 +478,13 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 		return 0
 
 	default:
-		fmt.Fprintf(stdout, "error: unknown verb %q\n", opts.verb)
-		return 2
+		return kit.UsageError(stdout, "notepad", opts.asJSON, fmt.Sprintf("unknown verb %q", opts.verb))
 	}
+}
+
+func commonQuery(fields string) string {
+	if fields == "" {
+		return ""
+	}
+	return "?fields=" + url.QueryEscape(fields)
 }

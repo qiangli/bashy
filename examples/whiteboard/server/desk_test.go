@@ -31,7 +31,7 @@ func deskServer(t *testing.T) (*httptest.Server, *app) {
 // board state, so it is exempt from the contentless-state probe.
 func TestDeskContract(t *testing.T) {
 	srv, _ := deskServer(t)
-	contracttest.Run(t, contracttest.Config{BaseURL: srv.URL, Tool: "whiteboard", ItemParam: "board", StateHasContent: true})
+	contracttest.Run(t, contracttest.Config{BaseURL: srv.URL, Tool: "whiteboard", CLI: deskCLICallback(srv.URL), ItemParam: "board", StateHasContent: true})
 }
 
 func TestDefaultBindStaysLAN(t *testing.T) {
@@ -51,7 +51,7 @@ func TestDeskPageCarriesKit(t *testing.T) {
 
 func TestDeskDoorMapsOntoBoards(t *testing.T) {
 	_, a := deskServer(t)
-	w := request(a, token(), "", "/api/action", map[string]any{"action": "new", "id": "desk1", "body": "hello-note"})
+	w := request(a, token(), "", "/api/action", map[string]any{"action": "add", "id": "desk1", "body": "hello-note"})
 	good(t, w)
 	var created map[string]any
 	json.Unmarshal(w.Body.Bytes(), &created)
@@ -69,7 +69,7 @@ func TestDeskDoorMapsOntoBoards(t *testing.T) {
 		t.Fatal("note from new is not on the board")
 	}
 	// A stranger cannot open or get a private board, nor see it in list.
-	for _, act := range []string{"open", "get"} {
+	for _, act := range []string{"open", "show"} {
 		if c := request(a, token(), "", "/api/action", map[string]any{"action": act, "id": "desk1"}).Code; c != 403 {
 			t.Errorf("%s by stranger: want 403, got %d", act, c)
 		}
@@ -91,7 +91,7 @@ func TestDeskDoorMapsOntoBoards(t *testing.T) {
 	if !strings.Contains(request(a, token(), key, "/api/state?board=desk1", nil).Body.String(), `"locked":true`) {
 		t.Error("close did not lock the board")
 	}
-	if c := request(a, token(), key, "/api/action", map[string]any{"action": "put", "id": "desk1", "body": "x"}).Code; c != 409 {
+	if c := request(a, token(), key, "/api/action", map[string]any{"action": "set", "id": "desk1", "body": "x"}).Code; c != 409 {
 		t.Errorf("put on closed board: want 409, got %d", c)
 	}
 }
@@ -115,7 +115,7 @@ func TestCLIOpenHidesContent(t *testing.T) {
 	srv, _ := deskServer(t)
 	addr := strings.TrimPrefix(srv.URL, "http://")
 	var out bytes.Buffer
-	if c := runCLI([]string{"-addr", addr, "--json", "new", "--id", "cli1", "--body", "cli-secret-note"}, &out); c != 0 {
+	if c := runCLI([]string{"-addr", addr, "--json", "add", "--id", "cli1", "--body", "cli-secret-note"}, &out); c != 0 {
 		t.Fatalf("new: %d %s", c, out.String())
 	}
 	var created map[string]any
@@ -132,7 +132,7 @@ func TestCLIOpenHidesContent(t *testing.T) {
 		t.Errorf("open must print exactly id url status, got %q", out.String())
 	}
 	out.Reset()
-	if c := runCLI([]string{"-addr", addr, "get", "cli1", "--key", key}, &out); c != 0 || !strings.Contains(out.String(), "cli-secret-note") {
+	if c := runCLI([]string{"-addr", addr, "show", "cli1", "--key", key}, &out); c != 0 || !strings.Contains(out.String(), "cli-secret-note") {
 		t.Errorf("get must return content: %d %s", c, out.String())
 	}
 	out.Reset()
@@ -142,5 +142,14 @@ func TestCLIOpenHidesContent(t *testing.T) {
 	out.Reset()
 	if c := runCLI([]string{"-addr", addr, "bogus"}, &out); c != 2 {
 		t.Errorf("unknown verb: want 2, got %d", c)
+	}
+}
+
+func deskCLICallback(base string) func(...string) (int, string) {
+	return func(args ...string) (int, string) {
+		var out bytes.Buffer
+		argv := append([]string{"--addr", strings.TrimPrefix(base, "http://")}, args...)
+		code := runCLI(argv, &out)
+		return code, out.String()
 	}
 }

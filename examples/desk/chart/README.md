@@ -10,8 +10,8 @@ accounts or layout editor. All source and the shipped page template are editable
 bashy ./register.sh
 bashy chart serve
 # In another terminal:
-bashy chart new --input testdata/otlp.json --json
-printf '[12,18,15,24]' | bashy chart new --input - --widget gauge --json
+bashy chart add --input testdata/otlp.json --json
+printf '[12,18,15,24]' | bashy chart add --input - --widget gauge --json
 ```
 
 Run these from this directory before registration; `bashy chart` then works
@@ -28,10 +28,10 @@ the root server; a direct page link remains the stable loopback URL.
 
 ## Desk operations
 
-`new|open|get|put|list|share|close` all accept `--json`, before or after the verb.
-`new` accepts `--id NAME`; otherwise it generates a stable id. `open ID` prints
-exactly id, URL and status, with no data. `get ID` returns the saved data,
-rendered HTML/SVG, and metadata. `put ID --input FILE` replaces the snapshot.
+`add|open|show|set|list|share|close` all accept `--json`, before or after the verb.
+`add` accepts `--id NAME`; otherwise it generates a stable id. `open ID` prints
+exactly id, URL and status, with no data. `show ID` returns the saved data,
+rendered HTML/SVG, and metadata. `set ID --input FILE` replaces the snapshot.
 `--title` and `--body` set the title and optional description.
 
 Creation returns an `ownerKey` once. Preserve it privately and supply it using
@@ -45,7 +45,7 @@ the item's page; it stays in that tab's session storage.
 CLI and browser call the same `POST /api/action` JSON operations. Example:
 
 ```json
-{"action":"new","title":"Requests","chart":{"input":"[1,4,8]","format":"json","widget":"counter"}}
+{"action":"add","title":"Requests","chart":{"input":"[1,4,8]","format":"json","widget":"counter"}}
 ```
 
 `chart` is an optional structured field alongside the shared kit's `body` and
@@ -96,13 +96,13 @@ coordinates; exact integers above 2^53 cannot be represented without rounding.
 Snapshot is the default: the source file is read once and its content saved.
 `--refresh 5s --input /absolute/file.json` or
 `--refresh 5s --input http://127.0.0.1:PORT/metrics` opts in to re-reading while
-viewed (or on `get`). Intervals range from 1 second to 24 hours. Stdin cannot
+viewed (or on `show`). Intervals range from 1 second to 24 hours. Stdin cannot
 refresh. URLs require a literal loopback IP; redirects, proxies and credentials
 are refused. A failed read or parse retains the last good snapshot and shows an
 error. Closing stops refresh. The server does not poll unattended items.
 
 Copy `templates/page.html`, edit it, then pass `--template my-page.html` with
-`new` or `put --input ...`. The file is captured in the item so later edits do
+`add` or `set --input ...`. The file is captured in the item so later edits do
 not unexpectedly change existing pages. Template fields: `.Title`,
 `.Description`, `.Widgets` (server-generated SVG). Templates are trusted local
 HTML supplied by the owner; ordinary data and titles are escaped. Widgets take

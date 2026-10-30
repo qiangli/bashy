@@ -36,6 +36,9 @@ type Config struct {
 	BaseURL string
 	// Tool is the tool name (data dir, CLI, launcher tile).
 	Tool string
+	// CLI runs one command and returns its exit code and combined output.
+	// The conformance probe checks the common options before mutations.
+	CLI func(args ...string) (int, string)
 	// ItemParam is the query parameter naming an item in URLs ("id" ...).
 	// Empty means "id".
 	ItemParam string
@@ -72,14 +75,82 @@ func Check(cfg Config) (failures []string) {
 	t.loopback()
 	t.securityHeaders()
 	t.pageKit()
-	t.conformance()
+	t.kitConformance()
 	t.methods()
 	t.crossSite()
 	t.strictDecoding()
 	t.names()
 	t.lifecycle()
 	t.secrets()
+	t.cliConformance()
 	return t.failures
+}
+
+func (t *check) cliConformance() {
+	version := kit.SchemaVersion(t.cfg.Tool)
+	for _, path := range []string{"/healthz", "/api/action"} {
+		var code int
+		var raw []byte
+		if path == "/healthz" {
+			code, raw, _ = t.get(path, nil)
+		} else {
+			code, raw, _ = t.post(path, `{"action":"list"}`, nil)
+		}
+		if code != http.StatusOK {
+			continue
+		}
+		v := decode(t, raw)
+		if v != nil && v["schema_version"] != version {
+			t.fail("%s: missing schema_version %s", path, version)
+		}
+	}
+	for _, old := range []string{"new", "get", "put"} {
+		code, _, _ := t.post("/api/action", fmt.Sprintf(`{"action":%q}`, old), nil)
+		if code != http.StatusBadRequest {
+			t.fail("non-standard verb %s accepted over HTTP", old)
+		}
+	}
+	code, raw, _ := t.post("/api/action?fields=schema_version", `{"action":"list"}`, nil)
+	if code == http.StatusOK {
+		v := decode(t, raw)
+		if len(v) != 1 || v["schema_version"] != version {
+			t.fail("HTTP --fields projection differs from CLI contract: %s", trunc(string(raw), 120))
+		}
+	} else {
+		t.fail("HTTP fields projection: want 200, got %d", code)
+	}
+	if t.cfg.CLI == nil {
+		return
+	}
+	for _, flag := range [][]string{{"--help=mcp"}, {"--explain", "list"}, {"--dry-run", "list"}, {"--no-input", "--json", "list"}, {"--json", "--fields=schema_version", "list"}} {
+		exit, output := t.cfg.CLI(flag...)
+		if exit != 0 {
+			t.fail("common option %s: exit %d: %s", flag[0], exit, trunc(output, 100))
+			continue
+		}
+		if flag[0] != "--no-input" {
+			var v map[string]any
+			if json.Unmarshal([]byte(output), &v) != nil || v["schema_version"] != version {
+				t.fail("common option %s: missing versioned JSON", flag[0])
+			}
+		}
+	}
+	for _, old := range []string{"new", "get", "put"} {
+		if exit, _ := t.cfg.CLI(old); exit != 2 {
+			t.fail("non-standard CLI verb %s: want exit 2, got %d", old, exit)
+		}
+		exit, output := t.cfg.CLI("--json", old)
+		var v struct {
+			SchemaVersion string `json:"schema_version"`
+			Error         struct {
+				Code    string `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if exit != 2 || json.Unmarshal([]byte(output), &v) != nil || v.SchemaVersion != version || v.Error.Code != "invalid_arg" || v.Error.Message == "" {
+			t.fail("non-standard CLI verb %s: wrong JSON error shape: %s", old, trunc(output, 120))
+		}
+	}
 }
 
 type check struct {
@@ -104,6 +175,7 @@ func (t *check) get(path string, headers map[string]string) (int, []byte, http.H
 	}
 	defer r.Body.Close()
 	body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	t.checkVersion(path, body, r.Header)
 	return r.StatusCode, body, r.Header
 }
 
@@ -120,7 +192,25 @@ func (t *check) post(path string, body string, headers map[string]string) (int, 
 	}
 	defer r.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	t.checkVersion(path, raw, r.Header)
 	return r.StatusCode, raw, r.Header
+}
+
+func (t *check) checkVersion(path string, raw []byte, header http.Header) {
+	if !strings.Contains(header.Get("Content-Type"), "application/json") {
+		return
+	}
+	var v map[string]any
+	if json.Unmarshal(raw, &v) != nil || v["schema_version"] != kit.SchemaVersion(t.cfg.Tool) {
+		t.fail("%s: missing schema_version %s", path, kit.SchemaVersion(t.cfg.Tool))
+		return
+	}
+	if value, ok := v["error"]; ok {
+		err, ok := value.(map[string]any)
+		if !ok || err["code"] == "" || err["message"] == "" {
+			t.fail("%s: error must have code and message", path)
+		}
+	}
 }
 
 func (t *check) cfgBase() string { return strings.TrimSuffix(t.cfg.BaseURL, "/") }
@@ -235,7 +325,7 @@ func (t *check) pageKit() {
 // Kit conformance: the page loads kit.css and the shared shell, and the
 // tool's own CSS carries no colour literal or font-family of its own — the
 // look comes from the kit tokens so every desk tool reads as one suite.
-func (t *check) conformance() {
+func (t *check) kitConformance() {
 	code, body, _ := t.get("/", nil)
 	if code != http.StatusOK {
 		return
@@ -297,7 +387,7 @@ func (t *check) names() {
 	if code, _, _ := t.post("/api/action", `{"action":"open","id":"bad!!name"}`, nil); code != http.StatusBadRequest {
 		t.fail("bad id over POST: want 400, got %d", code)
 	}
-	if code, _, _ := t.post("/api/action", `{"action":"get","id":"no-such-item"}`, nil); code != http.StatusNotFound {
+	if code, _, _ := t.post("/api/action", `{"action":"show","id":"no-such-item"}`, nil); code != http.StatusNotFound {
 		t.fail("unknown id over POST: want 404, got %d", code)
 	}
 }
@@ -306,7 +396,7 @@ func (t *check) names() {
 // get (content) → put → list (contentless) → share → close.
 func (t *check) lifecycle() {
 	canary := "canary-content-marker"
-	newBody := fmt.Sprintf(`{"action":"new","title":"contract probe","body":%q}`, canary)
+	newBody := fmt.Sprintf(`{"action":"add","title":"contract probe","body":%q}`, canary)
 	code, raw, _ := t.post("/api/action", newBody, nil)
 	if code != http.StatusOK {
 		t.fail("new: want 200, got %d", code)
@@ -365,7 +455,7 @@ func (t *check) lifecycle() {
 	}
 
 	// get: the one read that returns content.
-	code, raw, _ = t.post("/api/action", fmt.Sprintf(`{"action":"get","id":%q}`, id), auth)
+	code, raw, _ = t.post("/api/action", fmt.Sprintf(`{"action":"show","id":%q}`, id), auth)
 	if code != http.StatusOK {
 		t.fail("get: want 200, got %d", code)
 	} else if !strings.Contains(string(raw), canary) {
@@ -374,7 +464,7 @@ func (t *check) lifecycle() {
 
 	// put: content changes, secrets aside (covered separately).
 	code, raw, _ = t.post("/api/action",
-		fmt.Sprintf(`{"action":"put","id":%q,"body":"updated probe body"}`, id), auth)
+		fmt.Sprintf(`{"action":"set","id":%q,"body":"updated probe body"}`, id), auth)
 	if code != http.StatusOK {
 		t.fail("put: want 200, got %d", code)
 	}
@@ -412,7 +502,7 @@ func (t *check) lifecycle() {
 
 	// Duplicate new with the same id collides.
 	code, _, _ = t.post("/api/action",
-		fmt.Sprintf(`{"action":"new","id":%q,"title":"dup"}`, id), auth)
+		fmt.Sprintf(`{"action":"add","id":%q,"title":"dup"}`, id), auth)
 	if code != http.StatusConflict {
 		t.fail("duplicate new: want 409, got %d", code)
 	}
@@ -439,7 +529,7 @@ func (t *check) lifecycle() {
 		}
 	}
 	code, _, _ = t.post("/api/action",
-		fmt.Sprintf(`{"action":"put","id":%q,"body":"after close"}`, id), auth)
+		fmt.Sprintf(`{"action":"set","id":%q,"body":"after close"}`, id), auth)
 	if code != http.StatusConflict {
 		t.fail("put after close: want 409, got %d", code)
 	}
@@ -449,8 +539,8 @@ func (t *check) lifecycle() {
 // secret-named one) is refused before storage.
 func (t *check) secrets() {
 	for _, body := range []string{
-		`{"action":"new","title":"s","fields":[{"name":"notes","type":"secret","value":"hunter2"}]}`,
-		`{"action":"new","title":"s","fields":[{"name":"db_password","type":"text","value":"hunter2"}]}`,
+		`{"action":"add","title":"s","fields":[{"name":"notes","type":"secret","value":"hunter2"}]}`,
+		`{"action":"add","title":"s","fields":[{"name":"db_password","type":"text","value":"hunter2"}]}`,
 	} {
 		code, raw, _ := t.post("/api/action", body, nil)
 		if code != http.StatusBadRequest {

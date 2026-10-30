@@ -18,7 +18,7 @@ stay separate from `yoke/pkg/ask`: secrets are refused here (see point 7).
 
 | # | Point | Whiteboard | Brainstorm | Desk rule |
 |---|---|---|---|---|
-| 1 | Two front doors | `.bsh` serve/status/backup/… + page | same shape | CLI `new\|open\|get\|put\|list\|share\|close` (`--json`) + loopback page |
+| 1 | Two front doors | `.bsh` serve/status/backup/… + page | same shape | CLI `add\|open\|show\|set\|list\|share\|close` (`--json`) + loopback page |
 | 2 | One API | `POST /api/action`, `GET /api/state`, `GET /api/export` | same routes | same routes; `help <tool> --format=mcp` atlas entry |
 | 3 | Stable id + URL | board name + `?board=` link; facilitator key private | session + `?session=` link | item id + `?id=` loopback URL; `open` prints id/URL/status only, never content |
 | 4 | Any surface | same page everywhere | same page everywhere | same page on Linux/macOS/Windows; linkable, panel-embeddable |

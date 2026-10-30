@@ -9,9 +9,9 @@ metadata:
 # Chart
 
 Start `bashy chart serve` in one terminal. Create with
-`bashy chart new --input metrics.json --widget auto --json` (or pipe to
-`new --input -`). Keep the returned ownerKey private; use CHART_KEY for
-get/put/share/close. `open ID --json` returns only id, URL and status.
+`bashy chart add --input metrics.json --widget auto --json` (or pipe to
+`add --input -`). Keep the returned ownerKey private; use CHART_KEY for
+show/set/share/close. `open ID --json` returns only id, URL and status.
 `share ID --json` returns a single-use browser invite; `revoke ID` removes
 all invites and browser memberships. No accounts or external services.
 
@@ -19,7 +19,7 @@ Choose auto, counter, sum, gauge, updowncounter, histogram,
 exponentialhistogram, line, bar, table or stat. `--refresh 5s` explicitly
 re-reads a file or literal HTTP loopback URL while viewed. Default is a
 snapshot. `--template FILE` embeds a shaped copy of templates/page.html.
-Secrets are refused. `get` returns data and SVG; large data should be
+Secrets are refused. `show` returns data and SVG; large data should be
 re-surfaced with `open`, not pasted into chat. No query or layout language.
 ~~~
 set -euo pipefail

@@ -13,13 +13,16 @@ port=${NOTEPAD_PORT:-18095}
 # Register command for atlas entry and CLI invocation
 guide=$("$runner" --bashsharp "$here/notepad.bsh" --skill 2>/dev/null || cat << 'EOF'
 View and edit any content as text (txt, md, html, json, PDF->text).
-Agent drives via command/API (new, open, get, put, list, share, close); human edits Markdown in loopback page.
+Agent drives via command/API (add, open, show, set, list, share, close); human edits Markdown in loopback page.
 EOF
 )
 
+atlas_args=()
+atlas_rows=$(cd "$here/../kit" && go run ./cmd/atlas notepad 0)
+while IFS= read -r row; do atlas_args+=(--set "$row"); done <<< "$atlas_rows"
 "$runner" commands add "$name" --force \
   --set "exec.0=$runner" --set exec.1=--bashsharp --set "exec.2=$here/notepad.bsh" \
-  --set synopsis='Desk notepad: view any content as text, edit Markdown in loopback page, agent get/put/list/share' \
+  --set synopsis='Desk notepad: view any content as text, edit Markdown in loopback page, agent show/set/list/share' \
   --set "long=$guide" \
   --set group=platform \
   --set effects.0=read --set effects.1=write --set effects.2=exec --set effects.3=net \
@@ -37,11 +40,7 @@ EOF
   --set args.flags.11.name=to --set args.flags.11.type=string \
   --set args.flags.12.name=output --set args.flags.12.shorthand=o --set args.flags.12.type=string \
   --set args.positionals.0.name=verb \
-  --set args.positionals.0.enum.0=serve --set args.positionals.0.enum.1=new \
-  --set args.positionals.0.enum.2=open --set args.positionals.0.enum.3=get \
-  --set args.positionals.0.enum.4=put --set args.positionals.0.enum.5=list \
-  --set args.positionals.0.enum.6=share --set args.positionals.0.enum.7=close \
-  --set args.positionals.0.enum.8=export \
+  "${atlas_args[@]}" \
   --set args.positionals.1.name=id
 
 # Register skill

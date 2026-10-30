@@ -7,7 +7,7 @@ name: form
 description: Define an ad-hoc form in JSON/YAML for a human to fill on a loopback page, then read answers back as JSON keyed by field id. Use when there is more than one question for a human, or answers must survive reload and be polled.
 metadata:
   requires: "has=bashy"
-  step-porota: 'bashy form new --def form.json'
+  step-porota: 'bashy form add --def form.json'
   check-tests: 'bashy form list'
 ---
 # Ad-hoc forms
@@ -16,7 +16,7 @@ This is the prose face of `form.bsh`, the same executable body used by the
 registered `form` command. `bashy commands show form` exposes the
 executable argv and source path; `bashy skill show form` reads this face.
 
-- `bashy form new --def form.json --title "Intake"` defines a form from a
+- `bashy form add --def form.json --title "Intake"` defines a form from a
   JSON or YAML file (see `examples/` for the schema: text, textarea,
   choice, multi, yes-no, file; required; one recommended option per
   choice/multi shown with a mark). Prints the id, loopback URL and status
@@ -27,16 +27,16 @@ executable argv and source path; `bashy skill show form` reads this face.
   marks rows done. Input maps and the frozen extract schema are in README.md.
 - `bashy form ask --def questions.json --title "Intake"` creates a
   questionnaire with stable `q1..qn` ids and visible `Q1..Qn` labels.
-  `bashy form ask ID --key OWNER --def followup.json` appends only the new
-  round as the next question numbers; `get`/`wait` return each question's
+  `bashy form ask ID --key OWNER --def followup.json` appends only the add
+  round as the next question numbers; `show`/`wait` return each question's
   answer and `pending`/`answered` status.
 - `bashy form open ID` re-surfaces a form: id, URL, status only.
 - The human fills the form on the loopback page (Save keeps a partial
   save, Submit completes it); partial saves survive reload.
-- `bashy form get ID --json` reads the definition and the answers back as
+- `bashy form show ID --json` reads the definition and the answers back as
   JSON keyed by field id. `bashy form wait ID` blocks until the form is
   answered (or closed, or the timeout hits).
-- `bashy form put ID --answer name=Ada` prefills answers as the owner;
+- `bashy form set ID --answer name=Ada` prefills answers as the owner;
   `list`, `share`, `close` work like every desk tool.
 - `bashy form serve` starts the native foreground service (loopback only)
   and prints the participant origin. Ctrl-C stops it; saved forms remain.
@@ -72,7 +72,7 @@ case ${1:-serve} in
   done < "${BASH_SOURCE[0]}"
   ;;
 --contract) echo 'sokilili foromu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
--h|--help) echo 'form [serve|new|reply|ask|open|get|put|list|share|close|wait] [--json] — ad-hoc forms and questionnaires; --skill prints its embedded skill' ;;
+-h|--help) echo 'form [serve|add|reply|ask|open|show|set|list|share|close|append|wait] [--json] — ad-hoc forms and questionnaires; --skill prints its embedded skill' ;;
 serve)
   shift || true
   data=${FORM_DATA:-}
@@ -88,7 +88,7 @@ stop)
   if pkill -f "$bin serve" 2>/dev/null; then echo "stopped form"; else echo "no form server matched $bin serve"; fi
   ;;
 test) cd "$here"; GOWORK=off go test ./... ;;
-new|reply|ask|open|get|put|list|share|close|wait|join)
+add|reply|ask|open|show|set|list|share|close|wait|join)
   build
   data=${FORM_DATA:-}
   addr=${FORM_ADDR:-127.0.0.1:18107}
@@ -99,5 +99,5 @@ new|reply|ask|open|get|put|list|share|close|wait|join)
   if [[ -n ${prefix:-} ]]; then args+=(-prefix "$prefix"); fi
   exec "$bin" "${args[@]}" "$@"
   ;;
-*) echo 'Usage: form [serve|new|reply|ask|open|get|put|list|share|close|wait] [--json]' >&2; exit 2 ;;
+*) echo 'Usage: form [serve|add|reply|ask|open|show|set|list|share|close|append|wait] [--json]' >&2; exit 2 ;;
 esac

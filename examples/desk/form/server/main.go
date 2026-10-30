@@ -2,7 +2,7 @@
 // JSON or YAML and the human fills it on the loopback page; the agent
 // reads answers back as JSON keyed by field id.
 //
-// Doors: `form new|open|get|put|list|share|close|wait [--json]` (agent)
+// Doors: `form add|open|show|set|list|share|close|wait [--json]` (agent)
 // and the loopback page (human). Storage: $BASHY_HOME/desk/form/items/<id>.json.
 //
 // The definition schema and answer store in schema.go are the reusable
@@ -177,6 +177,10 @@ func decodeAnswers(raw json.RawMessage) (Answers, bool, error) {
 }
 
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	kit.ContractHandler("form", http.HandlerFunc(a.serveHTTP)).ServeHTTP(w, r)
+}
+
+func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	kit.ApplySecurityHeaders(w)
 	if !kit.GuardPOST(w, r, "form") {
 		return
@@ -204,7 +208,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		it, err := a.loadLocked(id)
 		if err != nil {
 			if os.IsNotExist(err) {
-				kit.Fail(w, 404, "Form not found. Create it with form new first.")
+				kit.Fail(w, 404, "Form not found. Create it with form add first.")
 			} else {
 				kit.Fail(w, 400, err.Error())
 			}
@@ -225,7 +229,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer a.mu.Unlock()
 	me := kit.ParticipantCookie(w, r, "form-participant")
 	switch req.Action {
-	case "new":
+	case "add":
 		a.create(w, req, me)
 	case "reply":
 		a.reply(w, req, me)
@@ -233,9 +237,9 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		a.ask(w, r, req, me)
 	case "open":
 		a.open(w, req)
-	case "get":
+	case "show":
 		a.get(w, r, req, me)
-	case "put":
+	case "set":
 		a.mutate(w, r, req, me, false)
 	case "close":
 		a.mutate(w, r, req, me, true)
@@ -365,7 +369,7 @@ func (a *app) open(w http.ResponseWriter, req request) {
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, 404, "Form not found. Create it with form new first.")
+			kit.Fail(w, 404, "Form not found. Create it with form add first.")
 		} else {
 			kit.Fail(w, 400, err.Error())
 		}
@@ -378,7 +382,7 @@ func (a *app) get(w http.ResponseWriter, r *http.Request, req request, me string
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, 404, "Form not found. Create it with form new first.")
+			kit.Fail(w, 404, "Form not found. Create it with form add first.")
 		} else {
 			kit.Fail(w, 400, err.Error())
 		}
@@ -414,7 +418,7 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req request, me str
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, 404, "Form not found. Create it with form new first.")
+			kit.Fail(w, 404, "Form not found. Create it with form add first.")
 		} else {
 			kit.Fail(w, 400, err.Error())
 		}
@@ -497,7 +501,7 @@ func (a *app) answer(w http.ResponseWriter, req request) {
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, 404, "Form not found. Create it with form new first.")
+			kit.Fail(w, 404, "Form not found. Create it with form add first.")
 		} else {
 			kit.Fail(w, 400, err.Error())
 		}
@@ -569,7 +573,7 @@ func (a *app) share(w http.ResponseWriter, r *http.Request, req request) {
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, 404, "Form not found. Create it with form new first.")
+			kit.Fail(w, 404, "Form not found. Create it with form add first.")
 		} else {
 			kit.Fail(w, 400, err.Error())
 		}
@@ -599,7 +603,7 @@ func (a *app) join(w http.ResponseWriter, req request, me string) {
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, 404, "Form not found. Create it with form new first.")
+			kit.Fail(w, 404, "Form not found. Create it with form add first.")
 		} else {
 			kit.Fail(w, 400, err.Error())
 		}
@@ -754,7 +758,7 @@ func (a *app) page(r *http.Request) []byte {
 				`<button type="button" class="desk-copy secondary" data-desk-save data-desk-shortcut="save" title="Save (⌘/Ctrl+S)">Save (partial)</button>` +
 				`<button type="button" class="desk-copy" data-desk-submit data-desk-shortcut="submit" title="Submit (⌘/Ctrl+Enter)">Submit answers</button></div></form>`
 		} else {
-			formBody = kit.State("error", "Form not found", "Create it with form new first.")
+			formBody = kit.State("error", "Form not found", "Create it with form add first.")
 		}
 	}
 	var badges strings.Builder
@@ -823,7 +827,7 @@ const formPageJS = `(function () {
       });
       var body = await r.json();
       if (!r.ok) {
-        if (msg) { msg.textContent = (body && body.error) || 'Could not save.'; msg.setAttribute('data-kind', 'error'); }
+        if (msg) { msg.textContent = (body && body.error && body.error.message) || 'Could not save.'; msg.setAttribute('data-kind', 'error'); }
         return;
       }
       if (msg) msg.textContent = '';

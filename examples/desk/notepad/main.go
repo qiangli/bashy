@@ -2,7 +2,7 @@
 // (txt, md, html, json, PDF->text), edit Markdown in the loopback page,
 // agent reads/puts content, lists and shares notes.
 //
-// Doors: `notepad new|open|get|put|list|share|close [--json]` (agent) and the
+// Doors: `notepad add|open|show|set|list|share|close [--json]` (agent) and the
 // loopback page (human). Storage: $BASHY_HOME/desk/notepad/items/<id>.json.
 package main
 
@@ -148,6 +148,10 @@ func (a *app) openView(n *note) map[string]any {
 }
 
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	kit.ContractHandler("notepad", http.HandlerFunc(a.serveHTTP)).ServeHTTP(w, r)
+}
+
+func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if breakMode != "no-csp" {
 		kit.ApplySecurityHeaders(w)
 	}
@@ -177,7 +181,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		n, err := a.loadLocked(id)
 		if err != nil {
 			if os.IsNotExist(err) {
-				kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad new first.")
+				kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
 			} else {
 				kit.Fail(w, http.StatusBadRequest, err.Error())
 			}
@@ -231,13 +235,13 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	defer a.mu.Unlock()
 	me := kit.ParticipantCookie(w, r, "notepad-participant")
 	switch req.Action {
-	case "new":
+	case "add":
 		a.create(w, req, me)
 	case "open":
 		a.open(w, req)
-	case "get":
+	case "show":
 		a.get(w, r, req, me)
-	case "put":
+	case "set":
 		a.mutate(w, r, req, me, false)
 	case "close":
 		a.mutate(w, r, req, me, true)
@@ -316,7 +320,7 @@ func (a *app) open(w http.ResponseWriter, req actionRequest) {
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad new first.")
+			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
 		} else {
 			kit.Fail(w, http.StatusBadRequest, err.Error())
 		}
@@ -329,7 +333,7 @@ func (a *app) get(w http.ResponseWriter, r *http.Request, req actionRequest, me 
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad new first.")
+			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
 		} else {
 			kit.Fail(w, http.StatusBadRequest, err.Error())
 		}
@@ -354,7 +358,7 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req actionRequest, 
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad new first.")
+			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
 		} else {
 			kit.Fail(w, http.StatusBadRequest, err.Error())
 		}
@@ -424,7 +428,7 @@ func (a *app) share(w http.ResponseWriter, r *http.Request, req actionRequest) {
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad new first.")
+			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
 		} else {
 			kit.Fail(w, http.StatusBadRequest, err.Error())
 		}
@@ -454,7 +458,7 @@ func (a *app) join(w http.ResponseWriter, req actionRequest, me string) {
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad new first.")
+			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
 		} else {
 			kit.Fail(w, http.StatusBadRequest, err.Error())
 		}
@@ -491,7 +495,7 @@ func (a *app) export(w http.ResponseWriter, r *http.Request, req actionRequest, 
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad new first.")
+			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
 		} else {
 			kit.Fail(w, http.StatusBadRequest, err.Error())
 		}
@@ -638,7 +642,7 @@ func (a *app) page(r *http.Request) []byte {
 
   if (saveBtn) {
     saveBtn.addEventListener('click', async () => {
-      const action = currentId ? 'put' : 'new';
+      const action = currentId ? 'set' : 'add';
       try {
         const res = await fetch('/api/action', {
           method: 'POST',
@@ -652,7 +656,7 @@ func (a *app) page(r *http.Request) []byte {
         });
         const data = await res.json();
         if (!res.ok) {
-          showAlert(data.error || 'Failed to save', true);
+          showAlert(data.error?.message || 'Failed to save', true);
           return;
         }
         showAlert('Saved successfully: ' + data.id, false);
@@ -715,7 +719,7 @@ func (a *app) page(r *http.Request) []byte {
             if (titleInput && !titleInput.value) titleInput.value = file.name;
             showAlert('Imported ' + file.name + ' as ' + (data.format || 'text'), false);
           } else {
-            showAlert(data.error || 'Import conversion failed', true);
+            showAlert(data.error?.message || 'Import conversion failed', true);
           }
         } catch (err) {
           showAlert('Import error: ' + err.message, true);

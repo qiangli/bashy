@@ -24,12 +24,122 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 )
+
+// SchemaVersion is the shared CLI and HTTP output contract.
+func SchemaVersion(tool string) string { return "bashy-" + tool + "-v1" }
+
+// Envelope gives every JSON result an object shape and a version. Lists use
+// items, while ordinary result fields stay at the top level.
+func Envelope(tool string, v any) map[string]any {
+	out := map[string]any{"schema_version": SchemaVersion(tool)}
+	switch x := v.(type) {
+	case nil:
+		out["items"] = []any{}
+	case map[string]any:
+		for k, value := range x {
+			out[k] = value
+		}
+	case []map[string]any:
+		out["items"] = x
+	default:
+		b, _ := json.Marshal(v)
+		var object map[string]any
+		if json.Unmarshal(b, &object) == nil && object != nil {
+			for k, value := range object {
+				out[k] = value
+			}
+		} else {
+			out["items"] = v
+		}
+	}
+	return out
+}
+
+// Project keeps selected top-level fields and the mandatory version.
+func Project(v map[string]any, fields string) (map[string]any, error) {
+	if fields == "" {
+		return v, nil
+	}
+	out := map[string]any{"schema_version": v["schema_version"]}
+	for _, field := range strings.Split(fields, ",") {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			return nil, errors.New("empty field name")
+		}
+		value, ok := v[field]
+		if !ok {
+			return nil, errors.New("unknown field " + field)
+		}
+		out[field] = value
+	}
+	return out, nil
+}
+
+// ErrorMessage reads the common HTTP/CLI error shape.
+func ErrorMessage(raw []byte) string {
+	var v struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if json.Unmarshal(raw, &v) == nil && v.Error.Message != "" {
+		return v.Error.Message
+	}
+	return strings.TrimSpace(string(raw))
+}
+
+// ContractHandler applies the same JSON envelope and field projection to
+// every API response, including errors. Page and asset bytes pass through.
+func ContractHandler(tool string, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rec := httptest.NewRecorder()
+		next.ServeHTTP(rec, r)
+		result := rec.Result()
+		defer result.Body.Close()
+		body := rec.Body.Bytes()
+		if strings.Contains(result.Header.Get("Content-Type"), "application/json") {
+			var value any
+			if json.Unmarshal(body, &value) == nil {
+				v := Envelope(tool, value)
+				if message, ok := v["error"].(string); ok {
+					code := "request_failed"
+					switch result.StatusCode {
+					case http.StatusBadRequest:
+						code = "invalid_arg"
+					case http.StatusNotFound:
+						code = "not_found"
+					case http.StatusConflict:
+						code = "conflict"
+					}
+					v["error"] = map[string]any{"code": code, "message": message}
+				}
+				if projected, err := Project(v, r.URL.Query().Get("fields")); err == nil {
+					v = projected
+				} else {
+					result.StatusCode = http.StatusBadRequest
+					v = Envelope(tool, map[string]any{"error": map[string]any{"code": "invalid_arg", "message": err.Error()}})
+				}
+				body, _ = json.Marshal(v)
+				body = append(body, '\n')
+			}
+		}
+		for key, values := range result.Header {
+			for _, value := range values {
+				w.Header().Add(key, value)
+			}
+		}
+		w.Header().Del("Content-Length")
+		w.WriteHeader(result.StatusCode)
+		_, _ = w.Write(body)
+	})
+}
 
 // NameRe is the shared item/session name rule inherited from
 // whiteboard/brainstorm: 1-64 chars, letters/digits/-/_ , leading alnum.

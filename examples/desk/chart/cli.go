@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,12 +41,33 @@ func interspersed(args []string) []string {
 }
 func runCLI(args []string, stdout io.Writer) int { return cli(args, os.Stdin, stdout) }
 func cli(args []string, stdin io.Reader, stdout io.Writer) int {
+	var common kit.CommonOptions
+	var commonErr error
+	args, common, commonErr = kit.ParseCommon(args)
+	if commonErr != nil {
+		fmt.Fprintln(stdout, "error:", commonErr)
+		return 2
+	}
+	if common.HelpMCP {
+		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.MCPHelp("chart")))
+		return 0
+	}
+	if common.Explain || common.DryRun {
+		verb := kit.FindVerb("chart", args)
+		if verb == "" {
+			fmt.Fprintln(stdout, "error: unknown verb")
+			return 2
+		}
+		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.Envelope("chart", map[string]any{"verb": verb, "effects": "desk action", "dry_run": common.DryRun})))
+		return 0
+	}
+
 	fs := flag.NewFlagSet("chart", flag.ContinueOnError)
 	fs.SetOutput(stdout)
 	addr := fs.String("addr", "127.0.0.1:18098", "loopback server address")
 	data := fs.String("data", kit.DefaultDataDir("chart"), "server storage directory")
 	prefix := fs.String("prefix", "", "URL path prefix")
-	asJSON := fs.Bool("json", false, "JSON output")
+	asJSON := fs.Bool("json", common.JSON, "JSON output")
 	title := fs.String("title", "", "chart title")
 	body := fs.String("body", "", "optional description")
 	idFlag := fs.String("id", "", "new item id")
@@ -63,7 +85,7 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 	}
 	fail := func(e error) int {
 		if *asJSON {
-			_ = json.NewEncoder(stdout).Encode(map[string]string{"error": e.Error()})
+			_ = json.NewEncoder(stdout).Encode(kit.Envelope("chart", map[string]any{"error": map[string]any{"code": "request_failed", "message": e.Error()}}))
 		} else {
 			fmt.Fprintln(stdout, "error:", e)
 		}
@@ -77,7 +99,7 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 	}
 	rest := fs.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(stdout, "chart serve|new|open|get|put|list|share|close|revoke [ID] --json; new/put --input FILE|- --widget TYPE")
+		fmt.Fprintln(stdout, "chart serve|add|open|show|set|list|share|close|revoke [ID] --json; new/put --input FILE|- --widget TYPE")
 		return 2
 	}
 	verb := rest[0]
@@ -87,21 +109,21 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 	}
 	payload := map[string]any{"action": verb}
 	switch verb {
-	case "new":
+	case "add":
 		payload["id"] = *idFlag
-	case "open", "get", "put", "share", "close", "revoke":
+	case "open", "show", "set", "share", "close", "revoke":
 		if len(rest) != 2 {
 			return fail(fmt.Errorf("%s requires one id", verb))
 		}
 		payload["id"] = rest[1]
 	case "list":
 	default:
-		return fail(fmt.Errorf("unknown verb %q", verb))
+		return kit.UsageError(stdout, "chart", *asJSON, fmt.Sprintf("unknown verb %q", verb))
 	}
-	if verb == "new" || verb == "put" {
+	if verb == "add" || verb == "set" {
 		payload["title"] = *title
 		payload["body"] = *body
-		if *input == "" && verb == "new" {
+		if *input == "" && verb == "add" {
 			*input = "-"
 		}
 		if *input != "" {
@@ -154,7 +176,7 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 	if e != nil {
 		return fail(e)
 	}
-	req, e := http.NewRequest("POST", "http://"+*addr+*prefix+"/api/action", bytes.NewReader(raw))
+	req, e := http.NewRequest("POST", "http://"+*addr+*prefix+"/api/action"+commonQuery(common.Fields), bytes.NewReader(raw))
 	if e != nil {
 		return fail(e)
 	}
@@ -171,10 +193,12 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 		return fail(e)
 	}
 	if res.StatusCode != 200 {
-		m, _ := v.(map[string]any)
-		return fail(fmt.Errorf("%v", m["error"]))
+		if *asJSON {
+			return encode(stdout, v)
+		}
+		return fail(fmt.Errorf("%s", kit.ErrorMessage([]byte(kit.CanonicalJSON(v)))))
 	}
-	if *asJSON || verb == "get" || verb == "list" {
+	if *asJSON || verb == "show" || verb == "list" {
 		return encode(stdout, v)
 	}
 	m := v.(map[string]any)
@@ -191,4 +215,11 @@ func encode(w io.Writer, v any) int {
 		return 1
 	}
 	return 0
+}
+
+func commonQuery(fields string) string {
+	if fields == "" {
+		return ""
+	}
+	return "?fields=" + url.QueryEscape(fields)
 }

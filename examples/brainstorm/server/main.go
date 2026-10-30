@@ -292,6 +292,10 @@ func (a *app) stripPrefix(path string) (string, bool) {
 func sameOrigin(r *http.Request, u *url.URL) bool { return kit.SameOrigin(r, u) }
 
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	kit.ContractHandler("brainstorm", http.HandlerFunc(a.serveHTTP)).ServeHTTP(w, r)
+}
+
+func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	kit.ApplySecurityHeaders(w)
 	if !kit.GuardPOST(w, r, "session's own") {
 		return
@@ -385,7 +389,9 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !kit.DecodeAction(w, r, 16384, &req) {
 		return
 	}
-	if deskActions[req.Action] {
+	// Card submissions already use add; their text distinguishes them from
+	// the desk add action, which creates a session.
+	if deskActions[req.Action] && !(req.Action == "add" && req.ID == "" && req.Title == "" && req.Body == "" && len(req.Fields) == 0) {
 		a.desk(w, r, id, &req)
 		return
 	}

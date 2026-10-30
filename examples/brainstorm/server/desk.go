@@ -12,13 +12,13 @@ import (
 	kit "desk-kit"
 )
 
-// The desk agent door: new|open|get|put|list|share|close over the same
+// The desk agent door: add|open|show|set|list|share|close over the same
 // /api/action route the page uses, mapped onto the session model. A session
 // is the desk item; its id is the session name. open/new/list/put/share/close
 // return id + URL + status only, never card text; get is the one read that
 // returns content, and shows only what the caller could see on the page.
 
-var deskActions = map[string]bool{"new": true, "open": true, "get": true, "put": true, "list": true, "share": true, "close": true}
+var deskActions = map[string]bool{"add": true, "open": true, "show": true, "set": true, "list": true, "share": true, "close": true}
 
 func sessionStatus(s *Session) string {
 	if s.Phase == "closed" {
@@ -128,7 +128,7 @@ func (a *app) desk(w http.ResponseWriter, r *http.Request, who string, req *acti
 		sort.Slice(out, func(i, j int) bool { return out[i]["id"].(string) < out[j]["id"].(string) })
 		respond(w, out)
 		return
-	case "new":
+	case "add":
 		name := req.ID
 		if name == "" {
 			name = "session-" + token()[:12]
@@ -187,7 +187,7 @@ func (a *app) desk(w http.ResponseWriter, r *http.Request, who string, req *acti
 	switch req.Action {
 	case "open":
 		respond(w, a.openView(r, s))
-	case "get":
+	case "show":
 		seen := cloneSession(s)
 		if isFac {
 			for i := range seen.Cards {
@@ -199,7 +199,7 @@ func (a *app) desk(w http.ResponseWriter, r *http.Request, who string, req *acti
 		v := a.view(who, &seen, isFac)
 		v["id"], v["url"], v["status"] = s.Name, a.sessionURL(r, s.Name), sessionStatus(s)
 		respond(w, v)
-	case "put":
+	case "set":
 		if s.Phase != "write" {
 			fail(w, 409, "Writing has ended")
 			return

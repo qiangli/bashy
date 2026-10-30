@@ -99,8 +99,8 @@ even on the same Wi-Fi. Everything works without internet once Go and the
 executable are available.
 
 `bashy whiteboard backup` prints a verified snapshot directory. Stop the
-server, choose a **new, empty** data directory, then run
-`WHITEBOARD_DATA=/new/board-data bashy whiteboard restore /saved/snapshot`
+server, choose a **add, empty** data directory, then run
+`WHITEBOARD_DATA=/add/board-data bashy whiteboard restore /saved/snapshot`
 before serving it again. Restore refuses nonempty destinations, invalid
 records and overwrites. Snapshot JSON contains facilitator capabilities;
 store it privately. Members and revocations survive restore.
@@ -118,10 +118,10 @@ then run `node browser-test.mjs`. `CHROMIUM_PATH` can select an existing browser
 
 The whiteboard follows the shared desk contract (`examples/desk/kit`): the page
 uses the kit's copy buttons and status badge, and `bashy whiteboard` gains
-`new|open|get|put|list|share|close` over the same `/api/action` route the page
+`add|open|show|set|list|share|close` over the same `/api/action` route the page
 uses. A board is the item and its name is the id; `open` prints id, URL and
-status only. `new` makes a private board and prints its owner key (pass it as
-`--key` or `WHITEBOARD_KEY`); `put` pins a note; `close` locks the board. A
+status only. `add` makes a private board and prints its owner key (pass it as
+`--key` or `WHITEBOARD_KEY`); `set` pins a note; `close` locks the board. A
 launcher tile is added by `register.sh` (`bashy app add`).
 
 Recorded exceptions to the desk defaults: the server keeps its LAN default bind

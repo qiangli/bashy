@@ -95,7 +95,8 @@ const contactDef = `[{"id":"name","label":"Full name","kind":"text","required":t
 	`{"id":"subscribe","label":"Subscribe?","kind":"yes-no","required":true}]`
 
 func TestDeskContract(t *testing.T) {
-	contracttest.Run(t, contracttest.Config{BaseURL: startServer(t), Tool: "form"})
+	base := startServer(t)
+	contracttest.Run(t, contracttest.Config{BaseURL: base, Tool: "form", CLI: deskCLICallback(base)})
 }
 
 func TestSecretDefinitionRefused(t *testing.T) {
@@ -111,10 +112,10 @@ func TestSecretDefinitionRefused(t *testing.T) {
 		var code int
 		var raw []byte
 		if tc.def == "" {
-			id, _ := newForm(t, base, `{"action":"new","title":"s","definition":`+contactDef+`}`)
+			id, _ := newForm(t, base, `{"action":"add","title":"s","definition":`+contactDef+`}`)
 			code, raw = post(t, base, `{"action":"answer","id":"`+id+`","answers":{"api_key":"x"}}`, "")
 		} else {
-			code, raw = post(t, base, `{"action":"new","title":"s","definition":`+tc.def+`}`, "")
+			code, raw = post(t, base, `{"action":"add","title":"s","definition":`+tc.def+`}`, "")
 		}
 		if code != 400 {
 			t.Errorf("%s: want 400, got %d (%s)", tc.name, code, raw)
@@ -143,7 +144,7 @@ func TestDefinitionValidation(t *testing.T) {
 		{"bad id", `[{"id":"has space","label":"A","kind":"text"}]`, "for an id"},
 		{"missing label", `[{"id":"a","kind":"text"}]`, "label is required"},
 	} {
-		code, raw := post(t, base, `{"action":"new","title":"s","definition":`+tc.def+`}`, "")
+		code, raw := post(t, base, `{"action":"add","title":"s","definition":`+tc.def+`}`, "")
 		if code != 400 {
 			t.Errorf("%s: want 400, got %d (%s)", tc.name, code, raw)
 			continue
@@ -156,7 +157,7 @@ func TestDefinitionValidation(t *testing.T) {
 
 func TestAnswerRoundTripAndReload(t *testing.T) {
 	a, base := serveApp(t)
-	id, key := newForm(t, base, `{"action":"new","title":"Contact","definition":`+contactDef+`}`)
+	id, key := newForm(t, base, `{"action":"add","title":"Contact","definition":`+contactDef+`}`)
 
 	// Partial save: required fields missing, still stored as pending.
 	code, raw := post(t, base, `{"action":"answer","id":"`+id+`","answers":{"name":"Ada"}}`, "")
@@ -196,7 +197,7 @@ func TestAnswerRoundTripAndReload(t *testing.T) {
 	if code, raw := post(t, base, complete, ""); code != 200 {
 		t.Fatalf("complete answer: want 200, got %d: %s", code, raw)
 	}
-	code, raw = post(t, base, `{"action":"get","id":"`+id+`"}`, key)
+	code, raw = post(t, base, `{"action":"show","id":"`+id+`"}`, key)
 	if code != 200 {
 		t.Fatalf("get: want 200, got %d: %s", code, raw)
 	}
@@ -254,7 +255,7 @@ func TestYAMLJSONParity(t *testing.T) {
 
 func TestRecommendedMarkOnPage(t *testing.T) {
 	_, base := serveApp(t)
-	id, _ := newForm(t, base, `{"action":"new","title":"Contact","definition":`+contactDef+`}`)
+	id, _ := newForm(t, base, `{"action":"add","title":"Contact","definition":`+contactDef+`}`)
 	r, err := http.Get(base + "/?id=" + id)
 	if err != nil {
 		t.Fatal(err)
@@ -275,7 +276,7 @@ func TestCLIOpenHidesContentGetReturnsAnswers(t *testing.T) {
 	srvURL := startServer(t)
 	addr := strings.TrimPrefix(srvURL, "http://")
 	var out bytes.Buffer
-	newArgs := []string{"new", "-addr", addr, "--json", "--id", "cli-probe", "--title", "T",
+	newArgs := []string{"add", "-addr", addr, "--json", "--id", "cli-probe", "--title", "T",
 		"--body", "cli-secret-body", "--def", "../examples/contact.json"}
 	if code := runCLI(newArgs, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
@@ -302,11 +303,11 @@ func TestCLIOpenHidesContentGetReturnsAnswers(t *testing.T) {
 		t.Errorf("CLI open lacks the id: %s", out.String())
 	}
 	out.Reset()
-	if code := runCLI([]string{"put", "-addr", addr, "--key", key, "--answer", "name=Ada", "cli-probe"}, &out); code != 0 {
+	if code := runCLI([]string{"set", "-addr", addr, "--key", key, "--answer", "name=Ada", "cli-probe"}, &out); code != 0 {
 		t.Fatalf("put: exit %d: %s", code, out.String())
 	}
 	out.Reset()
-	if code := runCLI([]string{"get", "-addr", addr, "--key", key, "--json", "cli-probe"}, &out); code != 0 {
+	if code := runCLI([]string{"show", "-addr", addr, "--key", key, "--json", "cli-probe"}, &out); code != 0 {
 		t.Fatalf("get: exit %d: %s", code, out.String())
 	}
 	var got struct {
@@ -326,7 +327,7 @@ func TestCLIFlagsAfterID(t *testing.T) {
 	srvURL := startServer(t)
 	addr := strings.TrimPrefix(srvURL, "http://")
 	var out bytes.Buffer
-	if code := runCLI([]string{"new", "-addr", addr, "--json", "--id", "order-probe",
+	if code := runCLI([]string{"add", "-addr", addr, "--json", "--id", "order-probe",
 		"--title", "T", "--def", "../examples/contact.json"}, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
 	}
@@ -334,7 +335,7 @@ func TestCLIFlagsAfterID(t *testing.T) {
 	_ = json.Unmarshal(out.Bytes(), &created)
 	key, _ := created["ownerKey"].(string)
 	out.Reset()
-	if code := runCLI([]string{"get", "order-probe", "--key", key, "-addr", addr, "--json"}, &out); code != 0 {
+	if code := runCLI([]string{"show", "order-probe", "--key", key, "-addr", addr, "--json"}, &out); code != 0 {
 		t.Fatalf("get ID --json: exit %d: %s", code, out.String())
 	}
 	var got struct {
@@ -352,7 +353,7 @@ func TestCLIWaitAnsweredAndTimeout(t *testing.T) {
 	srvURL := startServer(t)
 	addr := strings.TrimPrefix(srvURL, "http://")
 	var out bytes.Buffer
-	if code := runCLI([]string{"new", "-addr", addr, "--json", "--id", "wait-probe",
+	if code := runCLI([]string{"add", "-addr", addr, "--json", "--id", "wait-probe",
 		"--def", "../examples/contact.json"}, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
 	}
@@ -408,7 +409,7 @@ func TestQuestionnaireAppendRoundKeepsStableQuestionIDs(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("append: want 200, got %d: %s", code, raw)
 	}
-	code, raw = post(t, base, `{"action":"get","id":"`+id+`"}`, key)
+	code, raw = post(t, base, `{"action":"show","id":"`+id+`"}`, key)
 	if code != 200 {
 		t.Fatalf("get: want 200, got %d: %s", code, raw)
 	}
@@ -500,5 +501,14 @@ func TestQuestionnairePageNumbersQuestionsAndMarksRecommendation(t *testing.T) {
 		if !strings.Contains(page, want) {
 			t.Errorf("questionnaire page lacks %q", want)
 		}
+	}
+}
+
+func deskCLICallback(base string) func(...string) (int, string) {
+	return func(args ...string) (int, string) {
+		var out bytes.Buffer
+		argv := append([]string{"--addr", strings.TrimPrefix(base, "http://")}, args...)
+		code := runCLI(argv, &out)
+		return code, out.String()
 	}
 }

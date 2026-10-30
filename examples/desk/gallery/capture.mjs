@@ -38,12 +38,12 @@ Desk tools share **one look**: tokens, shell and this renderer.
 const TOOLS = [
   {name: 'notepad', args: d => ['-data', d, '-addr', '127.0.0.1:0', 'serve'],
     async seed(origin) {
-      const v = await act(origin, {action: 'new', id: 'release-notes', title: 'Release notes', body: NOTE});
+      const v = await act(origin, {action: 'add', id: 'release-notes', title: 'Release notes', body: NOTE});
       return {url: `${origin}/?id=${v.id}`};
     }},
   {name: 'form', args: d => ['serve', '-data', d, '-addr', '127.0.0.1:0'],
     async seed(origin) {
-      const v = await act(origin, {action: 'new', title: 'Contact', definition: [
+      const v = await act(origin, {action: 'add', title: 'Contact', definition: [
         {id: 'name', label: 'Full name', kind: 'text', required: true, help: 'As it should appear on the **badge**.'},
         {id: 'contact', label: 'Preferred contact', kind: 'choice', options: ['email', 'phone', 'post'], recommended: 'email'},
         {id: 'subscribe', label: 'Subscribe?', kind: 'yes-no'},
@@ -52,7 +52,7 @@ const TOOLS = [
     }},
   {name: 'chart', args: d => ['serve', '--addr', '127.0.0.1:0', '--data', d],
     async seed(origin) {
-      const v = await act(origin, {action: 'new', title: 'Requests', chart: {input: '[12,18,15,24,31,28,35]', widget: 'line', title: 'Requests'}});
+      const v = await act(origin, {action: 'add', title: 'Requests', chart: {input: '[12,18,15,24,31,28,35]', widget: 'line', title: 'Requests'}});
       return {url: v.url, init: [`chart-key-${v.id}`, v.ownerKey]};
     }},
   {name: 'whiteboard', args: d => ['-data', d, '-addr', '127.0.0.1:0'],

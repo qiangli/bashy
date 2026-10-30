@@ -35,7 +35,7 @@ func startServer(t *testing.T, breakM string) (string, string) {
 
 func TestDeskContract(t *testing.T) {
 	url, _ := startServer(t, "")
-	contracttest.Run(t, contracttest.Config{BaseURL: url, Tool: "notepad"})
+	contracttest.Run(t, contracttest.Config{BaseURL: url, Tool: "notepad", CLI: deskCLICallback(url)})
 }
 
 func TestContractRedOnBreak(t *testing.T) {
@@ -149,7 +149,7 @@ func TestCLIOpenHidesContent(t *testing.T) {
 	var out bytes.Buffer
 
 	// Create note via CLI
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "--json", "--id", "note-secret-probe", "--title", "T", "--body", "secret-canary-content", "new"}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "--json", "--id", "note-secret-probe", "--title", "T", "--body", "secret-canary-content", "add"}, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
 	}
 	var created map[string]any
@@ -174,7 +174,7 @@ func TestCLIOpenHidesContent(t *testing.T) {
 
 	// get returns content
 	out.Reset()
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "get", "note-secret-probe"}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "show", "note-secret-probe"}, &out); code != 0 {
 		t.Fatalf("get: exit %d: %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "secret-canary-content") {
@@ -188,7 +188,7 @@ func TestCLIPutFileConvertsContent(t *testing.T) {
 
 	// Create note
 	var out bytes.Buffer
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "--id", "import-note", "new"}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "--id", "import-note", "add"}, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
 	}
 
@@ -199,7 +199,7 @@ func TestCLIPutFileConvertsContent(t *testing.T) {
 	}
 
 	out.Reset()
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "put", "import-note", "-f", tmpHTML}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "set", "import-note", "-f", tmpHTML}, &out); code != 0 {
 		t.Fatalf("put: exit %d: %s", code, out.String())
 	}
 	// Verify open hides content
@@ -209,7 +209,7 @@ func TestCLIPutFileConvertsContent(t *testing.T) {
 
 	// Verify get returns markdown converted text
 	out.Reset()
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "get", "import-note"}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "show", "import-note"}, &out); code != 0 {
 		t.Fatalf("get: exit %d: %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "## Imported Subtitle") || !strings.Contains(out.String(), "Converted paragraph") {
@@ -222,11 +222,11 @@ func TestCLIPutFileConvertsContent(t *testing.T) {
 		t.Fatal(err)
 	}
 	out.Reset()
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "put", "import-note", "-f", tmpJSON}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "set", "import-note", "-f", tmpJSON}, &out); code != 0 {
 		t.Fatalf("put json: exit %d: %s", code, out.String())
 	}
 	out.Reset()
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "get", "import-note"}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "show", "import-note"}, &out); code != 0 {
 		t.Fatalf("get: exit %d: %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "  \"message\": \"hello world\"") {
@@ -239,7 +239,7 @@ func TestCLIShareCloseAndConflict(t *testing.T) {
 	addr := strings.TrimPrefix(srvURL, "http://")
 
 	var out bytes.Buffer
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "--id", "lifecycle-note", "new"}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "--id", "lifecycle-note", "add"}, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
 	}
 
@@ -265,7 +265,7 @@ func TestCLIShareCloseAndConflict(t *testing.T) {
 
 	// Put after close must fail with conflict (exit 1)
 	out.Reset()
-	code := runCLI([]string{"-addr", addr, "-data", dataDir, "put", "lifecycle-note", "--body", "new body"}, &out)
+	code := runCLI([]string{"-addr", addr, "-data", dataDir, "set", "lifecycle-note", "--body", "new body"}, &out)
 	if code == 0 {
 		t.Errorf("put after close should fail, got code 0: %s", out.String())
 	}
@@ -284,11 +284,11 @@ func TestCLINewWithFileAndStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "new", "--id", "note-from-file", "-f", tmpMD}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "add", "--id", "note-from-file", "-f", tmpMD}, &out); code != 0 {
 		t.Fatalf("new -f file: exit %d: %s", code, out.String())
 	}
 	out.Reset()
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "get", "note-from-file"}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "show", "note-from-file"}, &out); code != 0 {
 		t.Fatalf("get: exit %d: %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "meeting-notes") || !strings.Contains(out.String(), "Sprint 537") {
@@ -298,11 +298,11 @@ func TestCLINewWithFileAndStdin(t *testing.T) {
 	// 2. put with -f - (stdin)
 	inReader := strings.NewReader("<h3>Piped Content</h3><p>Piped paragraph</p>")
 	out.Reset()
-	if code := runCLIWithIO([]string{"-addr", addr, "-data", dataDir, "put", "note-from-file", "-f", "-", "--format", "html"}, inReader, &out); code != 0 {
+	if code := runCLIWithIO([]string{"-addr", addr, "-data", dataDir, "set", "note-from-file", "-f", "-", "--format", "html"}, inReader, &out); code != 0 {
 		t.Fatalf("put -f -: exit %d: %s", code, out.String())
 	}
 	out.Reset()
-	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "get", "note-from-file"}, &out); code != 0 {
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "show", "note-from-file"}, &out); code != 0 {
 		t.Fatalf("get: exit %d: %s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "### Piped Content") || !strings.Contains(out.String(), "Piped paragraph") {
@@ -347,5 +347,14 @@ func TestPageScriptNoPromptOrLocationSearch(t *testing.T) {
 	}
 	if strings.Contains(htmlStr, "window.location.search") {
 		t.Errorf("page script contains window.location.search assignment, want history.replaceState without reload")
+	}
+}
+
+func deskCLICallback(base string) func(...string) (int, string) {
+	return func(args ...string) (int, string) {
+		var out bytes.Buffer
+		argv := append([]string{"--addr", strings.TrimPrefix(base, "http://")}, args...)
+		code := runCLI(argv, &out)
+		return code, out.String()
 	}
 }
