@@ -93,26 +93,40 @@ run_one() (
   data=$work/$tool
   "$BASHY" mkdir -p "$data"
   # Bash# launchers forward server output when the process exits, so choose
-  # a port before starting and poll health without reading startup text.
-  addr=127.0.0.1:$((30000 + RANDOM % 20000))
-  origin=http://$addr
-  case "$tool" in
-    notepad) export NOTEPAD_DATA=$data NOTEPAD_ADDR=$addr ;;
-    form) export FORM_DATA=$data FORM_ADDR=$addr ;;
-    chart) export CHART_DATA=$data CHART_ADDR=$addr ;;
-    viewer) export VIEWER_DATA=$data VIEWER_ADDR=$addr ;;
-    whiteboard) export WHITEBOARD_DATA=$data WHITEBOARD_ADDR=$addr ;;
-    brainstorm) export BRAINSTORM_DATA=$data BRAINSTORM_ADDR=$addr ;;
-  esac
-  serve_tool "$tool" >"$data/server.log" 2>&1 &
-  server_pid=$!
-  trap 'kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true' EXIT
+  # a port before starting and poll health without reading startup text. A
+  # picked port can already be in use (seen on Windows): retry up to five
+  # fresh ports, giving up on an attempt once its server process has exited.
   ready=false
-  for i in $(seq 1 120); do
-    if "$BASHY" curl -fsS --max-time 1 "$origin/healthz" >/dev/null 2>&1; then ready=true; break; fi
-    sleep 1
+  server_pid=
+  trap 'if [[ -n $server_pid ]]; then kill "$server_pid" 2>/dev/null || true; wait "$server_pid" 2>/dev/null || true; fi' EXIT
+  for attempt in $(seq 1 5); do
+    port=$((30000 + RANDOM % 20000))
+    if [[ $attempt == 1 && -n ${DESK_ROUNDTRIP_FIRST_PORT:-} ]]; then port=$DESK_ROUNDTRIP_FIRST_PORT; fi
+    addr=127.0.0.1:$port
+    origin=http://$addr
+    case "$tool" in
+      notepad) export NOTEPAD_DATA=$data NOTEPAD_ADDR=$addr ;;
+      form) export FORM_DATA=$data FORM_ADDR=$addr ;;
+      chart) export CHART_DATA=$data CHART_ADDR=$addr ;;
+      viewer) export VIEWER_DATA=$data VIEWER_ADDR=$addr ;;
+      whiteboard) export WHITEBOARD_DATA=$data WHITEBOARD_ADDR=$addr ;;
+      brainstorm) export BRAINSTORM_DATA=$data BRAINSTORM_ADDR=$addr ;;
+    esac
+    serve_tool "$tool" >"$data/server.log" 2>&1 &
+    server_pid=$!
+    for i in $(seq 1 60); do
+      if "$BASHY" curl -fsS --max-time 1 "$origin/healthz" >/dev/null 2>&1; then ready=true; break; fi
+      if ! kill -0 "$server_pid" 2>/dev/null; then break; fi
+      sleep 1
+    done
+    if [[ $ready == true ]]; then break; fi
+    echo "$tool: server startup attempt $attempt failed on port $port" >&2
+    cat "$data/server.log" >&2
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+    server_pid=
   done
-  if [[ $ready != true ]]; then cat "$data/server.log" >&2; exit 1; fi
+  if [[ $ready != true ]]; then exit 1; fi
   case "$tool" in
     notepad) export NOTEPAD_ADDR=$addr ;;
     form) export FORM_ADDR=$addr ;;
