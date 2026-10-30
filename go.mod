@@ -376,7 +376,7 @@ require (
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261025102716-d14bdab6ed94 // indirect
 	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261030000410-a1c246bda044 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261030030700-4da588d684ac // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
 	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261030030345-281e79d3243d // indirect
 	github.com/qiangli/yoke/pkg/oci v0.0.0-20261030030345-281e79d3243d // indirect
