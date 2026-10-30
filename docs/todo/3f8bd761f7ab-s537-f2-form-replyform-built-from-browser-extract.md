@@ -3,15 +3,19 @@ id: 3f8bd761f7ab
 kind: feature
 title: 'S537.F2 form replyform: built from browser extract, per-field copy buttons + status badges, fed by guard refusals; optional in-page overlay'
 seq: 2929
-status: todo
+status: done
 priority: p2
 labels:
     - browser
     - desk
 created: 2026-10-30T02:27:25.901822Z
+weave: 359
+assignee: codex-gpt6-astra
 sprint: 537
 sprint_id: 3ec79210-039c-57d7-a0b5-7abfeeefbb1c
 sprint_title: 'bashy desk: agent-human tool suite (notepad, form, whiteboard, brainstorm) on one contract + UI kit'
+closed: 2026-10-30T18:25:00.580172Z
+closed_by: s537-manager
 ---
 
 replyform on the F1 form engine (examples/desk/form, merged; read examples/desk/form/README.md for the definition schema/answer store). Purpose: when an agent cannot (or must not) fill a web form, it hands the human a replyform: one row per page field with the agent's proposed value, a per-field copy button (kit CopyButton, "Copied" state) and a fill status badge (filled-by-agent, failed, needs-human, pending).

@@ -3,14 +3,18 @@ id: 17b39cadfda5
 kind: chore
 title: S537.W5 desk round-trip dag recipe (all tools, per OS) + evidence record
 seq: 2962
-status: todo
+status: done
 priority: p1
 labels:
     - desk
 created: 2026-10-30T20:00:48.514868Z
+weave: 379
+assignee: codex-gpt6-sol
 sprint: 537
 sprint_id: 3ec79210-039c-57d7-a0b5-7abfeeefbb1c
 sprint_title: 'bashy desk: agent-human tool suite (notepad, form, chart, whiteboard, brainstorm) on one contract + UI kit'
+closed: 2026-10-30T20:33:24.485071Z
+closed_by: s537-manager
 ---
 
 Planned wave W5 (plan docs/sprint-537-bashy-desk-plan.md, Master execution plan row W5): "freeze, one dag recipe round-trips all five tools per OS, one claim per host, one evidence record". This story delivers the RECIPE and its local proof; the manager runs it on novidesign (macOS), noviwin1 (Windows) and a dhnt-ephemeral droplet (Linux).

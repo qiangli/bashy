@@ -3,7 +3,7 @@ id: 4f7cec33da92
 kind: feature
 title: 'S537.C1 chart: bashy chart renders ready-made widgets for OTel metric types (counter/gauge/updown/histogram) + line/bar/table/stat from JSON/CSV/OTLP-JSON; pure-Go SVG; shapable templates; not a dashboard'
 seq: 2935
-status: assigned
+status: done
 priority: p2
 labels:
     - desk
@@ -13,6 +13,8 @@ assignee: codex-gpt6-astra
 sprint: 537
 sprint_id: 3ec79210-039c-57d7-a0b5-7abfeeefbb1c
 sprint_title: 'bashy desk: agent-human tool suite (notepad, form, whiteboard, brainstorm) on one contract + UI kit'
+closed: 2026-10-30T17:57:32.227127Z
+closed_by: s537-manager
 ---
 
 chart at examples/desk/chart (command bashy chart): quick, nice stats; deliberately NOT a dashboard app. Input: JSON, CSV, NDJSON or OTLP-JSON metrics (file or stdin). Renders one page of ready-made widgets, server-side SVG in pure Go (no new deps, no CDN, works offline, same look light/dark). Widgets map to OTel metric types: Counter/Sum -> total + rate-over-time line; Gauge -> stat tile + sparkline; UpDownCounter -> line; Histogram/ExponentialHistogram -> distribution bars + p50/p95/p99 tiles; plus generic line, bar, table, stat. Agents pick a widget (`--widget`) or tweak a shipped template (templates are files, shapable). Snapshot by default; optional `--refresh` re-reads a file or a loopback URL. No query language, no accounts, no layout editor. Red/green: golden SVG tests per widget type + one OTLP-JSON fixture.
