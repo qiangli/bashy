@@ -30,20 +30,26 @@ import (
 )
 
 type item struct {
-	Version    int             `json:"version"`
-	ID         string          `json:"id"`
-	Title      string          `json:"title"`
-	Body       string          `json:"body"`
-	Fields     []kit.Field     `json:"fields"`
-	Definition Definition      `json:"definition,omitempty"`
-	Answers    Answers         `json:"answers,omitempty"`
-	ReplyRows  []ReplyRow      `json:"reply_rows,omitempty"`
-	Mode       string          `json:"mode,omitempty"`
-	Status     string          `json:"status"`
-	Revision   int             `json:"revision"`
-	Owner      string          `json:"owner"`
-	Members    map[string]bool `json:"members"`
-	Invites    map[string]bool `json:"invites"`
+	Version        int                `json:"version"`
+	ID             string             `json:"id"`
+	Title          string             `json:"title"`
+	Body           string             `json:"body"`
+	Fields         []kit.Field        `json:"fields"`
+	Definition     Definition         `json:"definition,omitempty"`
+	Answers        Answers            `json:"answers,omitempty"`
+	Respondents    string             `json:"respondents,omitempty"`
+	Responses      map[string]Answers `json:"responses,omitempty"`
+	Completed      map[string]bool    `json:"completed,omitempty"`
+	Anonymous      bool               `json:"anonymous,omitempty"`
+	CloseAt        string             `json:"close_at,omitempty"`
+	ResultsVisible bool               `json:"results_visible,omitempty"`
+	ReplyRows      []ReplyRow         `json:"reply_rows,omitempty"`
+	Mode           string             `json:"mode,omitempty"`
+	Status         string             `json:"status"`
+	Revision       int                `json:"revision"`
+	Owner          string             `json:"owner"`
+	Members        map[string]bool    `json:"members"`
+	Invites        map[string]bool    `json:"invites"`
 }
 
 type app struct {
@@ -89,6 +95,18 @@ func (a *app) loadLocked(id string) (*item, error) {
 	if it.Answers == nil {
 		it.Answers = Answers{}
 	}
+	if it.Respondents == "" {
+		it.Respondents = "one"
+	}
+	if it.Respondents != "one" && it.Respondents != "many" {
+		return nil, fmt.Errorf("invalid respondents mode")
+	}
+	if it.Responses == nil {
+		it.Responses = map[string]Answers{}
+	}
+	if it.Completed == nil {
+		it.Completed = map[string]bool{}
+	}
 	a.items[id] = it
 	return it, nil
 }
@@ -114,27 +132,98 @@ func (a *app) urlFor(id string) string { return kit.ItemURL(a.baseURL+"/", "id",
 
 // openView is the contentless re-surface: id + stable URL + status only.
 func (a *app) openView(it *item) map[string]any {
-	return kit.OpenView(it.ID, a.urlFor(it.ID), it.Status)
+	v := kit.OpenView(it.ID, a.urlFor(it.ID), it.Status)
+	if it.closed() {
+		v["status"] = kit.StatusClosed
+	}
+	return v
+}
+
+func (it *item) closed() bool {
+	if it.Status == kit.StatusClosed {
+		return true
+	}
+	if it.CloseAt == "" {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, it.CloseAt)
+	return err == nil && !time.Now().Before(t)
+}
+
+func (it *item) results() map[string]any {
+	per := map[string]any{}
+	agg := map[string]any{}
+	for _, f := range it.Definition {
+		switch f.Kind {
+		case KindChoice, KindMulti, KindYesNo:
+			counts := map[string]int{}
+			if f.Kind == KindYesNo {
+				counts["yes"], counts["no"] = 0, 0
+			} else {
+				for _, option := range f.Options {
+					counts[option] = 0
+				}
+			}
+			for respondent, ans := range it.Responses {
+				if !it.Completed[respondent] {
+					continue
+				}
+				if f.Kind == KindMulti {
+					if vals, ok := toStringSlice(ans[f.ID]); ok {
+						for _, v := range vals {
+							counts[v]++
+						}
+					}
+				} else if v, ok := ans[f.ID].(string); ok && v != "" {
+					counts[v]++
+				}
+			}
+			agg[f.ID] = counts
+		default:
+			values := []any{}
+			for respondent, ans := range it.Responses {
+				if !it.Completed[respondent] {
+					continue
+				}
+				if v, ok := ans[f.ID]; ok && !emptyAnswer(v) {
+					values = append(values, v)
+				}
+			}
+			agg[f.ID] = values
+		}
+	}
+	count := 0
+	for id, ans := range it.Responses {
+		per[id] = map[string]any{"answers": ans, "complete": it.Completed[id]}
+		if it.Completed[id] {
+			count++
+		}
+	}
+	return map[string]any{"respondents": per, "aggregate": agg, "count": count}
 }
 
 // request is the shared action envelope. Definition and Answers ride as
 // raw messages so definition errors can name the offending field instead
 // of failing as a generic "Invalid request".
 type request struct {
-	Extract    json.RawMessage `json:"extract"`
-	Values     json.RawMessage `json:"values"`
-	Refusals   json.RawMessage `json:"refusals"`
-	ReplyRows  []ReplyRow      `json:"-"`
-	Action     string          `json:"action"`
-	ID         string          `json:"id"`
-	Title      string          `json:"title"`
-	Body       string          `json:"body"`
-	Fields     []kit.Field     `json:"fields"`
-	Definition json.RawMessage `json:"definition"`
-	Answers    json.RawMessage `json:"answers"`
-	Complete   bool            `json:"complete"`
-	Create     bool            `json:"create"`
-	Invite     string          `json:"invite"`
+	Extract        json.RawMessage `json:"extract"`
+	Values         json.RawMessage `json:"values"`
+	Refusals       json.RawMessage `json:"refusals"`
+	ReplyRows      []ReplyRow      `json:"-"`
+	Action         string          `json:"action"`
+	ID             string          `json:"id"`
+	Title          string          `json:"title"`
+	Body           string          `json:"body"`
+	Fields         []kit.Field     `json:"fields"`
+	Definition     json.RawMessage `json:"definition"`
+	Answers        json.RawMessage `json:"answers"`
+	Complete       bool            `json:"complete"`
+	Create         bool            `json:"create"`
+	Invite         string          `json:"invite"`
+	Respondents    string          `json:"respondents"`
+	Anonymous      bool            `json:"anonymous"`
+	CloseAt        string          `json:"close_at"`
+	ResultsVisible bool            `json:"results_visible"`
 }
 
 const modeQuestionnaire = "questionnaire"
@@ -193,7 +282,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if path == "/" && r.Method == "GET" {
 		kit.ParticipantCookie(w, r, "form-participant")
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(a.page(r))
+		w.Write(a.pageWithWriter(w, r))
 		return
 	}
 	if path == "/healthz" && r.Method == "GET" {
@@ -244,7 +333,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	case "close":
 		a.mutate(w, r, req, me, true)
 	case "answer":
-		a.answer(w, req)
+		a.answer(w, req, me)
 	case "list":
 		a.list(w)
 	case "share":
@@ -270,6 +359,19 @@ func (a *app) createItem(w http.ResponseWriter, req request, me, mode string) {
 		kit.Fail(w, 400, err.Error())
 		return
 	}
+	if req.Respondents == "" {
+		req.Respondents = "one"
+	}
+	if req.Respondents != "one" && req.Respondents != "many" {
+		kit.Fail(w, 400, "respondents must be one or many")
+		return
+	}
+	if req.CloseAt != "" {
+		if _, err := time.Parse(time.RFC3339, req.CloseAt); err != nil {
+			kit.Fail(w, 400, "close_at must be RFC3339")
+			return
+		}
+	}
 	id := req.ID
 	if id == "" {
 		id = "form-" + kit.NewToken()[:12]
@@ -292,7 +394,8 @@ func (a *app) createItem(w http.ResponseWriter, req request, me, mode string) {
 	}
 	it := &item{Version: 1, ID: id, Title: title, Body: req.Body,
 		Fields: req.Fields, Definition: def, Answers: Answers{},
-		Mode: mode, ReplyRows: req.ReplyRows,
+		Mode: mode, ReplyRows: req.ReplyRows, Respondents: req.Respondents,
+		Responses: map[string]Answers{}, Completed: map[string]bool{}, Anonymous: req.Anonymous, CloseAt: req.CloseAt, ResultsVisible: req.ResultsVisible,
 		Status: kit.StatusPending, Owner: kit.NewToken(),
 		Members: map[string]bool{me: true}, Invites: map[string]bool{}}
 	if err := a.saveLocked(it); err != nil {
@@ -388,8 +491,21 @@ func (a *app) get(w http.ResponseWriter, r *http.Request, req request, me string
 		}
 		return
 	}
-	if !a.isOwner(r, it) && !it.Members[me] {
+	if !a.isOwner(r, it) && !it.Members[me] && it.Respondents != "many" {
 		kit.Fail(w, 403, "Join this form first; ask the owner for an invite.")
+		return
+	}
+	if it.Respondents == "many" {
+		v := map[string]any{"id": it.ID, "url": a.urlFor(it.ID), "status": a.openView(it)["status"],
+			"title": it.Title, "body": it.Body, "definition": it.Definition, "revision": it.Revision,
+			"mode": it.Mode, "respondents": it.Respondents, "anonymous": it.Anonymous,
+			"close_at": it.CloseAt, "results_visible": it.ResultsVisible, "answers": it.Responses[me]}
+		if a.isOwner(r, it) {
+			v["results"] = it.results()
+		} else if it.ResultsVisible {
+			v["results"] = map[string]any{"aggregate": it.results()["aggregate"], "count": it.results()["count"]}
+		}
+		kit.WriteJSON(w, v)
 		return
 	}
 	answers := any(it.Answers)
@@ -428,7 +544,7 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req request, me str
 		kit.Fail(w, 403, "Only the owner can change this form")
 		return
 	}
-	if it.Status == kit.StatusClosed {
+	if it.closed() {
 		kit.Fail(w, 409, "This form is closed")
 		return
 	}
@@ -466,6 +582,16 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req request, me str
 		if strings.TrimSpace(req.Title) != "" {
 			next.Title = req.Title
 		}
+		if req.CloseAt != "" {
+			if _, err := time.Parse(time.RFC3339, req.CloseAt); err != nil {
+				kit.Fail(w, 400, "close_at must be RFC3339")
+				return
+			}
+			next.CloseAt = req.CloseAt
+		}
+		if req.ResultsVisible {
+			next.ResultsVisible = true
+		}
 		checkDef := next.Definition
 		if hasAns {
 			norm, err := NormalizeAnswers(checkDef, ans, false)
@@ -497,7 +623,7 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req request, me str
 // answers under the participant cookie. Every save persists, so partial
 // answers survive reload; a complete save with all required fields filled
 // moves the form to answered.
-func (a *app) answer(w http.ResponseWriter, req request) {
+func (a *app) answer(w http.ResponseWriter, req request, me string) {
 	it, err := a.loadLocked(req.ID)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -507,7 +633,7 @@ func (a *app) answer(w http.ResponseWriter, req request) {
 		}
 		return
 	}
-	if it.Status == kit.StatusClosed {
+	if it.closed() {
 		kit.Fail(w, 409, "This form is closed")
 		return
 	}
@@ -519,8 +645,12 @@ func (a *app) answer(w http.ResponseWriter, req request) {
 	if ans == nil {
 		ans = Answers{}
 	}
-	merged := make(Answers, len(it.Answers)+len(ans))
-	for id, answer := range it.Answers {
+	current := it.Answers
+	if it.Respondents == "many" {
+		current = it.Responses[me]
+	}
+	merged := make(Answers, len(current)+len(ans))
+	for id, answer := range current {
 		merged[id] = answer
 	}
 	for id, answer := range ans {
@@ -537,10 +667,27 @@ func (a *app) answer(w http.ResponseWriter, req request) {
 		return
 	}
 	next := *it
-	next.Answers = norm
-	if req.Complete {
+	if it.Respondents == "many" {
+		next.Responses = make(map[string]Answers, len(it.Responses)+1)
+		next.Completed = make(map[string]bool, len(it.Completed)+1)
+		for id, response := range it.Responses {
+			next.Responses[id] = response
+		}
+		for id, complete := range it.Completed {
+			next.Completed[id] = complete
+		}
+		next.Responses[me] = norm
+		if req.Complete {
+			next.Completed[me] = true
+		}
+		// A survey remains open after each participant submits.
+		next.Status = kit.StatusPending
+	} else {
+		next.Answers = norm
+	}
+	if req.Complete && it.Respondents != "many" {
 		next.Status = kit.StatusAnswered
-	} else if next.Status != kit.StatusAnswered {
+	} else if it.Respondents != "many" && next.Status != kit.StatusAnswered {
 		next.Status = kit.StatusPending
 	}
 	if err := a.saveLocked(&next); err != nil {
@@ -581,6 +728,11 @@ func (a *app) share(w http.ResponseWriter, r *http.Request, req request) {
 	}
 	if !a.isOwner(r, it) {
 		kit.Fail(w, 403, "Only the owner can share this form")
+		return
+	}
+	if it.Respondents == "many" {
+		// The form URL is reusable; the participant cookie separates responses.
+		kit.WriteJSON(w, a.openView(it))
 		return
 	}
 	next := *it
@@ -728,7 +880,9 @@ func fieldHTML(f FormField, saved any, questionnaire bool) string {
 
 // page renders the human door: item header, status badges, copy buttons,
 // the kit field components and a theme toggle, all from the kit snippets.
-func (a *app) page(r *http.Request) []byte {
+func (a *app) page(r *http.Request) []byte { return a.pageWithWriter(nil, r) }
+
+func (a *app) pageWithWriter(w http.ResponseWriter, r *http.Request) []byte {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	id := r.URL.Query().Get("id")
@@ -736,13 +890,24 @@ func (a *app) page(r *http.Request) []byte {
 	formBody := `<div class="desk-field">` + kit.State("empty", "No form open", "Open a form link (form open ID) to fill it here.") + `</div>`
 	if id != "" {
 		if it, err := a.loadLocked(id); err == nil {
-			header = kit.ItemHeader(it.ID, it.Status, a.urlFor(it.ID))
+			header = kit.ItemHeader(it.ID, a.openView(it)["status"].(string), a.urlFor(it.ID))
 			var fb strings.Builder
+			saved := it.Answers
+			if it.Respondents == "many" {
+				me := ""
+				if c, err := r.Cookie("form-participant"); err == nil {
+					me = c.Value
+				}
+				if me == "" && w != nil {
+					me = kit.ParticipantCookie(w, r, "form-participant")
+				}
+				saved = it.Responses[me]
+			}
 			for i, f := range it.Definition {
 				if it.Mode == modeQuestionnaire {
 					f.Label = fmt.Sprintf("Q%d. %s", i+1, f.Label)
 				}
-				fb.WriteString(fieldHTML(f, it.Answers[f.ID], it.Mode == modeQuestionnaire))
+				fb.WriteString(fieldHTML(f, saved[f.ID], it.Mode == modeQuestionnaire))
 			}
 			if it.Mode == modeReply {
 				for _, row := range it.ReplyRows {
@@ -757,6 +922,13 @@ func (a *app) page(r *http.Request) []byte {
 				`<div class="desk-row">` +
 				`<button type="button" class="desk-copy secondary" data-desk-save data-desk-shortcut="save" title="Save (⌘/Ctrl+S)">Save (partial)</button>` +
 				`<button type="button" class="desk-copy" data-desk-submit data-desk-shortcut="submit" title="Submit (⌘/Ctrl+Enter)">Submit answers</button></div></form>`
+			if it.closed() {
+				formBody = `<div class="desk-field">` + kit.State("empty", "Form closed", "Responses are closed.") + `</div>`
+			}
+			if it.Respondents == "many" && it.ResultsVisible {
+				resultJSON, _ := json.Marshal(map[string]any{"aggregate": it.results()["aggregate"], "count": it.results()["count"]})
+				formBody += `<section class="desk-panel"><h2>Live results</h2><pre>` + html.EscapeString(string(resultJSON)) + `</pre></section>`
+			}
 		} else {
 			formBody = kit.State("error", "Form not found", "Create it with form add first.")
 		}

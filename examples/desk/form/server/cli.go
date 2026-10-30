@@ -83,6 +83,12 @@ func runCLI(args []string, stdout io.Writer) int {
 	refusalsPath := fs.String("refusals", "", "fill results keyed by stable_id")
 	defPath := fs.String("def", "", "form definition file (JSON or YAML; - for stdin)")
 	defInline := fs.String("definition", "", "form definition inline (JSON or YAML)")
+	respondents := fs.String("respondents", "", "one or many participants")
+	anonymous := fs.Bool("anonymous", false, "do not ask participants for a name")
+	closeAt := fs.String("close-at", "", "optional RFC3339 close time")
+	resultsVisible := fs.Bool("results-visible", false, "show aggregate results to respondents")
+	poll := fs.String("poll", "", "create a one-question poll")
+	options := fs.String("options", "", "comma-separated poll choices")
 	key := fs.String("key", "", "owner key (FORM_KEY also works)")
 	timeout := fs.Duration("timeout", 5*time.Minute, "wait: give up after this long")
 	interval := fs.Duration("interval", 2*time.Second, "wait: poll interval")
@@ -113,13 +119,16 @@ func runCLI(args []string, stdout io.Writer) int {
 		} else if src == "" {
 			return nil, 0
 		}
-		t, def, err := ParseDefinition([]byte(src), name)
+		t, def, mode, err := ParseFormDefinition([]byte(src), name)
 		if err != nil {
 			fmt.Fprintf(stdout, "error: %v\n", err)
 			return nil, 1
 		}
 		if *title == "" {
 			*title = t
+		}
+		if *respondents == "" {
+			*respondents = mode
 		}
 		raw, _ := json.Marshal(def)
 		var v any
@@ -251,7 +260,8 @@ func runCLI(args []string, stdout io.Writer) int {
 			fmt.Fprintln(stdout, "error: form ask needs --def or --definition")
 			return 2
 		}
-		payload := map[string]any{"id": *idFlag, "title": *title, "body": *body, "definition": def}
+		payload := map[string]any{"id": *idFlag, "title": *title, "body": *body, "definition": def,
+			"respondents": *respondents, "anonymous": *anonymous, "close_at": *closeAt, "results_visible": *resultsVisible}
 		if len(positional) > 0 {
 			payload["id"] = positional[0]
 		} else {
@@ -267,7 +277,28 @@ func runCLI(args []string, stdout io.Writer) int {
 		if code != 0 {
 			return code
 		}
-		payload := map[string]any{"id": *idFlag, "title": *title, "body": *body}
+		if *poll != "" {
+			if def != nil || strings.TrimSpace(*options) == "" {
+				fmt.Fprintln(stdout, "error: --poll needs --options and cannot use --def")
+				return 2
+			}
+			choices := []string{}
+			for _, opt := range strings.Split(*options, ",") {
+				opt = strings.TrimSpace(opt)
+				if opt == "" {
+					fmt.Fprintln(stdout, "error: poll options must be nonempty")
+					return 2
+				}
+				choices = append(choices, opt)
+			}
+			def = Definition{{ID: "vote", Label: *poll, Kind: KindChoice, Required: true, Options: choices}}
+			if *title == "" {
+				*title = *poll
+			}
+			*respondents = "many"
+		}
+		payload := map[string]any{"id": *idFlag, "title": *title, "body": *body,
+			"respondents": *respondents, "anonymous": *anonymous, "close_at": *closeAt, "results_visible": *resultsVisible}
 		if def != nil {
 			payload["definition"] = def
 		}
@@ -329,7 +360,8 @@ func runCLI(args []string, stdout io.Writer) int {
 		if code != 0 {
 			return code
 		}
-		payload := map[string]any{"id": id, "title": *title, "body": *body}
+		payload := map[string]any{"id": id, "title": *title, "body": *body,
+			"close_at": *closeAt, "results_visible": *resultsVisible}
 		if def != nil {
 			payload["definition"] = def
 		}

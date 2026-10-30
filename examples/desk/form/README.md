@@ -95,6 +95,36 @@ For questionnaires, `show` and `wait` return entries such as
 recommended mark. A follow-up round returns an already-completed questionnaire
 to `pending` until it is submitted again.
 
+## Multiple respondents and polls
+
+Set `respondents: many` beside `fields` in a JSON or YAML definition. This
+works with `form add` and `form ask`; omitting it keeps the existing `one`
+respondent behavior.
+
+```yaml
+title: Lunch?
+respondents: many
+fields:
+  - id: vote
+    label: Lunch?
+    kind: choice
+    required: true
+    options: [a, b, c]
+```
+
+`form add --poll 'Lunch?' --options a,b,c` creates this poll. `form share ID
+--key "$FORM_KEY"` returns a reusable link. Each browser keeps its own
+response under a participant cookie; submitting again replaces its earlier
+vote. Partial saves remain editable and do not count until submitted.
+
+`form show ID --json --key "$FORM_KEY"` returns `results.respondents` (answers
+and completion state) and `results.aggregate` (tallies for choice, multi,
+yes-no; lists for text), plus a submitted-response `count`. The owner can poll
+for live results. Respondents can see their own answers; `--results-visible`
+also lets them see results. `--anonymous` records only opaque participant IDs.
+`--close-at 2026-10-31T17:00:00Z` closes at that time; `form close ID` closes
+immediately. Closed forms reject saves and re-votes.
+
 ## Definition schema (reusable: F2 and F3 build on this)
 
 A definition is a JSON array of fields, or `{"title":…, "fields":[…]}`.
@@ -103,6 +133,7 @@ quoted scalars, `true`/`false`; see `examples/contact.yaml`):
 
 | Key | Meaning |
 |---|---|
+| `respondents` | Top-level `one` (default) or `many` |
 | `id` | Field id, `^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`; answers are keyed by it |
 | `label` | Human label (required) |
 | `kind` | `text` \| `textarea` \| `choice` \| `multi` \| `yes-no` \| `file` |

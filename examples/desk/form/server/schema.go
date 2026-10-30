@@ -288,37 +288,50 @@ func toStringSlice(v any) ([]string, bool) {
 // below; otherwise the input must be JSON. Both shapes accept either a bare
 // field array or {"title":.., "fields":[..]}.
 func ParseDefinition(data []byte, filename string) (title string, def Definition, err error) {
+	title, def, _, err = ParseFormDefinition(data, filename)
+	return
+}
+
+// ParseFormDefinition includes the respondent mode declared beside fields.
+func ParseFormDefinition(data []byte, filename string) (title string, def Definition, respondents string, err error) {
 	if strings.HasSuffix(strings.ToLower(filename), ".yaml") ||
 		strings.HasSuffix(strings.ToLower(filename), ".yml") ||
 		looksLikeYAML(data) {
 		data, err = yamlSubsetToJSON(data)
 		if err != nil {
-			return "", nil, err
+			return "", nil, "", err
 		}
 	}
 	var bare []FormField
 	if err := json.Unmarshal(data, &bare); err == nil {
 		if err := ValidateDefinition(bare); err != nil {
-			return "", nil, err
+			return "", nil, "", err
 		}
-		return "", bare, nil
+		return "", bare, "one", nil
 	}
 	var doc struct {
-		Title  string     `json:"title"`
-		Fields Definition `json:"fields"`
+		Title       string     `json:"title"`
+		Fields      Definition `json:"fields"`
+		Respondents string     `json:"respondents"`
 	}
 	dec := json.NewDecoder(strings.NewReader(string(data)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&doc); err != nil {
-		return "", nil, fmt.Errorf("invalid form definition: %v", err)
+		return "", nil, "", fmt.Errorf("invalid form definition: %v", err)
 	}
 	if doc.Fields == nil {
-		return "", nil, fmt.Errorf("invalid form definition: want a field array or {\"title\", \"fields\"}")
+		return "", nil, "", fmt.Errorf("invalid form definition: want a field array or {\"title\", \"fields\"}")
 	}
 	if err := ValidateDefinition(doc.Fields); err != nil {
-		return "", nil, err
+		return "", nil, "", err
 	}
-	return doc.Title, doc.Fields, nil
+	if doc.Respondents == "" {
+		doc.Respondents = "one"
+	}
+	if doc.Respondents != "one" && doc.Respondents != "many" {
+		return "", nil, "", fmt.Errorf("respondents must be one or many")
+	}
+	return doc.Title, doc.Fields, doc.Respondents, nil
 }
 
 func looksLikeYAML(data []byte) bool {
