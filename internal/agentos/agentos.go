@@ -996,6 +996,9 @@ func dispatch() {
 			}
 			return handoff.ProjectRoots(projectRootOf(cwd))
 		})
+		// `claim who` composes the four stores that already know who is working
+		// here; it belongs under claim because that is where an agent asks.
+		cmd.AddCommand(newClaimWhoCmd())
 		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy claim:", err)

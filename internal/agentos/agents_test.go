@@ -833,3 +833,44 @@ func TestAgentRosterRunGenerationRejectsReusedIDs(t *testing.T) {
 	writeJSONFile(t, filepath.Join(sprintDir, "queue.json"), agentsSprintBoard{Stories: []agentsSprint{oldSprint}})
 	check(0)
 }
+
+func TestAgentRosterJSONCarriesRoomCwdAndTableDoesNot(t *testing.T) {
+	home, sprintDir, roomDir := t.TempDir(), t.TempDir(), t.TempDir()
+	t.Setenv("BASHY_HOME", home)
+	t.Setenv("BASHY_SPRINT_DIR", sprintDir)
+	t.Setenv("BASHY_ROOM_DIR", roomDir)
+	useAgentsHome(t, home)
+	cwd := filepath.Join(t.TempDir(), "workspaces", "issue-360")
+	card := room.Card{
+		ID: "codex-a-invoke", Principal: "operator", Tool: "codex", Model: "gpt-5.5",
+		Binding: "codex:gpt-5.5", Nick: "codex-a", Mode: "weave", Task: "claim who",
+		PID: os.Getpid(), Cwd: cwd, Joined: time.Now().UTC().Format(time.RFC3339),
+	}
+	if err := room.Join(card); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { room.Leave(card.ID) })
+
+	var jsonOut bytes.Buffer
+	if err := renderAgentRoster(&jsonOut, true); err != nil {
+		t.Fatal(err)
+	}
+	var roster agentsRoster
+	if err := json.Unmarshal(jsonOut.Bytes(), &roster); err != nil {
+		t.Fatal(err)
+	}
+	if len(roster.Assignments) != 1 || roster.Assignments[0].Cwd != cwd {
+		t.Fatalf("assignments = %#v, want the room card cwd", roster.Assignments)
+	}
+	if !strings.Contains(jsonOut.String(), `"cwd"`) {
+		t.Fatalf("JSON envelope missing cwd field: %s", jsonOut.String())
+	}
+
+	var table bytes.Buffer
+	if err := renderAgentRoster(&table, false); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(table.String(), cwd) {
+		t.Fatalf("table must stay unchanged, but printed the cwd:\n%s", table.String())
+	}
+}

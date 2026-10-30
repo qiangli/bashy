@@ -195,6 +195,8 @@ Weave-round verification + retro reports (historical, not load-bearing):
 
 - `QA-REPORT-R10.md`, `JUDGE-REPORT-R6.md`, `JUDGE-REPORT-R7.md`, `SPRINT-R10-RETRO-DRAFT.md`.
 
+- [`claim who` — the four-source path-owner join](plan-claim-who.md) — composes coord claims, live room cwds, weave holders and unpushed-commit trailers into one honest answer, plus the roster's new `cwd` field.
+
 - [Product startup signal contract](plan-startup-signal-contract.md) — pinned runtime overlay, asynchronous ignore scope and deterministic gates.
 
 - [Sprint 413 sprint watch / inbox-ack diagnostics](plan-sprint-413-sprint-watch-inbox-ack-diagnostics.md) — why `sprint --watch` and `inbox-ack` exited 1 with no stderr, the bashy half of the sprint tree's self-reporting contract, explained watch exits, and the yoke stale-heartbeat render patch reported for integration.

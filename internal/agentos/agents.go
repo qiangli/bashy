@@ -113,25 +113,29 @@ type agentsSprintBox struct {
 // run, workers have a run and may have a sprint. Zero-valued fields are omitted
 // in JSON so old consumers can continue reading the assignment fields.
 type agentAssignment struct {
-	Agent          string    `json:"agent"`
-	Binding        string    `json:"binding,omitempty"`
-	Role           string    `json:"role"`
-	InvocationRole string    `json:"invocation_role,omitempty"`
-	Mode           string    `json:"mode,omitempty"`
-	Source         string    `json:"source,omitempty"`
-	Owner          string    `json:"owner,omitempty"`
-	PID            int       `json:"pid,omitempty"`
-	Repo           string    `json:"repo"`
-	Run            int64     `json:"run"`
-	Sprint         int64     `json:"sprint,omitempty"`
-	Points         int       `json:"points,omitempty"`
-	Deadline       time.Time `json:"deadline,omitempty"`
-	LastProgress   time.Time `json:"last_progress,omitempty"`
-	State          string    `json:"state"`
-	Health         string    `json:"health"`
-	HealthReason   string    `json:"health_reason,omitempty"`
-	Age            string    `json:"age,omitempty"`
-	Title          string    `json:"title"`
+	Agent          string `json:"agent"`
+	Binding        string `json:"binding,omitempty"`
+	Role           string `json:"role"`
+	InvocationRole string `json:"invocation_role,omitempty"`
+	Mode           string `json:"mode,omitempty"`
+	Source         string `json:"source,omitempty"`
+	Owner          string `json:"owner,omitempty"`
+	PID            int    `json:"pid,omitempty"`
+	Repo           string `json:"repo"`
+	// Cwd is the room card's working directory: the concrete path this agent is
+	// writing in, which the repo basename alone cannot say (two workspaces of
+	// one repo share a basename). JSON only — the table stays as it was.
+	Cwd          string    `json:"cwd,omitempty"`
+	Run          int64     `json:"run"`
+	Sprint       int64     `json:"sprint,omitempty"`
+	Points       int       `json:"points,omitempty"`
+	Deadline     time.Time `json:"deadline,omitempty"`
+	LastProgress time.Time `json:"last_progress,omitempty"`
+	State        string    `json:"state"`
+	Health       string    `json:"health"`
+	HealthReason string    `json:"health_reason,omitempty"`
+	Age          string    `json:"age,omitempty"`
+	Title        string    `json:"title"`
 }
 
 type agentsRoster struct {
@@ -167,6 +171,7 @@ func (a agentAssignment) MarshalJSON() ([]byte, error) {
 		Owner          string     `json:"owner,omitempty"`
 		PID            int        `json:"pid,omitempty"`
 		Repo           string     `json:"repo"`
+		Cwd            string     `json:"cwd,omitempty"`
 		Run            int64      `json:"run"`
 		Sprint         int64      `json:"sprint,omitempty"`
 		Points         int        `json:"points,omitempty"`
@@ -189,7 +194,7 @@ func (a agentAssignment) MarshalJSON() ([]byte, error) {
 	}
 	return json.Marshal(wire{
 		Agent: a.Agent, Binding: a.Binding, Role: a.Role, InvocationRole: a.InvocationRole, Mode: a.Mode, Source: a.Source,
-		Owner: a.Owner, PID: a.PID, Repo: a.Repo, Run: a.Run,
+		Owner: a.Owner, PID: a.PID, Repo: a.Repo, Cwd: a.Cwd, Run: a.Run,
 		Sprint: a.Sprint, Points: a.Points, Deadline: deadline, LastProgress: progress,
 		State: a.State, Health: a.Health, HealthReason: a.HealthReason, Age: a.Age, Title: a.Title,
 	})
@@ -637,6 +642,7 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 						a.Mode = card.Mode
 						a.InvocationRole = card.Role
 						a.PID = card.PID
+						a.Cwd = card.Cwd
 					}
 				}
 				out = append(out, a)
@@ -673,6 +679,7 @@ func reconciledAgentRoster() ([]agentAssignment, error) {
 			Owner:          card.Principal,
 			PID:            card.PID,
 			Repo:           roomRepo(card.Cwd),
+			Cwd:            card.Cwd,
 			State:          "working",
 			LastProgress:   lastProgress,
 			Health:         "healthy",
