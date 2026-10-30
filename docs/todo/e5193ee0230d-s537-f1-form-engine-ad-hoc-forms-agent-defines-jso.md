@@ -3,14 +3,18 @@ id: e5193ee0230d
 kind: feature
 title: 'S537.F1 form engine + ad-hoc forms: agent defines JSON/YAML form, human fills on the page, agent reads answers back'
 seq: 2932
-status: todo
+status: done
 priority: p1
 labels:
     - desk
 created: 2026-10-30T02:45:42.70162Z
+weave: 352
+assignee: muse-conductor
 sprint: 537
 sprint_id: 3ec79210-039c-57d7-a0b5-7abfeeefbb1c
 sprint_title: 'bashy desk: agent-human tool suite (notepad, form, whiteboard, brainstorm) on one contract + UI kit'
+closed: 2026-10-30T17:52:30.18478Z
+closed_by: s537-manager
 ---
 
 form engine + ad-hoc forms at examples/desk/form (command bashy form). An agent defines a form in JSON or YAML (fields: text, textarea, choice, multi, yes-no, file; required; one recommended option per choice/multi shown with a mark); the human fills it on the loopback page using the kit field components; the agent reads answers back as JSON keyed by field id (`bashy form get <id> --json`, and `bashy form wait <id>` or polling for status pending/answered). Partial saves survive reload. Fields typed secret are refused with a clear error pointing to bashy ask. Engine is the base for replyform (F2) and questionnaire (F3): keep the definition schema and answer store reusable, document them in examples/desk/form/README.md.

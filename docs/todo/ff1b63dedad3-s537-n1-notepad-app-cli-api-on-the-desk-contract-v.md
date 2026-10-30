@@ -3,15 +3,18 @@ id: ff1b63dedad3
 kind: feature
 title: 'S537.N1 notepad: app + CLI/API on the desk contract; view any content as text (PDF/HTML/MD/JSON)'
 seq: 2927
-status: todo
+status: done
 priority: p2
 labels:
     - browser
     - desk
 created: 2026-10-30T02:27:25.318478Z
+assignee: agy-gemini3.8-flash
 sprint: 537
 sprint_id: 3ec79210-039c-57d7-a0b5-7abfeeefbb1c
 sprint_title: 'bashy desk: agent-human tool suite (notepad, form, whiteboard, brainstorm) on one contract + UI kit'
+closed: 2026-10-30T17:35:03.473246Z
+closed_by: s537-manager
 ---
 
 notepad at examples/desk/notepad (command bashy notepad), was S536.5. View any content as text: txt, md, html (via JohannesKaufmann/html-to-markdown, MIT), json (pretty), PDF->text (ledongthuc/pdf, BSD-3); these deps are added to the notepad module only (check licenses in the submit note). Human edits text/Markdown in the page; the agent reads it back (`bashy notepad get <id>`), puts content (`put <id> -f FILE|-`), lists, shares. Notes stored under $BASHY_HOME/desk/notepad. Linux/macOS/Windows identical (paths via filepath, no shell-outs). Conversion to PDF/PNG/HTML is N2, NOT this story.
