@@ -442,6 +442,7 @@ externals variant is a separate story.
 | shell | `-c (arithmetic, printf)` | works | 42 |
 | shell | `echo $HOME (non-tty stdout)` | stated | prints $HOME: Stage 0 output canonicalization (output_reduce.go); a tt |
 | shell | `network (curl)` | absent | no network tools in the image; --network=none besides |
+| verbs | `account` | works | Inspect and manage the host-local account inventory |
 | verbs | `acp` | works | Serve this machine as an ACP agent over stdin/stdout |
 | verbs | `act` | not usable offline | bin-managed external: would download - Error: act: resolve: binmgr: fe |
 | verbs | `act-runner` | not usable offline | bin-managed external: would download - act-runner runs Gitea's act_run |
@@ -472,7 +473,7 @@ externals variant is a separate story.
 | verbs | `command` | works | bash builtin |
 | verbs | `commands` | works | usage: commands [COMMAND] [-v] [--json\|--plain\|--agentic\|--all\|--g |
 | verbs | `conform` | works | verify runs bashy's formal test batteries. The four suites are a preci |
-| verbs | `connect` | works | Usage: bashy connect <host> [--native] [-- <cmd> [args...]] |
+| verbs | `connect` | works | Usage: bashy connect [user@]host[:port] [--native] [-- <cmd> [args...] |
 | verbs | `context` | works | usage: bashy inspect context [--json\|--plain] |
 | verbs | `craft` | works | craft is the accumulated body of practical skill on this host. |
 | verbs | `curl` | not usable offline | engine / remote-by-design (by design): Error: curl: not found on PATH  |
