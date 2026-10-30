@@ -4,7 +4,10 @@ go 1.27
 
 replace desk-kit => ../kit
 
-require desk-kit v0.0.0-00010101000000-000000000000
+require (
+	desk-chart v0.0.0
+	desk-kit v0.0.0
+)
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0 // indirect
@@ -15,3 +18,5 @@ require (
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/net v0.26.0 // indirect
 )
+
+replace desk-chart => ../chart

@@ -35,7 +35,21 @@ import (
 	"time"
 
 	kit "desk-kit"
+	"desk-kit/render"
+
+	"desk-chart/fence"
 )
+
+func init() {
+	// ```chart fences in books reuse the C1 renderer, as in notepad.
+	render.ChartSVG = fence.RenderFence
+}
+
+// renderMarkdown serves POST /api/render for kit.js deskRender: Markdown in,
+// sanitized HTML out, with no item assets.
+func renderMarkdown(src []byte) ([]byte, error) {
+	return render.Markdown(src, render.Options{})
+}
 
 const tool = "viewer"
 
@@ -161,6 +175,9 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(code)
 		w.Write(body)
+		return
+	case path == "/api/render":
+		kit.ServeRender(w, r, renderMarkdown)
 		return
 	case path == "/healthz" && r.Method == "GET":
 		kit.WriteJSON(w, map[string]bool{"ok": true})
