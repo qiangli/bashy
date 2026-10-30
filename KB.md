@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [repo/page] Windows gates must hand native exes cygpath-converted paths — When a Git Bash gate script invokes a native Windows executable (python.exe, cmake.exe, a compiled WFP guard): convert every path that binary opens, filters, or spawns with cygpath -m. MSYS auto-converts slash paths heuristically, but app-id filtering, Cr  (kb:windows-gates-must-hand-native-exes-cygpath-converted-paths)
+- [repo/page] Derive no-egress allowlists from the pinned test's full port set — When a sandbox profile or strace verdict allowlists loopback ports for a pinned test binary, enumerate every bind/connect in that test's source at the pinned commit, not the subset remembered from its description. Prima's ring test was allowed 5  (kb:derive-no-egress-allowlists-from-the-pinned-test-s-full-port-set)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 

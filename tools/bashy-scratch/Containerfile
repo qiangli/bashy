@@ -1,0 +1,16 @@
+FROM scratch
+
+ARG TARGETARCH
+ARG BASHY_COMMIT
+ARG BASHY_VERSION
+
+COPY bashy-linux-${TARGETARCH} /bashy
+
+LABEL org.opencontainers.image.title="bashy-scratch" \
+      org.opencontainers.image.description="The FROM-scratch image bashy self image builds, published every release" \
+      org.opencontainers.image.source="https://github.com/qiangli/bashy" \
+      org.opencontainers.image.revision="${BASHY_COMMIT}" \
+      org.opencontainers.image.version="${BASHY_VERSION}" \
+      org.opencontainers.image.licenses="BSD-3-Clause"
+
+ENTRYPOINT ["/bashy"]
