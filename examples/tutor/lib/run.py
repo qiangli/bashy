@@ -1,6 +1,6 @@
 """People's step timeboxes layered on the sprint's existing session clock."""
 import argparse
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import re
@@ -45,11 +45,36 @@ def read_card(sprint):
     return cards[0]
 
 
-def session_clock(card, at):
+CUTOFF = re.compile(r'cutoff (\d{4}-\d\d-\d\dT[\d:.]+(?:Z|[+-]\d\d:\d\d))')
+
+
+def thread_box(plain):
+    """Last session box from the plain card thread ('... cutoff <ISO>')."""
+    box = None
+    for line in plain.splitlines():
+        match = CUTOFF.search(line)
+        if match:
+            box = dict(cutoff=match[1])
+        elif box and re.search(r'\(stage\): (stopped|ended)', line):
+            box['stopped_at'] = 'thread'
+    return box
+
+
+def log_box(events):
+    """Session box recorded by `tutor start --for` when the card shows none."""
+    starts = [e for e in events if e.get('event') == 'session_start']
+    return dict(cutoff=starts[-1]['deadline']) if starts else None
+
+
+def session_clock(card, at, sprint=None, events=()):
     boxes = card.get('boxes') or []
-    if not boxes:
+    box = boxes[-1] if boxes else None
+    if box is None and sprint is not None:
+        box = thread_box(bashy('sprint', 'show', str(sprint), '--plain', check=False))
+    if box is None:
+        box = log_box(events)
+    if box is None:
         return dict(state='not-started', deadline=None, remaining_s=None)
-    box = boxes[-1]
     deadline = box.get('cutoff')
     stopped = box.get('stopped_at')
     return dict(state='stopped' if stopped else 'running', deadline=deadline,
@@ -82,6 +107,8 @@ def status(sprint, at=None):
                     role=role, status=item.get('state', item.get('status', 'todo')),
                     timebox_s=minutes * 60, started_at=None, done_at=None,
                     overdue=False, evidence=None)
+        if 'step-done' in labels:
+            step['status'] = 'done'
         for event in events:
             if event.get('step') != step['id']:
                 continue
@@ -92,6 +119,7 @@ def status(sprint, at=None):
             elif event['event'] == 'done':
                 step['done_at'] = event['ts']
                 step['evidence'] = event.get('evidence')
+                step['status'] = 'done'
             elif event['event'] == 'extend':
                 step['timebox_s'] += event['by_s']
         end = timestamp(step['done_at']) if step['done_at'] else at
@@ -106,7 +134,7 @@ def status(sprint, at=None):
                            title=step['title'], owners=owners, timebox_s=step['timebox_s'],
                            elapsed_s=elapsed, remaining_s=step['timebox_s'] - elapsed,
                            overdue=step['overdue'])
-    return dict(sprint=sprint, title=card['title'], clock=session_clock(card, at),
+    return dict(sprint=sprint, title=card['title'], clock=session_clock(card, at, sprint, events),
                 current=current, steps=[s for s, _ in steps])
 
 
@@ -135,7 +163,12 @@ def log(sprint, step, event, at, **fields):
 def transition(sprint, step, target, at, evidence=None):
     if step['status'] == target:
         return
-    bashy('todo', 'status', step['id'], target)
+    if target == 'done':
+        # People cannot close sprint stories; the class manager (the teacher's
+        # agent) accepts them later with `bashy sprint accept N ID -m EVIDENCE`.
+        bashy('todo', 'edit', step['id'], '--label', 'step-done')
+    else:
+        bashy('todo', 'status', step['id'], target)
     log(sprint, step, 'step_start' if target == 'doing' else 'done', at,
         **({'evidence': evidence} if target == 'done' else {}))
 
@@ -186,6 +219,8 @@ def main(argv):
                 if args.owner:
                     cmd += ['--owner', args.owner]
                 bashy(*cmd)
+                log(args.sprint, dict(id=None), 'session_start', at,
+                    deadline=(at + timedelta(seconds=duration(args.for_))).isoformat())
             if steps and value['current'] is None and steps[0]['status'] in ('todo', 'assigned'):
                 transition(args.sprint, steps[0], 'doing', at)
         elif args.verb == 'next':

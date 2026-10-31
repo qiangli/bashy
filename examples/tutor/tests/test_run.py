@@ -106,19 +106,10 @@ class RunTests(TempBashy):
         # A command-boundary test of tutor independent of the installed bashy's
         # generic sprint closure policy; the real round trip above stays mandatory.
         real = run.bashy
-        completed = set()
         calls = []
         def runner(*args, **kwargs):
-            if args[:2] == ('todo', 'status') and args[-1] == 'done':
+            if args[:2] in (('todo', 'status'), ('todo', 'edit')):
                 calls.append(args)
-                completed.add(args[2])
-                return ''
-            if args[:2] == ('todo', 'list'):
-                items = run.records(real(*args, **kwargs), 'todo')
-                for item in items:
-                    if item['id'] in completed:
-                        item['state'] = 'done'
-                return json.dumps(items)
             return real(*args, **kwargs)
         with patch.object(run, 'bashy', side_effect=runner):
             self.invoke('next', '1', '--json')
@@ -130,7 +121,10 @@ class RunTests(TempBashy):
             self.invoke('next', '1', '--json')
             self.invoke('next', '1', '--json')
             self.assertEqual(self.invoke('status', '1', '--line'), 'Done · 2/2 steps\n')
-        self.assertEqual(calls, [('todo', 'status', ident, 'done') for ident in self.ids])
+        # People never close sprint stories; the class manager accepts them.
+        self.assertNotIn('done', [c[-1] for c in calls if c[:2] == ('todo', 'status')])
+        self.assertEqual([c for c in calls if c[:2] == ('todo', 'edit')],
+                         [('todo', 'edit', ident, '--label', 'step-done') for ident in self.ids])
 
     def test_exact_line_and_native_json_envelope(self):
         value = dict(current=dict(index=2, total=5, title='Prototype sketch',
@@ -152,15 +146,21 @@ class RunTests(TempBashy):
         self.assertEqual(calls, [('sprint', 'start', '1', '--for', '45m', '--owner', 'teacher')])
         self.assertEqual(value['current']['id'], self.ids[0])
 
-    def test_real_sprint_clock_projection(self):
-        # Seed only this test's private store: no managed agent is launched.
-        path = self.root / 'home' / 'sprint' / 'queue.json'
-        board = json.loads(path.read_text())
-        box = dict(started_at='2026-10-30T09:00:00Z', cutoff='2026-10-30T10:30:00Z')
-        board['stories'][0]['boxes'] = [box]
-        path.write_text(json.dumps(board))
-        self.assertEqual(self.status()['clock'], dict(state='running',
-                         deadline='2026-10-30T10:30:00Z', remaining_s=1800))
-        box['stopped_at'] = '2026-10-30T10:00:00Z'
-        path.write_text(json.dumps(board))
-        self.assertEqual(self.status()['clock']['state'], 'stopped')
+    def test_clock_falls_back_to_plain_thread_then_run_log(self):
+        # The JSON card omits boxes today; the plain thread carries the cutoff.
+        plain = ("sprint #1 [doing] — Class\n"
+                 "  [10-30 09:00] t (stage): started a 90m box (backlog → doing), cutoff 2026-10-30T10:30:00Z\n")
+        self.assertEqual(run.thread_box(plain), {'cutoff': '2026-10-30T10:30:00Z'})
+        self.assertEqual(run.thread_box(plain + "  [10-30 10:00] t (stage): stopped the box\n")['stopped_at'], 'thread')
+        self.assertIsNone(run.thread_box("sprint #1 [backlog] — Class\n"))
+        at = run.timestamp('2026-10-30T10:00:00Z')
+        events = [{'event': 'session_start', 'deadline': '2026-10-30T10:30:00Z'}]
+        real = run.bashy
+        def runner(*args, **kwargs):
+            if args[:2] == ('sprint', 'show') and '--plain' in args:
+                return "sprint #1 [doing] — Class\n"
+            return real(*args, **kwargs)
+        with patch.object(run, 'bashy', side_effect=runner):
+            self.assertEqual(run.session_clock({}, at, 1, events),
+                             dict(state='running', deadline='2026-10-30T10:30:00Z', remaining_s=1800))
+            self.assertEqual(run.session_clock({}, at, 1, [])['state'], 'not-started')
