@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/qiangli/yoke/pkg/binmgr"
+	"github.com/qiangli/yoke/pkg/nfthelper"
 )
 
 // The lean binary provisions podman the way it already provisions ollama and
@@ -228,10 +229,19 @@ func applyManagedPodmanEnv(bin string) {
 	if !strings.HasPrefix(bin, engineCacheDir()) {
 		return
 	}
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("BASHY_PODMAN_SYSTEM"))) {
+	case "1", "true", "yes", "on":
+		return
+	}
 	switch runtime.GOOS {
 	case "linux":
 		root := managedPodmanRoot(bin)
 		if root == "" {
+			return
+		}
+		helperDir, err := nfthelper.Ensure()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "bashy podman: stage nft helper: %v\n", err)
 			return
 		}
 		conf, err := writePodmanConfOverride(root)
@@ -243,6 +253,8 @@ func applyManagedPodmanEnv(bin string) {
 		setenvDefault("CONTAINERS_REGISTRIES_CONF", filepath.Join(root, "etc", "containers", "registries.conf"))
 		setenvDefault("CONTAINERS_STORAGE_CONF", filepath.Join(root, "etc", "containers", "storage.conf"))
 		os.Setenv("PATH", filepath.Join(root, "usr", "local", "bin")+string(os.PathListSeparator)+os.Getenv("PATH"))
+		os.Setenv("PATH", helperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+		os.Setenv(nfthelper.EnvName, "1")
 		ensureUserPolicyJSON(filepath.Join(root, "etc", "containers", "policy.json"))
 		if hint := apparmorUsernsHint(os.Geteuid(), readTrimmed("/proc/sys/kernel/apparmor_restrict_unprivileged_userns")); hint != "" {
 			fmt.Fprintln(os.Stderr, hint)
@@ -317,7 +329,7 @@ func podmanConfOverrideLinux(root string) string {
 		"events_logger = \"file\"\n" +
 		"runtime = \"crun\"\n" +
 		"conmon_path = [" + q("usr", "local", "lib", "podman", "conmon") + "]\n" +
-		"helper_binaries_dir = [" + q("usr", "local", "lib", "podman") + ", " + q("usr", "local", "bin") + "]\n" +
+		"helper_binaries_dir = [" + fmt.Sprintf("%q", nfthelper.Dir()) + ", " + q("usr", "local", "lib", "podman") + ", " + q("usr", "local", "bin") + "]\n" +
 		"[engine.runtimes]\n" +
 		"crun = [" + q("usr", "local", "bin", "crun") + "]\n" +
 		"runc = [" + q("usr", "local", "bin", "runc") + "]\n" +

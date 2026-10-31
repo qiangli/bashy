@@ -13,6 +13,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/qiangli/yoke/pkg/nfthelper"
 )
 
 var hex64 = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -121,6 +123,9 @@ func TestApparmorUsernsHint(t *testing.T) {
 
 func TestPodmanConfOverrideLinuxPaths(t *testing.T) {
 	conf := podmanConfOverrideLinux("/c/podman/v6/podman-linux-amd64")
+	if want := `helper_binaries_dir = ["` + nfthelper.Dir() + `", `; !strings.Contains(conf, want) {
+		t.Errorf("nft helper must be first in helper_binaries_dir: %s", conf)
+	}
 	for _, want := range []string{
 		`conmon_path = ["/c/podman/v6/podman-linux-amd64/usr/local/lib/podman/conmon"]`,
 		`crun = ["/c/podman/v6/podman-linux-amd64/usr/local/bin/crun"]`,
@@ -130,6 +135,48 @@ func TestPodmanConfOverrideLinuxPaths(t *testing.T) {
 		if !strings.Contains(conf, want) {
 			t.Errorf("override missing %s\n%s", want, conf)
 		}
+	}
+}
+
+func TestManagedPodmanNftHelperOnlyForEmbeddedEngine(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("managed Linux Podman child environment")
+	}
+	cache := t.TempDir()
+	t.Setenv("BASHY_BIN_CACHE", cache)
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	t.Setenv("PATH", "/usr/bin:/bin")
+	t.Setenv(nfthelper.EnvName, "")
+	t.Setenv("CONTAINERS_CONF_OVERRIDE", "")
+	a := podmanAssets["linux/"+runtime.GOARCH]
+	bin := filepath.Join(cache, "podman", a.version, filepath.FromSlash(a.entrypoint))
+	if err := os.MkdirAll(filepath.Dir(bin), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("BASHY_PODMAN_SYSTEM", "1")
+	applyManagedPodmanEnv(bin)
+	if os.Getenv(nfthelper.EnvName) != "" || strings.Contains(os.Getenv("PATH"), nfthelper.Dir()) {
+		t.Fatal("system Podman inherited the private nft helper")
+	}
+	t.Setenv("BASHY_PODMAN_SYSTEM", "")
+	applyManagedPodmanEnv("/usr/bin/podman")
+	if os.Getenv(nfthelper.EnvName) != "" || strings.Contains(os.Getenv("PATH"), nfthelper.Dir()) {
+		t.Fatal("host Podman inherited the private nft helper")
+	}
+	applyManagedPodmanEnv(bin)
+	if os.Getenv(nfthelper.EnvName) != "1" {
+		t.Fatalf("managed Podman missing %s", nfthelper.EnvName)
+	}
+	if first := strings.Split(os.Getenv("PATH"), string(os.PathListSeparator))[0]; first != nfthelper.Dir() {
+		t.Fatalf("first PATH dir = %q, want %q", first, nfthelper.Dir())
+	}
+	if _, err := os.Lstat(filepath.Join(nfthelper.Dir(), "nft")); err != nil {
+		t.Fatalf("nft helper was not staged: %v", err)
+	}
+	conf, err := os.ReadFile(os.Getenv("CONTAINERS_CONF_OVERRIDE"))
+	if err != nil || !strings.Contains(string(conf), `helper_binaries_dir = ["`+nfthelper.Dir()+`", `) {
+		t.Fatalf("managed config missing nft helper: %v\n%s", err, conf)
 	}
 }
 
