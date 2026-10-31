@@ -6,7 +6,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -201,12 +200,11 @@ func splitOwners(v string) []string {
 }
 
 func (s *server) saveLocked() error {
-	b, _ := json.MarshalIndent(s.tok, "", "  ")
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	b, err := kit.MarshalIndent(s.tok)
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	return kit.AtomicWrite(s.path, b)
 }
 
 // snapshot returns a copy of the status with times advanced to now.
@@ -235,35 +233,11 @@ func (s *server) personOf(token string) (string, bool) {
 	return p, ok
 }
 
-func (s *server) ownerOK(key string) bool {
-	return subtle.ConstantTimeCompare([]byte(key), []byte(s.tok.Owner)) == 1
+func (s *server) ownerOK(r *http.Request) bool {
+	return kit.Grant(kit.FacilitatorKey(r), s.tok.Owner)
 }
 
 // ---- HTTP ------------------------------------------------------------------
-
-func writeJSON(w http.ResponseWriter, code int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(code)
-	_ = json.NewEncoder(w).Encode(v)
-}
-
-func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, 8<<10)
-	b, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeJSON(w, 413, map[string]string{"error": "body too large"})
-		return false
-	}
-	if len(bytes.TrimSpace(b)) == 0 {
-		return true
-	}
-	if err := json.Unmarshal(b, v); err != nil {
-		writeJSON(w, 400, map[string]string{"error": "bad json"})
-		return false
-	}
-	return true
-}
 
 // publicSteps drops evidence and ownership detail the display must not show.
 func publicView(st *Status, errMsg string) map[string]any {
@@ -277,58 +251,71 @@ func publicView(st *Status, errMsg string) map[string]any {
 
 func (s *server) handler() http.Handler {
 	mux := http.NewServeMux()
-	p := s.prefix
-	mux.HandleFunc("GET "+p+"/{$}", s.displayPage)
-	mux.HandleFunc("GET "+p+"/p", s.displayPage)
-	mux.HandleFunc("GET "+p+"/api/display", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { kit.WriteJSON(w, map[string]bool{"ok": true}) })
+	mux.HandleFunc("GET /{$}", s.displayPage)
+	mux.HandleFunc("GET /p", s.displayPage)
+	mux.HandleFunc("GET /api/display", func(w http.ResponseWriter, r *http.Request) {
 		st, e := s.snapshot()
 		if st == nil {
-			writeJSON(w, 503, map[string]string{"error": "no status yet: " + e})
+			kit.Fail(w, 503, "no status yet: "+e)
 			return
 		}
-		writeJSON(w, 200, publicView(st, e))
+		kit.WriteJSON(w, publicView(st, e))
 	})
-	mux.HandleFunc("GET "+p+"/t/{key}", s.ownerPage)
-	mux.HandleFunc("GET "+p+"/api/t/{key}", func(w http.ResponseWriter, r *http.Request) {
-		if !s.ownerOK(r.PathValue("key")) {
-			writeJSON(w, 403, map[string]string{"error": "owner key required"})
+	mux.HandleFunc("GET /t/{key}", s.ownerPage)
+	mux.HandleFunc("GET /api/owner", func(w http.ResponseWriter, r *http.Request) {
+		if !s.ownerOK(r) {
+			kit.Fail(w, 403, "owner key required")
 			return
 		}
 		st, e := s.snapshot()
 		if st == nil {
-			writeJSON(w, 503, map[string]string{"error": "no status yet: " + e})
+			kit.Fail(w, 503, "no status yet: "+e)
 			return
 		}
-		writeJSON(w, 200, map[string]any{"sprint": st.Sprint, "title": st.Title, "clock": st.Clock, "roles": st.Roles, "format": st.Format,
+		kit.WriteJSON(w, map[string]any{"sprint": st.Sprint, "title": st.Title, "clock": st.Clock, "roles": st.Roles, "format": st.Format,
 			"current": st.Current, "steps": st.Steps, "error": e})
 	})
-	mux.HandleFunc("POST "+p+"/t/{key}/next", s.ownerAction("next"))
-	mux.HandleFunc("POST "+p+"/t/{key}/extend", s.ownerAction("extend"))
-	mux.HandleFunc("POST "+p+"/t/{key}/stop", func(w http.ResponseWriter, r *http.Request) {
-		if !s.ownerOK(r.PathValue("key")) {
-			writeJSON(w, 403, map[string]string{"error": "owner key required"})
+	mux.HandleFunc("POST /api/owner/next", s.ownerAction("next"))
+	mux.HandleFunc("POST /api/owner/extend", s.ownerAction("extend"))
+	mux.HandleFunc("POST /api/owner/stop", func(w http.ResponseWriter, r *http.Request) {
+		if !s.ownerOK(r) {
+			kit.Fail(w, 403, "owner key required")
 			return
 		}
-		writeJSON(w, 200, map[string]string{"stopped": "ok"})
+		kit.WriteJSON(w, map[string]string{"stopped": "ok"})
 		s.once.Do(func() { close(s.quit) })
 	})
-	mux.HandleFunc("GET "+p+"/s/{token}", s.participantPage)
-	mux.HandleFunc("GET "+p+"/api/s/{token}", s.participantState)
-	mux.HandleFunc("POST "+p+"/s/{token}/done", s.participantDone)
-	return mux
+	mux.HandleFunc("GET /s/{token}", s.participantPage)
+	mux.HandleFunc("GET /api/s/{token}", s.participantState)
+	mux.HandleFunc("POST /s/{token}/done", s.participantDone)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		kit.ApplySecurityHeaders(w)
+		if !kit.GuardPOST(w, r, "tutor") {
+			return
+		}
+		rest, ok := kit.StripPrefix(s.prefix, r.URL.Path)
+		if !ok {
+			kit.Fail(w, 404, "not found")
+			return
+		}
+		r2 := r.Clone(r.Context())
+		r2.URL.Path, r2.URL.RawPath = rest, ""
+		mux.ServeHTTP(w, r2)
+	})
 }
 
 func (s *server) ownerAction(verb string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.ownerOK(r.PathValue("key")) {
-			writeJSON(w, 403, map[string]string{"error": "owner key required"})
+		if !s.ownerOK(r) {
+			kit.Fail(w, 403, "owner key required")
 			return
 		}
 		var body struct {
 			Step string `json:"step"`
 			By   string `json:"by"`
 		}
-		if !decodeBody(w, r, &body) {
+		if !kit.DecodeAction(w, r, 8<<10, &body) {
 			return
 		}
 		args := []string{verb, fmt.Sprint(s.n)}
@@ -343,7 +330,7 @@ func (s *server) ownerAction(verb string) http.HandlerFunc {
 				by = "5m"
 			}
 			if step == "" || !durRe(by) || strings.HasPrefix(step, "-") {
-				writeJSON(w, 400, map[string]string{"error": "extend needs a step and a duration like 5m"})
+				kit.Fail(w, 400, "extend needs a step and a duration like 5m")
 				return
 			}
 			args = append(args, step, "--by", by)
@@ -352,10 +339,10 @@ func (s *server) ownerAction(verb string) http.HandlerFunc {
 		out, err := s.bashy(args...)
 		s.refresh()
 		if err != nil {
-			writeJSON(w, 502, map[string]string{"error": err.Error()})
+			kit.Fail(w, 502, err.Error())
 			return
 		}
-		writeJSON(w, 200, map[string]any{"ok": true, "output": strings.TrimSpace(string(out))})
+		kit.WriteJSON(w, map[string]any{"ok": true, "output": strings.TrimSpace(string(out))})
 	}
 }
 
@@ -421,34 +408,34 @@ func (s *server) participantView(person string) (map[string]any, bool) {
 func (s *server) participantState(w http.ResponseWriter, r *http.Request) {
 	person, ok := s.personOf(r.PathValue("token"))
 	if !ok {
-		writeJSON(w, 404, map[string]string{"error": "unknown link"})
+		kit.Fail(w, 404, "unknown link")
 		return
 	}
 	v, ok := s.participantView(person)
 	if !ok {
-		writeJSON(w, 503, map[string]string{"error": "no status yet"})
+		kit.Fail(w, 503, "no status yet")
 		return
 	}
-	writeJSON(w, 200, v)
+	kit.WriteJSON(w, v)
 }
 
 func (s *server) participantDone(w http.ResponseWriter, r *http.Request) {
 	person, ok := s.personOf(r.PathValue("token"))
 	if !ok {
-		writeJSON(w, 404, map[string]string{"error": "unknown link"})
+		kit.Fail(w, 404, "unknown link")
 		return
 	}
 	var body struct {
 		Evidence string `json:"evidence"`
 		Step     string `json:"step"`
 	}
-	if !decodeBody(w, r, &body) {
+	if !kit.DecodeAction(w, r, 8<<10, &body) {
 		return
 	}
 	s.refresh()
 	st, _ := s.snapshot()
 	if st == nil || st.Current == nil {
-		writeJSON(w, 409, map[string]string{"error": "no step is running"})
+		kit.Fail(w, 409, "no step is running")
 		return
 	}
 	mine := false
@@ -456,11 +443,11 @@ func (s *server) participantDone(w http.ResponseWriter, r *http.Request) {
 		mine = mine || o == person
 	}
 	if !mine {
-		writeJSON(w, 403, map[string]string{"error": "the current step is not yours"})
+		kit.Fail(w, 403, "the current step is not yours")
 		return
 	}
 	if body.Step != "" && body.Step != st.Current.ID && body.Step != fmt.Sprint(st.Current.Index) {
-		writeJSON(w, 403, map[string]string{"error": "you can only finish your own current step"})
+		kit.Fail(w, 403, "you can only finish your own current step")
 		return
 	}
 	ev := strings.TrimSpace(body.Evidence)
@@ -473,45 +460,43 @@ func (s *server) participantDone(w http.ResponseWriter, r *http.Request) {
 	}
 	args = append(args, "--json")
 	if _, err := s.bashy(args...); err != nil {
-		writeJSON(w, 502, map[string]string{"error": err.Error()})
+		kit.Fail(w, 502, err.Error())
 		return
 	}
 	s.refresh()
-	writeJSON(w, 200, map[string]any{"ok": true, "step": st.Current.ID, "person": person})
+	kit.WriteJSON(w, map[string]any{"ok": true, "step": st.Current.ID, "person": person})
 }
 
 // ---- pages -------------------------------------------------------------------
 
-func page(title, body, script string) []byte {
-	return kit.Page("tutor", title, `<style>`+pageCSS+`</style>`+body+`<script>`+commonJS+script+`</script>`)
+func (s *server) render(w http.ResponseWriter, r *http.Request, title, body, script string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(page(title, s.statusLabel(), body, "const PFX="+jsq(kit.PublicPrefix(r, s.prefix))+";"+script))
 }
 
 func (s *server) displayPage(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(page("Display", displayBody, "start("+jsq(s.prefix+"/api/display")+",renderDisplay)"))
+	s.render(w, r, "Display", displayMain, "start('/api/display',renderDisplay)")
 }
 
 func (s *server) ownerPage(w http.ResponseWriter, r *http.Request) {
-	if !s.ownerOK(r.PathValue("key")) {
-		http.Error(w, "owner key required", 403)
+	key := r.PathValue("key")
+	if !kit.Grant(key, s.tok.Owner) {
+		kit.Fail(w, 403, "owner key required")
 		return
 	}
-	base := s.prefix + "/t/" + r.PathValue("key")
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Write(page(s.roleTitle(true, ""), ownerBody, "const BASE="+jsq(base)+";start("+jsq(s.prefix+"/api/t/"+r.PathValue("key"))+",renderOwner)"))
+	s.render(w, r, s.roleTitle(true, ""), ownerMain, "const KEY="+jsq(key)+";start('/api/owner',renderOwner,{'X-Facilitator-Key':KEY})")
 }
 
 func (s *server) participantPage(w http.ResponseWriter, r *http.Request) {
 	tk := r.PathValue("token")
 	if _, ok := s.personOf(tk); !ok {
-		http.Error(w, "unknown link", 404)
+		kit.Fail(w, 404, "unknown link")
 		return
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Write(page(s.roleTitle(false, tk), participantBody, "const BASE="+jsq(s.prefix+"/s/"+tk)+";start("+jsq(s.prefix+"/api/s/"+tk)+",renderParticipant)"))
+	s.render(w, r, s.roleTitle(false, tk), participantMain, "const TOKEN="+jsq(tk)+";start('/api/s/'+TOKEN,renderParticipant)")
 }
+
+func (s *server) statusLabel() string { return fmt.Sprintf("Sprint %d", s.n) }
 
 func (s *server) roleTitle(owner bool, token string) string {
 	st, _ := s.snapshot()
@@ -547,14 +532,7 @@ func jsq(v string) string { b, _ := json.Marshal(v); return string(b) }
 
 // ---- serve / join / stop -------------------------------------------------------
 
-func dataDir() string {
-	base := os.Getenv("XDG_DATA_HOME")
-	if base == "" {
-		h, _ := os.UserHomeDir()
-		base = filepath.Join(h, ".local", "share")
-	}
-	return filepath.Join(base, "bashy", "tutor")
-}
+func dataDir() string { return kit.DefaultDataDir("tutor") }
 
 // parse lets flags appear before or after the positional argument.
 func parse(fs *flag.FlagSet, args []string) (string, error) {
@@ -765,7 +743,10 @@ func cmdStop(args []string) error {
 		host = "127.0.0.1"
 	}
 	c := &http.Client{Timeout: 5 * time.Second}
-	resp, err := c.Post("http://"+net.JoinHostPort(host, port)+t.Prefix+"/t/"+t.Owner+"/stop", "application/json", nil)
+	req, _ := http.NewRequest("POST", "http://"+net.JoinHostPort(host, port)+t.Prefix+"/api/owner/stop", strings.NewReader("{}"))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Facilitator-Key", t.Owner)
+	resp, err := c.Do(req)
 	if err != nil {
 		return fmt.Errorf("no server running for sprint %d", n)
 	}

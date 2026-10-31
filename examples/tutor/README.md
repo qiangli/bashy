@@ -30,7 +30,6 @@ bashy tutor apply draft.json --json
 # Replace N with the returned sprint number; AGENT is the owner's agent.
 bashy sprint start N --owner AGENT --for 90m \
   --instruction "run today's session with the tutor skill"
-bashy tutor start N --json
 bashy tutor status N --line
 bashy tutor done N STEP -m 'Working result demonstrated' --json
 bashy tutor next N --json
@@ -48,13 +47,11 @@ The session manager (the owner's agent) accepts each finished step at the end:
 bashy sprint accept N ID -m 'Evidence reviewed by the owner'
 ```
 
-The session clock is the sprint's own clock. Tutor reads it from the card
-and falls back to the run log written by `tutor start --for`.
-`tutor start N --owner AGENT --for 90m` can start a session directly.
-With no agent, planning uses the format template and nudges use fallback
-questions. Starting a new session requires an explicit manager and otherwise
-returns a clean error. Offline `next`, `done` and `status` remain available;
-they do not invent a running session clock.
+The session clock is the sprint's own clock (`bashy sprint start N --owner
+AGENT --for 90m`); tutor only reads it and has no `start` verb. The first
+`tutor next N` marks step 1 doing. With no agent, planning uses the format
+template and nudges use fallback questions; offline `next`, `done` and
+`status` remain available but do not invent a running session clock.
 
 ## Meeting and solo work
 
@@ -100,7 +97,7 @@ Session-specific agendas belong in the owner's own files, outside this repositor
 Apply snapshots `format`, ordered `roles`, `audience` and `tone` in a `format`
 event in `$XDG_DATA_HOME/bashy/tutor/<sprint>.jsonl`. Status exposes `format`
 and `roles: {owner, participants}`. Later edits to a format do not change an
-applied session. Progress and next/start use participant-role steps; owner
+applied session. Progress and next uses participant-role steps; owner
 steps remain in `steps[]` and can be marked done explicitly. For a single-role
 format, that role performs the session work and counts toward progress.
 
@@ -147,15 +144,13 @@ bashy dag dag.md dry-run
 python3 -m unittest discover -s tests -t . -v
 ```
 
-`verify-duality.py` runs registration and plan → apply → start → done/next →
+`verify-duality.py` runs registration and plan → apply → next/done →
 status in temporary BASHY_HOME, coordination, room, XDG and app directories
 and a temporary git repo. It compares direct script and registered command
 JSON, checks skill projection and attestation, and rejects a missing sprint.
 
 The five rehearsal steps are frame the goal (15m), explore options (20m),
 build an example (25m), demonstrate the result (20m), and reflect (10m),
-plus three owner steps. The no-agent run verifies start's explicit-manager
-error and continues offline. The stub run supplies a deterministic planning
-response and acknowledges sprint start, checking the 90-minute fallback clock.
-It does not prove a real agent launch, LAN/phone access or chat delivery.
+plus three owner steps. The no-agent run plans from the template; the stub run supplies a
+deterministic planning response. Neither starts a sprint clock. It does not prove a real agent launch, LAN/phone access or chat delivery.
 No live board, accounts or server are changed.

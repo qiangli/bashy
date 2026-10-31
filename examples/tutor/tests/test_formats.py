@@ -35,14 +35,7 @@ class FormatFlows(TempBashy):
     def test_solo_plan_run_to_completion(self):
         draft, sprint = self.apply_format('solo')
         self.assertEqual({s['role'] for s in draft['steps']}, {'self'})
-        # Stub only manager launch; all step state and status use the real local board.
-        real = run.bashy
-        def launch(*args, **kwargs):
-            if args[:2] == ('sprint', 'start'):
-                return '{}'
-            return real(*args, **kwargs)
-        with patch.object(run, 'bashy', side_effect=launch), contextlib.redirect_stdout(io.StringIO()):
-            run.main(['start', sprint, '--owner', 'test-manager', '--for', '30m', '--json'])
+        self.tutor('next', sprint)
         value = run.status(int(sprint))
         self.assertEqual(value['roles'], {'owner': 'self', 'participants': []})
         self.assertEqual(value['current']['total'], len(draft['steps']))

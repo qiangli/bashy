@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	kit "desk-kit"
 )
 
 // TestMain doubles as the fake `bashy`: with FAKE_TUTOR_DIR set it answers
@@ -63,8 +65,15 @@ func setup(t *testing.T, prefix string) *env {
 }
 
 func (e *env) do(t *testing.T, method, path, body string) (int, string) {
+	return e.doKey(t, "", method, path, body)
+}
+
+func (e *env) doKey(t *testing.T, key, method, path, body string) (int, string) {
 	t.Helper()
 	req, _ := http.NewRequest(method, e.ts.URL+path, strings.NewReader(body))
+	if key != "" {
+		req.Header.Set("X-Facilitator-Key", key)
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -101,13 +110,16 @@ func TestDisplayHidesSecrets(t *testing.T) {
 func TestOwnerKeyRequired(t *testing.T) {
 	e := setup(t, "")
 	for _, c := range [][2]string{{"POST", "next"}, {"POST", "extend"}, {"POST", "stop"}} {
-		code, _ := e.do(t, c[0], "/t/wrongkey/"+c[1], "{}")
+		code, _ := e.doKey(t, "wrongkey", c[0], "/api/owner/"+c[1], "{}")
 		if code != 403 {
 			t.Fatalf("%s wrong key: %d", c[1], code)
 		}
+		if code, _ := e.do(t, c[0], "/api/owner/"+c[1], "{}"); code != 403 {
+			t.Fatalf("%s no key: %d", c[1], code)
+		}
 	}
 	// A participant token is not a owner key.
-	if code, _ := e.do(t, "POST", "/t/"+e.s.tok.Participants["alice"]+"/next", "{}"); code != 403 {
+	if code, _ := e.doKey(t, e.s.tok.Participants["alice"], "POST", "/api/owner/next", "{}"); code != 403 {
 		t.Fatalf("participant token as key: %d", code)
 	}
 	if code, _ := e.do(t, "GET", "/t/nope", ""); code != 403 {
@@ -117,22 +129,66 @@ func TestOwnerKeyRequired(t *testing.T) {
 		t.Fatalf("unauthorised calls reached bashy: %q", e.calls())
 	}
 	k := e.s.tok.Owner
-	if code, body := e.do(t, "POST", "/t/"+k+"/next", "{}"); code != 200 {
+	if code, body := e.doKey(t, k, "POST", "/api/owner/next", "{}"); code != 200 {
 		t.Fatal(code, body)
 	}
-	if code, body := e.do(t, "POST", "/t/"+k+"/extend", `{"by":"5m"}`); code != 200 {
+	if code, body := e.doKey(t, k, "POST", "/api/owner/extend", `{"by":"5m"}`); code != 200 {
 		t.Fatal(code, body)
 	}
-	if code, _ := e.do(t, "POST", "/t/"+k+"/extend", `{"by":"--rm"}`); code != 400 {
+	if code, _ := e.doKey(t, k, "POST", "/api/owner/extend", `{"by":"--rm"}`); code != 400 {
 		t.Fatal("bad duration accepted")
+	}
+	if code, _ := e.doKey(t, k, "POST", "/api/owner/next", `{"bogus":1}`); code != 400 {
+		t.Fatal("unknown field accepted")
 	}
 	c := e.calls()
 	if !strings.Contains(c, "tutor next 7 --json") || !strings.Contains(c, "tutor extend 7 t2 --by 5m --json") {
 		t.Fatal(c)
 	}
-	code, body := e.do(t, "GET", "/api/t/"+k, "")
+	code, body := e.doKey(t, k, "GET", "/api/owner", "")
 	if code != 200 || !strings.Contains(body, "secret.example") {
 		t.Fatal(code, body)
+	}
+	if code, _ := e.do(t, "GET", "/api/owner", ""); code != 403 {
+		t.Fatal("owner state without key", code)
+	}
+}
+
+func TestKitSecurityMechanics(t *testing.T) {
+	e := setup(t, "")
+	if code, body := e.do(t, "GET", "/healthz", ""); code != 200 || !strings.Contains(body, "true") {
+		t.Fatal(code, body)
+	}
+	resp, err := http.Get(e.ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	for _, h := range []string{"Content-Security-Policy", "X-Content-Type-Options", "Referrer-Policy"} {
+		if resp.Header.Get(h) == "" {
+			t.Fatalf("missing %s", h)
+		}
+	}
+	if resp.Header.Get("Cache-Control") != "no-store" {
+		t.Fatal("not no-store")
+	}
+	if len(e.s.tok.Owner) != 48 || !kit.ValidToken(e.s.tok.Participants["alice"]) {
+		t.Fatal("tokens are not 48-hex")
+	}
+	// cross-origin POST is refused before reaching bashy
+	req, _ := http.NewRequest("POST", e.ts.URL+"/api/owner/next", strings.NewReader("{}"))
+	req.Header.Set("X-Facilitator-Key", e.s.tok.Owner)
+	req.Header.Set("Origin", "http://evil.example")
+	r2, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2.Body.Close()
+	if r2.StatusCode != 403 {
+		t.Fatalf("cross-origin POST: %d", r2.StatusCode)
+	}
+	if code, _ := e.do(t, "PUT", "/api/display", "{}"); code != 405 {
+		t.Fatalf("PUT: %d", code)
 	}
 }
 
@@ -271,7 +327,7 @@ func TestFormatRolePageLabels(t *testing.T) {
 	if view["role"] != "speaker" {
 		t.Fatal(view)
 	}
-	_, ownerJSON := e.do(t, "GET", "/api/t/"+e.s.tok.Owner, "")
+	_, ownerJSON := e.doKey(t, e.s.tok.Owner, "GET", "/api/owner", "")
 	if !strings.Contains(ownerJSON, `"owner":"facilitator"`) {
 		t.Fatal(ownerJSON)
 	}

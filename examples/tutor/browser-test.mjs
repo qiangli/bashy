@@ -52,9 +52,10 @@ try{
  assert.ok(await proj.locator('#clock').evaluate(e=>parseFloat(getComputedStyle(e).fontSize))>=120,'big countdown');
  const html=await proj.content();
  for(const t of tokens)assert.ok(!html.includes(t),'display must not show tokens');
- assert.equal(await proj.locator('.clock.over').count(),0);
+ assert.equal(await proj.locator('.desk-appbar').count(),1,'kit app bar');
+ assert.equal(await proj.locator('#clock[data-over]').count(),0);
  await writeFile(state,JSON.stringify(status(true)));
- await proj.locator('.clock.over').waitFor({timeout:8000});
+ await proj.locator('#clock[data-over]').waitFor({timeout:8000});
  assert.match(await proj.locator('#clock').textContent(),/^\+\d+:\d\d$/);
  await proj.screenshot({path:join(dir,'display.png')});
  await writeFile(state,JSON.stringify(status(false)));
@@ -64,6 +65,8 @@ try{
  await phone.goto(alice);
  await phone.locator('h1',{hasText:'Build the arm'}).waitFor();
  assert.equal(await phone.title(),'Participant');
+ assert.equal(await phone.locator('.desk-appbar').count(),1,'kit app bar on phone');
+ assert.ok(await phone.locator('#done').evaluate(e=>e.classList.contains('desk-btn')),'Done is a kit button');
  assert.ok(await phone.evaluate(()=>document.documentElement.scrollWidth<=390),'no horizontal scroll');
  const done=phone.locator('#done');await done.waitFor();
  const box=await done.boundingBox();assert.ok(box.width>=300&&box.height>=40,'tap-sized Done');
@@ -81,10 +84,12 @@ try{
  // --- owner: next ---
  const t=await (await browser.newContext({viewport:{width:1280,height:720}})).newPage();
  await t.goto(owner);
+ await t.locator('.desk-appbar').waitFor();
  await t.locator('#next').click();
  assert.equal(await t.title(),'Facilitator');
  await t.locator('#msg',{hasText:'ok'}).waitFor();
  assert.match(await readFile(calls,'utf8'),/tutor next 7 --json/);
+ await t.screenshot({path:join(dir,'owner.png')});
 
  // --- second host: join from the LAN address with its own data dir ---
  const lan=Object.values(networkInterfaces()).flat().find(i=>i.family==='IPv4'&&!i.internal)?.address;

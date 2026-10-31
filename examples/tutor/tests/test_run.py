@@ -67,34 +67,6 @@ class RunTests(TempBashy):
         self.assertEqual(self.status()['steps'][1]['evidence'], 'Sketch shared')
         self.assertEqual(self.tutor('status', '1', '--line').stdout, 'Done · 2/2 steps\n')
 
-    def test_no_agent_start_refusal_does_not_start_step(self):
-        result = self.tutor('start', '1', '--json', check=False)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn('--owner', result.stderr)
-        self.assertNotIn('Traceback', result.stderr)
-        self.assertIsNone(self.status()['current'])
-        self.assertFalse(log_path(1).exists())
-
-    def test_running_clock_start_is_idempotent(self):
-        real = run.bashy
-        card = {'id': 1, 'title': 'Session', 'boxes': [
-            {'started_at': '2026-10-30T09:00:00Z', 'cutoff': '2026-10-30T10:30:00Z'}]}
-        def runner(*args, **kwargs):
-            if args[:2] == ('sprint', 'show'):
-                return json.dumps({'t': 'node', 'kind': 'sprint', 'attrs': card}) + '\n'
-            if args[:2] == ('sprint', 'start'):
-                self.fail('already running sprint must not start again')
-            return real(*args, **kwargs)
-        with patch.object(run, 'bashy', side_effect=runner):
-            self.invoke('start', '1', '--json')
-            self.invoke('start', '1', '--json')
-            status = json.loads(self.invoke('status', '1', '--json'))
-            self.assertEqual(status['clock']['remaining_s'], 1800)
-            self.assertEqual(status['clock']['state'], 'running')
-            card['boxes'][0]['stopped_at'] = '2026-10-30T10:00:00Z'
-            self.assertEqual(json.loads(self.invoke('status', '1', '--json'))['clock']['state'], 'stopped')
-        self.assertEqual(len(log_path(1).read_text().splitlines()), 1)
-
     def test_invalid_step_and_duration_are_clean_errors(self):
         for args in [('done', '1', '99'), ('extend', '1', '1', '--by', '-5m')]:
             result = self.tutor(*args, '--json', check=False)
@@ -133,20 +105,7 @@ class RunTests(TempBashy):
         card = {'id': 1, 'title': 'Session', 'boxes': []}
         self.assertEqual(run.records(json.dumps({'result': {'sprint': card}}), 'sprint'), [card])
 
-    def test_start_forwards_owner_and_duration(self):
-        real = run.bashy
-        calls = []
-        def runner(*args, **kwargs):
-            if args[:2] == ('sprint', 'start'):
-                calls.append(args)
-                return ''
-            return real(*args, **kwargs)
-        with patch.object(run, 'bashy', side_effect=runner):
-            value = json.loads(self.invoke('start', '1', '--for', '45m', '--owner', 'owner', '--json'))
-        self.assertEqual(calls, [('sprint', 'start', '1', '--for', '45m', '--owner', 'owner')])
-        self.assertEqual(value['current']['id'], self.ids[0])
-
-    def test_clock_falls_back_to_plain_thread_then_run_log(self):
+    def test_clock_falls_back_to_plain_thread(self):
         # The JSON card omits boxes today; the plain thread carries the cutoff.
         plain = ("sprint #1 [doing] — Session\n"
                  "  [10-30 09:00] t (stage): started a 90m box (backlog → doing), cutoff 2026-10-30T10:30:00Z\n")
@@ -154,13 +113,14 @@ class RunTests(TempBashy):
         self.assertEqual(run.thread_box(plain + "  [10-30 10:00] t (stage): stopped the box\n")['stopped_at'], 'thread')
         self.assertIsNone(run.thread_box("sprint #1 [backlog] — Session\n"))
         at = run.timestamp('2026-10-30T10:00:00Z')
-        events = [{'event': 'session_start', 'deadline': '2026-10-30T10:30:00Z'}]
         real = run.bashy
+        thread = [plain]
         def runner(*args, **kwargs):
             if args[:2] == ('sprint', 'show') and '--plain' in args:
-                return "sprint #1 [doing] — Session\n"
+                return thread[0]
             return real(*args, **kwargs)
         with patch.object(run, 'bashy', side_effect=runner):
-            self.assertEqual(run.session_clock({}, at, 1, events),
+            self.assertEqual(run.session_clock({}, at, 1),
                              dict(state='running', deadline='2026-10-30T10:30:00Z', remaining_s=1800))
-            self.assertEqual(run.session_clock({}, at, 1, [])['state'], 'not-started')
+            thread[0] = "sprint #1 [doing] — Session\n"
+            self.assertEqual(run.session_clock({}, at, 1)['state'], 'not-started')

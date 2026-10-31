@@ -1,6 +1,6 @@
 """People's step timeboxes layered on the sprint's existing session clock."""
 import argparse
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import json
 import os
 import re
@@ -60,19 +60,11 @@ def thread_box(plain):
     return box
 
 
-def log_box(events):
-    """Session box recorded by `tutor start --for` when the card shows none."""
-    starts = [e for e in events if e.get('event') == 'session_start']
-    return dict(cutoff=starts[-1]['deadline']) if starts else None
-
-
-def session_clock(card, at, sprint=None, events=()):
+def session_clock(card, at, sprint=None):
     boxes = card.get('boxes') or []
     box = boxes[-1] if boxes else None
     if box is None and sprint is not None:
         box = thread_box(bashy('sprint', 'show', str(sprint), '--plain', check=False))
-    if box is None:
-        box = log_box(events)
     if box is None:
         return dict(state='not-started', deadline=None, remaining_s=None)
     deadline = box.get('cutoff')
@@ -138,7 +130,7 @@ def status(sprint, at=None):
                            title=step['title'], owners=owners, timebox_s=step['timebox_s'],
                            elapsed_s=elapsed, remaining_s=step['timebox_s'] - elapsed,
                            overdue=step['overdue'])
-    return dict(sprint=sprint, title=card['title'], clock=session_clock(card, at, sprint, events),
+    return dict(sprint=sprint, title=card['title'], clock=session_clock(card, at, sprint),
                 current=current, steps=[s for s, _ in steps], format=meta["format"],
                 roles=dict(owner=roles[0], participants=roles[1:]))
 
@@ -198,16 +190,13 @@ def duration(value):
 def main(argv):
     parser = argparse.ArgumentParser(prog='tutor')
     verbs = parser.add_subparsers(dest='verb', required=True)
-    for name in ('start', 'next', 'done', 'extend', 'status'):
+    for name in ('next', 'done', 'extend', 'status'):
         sub = verbs.add_parser(name)
         sub.add_argument('sprint', type=int)
         output = sub.add_mutually_exclusive_group()
         output.add_argument('--json', action='store_true')
         if name == 'status':
             output.add_argument('--line', action='store_true')
-        if name == 'start':
-            sub.add_argument('--for', dest='for_', default='90m')
-            sub.add_argument('--owner')
         if name in ('done', 'extend'):
             sub.add_argument('step')
         if name == 'done':
@@ -221,17 +210,7 @@ def main(argv):
         roles = value['roles']
         work_roles = roles['participants'] or [roles['owner']]
         steps = [s for s in value['steps'] if s['role'] in work_roles]
-        if args.verb == 'start':
-            if value['clock']['state'] != 'running':
-                cmd = ['sprint', 'start', str(args.sprint), '--for', args.for_]
-                if args.owner:
-                    cmd += ['--owner', args.owner]
-                bashy(*cmd)
-                log(args.sprint, dict(id=None), 'session_start', at,
-                    deadline=(at + timedelta(seconds=duration(args.for_))).isoformat())
-            if steps and value['current'] is None and steps[0]['status'] in ('todo', 'assigned'):
-                transition(args.sprint, steps[0], 'doing', at)
-        elif args.verb == 'next':
+        if args.verb == 'next':
             current = value['current']
             if current:
                 transition(args.sprint, select_step(steps, current['id']), 'done', at)

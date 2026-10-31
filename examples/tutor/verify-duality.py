@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Real registration and rehearsal; every mutable store is temporary.
 
-The stub only supplies a chat draft and acknowledges sprint start. It never
+The stub only supplies a chat draft. It never
 launches an agent. This proves tutor's boundary, not a managed agent session.
 """
 import argparse
@@ -54,8 +54,6 @@ def verify(mode):
                             "args = sys.argv[1:]\n"
                             "if args[:1] == ['chat']:\n"
                             f"    print(open({str(response)!r}).read())\n"
-                            "elif args[:2] == ['sprint', 'start']:\n"
-                            "    print('{}')\n"
                             "else:\n"
                             "    os.execv(real, [real, *args])\n")
             stub.chmod(0o700)
@@ -84,16 +82,7 @@ def verify(mode):
         sprint = str(result["sprint"])
         assert sprint == "1", "must use an empty temporary board"
         print(f"{mode}: plan source={draft['source']}; apply sprint=1, 5 participant + {len(owners)} owner steps")
-        if mode == "none":
-            error = call("tutor", "start", sprint, "--for", "90m", "--json", ok=False)
-            assert "--owner" in error and "Traceback" not in error
-            print("none: start refused cleanly: explicit manager --owner required; continuing offline with next")
-            tutor("next", sprint, "--json")
-        else:
-            started = json.loads(tutor("start", sprint, "--owner", "stub", "--for", "90m", "--json"))
-            assert started["clock"]["state"] == "running"
-            assert started["clock"]["remaining_s"] == 5400
-            print("stub: start acknowledged by stub; fallback session clock=5400s")
+        tutor("next", sprint, "--json")
         tutor("done", sprint, result["steps"][0]["id"], "-m", "Rehearsal goal evidence", "--json")
         tutor("next", sprint, "--json")
         line = tutor("status", sprint, "--line").strip()
