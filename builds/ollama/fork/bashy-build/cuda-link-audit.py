@@ -26,6 +26,9 @@ def audit_link(text):
     for n in needed:
         if n.startswith("libcuda.so"):
             errors.append("libcuda is linked directly; the driver must be dlopen'd from the host")
+    for kind, value in re.findall(r"\((RUNPATH|RPATH)\)\s+Library (?:runpath|rpath): \[([^\]]*)\]", text):
+        if value != "$ORIGIN":
+            errors.append(f"{kind} must be absent or exactly $ORIGIN (got [{value}]); no build or absolute paths")
     for line in text.splitlines():
         m = re.match(r"\s*\d+:\s+[0-9a-f]+\s+\d+\s+\S+\s+\S+\s+\S+\s+(\S+)\s+((?:cuda|cublas)\w*)", line)
         if m and m.group(1) != "UND":

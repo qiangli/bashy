@@ -983,6 +983,37 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("libggml-base.so.0", r.stderr)
 
+    def test_link_audit_rejects_absolute_runpath_and_configure_sets_origin(self):
+        tool = self.helpers / "cuda-link-audit.py"
+        d = self.root / "runpath"
+        d.mkdir()
+        base = (" 0x1 (NEEDED) Shared library: [libcudart.so.12]\n 0x1 (NEEDED) Shared library: [libcublas.so.12]\n"
+                " 0x1 (NEEDED) Shared library: [libggml-base.so.0]\n")
+        cases = {
+            "none": ("", True),
+            "origin": (" 0x1d (RUNPATH) Library runpath: [$ORIGIN]\n", True),
+            "tmp": (" 0x1d (RUNPATH) Library runpath: [/tmp/tmp.lfg7yKmpJl/cuda-build/lib/ollama:]\n", False),
+            "rpath": (" 0x0f (RPATH) Library rpath: [/opt/build/lib]\n", False),
+            "mixed": (" 0x1d (RUNPATH) Library runpath: [$ORIGIN:/tmp/x]\n", False),
+        }
+        for name, (extra, ok) in cases.items():
+            f = d / f"{name}.txt"
+            f.write_text(base + extra)
+            r = run("python3", str(tool), "link", "--readelf-file", str(f), ok=ok)
+            if not ok:
+                self.assertIn("PATH must be absent", r.stdout + r.stderr.replace("RUNPATH", "PATH").replace("RPATH", "PATH"), name)
+        build = (self.helpers / "build-runner.sh").read_text()
+        configure = [l for l in build.splitlines() if "--preset 'CUDA 12'" in l]
+        self.assertEqual(len(configure), 1)
+        self.assertIn("-DCMAKE_BUILD_RPATH='$ORIGIN'", configure[0])
+        self.assertIn("-DCMAKE_BUILD_RPATH_USE_ORIGIN=ON", configure[0])
+
+    def test_release_note_states_side_by_side_install_and_silent_cpu_fallback(self):
+        env = (RECIPE / "tool.env").read_text()
+        note = re.search(r'RELEASE_NOTE="([^"]*)"', env).group(1)
+        for needle in ("side by side", "$ORIGIN", "libcudart", "libcublas", "silently falls back to CPU", "fails closed"):
+            self.assertIn(needle, note)
+
     def test_release_note_and_gates_describe_cuda_six_targets(self):
         env = (RECIPE / "tool.env").read_text()
         note = re.search(r'RELEASE_NOTE="([^"]*)"', env).group(1)

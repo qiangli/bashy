@@ -164,7 +164,7 @@ if [[ $cuda == 1 ]]; then
   # compiler-input license review; the cgo CC/CXX wrappers are not used here.
   export BASHY_CUDA_ROOT="$cuda_home" BASHY_REAL_NVCC="$nvcc"
   launcher="$here/compiler-capture-launcher"
-  env -u CC -u CXX "$cmake_bin" --preset 'CUDA 12' -B "$BASHY_COMPILER_TMP/cuda-build" -DCUDA_USE_STATIC=OFF -DGGML_CUDA_STATIC=OFF -DGGML_CUDA_NO_VMM=ON \
+  env -u CC -u CXX "$cmake_bin" --preset 'CUDA 12' -B "$BASHY_COMPILER_TMP/cuda-build" -DCUDA_USE_STATIC=OFF -DGGML_CUDA_STATIC=OFF -DGGML_CUDA_NO_VMM=ON -DCMAKE_BUILD_RPATH='$ORIGIN' -DCMAKE_BUILD_RPATH_USE_ORIGIN=ON \
     -DCMAKE_C_COMPILER="$real_cc" -DCMAKE_CXX_COMPILER="$real_cxx" -DCMAKE_CUDA_HOST_COMPILER="$real_cxx" -DCMAKE_CUDA_COMPILER="$nvcc" \
     -DCMAKE_C_COMPILER_LAUNCHER="$launcher" -DCMAKE_CXX_COMPILER_LAUNCHER="$launcher" -DCMAKE_CUDA_COMPILER_LAUNCHER="$launcher"
   env -u CC -u CXX "$cmake_bin" --build "$BASHY_COMPILER_TMP/cuda-build" --target ggml-cuda
