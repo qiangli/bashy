@@ -10,10 +10,11 @@ questionnaire (F3).
 
 ```bash
 bashy form add --def ./examples/contact.json --title "Contact preferences"
-# form-9f3a… http://127.0.0.1:18107/?id=form-9f3a… pending
+# form-9f3a… http://127.0.0.1:18107/?id=form-9f3a…#invite=… pending
 # ownerKey: … (keep private)
 
-bashy form open form-9f3a…        # id, URL, status only — never content
+bashy form open form-9f3a…        # owner reopens with a plain URL
+# send the URL printed by add to one recipient; the page redeems its invite
 # human fills the page (Save = partial, Submit = complete)
 
 bashy form show form-9f3a… --json  # definition + answers keyed by field id

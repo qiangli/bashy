@@ -207,7 +207,11 @@ func runCLI(args []string, stdout io.Writer) int {
 			fmt.Fprintf(stdout, "status: %v\n", obj["status"])
 		default:
 			// new/open/put/share/close: id, URL, status only — never content.
-			fmt.Fprintf(stdout, "%v %v %v\n", obj["id"], obj["url"], obj["status"])
+			link := obj["url"]
+			if inviteURL, ok := obj["inviteURL"].(string); ok && inviteURL != "" {
+				link = inviteURL
+			}
+			fmt.Fprintf(stdout, "%v %v %v\n", obj["id"], link, obj["status"])
 			if inv, ok := obj["invite"]; ok {
 				fmt.Fprintf(stdout, "invite: %v\n", inv)
 			}

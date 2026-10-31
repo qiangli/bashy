@@ -422,12 +422,20 @@ func (a *app) createItem(w http.ResponseWriter, r *http.Request, req request, me
 		Responses: map[string]Answers{}, Completed: map[string]bool{}, Anonymous: req.Anonymous, CloseAt: req.CloseAt, ResultsVisible: req.ResultsVisible,
 		Status: kit.StatusPending, Owner: kit.NewToken(),
 		Members: map[string]bool{me: true}, Invites: map[string]bool{}}
+	var invite string
+	if it.Respondents == "one" {
+		invite = kit.NewToken()
+		it.Invites[invite] = true
+	}
 	if err := a.saveLocked(it); err != nil {
 		kit.Fail(w, 500, "Could not save. Your change was not accepted.")
 		return
 	}
 	v := a.openView(r, it)
 	v["ownerKey"] = it.Owner // revealed once, at creation, like a facilitator key
+	if invite != "" {
+		v["inviteURL"] = a.urlFor(r, it.ID) + "#invite=" + invite
+	}
 	kit.WriteJSON(w, v)
 }
 
@@ -970,6 +978,25 @@ func (a *app) pageWithWriter(w http.ResponseWriter, r *http.Request) []byte {
 // bytes never leave the machine through this page.
 const formPageJS = `(function () {
   'use strict';
+  var fragment = new URLSearchParams(location.hash.slice(1));
+  var invite = fragment.get('invite');
+  var id = new URLSearchParams(location.search).get('id');
+  var joining = Promise.resolve(true);
+  if (invite && id) {
+    joining = fetch('api/action', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'join', id: id, invite: invite })
+    }).then(function (r) {
+      if (!r.ok) throw new Error('This invite is invalid. Ask the owner for a new one.');
+      history.replaceState(null, '', location.pathname + location.search);
+      return true;
+    }).catch(function (e) {
+      var msg = document.querySelector('[data-desk-alert]');
+      if (msg) { msg.textContent = e.message; msg.setAttribute('data-kind', 'error'); }
+      return false;
+    });
+  }
   function currentForm() { return document.getElementById('desk-form'); }
   function collect() {
     var form = currentForm();
@@ -1004,6 +1031,7 @@ const formPageJS = `(function () {
   }
   async function send(complete) {
     var msg = document.querySelector('[data-desk-alert]');
+    if (!await joining) return;
     var payload = collect();
     if (!payload) return;
     payload.action = 'answer';

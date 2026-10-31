@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -365,6 +366,44 @@ func TestCLIOpenHidesContentGetReturnsAnswers(t *testing.T) {
 	}
 	if got.Answers["name"] != "Ada" {
 		t.Errorf("CLI get must return answers keyed by field id: %s", out.String())
+	}
+}
+
+func TestCLIAddPrintsWorkingInviteURL(t *testing.T) {
+	base := startServer(t)
+	addr := strings.TrimPrefix(base, "http://")
+	var out bytes.Buffer
+	if code := runCLI([]string{"add", "-addr", addr, "--id", "invite-probe", "--title", "Invite probe"}, &out); code != 0 {
+		t.Fatalf("add: exit %d: %s", code, out.String())
+	}
+	parts := strings.Fields(strings.SplitN(out.String(), "\n", 2)[0])
+	if len(parts) != 3 || parts[0] != "invite-probe" {
+		t.Fatalf("add: expected id URL status, got %q", out.String())
+	}
+	link, err := url.Parse(parts[1])
+	if err != nil || link.Query().Get("id") != "invite-probe" {
+		t.Fatalf("add: invalid form URL %q: %v", parts[1], err)
+	}
+	invite := strings.TrimPrefix(link.Fragment, "invite=")
+	if !strings.HasPrefix(link.Fragment, "invite=") || invite == "" {
+		t.Fatalf("add: URL lacks invite: %q", parts[1])
+	}
+	code, raw := post(t, base, `{"action":"join","id":"invite-probe","invite":"`+invite+`"}`, "")
+	if code != 200 {
+		t.Fatalf("printed invite cannot be redeemed: %d %s", code, raw)
+	}
+	keyLine := strings.SplitN(out.String(), "ownerKey: ", 2)
+	if len(keyLine) != 2 {
+		t.Fatalf("add: missing owner key: %q", out.String())
+	}
+	owner := strings.Fields(keyLine[1])[0]
+	out.Reset()
+	if code := runCLI([]string{"share", "-addr", addr, "--key", owner, "invite-probe"}, &out); code != 0 {
+		t.Fatalf("share: exit %d: %s", code, out.String())
+	}
+	shared := strings.Fields(strings.SplitN(out.String(), "\n", 2)[0])
+	if len(shared) != 3 || !strings.Contains(shared[1], "#invite=") || shared[1] == parts[1] {
+		t.Fatalf("share: expected a fresh invite URL, got %q", out.String())
 	}
 }
 
