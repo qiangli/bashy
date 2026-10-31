@@ -44,7 +44,7 @@ NEEDED_RE = r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]"
 
 
 def closure(root_so, search, readelf):
-    """Recursive non-system dependency closure of a backend library, resolved as real files under `search`."""
+    """Recursive non-system dependency closure of a backend library, resolved (symlinks followed, real file must stay under `search`)."""
     import os
     seen, queue, errors = [], [root_so], []
     while queue:
@@ -56,8 +56,10 @@ def closure(root_so, search, readelf):
             elif n.startswith(SYSTEM) or n in seen:
                 continue
             else:
-                hits = sorted(os.path.join(r, n) for r, _, fs in os.walk(search) if n in fs)
-                hits = [h for h in hits if not os.path.islink(h)]
+                root = os.path.realpath(search)
+                hits = sorted(os.path.join(r, n) for r, ds, fs in os.walk(search) for n2 in (fs + ds) if n2 == n)
+                hits = [os.path.realpath(h) for h in hits]
+                hits = [h for h in hits if os.path.isfile(h) and os.path.commonpath([root, h]) == root]
                 if not hits:
                     errors.append(f"unresolved backend dependency {n} (needed by {os.path.basename(so)})")
                     continue

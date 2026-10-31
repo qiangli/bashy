@@ -175,15 +175,18 @@ if [[ $cuda == 1 ]]; then
   readelf -d --dyn-syms --wide "$out/$asset-libggml-cuda.so" >>"$out/$asset-cuda-linkage.txt"
   # Transitive backend libraries (e.g. ggml-base) are release artifacts too. The
   # closure is recursive over every copied library; any NEEDED entry that is
-  # neither system nor host-provided NVIDIA must resolve in the build tree as a
-  # real file, and a host driver (libcuda/libnvidia) link fails the build.
+  # neither system nor host-provided NVIDIA must resolve in the build tree to a
+  # real file (SONAME symlinks are followed), and a host driver (libcuda/libnvidia) link fails the build.
   extra=()
   deps=$(python3 "$here/cuda-link-audit.py" closure "$out/$asset-libggml-cuda.so" --search "$BASHY_COMPILER_TMP/cuda-build")
   while IFS= read -r dep; do
     [[ -n $dep ]] || continue
-    found=$(find "$BASHY_COMPILER_TMP/cuda-build" -type f -name "$dep" | LC_ALL=C sort | head -n1)
-    [[ -n $found && ! -L $found ]] || { echo "build-runner: unresolved transitive backend library $dep" >&2; exit 1; }
-    cp "$found" "$out/$asset-$dep"
+    found=$(find "$BASHY_COMPILER_TMP/cuda-build" \( -type f -o -type l \) -name "$dep" | LC_ALL=C sort | head -n1)
+    [[ -n $found ]] || { echo "build-runner: unresolved transitive backend library $dep" >&2; exit 1; }
+    real=$(realpath "$found")
+    root=$(realpath "$BASHY_COMPILER_TMP/cuda-build")
+    [[ -f $real && $real == "$root"/* ]] || { echo "build-runner: transitive backend library $dep resolves outside the build tree" >&2; exit 1; }
+    cp "$real" "$out/$asset-$dep"
     readelf -d --dyn-syms --wide "$out/$asset-$dep" >>"$out/$asset-cuda-linkage.txt"
     extra+=("$asset-$dep")
   done <<<"$deps"

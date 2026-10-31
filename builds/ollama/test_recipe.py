@@ -798,6 +798,48 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         build = (self.helpers / "build-runner.sh").read_text()
         self.assertIn('cuda-link-audit.py" closure', build)
 
+    def test_soname_symlink_dependency_resolves_to_real_file(self):
+        tool = self.helpers / "cuda-link-audit.py"
+        d = Path(tempfile.mkdtemp())
+        tree = d / "tree" / "lib"; tree.mkdir(parents=True)
+        (tree / "libggml-cuda.so").write_bytes(b"x")
+        (tree / "libggml-base.so.0.0.0").write_bytes(b"real")
+        (tree / "libggml-base.so.0").symlink_to("libggml-base.so.0.0.0")
+        fake = d / "readelf"
+        fake.write_text("#!/bin/sh\nfor a; do f=$a; done\ncase $(basename $f) in\n"
+            "libggml-cuda.so) echo ' 0x1 (NEEDED) Shared library: [libggml-base.so.0]';;\n"
+            "libggml-base.so.0.0.0) echo ' 0x1 (NEEDED) Shared library: [libc.so.6]';;\n"
+            "esac\n")
+        fake.chmod(0o755)
+        args = ["python3", str(tool), "closure", str(tree / "libggml-cuda.so"), "--search", str(d / "tree"), "--readelf", str(fake)]
+        r = subprocess.run(args, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.split(), ["libggml-base.so.0"])
+        outside = d / "outside.so"; outside.write_bytes(b"x")
+        (tree / "libggml-base.so.0").unlink()
+        (tree / "libggml-base.so.0").symlink_to(outside)
+        self.assertNotEqual(subprocess.run(args, capture_output=True, text=True).returncode, 0, "symlink escaping tree must fail")
+
+    def test_build_runner_packages_soname_symlink_under_soname(self):
+        build = (self.helpers / "build-runner.sh").read_text()
+        a = build.index("  extra=()")
+        b = build.index("  python3 - \"$out/$asset.backend-artifacts.json\"")
+        seg = build[a:b]
+        d = Path(tempfile.mkdtemp())
+        (d / "cuda-link-audit.py").write_text("print('libggml-base.so.0')\n")
+        (d / "out").mkdir()
+        script = ("set -euo pipefail\nhere=%s out=%s asset=a BASHY_COMPILER_TMP=%s\nmkdir -p \"$BASHY_COMPILER_TMP/cuda-build/lib\"\n"
+                  "printf real >\"$BASHY_COMPILER_TMP/cuda-build/lib/libggml-base.so.0.0.0\"\n"
+                  "ln -s libggml-base.so.0.0.0 \"$BASHY_COMPILER_TMP/cuda-build/lib/libggml-base.so.0\"\n"
+                  "readelf() { :; }\ntouch \"$out/a-libggml-cuda.so\"\n%s\necho PACKAGED \"${extra[*]}\"\n"
+                  % (d, d / "out", d / "tmp", seg))
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        got = d / "out" / "a-libggml-base.so.0"
+        self.assertTrue(got.is_file() and not got.is_symlink())
+        self.assertEqual(got.read_bytes(), b"real")
+        self.assertIn("a-libggml-base.so.0", r.stdout)
+
     def test_build_runner_aborts_when_closure_helper_fails(self):
         build = (self.helpers / "build-runner.sh").read_text()
         a = build.index("  extra=()")
