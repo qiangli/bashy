@@ -1,0 +1,65 @@
+#!/usr/bin/env -S bashy --bashsharp
+# One body, two orientations: executable Bash# and its embedded agent skill.
+# Verbs dispatch to stdlib Python modules in lib/ (one module per story) and a
+# Go stdlib server in server/. tutor composes plain bashy commands only.
+
+~~~skill as guide
+---
+name: tutor
+description: Plan and run an AI-guided, timeboxed session (class, meeting or solo work) on a bashy sprint card - editable format, timed steps owned by people, one-line status for chat, hints that never give answers.
+metadata:
+  requires: "has=bashy"
+---
+# Tutor
+
+A session is a sprint card; each step is a todo owned by a person, labelled
+`step-NN`, `timebox-Nm` and `role-student|role-teacher`. The session clock is
+the sprint's own clock (`bashy sprint start N --for 90m`, `extend`, `stop`);
+tutor never adds a second lifecycle.
+
+- `bashy tutor plan "GOAL" --minutes 90 [--people a,b] [--format F] [--agent A]`
+  prints an editable JSON draft. With no agent it splits the format's
+  template. Edit the draft, then `bashy tutor apply DRAFT` creates the card,
+  the people and the steps.
+- `bashy tutor next N`, `done N STEP [-m EVIDENCE]`, `extend N STEP --by 5m`
+  move people through steps; `status N --json|--line` reports the current step,
+  time left and overdue flags. `--line` is one line for a chat header.
+- `bashy tutor nudge N [--person P]` asks that person's own agent for a hint or
+  a question about the current step. Hints only: the tutor never does the work.
+- `bashy tutor render STEP --edition student|teacher` prints one edition of a
+  content item; `~~~teacher` blocks never appear in the student edition.
+- `bashy tutor serve N` / `join URL` / `stop` run the projector and per-student
+  pages. `bashy tutor prep [--from PATH]` shapes a content dir before class.
+
+Compose, don't couple: `bashy tutor status N --line | bashy klatch topic GROUP -`.
+Formats are editable Markdown (`formats/class.md`); copy one to make your own.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+usage='Usage: tutor plan|apply|start|next|done|extend|status|nudge|render|prep|serve|join|stop|test [ARGS] [--json]'
+case ${1:-} in
+--skill)
+  copying=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then copying=true; continue; fi
+    if [[ $copying == true && $line == '~~~' ]]; then break; fi
+    if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  ;;
+--contract) echo 'sokilili tutoro efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
+''|-h|--help) echo "$usage" ;;
+plan|apply)                   exec python3 "$here/lib/plan.py" "$@" ;;
+start|next|done|extend|status) exec python3 "$here/lib/run.py" "$@" ;;
+nudge)                        exec python3 "$here/lib/nudge.py" "$@" ;;
+render)                       exec python3 "$here/lib/render.py" "$@" ;;
+prep)                         exec python3 "$here/lib/prep.py" "$@" ;;
+serve|join|stop)              exec bash "$here/server/run.sh" "$@" ;;
+test)
+  cd "$here"
+  python3 -m unittest discover -s tests -t . -v
+  if [[ -f server/go.mod ]]; then (cd server && GOWORK=off go test -race ./...); fi
+  ;;
+*) echo "$usage" >&2; exit 2 ;;
+esac
