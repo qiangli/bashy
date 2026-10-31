@@ -2,7 +2,7 @@
 title: Introduction to Bashy Agentic Shell
 done_when: All questions answered and exercise completed
 timebox: 15m
-role: student
+role: participant
 questions:
   - id: q1
     label: What bashy command shows your unified inbox?
@@ -11,20 +11,20 @@ questions:
     answer: bashy inbox
     answer_rubric: Exactly "bashy inbox" or "bashy inbox --json"
   - id: q2
-    label: Which edition of tutor content hides teacher answers and notes?
+    label: Which edition of tutor content hides owner answers and notes?
     kind: choice
     options:
-      - student
-      - teacher
-    recommended: student
-    answer: student
+      - shared
+      - owner
+    recommended: shared
+    answer: shared
   - id: q3
     label: Explain how bashy tutor composes with desk tools without coupling.
     kind: textarea
     help: One or two sentences describing shell pipes and JSON interfaces.
     answer_rubric: Mentions piping rendered form definitions to bashy form add, or reading answers back via bashy form show.
 answer_notes:
-  Ensure students understand that tutor never imports form code directly; composition is via standard pipes and JSON.
+  Ensure participants understand that tutor never imports form code directly; composition is via standard pipes and JSON.
 ---
 # Introduction to Bashy Agentic Shell
 
@@ -36,10 +36,10 @@ basics of working with the bashy agentic shell.
 2. Verify that your environment is properly seated with your agent identity.
 3. Answer the check questions below.
 
-~~~teacher answers
+~~~private
 Key answers for facilitation:
 1. `bashy inbox` (or `bashy inbox --peek` / `bashy inbox --json`)
-2. `student` edition removes ~~~teacher blocks and front-matter answer* fields.
+2. `shared` edition removes ~~~private blocks and front-matter answer* fields.
 3. tutor render outputs form JSON piped to `bashy form add --def -`; answers read via `bashy form show --json`.
 ~~~
 
@@ -52,8 +52,8 @@ bashy inspect context --json
 
 Observe your session mode and available tools. When ready, complete the questions.
 
-~~~teacher: facilitation notes
-- If students see an unseated session warning on `bashy inbox`, guide them to set `export BASHY_AGENT=<name>` or use `--as <name>`.
+~~~private
+- If participants see an unseated session warning on `bashy inbox`, guide them to set `export BASHY_AGENT=<name>` or use `--as <name>`.
 - Allow approximately 5 minutes for reading and 10 minutes for hands-on exploration.
 ~~~
 

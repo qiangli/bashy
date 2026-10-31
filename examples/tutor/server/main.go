@@ -1,4 +1,4 @@
-// Command tutor-server serves the projector, teacher and per-student pages of a
+// Command tutor-server serves the display, owner and per-participant pages of a
 // tutor session. It holds no session state of its own: status comes from
 // `bashy tutor status N --json`, actions run `bashy tutor done|next|extend`.
 package main
@@ -81,7 +81,14 @@ type Current struct {
 	DoneWhen string   `json:"done_when,omitempty"`
 }
 
+type Roles struct {
+	Owner        string   `json:"owner"`
+	Participants []string `json:"participants"`
+}
+
 type Status struct {
+	Roles   Roles          `json:"roles"`
+	Format  string         `json:"format"`
 	Sprint  int            `json:"sprint"`
 	Title   string         `json:"title"`
 	Clock   map[string]any `json:"clock"`
@@ -90,11 +97,11 @@ type Status struct {
 }
 
 type tokenFile struct {
-	Sprint   int               `json:"sprint"`
-	Teacher  string            `json:"teacher"`
-	Students map[string]string `json:"students"`
-	Addr     string            `json:"addr"`
-	Prefix   string            `json:"prefix"`
+	Sprint       int               `json:"sprint"`
+	Owner        string            `json:"owner"`
+	Participants map[string]string `json:"participants"`
+	Addr         string            `json:"addr"`
+	Prefix       string            `json:"prefix"`
 }
 
 type server struct {
@@ -115,17 +122,17 @@ type server struct {
 func newServer(n int, bin, prefix, path string) *server {
 	s := &server{n: n, bin: bin, prefix: normPrefix(prefix), path: path,
 		byToken: map[string]string{}, quit: make(chan struct{})}
-	s.tok = tokenFile{Sprint: n, Students: map[string]string{}}
+	s.tok = tokenFile{Sprint: n, Participants: map[string]string{}}
 	if b, err := os.ReadFile(path); err == nil {
 		_ = json.Unmarshal(b, &s.tok)
 	}
-	if s.tok.Students == nil {
-		s.tok.Students = map[string]string{}
+	if s.tok.Participants == nil {
+		s.tok.Participants = map[string]string{}
 	}
-	if !kit.ValidToken(s.tok.Teacher) {
-		s.tok.Teacher = kit.NewToken()
+	if !kit.ValidToken(s.tok.Owner) {
+		s.tok.Owner = kit.NewToken()
 	}
-	for name, t := range s.tok.Students {
+	for name, t := range s.tok.Participants {
 		s.byToken[t] = name
 	}
 	return s
@@ -170,9 +177,9 @@ func (s *server) mintLocked() {
 	changed := false
 	for _, st := range s.st.Steps {
 		for _, o := range splitOwners(st.Owner) {
-			if _, ok := s.tok.Students[o]; !ok {
+			if _, ok := s.tok.Participants[o]; !ok {
 				t := kit.NewToken()
-				s.tok.Students[o] = t
+				s.tok.Participants[o] = t
 				s.byToken[t] = o
 				changed = true
 			}
@@ -228,8 +235,8 @@ func (s *server) personOf(token string) (string, bool) {
 	return p, ok
 }
 
-func (s *server) teacherOK(key string) bool {
-	return subtle.ConstantTimeCompare([]byte(key), []byte(s.tok.Teacher)) == 1
+func (s *server) ownerOK(key string) bool {
+	return subtle.ConstantTimeCompare([]byte(key), []byte(s.tok.Owner)) == 1
 }
 
 // ---- HTTP ------------------------------------------------------------------
@@ -258,7 +265,7 @@ func decodeBody(w http.ResponseWriter, r *http.Request, v any) bool {
 	return true
 }
 
-// publicSteps drops evidence and ownership detail the projector must not show.
+// publicSteps drops evidence and ownership detail the display must not show.
 func publicView(st *Status, errMsg string) map[string]any {
 	steps := make([]map[string]any, 0, len(st.Steps))
 	for _, x := range st.Steps {
@@ -271,9 +278,9 @@ func publicView(st *Status, errMsg string) map[string]any {
 func (s *server) handler() http.Handler {
 	mux := http.NewServeMux()
 	p := s.prefix
-	mux.HandleFunc("GET "+p+"/{$}", s.projectorPage)
-	mux.HandleFunc("GET "+p+"/p", s.projectorPage)
-	mux.HandleFunc("GET "+p+"/api/projector", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET "+p+"/{$}", s.displayPage)
+	mux.HandleFunc("GET "+p+"/p", s.displayPage)
+	mux.HandleFunc("GET "+p+"/api/display", func(w http.ResponseWriter, r *http.Request) {
 		st, e := s.snapshot()
 		if st == nil {
 			writeJSON(w, 503, map[string]string{"error": "no status yet: " + e})
@@ -281,10 +288,10 @@ func (s *server) handler() http.Handler {
 		}
 		writeJSON(w, 200, publicView(st, e))
 	})
-	mux.HandleFunc("GET "+p+"/t/{key}", s.teacherPage)
+	mux.HandleFunc("GET "+p+"/t/{key}", s.ownerPage)
 	mux.HandleFunc("GET "+p+"/api/t/{key}", func(w http.ResponseWriter, r *http.Request) {
-		if !s.teacherOK(r.PathValue("key")) {
-			writeJSON(w, 403, map[string]string{"error": "teacher key required"})
+		if !s.ownerOK(r.PathValue("key")) {
+			writeJSON(w, 403, map[string]string{"error": "owner key required"})
 			return
 		}
 		st, e := s.snapshot()
@@ -292,29 +299,29 @@ func (s *server) handler() http.Handler {
 			writeJSON(w, 503, map[string]string{"error": "no status yet: " + e})
 			return
 		}
-		writeJSON(w, 200, map[string]any{"sprint": st.Sprint, "title": st.Title, "clock": st.Clock,
+		writeJSON(w, 200, map[string]any{"sprint": st.Sprint, "title": st.Title, "clock": st.Clock, "roles": st.Roles, "format": st.Format,
 			"current": st.Current, "steps": st.Steps, "error": e})
 	})
-	mux.HandleFunc("POST "+p+"/t/{key}/next", s.teacherAction("next"))
-	mux.HandleFunc("POST "+p+"/t/{key}/extend", s.teacherAction("extend"))
+	mux.HandleFunc("POST "+p+"/t/{key}/next", s.ownerAction("next"))
+	mux.HandleFunc("POST "+p+"/t/{key}/extend", s.ownerAction("extend"))
 	mux.HandleFunc("POST "+p+"/t/{key}/stop", func(w http.ResponseWriter, r *http.Request) {
-		if !s.teacherOK(r.PathValue("key")) {
-			writeJSON(w, 403, map[string]string{"error": "teacher key required"})
+		if !s.ownerOK(r.PathValue("key")) {
+			writeJSON(w, 403, map[string]string{"error": "owner key required"})
 			return
 		}
 		writeJSON(w, 200, map[string]string{"stopped": "ok"})
 		s.once.Do(func() { close(s.quit) })
 	})
-	mux.HandleFunc("GET "+p+"/s/{token}", s.studentPage)
-	mux.HandleFunc("GET "+p+"/api/s/{token}", s.studentState)
-	mux.HandleFunc("POST "+p+"/s/{token}/done", s.studentDone)
+	mux.HandleFunc("GET "+p+"/s/{token}", s.participantPage)
+	mux.HandleFunc("GET "+p+"/api/s/{token}", s.participantState)
+	mux.HandleFunc("POST "+p+"/s/{token}/done", s.participantDone)
 	return mux
 }
 
-func (s *server) teacherAction(verb string) http.HandlerFunc {
+func (s *server) ownerAction(verb string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !s.teacherOK(r.PathValue("key")) {
-			writeJSON(w, 403, map[string]string{"error": "teacher key required"})
+		if !s.ownerOK(r.PathValue("key")) {
+			writeJSON(w, 403, map[string]string{"error": "owner key required"})
 			return
 		}
 		var body struct {
@@ -364,8 +371,8 @@ func durRe(v string) bool {
 	return strings.ContainsRune("smh", rune(v[len(v)-1]))
 }
 
-// studentView is what one person sees: their own step and nothing of others.
-func (s *server) studentView(person string) (map[string]any, bool) {
+// participantView is what one person sees: their own step and nothing of others.
+func (s *server) participantView(person string) (map[string]any, bool) {
 	st, e := s.snapshot()
 	if st == nil {
 		return nil, false
@@ -378,7 +385,7 @@ func (s *server) studentView(person string) (map[string]any, bool) {
 		}
 		return false
 	}
-	v := map[string]any{"person": person, "title": st.Title, "clock": st.Clock, "error": e, "mine": nil, "upcoming": []map[string]any{}}
+	v := map[string]any{"person": person, "roles": st.Roles, "role": "", "title": st.Title, "clock": st.Clock, "error": e, "mine": nil, "upcoming": []map[string]any{}}
 	if c := st.Current; c != nil {
 		for _, o := range c.Owners {
 			if o == person {
@@ -400,6 +407,7 @@ func (s *server) studentView(person string) (map[string]any, bool) {
 		if !own(x.Owner) {
 			continue
 		}
+		v["role"] = x.Role
 		if x.Status == "done" {
 			doneN++
 		} else if st.Current == nil || x.ID != st.Current.ID {
@@ -410,13 +418,13 @@ func (s *server) studentView(person string) (map[string]any, bool) {
 	return v, true
 }
 
-func (s *server) studentState(w http.ResponseWriter, r *http.Request) {
+func (s *server) participantState(w http.ResponseWriter, r *http.Request) {
 	person, ok := s.personOf(r.PathValue("token"))
 	if !ok {
 		writeJSON(w, 404, map[string]string{"error": "unknown link"})
 		return
 	}
-	v, ok := s.studentView(person)
+	v, ok := s.participantView(person)
 	if !ok {
 		writeJSON(w, 503, map[string]string{"error": "no status yet"})
 		return
@@ -424,7 +432,7 @@ func (s *server) studentState(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, v)
 }
 
-func (s *server) studentDone(w http.ResponseWriter, r *http.Request) {
+func (s *server) participantDone(w http.ResponseWriter, r *http.Request) {
 	person, ok := s.personOf(r.PathValue("token"))
 	if !ok {
 		writeJSON(w, 404, map[string]string{"error": "unknown link"})
@@ -478,23 +486,23 @@ func page(title, body, script string) []byte {
 	return kit.Page("tutor", title, `<style>`+pageCSS+`</style>`+body+`<script>`+commonJS+script+`</script>`)
 }
 
-func (s *server) projectorPage(w http.ResponseWriter, r *http.Request) {
+func (s *server) displayPage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Write(page("Tutor projector", projectorBody, "start("+jsq(s.prefix+"/api/projector")+",renderProjector)"))
+	w.Write(page("Display", displayBody, "start("+jsq(s.prefix+"/api/display")+",renderDisplay)"))
 }
 
-func (s *server) teacherPage(w http.ResponseWriter, r *http.Request) {
-	if !s.teacherOK(r.PathValue("key")) {
-		http.Error(w, "teacher key required", 403)
+func (s *server) ownerPage(w http.ResponseWriter, r *http.Request) {
+	if !s.ownerOK(r.PathValue("key")) {
+		http.Error(w, "owner key required", 403)
 		return
 	}
 	base := s.prefix + "/t/" + r.PathValue("key")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Write(page("Tutor teacher", teacherBody, "const BASE="+jsq(base)+";start("+jsq(s.prefix+"/api/t/"+r.PathValue("key"))+",renderTeacher)"))
+	w.Write(page(s.roleTitle(true, ""), ownerBody, "const BASE="+jsq(base)+";start("+jsq(s.prefix+"/api/t/"+r.PathValue("key"))+",renderOwner)"))
 }
 
-func (s *server) studentPage(w http.ResponseWriter, r *http.Request) {
+func (s *server) participantPage(w http.ResponseWriter, r *http.Request) {
 	tk := r.PathValue("token")
 	if _, ok := s.personOf(tk); !ok {
 		http.Error(w, "unknown link", 404)
@@ -502,7 +510,37 @@ func (s *server) studentPage(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Write(page("Tutor", studentBody, "const BASE="+jsq(s.prefix+"/s/"+tk)+";start("+jsq(s.prefix+"/api/s/"+tk)+",renderStudent)"))
+	w.Write(page(s.roleTitle(false, tk), participantBody, "const BASE="+jsq(s.prefix+"/s/"+tk)+";start("+jsq(s.prefix+"/api/s/"+tk)+",renderParticipant)"))
+}
+
+func (s *server) roleTitle(owner bool, token string) string {
+	st, _ := s.snapshot()
+	name := ""
+	if st != nil {
+		if owner {
+			name = st.Roles.Owner
+		} else {
+			person, _ := s.personOf(token)
+			for _, step := range st.Steps {
+				for _, p := range splitOwners(step.Owner) {
+					if p == person {
+						name = step.Role
+						break
+					}
+				}
+			}
+			if name == "" && len(st.Roles.Participants) > 0 {
+				name = st.Roles.Participants[0]
+			}
+		}
+	}
+	if name == "" {
+		if owner {
+			return "Host"
+		}
+		return "Participant"
+	}
+	return strings.ToUpper(name[:1]) + name[1:]
 }
 
 func jsq(v string) string { b, _ := json.Marshal(v); return string(b) }
@@ -599,20 +637,20 @@ func cmdServe(args []string) error {
 	}
 	origin := "http://" + net.JoinHostPort(lanHost(ln.Addr().String()), fmt.Sprint(ln.Addr().(*net.TCPAddr).Port))
 	s.mu.Lock()
-	names := make([]string, 0, len(s.tok.Students))
+	names := make([]string, 0, len(s.tok.Participants))
 	links := map[string]string{}
-	for k, t := range s.tok.Students {
+	for k, t := range s.tok.Participants {
 		names = append(names, k)
 		links[k] = origin + s.prefix + "/s/" + t
 	}
 	s.mu.Unlock()
 	sort.Strings(names)
-	projector, teacher := origin+s.prefix+"/", origin+s.prefix+"/t/"+s.tok.Teacher
+	display, owner := origin+s.prefix+"/", origin+s.prefix+"/t/"+s.tok.Owner
 	if *asJSON {
-		b, _ := json.Marshal(map[string]any{"sprint": n, "projector": projector, "teacher": teacher, "students": links})
+		b, _ := json.Marshal(map[string]any{"sprint": n, "display": display, "owner": owner, "participants": links})
 		fmt.Println(string(b))
 	} else {
-		fmt.Printf("Projector: %s\nTeacher (keep private): %s\n", projector, teacher)
+		fmt.Printf("Display: %s\n%s (keep private): %s\n", display, s.roleTitle(true, ""), owner)
 		for _, k := range names {
 			fmt.Printf("Join %s: %s\n", k, links[k])
 		}
@@ -656,7 +694,7 @@ func cmdJoin(args []string) error {
 	}
 	u, err := url.Parse(pos)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || !strings.Contains(u.Path, "/s/") {
-		return errors.New("usage: tutor join URL [--done -m EVIDENCE]  (URL is your student link)")
+		return errors.New("usage: tutor join URL [--done -m EVIDENCE]  (URL is your participant link)")
 	}
 	u.RawQuery, u.Fragment = "", ""
 	if !*done {
@@ -727,7 +765,7 @@ func cmdStop(args []string) error {
 		host = "127.0.0.1"
 	}
 	c := &http.Client{Timeout: 5 * time.Second}
-	resp, err := c.Post("http://"+net.JoinHostPort(host, port)+t.Prefix+"/t/"+t.Teacher+"/stop", "application/json", nil)
+	resp, err := c.Post("http://"+net.JoinHostPort(host, port)+t.Prefix+"/t/"+t.Owner+"/stop", "application/json", nil)
 	if err != nil {
 		return fmt.Errorf("no server running for sprint %d", n)
 	}

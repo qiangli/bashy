@@ -6,7 +6,7 @@ commands only — no klatch, no form, Python 3 stdlib.
 
 The format is the shaping surface: an editable Markdown file whose front-matter
 (`key: value` and `- item` lists only) declares phases, timeboxes, pairing,
-desk tools, tone and the teacher's own steps. The body is guidance for the
+desk tools, tone and the owner's own steps. The body is guidance for the
 planning agent. With no agent configured the format's template is split
 arithmetically, which is why a session can always be planned offline.
 """
@@ -24,8 +24,8 @@ HERE = Path(__file__).resolve().parent
 FORMATS = HERE.parent / "formats"
 PROMPTS = HERE.parent / "prompts"
 
-LIST_FIELDS = ("phases", "nudge_points", "desk_tools", "teacher_steps")
-DEFAULT_FORMAT = "class"
+LIST_FIELDS = ("phases", "nudge_points", "desk_tools", "owner_steps", "roles")
+DEFAULT_FORMAT = "session"
 DEFAULT_DONE_WHEN = "the outcome of this step is shown to another person"
 
 
@@ -62,17 +62,19 @@ def parse_format(text):
         fmt[field] = lists.get(field, [])
     for extra, items in lists.items():
         fmt.setdefault(extra, items)
+    fmt["roles"] = common.validate_roles(lists.get("roles", ["owner", "participant"]))
+    fmt["audience"] = scalars.get("audience", "")
     fmt["name"] = scalars.get("name", DEFAULT_FORMAT)
     fmt["minutes"] = _positive_int(scalars.get("minutes", 90), "format minutes")
     fmt["default_step_minutes"] = _positive_int(
         scalars.get("default_step_minutes", 20), "default_step_minutes")
-    fmt["teacher_step_minutes"] = _positive_int(
-        scalars.get("teacher_step_minutes", 5), "teacher_step_minutes")
+    fmt["owner_step_minutes"] = _positive_int(
+        scalars.get("owner_step_minutes", 5), "owner_step_minutes")
     fmt["pairing"] = scalars.get("pairing", "")
     fmt["tone"] = scalars.get("tone", "")
     fmt["default_done_when"] = scalars.get("default_done_when", DEFAULT_DONE_WHEN)
     fmt["phases"] = [_parse_phase(p) for p in fmt["phases"]]
-    fmt["teacher_steps"] = [_parse_pair(s) for s in fmt["teacher_steps"]]
+    fmt["owner_steps"] = [_parse_pair(s) for s in fmt["owner_steps"]]
     fmt["desk_tools_by_phase"] = dict(
         (p["name"], p["text"]) for p in (_parse_pair(d) for d in fmt["desk_tools"]))
     fmt["body"] = "\n".join(lines[body_start:]).strip()
@@ -161,7 +163,7 @@ def _split(total, parts):
 
 
 def template_steps(fmt, minutes, people, goal):
-    """The offline split: student steps per phase, then the teacher's own."""
+    """The offline split: participant steps per phase, then the owner's own."""
     short = _short(goal)
     steps = []
     for phase in scale_phases(fmt, minutes):
@@ -173,14 +175,14 @@ def template_steps(fmt, minutes, people, goal):
             title = label if len(chunks) == 1 else "%s %d/%d" % (label, i, len(chunks))
             steps.append({"title": "%s: %s" % (title, short), "owner": "",
                           "minutes": chunk, "done_when": fmt["default_done_when"],
-                          "phase": phase["name"], "role": "student"})
+                          "phase": phase["name"], "role": common.participant_roles(fmt["roles"])[0]})
     for i, step in enumerate(steps):
         step["owner"] = people[i % len(people)] if people else ""
-    for entry in fmt["teacher_steps"]:
+    for entry in fmt["owner_steps"]:
         steps.append({"title": "%s: %s" % (_phase_title(entry["name"]), short),
-                      "owner": "teacher", "minutes": fmt["teacher_step_minutes"],
+                      "owner": fmt["roles"][0], "minutes": fmt["owner_step_minutes"],
                       "done_when": entry["text"] or fmt["default_done_when"],
-                      "phase": entry["name"], "role": "teacher"})
+                      "phase": entry["name"], "role": fmt["roles"][0]})
     return steps
 
 
@@ -197,7 +199,8 @@ def template_draft(fmt, args, people):
     return {"version": common.DRAFT_VERSION,
             "title": args.title or _short(args.goal, 72),
             "goal": args.goal, "epic": args.epic, "minutes": args.minutes,
-            "format": fmt["name"], "people": people, "source": "template",
+            "format": fmt["name"], "roles": fmt["roles"],
+            "audience": fmt["audience"], "tone": fmt["tone"], "people": people, "source": "template",
             "steps": template_steps(fmt, args.minutes, people, args.goal)}
 
 
@@ -219,12 +222,16 @@ def fill_prompt(fmt, args, people):
         "people": ", ".join(people) or "(none)",
         "people_json": json.dumps(people),
         "format_name": fmt["name"],
+        "roles_json": json.dumps(fmt["roles"]),
+        "owner_role": fmt["roles"][0],
+        "participant_role": common.participant_roles(fmt["roles"])[0],
+        "audience": fmt["audience"],
         "format_body": fmt["body"],
         "phases": phases,
         "default_step_minutes": str(fmt["default_step_minutes"]),
         "pairing": fmt["pairing"],
         "tone": fmt["tone"],
-        "teacher_steps": "; ".join(e["name"] for e in fmt["teacher_steps"]),
+        "owner_steps": "; ".join(e["name"] for e in fmt["owner_steps"]),
         "nudge_points": ", ".join(fmt["nudge_points"]),
     }
     text = path.read_text()
@@ -260,7 +267,10 @@ def normalise_agent_draft(draft, fmt, args, people):
     out.setdefault("goal", args.goal)
     out.setdefault("title", args.title or _short(args.goal, 72))
     out.setdefault("epic", args.epic)
-    out.setdefault("format", fmt["name"])
+    out["format"] = fmt["name"]
+    out["roles"] = fmt["roles"]
+    out["audience"] = fmt["audience"]
+    out["tone"] = fmt["tone"]
     out.setdefault("people", people)
     out["minutes"] = _as_int(out.get("minutes"), args.minutes)
     steps = out.get("steps")
@@ -273,12 +283,12 @@ def normalise_agent_draft(draft, fmt, args, people):
         step = dict(step)
         step["minutes"] = _as_int(step.get("minutes"), 0)
         step["owner"] = str(step.get("owner") or "")
-        step["role"] = str(step.get("role") or "student")
+        step["role"] = str(step.get("role") or common.participant_roles(fmt["roles"])[0])
         step["phase"] = str(step.get("phase") or "main")
         step["done_when"] = str(step.get("done_when") or fmt["default_done_when"])
         step["title"] = str(step.get("title") or "")
-        if step["role"] == "teacher" and not step["owner"]:
-            step["owner"] = "teacher"
+        if step["role"] == fmt["roles"][0] and not step["owner"]:
+            step["owner"] = fmt["roles"][0]
         fixed.append(step)
     out["steps"] = fixed
     return out
@@ -398,6 +408,11 @@ def cmd_apply(argv):
     if not isinstance(sprint, int):
         common.fail("apply: sprint add returned no sprint number")
 
+    with common.log_path(sprint).open("a") as stream:
+        stream.write(json.dumps(dict(event="format", format=draft.get("format", "session"),
+                                    roles=draft.get("roles", ["owner", "participant"]),
+                                    audience=draft.get("audience", ""), tone=draft.get("tone", ""))) + "\n")
+
     for owner in dict.fromkeys(s.get("owner", "") for s in draft["steps"]):
         if owner:
             common.bashy("person", "add", owner, check=False)  # already exists is fine
@@ -405,7 +420,7 @@ def cmd_apply(argv):
     created = []
     for index, step in enumerate(draft["steps"], 1):
         labels = common.step_labels(index, step["minutes"],
-                                   step.get("role", "student"), step.get("phase", ""))
+                                   step.get("role", common.participant_roles(draft.get("roles", ["owner", "participant"]))[0]), step.get("phase", ""))
         todo = ["todo", "add", step["title"], "--sprint", str(sprint)]
         if step.get("owner"):
             todo += ["--owner", step["owner"]]

@@ -14,11 +14,11 @@ class RunTests(TempBashy):
     def setUp(self):
         super().setUp()
         os.environ['TUTOR_NOW'] = '2026-10-30T10:00:00Z'
-        bashy('sprint', 'add', 'Class')
+        bashy('sprint', 'add', 'Session')
         self.ids = []
         for i, title in enumerate(['Warmup', 'Prototype sketch'], 1):
             obj = bashy('todo', 'add', title, '--sprint', '1', '--owner', 'Ana',
-                        '--label', 'step-%02d,timebox-10m,role-student' % i,
+                        '--label', 'step-%02d,timebox-10m,role-participant' % i,
                         '--json', json_out=True)
             self.ids.append(obj['id'])
 
@@ -34,7 +34,7 @@ class RunTests(TempBashy):
     def test_not_started_and_filtering(self):
         bashy('todo', 'add', 'Unrelated', '--sprint', '1')
         status = self.status()
-        self.assertEqual(set(status), {'sprint', 'title', 'clock', 'current', 'steps'})
+        self.assertEqual(set(status), {'sprint', 'title', 'clock', 'current', 'steps', 'format', 'roles'})
         self.assertEqual(status['clock'], dict(state='not-started', deadline=None, remaining_s=None))
         self.assertIsNone(status['current'])
         self.assertEqual(len(status['steps']), 2)
@@ -77,7 +77,7 @@ class RunTests(TempBashy):
 
     def test_running_clock_start_is_idempotent(self):
         real = run.bashy
-        card = {'id': 1, 'title': 'Class', 'boxes': [
+        card = {'id': 1, 'title': 'Session', 'boxes': [
             {'started_at': '2026-10-30T09:00:00Z', 'cutoff': '2026-10-30T10:30:00Z'}]}
         def runner(*args, **kwargs):
             if args[:2] == ('sprint', 'show'):
@@ -121,7 +121,7 @@ class RunTests(TempBashy):
             self.invoke('next', '1', '--json')
             self.invoke('next', '1', '--json')
             self.assertEqual(self.invoke('status', '1', '--line'), 'Done · 2/2 steps\n')
-        # People never close sprint stories; the class manager accepts them.
+        # People never close sprint stories; the session manager accepts them.
         self.assertNotIn('done', [c[-1] for c in calls if c[:2] == ('todo', 'status')])
         self.assertEqual([c for c in calls if c[:2] == ('todo', 'edit')],
                          [('todo', 'edit', ident, '--label', 'step-done') for ident in self.ids])
@@ -130,7 +130,7 @@ class RunTests(TempBashy):
         value = dict(current=dict(index=2, total=5, title='Prototype sketch',
                                  remaining_s=760, overdue=False, owners=['Ana', 'Ben']))
         self.assertEqual(run.one_line(value), 'Step 2/5 · Prototype sketch · 12:40 left · Ana, Ben')
-        card = {'id': 1, 'title': 'Class', 'boxes': []}
+        card = {'id': 1, 'title': 'Session', 'boxes': []}
         self.assertEqual(run.records(json.dumps({'result': {'sprint': card}}), 'sprint'), [card])
 
     def test_start_forwards_owner_and_duration(self):
@@ -142,23 +142,23 @@ class RunTests(TempBashy):
                 return ''
             return real(*args, **kwargs)
         with patch.object(run, 'bashy', side_effect=runner):
-            value = json.loads(self.invoke('start', '1', '--for', '45m', '--owner', 'teacher', '--json'))
-        self.assertEqual(calls, [('sprint', 'start', '1', '--for', '45m', '--owner', 'teacher')])
+            value = json.loads(self.invoke('start', '1', '--for', '45m', '--owner', 'owner', '--json'))
+        self.assertEqual(calls, [('sprint', 'start', '1', '--for', '45m', '--owner', 'owner')])
         self.assertEqual(value['current']['id'], self.ids[0])
 
     def test_clock_falls_back_to_plain_thread_then_run_log(self):
         # The JSON card omits boxes today; the plain thread carries the cutoff.
-        plain = ("sprint #1 [doing] — Class\n"
+        plain = ("sprint #1 [doing] — Session\n"
                  "  [10-30 09:00] t (stage): started a 90m box (backlog → doing), cutoff 2026-10-30T10:30:00Z\n")
         self.assertEqual(run.thread_box(plain), {'cutoff': '2026-10-30T10:30:00Z'})
         self.assertEqual(run.thread_box(plain + "  [10-30 10:00] t (stage): stopped the box\n")['stopped_at'], 'thread')
-        self.assertIsNone(run.thread_box("sprint #1 [backlog] — Class\n"))
+        self.assertIsNone(run.thread_box("sprint #1 [backlog] — Session\n"))
         at = run.timestamp('2026-10-30T10:00:00Z')
         events = [{'event': 'session_start', 'deadline': '2026-10-30T10:30:00Z'}]
         real = run.bashy
         def runner(*args, **kwargs):
             if args[:2] == ('sprint', 'show') and '--plain' in args:
-                return "sprint #1 [doing] — Class\n"
+                return "sprint #1 [doing] — Session\n"
             return real(*args, **kwargs)
         with patch.object(run, 'bashy', side_effect=runner):
             self.assertEqual(run.session_clock({}, at, 1, events),

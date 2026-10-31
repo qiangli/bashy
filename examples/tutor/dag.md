@@ -1,15 +1,14 @@
 ---
 name: tutor
-description: Isolated Nov 1 Week 2 rehearsal and command/skill parity
+description: Isolated Session rehearsal and command/skill parity
 type: dag
 default: dry-run
 ---
 
-# Nov 1 · Week 2
+# Session
 
-The rehearsal uses the Week 2 Klatch theme: sign-up, groups and after-class
-use. The verifier owns a fresh temporary home and git repo for each lane;
-all state is removed on exit. No live class accounts or boards are accessed.
+The rehearsal plans and demonstrates a small improvement using the default format. The verifier owns a fresh temporary home and git repo for each lane;
+all state is removed on exit. No live session accounts or boards are accessed.
 
 ## Tasks
 

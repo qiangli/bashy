@@ -33,12 +33,12 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
-const canned = `{"sprint":7,"title":"Class","clock":{"state":"running","remaining_s":3000},
+const canned = `{"sprint":7,"title":"Session","clock":{"state":"running","remaining_s":3000},
 "current":{"index":2,"total":3,"id":"t2","title":"Build it","owners":["alice"],"timebox_s":600,"elapsed_s":100,"remaining_s":500,"overdue":false},
 "steps":[
- {"index":1,"id":"t1","title":"Warm up","owner":"bob","role":"student","status":"done","timebox_s":300,"overdue":false,"evidence":"https://secret.example/bob"},
- {"index":2,"id":"t2","title":"Build it","owner":"alice","role":"student","status":"doing","timebox_s":600,"overdue":false,"evidence":null},
- {"index":3,"id":"t3","title":"Share","owner":"bob","role":"student","status":"todo","timebox_s":300,"overdue":false,"evidence":null}]}`
+ {"index":1,"id":"t1","title":"Warm up","owner":"bob","role":"participant","status":"done","timebox_s":300,"overdue":false,"evidence":"https://secret.example/bob"},
+ {"index":2,"id":"t2","title":"Build it","owner":"alice","role":"participant","status":"doing","timebox_s":600,"overdue":false,"evidence":null},
+ {"index":3,"id":"t3","title":"Share","owner":"bob","role":"participant","status":"todo","timebox_s":300,"overdue":false,"evidence":null}]}`
 
 type env struct {
 	s   *server
@@ -79,26 +79,26 @@ func (e *env) calls() string {
 	return string(b)
 }
 
-func TestProjectorHidesSecrets(t *testing.T) {
+func TestDisplayHidesSecrets(t *testing.T) {
 	e := setup(t, "")
-	for _, p := range []string{"/", "/api/projector"} {
+	for _, p := range []string{"/", "/api/display"} {
 		code, body := e.do(t, "GET", p, "")
 		if code != 200 {
 			t.Fatalf("%s: %d", p, code)
 		}
-		for _, secret := range []string{e.s.tok.Teacher, e.s.tok.Students["alice"], e.s.tok.Students["bob"], "secret.example"} {
+		for _, secret := range []string{e.s.tok.Owner, e.s.tok.Participants["alice"], e.s.tok.Participants["bob"], "secret.example"} {
 			if strings.Contains(body, secret) {
 				t.Fatalf("%s leaks %q", p, secret)
 			}
 		}
 	}
-	_, body := e.do(t, "GET", "/api/projector", "")
+	_, body := e.do(t, "GET", "/api/display", "")
 	if !strings.Contains(body, "Build it") {
 		t.Fatal(body)
 	}
 }
 
-func TestTeacherKeyRequired(t *testing.T) {
+func TestOwnerKeyRequired(t *testing.T) {
 	e := setup(t, "")
 	for _, c := range [][2]string{{"POST", "next"}, {"POST", "extend"}, {"POST", "stop"}} {
 		code, _ := e.do(t, c[0], "/t/wrongkey/"+c[1], "{}")
@@ -106,9 +106,9 @@ func TestTeacherKeyRequired(t *testing.T) {
 			t.Fatalf("%s wrong key: %d", c[1], code)
 		}
 	}
-	// A student token is not a teacher key.
-	if code, _ := e.do(t, "POST", "/t/"+e.s.tok.Students["alice"]+"/next", "{}"); code != 403 {
-		t.Fatalf("student token as key: %d", code)
+	// A participant token is not a owner key.
+	if code, _ := e.do(t, "POST", "/t/"+e.s.tok.Participants["alice"]+"/next", "{}"); code != 403 {
+		t.Fatalf("participant token as key: %d", code)
 	}
 	if code, _ := e.do(t, "GET", "/t/nope", ""); code != 403 {
 		t.Fatal(code)
@@ -116,7 +116,7 @@ func TestTeacherKeyRequired(t *testing.T) {
 	if e.calls() != "tutor status 7 --json\n" {
 		t.Fatalf("unauthorised calls reached bashy: %q", e.calls())
 	}
-	k := e.s.tok.Teacher
+	k := e.s.tok.Owner
 	if code, body := e.do(t, "POST", "/t/"+k+"/next", "{}"); code != 200 {
 		t.Fatal(code, body)
 	}
@@ -136,9 +136,9 @@ func TestTeacherKeyRequired(t *testing.T) {
 	}
 }
 
-func TestStudentTokenIsolation(t *testing.T) {
+func TestParticipantTokenIsolation(t *testing.T) {
 	e := setup(t, "")
-	alice, bob := e.s.tok.Students["alice"], e.s.tok.Students["bob"]
+	alice, bob := e.s.tok.Participants["alice"], e.s.tok.Participants["bob"]
 	if alice == "" || bob == "" || alice == bob {
 		t.Fatal("tokens not minted per owner")
 	}
@@ -185,27 +185,27 @@ func TestTokensStableAndPrivate(t *testing.T) {
 		t.Fatalf("mode %v", st.Mode().Perm())
 	}
 	again := newServer(7, e.s.bin, "", e.s.path)
-	if again.tok.Teacher != e.s.tok.Teacher || again.tok.Students["alice"] != e.s.tok.Students["alice"] {
+	if again.tok.Owner != e.s.tok.Owner || again.tok.Participants["alice"] != e.s.tok.Participants["alice"] {
 		t.Fatal("links changed across restart")
 	}
 }
 
 func TestPrefixAndRace(t *testing.T) {
 	e := setup(t, "/tutor/")
-	if code, _ := e.do(t, "GET", "/tutor/api/projector", ""); code != 200 {
+	if code, _ := e.do(t, "GET", "/tutor/api/display", ""); code != 200 {
 		t.Fatal(code)
 	}
-	if code, _ := e.do(t, "GET", "/api/projector", ""); code == 200 {
+	if code, _ := e.do(t, "GET", "/api/display", ""); code == 200 {
 		t.Fatal("served outside prefix")
 	}
-	alice := e.s.tok.Students["alice"]
+	alice := e.s.tok.Participants["alice"]
 	var wg sync.WaitGroup
 	for i := 0; i < 8; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			e.s.refresh()
-			e.do(t, "GET", "/tutor/api/projector", "")
+			e.do(t, "GET", "/tutor/api/display", "")
 			e.do(t, "GET", "/tutor/api/s/"+alice, "")
 			e.do(t, "POST", "/tutor/s/"+alice+"/done", `{}`)
 		}()
@@ -215,7 +215,7 @@ func TestPrefixAndRace(t *testing.T) {
 
 func TestJoinDoneAndStop(t *testing.T) {
 	e := setup(t, "")
-	alice := e.s.tok.Students["alice"]
+	alice := e.s.tok.Participants["alice"]
 	// stop reads the recorded address/key.
 	if err := cmdJoin([]string{e.ts.URL + "/s/" + alice, "--done", "-m", "http://x/chart/1"}); err != nil {
 		t.Fatal(err)
@@ -227,7 +227,7 @@ func TestJoinDoneAndStop(t *testing.T) {
 		t.Fatal("bad token joined")
 	}
 	if err := cmdJoin([]string{"http://h/nothing"}); err == nil {
-		t.Fatal("non-student url accepted")
+		t.Fatal("non-participant url accepted")
 	}
 	e.s.tok.Addr = strings.TrimPrefix(e.ts.URL, "http://")
 	e.s.mu.Lock()
@@ -240,5 +240,43 @@ func TestJoinDoneAndStop(t *testing.T) {
 	case <-e.s.quit:
 	default:
 		t.Fatal("stop did not signal shutdown")
+	}
+}
+
+func TestFormatRolePageLabels(t *testing.T) {
+	e := setup(t, "")
+	if got := e.s.roleTitle(true, ""); got != "Host" {
+		t.Fatal(got)
+	}
+	e.s.mu.Lock()
+	e.s.st.Roles = Roles{Owner: "facilitator", Participants: []string{"speaker", "listener"}}
+	e.s.st.Format = "meeting"
+	for i := range e.s.st.Steps {
+		e.s.st.Steps[i].Role = "speaker"
+	}
+	e.s.mu.Unlock()
+	_, body := e.do(t, "GET", "/t/"+e.s.tok.Owner, "")
+	if !strings.Contains(body, "<title>Facilitator</title>") {
+		t.Fatal(body)
+	}
+	_, body = e.do(t, "GET", "/s/"+e.s.tok.Participants["alice"], "")
+	if !strings.Contains(body, "<title>Speaker</title>") {
+		t.Fatal(body)
+	}
+	_, body = e.do(t, "GET", "/api/s/"+e.s.tok.Participants["alice"], "")
+	var view map[string]any
+	if err := json.Unmarshal([]byte(body), &view); err != nil {
+		t.Fatal(err)
+	}
+	if view["role"] != "speaker" {
+		t.Fatal(view)
+	}
+	_, ownerJSON := e.do(t, "GET", "/api/t/"+e.s.tok.Owner, "")
+	if !strings.Contains(ownerJSON, `"owner":"facilitator"`) {
+		t.Fatal(ownerJSON)
+	}
+	roles := view["roles"].(map[string]any)
+	if roles["owner"] != "facilitator" {
+		t.Fatal(roles)
 	}
 }

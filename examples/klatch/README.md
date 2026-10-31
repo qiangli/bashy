@@ -19,7 +19,7 @@ Example config (keep the real file outside the repository):
     {"handle": "carol", "password_secret": "klatch/carol"}
   ],
   "groups": [
-    {"key": "class", "name": "Class", "owner": "alice", "members": ["bob", "carol"]}
+    {"key": "session", "name": "Session", "owner": "alice", "members": ["bob", "carol"]}
   ]
 }
 ```
@@ -36,19 +36,19 @@ never printed or placed in argv. There is no built-in roster.
 
 | `post GROUP TEXT\|-` | post TEXT (or stdin with `-`) to the group as the bot |
 | `topic GROUP TEXT\|-` | set the group's conversation header to `NAME — TEXT`; empty TEXT restores `NAME` |
-| `invite COUNT [REF]` | mint COUNT one-time sign-up links (`<base_url>/?add=TOKEN`) into the vault at REF (default `klatch/signup-links`); prints only the count and REF |
+| `invite --count N [--ref REF]` | mint N one-time sign-up links (`<base_url>/?add=TOKEN`) into the vault at REF (default `klatch/signup-links`); prints only the count and REF |
 
 `post` and `topic` take `CONFIG.json GROUP TEXT|-` and print
 `{"group": key, "ok": true}`. They act as the config's `"bot"` handle (a normal
 entry in `users`, password via vault ref like the others), or as the group
 owner if no `bot` is set. Databag only lets the account that hosts a channel set
-its subject, so make the bot the group `owner` (e.g. `"owner": "classbot",
+its subject, so make the bot the group `owner` (e.g. `"owner": "bot",
 "members": [...]`) and provision. These verbs know nothing about who calls them,
 so any line-producer composes:
 
 ```sh
-bashy tutor status 528 --line | bashy klatch topic class.json class -
-examples/tutor/chat-status.sh 528 class.json class --every 30   # loop + milestone posts
+bashy tutor status N --line | bashy klatch topic config.json session -
+examples/tutor/chat-status.sh N config.json session --every 30   # loop + milestone posts
 ```
 
 The header is the channel subject, shown as the conversation title on web
@@ -65,3 +65,7 @@ Tests (fake HTTP server, no real server needed):
 
 Klatch is based on Databag by Roland Osborne
 (github.com/balzack/databag), Apache-2.0.
+
+Run the server on your own machine. Handles, roster, groups, bot and server URL
+come from your config. Mint more invitations any time with
+`bashy klatch invite CONFIG.json --count N [--ref REF]`.

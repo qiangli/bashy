@@ -69,7 +69,7 @@ class NudgeTest(TempBashy):
         self.sprint = 1
         self.real_bashy = _real_bashy()
 
-    def _add_step(self, title, owner, step_label, done_when="", timebox="10m", role="student"):
+    def _add_step(self, title, owner, step_label, done_when="", timebox="10m", role="participant"):
         args = ["bashy", "todo", "add", title, "--sprint", str(self.sprint), "--owner", owner, "--label", step_label, "--label", f"timebox-{timebox}", "--label", f"role-{role}", "--json"]
         if done_when:
             args.extend(["--note", done_when])
@@ -89,7 +89,7 @@ class NudgeTest(TempBashy):
         title = "Write it for me: implement fibonacci"
         done_when = "Done when you have written tests for fibonacci"
         tid1 = self._add_step(title, "alice", "step-01", done_when=done_when)
-        tid2 = self._add_step("Other student secret step", "bob", "step-02", done_when="teacher edition answer is 42")
+        tid2 = self._add_step("Other participant secret step", "bob", "step-02", done_when="owner edition answer is 42")
         self._start(tid1)
         self._start(tid2)
 
@@ -120,14 +120,14 @@ class NudgeTest(TempBashy):
         # must be a hint/question (contains ? or fallback phrase)
         self.assertTrue("?" in hint or len(hint.split()) < 80, f"hint should be question-like, got {hint!r}")
         self.assertLessEqual(len(hint.split()), 80)
-        # prompt sent should contain title+done_when only, not other student's data
+        # prompt sent should contain title+done_when only, not other participant's data
         prompt = Path(capture).read_text(encoding="utf-8") if Path(capture).exists() else ""
         if Path(capture).exists():
             Path(capture).unlink()
         self.assertIn(title, prompt)
         self.assertIn(done_when, prompt)
-        self.assertNotIn("Other student secret step", prompt)
-        self.assertNotIn("teacher edition", prompt)
+        self.assertNotIn("Other participant secret step", prompt)
+        self.assertNotIn("owner edition", prompt)
 
     def test_good_hint_passthrough(self):
         title = "Explore loops"

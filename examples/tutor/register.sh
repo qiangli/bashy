@@ -18,7 +18,7 @@ done
 args+=(--set args.flags.10.shorthand=m)
 "$runner" commands add tutor --force \
   --set "exec.0=$runner" --set exec.1=--bashsharp --set "exec.2=$here/tutor.bsh" \
-  --set synopsis='Plan and run timeboxed class, meeting and solo sessions on sprint cards' \
+  --set synopsis='Plan and run timeboxed group, meeting and solo sessions on sprint cards' \
   --set "long=$guide" --set group=platform \
   --set effects.0=read --set effects.1=write --set effects.2=exec --set effects.3=net \
   --set args.positionals.0.name=action "${args[@]}" \
@@ -29,5 +29,5 @@ printf '%s\n' "$guide" > "$tmp/SKILL.md"
 "$runner" --bashsharp "$here/tutor.bsh" --contract > "$tmp/skill.dhnt"
 "$runner" skill add "$tmp" --force
 "$runner" app add tutor --port 18093 --label Tutor --icon "🎓" \
-  --tip 'Timeboxed class, meeting and solo sessions' --force
+  --tip 'Timeboxed group, meeting and solo sessions' --force
 echo 'Registered tutor: one Bash# body, command and skill.'

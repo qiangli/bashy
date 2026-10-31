@@ -6,11 +6,11 @@ import run
 
 
 class SmokeRegressions(TempBashy):
-    def test_student_progress_excludes_teacher_steps(self):
-        bashy('sprint', 'add', 'Week 2')
+    def test_participant_progress_excludes_owner_steps(self):
+        bashy('sprint', 'add', 'Session')
         ids = []
-        for i, role in enumerate(['teacher', 'student', 'teacher', 'student',
-                                   'student', 'teacher', 'student', 'student'], 1):
+        for i, role in enumerate(['owner', 'participant', 'owner', 'participant',
+                                   'participant', 'owner', 'participant', 'participant'], 1):
             ids.append(bashy('todo', 'add', 'Step %d' % i, '--sprint', '1',
                              '--label', 'step-%02d,timebox-10m,role-%s' % (i, role),
                              '--json', json_out=True)['id'])
@@ -24,7 +24,7 @@ class SmokeRegressions(TempBashy):
         self.assertEqual(run.status(1)['current']['id'], ids[4])
 
     def test_apply_nudge_done_when_roundtrip(self):
-        draft = json.loads(self.tutor('plan', 'Week 2', '--people', 'ana', '--json').stdout)
+        draft = json.loads(self.tutor('plan', 'Session', '--people', 'ana', '--json').stdout)
         draft['steps'][0]['done_when'] = 'Sketch shared'
         result = json.loads(self.tutor('apply', '-', '--json', stdin=json.dumps(draft)).stdout)
         self.tutor('next', str(result['sprint']), '--json')

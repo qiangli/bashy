@@ -19,9 +19,9 @@ handles to guids and group keys to ids. Reruns create no duplicates.
 `bot` account (default the group owner, which must host the group);
 `topic CONFIG.json GROUP TEXT|-` sets the conversation header to `NAME — TEXT`
 (empty TEXT restores NAME). `-` reads TEXT from stdin, so anything composes:
-`some-status --line | bashy klatch topic CONFIG.json class -`. Both print
+`some-status --line | bashy klatch topic CONFIG.json session -`. Both print
 `{"group", "ok"}`.
-`invite CONFIG.json COUNT [SECRET_REF]` mints COUNT one-time sign-up links
+`invite CONFIG.json --count N [--ref REF]` mints N one-time sign-up links
 (`<base_url>/?add=TOKEN`, one account each) into the vault (default
 `klatch/signup-links`); it prints only the count and the reference.
 Passwords are vault references via `bashy secret show REF`; never put one in
@@ -44,9 +44,16 @@ if [[ ${1:-} == --contract ]]; then
   echo 'sokilili meitorikusu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini'
   exit
 fi
+# Registered commands put declared flags before positional arguments.
+bound_flags=()
+while [[ ${1:-} == --count=* || ${1:-} == --ref=* ]]; do
+  bound_flags+=("$1")
+  shift
+done
+if (( ${#bound_flags[@]} )); then set -- "$@" "${bound_flags[@]}"; fi
 case ${1:-} in
   post|topic) (( $# == 4 )) || { echo "Usage: klatch $1 CONFIG.json GROUP TEXT|-" >&2; exit 2; } ;;
-  invite) (( $# == 3 || $# == 4 )) || { echo 'Usage: klatch invite CONFIG.json COUNT [SECRET_REF]' >&2; exit 2; } ;;
+  invite) ;; # provision.py validates required flags before contacting the server
   *) (( $# == 2 )) || { echo 'Usage: klatch setup|provision|status CONFIG.json | post|topic CONFIG.json GROUP TEXT|-' >&2; exit 2; } ;;
 esac
 exec python3 "$here/provision.py" "$@"

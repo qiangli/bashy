@@ -1,6 +1,6 @@
 """Test isolation: every test runs bashy against a temporary home + repo.
 
-Never touches the live board, the class Klatch data, or Sprints 510/528.
+Never touches live boards, accounts or server data.
 """
 import os
 import subprocess

@@ -13,8 +13,8 @@ import plan
 class FormatParseTest(unittest.TestCase):
     """The tiny front-matter parser: `key: value` and `- item` lists only."""
 
-    def test_class_format_fields(self):
-        fmt = plan.load_format("class")
+    def test_session_format_fields(self):
+        fmt = plan.load_format("session")
         self.assertEqual(fmt["minutes"], 90)
         self.assertTrue(fmt["phases"])
         self.assertEqual([p["name"] for p in fmt["phases"]],
@@ -23,7 +23,7 @@ class FormatParseTest(unittest.TestCase):
         self.assertGreater(fmt["default_step_minutes"], 0)
         self.assertIn("halfway", fmt["nudge_points"])
         self.assertTrue(fmt["pairing"])
-        self.assertTrue(fmt["teacher_steps"])
+        self.assertTrue(fmt["owner_steps"])
         self.assertTrue(fmt["desk_tools"])
         self.assertTrue(fmt["tone"].strip())
         self.assertIn("guidance", fmt["body"].lower())
@@ -35,12 +35,12 @@ class FormatParseTest(unittest.TestCase):
         self.assertEqual([p["minutes"] for p in phases], [20, 20])
 
     def test_timebox_is_a_ceiling_and_sums_exactly(self):
-        fmt = plan.load_format("class")
+        fmt = plan.load_format("session")
         for minutes in (3, 12, 25, 40, 90, 180):
-            student = [s for s in plan.template_steps(fmt, minutes, ["a", "b"], "g")
-                       if s["role"] == "student"]
-            self.assertEqual(sum(s["minutes"] for s in student), minutes)
-            for s in student:
+            participant = [s for s in plan.template_steps(fmt, minutes, ["a", "b"], "g")
+                       if s["role"] == "participant"]
+            self.assertEqual(sum(s["minutes"] for s in participant), minutes)
+            for s in participant:
                 self.assertLessEqual(s["minutes"], fmt["default_step_minutes"])
                 self.assertGreater(s["minutes"], 0)
 
@@ -61,14 +61,14 @@ class TemplatePlanTest(TempBashy):
         self.assertEqual(d["source"], "template")
         self.assertEqual(d["minutes"], 60)
         self.assertEqual(d["goal"], "Ship the parser")
-        self.assertEqual(d["format"], "class")
+        self.assertEqual(d["format"], "session")
         self.assertEqual(d["people"], ["ana", "bo"])
-        student = [s for s in d["steps"] if s["role"] == "student"]
-        teacher = [s for s in d["steps"] if s["role"] == "teacher"]
-        self.assertEqual(sum(s["minutes"] for s in student), 60)
-        self.assertTrue(teacher)
-        self.assertEqual({s["owner"] for s in teacher}, {"teacher"})
-        self.assertEqual([s["owner"] for s in student[:4]],
+        participant = [s for s in d["steps"] if s["role"] == "participant"]
+        owner = [s for s in d["steps"] if s["role"] == "owner"]
+        self.assertEqual(sum(s["minutes"] for s in participant), 60)
+        self.assertTrue(owner)
+        self.assertEqual({s["owner"] for s in owner}, {"owner"})
+        self.assertEqual([s["owner"] for s in participant[:4]],
                          ["ana", "bo", "ana", "bo"])
         for s in d["steps"]:
             self.assertTrue(s["title"].strip())
@@ -78,16 +78,16 @@ class TemplatePlanTest(TempBashy):
 
     def test_no_people_leaves_owner_empty(self):
         d = self.plan_json("Solo work", "--minutes", "25", "--json")
-        student = [s for s in d["steps"] if s["role"] == "student"]
-        self.assertEqual(sum(s["minutes"] for s in student), 25)
-        self.assertEqual({s["owner"] for s in student}, {""})
+        participant = [s for s in d["steps"] if s["role"] == "participant"]
+        self.assertEqual(sum(s["minutes"] for s in participant), 25)
+        self.assertEqual({s["owner"] for s in participant}, {""})
         self.assertEqual(d["people"], [])
 
     def test_title_and_epic_flags(self):
         d = self.plan_json("Goal text", "--minutes", "30", "--title", "Week 3",
-                           "--epic", "lern-psic", "--json")
+                           "--epic", "session-demo", "--json")
         self.assertEqual(d["title"], "Week 3")
-        self.assertEqual(d["epic"], "lern-psic")
+        self.assertEqual(d["epic"], "session-demo")
 
     def test_draft_validates(self):
         d = self.plan_json("Goal text", "--minutes", "45", "--json")
@@ -114,14 +114,14 @@ class StubAgentTest(TempBashy):
 
     def test_valid_agent_json_is_used(self):
         draft = {"version": 1, "title": "Agent card", "goal": "Ship it",
-                 "epic": "lern-psic", "minutes": 30, "format": "class",
+                 "epic": "session-demo", "minutes": 30, "format": "session",
                  "people": ["ana"],
                  "steps": [{"title": "Read", "owner": "ana", "minutes": 10,
                             "done_when": "notes taken", "phase": "warm-up",
-                            "role": "student"},
+                            "role": "participant"},
                            {"title": "Build", "owner": "ana", "minutes": 20,
                             "done_when": "tests pass", "phase": "work",
-                            "role": "student"}]}
+                            "role": "participant"}]}
         self.stub("Here is the plan:\n```json\n%s\n```\nGood luck!" % json.dumps(draft))
         d = json.loads(self.tutor("plan", "Ship it", "--minutes", "30",
                                   "--people", "ana", "--agent", "stub",
@@ -164,16 +164,16 @@ class ApplyTest(TempBashy):
         attrs = nodes[0]["attrs"]
         self.assertEqual(attrs["title"], draft["steps"][0]["title"])
         self.assertEqual(attrs["assignee"], draft["steps"][0]["owner"])
-        self.assertIn("role-student", attrs["labels"])
+        self.assertIn("role-participant", attrs["labels"])
         self.assertIn("timebox-%dm" % draft["steps"][0]["minutes"], attrs["labels"])
         self.assertEqual(attrs["sprint"], res["sprint"])
         self.assertIn("phase-%s" % draft["steps"][0]["phase"].replace("-", ""),
                       attrs["labels"])
 
-        teacher = [s for s in draft["steps"] if s["role"] == "teacher"][0]
-        idx = draft["steps"].index(teacher) + 1
+        owner = [s for s in draft["steps"] if s["role"] == "owner"][0]
+        idx = draft["steps"].index(owner) + 1
         tnodes = self.todo_nodes("step-%02d" % idx)
-        self.assertEqual(tnodes[0]["attrs"]["assignee"], "teacher")
+        self.assertEqual(tnodes[0]["attrs"]["assignee"], "owner")
 
     def test_apply_refuses_invalid_draft_before_creating_anything(self):
         bad = {"version": 1, "title": "t", "goal": "g", "minutes": 10, "steps": []}

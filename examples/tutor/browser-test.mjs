@@ -1,4 +1,4 @@
-// Real-browser check of the tutor server: projector, 390px phone, teacher, and
+// Real-browser check of the tutor server: display, 390px phone, owner, and
 // a join from the LAN address. A fake `bashy` (node script) supplies canned status.
 //   PLAYWRIGHT_MODULE=/path/to/playwright/index.mjs [CHROMIUM_PATH=...] node browser-test.mjs
 // TUTOR_SERVER_BIN selects a prebuilt server; otherwise it is built from server/.
@@ -18,11 +18,11 @@ if(!exe){exe=join(dir,'tutor-server');
  assert.equal(b.status,0,b.stderr)}
 
 const state=join(dir,'status.json'),calls=join(dir,'calls.log');
-const status=(over)=>({sprint:7,title:'Robotics class',clock:{state:'running'},
+const status=(over)=>({sprint:7,title:'Robotics session',format:'meeting',roles:{owner:'facilitator',participants:['participant']},clock:{state:'running'},
  current:{index:2,total:3,id:'t2',title:'Build the arm',owners:['alice'],timebox_s:600,elapsed_s:over?700:100,remaining_s:over?-100:500,overdue:over},
- steps:[{index:1,id:'t1',title:'Warm up',owner:'bob',role:'student',status:'done',timebox_s:300,overdue:false,evidence:null},
-  {index:2,id:'t2',title:'Build the arm',owner:'alice',role:'student',status:'doing',timebox_s:600,overdue:over,evidence:null},
-  {index:3,id:'t3',title:'Share',owner:'bob',role:'student',status:'todo',timebox_s:300,overdue:false,evidence:null}]});
+ steps:[{index:1,id:'t1',title:'Warm up',owner:'bob',role:'participant',status:'done',timebox_s:300,overdue:false,evidence:null},
+  {index:2,id:'t2',title:'Build the arm',owner:'alice',role:'participant',status:'doing',timebox_s:600,overdue:over,evidence:null},
+  {index:3,id:'t3',title:'Share',owner:'bob',role:'participant',status:'todo',timebox_s:300,overdue:false,evidence:null}]});
 await writeFile(state,JSON.stringify(status(false)));
 const fake=join(dir,'bashy');
 await writeFile(fake,`#!/usr/bin/env node
@@ -35,34 +35,35 @@ const env={...process.env,BASHY_BIN:fake,XDG_DATA_HOME:join(dir,'xdg')};
 const server=spawn(exe,['serve','7','--addr','0.0.0.0:0'],{env});
 let out='';server.stdout.on('data',d=>out+=d);server.stderr.on('data',d=>out+=d);
 for(let i=0;i<100&&!out.includes('Join bob');i++)await new Promise(r=>setTimeout(r,100));
-const projector=out.match(/Projector: (\S+)/)?.[1],teacher=out.match(/Teacher \(keep private\): (\S+)/)?.[1];
+const display=out.match(/Display: (\S+)/)?.[1],owner=out.match(/Facilitator \(keep private\): (\S+)/)?.[1];
 const alice=out.match(/Join alice: (\S+)/)?.[1],bob=out.match(/Join bob: (\S+)/)?.[1];
-assert.ok(projector&&teacher&&alice&&bob,out);
-const tokens=[teacher.split('/').pop(),alice.split('/').pop(),bob.split('/').pop()];
+assert.ok(display&&owner&&alice&&bob,out);
+const tokens=[owner.split('/').pop(),alice.split('/').pop(),bob.split('/').pop()];
 
 let browser;
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
- // --- projector, 1280x720 ---
+ // --- display, 1280x720 ---
  const proj=await (await browser.newContext({viewport:{width:1280,height:720}})).newPage();
- await proj.goto(projector);
+ await proj.goto(display);
  await proj.locator('h1',{hasText:'Build the arm'}).waitFor();
  const clock=await proj.locator('#clock').textContent();
  assert.match(clock,/^\d+:\d\d$/);
  assert.ok(await proj.locator('#clock').evaluate(e=>parseFloat(getComputedStyle(e).fontSize))>=120,'big countdown');
  const html=await proj.content();
- for(const t of tokens)assert.ok(!html.includes(t),'projector must not show tokens');
+ for(const t of tokens)assert.ok(!html.includes(t),'display must not show tokens');
  assert.equal(await proj.locator('.clock.over').count(),0);
  await writeFile(state,JSON.stringify(status(true)));
  await proj.locator('.clock.over').waitFor({timeout:8000});
  assert.match(await proj.locator('#clock').textContent(),/^\+\d+:\d\d$/);
- await proj.screenshot({path:join(dir,'projector.png')});
+ await proj.screenshot({path:join(dir,'display.png')});
  await writeFile(state,JSON.stringify(status(false)));
 
  // --- phone 390px: alice's own step, Done with evidence link ---
  const phone=await (await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true})).newPage();
  await phone.goto(alice);
  await phone.locator('h1',{hasText:'Build the arm'}).waitFor();
+ assert.equal(await phone.title(),'Participant');
  assert.ok(await phone.evaluate(()=>document.documentElement.scrollWidth<=390),'no horizontal scroll');
  const done=phone.locator('#done');await done.waitFor();
  const box=await done.boundingBox();assert.ok(box.width>=300&&box.height>=40,'tap-sized Done');
@@ -77,10 +78,11 @@ try{
  await bobPage.locator('h1',{hasText:'Not your turn yet'}).waitFor();
  assert.equal(await bobPage.locator('#done').count(),0);
 
- // --- teacher: next ---
+ // --- owner: next ---
  const t=await (await browser.newContext({viewport:{width:1280,height:720}})).newPage();
- await t.goto(teacher);
+ await t.goto(owner);
  await t.locator('#next').click();
+ assert.equal(await t.title(),'Facilitator');
  await t.locator('#msg',{hasText:'ok'}).waitFor();
  assert.match(await readFile(calls,'utf8'),/tutor next 7 --json/);
 
