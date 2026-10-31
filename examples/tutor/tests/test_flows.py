@@ -76,7 +76,9 @@ class Flows(TempBashy):
                     except OSError:
                         break
                     buf += chunk
-            lines = [l.strip() for l in buf.decode().splitlines() if l.strip() and not l.startswith("==> ")]
+            # bashy's own status lines (e.g. "bashy: telemetry on → …") are host-dependent, not tutor output.
+            lines = [l.strip() for l in buf.decode().splitlines()
+                     if l.strip() and not l.startswith("==> ") and not l.strip().startswith("bashy: ")]
             self.assertTrue(any("Ctrl-C to stop" in l for l in lines), buf.decode())
             check(lines)
         finally:
