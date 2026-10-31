@@ -130,20 +130,14 @@ the format from the content's `format:` field, a neighboring `format.md`
 Unknown editions are rejected. `--format form` emits the question form. Hints should ask a question
 or suggest the next small step; they should never supply the participant's work.
 
-## Chat composition and skill
+## Skill
 
 ```sh
-examples/tutor/chat-status.sh N CONFIG.json GROUP
-# One update only:
-examples/tutor/chat-status.sh N CONFIG.json GROUP --once
 TUTOR_SPRINT=N bashy skill run tutor --json
 ```
 
-The shell helper pipes `tutor status --line` to
-`bashy klatch topic CONFIG.json GROUP -` and posts a milestone on step
-change. It needs an existing Klatch bot configuration and group. Tutor does
-not import Klatch or form code. The skill attests a read of the explicitly
-selected sprint; it does not start a session.
+`tutor status N --line` prints one plain line, so any tool can carry it (for
+example a chat app's topic); tutor itself knows nothing about chat.
 
 ## Isolated rehearsal and gate
 

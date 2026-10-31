@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Setup/provision/status/post/topic adapter for a running Klatch (Databag fork) server.
+"""Setup/provision/status adapter for a running Klatch (Databag fork) server.
 
 Passwords are vault references resolved with `bashy secret show`; they travel
 only in HTTP headers/query parameters the server contract requires, never in
@@ -58,9 +58,6 @@ def config(path):
                 fail("group %s references unknown handle %s" % (g["key"], h))
         if not g.get("name"):
             fail("group %s needs a name" % g["key"])
-    bot = cfg.get("bot")
-    if bot is not None and bot not in handles:
-        fail("bot %s is not a configured user" % bot)
     cfg.setdefault("users", [])
     cfg.setdefault("groups", [])
     return cfg
@@ -159,23 +156,11 @@ class Client:
     def channels(self, agent):
         return self.call("GET", "/content/channels", {"agent": agent}) or []
 
-    def add_channel(self, agent, subject, card_ids, key=None):
-        data = {"subject": subject}
-        if key:
-            data["key"] = key
-        body = {"dataType": "superbasic", "data": json.dumps(data),
+    def add_channel(self, agent, subject, card_ids):
+        body = {"dataType": "superbasic", "data": json.dumps({"subject": subject}),
                 "groups": [], "cards": card_ids}
         res = self.call("POST", "/content/channels", {"agent": agent}, body)
         return res.get("id") if isinstance(res, dict) else res
-
-    def set_subject(self, agent, channel_id, data):
-        self.call("PUT", "/content/channels/%s/subject" % channel_id, {"agent": agent},
-                  {"dataType": "superbasic", "data": json.dumps(data)})
-
-    def add_topic(self, agent, channel_id, text):
-        self.call("POST", "/content/channels/%s/topics" % channel_id,
-                  {"agent": agent, "confirm": "true"},
-                  {"dataType": "superbasictopic", "data": json.dumps({"text": text})})
 
 
 def account_handle(entry):
@@ -193,29 +178,13 @@ def card_status(entry):
     return (data.get("cardDetail") or {}).get("status")
 
 
-def channel_data(entry):
+def channel_subject(entry):
     data = entry.get("data") or {}
     detail = data.get("channelDetail") or {}
     try:
-        out = json.loads(detail.get("data", ""))
-    except (ValueError, TypeError):
-        return {}
-    return out if isinstance(out, dict) else {}
-
-
-def channel_subject(entry):
-    return channel_data(entry).get("subject")
-
-
-def group_channel(channels, g):
-    """The group's channel: tagged with its key, else (pre-key) titled by its name."""
-    for c in channels:
-        if channel_data(c).get("key") == g["key"]:
-            return c
-    for c in channels:
-        if channel_subject(c) == g["name"]:
-            return c
-    return None
+        return json.loads(detail.get("data", "")).get("subject")
+    except (ValueError, AttributeError, TypeError):
+        return None
 
 
 def admin_session(client, cfg, bootstrap):
@@ -324,12 +293,12 @@ def provision(client, cfg, session):
     groups = {}
     for g in cfg["groups"]:
         token = logins[g["owner"]][1]
-        found = group_channel(client.channels(token), g)
+        found = [c for c in client.channels(token) if channel_subject(c) == g["name"]]
         if found:
-            groups[g["key"]] = found.get("id")
+            groups[g["key"]] = found[0].get("id")
         else:
             groups[g["key"]] = client.add_channel(
-                token, g["name"], [cardids[g["owner"]][m] for m in g.get("members", [])], g["key"])
+                token, g["name"], [cardids[g["owner"]][m] for m in g.get("members", [])])
     return {"handles": guids, "groups": groups}
 
 
@@ -353,68 +322,11 @@ def status(client, cfg):
                 next(u["password_secret"] for u in cfg["users"] if u["handle"] == g["owner"])))
         except SystemExit:
             continue
-        found = group_channel(client.channels(token), g)
-        if found:
-            groups[g["key"]] = found.get("id")
+        for c in client.channels(token):
+            if channel_subject(c) == g["name"]:
+                groups[g["key"]] = c.get("id")
     out["groups"] = groups
     return out
-
-
-def bot_channel(client, cfg, key):
-    """Log in as the config's bot (default: the group owner) and find the group's channel."""
-    g = next((g for g in cfg["groups"] if g["key"] == key), None)
-    if g is None:
-        fail("unknown group %s" % key)
-    bot = cfg.get("bot") or g["owner"]
-    ref = next(u["password_secret"] for u in cfg["users"] if u["handle"] == bot)
-    _, token = client.login(bot, client.resolve(ref))
-    found = group_channel(client.channels(token), g)
-    if found is None:
-        fail("bot %s does not host group %s; make it the group owner and provision" % (bot, key))
-    return g, token, found
-
-
-def post(client, cfg, key, text):
-    _, token, channel = bot_channel(client, cfg, key)
-    client.add_topic(token, channel.get("id"), text)
-    return {"group": key, "ok": True}
-
-
-def topic(client, cfg, key, text):
-    """Set the channel subject (the conversation header) to 'NAME — TEXT'; empty TEXT restores NAME."""
-    g, token, channel = bot_channel(client, cfg, key)
-    text = " ".join(text.split())
-    data = channel_data(channel)
-    data["key"] = key
-    data["subject"] = "%s \u2014 %s" % (g["name"], text) if text else g["name"]
-    client.set_subject(token, channel.get("id"), data)
-    return {"group": key, "ok": True, "subject": data["subject"]}
-
-
-def vault_store(ref, value):
-    if not re.fullmatch(r"[A-Za-z0-9_./-]+", ref):
-        fail("invalid secret reference")
-    subprocess.run(["bashy", "secret", "set", ref], input=value, check=True, text=True,
-                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-
-def invite(client, cfg, session, count, ref, store=vault_store):
-    """Mint COUNT one-time sign-up links (<base_url>/?add=TOKEN) into the vault at REF.
-
-    Each link is a Databag admin account token: it creates exactly one account.
-    The links are written to the vault only; the output carries the count and REF.
-    """
-    if count < 1 or count > 100:
-        fail("invite count must be 1..100")
-    links = ["%s/?add=%s" % (cfg["base_url"], client.call("POST", "/admin/accounts", {"token": session}))
-             for _ in range(count)]
-    store(ref, "\n".join(links) + "\n")
-    return {"links": count, "ref": ref}
-
-
-def message_text(arg, stdin=sys.stdin):
-    text = stdin.read() if arg == "-" else arg
-    return text.strip()
 
 
 def main(argv):
@@ -424,33 +336,8 @@ def main(argv):
         session, admin_pw = admin_session(client, cfg, bootstrap=False)
         print(json.dumps(reset_passwords(client, cfg, session, admin_pw, argv[2:]), indent=2))
         return
-    if argv and argv[0] == "invite":
-        import argparse
-        parser = argparse.ArgumentParser(prog="klatch invite")
-        parser.add_argument("config")
-        parser.add_argument("--count", type=int, required=True)
-        parser.add_argument("--ref", default="klatch/signup-links")
-        args = parser.parse_args(argv[1:])
-        if not 1 <= args.count <= 100:
-            fail("invite count must be 1..100")
-        cfg = config(args.config)
-        client = Client(cfg["base_url"])
-        session, _ = admin_session(client, cfg, bootstrap=False)
-        print(json.dumps(invite(client, cfg, session, args.count, args.ref), sort_keys=True))
-        return
-    if len(argv) == 4 and argv[0] in ("post", "topic"):
-        action, path, key, arg = argv
-        cfg = config(path)
-        text = message_text(arg)
-        if action == "post" and not text:
-            fail("post needs non-empty TEXT")
-        fn = post if action == "post" else topic
-        print(json.dumps(fn(Client(cfg["base_url"]), cfg, key, text), sort_keys=True))
-        return
     if len(argv) != 2 or argv[0] not in ("setup", "provision", "status"):
         fail("Usage: provision.py setup|provision|status CONFIG.json\n"
-             "       provision.py post|topic CONFIG.json GROUP TEXT|-\n"
-             "       provision.py invite CONFIG.json --count N [--ref REF]\n"
              "       provision.py reset-passwords CONFIG.json HANDLE...")
     action, path = argv
     cfg = config(path)

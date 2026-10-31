@@ -45,8 +45,7 @@ through the registered command. No default sprint is silently selected.
 - `bashy tutor serve N` / `join URL` / `stop` run the display and per-participant
   pages. `bashy tutor prep DIR [--from PATH]` shapes a content dir before a session.
 
-Compose, don't couple: `examples/tutor/chat-status.sh N CONFIG GROUP` pipes
-`status --line` to `bashy klatch topic CONFIG GROUP -` and posts on step change.
+Compose, don't couple: `status --line` is one plain line any other tool can carry.
 Formats are editable Markdown (`formats/session.md`); copy one to make your own
 session, meeting or solo format. This is Software Shaping: edit phases, pairing,
 timeboxes, tools, tone and owner steps, then plan with `--format PATH`.

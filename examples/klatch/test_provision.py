@@ -13,7 +13,7 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 ADMIN = "adminpw"
-SECRETS = {"klatch/admin": ADMIN, "klatch/bot": "botpw", "klatch/alice": "apw", "klatch/bob": "bpw", "klatch/carol": "cpw"}
+SECRETS = {"klatch/admin": ADMIN, "klatch/alice": "apw", "klatch/bob": "bpw", "klatch/carol": "cpw"}
 
 
 class State:
@@ -29,8 +29,6 @@ class State:
         self.resets = {}        # reset token -> handle
         self.next = 0
         self.connected_calls = []
-        self.topics = []        # (agent, channel id, query, body)
-        self.subjects = []      # (agent, channel id, body)
 
     def nid(self):
         self.next += 1
@@ -153,18 +151,6 @@ def make_handler(st):
                     {"id": cid, "data": {"channelDetail": {"dataType": body["dataType"], "data": body["data"]}},
                      "cards": body["cards"]})
                 return self.reply({"id": cid})
-            m = re.fullmatch(r"/content/channels/([^/]+)/(subject|topics)", p)
-            if m:
-                c = next((c for c in st.channels.get(q.get("agent"), []) if c["id"] == m.group(1)), None)
-                if c is None:
-                    return self.reply(None, 404)
-                if m.group(2) == "subject" and method == "PUT":
-                    st.subjects.append((q["agent"], c["id"], body))
-                    c["data"]["channelDetail"].update(body)
-                    return self.reply(None)
-                if m.group(2) == "topics" and method == "POST":
-                    st.topics.append((q["agent"], c["id"], q, body))
-                    return self.reply({"id": st.nid()})
             self.reply(None, 404)
 
         def do_GET(self):
@@ -188,7 +174,7 @@ class ProvisionTest(unittest.TestCase):
             "base_url": "http://127.0.0.1:%d" % self.srv.server_port, "domain": "chat.test",
             "admin_password_secret": "klatch/admin",
             "users": [{"handle": h, "password_secret": "klatch/" + h} for h in ("alice", "bob", "carol")],
-            "groups": [{"key": "session", "name": "Session", "owner": "alice", "members": ["bob", "carol"]}],
+            "groups": [{"key": "class", "name": "Class", "owner": "alice", "members": ["bob", "carol"]}],
         }
         self.client = module.Client(self.cfg["base_url"], resolve=SECRETS.__getitem__)
 
@@ -209,7 +195,7 @@ class ProvisionTest(unittest.TestCase):
         self.assertEqual(body["domain"], "chat.test")
         self.assertFalse(body["enableOpenAccess"])
         self.assertEqual(out["handles"], {h: "guid-" + h for h in ("alice", "bob", "carol")})
-        self.assertEqual(list(out["groups"]), ["session"])
+        self.assertEqual(list(out["groups"]), ["class"])
         # alice holds cards for bob and carol; each member holds one for alice
         self.assertEqual(len(self.st.cards["tok-alice"]), 2)
         self.assertEqual(len(self.st.cards["tok-bob"]), 1)
@@ -286,35 +272,13 @@ class ProvisionTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             module.admin_session(self.client, self.cfg, bootstrap=False)
 
-    def test_invite_links_go_to_vault_only(self):
-        self.run_setup()
-        session, _ = module.admin_session(self.client, self.cfg, bootstrap=False)
-        stored = {}
-        out = module.invite(self.client, self.cfg, session, 3, "klatch/signup-links",
-                            store=lambda ref, value: stored.update({ref: value}))
-        self.assertEqual(out, {"links": 3, "ref": "klatch/signup-links"})
-        links = stored["klatch/signup-links"].split()
-        self.assertEqual(len(links), 3)
-        self.assertEqual(len(set(links)), 3)
-        for link in links:
-            self.assertTrue(link.startswith(self.cfg["base_url"] + "/?add=create-"), link)
-            self.assertNotIn(link.split("=", 1)[1], json.dumps(out))
-        self.assertEqual(len(self.st.creates), 3 + 3)  # 3 provisioned accounts + 3 unused invites
-
-    def test_invite_count_bounds(self):
-        self.run_setup()
-        session, _ = module.admin_session(self.client, self.cfg, bootstrap=False)
-        for bad in (0, 101):
-            with self.assertRaises(SystemExit):
-                module.invite(self.client, self.cfg, session, bad, "klatch/x", store=lambda *a: None)
-
     def test_status(self):
         self.assertFalse(module.status(self.client, self.cfg)["bootstrapped"])
         self.run_setup()
         s = module.status(self.client, self.cfg)
         self.assertTrue(s["reachable"])
         self.assertEqual(s["accounts"], 3)
-        self.assertEqual(list(s["groups"]), ["session"])
+        self.assertEqual(list(s["groups"]), ["class"])
 
     def test_status_unreachable(self):
         dead = module.Client("http://127.0.0.1:1", resolve=SECRETS.__getitem__)
@@ -330,97 +294,5 @@ class ProvisionTest(unittest.TestCase):
                 module.config(p)
 
 
-
-class ChatTest(unittest.TestCase):
-    """post/topic act as the config's bot, which hosts the group."""
-    tearDown = ProvisionTest.tearDown
-    run_setup = ProvisionTest.run_setup
-
-    def setUp(self):
-        ProvisionTest.setUp(self)
-        self.cfg["users"].append({"handle": "bot", "password_secret": "klatch/bot"})
-        self.cfg["bot"] = "bot"
-        self.cfg["groups"][0]["owner"] = "bot"
-        self.cfg["groups"][0]["members"] = ["alice", "bob", "carol"]
-        self.out = self.run_setup()
-        self.chan = self.out["groups"]["session"]
-
-    def test_post_as_bot(self):
-        out = module.post(self.client, self.cfg, "session", "step-02 started")
-        self.assertEqual(out, {"group": "session", "ok": True})
-        agent, cid, q, body = self.st.topics[-1]
-        self.assertEqual((agent, cid, q["confirm"]), ("tok-bot", self.chan, "true"))
-        self.assertEqual(body["dataType"], "superbasictopic")
-        self.assertEqual(json.loads(body["data"]), {"text": "step-02 started"})
-
-    def test_topic_sets_header_and_keeps_group(self):
-        out = module.topic(self.client, self.cfg, "session", "step-02 Pair up \u00b7 12m left\n")
-        self.assertEqual(out["subject"], "Session \u2014 step-02 Pair up \u00b7 12m left")
-        agent, cid, body = self.st.subjects[-1]
-        self.assertEqual((agent, cid), ("tok-bot", self.chan))
-        self.assertEqual(json.loads(body["data"]), {"subject": out["subject"], "key": "session"})
-        # renamed header must not make a rerun create a duplicate group
-        self.assertEqual(self.run_setup(), self.out)
-        self.assertEqual(len(self.st.channels["tok-bot"]), 1)
-        module.topic(self.client, self.cfg, "session", "")
-        self.assertEqual(json.loads(self.st.subjects[-1][2]["data"])["subject"], "Session")
-
-    def test_stdin_text(self):
-        import io
-        self.assertEqual(module.message_text("-", io.StringIO("from stdin\n")), "from stdin")
-        self.assertEqual(module.message_text("literal"), "literal")
-
-    def test_bot_must_host_group(self):
-        cfg = dict(self.cfg, bot="alice")
-        with self.assertRaises(SystemExit):
-            module.post(self.client, cfg, "session", "hi")
-        with self.assertRaises(SystemExit):
-            module.post(self.client, self.cfg, "nope", "hi")
-        self.assertEqual(self.st.topics, [])
-
-
 if __name__ == "__main__":
     unittest.main()
-
-
-class InviteFlagsTest(unittest.TestCase):
-    def test_required_count_and_optional_ref(self):
-        from unittest.mock import patch
-        import contextlib
-        import io
-        with patch.object(module, 'config', return_value={'base_url': 'http://localhost'}) as cfg, \
-             patch.object(module, 'Client'), \
-             patch.object(module, 'admin_session', return_value=('session', 'password')), \
-             patch.object(module, 'invite', return_value={'links': 7, 'ref': 'owner/links'}) as mint, \
-             contextlib.redirect_stdout(io.StringIO()):
-            module.main(['invite', 'owner.json', '--count', '7', '--ref', 'owner/links'])
-            self.assertEqual(mint.call_args.args[3:], (7, 'owner/links'))
-            module.main(['invite', 'owner.json', '--count', '2'])
-            self.assertEqual(mint.call_args.args[3:], (2, 'klatch/signup-links'))
-            cfg.reset_mock()
-            for args in (['invite', 'owner.json'], ['invite', 'owner.json', '3'],
-                         ['invite', 'owner.json', '--count', '0']):
-                with self.subTest(args=args), self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
-                    module.main(args)
-            cfg.assert_not_called()
-
-    def test_registered_invite_flags_reach_validation(self):
-        import os
-        import subprocess
-        import tempfile
-        here = Path(__file__).resolve().parent
-        with tempfile.TemporaryDirectory(prefix='klatch-registration-') as tmp:
-            root = Path(tmp)
-            env = dict(os.environ, BASHY_HOME=str(root/'home'),
-                       BASHY_COORD_DIR=str(root/'coord'), BASHY_ROOM_DIR=str(root/'room'),
-                       XDG_DATA_HOME=str(root/'data'), BASHY_HINTS='off')
-            subprocess.run(['git', 'init', '-q', tmp], check=True, env=env)
-            registered = subprocess.run(['bash', str(here/'register.sh')], cwd=tmp,
-                                        env=env, text=True, capture_output=True)
-            self.assertEqual(registered.returncode, 0, registered.stderr)
-            for command in (['bashy', 'klatch'], ['bashy', '--bashsharp', str(here/'klatch.bsh')]):
-                result = subprocess.run(command + ['invite', 'missing.json', '--count', '0', '--ref', 'owner/links'],
-                                        cwd=tmp, env=env, text=True, capture_output=True)
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn('invite count must be 1..100', result.stderr)
-                self.assertNotIn('unknown flag', result.stderr)
