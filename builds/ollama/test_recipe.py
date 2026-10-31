@@ -772,6 +772,38 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         self.assertTrue((d / "cmake.d").is_file(), "CMake's own depfile must be preserved")
         self.assertEqual([i["relative"] for i in recs[0]["inputs"]], ["k.cu"])
 
+    def test_relative_deleted_depfile_survives_to_compiler_inputs_audit(self):
+        # Hosted run 41168017074: CMake passes a cwd-relative -MF and ninja
+        # consumes/deletes the .d after the compile; the launcher must snapshot
+        # it into the capture dir so audit-runner (another cwd, later) finds it.
+        launcher = self.helpers / "compiler-capture-launcher"
+        d = Path(tempfile.mkdtemp())
+        src = d / "src"; (src / "build").mkdir(parents=True)
+        (src / "k.cu").write_text("__global__ void k(){}\n")
+        fake = d / "fakenvcc"
+        fake.write_text("#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = -MF ] && { shift; echo \"o: ../k.cu\" > \"$1\"; }; shift; done\n")
+        fake.chmod(0o755)
+        cap = d / "cap"
+        env = dict(os.environ, BASHY_COMPILER_CAPTURE_DIR=str(cap), BASHY_COMPILER_SOURCE=str(src),
+                   BASHY_COMPILER_GOROOT=str(d), BASHY_COMPILER_TMP=str(d))
+        r = subprocess.run([str(launcher), str(fake), "-c", "../k.cu", "-MD", "-MF", "k.cu.o.d"],
+                           env=env, capture_output=True, text=True, cwd=src / "build")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue((src / "build" / "k.cu.o.d").is_file(), "CMake's relative depfile must stay in place")
+        (src / "build" / "k.cu.o.d").unlink()
+        rec = json.loads(next((cap / "invocations").glob("*.json")).read_text())
+        self.assertTrue(os.path.isabs(rec["depfile"]))
+        self.assertTrue(rec["depfile"].startswith(str(cap / "depfiles")), rec["depfile"])
+        self.assertEqual(rec["source_depfile"], "k.cu.o.d")
+        out = d / "inputs.json"
+        r = subprocess.run(["python3", str(self.helpers / "audit-runner.py"), "compiler-inputs", "--capture", str(cap),
+                            "--source", str(src), "--generated", str(d / "none"), "--output", str(out)],
+                           capture_output=True, text=True, cwd=d)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        data = json.loads(out.read_text())
+        self.assertEqual(sorted(data["files"]), ["k.cu"])
+        self.assertEqual(data["dependency_files"], 1)
+
     def test_backend_dependency_closure_is_recursive_and_fail_closed(self):
         tool = self.helpers / "cuda-link-audit.py"
         d = Path(tempfile.mkdtemp())

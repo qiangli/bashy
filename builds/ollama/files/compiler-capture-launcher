@@ -2,10 +2,12 @@
 """CMake compiler launcher: LAUNCHER REAL_COMPILER ARGS... (nvcc/.cu, gcc, g++).
 
 Records the invocation and snapshots its dependency file like compiler-capture-cc.
-A depfile CMake already requested with -MF is reused, never overridden.
+A depfile CMake requested with -MF is left untouched; after a successful compile it is
+copied (resolved against the compile cwd) into the capture dir, since ninja may delete it.
 """
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -22,23 +24,28 @@ root = Path(os.environ["BASHY_COMPILER_CAPTURE_DIR"])
 root.mkdir(parents=True, exist_ok=True)
 source_exts = (".c", ".cc", ".cpp", ".cxx", ".cu", ".cuh", ".h", ".hh", ".hpp", ".hxx")
 is_native = any(Path(arg).suffix.lower() in source_exts for arg in args) and "-c" in args
-run_args, depfile = list(args), None
+run_args, depfile, source_depfile = list(args), None, None
 if is_native:
     if "-MF" in args and args.index("-MF") + 1 < len(args):
-        depfile = Path(args[args.index("-MF") + 1])
+        source_depfile = Path(args[args.index("-MF") + 1])
+        depfile = root / "depfiles" / (uuid.uuid4().hex + ".d")
     else:
         depdir = root / "depfiles"
         depdir.mkdir(parents=True, exist_ok=True)
         depfile = depdir / (uuid.uuid4().hex + ".d")
         run_args += ["-MMD", "-MF", str(depfile)]
 record = {"compiler": compiler, "argv": args, "captured": is_native,
-          "depfile": str(depfile) if depfile else None, "cwd": str(Path.cwd()), "executed_argv": run_args,
+          "depfile": str(depfile) if depfile else None,
+          "source_depfile": str(source_depfile) if source_depfile else None, "cwd": str(Path.cwd()), "executed_argv": run_args,
           "roots": {key: str(Path(os.environ[key]).resolve()) for key in
                     ("BASHY_COMPILER_SOURCE", "BASHY_COMPILER_GOROOT", "BASHY_COMPILER_TMP", "BASHY_CUDA_ROOT") if key in os.environ}}
 result = subprocess.run([compiler, *run_args])
 record["returncode"] = result.returncode
 try:
     if result.returncode == 0 and depfile is not None:
+        if source_depfile is not None:
+            depfile.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source_depfile, depfile)
         store = root / "content"
         store.mkdir(exist_ok=True)
         record["inputs"] = evidence.snapshot(depfile, store)
