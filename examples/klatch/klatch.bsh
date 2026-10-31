@@ -3,7 +3,7 @@
 ~~~skill as guide
 ---
 name: klatch
-description: Bootstrap and provision a running Klatch chat server, idempotently, with admin, accounts, mutual contacts and groups.
+description: Bootstrap and provision a running Klatch chat server, idempotently, with admin, accounts, mutual contacts and groups; post to a group or set its header topic as a bot.
 metadata:
   requires: "has=bashy"
 ---
@@ -15,6 +15,12 @@ the federation domain and closed access, then provisions accounts, mutual
 contacts between group owner and members and groups. `provision` skips the admin
 steps; `status` reports reachability, account count and groups. Output is JSON
 handles to guids and group keys to ids. Reruns create no duplicates.
+`post CONFIG.json GROUP TEXT|-` posts a message to the group as the config's
+`bot` account (default the group owner, which must host the group);
+`topic CONFIG.json GROUP TEXT|-` sets the conversation header to `NAME — TEXT`
+(empty TEXT restores NAME). `-` reads TEXT from stdin, so anything composes:
+`some-status --line | bashy klatch topic CONFIG.json class -`. Both print
+`{"group", "ok"}`.
 Passwords are vault references via `bashy secret show REF`; never put one in
 the config or on a command line. See `examples/klatch/README.md`.
 ~~~
@@ -35,8 +41,8 @@ if [[ ${1:-} == --contract ]]; then
   echo 'sokilili meitorikusu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini'
   exit
 fi
-if (( $# != 2 )); then
-  echo 'Usage: klatch setup|provision|status CONFIG.json' >&2
-  exit 2
-fi
-exec python3 "$here/provision.py" "$1" "$2"
+case ${1:-} in
+  post|topic) (( $# == 4 )) || { echo "Usage: klatch $1 CONFIG.json GROUP TEXT|-" >&2; exit 2; } ;;
+  *) (( $# == 2 )) || { echo 'Usage: klatch setup|provision|status CONFIG.json | post|topic CONFIG.json GROUP TEXT|-' >&2; exit 2; } ;;
+esac
+exec python3 "$here/provision.py" "$@"
