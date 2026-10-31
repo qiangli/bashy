@@ -34,6 +34,27 @@ never printed or placed in argv. There is no built-in roster.
 | `provision` | create missing accounts, mutual contacts (owner and members), and groups |
 | `status` | report reachability, bootstrap state, account count, groups found |
 
+| `post GROUP TEXT\|-` | post TEXT (or stdin with `-`) to the group as the bot |
+| `topic GROUP TEXT\|-` | set the group's conversation header to `NAME — TEXT`; empty TEXT restores `NAME` |
+
+`post` and `topic` take `CONFIG.json GROUP TEXT|-` and print
+`{"group": key, "ok": true}`. They act as the config's `"bot"` handle (a normal
+entry in `users`, password via vault ref like the others), or as the group
+owner if no `bot` is set. Databag only lets the account that hosts a channel set
+its subject, so make the bot the group `owner` (e.g. `"owner": "classbot",
+"members": [...]`) and provision. These verbs know nothing about who calls them,
+so any line-producer composes:
+
+```sh
+bashy tutor status 528 --line | bashy klatch topic class.json class -
+examples/tutor/chat-status.sh 528 class.json class --every 30   # loop + milestone posts
+```
+
+The header is the channel subject, shown as the conversation title on web
+(single line, ellipsised when long) and on the phone app. Groups carry their
+`key` in the channel data, so a changed header never makes a rerun duplicate
+the group.
+
 `setup` and `provision` print JSON: `{"handles": {handle: guid}, "groups":
 {key: id}}`. Reruns skip existing accounts, contacts and groups (groups are
 matched by subject), so they never duplicate.
