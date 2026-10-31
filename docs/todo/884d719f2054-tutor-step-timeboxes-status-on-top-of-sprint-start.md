@@ -37,3 +37,10 @@ Verbs (`--json` everywhere):
   `{"sprint":N,"title":str,"clock":{"state":"running|not-started|stopped","deadline":iso|null,"remaining_s":int|null},"current":{"index":i,"total":n,"id":str,"title":str,"owners":[..],"timebox_s":int,"elapsed_s":int,"remaining_s":int,"overdue":bool}|null,"steps":[{"index","id","title","owner","role","status","timebox_s","started_at","done_at","overdue","evidence"}]}`.
   Elapsed comes from the run log step_start; timebox = label minutes + extends. `--line`: `Step 2/5 · Prototype sketch · 12:40 left · Ana, Ben` (`· 3:10 over` when overdue; `Not started · 5 steps` / `Done · 5/5 steps` edge cases). One line, no ANSI.
 - Tests: injectable clock (env `TUTOR_NOW` ISO timestamp honoured by run.py) to assert remaining/overdue deterministically; next/done/extend round trip; --line format.
+
+## Rework brief (manager s547-manager, 2026-10-30 — run #391 delivered red, abandoned; work preserved)
+1. `git cherry-pick 67e31996` (your earlier delivery; it is reachable as refs/salvage/abandoned-391^ in the canonical repo `$HOME/projects/poc/dhnt/bashy` — fetch it from there). Do NOT take 9fdb3613 (KB.md auto-commit).
+2. `git apply $HOME/.bashy/s547/884d-rework.patch` — manager-reviewed patch implementing the decisions:
+   - CLOSURE: people never close sprint stories. start/next use `bashy todo status ID doing`; done = run-log `{event:done,evidence}` + `bashy todo edit ID --label step-done`; never `todo status done`. A step counts as done if the log has a done event, the todo has label `step-done`, or its status is done (after the class manager's `bashy sprint accept N ID -m EVIDENCE`).
+   - CLOCK: graph node `attrs.boxes[-1]`, else the last `cutoff <ISO>` in `bashy sprint show N --plain`, else the run log's `session_start` written by `tutor start --for`. The private queue.json test is replaced by fallback unit tests.
+3. `cd examples/tutor && python3 -m unittest discover -s tests -t . -v` → expect 13 tests OK. Commit with this story's trailers and submit. No other changes.
