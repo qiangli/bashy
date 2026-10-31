@@ -995,6 +995,11 @@
       "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
       "sha256": "6d57ebc3df51169c0f0d4d6e9459595fa0568fa1b515546735067c6ecfd4bc63"
     },
+    "ml/backend/ggml/ggml/include/ggml-cuda.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "8f22e8e43e460db426bb94e14e10dc91e64789e8d216c5ae62a0d02a2eb07d7f"
+    },
     "ml/backend/ggml/ggml/include/ggml-metal.h": {
       "license": "MIT",
       "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
@@ -1199,6 +1204,981 @@
       "license": "MIT",
       "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors).",
       "sha256": "ca25bbc94ef7ea71b2754b7c526e1776fd0076d1777da2444286a03d2ed9167c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/acc.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "9463f70b9edc9749d3f06331640120d99fd75af072c46c5fd1ee40d6148ffd3d"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/acc.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "4d5ff42aa0767d1b2d1f38ebd7aafef34989c329ba10ff075309feb8dcf0524a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/add-id.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "f696adbcf54d0fda380fc56009c0d68009cacdbc0d226d1c27f999f3881b4840"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/add-id.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "5e6a300c364652c50d4b73ceaef0134f70a0bd381c31d8a797e4d2124990b922"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/arange.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "e9bef1d5940009034d8bc8ca4185dd204191c20d1a0682a9bdccf4f953c57a5e"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/arange.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "f5bd2851bc3a5c0191aa3e5ef6dbd4e1aa6a3baef6f7b01ff018220b803cc4a6"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/argmax.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "02b7d8d7b55d9a27b744a92b5e7cf44507b13ee1712596ec8db23c9b4f4994d3"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/argmax.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "ef21bf4859104c16037220a70a0c64de0b64a2469d6c1a65b49cf3ce6dc45b84"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/argsort.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "a7608a416ae56aebe15f4fc8f670d51728a7b840266e2f2074ba4c4bd56fc11d"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/argsort.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3f42aa142fa4b504546cded8606de70d9bad6a104f90f7a0061dde649f6c4161"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/binbcast.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "06a09790497b3fa22dccf2099e3e2689daa20bc0304cd6b2f98435d688853d45"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/binbcast.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "edbd8bbeed4a830f292648b685be34d1b14c87b4618d26e9b7bab4ab80f1ef0b"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/clamp.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "ad20b2b271c125a306509d81b062ac6f79be3f430ef6f75099946078bc8d6a0a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/clamp.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "53713bdce3d2cd614719a00e3e282c7ec2555cad1d35baa65e930cb5bda54b27"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/common.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "cef0da3e2da6bf599f6261f23ec3d6cb26d8345dbbfaf33766d7b15bea1c2cc7"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/concat.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "b033e3d83f3004de053eb2d616e034684e9c7b93d68e92d11c69e762711cf741"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/concat.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "d367604a4ae4ab673580082fb397d04062bd541706d9eefb6989f9a905e61a12"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/conv-transpose-1d.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "4e401ed82e2f3200b15e98e180ccd6e51df1034925848fcd27e8d3cc96e537c7"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/conv-transpose-1d.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "7b0e3ae90967a5d20331a045786adbf6c9c32df3fece85ad5489a3b5309920a3"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/conv2d-dw.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "fb451d1ff03ef05a28fdd82fe08d2083c05c9f39b04d6821c2758395ee990fa8"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/conv2d-dw.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "9df0c2add5f474dcd1499fe6b1375a9e90bd4b970b7bd51c26c05ef8c0804ec6"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/conv2d-transpose.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "35f8e242458eb0c27d2808f88d412c9d3d19b0722b6865bc3b8118b39a9a5673"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/conv2d-transpose.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "09c018dcf2c0c7bc579ab7b95f4ee810897131e893be3b6e9be3d320ed1fc5e3"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/conv2d.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "e22f516640c89b24d2f3323af73736037fc97a1aa31582f410c767e357156c9a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/conv2d.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "6edb9e83097aed547422aa293762a1b30ad671c25d272a2425518b61bba2e562"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/convert.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "de4986f707dfa04c4b4111274fc01e213eaa44dc02183f9a7d4ecb5d7a8212ed"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/convert.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "4f37b5c43f3dc8b85e372a7786109d277a10ad5bd8b7f0665ab01f2a112c1437"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/count-equal.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "77a92c2ce713ab41427cae44857e3e1b7f5c25fd2fd9ae0d2d79398fae5c0e51"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/count-equal.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "8eca686572d160baa9c16de9d5851124626421f1760526c00aab641d36cadd1c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/cp-async.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "c0857cb62072ead470b2ec86039a90cd06b1825443fc523564992f5b7d94fec4"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/cpy-utils.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "1708388f0d2a459bc4bcaa86e884402e0f558ef6424d529263d30b53f3910195"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/cpy.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "0f6b6f9c943ec15cfcc947c81f7396f730e3a20d38cf5d3f0b80c6e0e2ca9948"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/cpy.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "d34e529f05a2e9db2bce75abd4ff681d286e239b4f10a67c1baf990b1170645c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/cross-entropy-loss.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "05eda816185b4f0ddc00fc188d66a00f48cbb98bf079632f79628d65984e0d9b"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/cross-entropy-loss.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "0f75c1b9f02243ca08a6972f5c8758781033106a38e9f64b5e2f37bade7a1130"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/cumsum.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "a1f764722b9213a4b777a820a5d76504819c4f916120cadf8ce95b244ed080a9"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/cumsum.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "9f177ada2f09467c6bb0936b0a246c4d43798e520628c7182ee98601f22b08b3"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/dequantize.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "9c25a44d9cd15362088e4a678d13ba33bdafadd529a59ad10c461dfdd5b3ed04"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/diag.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "9d683fe8ba8e1fec233ebb7f6a4a9ed06979cb944a046277265aebeb6d795299"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/diag.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "119ef91c4eeecc49726e8bfc1c8831e739b999a6b6424751c43993ebbec39f8f"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/diagmask.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "dbd7dcd55bbe033bb34d8ead3733c37a7e4e2eecb905a9199315d98cc3e04f7a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/diagmask.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "6017d90f19b13f525806151ff115d94ff38154764334c143b966c5e0efb66bc1"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/fattn-common.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "9bc2fcf22c018e80026cded733642458a9f79d69838220cdeafd35cd782bc171"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/fattn-mma-f16.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "b67c0e8668b286dde0d2320167cc0df05ec940bab040b1a64a6ad7776c6c0088"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/fattn-tile.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3ba3b2a4e1a112d69f76eb312ccfa2f646a9e242d008e4131dae39fffaefe0bb"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/fattn-tile.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "9939ea20b6e933f1e44efde85b8c83360b28387bc859227126d214784cd08874"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/fattn-vec.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "4eed20ad9df223e80c30abf239e49628c4819bfa94c3fac614332f4501968887"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/fattn-wmma-f16.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "74c624638c1fe6136bb9b79359f51862c92e2bf6d66eab6102cb1c77f985cde6"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/fattn-wmma-f16.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "f6f7c73799ae506c8d2452a469d1ae4a2855538bfd2f9b1025156d04edec52af"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/fattn.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "f767dfdb44cc5d5c70adba9077516b7833862490b111a371ad2852da1c4424aa"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/fattn.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "32601cf7bc698fd4b95ad2a06fec02a426244f092aea4173ab0937d59f566679"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/fill.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "ed8387d00e6144d5fbc761bc646d046862f95eb8700cbc8acd540898e558f562"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/fill.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "4ee8dcaf81b8a9aaae4041373c91c7b35d6e018006566a941030022e70e6dc14"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/getrows.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "1fdd3998472298b1f6981a015b910504c96f42718866ac0b859d178c71aa0d7c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/getrows.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "5c365e5111fe5a44ded0c0344568dbc8489c94aa87583746c8e15666fe910601"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/ggml-cuda.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "989b0a5f92480274d4fc52a89044e23a5278f29e64553bef1ff0e04a3c34ae6b"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/gla.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "472ea9747c46ad2de4279d3322efaac8783ae4c971f678da47fcdb301cda9dcb"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/gla.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "8d10e6be2e286883888ae4fa781c566dc376a269f984cca37928dce9d96fa95a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/im2col.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "54abccd98e8f2fbbaeaff91de3362b9436b1d7d9f91313a012c240e9dd4c5853"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/im2col.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3050c2e0edad2d05dcda4077543648f9ac404be63f95b9e874110216998d08ba"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mean.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "ad24a94c39afccc96a672587634e615716bd8f3333dd7183415f0c03ff3b2279"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mean.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "5e9e789ca937828dfd316495716264fe37c32845e59c5e457ab108f361141adb"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mma.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "8d809017543674ff74039660fa3f9b863b95e458fcc1a0f2868c1c93628a9cd9"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mmf.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "f8bcedb4d4b74948c5c82c999001d2bece0bdd896abc1f938614ab99628fd7f1"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mmf.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "dac913264a79e0ea62e78393ab0ff90862aa5a14a910f1cbfea265a7759847aa"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mmid.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "a1ffb79adcc600dab29d1e99abe3ac3792e2cc2e93007634491000a4b4952f1c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mmid.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "207242fc9a757754051c186fc9cd2998b8a258541ba646838659c3ef1a110c37"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mmq.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "900f952c92dfe603b3785f4abad6b6bf67d1fa5bea814f5d8ecfa0de4f2be2e3"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mmq.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "ab234335f14cb1654812748814be29d6d21c7c188e748eab1777ec1c2722e4ed"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mmvf.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "5d989d43f5cda15bb9c81b20149fe481aed11053f3a7df3ca7a991afb4134f8a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mmvf.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "5e551212b14dc9829512021b9c631a7ae49d32d44461f32718c9a0b4afce7672"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mmvq.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "c0116d9a7e3911bd22e14ed642270e7a2d80f0c31e8613a0ef5b025eba0aa0d0"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/mmvq.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "28a5ff10de5ca61cf3ff00ac8774dcec721722a571f145be4f71c880f219cb57"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/norm.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "a3602a61433adde0cb6ad18dd1e488ec3def5d950246f7794c5509d43940c0a4"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/norm.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "0f2d6b743ff349012424cddc8866eb0fa504ea16b7a58cb47b31b392d1f78a73"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/opt-step-adamw.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "41b4f129b149af3bb86257c41521329448b08f6e41743a8ab2edb98a1f6165a2"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/opt-step-adamw.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "250c6fda21e8ed98e34518599c9fe1db2ac50596c8f41fafe03b752d6f0355a4"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/opt-step-sgd.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "6b82809e3a4e883cca28e689d340ca31c0ab9a8b62e8180cdc42d043e705ec3f"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/opt-step-sgd.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "92a52bae098f5126d686a3fb9a02dfc4b4bb81dd6b349661ac63abbc661e9337"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/out-prod.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3f1539ff26d5ec9d910e1eb4297df854b2ccd04646ca1f53830ede757f21cc74"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/out-prod.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "98e053024e8111bc908c904fc2734a3069d219fefb4699a5588623a5237411da"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/pad.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "51e85bb02e74df0bf2b3df74b9f873d73edd96727f65d0696592bb397f8820d1"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/pad.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "2ac173fd9d89eb83c146962f741ca8e1ec49c0d2312df07b16e77a1a3407a275"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/pad_reflect_1d.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "db74030f87b562c29a02c2bcaf433e62fe4f16efa64ccbcd7bbf306dfb4c477a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/pad_reflect_1d.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3e04a3df38b7ccdf560a0d8e94233f63f90b43366a06a0f2e8939bca94d9fc5f"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/pool2d.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "71d204b8bff51226abe25f3eecf6ca8325fd9399ff89d4eb0c41b1b00f8ad1bb"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/pool2d.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3417872508e299a2b480df788fb96bdeae09cfd48e089238d9eedca779d80a30"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/quantize.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "5c9dd7bd0937411366aafb5a928547271ef028da9579fc9ba09472f67b370cf9"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/quantize.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "9c95c4f23c19b49181375e71532c2b6608f9b996e820f568608d31c586342125"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/reduce_rows.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "01659fa503f2d70090cf0b8e32afc08ea8b30ea90a4621867bb8ec6325bf3faa"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/roll.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "69cee7872166c8eb05893284f7f51ed2c195d6d00e997246610aa01a67cbda58"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/roll.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3935af611b59141ef8f97b268a71c5a68d57cc488ed4fa174a63291a0e74bafb"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/rope.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "839fee4a910566f30fd515d6714d41f7895964177e138a3e8e09b121a9a1948b"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/rope.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3e69d8f2dc1ecab9a8e7ac9208529b8525901c0318505891916c325981aeb885"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/scale.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "b0980a1326b73cc2007bac7b1760ac4d422b3cf1a586b7fe5268e7fa1bee6f9d"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/scale.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "7b7c8e4eaeba76d297739b3757f775b9f011568cf40f4f2cc242e8aeb6f4ff5c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/set-rows.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3902d49fd91b0626a7581544c5f11b051a2558cf6a55284c86b2852936a08664"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/set-rows.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "e4a61e6fbeaed73bdb9d080f70a34312b3487507ff1db347187cce4322b0a604"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/set.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "14aa1ad3fc5469c57379b5a6d54d41865552741c84fbc2e9abb251e64ebc94e5"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/set.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "80d876a132bb3a7dcc238b896eaee7607bbd106698b3946ef441ed460d3aef43"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/softcap.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "7a6852bf65558ac43ba2310f0f4d629f53cb0fdbfe48a160de36cb5febcc86ab"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/softcap.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "4187b9b447cdafcce48c5d855f6b614e6637fa1c1138943c8fec8ef415eb0def"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/softmax.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "ba1d1289e64171fc8973acc219e8748625f2c2624445756f014f36b3257814be"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/softmax.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "972a8aa13502aa291771c05c4f6cb815f60879734d7e8bdd82ba32d9d37132cd"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/solve_tri.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "1448b2a0bb0a57958646e8b7a7639f6b5f5f3406e76c8d2453d706cc7c42a610"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/solve_tri.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "4bc82e78e8ed66d9526ff9e8a133f01ea2948add3860136ce7d32fd248429f9f"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/ssm-conv.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "dd5243a9e2c7a0493d990c745e2681fe09f6c36543b1c8daf693176139e81e9c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/ssm-conv.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "84a2ae522b0fd656c5d778cdfe012935ef5a8fa6c9e332a0314b33cfaaf0f662"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/ssm-scan.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "b35090ea4238aeda93a17073203c5587ef2f41cef5c94818def111dcf299fa64"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/ssm-scan.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "ff506178172b025df33aabab47df575813b41208c9a82901d9ffca1636481bf7"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/sum.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "b03a1f7f5eaca802c23bb6ca91e7e482799cf3785c6f63bd073f4c7c2547804a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/sum.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "a5164e2c10a2bd6c83ae481bb6a99a0eab739c2e3d67d55baa38461d2f5b5619"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/sumrows.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "a5c673b975b713db60ad24ba46a7d8eb724ccea29775ce99e800ece513d7410c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/sumrows.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "2adea2dc3e9b6e6bf2c2f6c73c1a5491ea04c002832ea3fa2acebdeab86e8f86"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_1-ncols2_16.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "342eab7b95299f552cb63639e2eac96cce0a7e4b99a096508799f4e959c8b598"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_1-ncols2_8.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "d1a5f42fd1e6c8a411ca1ba19fad7cbef635aeff21b5a756b2a33ac7c0148d04"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_16-ncols2_1.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "00570ad7a17671a574c4d371011e7f5a230593f6f79b66970a277c7b4f200e75"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_16-ncols2_2.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "511ca0ae6f1369bcec78cfd941afc7c422b621a28067b30255b26b2d72fc3a92"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_16-ncols2_4.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "16a8d5d9db3a5f1ebb7abf284fd6ebc1a2ac28a29454b4b9ffe18c0e2337201b"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_2-ncols2_16.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "241f093cfa13e32dcc66101738c915766a183bf469ee349bcbd2e90e7812d8be"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_2-ncols2_4.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "69359db5c751b8ca52198621c5fd70fe8fc25cdf02b332ad72d690ac0178069a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_2-ncols2_8.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "e1f80370227ff59b7aae74262089cd036f4155ac530d149cf87c00645977c7ad"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_32-ncols2_1.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "39877cde59cfa7480c10a01dcce06c7a8833df514e0a8b26749e2d144dabd889"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_32-ncols2_2.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "a26ffb273305707b25f1826937ce664d2cde58cc6e5e480ca9864fb8e24eed35"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_16.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "f150763257377e909e64a54b723bd84f430243be3ea877efa0ff0ae26c7ae80f"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_2.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "09e9fbb551235d31405c6c0572a9d8d8eb2d567121f5c028d126cb1f57d6305d"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_4.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "c17fa8bff1a38fcc8886748bbc5002e7d5db57ffcd6b3765be9554938b7fbbb0"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_4-ncols2_8.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "c72d95cbcc5518cb578b7096a2f3bae479e7ce961e5d2654e15fe25fd493c054"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_64-ncols2_1.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "cd6a7f75926dd4ef73997dce43eb35e88eee410588a62b9105197d38c409eb50"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_1.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "a25c36e1dfe4308e7deaa743c842e0a03b014fc651f31149ce35614bb0fca30e"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_2.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "6a400903199d9332263b52aab3f6191c5ab9690fa5180fd6c24995e205c725fe"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_4.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3d43f8ba74a037d08464ea1f056a43d6210bcd37d959c200dc20e6905cb76426"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-mma-f16-instance-ncols1_8-ncols2_8.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "efcc2b5cafa097ee6a3627fd19dc76228a675027602357a0974bc9a39b8904a2"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-tile-instance-dkq112-dv112.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "d9a41a0ca7a68e2e7f0739277657a2f401c852f7caa16bfcc3df7da75f0d7a81"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-tile-instance-dkq128-dv128.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "8670e5455bea2ba6b03ac1daf86001a4125d806ad744ab1fb08bb1ee473a5b1a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-tile-instance-dkq256-dv256.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "e13966ac7f971950f9060ba87e0026a1ffab9b1f5697b5b29a5ff3226169ea5b"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-tile-instance-dkq40-dv40.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "44849192ac6c1852ac8ad0a377565f5a550ab726905701163fa4c885f1856818"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-tile-instance-dkq512-dv512.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "10b07cec88eca02266b046c51c38798749bb8e2f751b1cefdfcd8b144ba93a37"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-tile-instance-dkq576-dv512.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "80bae9cf03430ab7e1a9bc58a6b8245353efdbdfb90fd2415aa47dfc6fdef218"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-tile-instance-dkq64-dv64.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "f9a5c827cb365345691e1449b092b38e78aa1b29f9bbb51bb6faef2cb499594e"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-tile-instance-dkq72-dv72.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "4c413954dfce0998e05411ddaaf65197359bf8dc03a60cdd2efc83f0a7ce637a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-tile-instance-dkq80-dv80.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "c612ad426e577eac4c6cb2c669348611273b2490e0a029f8c344612826b78583"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-tile-instance-dkq96-dv96.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "c998376005406c0d43e9c1993b4fd363cf42f045c08a1356bcebacf9f3b7d37c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-vec-instance-f16-f16.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "bab518968e5b19bfbc523b7d51ec913bb450c70fc2ad61c75cadf12f90cc4821"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-vec-instance-q4_0-q4_0.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "eb758e247ff817a5302ebb59ddaf1efa9839731a6c2e4ad48e6a9e9b14f71b54"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/fattn-vec-instance-q8_0-q8_0.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "482a63647edc7ce0cafd92548bb188131f5c5aa72db162647f93d6bfa9378923"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_1.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "48fddfa154dd4942e943a47a697597e3d2e5406f4d7fae74687bf12e23aeefb0"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_10.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "1f7692c8454683d97951ab3b56c3404089bc6e7ac9fd8e42fd89e069165841cd"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_11.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "56ad9283c689b9873371ee3feb5d72d862f272e22bf21a1ff582f3556c69ac79"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_12.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "2000decac72b0078ec5a510a23d710a59c1ea6dab8a342b87ae033d3a11130f0"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_13.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "cc1aef2d65fdccfaf650c019d38a32831027faaca28a10fe45d43a16317b6f0a"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_14.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "9392a013e2409e6e8951231486a665167a008dfeb2a482c27c68391cb9f3563f"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_15.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "ce65eb4614112d7cdbf7634aeb35200e1c4ec953c862ea0239c61035d2e0e2fb"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_16.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "af9a987d95b380cba2cf24eb137ccd371e42038535357a83a9dc179274a334b6"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_2.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "c6093a25b6b64837d84e8550c2e6a78b8c4737332aa40e8be6ceb2bb04eb233f"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_3.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "840ae67f3bb493d2e66f2882db271645f5a9f10874650d43c132e43f5eaab557"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_4.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "f09068f887bba46756ce3de2b1051b4b6d26e0fbf97c89fbc666d1b63855028c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_5.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "d35d85ef1eed82154f90b6196cb51d2e1df82bef04a7e01634e8e064e0e6cec4"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_6.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "7fc80d943ea461f79641bf8c65a6b846ed1a4e7025ec0f8bd97c1cf45ab3503e"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_7.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "30c54b581a145dce88bf0c78ce262fe32028fc505dabc0d43133751ebc8cbbb5"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_8.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "50f55a27ffbf909727ddd2f97658602d118e8e87d66035f72c315676ef7c1943"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmf-instance-ncols_9.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "2e950c4704407339bbe3047c2028accdc503e428fc88bc82238b0270237459c2"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-iq1_s.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3e54437db9b0cdda4ddb629982f1f083458de06771a04e5d25ab3e65dbca9e95"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-iq2_s.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "8a841418b1b818a13f739759ea0d36ed778e1b6343aee85fdc58d341b169bd55"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-iq2_xs.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "549d0c56b4b7ffccf262a611e28d257ce8e7ee94ce7ac814259c427eaeb10fe8"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-iq2_xxs.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "7fa1a4a0aaec59e2e27eb40a13078be685952e446c5c9fb0840a47d0e28a17bf"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-iq3_s.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "8167508364494a8f51f736186c5294585a26302cb034e051b8b80acf1db18850"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-iq3_xxs.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "13af5ff17c13dbbe712a6f400b83b69da77792969162c6f345491392d36c1d51"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-iq4_nl.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "a03418c7c0607a3ce3707129dd7e0fcd18d36f241c55289a274fac66f1548f93"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-iq4_xs.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "c4f568105a3ff273287b04c58879ea455efd5fa05aa72da9ef0efeb7ab9de520"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-mxfp4.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "c9be52057f9662aaa0479e5948d6dffed2de2a344dec6c90f1ed3d9d32b42497"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-q2_k.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "e378922ee4aaabe395e7e3f620a38ae26e36e27b46036b8b7fea71292bf8cc2b"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-q3_k.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "3847ca2cefb02dd316033e05db5451b24440cf6ab4cb2d23b4f54a388b492edc"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-q4_0.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "b0f6646afd4a8cc45aaf390a004700057baeae6d87d672dcd67c21a0a81eb74f"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-q4_1.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "8a8c0da33c1c44fcbe516c6c7bd7bf1a6f3b934b63eaf99333e3fba42bfebbea"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-q4_k.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "2ab47361d40a9ece25406c20693424a466c93bcb5cdb5c06cee8f9d03a806beb"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-q5_0.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "34a443ed0e68b1ad614eb251758d0f43f003ce8d10e7833f9f58a46677d336db"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-q5_1.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "a1312dd1316cd75b4a18e2c4a4c34d54ddfcd92b7fc1e45d4daee101e8d69f00"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-q5_k.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "c98bbe1dd91e03362f4136357c6f4e4e2c5328902fdc6fd857d0f608386ffb2e"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-q6_k.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "989943d6501a74927d079eacca793e94a1233863196c94dd20e459017ed76fc2"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/template-instances/mmq-instance-q8_0.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "b38f4de9a3563debaf4796d6772e1ed72ce6944c2b8b03f9c26bf19191addee7"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/topk-moe.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "77901fe72d397582943aaa445a25eedcdffd57a8782bde673e3c1f8dff592131"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/topk-moe.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "6198e2cdfe794eae2da908e6bc37665470656291e84ddfd4f5c5b034d353795b"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/tri.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "29fb339d668087b81509987953fbd31df3d8b0987b53ec85be8725c37ef2b4c8"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/tri.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "c98755c7eaeb37b694184160007e9c3dcfc487eb1d27dc753b795ff601e9b7e4"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/tsembd.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "54109ff13fb88f2f2bfd3bb0d91a11833f347a3a2e129963cf103d41108abe82"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/tsembd.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "7dd4784baed53b3f8cf3c2919fb294e5341398f91297776e4b8af775279e6dc1"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/unary.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "eebad3001210e07faaa831ca18aadcf5b95189004cff0f6936977147a9d4fc2b"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/unary.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "be26bbdf25a24c0b41a3866ab80e7e7862f0af6caddf39d396f1a476b001994c"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/upscale.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "8eabc72b145f4aaf3201873f5cd5fdd7d8216d98286881a41f624100bfec349f"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/upscale.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "2557d6d800986a0aa9153adbfdbba746945c179323661030b5c45b4aae869687"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/vecdotq.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "848fdf96fc80d62387e5ce6a4725fc0793270469eb76bf960c50dc620cd27505"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/vendors/cuda.h": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "cf709f2aaf9172a48e7ea0730bd1b97d4afbd464950b971d30f4ed7415af5c05"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/wkv.cu": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "25e0b0bf660b09cfed312a28d17e14699f85f98a063c6b33537966ac8eff19b0"
+    },
+    "ml/backend/ggml/ggml/src/ggml-cuda/wkv.cuh": {
+      "license": "MIT",
+      "notice": "MIT (ggml LICENSE; Copyright 2023-2024 The ggml authors; ggml-cuda backend source of the pinned ollama ml/backend/ggml tree).",
+      "sha256": "d2a64d7f343e103f41f4f171c297248e8bc4d4dbee8271e7e77490e2c3edd6c4"
     },
     "ml/backend/ggml/ggml/src/ggml-impl.h": {
       "license": "MIT",

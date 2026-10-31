@@ -449,6 +449,21 @@ class AuditPolicy(unittest.TestCase):
                                          generated_review_path,
                                          "--output", out / "licenses.json", ok=False).stderr)
 
+    def test_cuda_compiled_native_inputs_are_all_reviewed(self):
+        fixture = json.loads((ROOT / "builds/ollama/fixtures/linux-amd64-cuda.native-files.json").read_text())
+        review_path = ROOT / "builds/ollama/files/license-review.json"
+        with tempfile.TemporaryDirectory() as td:
+            out = Path(td)
+            for target in TARGETS:
+                files = fixture["files"] if target == "linux-amd64-cuda" else {}
+                (out / ("runner-" + target + ".compiler-inputs.json")).write_text(
+                    json.dumps({"schema": "bashy-runner-compiler-inputs-v1", "files": files}))
+            self.run_audit("native-licenses", "--out", out, "--review", review_path, "--output", out / "licenses.json")
+            rows = json.loads((out / "licenses.json").read_text())["inputs"]
+            cuda = [r for r in rows if r["target"] == "linux-amd64-cuda"]
+            self.assertEqual(len(cuda), len(fixture["files"]))
+            self.assertTrue(any(r["path"].endswith("ggml-cuda.h") for r in cuda))
+
     def test_cyclonedx_aggregates_all_target_module_graphs_and_native_links(self):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)
