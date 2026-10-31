@@ -35,7 +35,9 @@ executable argv and source path; `bashy skill show form` reads this face.
   save, Submit completes it); partial saves survive reload.
 - `bashy form show ID --json` reads the definition and the answers back as
   JSON keyed by field id. `bashy form wait ID` blocks until the form is
-  answered (or closed, or the timeout hits).
+  answered (or closed, or the timeout hits). For a form created in the same
+  local store, `wait` resolves the owner's key automatically; use `--key` or
+  `FORM_KEY` when waiting from another store or host.
 - `bashy form set ID --answer name=Ada` prefills answers as the owner;
   `list`, `share`, `close` work like every desk tool.
 - `bashy form serve` starts the native foreground service (loopback only)

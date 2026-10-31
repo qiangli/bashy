@@ -436,20 +436,23 @@ func TestCLIFlagsAfterID(t *testing.T) {
 }
 
 func TestCLIWaitAnsweredAndTimeout(t *testing.T) {
-	srvURL := startServer(t)
+	a, srvURL := serveApp(t)
 	addr := strings.TrimPrefix(srvURL, "http://")
 	var out bytes.Buffer
-	if code := runCLI([]string{"add", "-addr", addr, "--json", "--id", "wait-probe",
+	if code := runCLI([]string{"add", "-addr", addr, "-data", a.dir, "--json", "--id", "wait-probe",
 		"--def", "../examples/contact.json"}, &out); code != 0 {
 		t.Fatalf("new: exit %d: %s", code, out.String())
 	}
 	var created map[string]any
 	_ = json.Unmarshal(out.Bytes(), &created)
-	key, _ := created["ownerKey"].(string)
+	if key, _ := created["ownerKey"].(string); key == "" {
+		t.Fatalf("new: no ownerKey in %s", out.String())
+	}
 
-	// Pending form: wait gives up fast with a timeout, exit 1.
+	// The creating owner does not have to copy the returned key into --key:
+	// wait resolves it from the same local form store.
 	out.Reset()
-	if code := runCLI([]string{"wait", "-addr", addr, "--key", key,
+	if code := runCLI([]string{"wait", "-addr", addr, "-data", a.dir,
 		"--timeout", "50ms", "--interval", "10ms", "wait-probe"}, &out); code != 1 {
 		t.Fatalf("wait on pending: want exit 1, got %d: %s", code, out.String())
 	}
@@ -464,7 +467,7 @@ func TestCLIWaitAnsweredAndTimeout(t *testing.T) {
 		t.Fatalf("complete: want 200, got %d: %s", code, raw)
 	}
 	out.Reset()
-	if code := runCLI([]string{"wait", "-addr", addr, "--key", key, "--json",
+	if code := runCLI([]string{"wait", "-addr", addr, "-data", a.dir, "--json",
 		"--timeout", "5s", "--interval", "10ms", "wait-probe"}, &out); code != 0 {
 		t.Fatalf("wait on answered: want exit 0, got %d: %s", code, out.String())
 	}

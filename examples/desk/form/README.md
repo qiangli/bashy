@@ -18,8 +18,12 @@ bashy form open form-9f3a…        # owner reopens with a plain URL
 # human fills the page (Save = partial, Submit = complete)
 
 bashy form show form-9f3a… --json  # definition + answers keyed by field id
-bashy form wait form-9f3a…        # blocks until answered (or closed/timeout)
+bashy form wait form-9f3a…        # local owner key is resolved automatically
 ```
+
+`wait` blocks until answered (or closed/timeout). It reads the owner key from
+the same local form store when neither `--key` nor `FORM_KEY` is supplied; a
+caller using another store or host must provide one of those credentials.
 
 ## Replyforms
 

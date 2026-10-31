@@ -232,6 +232,27 @@ func runCLI(args []string, stdout io.Writer) int {
 		}
 		return positional[0], true
 	}
+	// The local item store is the creating owner's credential store. Resolve
+	// that key for wait when the caller did not supply --key or FORM_KEY, so
+	// the documented `form wait ID` round-trip works without copying a secret
+	// out of the add response. Explicit credentials always win, and a remote
+	// caller without this store still goes through the normal authorization
+	// response.
+	resolveWaitKey := func(id string) {
+		if *key != "" {
+			return
+		}
+		raw, err := os.ReadFile(itemPath(*data, id))
+		if err != nil {
+			return
+		}
+		var saved struct {
+			Owner string `json:"owner"`
+		}
+		if json.Unmarshal(raw, &saved) == nil && saved.Owner != "" {
+			*key = saved.Owner
+		}
+	}
 	switch verb {
 	case "reply":
 		if *extractPath == "" {
@@ -336,6 +357,7 @@ func runCLI(args []string, stdout io.Writer) int {
 		if !ok {
 			return 2
 		}
+		resolveWaitKey(id)
 		deadline := time.Now().Add(*timeout)
 		for {
 			obj, _, code := call("show", map[string]any{"id": id})
