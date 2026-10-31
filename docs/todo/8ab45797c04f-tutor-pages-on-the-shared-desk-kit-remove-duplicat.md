@@ -3,11 +3,12 @@ id: 8ab45797c04f
 kind: refactor
 title: 'tutor: pages on the shared desk kit + remove duplicate start (audit)'
 seq: 3024
-status: todo
+status: assigned
 priority: p0
 labels:
     - tutor
 created: 2026-10-31T04:34:25.711791Z
+weave: 406
 sprint: 547
 sprint_id: 1422bece-2466-50b8-986f-160a56a64f00
 sprint_title: Teacher tools · tutor — AI-guided timeboxed sessions
@@ -25,3 +26,5 @@ B. Duplicate audit removals (operator rule: keep only what bashy lacks):
 - Keep: plan/apply (format→timed steps; apply composes sprint add/person add/todo add), next/done/extend (per-person step state; sprint claim needs an agent), status --json/--line (per-step view; clock read from the sprint's box), render, nudge (one `bashy chat` call + guardrail), prep, serve/join (participant pages without accounts).
 
 Acceptance: `git grep -n -E "func .*Token|Content-Security-Policy|SameSite" examples/tutor/server` shows only kit calls (no local reimplementation); `git grep -n -w start examples/tutor/tutor.bsh examples/tutor/register.sh` has no tutor `start` verb; tutor suite, `GOWORK=off go test -race ./...` in server, verify-duality.py and browser-test.mjs all green (Playwright: PLAYWRIGHT_MODULE=/private/tmp/d1pw/node_modules/playwright/index.mjs CHROMIUM_PATH=$HOME/Library/Caches/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64/chrome-headless-shell). Commit with this story's trailers; submit with the grep outputs and a screenshot path of the phone page.
+
+C. (operator 2026-10-30 ~22:45) "tutor is just an example, not part of bashy": `git mv docs/plan-tutor-generic-formats.md examples/tutor/docs/plan-generic-formats.md` (the only tutor reference outside examples/tutor); README.md opens with "an example built on bashy" (not a bashy feature) and states it is opt-in via `bash examples/tutor/register.sh` on the user's own machine — never auto-registered, embedded, shipped or listed by default. HARD RULE: change ONLY files under examples/tutor (+ this record, + that one doc move); if anything else seems needed, stop and report.
