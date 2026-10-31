@@ -117,7 +117,7 @@ def is_deliverable(text):
 
 def parse_doing_nodes(sprint_id):
     """Return list of doing todo nodes for sprint_id, parsed from bashy todo list."""
-    raw = bashy("todo", "list", "--json", "--status", "doing", check=False)
+    raw = bashy("todo", "list", "--user", "--json", "--status", "doing", check=False)
     nodes = []
     for line in raw.splitlines():
         line = line.strip()
@@ -149,7 +149,7 @@ def parse_doing_nodes(sprint_id):
 
 def fetch_body(todo_id):
     """Fetch todo body (done_when) via bashy todo show."""
-    raw = bashy("todo", "show", todo_id, "--json", check=False)
+    raw = bashy("todo", "show", "--user", todo_id, "--json", check=False)
     body = ""
     for line in raw.splitlines():
         line = line.strip()

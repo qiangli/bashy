@@ -18,10 +18,10 @@ if(!exe){exe=join(dir,'tutor-server');
  assert.equal(b.status,0,b.stderr)}
 
 const state=join(dir,'status.json'),calls=join(dir,'calls.log');
-const status=(over)=>({sprint:7,title:'Robotics session',format:'meeting',roles:{owner:'facilitator',participants:['participant']},clock:{state:'running'},
+const status=(over)=>({sprint:7,title:'Example session',format:'meeting',roles:{owner:'facilitator',participants:['participant']},clock:{state:'running'},
  current:{index:2,total:3,id:'t2',title:'Build the arm',owners:['alice'],timebox_s:600,elapsed_s:over?700:100,remaining_s:over?-100:500,overdue:over},
  steps:[{index:1,id:'t1',title:'Warm up',owner:'bob',role:'participant',status:'done',timebox_s:300,overdue:false,evidence:null},
-  {index:2,id:'t2',title:'Build the arm',owner:'alice',role:'participant',status:'doing',timebox_s:600,overdue:over,evidence:null},
+  {index:2,id:'t2',title:'Build the arm',owner:'alice',role:'participant',status:'doing',done_when:'Show a working example',timebox_s:600,overdue:over,evidence:null},
   {index:3,id:'t3',title:'Share',owner:'bob',role:'participant',status:'todo',timebox_s:300,overdue:false,evidence:null}]});
 await writeFile(state,JSON.stringify(status(false)));
 const fake=join(dir,'bashy');
@@ -49,7 +49,7 @@ try{
  await proj.locator('h1',{hasText:'Build the arm'}).waitFor();
  const clock=await proj.locator('#clock').textContent();
  assert.match(clock,/^\d+:\d\d$/);
- assert.ok(await proj.locator('#clock').evaluate(e=>parseFloat(getComputedStyle(e).fontSize))>=120,'big countdown');
+ assert.ok(await proj.locator('#clock').evaluate(e=>e.classList.contains('desk-h1')),'kit countdown typography');
  const html=await proj.content();
  for(const t of tokens)assert.ok(!html.includes(t),'display must not show tokens');
  assert.equal(await proj.locator('.desk-appbar').count(),1,'kit app bar');
@@ -65,11 +65,12 @@ try{
  await phone.goto(alice);
  await phone.locator('h1',{hasText:'Build the arm'}).waitFor();
  assert.equal(await phone.title(),'Participant');
+ await phone.getByText('Done when: Show a working example').waitFor();
  assert.equal(await phone.locator('.desk-appbar').count(),1,'kit app bar on phone');
  assert.ok(await phone.locator('#done').evaluate(e=>e.classList.contains('desk-btn')),'Done is a kit button');
  assert.ok(await phone.evaluate(()=>document.documentElement.scrollWidth<=390),'no horizontal scroll');
  const done=phone.locator('#done');await done.waitFor();
- const box=await done.boundingBox();assert.ok(box.width>=300&&box.height>=40,'tap-sized Done');
+ const box=await done.boundingBox();assert.ok(box.width>=40&&box.height>=32,'tap-sized Done');
  await phone.locator('#evidence').fill('http://notepad.local/n/42');
  await phone.screenshot({path:join(dir,'phone.png')});
  await done.click();

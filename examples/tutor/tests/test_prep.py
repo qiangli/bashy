@@ -14,7 +14,7 @@ import plan
 
 class PrepTest(TempBashy):
     def todo_nodes(self, sprint=None, label=None):
-        args = ["todo", "list", "--json"]
+        args = ["todo", "list", "--user", "--json"]
         if label:
             args += ["--label", label]
         import subprocess

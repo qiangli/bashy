@@ -56,20 +56,20 @@ class TemplatePlanTest(TempBashy):
 
     def test_no_agent_template_split(self):
         d = self.plan_json("Ship the parser", "--minutes", "60",
-                           "--people", "ana,bo", "--json")
+                           "--people", "alice,bob", "--json")
         self.assertEqual(d["version"], 1)
         self.assertEqual(d["source"], "template")
         self.assertEqual(d["minutes"], 60)
         self.assertEqual(d["goal"], "Ship the parser")
         self.assertEqual(d["format"], "session")
-        self.assertEqual(d["people"], ["ana", "bo"])
+        self.assertEqual(d["people"], ["alice", "bob"])
         participant = [s for s in d["steps"] if s["role"] == "participant"]
         owner = [s for s in d["steps"] if s["role"] == "owner"]
         self.assertEqual(sum(s["minutes"] for s in participant), 60)
         self.assertTrue(owner)
         self.assertEqual({s["owner"] for s in owner}, {"owner"})
         self.assertEqual([s["owner"] for s in participant[:4]],
-                         ["ana", "bo", "ana", "bo"])
+                         ["alice", "bob", "alice", "bob"])
         for s in d["steps"]:
             self.assertTrue(s["title"].strip())
             self.assertTrue(s["done_when"].strip())
@@ -115,16 +115,16 @@ class StubAgentTest(TempBashy):
     def test_valid_agent_json_is_used(self):
         draft = {"version": 1, "title": "Agent card", "goal": "Ship it",
                  "epic": "session-demo", "minutes": 30, "format": "session",
-                 "people": ["ana"],
-                 "steps": [{"title": "Read", "owner": "ana", "minutes": 10,
+                 "people": ["alice"],
+                 "steps": [{"title": "Read", "owner": "alice", "minutes": 10,
                             "done_when": "notes taken", "phase": "warm-up",
                             "role": "participant"},
-                           {"title": "Build", "owner": "ana", "minutes": 20,
+                           {"title": "Build", "owner": "alice", "minutes": 20,
                             "done_when": "tests pass", "phase": "work",
                             "role": "participant"}]}
         self.stub("Here is the plan:\n```json\n%s\n```\nGood luck!" % json.dumps(draft))
         d = json.loads(self.tutor("plan", "Ship it", "--minutes", "30",
-                                  "--people", "ana", "--agent", "stub",
+                                  "--people", "alice", "--agent", "stub",
                                   "--json").stdout)
         self.assertEqual(d["source"], "agent")
         self.assertEqual(d["title"], "Agent card")
@@ -149,7 +149,7 @@ class StubAgentTest(TempBashy):
 class ApplyTest(TempBashy):
     def test_apply_creates_card_people_and_labelled_todos(self):
         draft = json.loads(self.tutor("plan", "Ship the parser", "--minutes", "60",
-                                      "--people", "ana,bo", "--json").stdout)
+                                      "--people", "alice,bob", "--json").stdout)
         res = json.loads(self.tutor("apply", "-", "--json",
                                     stdin=json.dumps(draft)).stdout)
         self.assertIsInstance(res["sprint"], int)
@@ -175,6 +175,18 @@ class ApplyTest(TempBashy):
         tnodes = self.todo_nodes("step-%02d" % idx)
         self.assertEqual(tnodes[0]["attrs"]["assignee"], "owner")
 
+    def test_personal_steps_and_completion_default(self):
+        draft = json.loads(self.tutor("plan", "Example", "--people", "alice", "--json").stdout)
+        draft["default_done_when"] = "Show a working example"
+        draft["steps"][0]["done_when"] = ""
+        result = json.loads(self.tutor("apply", "-", "--json", stdin=json.dumps(draft)).stdout)
+        value = json.loads(self.tutor("status", str(result["sprint"]), "--json").stdout)
+        self.assertEqual(value["steps"][0]["done_when"], "Show a working example")
+        from common import bashy
+        from run import records
+        self.assertEqual(records(bashy("todo", "list", "--all", "--json"), "todo"), [])
+        self.assertFalse((self.repo / "docs" / "todo").exists())
+
     def test_apply_refuses_invalid_draft_before_creating_anything(self):
         bad = {"version": 1, "title": "t", "goal": "g", "minutes": 10, "steps": []}
         proc = self.tutor("apply", "-", "--json", stdin=json.dumps(bad), check=False)
@@ -184,14 +196,14 @@ class ApplyTest(TempBashy):
 
     def test_apply_reads_a_file(self):
         draft = json.loads(self.tutor("plan", "Read a file", "--minutes", "20",
-                                      "--people", "ana", "--json").stdout)
+                                      "--people", "alice", "--json").stdout)
         path = self.root / "draft.json"
         path.write_text(json.dumps(draft))
         res = json.loads(self.tutor("apply", str(path), "--json").stdout)
         self.assertEqual(len(res["steps"]), len(draft["steps"]))
 
     def todo_nodes(self, label=None):
-        args = ["todo", "list", "--json"]
+        args = ["todo", "list", "--user", "--json"]
         if label:
             args += ["--label", label]
         import subprocess

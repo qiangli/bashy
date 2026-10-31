@@ -25,6 +25,7 @@ class TempBashy(unittest.TestCase):
         subprocess.run(["git", "init", "-q", str(self.repo)], check=True)
         self._env = dict(os.environ)
         os.environ.update({
+            "HOME": str(root / "home"),
             "BASHY_HOME": str(root / "home"),
             "BASHY_COORD_DIR": str(root / "coord"),
             "BASHY_ROOM_DIR": str(root / "room"),
