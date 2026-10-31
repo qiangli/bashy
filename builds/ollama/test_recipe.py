@@ -199,6 +199,26 @@ class Recipe(unittest.TestCase):
         for banned in ("libcudart", "libcublas", "libcuda.so"):
             self.assertIn(banned, package)  # refused as backend artifacts
 
+    def test_cuda_host_check_without_ldconfig_on_restricted_path(self):
+        # The Linux no-egress gate runs under env -i PATH=/usr/bin:/bin, where
+        # ldconfig (/usr/sbin) is not on PATH: no ldconfig means no host
+        # runtime evidence, never a crash.
+        tool = self.helpers / "cuda-link-audit.py"
+        bare = self.root / "bare-path"
+        bare.mkdir()
+        env = {"PATH": str(bare)}
+        cpu = subprocess.run([sys.executable, str(tool), "host", "--cpu-explicit"],
+                             env=env, capture_output=True, text=True)
+        self.assertEqual(cpu.returncode, 0, cpu.stdout + cpu.stderr)
+        self.assertIn("host lacks", cpu.stdout)
+        strict = subprocess.run([sys.executable, str(tool), "host"],
+                                env=env, capture_output=True, text=True)
+        self.assertNotEqual(strict.returncode, 0)
+        self.assertIn("ldconfig", strict.stdout + strict.stderr)
+        gate = (self.helpers / "native-gate.py").read_text()
+        record = gate.index("'cpu_explicit_returncode'")
+        self.assertLess(record, gate.index("require(cpu.returncode == 0"))
+
     def test_cuda_link_audit_and_host_runtime_fail_closed(self):
         # S451.4a review: the backend must link NVIDIA libs dynamically only
         # (NEEDED, no defined cuda*/cublas* symbols), and a host without the

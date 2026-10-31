@@ -7,7 +7,9 @@ host: host must resolve libcuda, libcudart and libcublas; otherwise fail closed
 unless --cpu-explicit asks for the CPU fallback.
 """
 import argparse
+import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -116,7 +118,16 @@ def main():
             sys.exit("cuda-link-audit: " + "; ".join(errors))
         print("cuda-link-audit: dynamic NEEDED " + " ".join(needed))
         return
-    text = open(a.ldconfig_file).read() if a.ldconfig_file else subprocess.check_output(["ldconfig", "-p"], text=True)
+    if a.ldconfig_file:
+        text = open(a.ldconfig_file).read()
+    else:
+        found = shutil.which("ldconfig") or next((c for c in ("/usr/sbin/ldconfig", "/sbin/ldconfig") if os.path.isfile(c)), None)
+        if found is None:
+            if not a.cpu_explicit:
+                sys.exit("cuda-link-audit: ldconfig not found (PATH, /usr/sbin, /sbin): no host CUDA runtime evidence; fails closed (pass --cpu-explicit for CPU)")
+            text = ""
+        else:
+            text = subprocess.check_output([found, "-p"], text=True)
     missing = [h for h in HOST if h not in text]
     if not missing:
         print("cuda: host runtime present")

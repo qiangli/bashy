@@ -246,7 +246,12 @@ def exercise(binary, fixture, evidence_path, port):
         tool = HERE / 'cuda-link-audit.py'
         strict = subprocess.run([sys.executable, str(tool), 'host'], capture_output=True, text=True)
         cpu = subprocess.run([sys.executable, str(tool), 'host', '--cpu-explicit'], capture_output=True, text=True)
-        require(cpu.returncode == 0, 'cuda host-runtime explicit CPU path failed')
+        evidence['host_runtime_probe'] = {'cpu_explicit_returncode': cpu.returncode,
+                                          'cpu_explicit_output': (cpu.stdout + cpu.stderr).strip()}
+        if cpu.returncode != 0:
+            evidence['error'] = 'cuda host-runtime explicit CPU path failed'
+            evidence_path.write_text(json.dumps(evidence, indent=2) + '\n')
+        require(cpu.returncode == 0, 'cuda host-runtime explicit CPU path failed: ' + (cpu.stdout + cpu.stderr).strip())
         evidence['host_runtime'] = {'strict_exit': strict.returncode, 'strict_output': (strict.stdout + strict.stderr).strip(),
                                     'cpu_explicit_output': cpu.stdout.strip(),
                                     'verdict': 'cuda-present' if strict.returncode == 0 else 'fail-closed; cpu-explicit only'}
