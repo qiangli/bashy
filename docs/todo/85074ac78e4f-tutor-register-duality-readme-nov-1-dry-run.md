@@ -32,3 +32,12 @@ Your files: `register.sh`, `verify-duality.py`, `README.md`, `dag.md`, the `~~~s
 - verify-duality.py: pattern examples/brainstorm/verify-duality.py.
 - README: class / meeting / solo examples; "start a class like a coding sprint" (`bashy sprint start N --owner <agent> --for 90m --instruction 'run today's session with the tutor skill'`); chat composition (`chat-status.sh`); "make your own format" (copy formats/class.md = Software Shaping example); teacher/student editions.
 - dag.md: the Nov 1 dry run as a dag (plan → apply → start → next/done → status --line) in a temp BASHY_HOME with no agent and with a stub agent. Record the dry-run output as evidence in the submit message. Linking the outcome to Sprint 528 is done by the manager.
+
+## Addendum (manager, 2026-10-30 19:10 PDT — wave 1 merged at bashy 693e46f8)
+All verbs except serve/join/stop/prep now work (plan, apply, start, next, done, extend, status, nudge, render). Facts the README and skill must state:
+- People never close sprint stories: `tutor done` records a run-log done event and labels the todo `step-done`; at the end the class manager (the teacher's agent) runs `bashy sprint accept N ID -m EVIDENCE` per done step.
+- Session clock = the sprint's own (`bashy sprint start N --owner AGENT --for 90m`); tutor reads it from the card, falling back to `tutor start --for`.
+- Chat: `examples/tutor/chat-status.sh SPRINT CONFIG GROUP` pipes `tutor status --line` into `bashy klatch topic` (and `post` on step change).
+Bugs found by the manager's smoke (fix them in this story, each with a focused test; you may edit lib/run.py and lib/plan.py for these only):
+1. `status --line` / `current.total` counts teacher steps: with 5 student + 3 teacher steps it prints `Step 2/8`. Student sequence must count role-student steps only (`Step 2/5`); teacher steps stay in `steps[]`.
+2. `apply` stores the todo note as `done when: X` and nudge/status read it back with the prefix, giving `done when: done when: X`. Strip the prefix on read (or store without it) so `done_when` is just `X`.
