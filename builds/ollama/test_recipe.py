@@ -749,18 +749,19 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         (d / "runner.json").write_text(json.dumps({"backend_artifacts": [
             {"name": "libggml-cuda.so", "sha256": hashlib.sha256(b"cuda").hexdigest()},
             {"name": "libggml-base.so", "sha256": hashlib.sha256(b"base").hexdigest()}]}))
+        (d / "runner-cuda-admission.json").write_text(json.dumps({"admission": "PRERELEASE_ADMITTED"}))
         run = lambda *a: subprocess.run(["python3", str(tool), *a], capture_output=True, text=True)
-        ok = run(str(d), "libggml-cuda.so runner.json libggml-base.so")
+        ok = run(str(d), "libggml-cuda.so runner.json libggml-base.so runner-cuda-admission.json")
         self.assertEqual(ok.returncode, 0, ok.stderr)
         self.assertIn("libggml-base.so", ok.stdout)
         # manifest-derived artifact absent from the static list is still required
         (d / "libggml-base.so").unlink()
-        self.assertNotEqual(run(str(d), "libggml-cuda.so runner.json").returncode, 0)
+        self.assertNotEqual(run(str(d), "libggml-cuda.so runner.json runner-cuda-admission.json").returncode, 0)
         (d / "libggml-base.so").write_bytes(b"tampered")
-        self.assertNotEqual(run(str(d), "libggml-cuda.so runner.json").returncode, 0)
+        self.assertNotEqual(run(str(d), "libggml-cuda.so runner.json runner-cuda-admission.json").returncode, 0)
         (d / "libggml-base.so").write_bytes(b"base")
         (d / "libstray.so.1").write_bytes(b"x")
-        self.assertNotEqual(run(str(d), "libggml-cuda.so runner.json").returncode, 0)
+        self.assertNotEqual(run(str(d), "libggml-cuda.so runner.json runner-cuda-admission.json").returncode, 0)
         wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()
         step = wf.split("assemble release payload", 1)[1].split("- name:", 1)[0]
         self.assertIn("release-assets-check.py", step)
@@ -992,6 +993,7 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         (d / "runner.json").write_text(json.dumps({"backend_artifacts": [
             {"name": "libggml-cuda.so", "sha256": hashlib.sha256(b"c").hexdigest()},
             {"name": "libggml-base.so.0", "sha256": hashlib.sha256(b"b").hexdigest()}]}))
+        (d / "runner-cuda-admission.json").write_text(json.dumps({"admission": "PRERELEASE_ADMITTED"}))
         r = subprocess.run(["python3", str(tool), str(d), "libggml-cuda.so runner.json"], capture_output=True, text=True)
         self.assertNotEqual(r.returncode, 0)
         self.assertIn("libggml-base.so.0", r.stderr)
@@ -1023,6 +1025,23 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         self.assertEqual(len(configure), 1)
         self.assertIn("-DCMAKE_BUILD_RPATH='$ORIGIN'", configure[0])
         self.assertIn("-DCMAKE_BUILD_RPATH_USE_ORIGIN=ON", configure[0])
+
+    def test_release_requires_admitted_cuda_admission_record(self):
+        tool = self.helpers / "release-assets-check.py"
+        d = Path(tempfile.mkdtemp())
+        (d / "libggml-cuda.so").write_bytes(b"c")
+        (d / "runner.json").write_text(json.dumps({"backend_artifacts": [
+            {"name": "libggml-cuda.so", "sha256": hashlib.sha256(b"c").hexdigest()}]}))
+        check = lambda: subprocess.run(["python3", str(tool), str(d), "libggml-cuda.so runner.json runner-cuda-admission.json"], capture_output=True, text=True)
+        r = check()
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("runner-cuda-admission.json", r.stderr)
+        (d / "runner-cuda-admission.json").write_text(json.dumps({"admission": "REJECTED"}))
+        self.assertNotEqual(check().returncode, 0)
+        (d / "runner-cuda-admission.json").write_text(json.dumps({"admission": "PRERELEASE_ADMITTED"}))
+        self.assertEqual(check().returncode, 0, check().stderr)
+        env = (RECIPE / "tool.env").read_text()
+        self.assertIn("runner-cuda-admission.json", re.search(r'^RELEASE_ASSETS="([^"]*)"', env, re.M).group(1).split())
 
     def test_release_note_states_side_by_side_install_and_silent_cpu_fallback(self):
         env = (RECIPE / "tool.env").read_text()

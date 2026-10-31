@@ -1,0 +1,65 @@
+{
+  "schema": "bashy-cuda-admission-v1",
+  "policy_ref": "docs/bashy-service-supply-chain-policy.md 'CUDA platform toolkit clarification (operator, 2026-10-20; S451.4a)'",
+  "identity": {
+    "toolkit_version": "12.8.1",
+    "toolkit_sha256": "7f942bb126c1ef8bbf75ab075c7baea34606f90c3876886b6a8e458262247ac9",
+    "toolkit_components": [
+      {
+        "archive": "cuda_nvcc-linux-x86_64-12.8.93-archive.tar.xz",
+        "sha256": "9961b3484b6b71314063709a4f9529654f96782ad39e72bf1e00f070db8210d3"
+      },
+      {
+        "archive": "cuda_cudart-linux-x86_64-12.8.90-archive.tar.xz",
+        "sha256": "8d566b5fe745c46842dc16945cf36686227536decd2302c372be86da37faca68"
+      },
+      {
+        "archive": "cuda_cccl-linux-x86_64-12.8.90-archive.tar.xz",
+        "sha256": "0740e9e01e4f15e17c5ab8d68bba4f8ec0eb6b84edccba4ac45112d2d2174e4b"
+      },
+      {
+        "archive": "libcublas-linux-x86_64-12.8.4.1-archive.tar.xz",
+        "sha256": "21718957c2cf000bacd69d36c95708a2319199e39e056f8b4f0f68e3b9f323bb"
+      }
+    ],
+    "nvcc_sha256": "59e4e55f9a38b78c590df1e28a69dad91052958f18a03868ca4a547c043fbba7"
+  },
+  "rows": [
+    {
+      "id": "toolkit-build-only",
+      "stage": "in-run",
+      "condition": "CUDA toolkit is a build-only SDK: pinned, sha256-verified, exact version in the SBOM",
+      "check": "manifest backend_identity equals this record; runner-sbom.cdx.json carries a build-only-sdk component per pinned archive digest at the pinned version; manifest toolkit_role is build-only"
+    },
+    {
+      "id": "host-runtime-dynamic",
+      "stage": "in-run",
+      "condition": "libcuda, cudart and cuBLAS are host-provided, dynamically loaded, never bundled",
+      "check": "runner-linux-amd64-cuda-cuda-linkage.txt: libcudart and libcublas dynamic NEEDED, no libcuda NEEDED, RUNPATH/RPATH absent or exactly $ORIGIN; every backend artifact is a libggml-* build-tree library"
+    },
+    {
+      "id": "fail-closed-launcher",
+      "stage": "reference",
+      "condition": "missing host driver/runtime fails closed; CPU only on explicit selection",
+      "reference": "bashy launcher (S546.1 slice 2): yoke 94fa0204 runner_embed CUDA tests; reviewed reference, not a CI check"
+    },
+    {
+      "id": "in-run-audit",
+      "stage": "in-run",
+      "condition": "Rule 1 audit of the runner bytes: native-licenses, govulncheck, SBOM, vulnerability scans, native and no-egress gates in this run",
+      "check": "runner-native-licenses.json holds linux-amd64-cuda inputs; runner-govulncheck.json has no unwaived reachable finding for linux-amd64-cuda; runner-osv.json, runner-grype.json, runner-linux-amd64-cuda-native.json and -egress.txt present and nonempty"
+    },
+    {
+      "id": "post-signing-verify",
+      "stage": "promotion",
+      "condition": "Sigstore identity and binmgr digest verification of the released assets",
+      "check": "gh release asset/signature verification after signing; gates promotion, not the prerelease"
+    },
+    {
+      "id": "gpu-model-load",
+      "stage": "promotion",
+      "condition": "GPU model-load proof of the RELEASED prerelease bytes",
+      "check": "puppy.local CUDA model-load probe; gates promotion, not the prerelease"
+    }
+  ]
+}

@@ -15,6 +15,7 @@ import sys
 def main(dist, static):
     dist = Path(dist)
     required = set(static.split())
+    needs_admission = False
     for manifest in sorted(dist.glob("*.json")):
         try:
             data = json.loads(manifest.read_text())
@@ -23,6 +24,7 @@ def main(dist, static):
         if not isinstance(data, dict):
             continue
         for item in data.get("backend_artifacts") or []:
+            needs_admission = True
             name = item.get("name", "")
             path = dist / name
             if not name or "/" in name or path.is_symlink() or not path.is_file():
@@ -31,6 +33,17 @@ def main(dist, static):
                 sys.exit(f"release-assets-check: backend artifact digest differs from manifest: {name}")
             if name not in required:
                 sys.exit(f"release-assets-check: backend artifact packaged by the build but missing from the release asset list: {name}")
+    if needs_admission:
+        # A CUDA backend ships only with the reviewed admission result for THIS run.
+        record = dist / "runner-cuda-admission.json"
+        if "runner-cuda-admission.json" not in required or not record.is_file():
+            sys.exit("release-assets-check: CUDA backend packaged but runner-cuda-admission.json is missing from the release")
+        try:
+            admitted = json.loads(record.read_text()).get("admission")
+        except ValueError:
+            admitted = None
+        if admitted != "PRERELEASE_ADMITTED":
+            sys.exit(f"release-assets-check: CUDA backend not admitted (runner-cuda-admission.json: {admitted!r})")
     for path in sorted(dist.iterdir()):
         if path.is_file() and ".so" in path.name and path.name not in required:
             sys.exit(f"release-assets-check: shared library not listed by any manifest: {path.name}")

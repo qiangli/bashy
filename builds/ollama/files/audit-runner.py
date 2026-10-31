@@ -590,16 +590,136 @@ def govulncheck(out, ignore=None, targets=ALL_TARGETS):
           f"{total_reported} reported non-reachable; summary: {summary_path.name})")
 
 
-def cuda_hold(out):
-    # A CUDA backend ships NVIDIA toolkit/runtime bytes outside the permissive-only
-    # policy; no review record exists, so any CUDA manifest keeps the audit failed.
-    for manifest in sorted(Path(out).glob("runner-*-cuda.json")):
-        if load_json(manifest).get("release_admission") != "ADMITTED":
-            fail(f"{manifest.name}: CUDA backend not admitted (NVIDIA toolkit/runtime license, linkage, vulnerability and SBOM review absent)")
+CUDA_PREFIX = f"runner-{CUDA_TARGET}"
+DEFAULT_ADMISSION_RECORD = Path(__file__).resolve().parent / "cuda-admission.json"
+ADMISSION_ROWS = ("toolkit-build-only", "host-runtime-dynamic", "fail-closed-launcher", "in-run-audit", "post-signing-verify", "gpu-model-load")
 
 
-def final(out, commit):
-    cuda_hold(out)
+def _read_json(path):
+    try:
+        return json.loads(Path(path).read_text())
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"{Path(path).name}: {exc}")
+
+
+def _nonempty(out, name):
+    path = out / name
+    if not path.is_file() or path.stat().st_size == 0:
+        raise ValueError(f"{name} missing or empty")
+
+
+def _row_toolkit(out, record):
+    identity = record["identity"]
+    manifest = _read_json(out / f"{CUDA_PREFIX}.json")
+    got = manifest.get("backend_identity") or {}
+    for key in ("toolkit_version", "toolkit_sha256", "toolkit_components", "nvcc_sha256"):
+        if got.get(key) != identity.get(key):
+            raise ValueError(f"manifest backend_identity.{key} differs from the reviewed record")
+    if "build-only" not in str(manifest.get("toolkit_role")):
+        raise ValueError("manifest does not declare the toolkit build-only")
+    sbom = _read_json(out / "runner-sbom.cdx.json")
+    have = {(c.get("name"), c.get("version"), h.get("content")) for c in sbom.get("components", [])
+            if c.get("group") == "build-only-sdk" for h in c.get("hashes", [])}
+    for comp in identity["toolkit_components"]:
+        if (comp["archive"], identity["toolkit_version"], comp["sha256"]) not in have:
+            raise ValueError(f"SBOM lacks build-only SDK component {comp['archive']} at {identity['toolkit_version']}")
+    return "pinned identity matches; every toolkit archive digest and version is in the SBOM"
+
+
+def _row_host_runtime(out, record):
+    manifest = _read_json(out / f"{CUDA_PREFIX}.json")
+    artifacts = manifest.get("backend_artifacts") or []
+    if not artifacts:
+        raise ValueError("no backend artifacts recorded")
+    for item in artifacts:
+        base = Path(item.get("name", "")).name
+        if not base.startswith(CUDA_PREFIX + "-libggml-") or re.search(r"libcuda|libcudart|libcublas|libnv", base):
+            raise ValueError(f"backend artifact is not a libggml-* build-tree library: {base}")
+    name = f"{CUDA_PREFIX}-cuda-linkage.txt"
+    _nonempty(out, name)
+    text = (out / name).read_text()
+    needed = re.findall(r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]", text)
+    if not any(n.startswith("libcudart.so") for n in needed) or not any(n.startswith("libcublas.so") for n in needed):
+        raise ValueError("libcudart and libcublas are not dynamic NEEDED entries")
+    if any(n.startswith("libcuda.so") for n in needed):
+        raise ValueError("libcuda is linked directly")
+    for kind, value in re.findall(r"\((RUNPATH|RPATH)\)\s+Library (?:runpath|rpath): \[([^\]]*)\]", text):
+        entries = [e for e in value.split(":") if e]
+        if not entries or any(e != "$ORIGIN" for e in entries):
+            raise ValueError(f"{kind} is not exactly $ORIGIN: [{value}]")
+    return "libcudart/libcublas dynamic and host-provided, no libcuda, libggml-only artifacts, RUNPATH $ORIGIN"
+
+
+def _row_in_run_audit(out, record):
+    native = _read_json(out / "runner-native-licenses.json")
+    if not any(i.get("target") == CUDA_TARGET for i in native.get("inputs", [])):
+        raise ValueError("native license review has no linux-amd64-cuda inputs")
+    target = (_read_json(out / "runner-govulncheck.json").get("targets") or {}).get(CUDA_TARGET)
+    if not isinstance(target, dict) or target.get("unwaived") != []:
+        raise ValueError("govulncheck has unresolved or missing findings for linux-amd64-cuda")
+    for name in ("runner-osv.json", "runner-grype.json", f"{CUDA_PREFIX}-native.json", f"{CUDA_PREFIX}-egress.txt"):
+        _nonempty(out, name)
+    return "native licenses, govulncheck, OSV, Grype, native gate and no-egress evidence green for linux-amd64-cuda"
+
+
+def cuda_admission(out, record_path=None):
+    """Evaluate the reviewed admission record against THIS run's evidence; fail closed.
+
+    Only linux-amd64-cuda in-run rows can turn green here. Post-signing
+    verification and the GPU model-load proof gate promotion, not the prerelease.
+    """
+    out = Path(out)
+    record_path = Path(record_path or DEFAULT_ADMISSION_RECORD)
+    result = {"schema": "bashy-cuda-admission-result-v1", "admission": "REJECTED", "rows": []}
+    problems = []
+    try:
+        record = _read_json(record_path)
+        if record.get("schema") != "bashy-cuda-admission-v1" or [r.get("id") for r in record.get("rows", [])] != list(ADMISSION_ROWS):
+            raise ValueError("admission record has wrong schema or rows")
+        result["policy_ref"] = record.get("policy_ref")
+        result["identity"] = record.get("identity")
+    except (ValueError, AttributeError) as exc:
+        problems.append(f"admission record unusable: {exc}")
+        record = None
+    if record is not None:
+        checks = {"toolkit-build-only": _row_toolkit, "host-runtime-dynamic": _row_host_runtime, "in-run-audit": _row_in_run_audit}
+        for row in record["rows"]:
+            entry = {"id": row["id"], "condition": row.get("condition"), "check": row.get("check") or row.get("reference")}
+            if row["id"] in checks:
+                try:
+                    entry["detail"] = checks[row["id"]](out, record)
+                    entry["verdict"] = "GREEN"
+                except (ValueError, KeyError, TypeError, AttributeError) as exc:
+                    entry["verdict"] = "RED"
+                    entry["detail"] = str(exc)
+                    problems.append(f"{row['id']}: {exc}")
+            elif row.get("stage") == "reference":
+                if not isinstance(row.get("reference"), str) or not row["reference"].strip():
+                    entry["verdict"] = "RED"
+                    entry["detail"] = "reviewed reference missing"
+                    problems.append(f"{row['id']}: reviewed reference missing")
+                else:
+                    entry["verdict"] = "REFERENCE"
+            else:
+                entry["verdict"] = "PENDING_PROMOTION"
+            result["rows"].append(entry)
+    if not problems:
+        result["admission"] = "PRERELEASE_ADMITTED"
+    result["problems"] = problems
+    (out / "runner-cuda-admission.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+    if problems:
+        fail("CUDA backend not admitted: " + "; ".join(problems))
+    print("cuda-admission: PRERELEASE_ADMITTED (post-signing verification and GPU model-load proof PENDING_PROMOTION)")
+
+
+def cuda_hold(out, record=None):
+    # No CUDA manifest: nothing to admit. Any CUDA manifest must pass the reviewed record.
+    if (Path(out) / f"{CUDA_PREFIX}.json").is_file():
+        cuda_admission(out, record)
+
+
+def final(out, commit, record=None):
+    cuda_hold(out, record)
     required = ["runner-linked-libraries.json", "runner-licenses.json", "runner-native-licenses.json", "runner-sbom.cdx.json", "runner-osv.json", "runner-grype.json"]
     for name in required:
         if not (out / name).is_file() or (out / name).stat().st_size == 0:
@@ -664,12 +784,13 @@ def main():
     q = sub.add_parser("grype"); q.add_argument("--report", required=True); q.add_argument("--ignore", default=None)
     q = sub.add_parser("govulncheck"); q.add_argument("--out", type=Path, required=True); q.add_argument("--ignore", default=None); q.add_argument("--targets", default=",".join(ALL_TARGETS))
     q = sub.add_parser("aggregate-sbom"); q.add_argument("--out", type=Path, required=True)
-    q = sub.add_parser("final"); q.add_argument("--out", type=Path, required=True); q.add_argument("--commit", required=True)
+    q = sub.add_parser("cuda-admission"); q.add_argument("--out", type=Path, required=True); q.add_argument("--record", default=None)
+    q = sub.add_parser("final"); q.add_argument("--out", type=Path, required=True); q.add_argument("--commit", required=True); q.add_argument("--record", default=None)
     a = p.parse_args()
     {"inventory": lambda: inventory(a.out, a.report), "merge-inputs": lambda: merge_inputs(a.out),
      "compiler-inputs": lambda: compiler_inputs(a.capture, a.source, a.generated, a.output),
      "native-licenses": lambda: review_native_licenses(a.out, a.review, a.output), "licenses": lambda: licenses(a.report, a.notices, a.output),
-     "osv": lambda: osv(a.report, a.ignore), "grype": lambda: grype(a.report, a.ignore), "govulncheck": lambda: govulncheck(a.out, a.ignore, a.targets), "aggregate-sbom": lambda: aggregate_sbom(a.out), "final": lambda: final(a.out, a.commit)}[a.mode]()
+     "osv": lambda: osv(a.report, a.ignore), "grype": lambda: grype(a.report, a.ignore), "govulncheck": lambda: govulncheck(a.out, a.ignore, a.targets), "aggregate-sbom": lambda: aggregate_sbom(a.out), "cuda-admission": lambda: cuda_admission(a.out, a.record), "final": lambda: final(a.out, a.commit, a.record)}[a.mode]()
 
 
 if __name__ == "__main__":

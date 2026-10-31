@@ -464,6 +464,83 @@ class AuditPolicy(unittest.TestCase):
             self.assertEqual(len(cuda), len(fixture["files"]))
             self.assertTrue(any(r["path"].endswith("ggml-cuda.h") for r in cuda))
 
+    def cuda_out(self, td):
+        out = Path(td)
+        record = json.loads((ROOT / "builds/ollama/files/cuda-admission.json").read_text())
+        ident = dict(record["identity"], source_commit="1" * 40, cuda_toolkit="Build cuda_12.8", preset="CUDA 12")
+        (out / "runner-linux-amd64-cuda.json").write_text(json.dumps({
+            "backend_identity": ident, "toolkit_role": "build-only; runtime host-provided",
+            "backend_artifacts": [{"name": "runner-linux-amd64-cuda-libggml-cuda.so", "sha256": "a" * 64},
+                                  {"name": "runner-linux-amd64-cuda-libggml-base.so.0", "sha256": "b" * 64}]}))
+        (out / "runner-linux-amd64-cuda-cuda-linkage.txt").write_text(
+            "cuda-link-audit: dynamic NEEDED libggml-base.so.0 libcudart.so.12 libcublas.so.12\n"
+            " 0x1 (NEEDED) Shared library: [libcudart.so.12]\n 0x1 (NEEDED) Shared library: [libcublas.so.12]\n"
+            " 0x1d (RUNPATH) Library runpath: [$ORIGIN]\nhost-required: libcudart.so.12\n")
+        (out / "runner-sbom.cdx.json").write_text(json.dumps({"bomFormat": "CycloneDX", "components": [
+            {"type": "file", "group": "build-only-sdk", "name": c["archive"], "version": ident["toolkit_version"],
+             "hashes": [{"alg": "SHA-256", "content": c["sha256"]}]} for c in ident["toolkit_components"]]}))
+        (out / "runner-native-licenses.json").write_text(json.dumps({"inputs": [
+            {"target": "linux-amd64-cuda", "path": "x.cu", "sha256": "c" * 64, "license": "MIT", "notice": "n"}]}))
+        (out / "runner-govulncheck.json").write_text(json.dumps({"targets": {"linux-amd64-cuda": {"reachable": [], "waived": [], "unwaived": []}}}))
+        for name in ("runner-osv.json", "runner-grype.json", "runner-linux-amd64-cuda-native.json", "runner-linux-amd64-cuda-egress.txt"):
+            (out / name).write_text("{}")
+        return out, record
+
+    def admit(self, out, record_path=None, ok=True):
+        return self.run_audit("cuda-admission", "--out", out,
+                              "--record", record_path or ROOT / "builds/ollama/files/cuda-admission.json", ok=ok)
+
+    def test_cuda_admission_green_is_prerelease_admitted_with_pending_promotion(self):
+        with tempfile.TemporaryDirectory() as td:
+            out, _ = self.cuda_out(td)
+            self.admit(out)
+            result = json.loads((out / "runner-cuda-admission.json").read_text())
+            self.assertEqual(result["admission"], "PRERELEASE_ADMITTED")
+            verdicts = {r["id"]: r["verdict"] for r in result["rows"]}
+            self.assertEqual(verdicts["toolkit-build-only"], "GREEN")
+            self.assertEqual(verdicts["host-runtime-dynamic"], "GREEN")
+            self.assertEqual(verdicts["in-run-audit"], "GREEN")
+            self.assertEqual(verdicts["fail-closed-launcher"], "REFERENCE")
+            self.assertEqual(verdicts["post-signing-verify"], "PENDING_PROMOTION")
+            self.assertEqual(verdicts["gpu-model-load"], "PENDING_PROMOTION")
+
+    def test_cuda_admission_fails_closed(self):
+        def mutate(out, name, fn):
+            path = out / name
+            path.write_text(fn(path.read_text()))
+        cases = {
+            "identity digest": lambda out: mutate(out, "runner-linux-amd64-cuda.json", lambda t: t.replace(json.loads(t)["backend_identity"]["nvcc_sha256"], "0" * 64)),
+            "runpath": lambda out: mutate(out, "runner-linux-amd64-cuda-cuda-linkage.txt", lambda t: t.replace("[$ORIGIN]", "[/tmp/x/cuda-build]")),
+            "libcuda": lambda out: mutate(out, "runner-linux-amd64-cuda-cuda-linkage.txt", lambda t: t + " 0x1 (NEEDED) Shared library: [libcuda.so.1]\n"),
+            "govulncheck": lambda out: mutate(out, "runner-govulncheck.json", lambda t: t.replace('"unwaived": []', '"unwaived": ["GO-1"]')),
+            "sbom toolkit": lambda out: mutate(out, "runner-sbom.cdx.json", lambda t: json.dumps({"bomFormat": "CycloneDX", "components": []})),
+            "bundled runtime": lambda out: mutate(out, "runner-linux-amd64-cuda.json", lambda t: t.replace("libggml-base.so.0", "libcudart.so.12")),
+            "no native evidence": lambda out: (out / "runner-linux-amd64-cuda-native.json").unlink(),
+        }
+        for name, apply in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as td:
+                out, _ = self.cuda_out(td)
+                apply(out)
+                r = self.admit(out, ok=False)
+                self.assertIn("CUDA backend not admitted", r.stderr)
+                self.assertEqual(json.loads((out / "runner-cuda-admission.json").read_text())["admission"], "REJECTED")
+        with tempfile.TemporaryDirectory() as td:
+            out, _ = self.cuda_out(td)
+            r = self.admit(out, out / "missing.json", ok=False)
+            self.assertIn("CUDA backend not admitted", r.stderr)
+            self.assertIn("record", r.stderr)
+
+    def test_cuda_admission_record_is_bound_to_tool_env_pins(self):
+        import re
+        env = dict(l.split("=", 1) for l in (ROOT / "builds/ollama/tool.env").read_text().splitlines() if re.match(r"^[A-Z0-9_]+=", l))
+        pins = env["CUDA_TOOLKIT_SHA256"].strip('"')
+        ident = json.loads((ROOT / "builds/ollama/files/cuda-admission.json").read_text())["identity"]
+        self.assertEqual(ident["toolkit_version"], env["CUDA_TOOLKIT_VERSION"])
+        self.assertEqual(ident["toolkit_sha256"], hashlib.sha256(pins.encode()).hexdigest())
+        self.assertEqual([(c["archive"], c["sha256"]) for c in ident["toolkit_components"]],
+                         [(e.split("=")[0].rsplit("/", 1)[-1], e.split("=")[1]) for e in pins.split()])
+        self.assertRegex(ident["nvcc_sha256"], r"^[0-9a-f]{64}$")
+
     def test_cyclonedx_aggregates_all_target_module_graphs_and_native_links(self):
         with tempfile.TemporaryDirectory() as td:
             out = Path(td)
