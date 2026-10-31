@@ -12,6 +12,9 @@ import sys
 import tempfile
 import unittest
 
+# The bashy shim has a built-in cygpath that would shadow the test mock; use a real bash.
+REAL_BASH = "/bin/bash" if os.path.exists("/bin/bash") else shutil.which("bash")
+
 ROOT = Path(__file__).resolve().parents[2]
 RECIPE = ROOT / "builds/ollama"
 PIN = "590109c8352e8d5a6206e8909b518a54a2b0a7b8"
@@ -182,6 +185,11 @@ class Recipe(unittest.TestCase):
         self.assertIn("install-cuda-toolkit.sh", build)
         self.assertIn("CUDA_TOOLKIT_SHA256", build)
         self.assertIn("CUDA_USE_STATIC", build)  # static cudart/cublas link refused
+        # Upstream ggml-cuda links libcuda (CUDA::cuda_driver) for its VMM pool;
+        # NO_VMM keeps the driver reachable only through host cudart.
+        configure = [l for l in build.splitlines() if '--preset \'CUDA 12\'' in l]
+        self.assertEqual(len(configure), 1)
+        self.assertIn("-DGGML_CUDA_NO_VMM=ON", configure[0])
         package = (self.helpers / "package-runner.py").read_text()
         self.assertIn("toolkit_sha256", package)
         self.assertIn("build-only", package)
@@ -580,7 +588,7 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
                 # fixture must be restored to pristine so each leg exercises
                 # the override from the pinned tree (verify-pin runs first).
                 run("git", "-C", str(src), "checkout", "--", "go.mod", "go.sum")
-                run("bash", str(self.helpers / "build-runner.sh"), str(src), str(out), asset, env=env)
+                run(REAL_BASH, str(self.helpers / "build-runner.sh"), str(src), str(out), asset, env=env)
                 captured = json.loads((out / (asset + ".compiler-inputs.json")).read_text())
                 self.assertIn("llama/llama.cpp/native.c", captured["files"])
                 self.assertIn("llama/llama.cpp/vendor/nlohmann/json.hpp", captured["files"])
@@ -637,7 +645,8 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         lean = self.root / "lean-bin"
         lean.mkdir()
         for tool, target in [("go", mock / "go"), ("python3", Path(sys.executable)),
-                             ("bash", Path(shutil.which("bash"))),
+                             ("bash", Path(REAL_BASH)),
+                             
                              ("git", Path(shutil.which("git"))),
                              ("cygpath", mock / "cygpath")]:
             (lean / tool).symlink_to(target)
@@ -652,10 +661,10 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
             str(src), str(lean_out), "runner-windows-amd64", env=lean_env)
         self.assertTrue((lean_out / "runner-windows-amd64.exe").is_file())
         env["TEST_HOST"] = "linux/amd64"
-        p = run("bash", str(self.helpers / "build-runner.sh"), str(src), str(self.root / "bad"),
+        p = run(REAL_BASH, str(self.helpers / "build-runner.sh"), str(src), str(self.root / "bad"),
                 "runner-windows-amd64", env=env, ok=False)
         self.assertIn("native builder required", p.stderr)
-        run("bash", str(self.helpers / "build-runner.sh"), str(src), str(self.root / "bad"),
+        run(REAL_BASH, str(self.helpers / "build-runner.sh"), str(src), str(self.root / "bad"),
             "runner-windows-arm64", env=env, ok=False)
     def test_capture_is_unique_under_parallel_compiles_and_keeps_compiler_argv(self):
         capture = self.root / "capture"
