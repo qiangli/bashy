@@ -152,7 +152,7 @@ class Recipe(unittest.TestCase):
         ident.write_text(json.dumps(base))
         pkg = str(self.helpers / "package-runner.py")
         args = [pkg, "package", str(d / "runner"), str(d / "r.gz"), str(d / "runner-linux-amd64-cuda.json"),
-                "linux/amd64", PIN, "1.27.2"]
+                "linux/amd64", PIN, "1.27.3"]
         run("python3", *args, str(ident))
         m = json.loads((d / "runner-linux-amd64-cuda.json").read_text())
         self.assertEqual(m["backend_artifacts"][0]["sha256"], hashlib.sha256(b"backend").hexdigest())
@@ -295,7 +295,7 @@ class Recipe(unittest.TestCase):
                                      "toolkit_sha256": "b" * 64, "toolkit_version": "12.8.1", "toolkit_components": comps,
                                      "preset": "CUDA 12", "artifacts": ["lib.so"]}))
         run("python3", str(self.helpers / "package-runner.py"), "package", str(d / "runner"), str(d / "r.gz"),
-            str(d / "runner-linux-amd64-cuda.json"), "linux/amd64", PIN, "1.27.2", str(ident))
+            str(d / "runner-linux-amd64-cuda.json"), "linux/amd64", PIN, "1.27.3", str(ident))
         m = json.loads((d / "runner-linux-amd64-cuda.json").read_text())
         self.assertEqual(m["backend_identity"]["toolkit_components"], comps)
         self.assertEqual(m["backend_identity"]["toolkit_version"], "12.8.1")
@@ -534,7 +534,7 @@ assert os.environ['GOWORK'] == 'off'
 assert os.environ['CGO_ENABLED'] == '1'
 assert os.environ['GOTOOLCHAIN'] == 'local'
 if args[0] == 'env':
- print({'GOHOSTOS':os.environ['TEST_HOST'].split('/')[0], 'GOHOSTARCH':os.environ['TEST_HOST'].split('/')[1], 'GOVERSION':'go1.27.2', 'GOROOT':str(pathlib.Path.cwd() / 'goroot')}[args[1]])
+ print({'GOHOSTOS':os.environ['TEST_HOST'].split('/')[0], 'GOHOSTARCH':os.environ['TEST_HOST'].split('/')[1], 'GOVERSION':'go1.27.3', 'GOROOT':str(pathlib.Path.cwd() / 'goroot')}[args[1]])
 elif args[0] == 'build':
  assert args[1:3] == ['-mod=readonly','-trimpath'] and args[-1] == './cmd/runner'
  subprocess.run([*shlex.split(os.environ['CC']), '-c', str(pathlib.Path.cwd() / 'llama/llama.cpp/native.c')], check=True)
@@ -635,7 +635,7 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
                 self.assertEqual(gz[3], 0)  # no original filename
                 run("python3", str(self.helpers / "package-runner.py"), "package",
                     str(out / data["executable"]), str(out / "again.gz"), str(out / "again.json"),
-                    data["target"], data["upstream_commit"], "1.27.2")
+                    data["target"], data["upstream_commit"], "1.27.3")
                 self.assertEqual(gz, (out / "again.gz").read_bytes())
         # The reviewed module bump applies in the build: the fixture pins
         # the x/* modules below the override, and every leg must have raised
@@ -955,6 +955,19 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
         self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertNotIn("PACKAGED", r.stdout)
+
+    def test_runner_toolchain_carries_stdlib_x509_fix(self):
+        def ver(v):
+            return tuple(int(x) for x in v.split("."))
+        env = dict(l.split("=", 1) for l in (RECIPE / "tool.env").read_text().splitlines()
+                   if re.match(r"^GO_TOOLCHAIN(_SECURITY_OVERRIDE)?=", l))
+        effective = env.get("GO_TOOLCHAIN_SECURITY_OVERRIDE", env["GO_TOOLCHAIN"])
+        self.assertGreaterEqual(ver(effective), (1, 27, 3), "GO-2026-6809 is fixed in go1.27.3")
+        for f in ("setup.yml", "audit.yml"):
+            m = re.search(r"go-version: '([^']+)'", (RECIPE / f).read_text())
+            self.assertTrue(m.group(1) == "@@GO_TOOLCHAIN@@" or ver(m.group(1)) >= (1, 27, 3), f)
+        pin = (self.helpers / "PIN").read_text()
+        self.assertIn("GO_TOOLCHAIN=" + env["GO_TOOLCHAIN"], pin)
 
     def test_prerelease_is_per_tool_and_cuda_libs_are_release_assets(self):
         wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()

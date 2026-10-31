@@ -7,13 +7,13 @@ UPSTREAM_COMMIT=590109c8352e8d5a6206e8909b518a54a2b0a7b8
 UPSTREAM_TAG_FORM=vX.Y.Z
 SOURCE_ADMISSION=official-release
 KIND=custom
-GO_TOOLCHAIN=1.27.2
+GO_TOOLCHAIN=1.27.3
 # S436/#2028 reviewed module bumps: golang.org/x/image v0.22.0 carries 16
 # reachable vulns, all fixed by v0.45.0; take the latest v0.47.0. The entry
 # below is DERIVED, not hand-picked (builds/README.md GO_SECURITY_OVERRIDES):
 # `go get golang.org/x/image@v0.47.0` on the pinned tree moves eight further
 # golang.org/x modules by MVS, and raises the go directive 1.24.1 -> 1.26.0
-# (at or below the effective go1.27.2), so each moved module is declared at
+# (at or below the effective go1.27.3), so each moved module is declared at
 # exactly the version MVS selected. Applied by go-security-overrides.sh in
 # the build job (after the pin gates, before go list/go build) and in the
 # audit job (before go-licenses/SBOM/govulncheck), so inputs, deps, SBOM and

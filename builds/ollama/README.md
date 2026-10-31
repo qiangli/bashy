@@ -32,7 +32,7 @@ match the pin; dirty trees, missing nested headers and unreviewed gitlinks
 fail. Go module ZIPs and Yoke's patched source do not qualify. No generated
 main, dispatcher pruning, header relocation or upstream patch is applied.
 
-Go 1.27.2 is explicit (source minimum 1.24.1); `GOTOOLCHAIN=local`,
+Go 1.27.3 is explicit (go1.27.2 carried GO-2026-6809, crypto/x509) (source minimum 1.24.1); `GOTOOLCHAIN=local`,
 `GOENV=off`, `GOWORK=off`, empty `GOFLAGS`, and `CGO_ENABLED=1` prevent ambient
 workspace/toolchain selection. This supported-toolchain choice follows the
 source qualification; vulnerability admission still requires its own gate.
