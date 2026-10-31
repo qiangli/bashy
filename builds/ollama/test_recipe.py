@@ -840,6 +840,54 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         self.assertEqual(got.read_bytes(), b"real")
         self.assertIn("a-libggml-base.so.0", r.stdout)
 
+    def test_closure_ships_only_ggml_and_reports_nvidia_host_required(self):
+        tool = self.helpers / "cuda-link-audit.py"
+        d = Path(tempfile.mkdtemp())
+        tree = d / "tree"; (tree / "lib").mkdir(parents=True); (tree / "toolkit" / "lib64").mkdir(parents=True)
+        (tree / "lib" / "libggml-cuda.so").write_bytes(b"x")
+        (tree / "lib" / "libggml-base.so.0.0.0").write_bytes(b"real")
+        (tree / "lib" / "libggml-base.so.0").symlink_to("libggml-base.so.0.0.0")
+        (tree / "toolkit" / "lib64" / "libcudart.so.12.8.90").write_bytes(b"nv")
+        (tree / "toolkit" / "lib64" / "libcudart.so.12").symlink_to("libcudart.so.12.8.90")
+        fake = d / "readelf"
+        fake.write_text("#!/bin/sh\nfor a; do f=$a; done\ncase $(basename $f) in\n"
+            "libggml-cuda.so) echo ' 0x1 (NEEDED) Shared library: [libcudart.so.12]'; echo ' 0x1 (NEEDED) Shared library: [libcublasLt.so.12]'; echo ' 0x1 (NEEDED) Shared library: [libggml-base.so.0]';;\n"
+            "libggml-base.so.0.0.0) echo ' 0x1 (NEEDED) Shared library: [libc.so.6]';;\n"
+            "esac\n")
+        fake.chmod(0o755)
+        hr = d / "host-required.txt"
+        args = ["python3", str(tool), "closure", str(tree / "lib" / "libggml-cuda.so"), "--search", str(tree), "--readelf", str(fake),
+                "--host-required-out", str(hr)]
+        r = subprocess.run(args, capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(r.stdout.split(), ["libggml-base.so.0"])
+        self.assertEqual(sorted(hr.read_text().split()), ["libcublasLt.so.12", "libcudart.so.12"])
+        (tree / "lib" / "libfoo.so.1").write_bytes(b"x")
+        fake.write_text(fake.read_text().replace("[libc.so.6]", "[libfoo.so.1]"))
+        r = subprocess.run(args, capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("libfoo.so.1", r.stderr)
+        build = (self.helpers / "build-runner.sh").read_text()
+        self.assertIn("--host-required-out", build)
+        self.assertIn("host-required", build)
+
+    def test_build_runner_refuses_non_ggml_packaging(self):
+        build = (self.helpers / "build-runner.sh").read_text()
+        a = build.index("  extra=()")
+        b = build.index("  python3 - \"$out/$asset.backend-artifacts.json\"")
+        seg = build[a:b]
+        d = Path(tempfile.mkdtemp())
+        (d / "cuda-link-audit.py").write_text("print('libcudart.so.12')\n")
+        (d / "out").mkdir()
+        script = ("set -euo pipefail\nhere=%s out=%s asset=a BASHY_COMPILER_TMP=%s\nmkdir -p \"$BASHY_COMPILER_TMP/cuda-build/lib\"\n"
+                  "printf nv >\"$BASHY_COMPILER_TMP/cuda-build/lib/libcudart.so.12\"\n"
+                  "readelf() { :; }\ntouch \"$out/a-libggml-cuda.so\"\n%s\necho PACKAGED\n" % (d, d / "out", d / "tmp", seg))
+        r = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertNotIn("PACKAGED", r.stdout)
+        self.assertIn("libcudart.so.12", r.stderr)
+        self.assertFalse((d / "out" / "a-libcudart.so.12").exists())
+
     def test_build_runner_aborts_when_closure_helper_fails(self):
         build = (self.helpers / "build-runner.sh").read_text()
         a = build.index("  extra=()")

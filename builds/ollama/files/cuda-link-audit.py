@@ -40,21 +40,29 @@ def transitive(needed):
     return [n for n in needed if not n.startswith(SYSTEM)]
 
 
+HOST_REQUIRED = ("libcuda", "libcudart", "libcublas", "libcublasLt", "libnv")
+SHIP_PREFIX = "libggml-"
+
 NEEDED_RE = r"\(NEEDED\)\s+Shared library: \[([^\]]+)\]"
 
 
 def closure(root_so, search, readelf):
     """Recursive non-system dependency closure of a backend library, resolved (symlinks followed, real file must stay under `search`)."""
     import os
-    seen, queue, errors = [], [root_so], []
+    seen, queue, errors, host = [], [root_so], [], []
     while queue:
         so = queue.pop(0)
         text = subprocess.check_output([readelf, "-d", "--wide", so], text=True)
         for n in re.findall(NEEDED_RE, text):
             if n.startswith(("libcuda.so", "libnvidia-")):
                 errors.append(f"{os.path.basename(so)} links host driver library {n}")
+            elif n.startswith(HOST_REQUIRED):
+                if n not in host:
+                    host.append(n)
             elif n.startswith(SYSTEM) or n in seen:
                 continue
+            elif not n.startswith(SHIP_PREFIX):
+                errors.append(f"refusing to ship non-libggml build-tree dependency {n} (needed by {os.path.basename(so)})")
             else:
                 root = os.path.realpath(search)
                 hits = sorted(os.path.join(r, n) for r, ds, fs in os.walk(search) for n2 in (fs + ds) if n2 == n)
@@ -65,7 +73,7 @@ def closure(root_so, search, readelf):
                     continue
                 seen.append(n)
                 queue.append(hits[0])
-    return seen, errors
+    return seen, host, errors
 
 
 def main():
@@ -81,14 +89,17 @@ def main():
     clo.add_argument("so")
     clo.add_argument("--search", required=True)
     clo.add_argument("--readelf", default="readelf")
+    clo.add_argument("--host-required-out")
     host = sub.add_parser("host")
     host.add_argument("--ldconfig-file")
     host.add_argument("--cpu-explicit", action="store_true")
     a = ap.parse_args()
     if a.cmd == "closure":
-        seen, errors = closure(a.so, a.search, a.readelf)
+        seen, host, errors = closure(a.so, a.search, a.readelf)
         if errors:
             sys.exit("cuda-link-audit: " + "; ".join(errors))
+        if a.host_required_out:
+            open(a.host_required_out, "w").write("".join(h + "\n" for h in host))
         print("\n".join(seen))
         return
     if a.cmd == "needed":

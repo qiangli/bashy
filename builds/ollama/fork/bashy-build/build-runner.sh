@@ -178,9 +178,15 @@ if [[ $cuda == 1 ]]; then
   # neither system nor host-provided NVIDIA must resolve in the build tree to a
   # real file (SONAME symlinks are followed), and a host driver (libcuda/libnvidia) link fails the build.
   extra=()
-  deps=$(python3 "$here/cuda-link-audit.py" closure "$out/$asset-libggml-cuda.so" --search "$BASHY_COMPILER_TMP/cuda-build")
+  deps=$(python3 "$here/cuda-link-audit.py" closure "$out/$asset-libggml-cuda.so" --search "$BASHY_COMPILER_TMP/cuda-build" --host-required-out "$out/$asset-host-required.txt")
+  # NVIDIA runtime libraries are host-provided: recorded, never copied.
+  if [[ -f $out/$asset-host-required.txt ]]; then
+    while IFS= read -r h; do [[ -n $h ]] && echo "host-required: $h" >>"$out/$asset-cuda-linkage.txt"; done <"$out/$asset-host-required.txt"
+    rm -f "$out/$asset-host-required.txt"
+  fi
   while IFS= read -r dep; do
     [[ -n $dep ]] || continue
+    [[ $dep == libggml-* ]] || { echo "build-runner: refusing to package non-libggml library $dep" >&2; exit 1; }
     found=$(find "$BASHY_COMPILER_TMP/cuda-build" \( -type f -o -type l \) -name "$dep" | LC_ALL=C sort | head -n1)
     [[ -n $found ]] || { echo "build-runner: unresolved transitive backend library $dep" >&2; exit 1; }
     real=$(realpath "$found")
