@@ -168,6 +168,41 @@ class Flows(TempBashy):
                 pass
             proc.wait(timeout=30)
 
+    def test_demo_sigint_exits_clean_and_removes_throwaway_dir(self):
+        tmp = self.root / "tmp"
+        tmp.mkdir()
+        argvs = [["bashy", "--bashsharp", str(HERE / "tutor.bsh"), "demo"],
+                 ["bashy", "dag", "--plain", str(HERE / "dag.md"), "demo", "TUTOR_DIR=%s" % HERE]]
+        for argv in argvs:
+            with self.subTest(argv=argv[1:3]):
+                proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                        stdin=subprocess.DEVNULL, start_new_session=True,
+                                        env=dict(os.environ, TMPDIR=str(tmp)))
+                out = b""
+                deadline = time.time() + 90
+                while time.time() < deadline and b"Ctrl-C to stop" not in out:
+                    if select.select([proc.stdout], [], [], 1)[0]:
+                        chunk = os.read(proc.stdout.fileno(), 4096)
+                        if not chunk:
+                            break
+                        out += chunk
+                self.assertIn(b"Ctrl-C to stop", out, out.decode())
+                url = next(l for l in out.decode().splitlines() if l.startswith("Display (projector):")).split()[-1]
+                port = url.rsplit(":", 1)[1].split("/")[0]
+                time.sleep(1.5)
+                os.killpg(proc.pid, signal.SIGINT)
+                rest = proc.stdout.read().decode()
+                proc.wait(30)
+                self.assertIn(proc.returncode, (0, 130, -signal.SIGINT), rest)
+                self.assertNotIn("FAILED", rest)
+                self.assertNotIn("Directory not empty", rest)
+                for _ in range(100):
+                    if not list(tmp.iterdir()):
+                        break
+                    time.sleep(0.1)
+                self.assertEqual(list(tmp.iterdir()), [])
+                self.assert_server_gone(port)
+
     def test_go_verb_and_dag(self):
         goal = "Build a small thing"
         verbs = [["bashy", "--bashsharp", str(HERE / "tutor.bsh"), "go", goal,

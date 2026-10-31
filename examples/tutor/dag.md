@@ -68,9 +68,9 @@ real_cache=${XDG_CACHE_HOME:-$HOME/.cache}
 server_bin=${TUTOR_SERVER_BIN:-$(XDG_CACHE_HOME=$real_cache bash "$TUTOR_DIR/server/run.sh" build | tail -n 1)}
 sandbox=$(mktemp -d)
 SERVE_PID=
-cleanup() { stop_server; cd /; rm -rf "$sandbox"; }
+cleanup() { stop_server; cd /; rm_dir "$sandbox"; }
 trap cleanup EXIT
-trap 'exit 130' INT TERM
+trap 'exit 0' INT TERM
 export HOME=$sandbox/home BASHY_HOME=$sandbox/home BASHY_COORD_DIR=$sandbox/coord \
   BASHY_ROOM_DIR=$sandbox/room BASHY_APPS_DIR=$sandbox/apps XDG_DATA_HOME=$sandbox/xdg \
   XDG_CACHE_HOME=$sandbox/cache BASHY_SPRINT_ANNOUNCE=0 TUTOR_SERVER_BIN=$server_bin
@@ -95,9 +95,9 @@ set -euo pipefail
 : "${PEOPLE:?usage: bashy tutor go \"GOAL\" --people a,b}"
 work=$(mktemp -d)
 SERVE_PID=
-cleanup() { stop_server; rm -rf "$work"; }
+cleanup() { stop_server; rm_dir "$work"; }
 trap cleanup EXIT
-trap 'exit 130' INT TERM
+trap 'exit 0' INT TERM
 start_session "$GOAL" "$PEOPLE" "${MINUTES:-60}" "${FORMAT:-}" "${AGENT:-}" "${PORT:-18093}" "$work"
 echo "Session: sprint $SPRINT (later: bashy tutor status $SPRINT)"
 print_links "$work" "$SPRINT"
