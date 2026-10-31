@@ -17,9 +17,8 @@ metadata:
 A session is a sprint card; each step is a todo owned by a person, labelled
 `step-NN`, `timebox-Nm` and `role-WORD`. The session clock is
 the sprint's own clock (`bashy sprint start N --owner AGENT --for 90m`, `extend`, `stop`);
-tutor reads that clock, falling back to the run log from `tutor start --for`.
-Starting requires an explicit manager agent; without one, planning, applying,
-next/done, status and fallback hints still work, and start reports a clean error.
+tutor only reads that clock. The first `tutor next N` marks step 1 doing; tutor has no
+start verb of its own.
 
 Start a session like a coding sprint:
 `bashy sprint start N --owner AGENT --for 90m --instruction "run today's session with the tutor skill"`.
@@ -56,7 +55,7 @@ Render the same source with `--edition owner` for preparation and
 set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-usage='Usage: tutor plan|apply|start|next|done|extend|status|nudge|render|prep|serve|join|stop|test [ARGS] [--json]'
+usage='Usage: tutor plan|apply|next|done|extend|status|nudge|render|prep|serve|join|stop|test [ARGS] [--json]'
 # Registered schemas canonicalize flags before positionals as --name=value.
 # Restore the verb-first argv expected by the shared Python dispatchers.
 bound_flags=()
@@ -81,7 +80,7 @@ case ${1:-} in
 --contract) echo 'sokilili tutoro efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
 ''|-h|--help) echo "$usage" ;;
 plan|apply)                   exec python3 "$here/lib/plan.py" "$@" ;;
-start|next|done|extend|status) exec python3 "$here/lib/run.py" "$@" ;;
+next|done|extend|status) exec python3 "$here/lib/run.py" "$@" ;;
 nudge)                        exec python3 "$here/lib/nudge.py" "$@" ;;
 render)                       exec python3 "$here/lib/render.py" "$@" ;;
 prep)                         exec python3 "$here/lib/prep.py" "$@" ;;
