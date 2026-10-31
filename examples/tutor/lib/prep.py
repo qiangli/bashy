@@ -13,7 +13,7 @@ import render
 
 
 class PlanArgs:
-    def __init__(self, goal, minutes=0, people="", fmt="class", agent="", title="", epic=""):
+    def __init__(self, goal, minutes=0, people="", fmt="session", agent="", title="", epic=""):
         self.goal = goal
         self.minutes = minutes
         self.people = people
@@ -73,8 +73,8 @@ def parse_content_file(path, fmt):
         done_when = fmt.get("default_done_when", plan.DEFAULT_DONE_WHEN)
 
     role = str(fm.get("role") or "").strip().lower()
-    if role not in ("student", "teacher"):
-        role = "student"
+    if role not in fmt["roles"]:
+        role = common.participant_roles(fmt["roles"])[0]
 
     phase = str(fm.get("phase") or "").strip().lower()
     if not phase:
@@ -87,8 +87,8 @@ def parse_content_file(path, fmt):
             phase = "work"
 
     owner = str(fm.get("owner") or "").strip()
-    if role == "teacher" and not owner:
-        owner = "teacher"
+    if role == fmt["roles"][0] and not owner:
+        owner = fmt["roles"][0]
 
     return {
         "title": title,
@@ -106,35 +106,35 @@ def make_step_content(step):
         f"---\n"
         f"title: {step['title']}\n"
         f"timebox: {step['minutes']}m\n"
-        f"role: {step.get('role', 'student')}\n"
+        f"role: {step.get('role', 'participant')}\n"
         f"phase: {step.get('phase', '')}\n"
         f"done_when: {step.get('done_when', '')}\n"
         f"---\n"
         f"# {step['title']}\n\n"
-        f"~~~teacher\n"
+        f"~~~private\n"
         f"~~~\n"
     )
 
 
-def ensure_teacher_steps(steps, fmt, goal):
+def ensure_owner_steps(steps, fmt, goal):
     short = plan._short(goal)
-    existing_teacher_phases = {
-        s["phase"] for s in steps if s.get("role") == "teacher"
+    existing_owner_phases = {
+        s["phase"] for s in steps if s.get("role") == fmt["roles"][0]
     }
-    for entry in fmt.get("teacher_steps", []):
-        if entry["name"] not in existing_teacher_phases:
+    for entry in fmt.get("owner_steps", []):
+        if entry["name"] not in existing_owner_phases:
             steps.append({
                 "title": "%s: %s" % (plan._phase_title(entry["name"]), short),
-                "owner": "teacher",
-                "minutes": fmt["teacher_step_minutes"],
+                "owner": fmt["roles"][0],
+                "minutes": fmt["owner_step_minutes"],
                 "done_when": entry["text"] or fmt["default_done_when"],
                 "phase": entry["name"],
-                "role": "teacher"
+                "role": fmt["roles"][0]
             })
 
 
 def cmd_prep(argv):
-    ap = argparse.ArgumentParser(prog="tutor prep", description="prepare a class content directory")
+    ap = argparse.ArgumentParser(prog="tutor prep", description="prepare a session content directory")
     ap.add_argument("dir", help="target directory to prepare")
     ap.add_argument("--from", dest="from_path", default="", help="existing content dir to copy and modify")
     ap.add_argument("--goal", "-g", default="", help="session goal")
@@ -176,7 +176,7 @@ def cmd_prep(argv):
             else (
                 plan.FORMATS / f"{args.format}.md"
                 if (plan.FORMATS / f"{args.format}.md").is_file()
-                else plan.FORMATS / "class.md"
+                else plan.FORMATS / "session.md"
             )
         )
         target_dir.mkdir(parents=True, exist_ok=True)
@@ -192,7 +192,7 @@ def cmd_prep(argv):
     if from_scratch:
         content_dir.mkdir(parents=True, exist_ok=True)
         total_minutes = args.minutes if args.minutes > 0 else fmt["minutes"]
-        goal = args.goal.strip() or f"Class session: {target_dir.name}"
+        goal = args.goal.strip() or f"Session: {target_dir.name}"
         title = args.title.strip() or plan._short(goal, 72)
         people = plan.people_list(args.people)
         agent = args.agent or os.environ.get("TUTOR_AGENT", "")
@@ -211,15 +211,15 @@ def cmd_prep(argv):
         if draft is None:
             draft = plan.template_draft(fmt, plan_args, people)
 
-        student_steps = [s for s in draft["steps"] if s.get("role", "student") == "student"]
-        for idx, s in enumerate(student_steps, 1):
+        participant_steps = [s for s in draft["steps"] if s.get("role") in common.participant_roles(fmt["roles"])]
+        for idx, s in enumerate(participant_steps, 1):
             slug = make_slug(s["title"])
             filename = f"{idx:02d}-{slug}.md"
             file_path = content_dir / filename
             file_path.write_text(make_step_content(s), encoding="utf-8")
             s["content"] = f"content/{filename}"
 
-        ensure_teacher_steps(draft["steps"], fmt, goal)
+        ensure_owner_steps(draft["steps"], fmt, goal)
         common.validate_draft(draft)
         draft_file.write_text(json.dumps(draft, indent=2) + "\n", encoding="utf-8")
     else:
@@ -247,20 +247,20 @@ def cmd_prep(argv):
             steps.append(step)
 
         if people:
-            student_steps = [s for s in steps if s.get("role") == "student"]
-            for i, s in enumerate(student_steps):
+            participant_steps = [s for s in steps if s.get("role") in common.participant_roles(fmt["roles"])]
+            for i, s in enumerate(participant_steps):
                 if not s.get("owner"):
                     s["owner"] = people[i % len(people)]
 
-        ensure_teacher_steps(steps, fmt, goal)
+        ensure_owner_steps(steps, fmt, goal)
 
         if args.minutes > 0:
             total_minutes = args.minutes
         elif old_draft.get("minutes"):
             total_minutes = old_draft["minutes"]
         else:
-            student_mins = sum(s["minutes"] for s in steps if s.get("role") == "student")
-            total_minutes = student_mins if student_mins > 0 else fmt["minutes"]
+            participant_mins = sum(s["minutes"] for s in steps if s.get("role") in common.participant_roles(fmt["roles"]))
+            total_minutes = participant_mins if participant_mins > 0 else fmt["minutes"]
 
         draft = {
             "version": common.DRAFT_VERSION,
@@ -269,6 +269,7 @@ def cmd_prep(argv):
             "epic": epic,
             "minutes": total_minutes,
             "format": fmt["name"],
+            "roles": fmt["roles"], "audience": fmt["audience"], "tone": fmt["tone"],
             "people": people,
             "source": "prep",
             "steps": steps,
@@ -277,8 +278,8 @@ def cmd_prep(argv):
         common.validate_draft(draft)
         draft_file.write_text(json.dumps(draft, indent=2) + "\n", encoding="utf-8")
 
-    student_count = sum(1 for s in draft["steps"] if s.get("role") == "student")
-    teacher_count = sum(1 for s in draft["steps"] if s.get("role") == "teacher")
+    participant_count = sum(1 for s in draft["steps"] if s.get("role") in common.participant_roles(fmt["roles"]))
+    owner_count = len(draft["steps"]) - participant_count
     content_files = sorted(content_dir.glob("*.md"), key=sort_key)
     out = {
         "dir": str(target_dir),
@@ -292,7 +293,7 @@ def cmd_prep(argv):
         "minutes": draft["minutes"],
     }
     text = (
-        f"prepared {target_dir}: {len(draft['steps'])} steps ({student_count} student, {teacher_count} teacher)\n"
+        f"prepared {target_dir}: {len(draft['steps'])} steps ({participant_count} participant, {owner_count} owner)\n"
         f"  format:  {fmt_file}\n"
         f"  draft:   {draft_file}\n"
         f"  content: {content_dir} ({len(content_files)} files)"

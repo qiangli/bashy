@@ -13,7 +13,7 @@ module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
 
 ADMIN = "adminpw"
-SECRETS = {"klatch/admin": ADMIN, "klatch/classbot": "botpw", "klatch/alice": "apw", "klatch/bob": "bpw", "klatch/carol": "cpw"}
+SECRETS = {"klatch/admin": ADMIN, "klatch/bot": "botpw", "klatch/alice": "apw", "klatch/bob": "bpw", "klatch/carol": "cpw"}
 
 
 class State:
@@ -188,7 +188,7 @@ class ProvisionTest(unittest.TestCase):
             "base_url": "http://127.0.0.1:%d" % self.srv.server_port, "domain": "chat.test",
             "admin_password_secret": "klatch/admin",
             "users": [{"handle": h, "password_secret": "klatch/" + h} for h in ("alice", "bob", "carol")],
-            "groups": [{"key": "class", "name": "Class", "owner": "alice", "members": ["bob", "carol"]}],
+            "groups": [{"key": "session", "name": "Session", "owner": "alice", "members": ["bob", "carol"]}],
         }
         self.client = module.Client(self.cfg["base_url"], resolve=SECRETS.__getitem__)
 
@@ -209,7 +209,7 @@ class ProvisionTest(unittest.TestCase):
         self.assertEqual(body["domain"], "chat.test")
         self.assertFalse(body["enableOpenAccess"])
         self.assertEqual(out["handles"], {h: "guid-" + h for h in ("alice", "bob", "carol")})
-        self.assertEqual(list(out["groups"]), ["class"])
+        self.assertEqual(list(out["groups"]), ["session"])
         # alice holds cards for bob and carol; each member holds one for alice
         self.assertEqual(len(self.st.cards["tok-alice"]), 2)
         self.assertEqual(len(self.st.cards["tok-bob"]), 1)
@@ -314,7 +314,7 @@ class ProvisionTest(unittest.TestCase):
         s = module.status(self.client, self.cfg)
         self.assertTrue(s["reachable"])
         self.assertEqual(s["accounts"], 3)
-        self.assertEqual(list(s["groups"]), ["class"])
+        self.assertEqual(list(s["groups"]), ["session"])
 
     def test_status_unreachable(self):
         dead = module.Client("http://127.0.0.1:1", resolve=SECRETS.__getitem__)
@@ -338,32 +338,32 @@ class ChatTest(unittest.TestCase):
 
     def setUp(self):
         ProvisionTest.setUp(self)
-        self.cfg["users"].append({"handle": "classbot", "password_secret": "klatch/classbot"})
-        self.cfg["bot"] = "classbot"
-        self.cfg["groups"][0]["owner"] = "classbot"
+        self.cfg["users"].append({"handle": "bot", "password_secret": "klatch/bot"})
+        self.cfg["bot"] = "bot"
+        self.cfg["groups"][0]["owner"] = "bot"
         self.cfg["groups"][0]["members"] = ["alice", "bob", "carol"]
         self.out = self.run_setup()
-        self.chan = self.out["groups"]["class"]
+        self.chan = self.out["groups"]["session"]
 
     def test_post_as_bot(self):
-        out = module.post(self.client, self.cfg, "class", "step-02 started")
-        self.assertEqual(out, {"group": "class", "ok": True})
+        out = module.post(self.client, self.cfg, "session", "step-02 started")
+        self.assertEqual(out, {"group": "session", "ok": True})
         agent, cid, q, body = self.st.topics[-1]
-        self.assertEqual((agent, cid, q["confirm"]), ("tok-classbot", self.chan, "true"))
+        self.assertEqual((agent, cid, q["confirm"]), ("tok-bot", self.chan, "true"))
         self.assertEqual(body["dataType"], "superbasictopic")
         self.assertEqual(json.loads(body["data"]), {"text": "step-02 started"})
 
     def test_topic_sets_header_and_keeps_group(self):
-        out = module.topic(self.client, self.cfg, "class", "step-02 Pair up \u00b7 12m left\n")
-        self.assertEqual(out["subject"], "Class \u2014 step-02 Pair up \u00b7 12m left")
+        out = module.topic(self.client, self.cfg, "session", "step-02 Pair up \u00b7 12m left\n")
+        self.assertEqual(out["subject"], "Session \u2014 step-02 Pair up \u00b7 12m left")
         agent, cid, body = self.st.subjects[-1]
-        self.assertEqual((agent, cid), ("tok-classbot", self.chan))
-        self.assertEqual(json.loads(body["data"]), {"subject": out["subject"], "key": "class"})
+        self.assertEqual((agent, cid), ("tok-bot", self.chan))
+        self.assertEqual(json.loads(body["data"]), {"subject": out["subject"], "key": "session"})
         # renamed header must not make a rerun create a duplicate group
         self.assertEqual(self.run_setup(), self.out)
-        self.assertEqual(len(self.st.channels["tok-classbot"]), 1)
-        module.topic(self.client, self.cfg, "class", "")
-        self.assertEqual(json.loads(self.st.subjects[-1][2]["data"])["subject"], "Class")
+        self.assertEqual(len(self.st.channels["tok-bot"]), 1)
+        module.topic(self.client, self.cfg, "session", "")
+        self.assertEqual(json.loads(self.st.subjects[-1][2]["data"])["subject"], "Session")
 
     def test_stdin_text(self):
         import io
@@ -373,7 +373,7 @@ class ChatTest(unittest.TestCase):
     def test_bot_must_host_group(self):
         cfg = dict(self.cfg, bot="alice")
         with self.assertRaises(SystemExit):
-            module.post(self.client, cfg, "class", "hi")
+            module.post(self.client, cfg, "session", "hi")
         with self.assertRaises(SystemExit):
             module.post(self.client, self.cfg, "nope", "hi")
         self.assertEqual(self.st.topics, [])
@@ -381,3 +381,46 @@ class ChatTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class InviteFlagsTest(unittest.TestCase):
+    def test_required_count_and_optional_ref(self):
+        from unittest.mock import patch
+        import contextlib
+        import io
+        with patch.object(module, 'config', return_value={'base_url': 'http://localhost'}) as cfg, \
+             patch.object(module, 'Client'), \
+             patch.object(module, 'admin_session', return_value=('session', 'password')), \
+             patch.object(module, 'invite', return_value={'links': 7, 'ref': 'owner/links'}) as mint, \
+             contextlib.redirect_stdout(io.StringIO()):
+            module.main(['invite', 'owner.json', '--count', '7', '--ref', 'owner/links'])
+            self.assertEqual(mint.call_args.args[3:], (7, 'owner/links'))
+            module.main(['invite', 'owner.json', '--count', '2'])
+            self.assertEqual(mint.call_args.args[3:], (2, 'klatch/signup-links'))
+            cfg.reset_mock()
+            for args in (['invite', 'owner.json'], ['invite', 'owner.json', '3'],
+                         ['invite', 'owner.json', '--count', '0']):
+                with self.subTest(args=args), self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                    module.main(args)
+            cfg.assert_not_called()
+
+    def test_registered_invite_flags_reach_validation(self):
+        import os
+        import subprocess
+        import tempfile
+        here = Path(__file__).resolve().parent
+        with tempfile.TemporaryDirectory(prefix='klatch-registration-') as tmp:
+            root = Path(tmp)
+            env = dict(os.environ, BASHY_HOME=str(root/'home'),
+                       BASHY_COORD_DIR=str(root/'coord'), BASHY_ROOM_DIR=str(root/'room'),
+                       XDG_DATA_HOME=str(root/'data'), BASHY_HINTS='off')
+            subprocess.run(['git', 'init', '-q', tmp], check=True, env=env)
+            registered = subprocess.run(['bash', str(here/'register.sh')], cwd=tmp,
+                                        env=env, text=True, capture_output=True)
+            self.assertEqual(registered.returncode, 0, registered.stderr)
+            for command in (['bashy', 'klatch'], ['bashy', '--bashsharp', str(here/'klatch.bsh')]):
+                result = subprocess.run(command + ['invite', 'missing.json', '--count', '0', '--ref', 'owner/links'],
+                                        cwd=tmp, env=env, text=True, capture_output=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('invite count must be 1..100', result.stderr)
+                self.assertNotIn('unknown flag', result.stderr)

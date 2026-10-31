@@ -35,7 +35,7 @@ async function post(path,body){const r=await fetch(path,{method:'POST',headers:{
 function chips(steps){return h('div',{class:'chips'},...(steps||[]).map(s=>h('span',{class:'chip '+(s.status==='done'?'done':s.status==='doing'?(s.overdue?'over':'doing'):'')},s.index+'. '+s.title)))}
 function clockEl(sec,cls){return h('div',{class:'clock '+(sec<0?'over':'')+(cls||''),id:'clock','aria-live':'off'},fmt(sec))}
 
-function renderProjector(root,st){
+function renderDisplay(root,st){
  const c=st.current,kids=[];
  if(!c){kids.push(h('p',{class:'eyebrow'},st.title||'Tutor'),h('h1',{},(st.steps||[]).length&&st.steps.every(s=>s.status==='done')?'All steps done':'Waiting to start'))}
  else{const sec=remaining(c);
@@ -44,8 +44,10 @@ function renderProjector(root,st){
  kids.push(chips(st.steps));
  root.replaceChildren(...kids)}
 
-function renderStudent(root,st){
- const m=st.mine,kids=[h('p',{class:'eyebrow'},(st.title||'Tutor')+' · '+st.person)];
+function roleLabel(word,fallback){return word?word[0].toUpperCase()+word.slice(1):fallback}
+function renderParticipant(root,st){
+ document.title=roleLabel(st.role||st.roles?.participants?.[0],"Participant");
+ const m=st.mine,kids=[h('p',{class:'eyebrow'},document.title+' · '+(st.title||'Tutor')+' · '+st.person)];
  if(m){const sec=m.remaining_s-now();
   kids.push(h('div',{class:'panel'},h('p',{class:'eyebrow'},'Step '+m.index+' of '+m.total),h('h1',{},m.title),clockEl(sec),
     h('p',{class:'muted'},m.done_when?'Done when: '+m.done_when:'')));
@@ -55,14 +57,15 @@ function renderStudent(root,st){
   b.onclick=async()=>{b.disabled=true;try{await post(BASE+'/done',{evidence:ev.value.trim()});msg.textContent='Marked done.';await load()}catch(e){msg.textContent=e.message;b.disabled=false}};
   kids.push(h('div',{class:'panel'},h('label',{for:'evidence'},'Evidence'),ev,h('p'),b,msg))}
  else{kids.push(h('div',{class:'panel'},h('h1',{},st.done_count&&!(st.upcoming||[]).length?'All your steps are done':'Not your turn yet'),
-   st.now?h('p',{class:'muted'},'Class is on step '+st.now.index+': '+st.now.title):h('p',{class:'muted'},'Waiting for the session to start.')))}
+   st.now?h('p',{class:'muted'},'Session is on step '+st.now.index+': '+st.now.title):h('p',{class:'muted'},'Waiting for the session to start.')))}
  if((st.upcoming||[]).length)kids.push(h('div',{class:'panel'},h('p',{class:'eyebrow'},'Coming up'),...st.upcoming.map(u=>h('p',{},u.index+'. '+u.title+' · '+Math.round(u.timebox_s/60)+' min'))));
  const old=document.getElementById('evidence');
  if(old&&m&&root.dataset.step===m.id){const ck=document.getElementById('clock');ck.textContent=fmt(m.remaining_s-now());ck.className='clock '+(m.remaining_s-now()<0?'over':'');return}
  root.dataset.step=m?m.id:'';root.replaceChildren(...kids)}
 
-function renderTeacher(root,st){
- const c=st.current,kids=[h('p',{class:'eyebrow'},'Teacher · '+(st.title||''))];
+function renderOwner(root,st){
+ document.title=roleLabel(st.roles?.owner,"Host");
+ const c=st.current,kids=[h('p',{class:'eyebrow'},document.title+' · '+(st.title||''))];
  const msg=h('p',{class:'muted',id:'msg','aria-live':'polite'},window.LASTMSG||'');
  const act=(path,body)=>async()=>{try{await post(BASE+path,body);window.LASTMSG='ok'}catch(e){window.LASTMSG=e.message}await load()};
  if(c){const sec=remaining(c);
@@ -76,6 +79,6 @@ function renderTeacher(root,st){
  root.replaceChildren(...kids)}
 `
 
-const projectorBody = `<main class="proj"><div id="root"><p class="muted">Loading…</p></div></main>`
-const teacherBody = `<main><div id="root"><p class="muted">Loading…</p></div></main>`
-const studentBody = `<div class="stu"><main><div id="root"><p class="muted">Loading…</p></div></main></div>`
+const displayBody = `<main class="proj"><div id="root"><p class="muted">Loading…</p></div></main>`
+const ownerBody = `<main><div id="root"><p class="muted">Loading…</p></div></main>`
+const participantBody = `<div class="stu"><main><div id="root"><p class="muted">Loading…</p></div></main></div>`

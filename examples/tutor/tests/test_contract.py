@@ -6,8 +6,8 @@ import common
 
 class ContractTest(unittest.TestCase):
     def test_step_labels_are_bashy_words(self):
-        self.assertEqual(common.step_labels(2, 20, "student", "Work block"),
-                         ["step-02", "timebox-20m", "role-student", "phase-workblock"])
+        self.assertEqual(common.step_labels(2, 20, "participant", "Work block"),
+                         ["step-02", "timebox-20m", "role-participant", "phase-workblock"])
 
     def test_validate_draft_rejects_missing_steps(self):
         with self.assertRaises(SystemExit):

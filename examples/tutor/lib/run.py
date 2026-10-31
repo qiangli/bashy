@@ -6,7 +6,7 @@ import os
 import re
 import sys
 
-from common import bashy, emit, fail, log_path
+from common import bashy, emit, fail, log_path, metadata, participant_roles
 
 
 def timestamp(value):
@@ -85,6 +85,9 @@ def session_clock(card, at, sprint=None, events=()):
 def status(sprint, at=None):
     at = at or now()
     card = read_card(sprint)
+    meta = metadata(sprint)
+    roles = meta["roles"]
+    participants = participant_roles(roles)
     events = []
     path = log_path(sprint)
     if path.exists():
@@ -101,7 +104,7 @@ def status(sprint, at=None):
             continue
         minutes = next((int(m[1]) for label in labels
                         if (m := re.fullmatch(r'timebox-(\d+)m', label))), 0)
-        role = next((label[5:] for label in labels if label.startswith('role-')), 'student')
+        role = next((label[5:] for label in labels if label.startswith('role-')), participants[0])
         step = dict(index=indexes[0], id=str(item['id']), title=item['title'],
                     owner=item.get('assignee', item.get('owner', '')),
                     role=role, status=item.get('state', item.get('status', 'todo')),
@@ -128,23 +131,24 @@ def status(sprint, at=None):
         steps.append((step, elapsed))
     steps.sort(key=lambda pair: (pair[0]['index'], pair[0]['id']))
     for step, elapsed in steps:
-        if step['status'] == 'doing' and current is None:
+        if step['status'] == 'doing' and step['role'] in participants and current is None:
             owners = [s.strip() for s in step['owner'].split(',') if s.strip()]
-            sequence = [s for s, _ in steps if s['role'] == step['role']]
+            sequence = [s for s, _ in steps if s['role'] in participants]
             current = dict(index=sequence.index(step) + 1, total=len(sequence), id=step['id'],
                            title=step['title'], owners=owners, timebox_s=step['timebox_s'],
                            elapsed_s=elapsed, remaining_s=step['timebox_s'] - elapsed,
                            overdue=step['overdue'])
     return dict(sprint=sprint, title=card['title'], clock=session_clock(card, at, sprint, events),
-                current=current, steps=[s for s, _ in steps])
+                current=current, steps=[s for s, _ in steps], format=meta["format"],
+                roles=dict(owner=roles[0], participants=roles[1:]))
 
 
 def one_line(value):
     step = value['current']
     if step is None:
-        students = [s for s in value['steps'] if s['role'] == 'student']
-        total = len(students)
-        done = sum(s['status'] == 'done' for s in students)
+        participants = [s for s in value['steps'] if s['role'] in (value.get('roles', {}).get('participants') or [value.get('roles', {}).get('owner', 'participant')])]
+        total = len(participants)
+        done = sum(s['status'] == 'done' for s in participants)
         return 'Done · %d/%d steps' % (done, total) if total and done == total else 'Not started · %d steps' % total
     seconds = abs(step['remaining_s'])
     line = 'Step %d/%d · %s · %d:%02d %s' % (
@@ -166,7 +170,7 @@ def transition(sprint, step, target, at, evidence=None):
     if step['status'] == target:
         return
     if target == 'done':
-        # People cannot close sprint stories; the class manager (the teacher's
+        # People cannot close sprint stories; the session manager (the owner's
         # agent) accepts them later with `bashy sprint accept N ID -m EVIDENCE`.
         bashy('todo', 'edit', step['id'], '--label', 'step-done')
     else:
@@ -214,7 +218,9 @@ def main(argv):
     try:
         at = now()
         value = status(args.sprint, at)
-        steps = value['steps']
+        roles = value['roles']
+        work_roles = roles['participants'] or [roles['owner']]
+        steps = [s for s in value['steps'] if s['role'] in work_roles]
         if args.verb == 'start':
             if value['clock']['state'] != 'running':
                 cmd = ['sprint', 'start', str(args.sprint), '--for', args.for_]
@@ -234,9 +240,9 @@ def main(argv):
             if pending:
                 transition(args.sprint, pending[0], 'doing', at)
         elif args.verb == 'done':
-            transition(args.sprint, select_step(steps, args.step), 'done', at, args.message)
+            transition(args.sprint, select_step(value['steps'], args.step), 'done', at, args.message)
         elif args.verb == 'extend':
-            log(args.sprint, select_step(steps, args.step), 'extend', at, by_s=args.by)
+            log(args.sprint, select_step(value['steps'], args.step), 'extend', at, by_s=args.by)
         if args.verb != 'status':
             value = status(args.sprint, at)
         emit(value, args.json, one_line(value))

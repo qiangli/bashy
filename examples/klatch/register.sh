@@ -8,7 +8,9 @@ guide=$("$runner" --bashsharp "$here/klatch.bsh" --skill)
   --set synopsis='Set up and provision a Klatch (Databag) chat server' \
   --set "long=$guide" --set group=platform \
   --set effects.0=read --set effects.1=write --set effects.2=exec --set effects.3=net \
-  --set args.positionals.0.name=action --set args.positionals.1.name=config
+  --set args.positionals.0.name=action --set args.positionals.1.name=config \
+  --set args.flags.0.name=count --set args.flags.0.type=string \
+  --set args.flags.1.name=ref --set args.flags.1.type=string
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 printf '%s\n' "$guide" > "$tmp/SKILL.md"

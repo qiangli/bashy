@@ -424,14 +424,19 @@ def main(argv):
         session, admin_pw = admin_session(client, cfg, bootstrap=False)
         print(json.dumps(reset_passwords(client, cfg, session, admin_pw, argv[2:]), indent=2))
         return
-    if len(argv) in (3, 4) and argv[0] == "invite":
-        cfg = config(argv[1])
-        if not argv[2].isdigit():
-            fail("Usage: provision.py invite CONFIG.json COUNT [SECRET_REF]")
+    if argv and argv[0] == "invite":
+        import argparse
+        parser = argparse.ArgumentParser(prog="klatch invite")
+        parser.add_argument("config")
+        parser.add_argument("--count", type=int, required=True)
+        parser.add_argument("--ref", default="klatch/signup-links")
+        args = parser.parse_args(argv[1:])
+        if not 1 <= args.count <= 100:
+            fail("invite count must be 1..100")
+        cfg = config(args.config)
         client = Client(cfg["base_url"])
         session, _ = admin_session(client, cfg, bootstrap=False)
-        ref = argv[3] if len(argv) == 4 else "klatch/signup-links"
-        print(json.dumps(invite(client, cfg, session, int(argv[2]), ref), sort_keys=True))
+        print(json.dumps(invite(client, cfg, session, args.count, args.ref), sort_keys=True))
         return
     if len(argv) == 4 and argv[0] in ("post", "topic"):
         action, path, key, arg = argv
@@ -445,7 +450,7 @@ def main(argv):
     if len(argv) != 2 or argv[0] not in ("setup", "provision", "status"):
         fail("Usage: provision.py setup|provision|status CONFIG.json\n"
              "       provision.py post|topic CONFIG.json GROUP TEXT|-\n"
-             "       provision.py invite CONFIG.json COUNT [SECRET_REF]\n"
+             "       provision.py invite CONFIG.json --count N [--ref REF]\n"
              "       provision.py reset-passwords CONFIG.json HANDLE...")
     action, path = argv
     cfg = config(path)

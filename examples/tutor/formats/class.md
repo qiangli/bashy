@@ -1,5 +1,9 @@
 ---
 name: class
+roles:
+- teacher
+- student
+audience: students aged 13 and up
 minutes: 90
 phases:
 - warm-up 10
@@ -7,7 +11,7 @@ phases:
 - demo 15
 - retro 5
 default_step_minutes: 20
-teacher_step_minutes: 5
+owner_step_minutes: 5
 default_done_when: the outcome of this step is shown to another person and noted on the card
 nudge_points:
 - halfway
@@ -19,7 +23,7 @@ desk_tools:
 - demo: projector, timer
 - retro: notes
 tone: Ask before you tell. A hint is a question or the next smallest step, never the answer or the code.
-teacher_steps:
+owner_steps:
 - prepare: content ready, desks and tools checked, pairs decided
 - facilitate: clock running, nudges sent at the format's nudge points
 - review: evidence collected per step, retro notes written on the card
@@ -27,7 +31,7 @@ teacher_steps:
 
 # Class — guidance for the planning agent
 
-This is the default session format: one teacher, a handful of students, one
+This is an example session format: one teacher, a handful of students, one
 goal, one clock. Copy this file to make your own format and pass it with
 `--format <name-or-path>`.
 

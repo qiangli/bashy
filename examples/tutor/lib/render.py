@@ -200,47 +200,25 @@ def filter_answers_from_obj(obj):
     return obj
 
 
-def process_body_blocks(body_text, edition):
-    """Process ~~~teacher blocks according to edition."""
-    lines = body_text.splitlines()
+def process_body_blocks(body_text, edition, owner_role="owner"):
+    """Private blocks are visible to the owner and explicitly named roles."""
     out = []
-    in_teacher = False
-    teacher_lines = []
-    teacher_header = ""
-    had_teacher_blocks = False
-
-    for line in lines:
-        stripped = line.strip()
-        if not in_teacher:
-            m = re.match(r"^~~~\s*teacher(?::\s*(.*)|\s+(.*)|$)", stripped, re.IGNORECASE)
-            if m:
-                in_teacher = True
-                had_teacher_blocks = True
-                desc = (m.group(1) or m.group(2) or "").strip()
-                teacher_header = f"> Teacher: {desc}" if desc else "> Teacher:"
-                teacher_lines = []
-                continue
-            out.append(line)
-        else:
-            if stripped == "~~~":
-                in_teacher = False
-                if edition == "teacher":
-                    out.append(teacher_header)
-                    for tl in teacher_lines:
-                        out.append(f"> {tl}" if tl else ">")
-                continue
-            teacher_lines.append(line)
-
-    if in_teacher and edition == "teacher":
-        out.append(teacher_header)
-        for tl in teacher_lines:
-            out.append(f"> {tl}" if tl else ">")
-
-    result = "\n".join(out)
-    # If blocks were removed in student edition, collapse large newline gaps
-    if had_teacher_blocks and edition == "student":
-        result = re.sub(r"\n{3,}", "\n\n", result)
-    return result
+    visible = None
+    for line in body_text.splitlines():
+        if visible is None:
+            match = re.fullmatch(r"\s*~~~private(?:\s+(.*))?\s*", line)
+            if match:
+                allowed = (match[1] or "").split()
+                visible = edition in ("owner", owner_role) or (edition != "shared" and edition in allowed)
+                if visible:
+                    out.append("> Private:")
+            else:
+                out.append(line)
+        elif line.strip() == "~~~":
+            visible = None
+        elif visible:
+            out.append("> " + line if line else ">")
+    return re.sub(r"\n{3,}", "\n\n", "\n".join(out))
 
 
 def extract_front_matter_and_body(raw_text):
@@ -305,12 +283,21 @@ def questions_to_form_fields(questions):
 
 
 def render_content(file_path, edition, fmt="md", as_json=False):
-    """Render a step file for student or teacher edition."""
+    """Render a step file for participant or owner edition."""
     raw_text = file_path.read_text(encoding="utf-8")
     fm_lines, body_text = extract_front_matter_and_body(raw_text)
 
     # Parse front-matter if present
     parsed_fm = parse_simple_yaml("\n".join(fm_lines)) if fm_lines is not None else {}
+
+    import plan
+    local_formats = [file_path.parent / "format.md", file_path.parent.parent / "format.md"]
+    spec = parsed_fm.get("format") or next((str(p) for p in local_formats if p.is_file()), "session")
+    session_format = plan.load_format(spec)
+    roles = session_format["roles"]
+    if edition not in roles + ["owner", "shared"]:
+        fail("edition must be a format role, owner or shared", 2)
+    is_owner = edition in ("owner", roles[0])
 
     # Determine title
     title = parsed_fm.get("title")
@@ -336,11 +323,11 @@ def render_content(file_path, edition, fmt="md", as_json=False):
         return
 
     # Process body blocks
-    rendered_body = process_body_blocks(body_text, edition)
+    rendered_body = process_body_blocks(body_text, edition, roles[0])
 
     # Process front-matter for Markdown output
     if fm_lines is not None:
-        if edition == "student":
+        if not is_owner:
             cleaned_fm_lines = strip_answers_from_yaml_lines(fm_lines)
             fm_part = "\n".join(cleaned_fm_lines).strip()
             rendered_md = f"---\n{fm_part}\n---\n{rendered_body}" if fm_part else rendered_body
@@ -351,7 +338,7 @@ def render_content(file_path, edition, fmt="md", as_json=False):
         rendered_md = rendered_body
 
     # Prepare structured JSON object
-    filtered_fm = filter_answers_from_obj(parsed_fm) if edition == "student" else parsed_fm
+    filtered_fm = filter_answers_from_obj(parsed_fm) if not is_owner else parsed_fm
     structured_questions = filtered_fm.get("questions") or []
 
     obj = {
@@ -382,11 +369,11 @@ def main(argv=None):
 
     parser = argparse.ArgumentParser(
         prog="tutor render",
-        description="Render a lesson or step for student or teacher edition."
+        description="Render a lesson or step for participant or owner edition."
     )
     parser.add_argument("target", metavar="FILE|STEP", help="Step name or markdown file path")
-    parser.add_argument("--edition", choices=["student", "teacher"], required=True,
-                        help="Edition to render (student or teacher)")
+    parser.add_argument("--edition", required=True,
+                        help="Format role, owner or shared")
     parser.add_argument("--format", choices=["md", "json", "form"], default="md",
                         help="Output format (md, json, or form)")
     parser.add_argument("--json", action="store_true",

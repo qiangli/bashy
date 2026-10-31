@@ -23,9 +23,9 @@ class RenderTest(TempBashy):
                 "--set", f"exec.2={form_bsh}"
             ], capture_output=True, text=True)
 
-    def test_student_edition_contains_no_teacher_content(self):
-        secret_marker = "TEACHER_SECRET_MARKER_9d0a95cf"
-        secret_block = "TEACHER_BLOCK_MARKER_abcdef123"
+    def test_participant_edition_contains_no_owner_content(self):
+        secret_marker = "OWNER_SECRET_MARKER_9d0a95cf"
+        secret_block = "OWNER_BLOCK_MARKER_abcdef123"
         step_content = f"""---
 title: Sample Lesson
 done_when: all tasks done
@@ -35,15 +35,15 @@ questions:
     kind: text
     answer: {secret_marker}
     answer_rubric: Exact match only
-answer_notes: Top secret teacher notes
+answer_notes: Top secret owner notes
 ---
 # Lesson One
 
-Welcome students. Please answer the questions.
+Welcome participants. Please answer the questions.
 
-~~~teacher answers
+~~~private
 {secret_block}
-Full teacher guide and solution key.
+Full owner guide and solution key.
 ~~~
 
 Follow-up exercise instructions.
@@ -53,30 +53,30 @@ Follow-up exercise instructions.
         step_file.write_text(step_content, encoding="utf-8")
 
         # Test markdown format
-        res = self.tutor("render", str(step_file), "--edition", "student")
+        res = self.tutor("render", str(step_file), "--edition", "participant")
         out = res.stdout
         self.assertNotIn(secret_marker, out)
         self.assertNotIn(secret_block, out)
-        self.assertNotIn("~~~teacher", out)
+        self.assertNotIn("~~~private", out)
         self.assertNotIn("answer_notes", out)
         self.assertNotIn("answer_rubric", out)
-        self.assertIn("Welcome students.", out)
+        self.assertIn("Welcome participants.", out)
         self.assertIn("What is 2 + 2?", out)
 
         # Test JSON format
-        res_json = self.tutor("render", str(step_file), "--edition", "student", "--format", "json")
+        res_json = self.tutor("render", str(step_file), "--edition", "participant", "--format", "json")
         data = json.loads(res_json.stdout)
-        self.assertEqual(data["edition"], "student")
+        self.assertEqual(data["edition"], "participant")
         self.assertNotIn(secret_marker, res_json.stdout)
         self.assertNotIn(secret_block, res_json.stdout)
         self.assertTrue(len(data.get("questions", [])) > 0)
         for q in data["questions"]:
             for k in q:
-                self.assertFalse(k.lower().startswith("answer"), f"Leaked {k} in student question")
+                self.assertFalse(k.lower().startswith("answer"), f"Leaked {k} in participant question")
 
-    def test_teacher_edition_contains_teacher_content(self):
-        secret_marker = "TEACHER_SECRET_MARKER_9d0a95cf"
-        secret_block = "TEACHER_BLOCK_MARKER_abcdef123"
+    def test_owner_edition_contains_owner_content(self):
+        secret_marker = "OWNER_SECRET_MARKER_9d0a95cf"
+        secret_block = "OWNER_BLOCK_MARKER_abcdef123"
         step_content = f"""---
 title: Sample Lesson
 done_when: all tasks done
@@ -88,11 +88,11 @@ questions:
 ---
 # Lesson One
 
-Welcome students.
+Welcome participants.
 
-~~~teacher answers
+~~~private
 {secret_block}
-Full teacher guide.
+Full owner guide.
 ~~~
 """
         step_file = self.repo / "content" / "step-01.md"
@@ -100,16 +100,16 @@ Full teacher guide.
         step_file.write_text(step_content, encoding="utf-8")
 
         # Test markdown format
-        res = self.tutor("render", str(step_file), "--edition", "teacher")
+        res = self.tutor("render", str(step_file), "--edition", "owner")
         out = res.stdout
         self.assertIn(secret_marker, out)
         self.assertIn(secret_block, out)
-        self.assertIn("> Teacher: answers", out)
+        self.assertIn("> Private:", out)
 
         # Test JSON format
-        res_json = self.tutor("render", str(step_file), "--edition", "teacher", "--format", "json")
+        res_json = self.tutor("render", str(step_file), "--edition", "owner", "--format", "json")
         data = json.loads(res_json.stdout)
-        self.assertEqual(data["edition"], "teacher")
+        self.assertEqual(data["edition"], "owner")
         self.assertIn(secret_marker, res_json.stdout)
         self.assertIn(secret_block, res_json.stdout)
         self.assertEqual(data["questions"][0]["answer"], secret_marker)
@@ -125,15 +125,15 @@ questions:
 ---
 # Neutral Lesson
 
-Just regular content without any teacher blocks or answer keys.
+Just regular content without any owner blocks or answer keys.
 """
         step_file = self.repo / "content" / "step-neutral.md"
         step_file.parent.mkdir(parents=True, exist_ok=True)
         step_file.write_text(step_content, encoding="utf-8")
 
-        res_student = self.tutor("render", str(step_file), "--edition", "student")
-        res_teacher = self.tutor("render", str(step_file), "--edition", "teacher")
-        self.assertEqual(res_student.stdout, res_teacher.stdout)
+        res_participant = self.tutor("render", str(step_file), "--edition", "participant")
+        res_owner = self.tutor("render", str(step_file), "--edition", "owner")
+        self.assertEqual(res_participant.stdout, res_owner.stdout)
 
     def test_form_def_round_trip(self):
         step_content = """---
@@ -144,7 +144,7 @@ questions:
     label: What is your name?
     kind: text
     required: true
-    answer: Student Name
+    answer: Participant Name
   - id: q2
     label: Select an option
     kind: choice
@@ -189,7 +189,7 @@ questions:
             env = dict(os.environ, FORM_ADDR=f"127.0.0.1:{port}", BASHY_HINTS="off")
 
             # Render form definition
-            render_res = self.tutor("render", str(step_file), "--edition", "student", "--format", "form")
+            render_res = self.tutor("render", str(step_file), "--edition", "participant", "--format", "form")
             form_def_str = render_res.stdout
             form_def = json.loads(form_def_str)
             self.assertEqual(form_def["title"], "Test Questionnaire")
@@ -218,11 +218,11 @@ questions:
         example_step = HERE / "content" / "example-step.md"
         self.assertTrue(example_step.is_file(), "content/example-step.md must exist")
 
-        res_stud = self.tutor("render", "example-step", "--edition", "student")
-        self.assertNotIn("~~~teacher", res_stud.stdout)
+        res_stud = self.tutor("render", "example-step", "--edition", "participant")
+        self.assertNotIn("~~~private", res_stud.stdout)
 
-        res_teach = self.tutor("render", "example-step", "--edition", "teacher")
-        self.assertIn("> Teacher:", res_teach.stdout)
+        res_teach = self.tutor("render", "example-step", "--edition", "owner")
+        self.assertIn("> Private:", res_teach.stdout)
 
 
 if __name__ == "__main__":

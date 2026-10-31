@@ -5,7 +5,7 @@ import re
 import sys
 from pathlib import Path
 
-from common import bashy, bashy_bin, emit, fail
+from common import bashy, bashy_bin, emit, fail, metadata
 
 FALLBACK_QUESTIONS = [
     "What have you tried so far for this step, and what happened?",
@@ -34,7 +34,7 @@ def load_prompt_template():
     if tpl is None:
         # built-in minimal template
         tpl = (
-            "You are a supportive tutor for students aged 13 and up.\n"
+            "You are a supportive tutor. {{audience}} {{tone}}\n"
             "Give hints and questions only, never the full solution. Keep tone encouraging.\n"
             "Title: {{title}}\nDone when: {{done_when}}\n"
         )
@@ -64,11 +64,14 @@ def load_prompt_template():
     return tpl, fallbacks
 
 
-def fill_prompt(template, title, done_when):
+def fill_prompt(template, title, done_when, meta=None):
     """Fill placeholders with title/done_when only."""
+    meta = meta or {}
     done_when = done_when or ""
     # Replace known placeholders
     replacements = {
+        "{{audience}}": ("Audience: " + meta["audience"] + ".") if meta.get("audience") else "",
+        "{{tone}}": meta.get("tone", ""),
         "{{title}}": title,
         "{{TITLE}}": title,
         "{{Title}}": title,
@@ -281,7 +284,7 @@ def main(argv):
         done_when = fetch_body(todo_id)
 
     template, fallbacks = load_prompt_template()
-    prompt = fill_prompt(template, title, done_when)
+    prompt = fill_prompt(template, title, done_when, metadata(sprint_id))
     fallback_q = fallbacks[0] if fallbacks else FALLBACK_QUESTIONS[0]
 
     hint = None

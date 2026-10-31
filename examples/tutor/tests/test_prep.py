@@ -43,10 +43,10 @@ class PrepTest(TempBashy):
         self.assertEqual(data["minutes"], 60)
         self.assertTrue(target.is_dir())
 
-        # format.md must exist and match class format
+        # format.md must exist and match session format
         fmt_file = target / "format.md"
         self.assertTrue(fmt_file.is_file())
-        self.assertIn("name: class", fmt_file.read_text())
+        self.assertIn("name: session", fmt_file.read_text())
 
         # draft.json must exist and validate
         draft_file = target / "draft.json"
@@ -56,24 +56,24 @@ class PrepTest(TempBashy):
         self.assertEqual(draft["goal"], "Learn Bashy Basics")
         self.assertEqual(draft["minutes"], 60)
 
-        # content/ directory must exist and have files with empty ~~~teacher blocks
+        # content/ directory must exist and have files with empty ~~~private blocks
         content_dir = target / "content"
         self.assertTrue(content_dir.is_dir())
         md_files = sorted(content_dir.glob("*.md"))
         self.assertTrue(len(md_files) > 0)
 
-        student_steps = [s for s in draft["steps"] if s["role"] == "student"]
-        teacher_steps = [s for s in draft["steps"] if s["role"] == "teacher"]
-        self.assertEqual(len(md_files), len(student_steps))
-        self.assertTrue(len(teacher_steps) >= 3)  # prepare, facilitate, review
+        participant_steps = [s for s in draft["steps"] if s["role"] == "participant"]
+        owner_steps = [s for s in draft["steps"] if s["role"] == "owner"]
+        self.assertEqual(len(md_files), len(participant_steps))
+        self.assertTrue(len(owner_steps) >= 3)  # prepare, facilitate, review
 
-        for i, s in enumerate(student_steps):
+        for i, s in enumerate(participant_steps):
             expected_content = f"content/{md_files[i].name}"
             self.assertEqual(s["content"], expected_content)
             # Check NN-slug pattern
             self.assertTrue(re.match(r"^\d\d-[a-z0-9-]+\.md$", md_files[i].name))
             text = md_files[i].read_text()
-            self.assertIn("~~~teacher", text)
+            self.assertIn("~~~private", text)
             self.assertIn("~~~", text)
 
         # Check non-json invocation
@@ -86,7 +86,7 @@ class PrepTest(TempBashy):
         # 1. Create fixture directory
         fixture = self.repo / "fixture_dir"
         fixture.mkdir()
-        shutil.copy(plan.FORMATS / "class.md", fixture / "format.md")
+        shutil.copy(plan.FORMATS / "session.md", fixture / "format.md")
         content_dir = fixture / "content"
         content_dir.mkdir()
 
@@ -94,15 +94,15 @@ class PrepTest(TempBashy):
         step1.write_text("""---
 title: Warm-up Exercise
 timebox: 10m
-role: student
+role: participant
 phase: warm-up
 done_when: completed warmup notes
 ---
 # Warm-up Exercise
 
-Welcome to class!
+Welcome to the session!
 
-~~~teacher
+~~~private
 ~~~
 """)
 
@@ -110,7 +110,7 @@ Welcome to class!
         step2.write_text("""---
 title: Hands-on Lab
 timebox: 25m
-role: student
+role: participant
 phase: work
 done_when: all tests pass
 ---
@@ -118,13 +118,13 @@ done_when: all tests pass
 
 Work on the lab.
 
-~~~teacher
+~~~private
 Check test results
 ~~~
 """)
 
         # 2. Prep from fixture
-        target = self.repo / "week2"
+        target = self.repo / "session-copy"
         res = self.tutor("prep", str(target), "--from", str(fixture),
                          "--goal", "Advanced Git & Bashy", "--json")
         data = json.loads(res.stdout)
@@ -132,51 +132,51 @@ Check test results
 
         draft = json.loads((target / "draft.json").read_text())
         common.validate_draft(draft)
-        student_steps = [s for s in draft["steps"] if s["role"] == "student"]
-        teacher_steps = [s for s in draft["steps"] if s["role"] == "teacher"]
-        self.assertEqual(len(student_steps), 2)
-        self.assertEqual(student_steps[0]["title"], "Warm-up Exercise")
-        self.assertEqual(student_steps[0]["content"], "content/01-warm-up.md")
-        self.assertEqual(student_steps[1]["title"], "Hands-on Lab")
-        self.assertEqual(student_steps[1]["content"], "content/02-hands-on.md")
-        self.assertEqual([s["phase"] for s in teacher_steps],
+        participant_steps = [s for s in draft["steps"] if s["role"] == "participant"]
+        owner_steps = [s for s in draft["steps"] if s["role"] == "owner"]
+        self.assertEqual(len(participant_steps), 2)
+        self.assertEqual(participant_steps[0]["title"], "Warm-up Exercise")
+        self.assertEqual(participant_steps[0]["content"], "content/01-warm-up.md")
+        self.assertEqual(participant_steps[1]["title"], "Hands-on Lab")
+        self.assertEqual(participant_steps[1]["content"], "content/02-hands-on.md")
+        self.assertEqual([s["phase"] for s in owner_steps],
                          ["prepare", "facilitate", "review"])
 
         # 3. Modify content in target
         (target / "content" / "02-hands-on.md").write_text("""---
 title: Hands-on Lab Extended
 timebox: 35m
-role: student
+role: participant
 phase: work
 done_when: all tests and lint pass
 ---
 # Hands-on Lab Extended
-~~~teacher
+~~~private
 ~~~
 """)
         # Add another content file
         (target / "content" / "03-demo.md").write_text("""---
 title: Peer Demo
 timebox: 15m
-role: student
+role: participant
 phase: demo
 done_when: demonstrated to peer
 ---
 # Peer Demo
-~~~teacher
+~~~private
 ~~~
 """)
 
         # Refresh by running prep on the target dir
         self.tutor("prep", str(target), "--json")
         draft = json.loads((target / "draft.json").read_text())
-        student_steps = [s for s in draft["steps"] if s["role"] == "student"]
-        self.assertEqual(len(student_steps), 3)
-        self.assertEqual(student_steps[1]["title"], "Hands-on Lab Extended")
-        self.assertEqual(student_steps[1]["minutes"], 35)
-        self.assertEqual(student_steps[1]["done_when"], "all tests and lint pass")
-        self.assertEqual(student_steps[2]["title"], "Peer Demo")
-        self.assertEqual(student_steps[2]["content"], "content/03-demo.md")
+        participant_steps = [s for s in draft["steps"] if s["role"] == "participant"]
+        self.assertEqual(len(participant_steps), 3)
+        self.assertEqual(participant_steps[1]["title"], "Hands-on Lab Extended")
+        self.assertEqual(participant_steps[1]["minutes"], 35)
+        self.assertEqual(participant_steps[1]["done_when"], "all tests and lint pass")
+        self.assertEqual(participant_steps[2]["title"], "Peer Demo")
+        self.assertEqual(participant_steps[2]["content"], "content/03-demo.md")
 
         # 4. Apply the prepped draft
         apply_res = self.tutor("apply", str(target / "draft.json"), "--json")
@@ -188,21 +188,21 @@ done_when: demonstrated to peer
         nodes = self.todo_nodes(sprint=sprint_num)
         self.assertEqual(len(nodes), len(draft["steps"]))
 
-        # Check student stories
-        student_nodes = [n for n in nodes if "role-student" in n["attrs"]["labels"]]
-        teacher_nodes = [n for n in nodes if "role-teacher" in n["attrs"]["labels"]]
-        self.assertEqual(len(student_nodes), 3)
-        self.assertEqual(len(teacher_nodes), 3)
+        # Check participant stories
+        participant_nodes = [n for n in nodes if "role-participant" in n["attrs"]["labels"]]
+        owner_nodes = [n for n in nodes if "role-owner" in n["attrs"]["labels"]]
+        self.assertEqual(len(participant_nodes), 3)
+        self.assertEqual(len(owner_nodes), 3)
 
-        titles = [n["attrs"]["title"] for n in student_nodes]
+        titles = [n["attrs"]["title"] for n in participant_nodes]
         self.assertIn("Warm-up Exercise", titles)
         self.assertIn("Hands-on Lab Extended", titles)
         self.assertIn("Peer Demo", titles)
 
-        teacher_titles = [n["attrs"]["title"] for n in teacher_nodes]
-        self.assertTrue(any("Prepare" in t for t in teacher_titles))
-        self.assertTrue(any("Facilitate" in t for t in teacher_titles))
-        self.assertTrue(any("Review" in t for t in teacher_titles))
+        owner_titles = [n["attrs"]["title"] for n in owner_nodes]
+        self.assertTrue(any("Prepare" in t for t in owner_titles))
+        self.assertTrue(any("Facilitate" in t for t in owner_titles))
+        self.assertTrue(any("Review" in t for t in owner_titles))
 
     def test_prep_missing_from_fails(self):
         proc = self.tutor("prep", "invalid", "--from", "non_existent_directory_xyz",
@@ -224,14 +224,14 @@ done_when: demonstrated to peer
         if not step_file.is_file():
             step_file = sorted((target / "content").glob("*.md"))[0]
 
-        # Student edition hides teacher notes
-        res_student = self.tutor("render", str(step_file), "--edition", "student")
-        self.assertNotIn("~~~teacher", res_student.stdout)
-        self.assertNotIn("> Teacher:", res_student.stdout)
+        # Participant edition hides owner notes
+        res_participant = self.tutor("render", str(step_file), "--edition", "participant")
+        self.assertNotIn("~~~private", res_participant.stdout)
+        self.assertNotIn("> Private:", res_participant.stdout)
 
-        # Teacher edition renders teacher block
-        res_teacher = self.tutor("render", str(step_file), "--edition", "teacher")
-        self.assertIn("> Teacher:", res_teacher.stdout)
+        # Owner edition renders owner block
+        res_owner = self.tutor("render", str(step_file), "--edition", "owner")
+        self.assertIn("> Private:", res_owner.stdout)
 
     def test_prep_with_agent(self):
         import stat
@@ -241,7 +241,7 @@ done_when: demonstrated to peer
             "goal": "Build Agent Tools",
             "epic": "agent-tools",
             "minutes": 40,
-            "format": "class",
+            "format": "session",
             "people": ["alice", "bob"],
             "steps": [
                 {
@@ -250,7 +250,7 @@ done_when: demonstrated to peer
                     "minutes": 15,
                     "done_when": "discovered tools",
                     "phase": "warm-up",
-                    "role": "student"
+                    "role": "participant"
                 },
                 {
                     "title": "Agent Implementation Step",
@@ -258,7 +258,7 @@ done_when: demonstrated to peer
                     "minutes": 25,
                     "done_when": "tools implemented",
                     "phase": "work",
-                    "role": "student"
+                    "role": "participant"
                 }
             ]
         }
@@ -286,10 +286,10 @@ done_when: demonstrated to peer
         self.assertEqual(data["content_files"][1], "content/02-agent-implementation-step.md")
 
         draft_loaded = json.loads((target / "draft.json").read_text())
-        student_steps = [s for s in draft_loaded["steps"] if s["role"] == "student"]
-        teacher_steps = [s for s in draft_loaded["steps"] if s["role"] == "teacher"]
-        self.assertEqual(len(student_steps), 2)
-        self.assertTrue(len(teacher_steps) >= 3)
+        participant_steps = [s for s in draft_loaded["steps"] if s["role"] == "participant"]
+        owner_steps = [s for s in draft_loaded["steps"] if s["role"] == "owner"]
+        self.assertEqual(len(participant_steps), 2)
+        self.assertTrue(len(owner_steps) >= 3)
 
 
 

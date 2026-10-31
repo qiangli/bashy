@@ -11,14 +11,14 @@ other tool. State lives in existing primitives:
 Step labels (bashy labels are one lowercase word, no colon):
   step-NN        1-based order of the step in the session ("step-01")
   timebox-Nm     the step's timebox in minutes ("timebox-20m")
-  role-student | role-teacher   who the step belongs to
+  role-WORD   who the step belongs to
   phase-WORD     optional phase from the format ("phase-warmup")
 
 Draft (output of `tutor plan`, input of `tutor apply`), version 1:
   {"version": 1, "title": str, "goal": str, "epic": str, "minutes": int,
-   "format": str, "people": [str],
+   "format": str, "roles": [str], "audience": str, "tone": str, "people": [str],
    "steps": [{"title": str, "owner": str, "minutes": int,
-              "done_when": str, "phase": str, "role": "student"|"teacher"}]}
+              "done_when": str, "phase": str, "role": str}]}
 
 Every verb prints JSON with --json; errors go to stderr with a non-zero exit.
 """
@@ -87,6 +87,35 @@ def step_labels(index, minutes, role, phase=""):
     return labels
 
 
+def validate_roles(roles):
+    if not isinstance(roles, list) or not roles:
+        fail("roles must be a non-empty ordered list of unique words")
+    for role in roles:
+        if not isinstance(role, str) or not WORD.fullmatch(role) or role != role.lower():
+            fail("invalid role word %r" % role)
+        label_word("role", role)
+    if len(set(roles)) != len(roles):
+        fail("roles must be unique")
+    if "shared" in roles or ("owner" in roles and roles[0] != "owner"):
+        fail("shared is reserved; owner can only be the first role")
+    return roles
+
+
+def participant_roles(roles):
+    # In a one-person format the owner also performs the session work.
+    return roles[1:] or roles[:1]
+
+
+def metadata(sprint):
+    path = log_path(sprint)
+    if path.exists():
+        for line in reversed(path.read_text().splitlines()):
+            event = json.loads(line)
+            if event.get("event") == "format":
+                return event
+    return dict(format="session", roles=["owner", "participant"], audience="", tone="")
+
+
 def validate_draft(draft):
     """Return the draft if valid; fail with a precise message otherwise."""
     if not isinstance(draft, dict) or draft.get("version") != DRAFT_VERSION:
@@ -96,6 +125,7 @@ def validate_draft(draft):
             fail("draft: %s is required" % key)
     if not isinstance(draft.get("minutes"), int) or draft["minutes"] <= 0:
         fail("draft: minutes must be a positive integer")
+    roles = validate_roles(draft.get("roles", ["owner", "participant"]))
     steps = draft.get("steps")
     if not isinstance(steps, list) or not steps:
         fail("draft: steps must be a non-empty list")
@@ -104,6 +134,6 @@ def validate_draft(draft):
             fail("draft: step %d needs a title" % i)
         if not isinstance(s.get("minutes"), int) or s["minutes"] <= 0:
             fail("draft: step %d minutes must be a positive integer" % i)
-        if s.get("role", "student") not in ("student", "teacher"):
-            fail("draft: step %d role must be student or teacher" % i)
+        if s.get("role", participant_roles(roles)[0]) not in roles:
+            fail("draft: step %d role must be declared by the format" % i)
     return draft
