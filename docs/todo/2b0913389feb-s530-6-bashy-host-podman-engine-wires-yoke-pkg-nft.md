@@ -3,12 +3,16 @@ id: 2b0913389feb
 kind: bug
 title: S530.6 bashy host podman engine wires yoke pkg/nfthelper so embedded netavark finds bashy's nft (S530.5 companion, bashy side)
 seq: 3014
-status: todo
+status: done
 priority: p1
 created: 2026-10-31T02:51:08.208661Z
+weave: 402
+assignee: codex-gpt6-sol
 sprint: 530
 sprint_id: 1d6b9478-c054-5b09-961e-c649a3bc1705
 sprint_title: 'Master-provisioned AWS satellites: cloudbox provisions Lightsail satellites from owner-held AWS credentials (S522.5)'
+closed: 2026-10-31T03:58:32.87671Z
+closed_by: s530-manager
 ---
 
 Companion to S530.5 (yoke ac23a2648237; yoke run 751 commit d820b289 adds pkg/nft JSON input + pkg/nfthelper). Operator 2026-10-30: real bashy bug, fixed in-sprint, does not gate S530.4.
