@@ -995,6 +995,9 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
             "tmp": (" 0x1d (RUNPATH) Library runpath: [/tmp/tmp.lfg7yKmpJl/cuda-build/lib/ollama:]\n", False),
             "rpath": (" 0x0f (RPATH) Library rpath: [/opt/build/lib]\n", False),
             "mixed": (" 0x1d (RUNPATH) Library runpath: [$ORIGIN:/tmp/x]\n", False),
+            "origin_trailing_colon": (" 0x1d (RUNPATH) Library runpath: [$ORIGIN:]\n", True),
+            "origin_twice": (" 0x1d (RUNPATH) Library runpath: [$ORIGIN:$ORIGIN]\n", True),
+            "empty": (" 0x1d (RUNPATH) Library runpath: []\n", False),
         }
         for name, (extra, ok) in cases.items():
             f = d / f"{name}.txt"
