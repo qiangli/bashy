@@ -31,3 +31,6 @@ Feels like presenting slides: big Previous / Next buttons on the Owner page; key
 
 ## Navigation is FREE (operator, supersedes any restriction above)
 No restrictions: any step, any order, unlimited, including steps already done or skipped. Revisiting a done/skipped step makes it current again (todo status doing; remove its step-done/step-skipped label; the earlier done event stays in the run log), and it is marked done again on the next Next/Done. Timer on revisit RESUMES where it left off (accumulated elapsed per step; no reset); the owner adjusts with +/-. Reordering (move) still applies to steps other than the current one. Tests: revisit a done step, its elapsed resumes, then Next marks it done again.
+
+## Principle (operator): teaching, not a test
+Timers are guides, never limits: no auto-advance, no locking, nothing refused when time runs out. Overtime shows gently — "+2:10 over" — no red/failure wording or styling (use the kit's neutral/info tone, not error). Participants can browse earlier and later steps on their own page (current one highlighted) and mark any step Done at any time. Say this in the generic default format (formats/session.md guidance/tone) and in the README's short description. Tests: done on a non-current step from the participant page is accepted; overtime status text is "+M:SS over" and carries no error class.
