@@ -2,11 +2,12 @@
 """`bashy klatch serve|stop|url` — run Klatch on the owner's own machine.
 
 Nothing here names a host, a count or a handle. The owner chooses the data
-directory and the port. Reach is one registration: when this machine runs an
-outpost daemon, the app is registered with it under its name (`klatch`), and
-outpost's own routing makes it reachable (satellite /matrix/h/<host>/app/klatch/).
-Without outpost, `--lan` binds the LAN address as the offline fallback;
-otherwise it stays on loopback. Nothing else is composed here.
+directory and the port. Reach is declared, not composed: the service unit
+carries `expose.app` and `expose.mesh` (name `klatch`), and an outpost daemon on
+this machine publishes both while the unit is active (satellite route
+/matrix/h/<host>/app/klatch/; peers `outpost mesh dial klatch`). Klatch has
+its own accounts, so the route does not require a cloudbox login. Without
+outpost, `--lan` binds the LAN address as the offline fallback.
 
 Supply chain: the server binary comes from `bashy tools install klatch` (the
 bashy-built, sigstore-verified pin). The transform helpers and the web bundle
@@ -60,6 +61,10 @@ restart:
 stop:
   signal: TERM
   timeout: 20s
+expose:
+  app: {{name: {app}}}
+  mesh:
+    - name: {app}
 upgrade: restart
 enabled: true
 """
@@ -145,15 +150,6 @@ def extract(data, dest, prefix=""):
 APP = "klatch"
 
 
-def outpost_present(runner):
-    """True when an outpost daemon on this machine answers (apps list succeeds)."""
-    try:
-        runner("outpost", "apps", "list", check=True)
-        return True
-    except SystemExit:
-        return False
-
-
 def lan_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -203,27 +199,23 @@ def serve(args, runner=run, opener=urllib.request.urlopen, healthy=wait_healthy,
     extract(fetch(*pins["server"], opener=opener), data / "transform", prefix="transform")
     extract(fetch(*pins["web"], opener=opener), data / "web")
     bind = "0.0.0.0" if args.lan else "127.0.0.1"
-    unit = UNIT.format(binary=binary, bind=bind, port=args.port, data=data / "store",
+    unit = UNIT.format(app=APP, binary=binary, bind=bind, port=args.port, data=data / "store",
                        web=data / "web", transform=data / "transform")
     (data / "store").mkdir(exist_ok=True)
     runner("service", "add", "-f", "-", "--force", stdin=unit)
     runner("service", "start", "klatch")
     local = "http://127.0.0.1:%d" % args.port
     healthy(local)
-    reach = {"local": local}
-    if outpost_present(runner):
-        # One registration; outpost's routing does the rest. The public address
-        # is listed by `outpost apps list` — record the app name, not a guess.
-        runner("outpost", "apps", "add", APP, "--url", local)
-        reach["outpost"] = "outpost-app:" + APP
+    # Published by outpost from the unit's expose block when outpost runs here.
+    reach = {"local": local, "outpost": "app %s + mesh %s (when outpost runs here)" % (APP, APP)}
     if args.lan:
         reach["lan"] = "http://%s:%d" % (lan_ip(), args.port)
-    url = reach.get("outpost") or reach.get("lan") or local
+    url = reach.get("lan") or local
     ensure_secret(args.admin_ref, runner)
     domain = args.domain or (url.split("://", 1)[1].rstrip("/") if "://" in url else "%s:%d" % (socket.gethostname(), args.port))
     (setup or admin_setup)(local, args.admin_ref, domain)
     runner("secret", "set", args.url_ref, stdin=url + "\n")
-    return {"url": url, "local": local, "reach": sorted(k for k in reach if k != "local") or ["loopback"],
+    return {"url": url, "local": local, "reach": sorted(k for k in reach if k != "local"),
             "reaches": reach,
             "data": str(data), "version": pins["version"], "free_gb": round(free, 1),
             "admin_ref": args.admin_ref, "url_ref": args.url_ref}

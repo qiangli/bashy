@@ -103,7 +103,7 @@ class ServeTest(unittest.TestCase):
 
     def test_loopback_default_installs_signed_pin_and_writes_unit(self):
         out, r = self.run_serve()
-        self.assertEqual(out["reach"], ["loopback"])
+        self.assertEqual(out["reach"], ["outpost"])
         self.assertEqual(out["url"], "http://127.0.0.1:7199")
         self.assertIn("tools install klatch", r.verbs())
         unit = next(stdin for a, stdin in r.calls if a[:2] == ("service", "add"))
@@ -120,24 +120,21 @@ class ServeTest(unittest.TestCase):
         out, r = self.run_serve(lan=True)
         unit = next(stdin for a, stdin in r.calls if a[:2] == ("service", "add"))
         self.assertIn('"0.0.0.0:7199"', unit)
-        self.assertEqual(out["reach"], ["lan"])
+        self.assertEqual(out["reach"], ["lan", "outpost"])
         self.assertRegex(out["url"], r"^http://\d+\.\d+\.\d+\.\d+:7199$")
         self.assertNotIn("outpost apps add", " ".join(r.verbs()))
 
-    def test_outpost_present_registers_one_app_and_stays_loopback(self):
-        out, r = self.run_serve(runner=Runner(outpost=True))
-        calls = [a for a, _ in r.calls]
-        self.assertIn(("outpost", "apps", "add", "klatch", "--url", "http://127.0.0.1:7199"), calls)
-        self.assertFalse([a for a in calls if a[:2] == ("outpost", "mesh")])
+    def test_unit_declares_app_and_mesh_exposure_and_never_calls_outpost(self):
+        out, r = self.run_serve()
         unit = next(stdin for a, stdin in r.calls if a[:2] == ("service", "add"))
-        self.assertIn('"127.0.0.1:7199"', unit)
-        self.assertEqual(out["url"], "outpost-app:klatch")
-        self.assertEqual(out["reach"], ["outpost"])
+        self.assertIn("expose:\n  app: {name: klatch}\n  mesh:\n    - name: klatch\n", unit)
+        self.assertNotIn("require_login", unit)
+        self.assertFalse([a for a, _ in r.calls if a[0] == "outpost"])
+        self.assertIn("outpost", out["reach"])
 
-    def test_no_outpost_lan_is_the_fallback(self):
+    def test_lan_fallback_reported(self):
         out, r = self.run_serve(lan=True)
-        self.assertNotIn(("outpost", "apps", "add"), [a[:3] for a, _ in r.calls])
-        self.assertEqual(out["reach"], ["lan"])
+        self.assertEqual(out["reach"], ["lan", "outpost"])
 
     def test_existing_admin_secret_is_kept(self):
         r = Runner()
