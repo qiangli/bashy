@@ -17,7 +17,7 @@ import (
 )
 
 // TestMain doubles as the fake `bashy`: with FAKE_TUTOR_DIR set it answers
-// `tutor status|done|next|extend` from canned JSON and logs every call.
+// `tutor status|done|next|pause|resume|time|goto|skip|move` from canned JSON and logs every call.
 func TestMain(m *testing.M) {
 	if d := os.Getenv("FAKE_TUTOR_DIR"); d != "" {
 		args := os.Args[1:]
@@ -109,7 +109,7 @@ func TestDisplayHidesSecrets(t *testing.T) {
 
 func TestOwnerKeyRequired(t *testing.T) {
 	e := setup(t, "")
-	for _, c := range [][2]string{{"POST", "next"}, {"POST", "extend"}, {"POST", "stop"}} {
+	for _, c := range [][2]string{{"POST", "next"}, {"POST", "time"}, {"POST", "pause"}, {"POST", "resume"}, {"POST", "goto"}, {"POST", "skip"}, {"POST", "move"}, {"POST", "stop"}} {
 		code, _ := e.doKey(t, "wrongkey", c[0], "/api/owner/"+c[1], "{}")
 		if code != 403 {
 			t.Fatalf("%s wrong key: %d", c[1], code)
@@ -132,17 +132,17 @@ func TestOwnerKeyRequired(t *testing.T) {
 	if code, body := e.doKey(t, k, "POST", "/api/owner/next", "{}"); code != 200 {
 		t.Fatal(code, body)
 	}
-	if code, body := e.doKey(t, k, "POST", "/api/owner/extend", `{"by":"5m"}`); code != 200 {
+	if code, body := e.doKey(t, k, "POST", "/api/owner/time", `{"add":"5m","step":"t2"}`); code != 200 {
 		t.Fatal(code, body)
 	}
-	if code, _ := e.doKey(t, k, "POST", "/api/owner/extend", `{"by":"--rm"}`); code != 400 {
+	if code, _ := e.doKey(t, k, "POST", "/api/owner/time", `{"add":"--rm"}`); code != 400 {
 		t.Fatal("bad duration accepted")
 	}
 	if code, _ := e.doKey(t, k, "POST", "/api/owner/next", `{"bogus":1}`); code != 400 {
 		t.Fatal("unknown field accepted")
 	}
 	c := e.calls()
-	if !strings.Contains(c, "tutor next 7 --json") || !strings.Contains(c, "tutor extend 7 t2 --by 5m --json") {
+	if !strings.Contains(c, "tutor next 7 --json") || !strings.Contains(c, "tutor time 7 t2 --add=5m --json") {
 		t.Fatal(c)
 	}
 	code, body := e.doKey(t, k, "GET", "/api/owner", "")
@@ -334,5 +334,38 @@ func TestFormatRolePageLabels(t *testing.T) {
 	roles := view["roles"].(map[string]any)
 	if roles["owner"] != "facilitator" {
 		t.Fatal(roles)
+	}
+}
+
+func TestOwnerTempoActions(t *testing.T) {
+	e := setup(t, "")
+	k := e.s.tok.Owner
+	for _, c := range []struct{ verb, body string }{
+		{"pause", `{}`}, {"resume", `{}`}, {"skip", `{}`},
+		{"time", `{"add":"-1m"}`}, {"goto", `{"step":"t3"}`},
+		{"move", `{"step":"t3","dir":"up"}`}, {"move", `{"step":"t3","dir":"to","to":2}`},
+	} {
+		// A participant token is refused before anything reaches bashy.
+		if code, _ := e.doKey(t, e.s.tok.Participants["alice"], "POST", "/api/owner/"+c.verb, c.body); code != 403 {
+			t.Fatalf("%s accepted a participant token: %d", c.verb, code)
+		}
+		if code, body := e.doKey(t, k, "POST", "/api/owner/"+c.verb, c.body); code != 200 {
+			t.Fatalf("%s: %d %s", c.verb, code, body)
+		}
+	}
+	for _, c := range []struct{ verb, body string }{
+		{"goto", `{}`}, {"goto", `{"step":"--rm"}`}, {"move", `{"step":"t3"}`},
+		{"move", `{"step":"t3","dir":"sideways"}`}, {"time", `{"add":"0m"}`},
+	} {
+		if code, _ := e.doKey(t, k, "POST", "/api/owner/"+c.verb, c.body); code != 400 {
+			t.Fatalf("%s %s accepted", c.verb, c.body)
+		}
+	}
+	got := e.calls()
+	for _, want := range []string{"tutor pause 7 --json", "tutor resume 7 --json", "tutor skip 7 --json",
+		"tutor time 7 --add=-1m --json", "tutor goto 7 t3 --json", "tutor move 7 t3 --up --json", "tutor move 7 t3 --to 2 --json"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in %s", want, got)
+		}
 	}
 }

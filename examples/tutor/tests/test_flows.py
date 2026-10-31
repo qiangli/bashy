@@ -4,6 +4,7 @@ Each flow runs on a pty (a human's terminal) with a stub opener; the real
 stores here are the TempBashy ones, so "real HOME unchanged" is checked on them.
 """
 import json
+import re
 import os
 import pty
 import select
@@ -92,7 +93,7 @@ class Flows(TempBashy):
         time.sleep(0.5)
         return lines
 
-    def assert_up(self, display):
+    def assert_up(self, display, owner=None):
         base = display.rstrip("/")
         port = display.rsplit(":", 1)[1].split("/")[0]
         local = "http://127.0.0.1:%s" % port
@@ -102,7 +103,7 @@ class Flows(TempBashy):
             state = json.load(r)
         statuses = [s["status"] for s in state["steps"]]
         self.assertIn("doing", statuses[:1] + statuses, statuses)
-        self.assertEqual(self.opened.read_text().split(), [display])
+        self.assertEqual(self.opened.read_text().split(), [owner or display])
         return port, base
 
     def assert_server_gone(self, port):
@@ -110,8 +111,12 @@ class Flows(TempBashy):
             urllib.request.urlopen("http://127.0.0.1:%s/healthz" % port, timeout=2)
 
     def assert_links(self, lines, phones):
-        urls = [l for l in lines if l.startswith("http")]
-        self.assertEqual(len(urls), 1 + phones, lines)
+        labelled = [l for l in lines if re.match(r"(.+ \(private\)|Display \(projector\)|Phone for .+): http", l)]
+        self.assertTrue(labelled[0].startswith("Host (private): ") or "(private): " in labelled[0], lines)
+        self.assertTrue(labelled[1].startswith("Display (projector): "), lines)
+        self.assertTrue(all(l.startswith("Phone for ") for l in labelled[2:]), lines)
+        urls = [l.split(": ", 1)[1] for l in labelled]
+        self.assertEqual(len(urls), 2 + phones, lines)
         lan = lan_address()
         if lan:
             for u in urls:
@@ -131,10 +136,10 @@ class Flows(TempBashy):
 
                 def check(lines):
                     urls = self.assert_links(lines, 1)
-                    self.assertTrue(urls[0].endswith("/"), urls)
-                    self.assertIn("/s/", urls[1])
-                    seen["port"], _ = self.assert_up(urls[0])
-                    self.assertEqual(len(lines), 3, lines)
+                    self.assertTrue(urls[1].endswith("/"), urls)
+                    self.assertIn("/s/", urls[2])
+                    seen["port"], _ = self.assert_up(urls[1], urls[0])
+                    self.assertEqual(len(lines), 4, lines)
 
                 self.run_flow(argv, check)
                 self.assert_server_gone(seen["port"])
@@ -177,12 +182,14 @@ class Flows(TempBashy):
                     text = "\n".join(lines)
                     sprint = int(next(l for l in lines if l.startswith("Session:")).split()[2])
                     seen["sprint"] = sprint
-                    self.assertIn("Join alice:", text)
-                    self.assertIn("Join bob:", text)
-                    self.assertIn("(keep private)", text)
+                    self.assertIn("Phone for alice: ", text)
+                    self.assertIn("Phone for bob: ", text)
+                    self.assertIn("(private): ", text)
+                    owner_line = next(l for l in lines if "(private): " in l)
+                    self.assertLess(text.index("(private): "), text.index("Display (projector): "))
                     self.assertIn("session data stays", text)
-                    display = next(l for l in lines if l.startswith("Display:")).split()[1]
-                    seen["port"], _ = self.assert_up(display)
+                    display = next(l for l in lines if l.startswith("Display (projector):")).split()[-1]
+                    seen["port"], _ = self.assert_up(display, owner_line.split()[-1])
                     status = json.loads(self.tutor("status", str(sprint), "--json").stdout)
                     self.assertEqual(status["current"]["index"], 1)
 

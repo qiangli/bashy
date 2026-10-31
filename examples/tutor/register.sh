@@ -4,18 +4,18 @@ export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 runner=${BASHY_BIN:-bashy}
 guide=$("$runner" --bashsharp "$here/tutor.bsh" --skill)
-verbs=(plan apply next done extend status nudge render prep serve join stop demo go test)
+verbs=(plan apply next done time goto skip move pause resume status nudge render prep serve join stop demo go test)
 args=()
 for i in "${!verbs[@]}"; do
   args+=(--set "args.positionals.0.enum.$i=${verbs[$i]}")
 done
-flags=(json minutes people format agent title epic for owner by message line person edition from help goal addr prefix data done open port)
+flags=(json minutes people format agent title epic for owner message line person edition from help goal addr prefix data done open port add up down to)
 for i in "${!flags[@]}"; do
   kind=string
-  case ${flags[$i]} in json|line|help|done|open) kind=bool ;; esac
+  case ${flags[$i]} in json|line|help|done|open|up|down) kind=bool ;; esac
   args+=(--set "args.flags.$i.name=${flags[$i]}" --set "args.flags.$i.type=$kind")
 done
-args+=(--set args.flags.10.shorthand=m)
+args+=(--set args.flags.9.shorthand=m)
 "$runner" commands add tutor --force \
   --set "exec.0=$runner" --set exec.1=--bashsharp --set "exec.2=$here/tutor.bsh" \
   --set synopsis='Plan and run timeboxed group, meeting and solo sessions on sprint cards' \

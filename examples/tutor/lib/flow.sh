@@ -62,3 +62,25 @@ stop_server() {
   wait "$SERVE_PID" 2>/dev/null || true
   SERVE_PID=
 }
+
+# print_links WORK SPRINT [PERSON]: labelled links, then open the OWNER page.
+# Prints "<Owner role> (private): URL", "Display (projector): URL" and one
+# "Phone for <name>: URL" per participant (just PERSON when given).
+print_links() {
+  local work=$1 sprint=$2 only=${3:-}
+  tutor_run status "$sprint" --json > "$work/status.json" 2>/dev/null || true
+  python3 - "$work/links.json" "$work/status.json" "$only" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+try:
+    role = json.load(open(sys.argv[2])).get("roles", {}).get("owner") or "host"
+except Exception:
+    role = "host"
+print("%s (private): %s" % (role[:1].upper() + role[1:], d["owner"]))
+print("Display (projector): %s" % d["display"])
+for name, url in sorted(d["participants"].items()):
+    if name != "owner" and (not sys.argv[3] or name == sys.argv[3]):
+        print("Phone for %s: %s" % (name, url))
+PY
+  open_url "$(jget "$work/links.json" 'd["owner"]')"
+}

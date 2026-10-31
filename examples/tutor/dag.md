@@ -79,16 +79,14 @@ mkdir -p "$HOME" "$sandbox/repo" "$sandbox/work"
 cd "$sandbox/repo"
 git init -q . 2>/dev/null || true
 start_session "${GOAL:-Build and demonstrate a small improvement}" alice,bob "${MINUTES:-60}" "" "" "${PORT:-0}" "$sandbox/work"
-display=$(jget "$sandbox/work/links.json" 'd["display"]')
-phone=$(jget "$sandbox/work/links.json" 'd["participants"]["alice"]')
-open_url "$display"
-printf '%s\n%s\nCtrl-C to stop\n' "$display" "$phone"
+print_links "$sandbox/work" "$SPRINT" alice
+echo "Ctrl-C to stop"
 wait "$SERVE_PID" || true
 ```
 
 ### go
 Real session in your own home: plan, apply, start step 1, serve and open the
-Display page. Session data stays after Ctrl-C.
+owner page. Session data stays after Ctrl-C.
 
 ```bash
 set -euo pipefail
@@ -101,12 +99,8 @@ cleanup() { stop_server; rm -rf "$work"; }
 trap cleanup EXIT
 trap 'exit 130' INT TERM
 start_session "$GOAL" "$PEOPLE" "${MINUTES:-60}" "${FORMAT:-}" "${AGENT:-}" "${PORT:-18093}" "$work"
-display=$(jget "$work/links.json" 'd["display"]')
-open_url "$display"
 echo "Session: sprint $SPRINT (later: bashy tutor status $SPRINT)"
-echo "Display: $display"
-echo "Owner (keep private): $(jget "$work/links.json" 'd["owner"]')"
-jget "$work/links.json" '"\n".join("Join %s: %s" % kv for kv in sorted(d["participants"].items()) if kv[0] != "owner")'
+print_links "$work" "$SPRINT"
 echo "Ctrl-C to stop serving (session data stays)"
 wait "$SERVE_PID" || true
 ```

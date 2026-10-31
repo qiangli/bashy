@@ -18,7 +18,7 @@ if(!exe){exe=join(dir,'tutor-server');
  assert.equal(b.status,0,b.stderr)}
 
 const state=join(dir,'status.json'),calls=join(dir,'calls.log');
-const status=(over)=>({sprint:7,title:'Example session',format:'meeting',roles:{owner:'facilitator',participants:['participant']},clock:{state:'running'},
+const status=(over,paused=false)=>({sprint:7,paused,title:'Example session',format:'meeting',roles:{owner:'facilitator',participants:['participant']},clock:{state:'running'},
  current:{index:2,total:3,id:'t2',title:'Build the arm',owners:['alice'],timebox_s:600,elapsed_s:over?700:100,remaining_s:over?-100:500,overdue:over},
  steps:[{index:1,id:'t1',title:'Warm up',owner:'bob',role:'participant',status:'done',timebox_s:300,overdue:false,evidence:null},
   {index:2,id:'t2',title:'Build the arm',owner:'alice',role:'participant',status:'doing',done_when:'Show a working example',timebox_s:600,overdue:over,evidence:null},
@@ -27,7 +27,11 @@ await writeFile(state,JSON.stringify(status(false)));
 const fake=join(dir,'bashy');
 await writeFile(fake,`#!/usr/bin/env node
 const fs=require('fs');fs.appendFileSync(${JSON.stringify(calls)},process.argv.slice(2).join(' ')+'\\n');
-if(process.argv[3]==='status')process.stdout.write(fs.readFileSync(${JSON.stringify(state)}));else console.log('{"ok":true}');
+if(process.argv[3]==='status')process.stdout.write(fs.readFileSync(${JSON.stringify(state)}));
+else{if(process.argv[3]==='goto'){const st=JSON.parse(fs.readFileSync(${JSON.stringify(state)}));const t=st.steps.find(s=>s.id===process.argv[5]);
+ if(t){st.steps.forEach(s=>{if(s.status==='doing')s.status='todo'});t.status='doing';st.current={...st.current,index:t.index,id:t.id,title:t.title};fs.writeFileSync(${JSON.stringify(state)},JSON.stringify(st))}}
+ console.log('{"ok":true}')}
+
 `);
 await chmod(fake,0o755);
 
@@ -40,6 +44,7 @@ const alice=out.match(/Join alice: (\S+)/)?.[1],bob=out.match(/Join bob: (\S+)/)
 assert.ok(display&&owner&&alice&&bob,out);
 const tokens=[owner.split('/').pop(),alice.split('/').pop(),bob.split('/').pop()];
 
+const sawCall=async re=>{for(let i=0;i<50;i++){if(re.test(await readFile(calls,'utf8')))return;await new Promise(r=>setTimeout(r,100))}assert.match(await readFile(calls,'utf8'),re)};
 let browser;
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined});
@@ -56,7 +61,7 @@ try{
  assert.equal(await proj.locator('#clock[data-over]').count(),0);
  await writeFile(state,JSON.stringify(status(true)));
  await proj.locator('#clock[data-over]').waitFor({timeout:8000});
- assert.match(await proj.locator('#clock').textContent(),/^\+\d+:\d\d$/);
+ assert.match(await proj.locator('#clock').textContent(),/^\+\d+:\d\d over$/);
  await proj.screenshot({path:join(dir,'display.png')});
  await writeFile(state,JSON.stringify(status(false)));
 
@@ -90,6 +95,25 @@ try{
  assert.equal(await t.title(),'Facilitator');
  await t.locator('#msg',{hasText:'ok'}).waitFor();
  assert.match(await readFile(calls,'utf8'),/tutor next 7 --json/);
+ // presenter keys: ArrowRight/ArrowLeft on the owner page move the Display's current step
+ await t.keyboard.press('ArrowRight');
+ await proj.locator('h1',{hasText:'Share'}).waitFor({timeout:8000});
+ await t.keyboard.press('ArrowLeft');
+ await proj.locator('h1',{hasText:'Build the arm'}).waitFor({timeout:8000});
+ for(const id of ['pause','skip','addm1','addp1','addp5','mins','addcustom','go-1','up-3','down-3'])assert.equal(await t.locator('#'+id).count(),1,'owner control #'+id);
+ assert.equal(await t.locator('#up-2').count(),0,'current step has no reorder buttons');
+ await t.locator('#addp5').click();
+ await sawCall(/tutor time 7 --add=5m --json/);
+ await t.locator('#go-3').click();
+ await sawCall(/tutor goto 7 t3 --json/);
+ await t.locator('#up-3').click();
+ await sawCall(/tutor move 7 t3 --up --json/);
+ await t.locator('#pause').click();
+ await sawCall(/tutor pause 7 --json/);
+ await writeFile(state,JSON.stringify(status(false,true)));
+ await t.locator('#pause',{hasText:'Resume'}).waitFor({timeout:8000});
+ await proj.getByText('Paused',{exact:false}).first().waitFor({timeout:8000});
+ await writeFile(state,JSON.stringify(status(false)));
  await t.screenshot({path:join(dir,'owner.png')});
 
  // --- second host: join from the LAN address with its own data dir ---

@@ -33,7 +33,14 @@ bashy sprint start N --owner AGENT --for 90m \
 bashy tutor status N --line
 bashy tutor done N STEP -m 'Working result demonstrated' --json
 bashy tutor next N --json
-bashy tutor extend N STEP --by 5m --json
+bashy tutor pause N --json
+bashy tutor resume N --json
+bashy tutor time N STEP --add 5m --json
+bashy tutor time N --add -1m --json
+bashy tutor goto N STEP --json
+bashy tutor skip N --json
+bashy tutor move N STEP --up --json
+bashy tutor move N STEP --to 4 --json
 bashy tutor nudge N --person alice --json
 ```
 

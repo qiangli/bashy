@@ -46,6 +46,8 @@ def read_card(sprint):
     return cards[0]
 
 
+MIN_TIMEBOX_S = 60
+FINISHED = ('done', 'skipped')
 CUTOFF = re.compile(r'cutoff (\d{4}-\d\d-\d\dT[\d:.]+(?:Z|[+-]\d\d:\d\d))')
 
 
@@ -85,6 +87,16 @@ def status(sprint, at=None):
     path = log_path(sprint)
     if path.exists():
         events = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    paused_since, intervals = None, []
+    for event in events:
+        if event['event'] == 'pause' and paused_since is None:
+            paused_since = timestamp(event['ts'])
+        elif event['event'] == 'resume' and paused_since is not None:
+            intervals.append((paused_since, timestamp(event['ts'])))
+            paused_since = None
+    paused = paused_since is not None
+    if paused:
+        intervals.append((paused_since, at))
     todos = records(bashy('todo', 'list', "--user", '--all', '--json'), 'todo')
     steps = []
     current = None
@@ -106,6 +118,8 @@ def status(sprint, at=None):
                     done_when=fetch_body(str(item['id'])) or 'Show the outcome of this step.')
         if 'step-done' in labels:
             step['status'] = 'done'
+        if 'step-skipped' in labels:
+            step['status'] = 'skipped'
         for event in events:
             if event.get('step') != step['id']:
                 continue
@@ -113,14 +127,22 @@ def status(sprint, at=None):
                 step['started_at'] = event['ts']
                 step['done_at'] = None
                 step['evidence'] = None
+                if step['status'] == 'done' and 'step-done' not in labels:
+                    step['status'] = 'doing'
             elif event['event'] == 'done':
                 step['done_at'] = event['ts']
                 step['evidence'] = event.get('evidence')
                 step['status'] = 'done'
-            elif event['event'] == 'extend':
-                step['timebox_s'] += event['by_s']
+            elif event['event'] == 'leave':
+                step['started_at'] = None
+            elif event['event'] == 'time':
+                step['timebox_s'] = max(MIN_TIMEBOX_S, step['timebox_s'] + event['by_s'])
         end = timestamp(step['done_at']) if step['done_at'] else at
-        elapsed = max(0, int((end - timestamp(step['started_at'])).total_seconds())) if step['started_at'] else 0
+        elapsed = 0
+        if step['started_at']:
+            begin = timestamp(step['started_at'])
+            frozen = sum(max(0, (min(b, end) - max(a, begin)).total_seconds()) for a, b in intervals)
+            elapsed = max(0, int((end - begin).total_seconds() - frozen))
         step['overdue'] = elapsed > step['timebox_s']
         steps.append((step, elapsed))
     steps.sort(key=lambda pair: (pair[0]['index'], pair[0]['id']))
@@ -133,16 +155,18 @@ def status(sprint, at=None):
                            elapsed_s=elapsed, remaining_s=step['timebox_s'] - elapsed,
                            overdue=step['overdue'])
     return dict(sprint=sprint, title=card['title'], clock=session_clock(card, at, sprint),
-                current=current, steps=[s for s, _ in steps], format=meta["format"],
+                paused=paused, current=current, steps=[s for s, _ in steps], format=meta["format"],
                 roles=dict(owner=roles[0], participants=roles[1:]))
 
 
 def one_line(value):
     step = value['current']
+    if value.get('paused') and step:
+        return clean('Paused · Step %d/%d · %s' % (step['index'], step['total'], step['title']))
     if step is None:
         participants = [s for s in value['steps'] if s['role'] in (value.get('roles', {}).get('participants') or [value.get('roles', {}).get('owner', 'participant')])]
         total = len(participants)
-        done = sum(s['status'] == 'done' for s in participants)
+        done = sum(s['status'] in FINISHED for s in participants)
         if total and done == total:
             return 'Done · %d/%d steps' % (done, total)
         if done:
@@ -154,6 +178,10 @@ def one_line(value):
         'over' if step['overdue'] else 'left')
     if step['owners']:
         line += ' · ' + ', '.join(step['owners'])
+    return clean(line)
+
+
+def clean(line):
     # User titles and owners must not introduce extra lines or terminal escapes.
     line = re.sub(r'\x1b\[[0-?]*[ -/]*[@-~]', '', line)
     return ' '.join(''.join(c for c in line if c >= ' ' or c in '\r\n\t').split())
@@ -161,7 +189,8 @@ def one_line(value):
 
 def log(sprint, step, event, at, **fields):
     with log_path(sprint).open('a', encoding='utf-8') as stream:
-        stream.write(json.dumps(dict(ts=at.isoformat(), event=event, step=step['id'], **fields)) + '\n')
+        stream.write(json.dumps(dict(ts=at.isoformat(), event=event,
+                                     **({'step': step['id']} if step else {}), **fields)) + '\n')
 
 
 def transition(sprint, step, target, at, evidence=None):
@@ -187,28 +216,83 @@ def select_step(steps, selector):
 
 
 def duration(value):
-    match = re.fullmatch(r'([1-9]\d*)([smh])', value)
+    match = re.fullmatch(r'([+-]?)([1-9]\d*)([smh])', value)
     if not match:
-        raise argparse.ArgumentTypeError('duration must be positive, e.g. 5m')
-    return int(match[1]) * {'s': 1, 'm': 60, 'h': 3600}[match[2]]
+        raise argparse.ArgumentTypeError('duration must look like 5m, +5m or -1m')
+    seconds = int(match[2]) * {'s': 1, 'm': 60, 'h': 3600}[match[3]]
+    return -seconds if match[1] == '-' else seconds
+
+
+def set_todo_state(step, target):
+    bashy('todo', 'status', '--user', step['id'], target)
+
+
+def goto(sprint, current, target, at):
+    if current and current['id'] == target['id']:
+        return
+    if current:
+        set_todo_state(current, 'assigned' if current['owner'] else 'todo')
+        log(sprint, current, 'leave', at)
+    drop = {'done': 'step-done', 'skipped': 'step-skipped'}.get(target['status'])
+    if drop:
+        bashy('todo', 'edit', '--user', target['id'], '--unlabel', drop)
+    set_todo_state(target, 'doing')
+    log(sprint, target, 'step_start', at)
+
+
+def reorder(sprint, steps, step, mode, where, at):
+    upcoming = [s for s in steps if s['status'] not in FINISHED + ('doing',)]
+    if step not in upcoming:
+        fail('only upcoming steps can be moved')
+    slots = [s['index'] for s in upcoming]
+    order = list(upcoming)
+    at_pos = order.index(step)
+    order.remove(step)
+    if mode == 'to':
+        if where not in slots:
+            fail('%d is not an upcoming position (%s)' % (where, ', '.join(map(str, slots))))
+        pos = slots.index(where)
+    else:
+        pos = max(0, min(len(order), at_pos + (-1 if mode == 'up' else 1)))
+    order.insert(pos, step)
+    changed = [(s, slot) for s, slot in zip(order, slots) if s['index'] != slot]
+    for s, slot in changed:
+        bashy('todo', 'edit', '--user', s['id'], '--label', 'step-%02d' % slot,
+              '--unlabel', 'step-%02d' % s['index'])
+    if changed:
+        log(sprint, None, 'reorder', at, order=[s['id'] for s in order])
 
 
 def main(argv):
+    # argparse reads "-1m" as a flag; glue it to --add so `--add -1m` works.
+    glued = []
+    for arg in argv:
+        if glued and glued[-1] == '--add' and arg[:1] == '-':
+            glued[-1] = '--add=' + arg
+        else:
+            glued.append(arg)
+    argv = glued
     parser = argparse.ArgumentParser(prog='tutor')
     verbs = parser.add_subparsers(dest='verb', required=True)
-    for name in ('next', 'done', 'extend', 'status'):
+    for name in ('next', 'done', 'time', 'goto', 'skip', 'move', 'pause', 'resume', 'status'):
         sub = verbs.add_parser(name)
         sub.add_argument('sprint', type=int)
         output = sub.add_mutually_exclusive_group()
         output.add_argument('--json', action='store_true')
         if name == 'status':
             output.add_argument('--line', action='store_true')
-        if name in ('done', 'extend'):
+        if name in ('done', 'goto', 'move'):
             sub.add_argument('step')
+        if name == 'time':
+            sub.add_argument('step', nargs='?')
+            sub.add_argument('--add', required=True, type=duration)
         if name == 'done':
             sub.add_argument('-m', '--message', default=None)
-        if name == 'extend':
-            sub.add_argument('--by', required=True, type=duration)
+        if name == 'move':
+            where = sub.add_mutually_exclusive_group(required=True)
+            where.add_argument('--up', action='store_true')
+            where.add_argument('--down', action='store_true')
+            where.add_argument('--to', type=int)
     args = parser.parse_args(argv)
     try:
         at = now()
@@ -216,18 +300,41 @@ def main(argv):
         roles = value['roles']
         work_roles = roles['participants'] or [roles['owner']]
         steps = [s for s in value['steps'] if s['role'] in work_roles]
-        if args.verb == 'next':
-            current = value['current']
-            if current:
-                transition(args.sprint, select_step(steps, current['id']), 'done', at)
+        current = select_step(steps, value['current']['id']) if value['current'] else None
+
+        def start_next():
             pending = [s for s in steps if s['status'] in ('todo', 'assigned')
-                       and (not current or s['index'] > select_step(steps, current['id'])['index'])]
+                       and (not current or s['index'] > current['index'])]
             if pending:
                 transition(args.sprint, pending[0], 'doing', at)
+
+        if args.verb == 'next':
+            if current:
+                transition(args.sprint, current, 'done', at)
+            start_next()
         elif args.verb == 'done':
             transition(args.sprint, select_step(value['steps'], args.step), 'done', at, args.message)
-        elif args.verb == 'extend':
-            log(args.sprint, select_step(value['steps'], args.step), 'extend', at, by_s=args.by)
+        elif args.verb == 'time':
+            if args.step is None and not current:
+                fail('no step is running; name a step')
+            step = select_step(value['steps'], args.step) if args.step else current
+            by = max(args.add, MIN_TIMEBOX_S - step['timebox_s'])
+            log(args.sprint, step, 'time', at, by_s=by)
+        elif args.verb == 'pause' and not value['paused']:
+            log(args.sprint, None, 'pause', at)
+        elif args.verb == 'resume' and value['paused']:
+            log(args.sprint, None, 'resume', at)
+        elif args.verb == 'goto':
+            goto(args.sprint, current, select_step(steps, args.step), at)
+        elif args.verb == 'skip':
+            if not current:
+                fail('no step is running')
+            bashy('todo', 'edit', '--user', current['id'], '--label', 'step-skipped')
+            log(args.sprint, current, 'skip', at)
+            start_next()
+        elif args.verb == 'move':
+            mode = 'up' if args.up else 'down' if args.down else 'to'
+            reorder(args.sprint, steps, select_step(steps, args.step), mode, args.to, at)
         if args.verb != 'status':
             value = status(args.sprint, at)
         emit(value, args.json, one_line(value))

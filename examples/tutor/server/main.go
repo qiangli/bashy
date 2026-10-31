@@ -1,6 +1,6 @@
 // Command tutor-server serves the display, owner and per-participant pages of a
 // tutor session. It holds no session state of its own: status comes from
-// `bashy tutor status N --json`, actions run `bashy tutor done|next|extend`.
+// `bashy tutor status N --json`, actions run `bashy tutor done|next|pause|resume|time|goto|skip|move`.
 package main
 
 import (
@@ -91,6 +91,7 @@ type Status struct {
 	Sprint  int            `json:"sprint"`
 	Title   string         `json:"title"`
 	Clock   map[string]any `json:"clock"`
+	Paused  bool           `json:"paused"`
 	Current *Current       `json:"current"`
 	Steps   []Step         `json:"steps"`
 }
@@ -215,7 +216,7 @@ func (s *server) snapshot() (*Status, string) {
 		return nil, s.lastErr
 	}
 	c := *s.st
-	if c.Current != nil {
+	if c.Current != nil && !c.Paused {
 		cur := *c.Current
 		d := int(time.Since(s.at).Seconds())
 		cur.ElapsedS += d
@@ -246,7 +247,7 @@ func publicView(st *Status, errMsg string) map[string]any {
 		steps = append(steps, map[string]any{"index": x.Index, "title": x.Title, "owner": x.Owner,
 			"status": x.Status, "overdue": x.Overdue})
 	}
-	return map[string]any{"title": st.Title, "clock": st.Clock, "current": st.Current, "steps": steps, "error": errMsg}
+	return map[string]any{"title": st.Title, "clock": st.Clock, "paused": st.Paused, "current": st.Current, "steps": steps, "error": errMsg}
 }
 
 func (s *server) handler() http.Handler {
@@ -273,11 +274,13 @@ func (s *server) handler() http.Handler {
 			kit.Fail(w, 503, "no status yet: "+e)
 			return
 		}
-		kit.WriteJSON(w, map[string]any{"sprint": st.Sprint, "title": st.Title, "clock": st.Clock, "roles": st.Roles, "format": st.Format,
+		kit.WriteJSON(w, map[string]any{"sprint": st.Sprint, "title": st.Title, "clock": st.Clock, "paused": st.Paused, "roles": st.Roles, "format": st.Format,
 			"current": st.Current, "steps": st.Steps, "error": e})
 	})
 	mux.HandleFunc("POST /api/owner/next", s.ownerAction("next"))
-	mux.HandleFunc("POST /api/owner/extend", s.ownerAction("extend"))
+	for _, verb := range []string{"pause", "resume", "time", "goto", "skip", "move"} {
+		mux.HandleFunc("POST /api/owner/"+verb, s.ownerAction(verb))
+	}
 	mux.HandleFunc("POST /api/owner/stop", func(w http.ResponseWriter, r *http.Request) {
 		if !s.ownerOK(r) {
 			kit.Fail(w, 403, "owner key required")
@@ -313,27 +316,54 @@ func (s *server) ownerAction(verb string) http.HandlerFunc {
 		}
 		var body struct {
 			Step string `json:"step"`
-			By   string `json:"by"`
+			Add  string `json:"add"`
+			Dir  string `json:"dir"`
+			To   int    `json:"to"`
 		}
 		if !kit.DecodeAction(w, r, 8<<10, &body) {
 			return
 		}
 		args := []string{verb, fmt.Sprint(s.n)}
-		if verb == "extend" {
-			st, _ := s.snapshot()
-			step := body.Step
-			if step == "" && st != nil && st.Current != nil {
-				step = st.Current.ID
-			}
-			by := body.By
-			if by == "" {
-				by = "5m"
-			}
-			if step == "" || !durRe(by) || strings.HasPrefix(step, "-") {
-				kit.Fail(w, 400, "extend needs a step and a duration like 5m")
+		bad := func(msg string) { kit.Fail(w, 400, msg) }
+		if body.Step != "" && !stepRe(body.Step) {
+			bad("invalid step")
+			return
+		}
+		switch verb {
+		case "time":
+			if !durRe(body.Add) {
+				bad("time needs a signed duration like 5m or -1m")
 				return
 			}
-			args = append(args, step, "--by", by)
+			if body.Step != "" {
+				args = append(args, body.Step)
+			}
+			args = append(args, "--add="+body.Add)
+		case "goto":
+			if body.Step == "" {
+				bad("goto needs a step")
+				return
+			}
+			args = append(args, body.Step)
+		case "move":
+			if body.Step == "" {
+				bad("move needs a step")
+				return
+			}
+			args = append(args, body.Step)
+			switch body.Dir {
+			case "up", "down":
+				args = append(args, "--"+body.Dir)
+			case "to":
+				if body.To < 1 || body.To > 999 {
+					bad("move --to needs a position")
+					return
+				}
+				args = append(args, "--to", fmt.Sprint(body.To))
+			default:
+				bad("move needs dir up, down or to")
+				return
+			}
 		}
 		args = append(args, "--json")
 		out, err := s.bashy(args...)
@@ -346,7 +376,22 @@ func (s *server) ownerAction(verb string) http.HandlerFunc {
 	}
 }
 
+func stepRe(v string) bool {
+	if v == "" || len(v) > 64 || v[0] == '-' {
+		return false
+	}
+	for _, c := range v {
+		if !(c >= '0' && c <= '9' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '-' || c == '_' || c == '.') {
+			return false
+		}
+	}
+	return true
+}
+
 func durRe(v string) bool {
+	if v != "" && (v[0] == '-' || v[0] == '+') {
+		v = v[1:]
+	}
 	if len(v) < 2 || len(v) > 6 || v[0] == '0' {
 		return false
 	}
@@ -372,7 +417,7 @@ func (s *server) participantView(person string) (map[string]any, bool) {
 		}
 		return false
 	}
-	v := map[string]any{"person": person, "roles": st.Roles, "role": "", "title": st.Title, "clock": st.Clock, "error": e, "mine": nil, "upcoming": []map[string]any{}}
+	v := map[string]any{"person": person, "roles": st.Roles, "role": "", "title": st.Title, "clock": st.Clock, "paused": st.Paused, "error": e, "mine": nil, "upcoming": []map[string]any{}}
 	if c := st.Current; c != nil {
 		for _, o := range c.Owners {
 			if o == person {
@@ -475,7 +520,7 @@ func (s *server) render(w http.ResponseWriter, r *http.Request, title, body, scr
 }
 
 func (s *server) displayPage(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "Display", displayMain, "start('/api/display',renderDisplay)")
+	s.render(w, r, "Display", displayMain, "navKeys(()=>{try{return localStorage.getItem('tutor-owner-key')}catch(e){return null}});start('/api/display',renderDisplay)")
 }
 
 func (s *server) ownerPage(w http.ResponseWriter, r *http.Request) {
@@ -484,7 +529,7 @@ func (s *server) ownerPage(w http.ResponseWriter, r *http.Request) {
 		kit.Fail(w, 403, "owner key required")
 		return
 	}
-	s.render(w, r, s.roleTitle(true, ""), ownerMain, "const KEY="+jsq(key)+";start('/api/owner',renderOwner,{'X-Facilitator-Key':KEY})")
+	s.render(w, r, s.roleTitle(true, ""), ownerMain, "const KEY="+jsq(key)+";try{localStorage.setItem('tutor-owner-key',KEY)}catch(e){}navKeys(()=>KEY);start('/api/owner',renderOwner,{'X-Facilitator-Key':KEY})")
 }
 
 func (s *server) participantPage(w http.ResponseWriter, r *http.Request) {
