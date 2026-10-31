@@ -9,13 +9,26 @@ name: tutor
 description: Plan and run an AI-guided, timeboxed session (class, meeting or solo work) on a bashy sprint card - editable format, timed steps owned by people, one-line status for chat, hints that never give answers.
 metadata:
   requires: "has=bashy"
+  step-porota: 'bashy tutor status "${TUTOR_SPRINT:?set TUTOR_SPRINT}" --json'
+  check-tests: 'bashy tutor status "${TUTOR_SPRINT:?set TUTOR_SPRINT}" --json'
 ---
 # Tutor
 
 A session is a sprint card; each step is a todo owned by a person, labelled
 `step-NN`, `timebox-Nm` and `role-student|role-teacher`. The session clock is
-the sprint's own clock (`bashy sprint start N --for 90m`, `extend`, `stop`);
-tutor never adds a second lifecycle.
+the sprint's own clock (`bashy sprint start N --owner AGENT --for 90m`, `extend`, `stop`);
+tutor reads that clock, falling back to the run log from `tutor start --for`.
+Starting requires an explicit manager agent; without one, planning, applying,
+next/done, status and fallback hints still work, and start reports a clean error.
+
+Start a class like a coding sprint:
+`bashy sprint start N --owner AGENT --for 90m --instruction "run today's session with the tutor skill"`.
+People never close sprint stories: `tutor done` records a run-log done event
+and labels the todo `step-done`. At the end the class manager (the teacher's
+agent) runs `bashy sprint accept N ID -m EVIDENCE` for each done step.
+Student progress counts student steps; teacher steps remain in `steps[]`.
+Set `TUTOR_SPRINT=N` then `bashy skill run tutor --json` to attest status
+through the registered command. No default sprint is silently selected.
 
 - `bashy tutor plan "GOAL" --minutes 90 [--people a,b] [--format F] [--agent A]`
   prints an editable JSON draft. With no agent it splits the format's
@@ -29,16 +42,33 @@ tutor never adds a second lifecycle.
 - `bashy tutor render STEP --edition student|teacher` prints one edition of a
   content item; `~~~teacher` blocks never appear in the student edition.
 - `bashy tutor serve N` / `join URL` / `stop` run the projector and per-student
-  pages. `bashy tutor prep [--from PATH]` shapes a content dir before class.
+  pages. `bashy tutor prep DIR [--from PATH]` shapes a content dir before class.
 
-Compose, don't couple: `bashy tutor status N --line | bashy klatch topic GROUP -`.
-Formats are editable Markdown (`formats/class.md`); copy one to make your own.
+Compose, don't couple: `examples/tutor/chat-status.sh N CONFIG GROUP` pipes
+`status --line` to `bashy klatch topic CONFIG GROUP -` and posts on step change.
+Formats are editable Markdown (`formats/class.md`); copy one to make your own
+class, meeting or solo format. This is Software Shaping: edit phases, pairing,
+timeboxes, tools, tone and teacher steps, then plan with `--format PATH`.
+Render the same source with `--edition teacher` for preparation and
+`--edition student` for sharing; teacher-only notes stay out of student output.
 ~~~
 
 set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 usage='Usage: tutor plan|apply|start|next|done|extend|status|nudge|render|prep|serve|join|stop|test [ARGS] [--json]'
+# Registered schemas canonicalize flags before positionals as --name=value.
+# Restore the verb-first argv expected by the shared Python dispatchers.
+bound_flags=()
+while [[ ${1:-} == --*=* ]]; do
+  case $1 in
+    --json=true|--line=true|--help=true) bound_flags+=("${1%=true}") ;;
+    --json=false|--line=false|--help=false) ;;
+    *) bound_flags+=("$1") ;;
+  esac
+  shift
+done
+if (( ${#bound_flags[@]} )); then set -- "$@" "${bound_flags[@]}"; fi
 case ${1:-} in
 --skill)
   copying=false
