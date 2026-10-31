@@ -41,6 +41,15 @@ through the registered command. No default sprint is silently selected.
 - `bashy tutor render STEP --edition ROLE|owner|shared` prints one edition of a
   content item; `~~~private` is owner-only, `~~~private ROLE...` also grants
   named roles access. The shared edition excludes every private block.
+- `bashy tutor demo [--port P]` is the one-command look: a throwaway session in a
+  temporary home (removed on Ctrl-C) with the Display page opened and one phone link.
+  `bashy tutor go "GOAL" --people a,b [--minutes 60] [--format F] [--agent A] [--port P]`
+  runs a real session in your own home in one command (plan, apply, next, serve, open
+  the Display page; prints the owner link, one join link per person and the sprint
+  number for later `bashy tutor status N`). Both run the `demo`/`go` targets of
+  dag.md. When a user says "start a tutor session for <goal> with alice and bob",
+  run `bashy tutor go "<goal>" --people alice,bob`; for "show me a demo" run
+  `bashy tutor demo`.
 - `bashy tutor serve N` / `join URL` / `stop` run the display and per-participant
   pages. `bashy tutor prep DIR [--from PATH]` shapes a content dir before a session.
 
@@ -55,7 +64,7 @@ Render the same source with `--edition owner` for preparation and
 set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-usage='Usage: tutor plan|apply|next|done|extend|status|nudge|render|prep|serve|join|stop|test [ARGS] [--json]'
+usage='Usage: tutor plan|apply|next|done|extend|status|nudge|render|prep|serve|join|stop|demo|go|test [ARGS] [--json]'
 # Registered schemas canonicalize flags before positionals as --name=value.
 # Restore the verb-first argv expected by the shared Python dispatchers.
 bound_flags=()
@@ -95,6 +104,34 @@ join)
     esac
   done
   exec bash "$here/server/run.sh" "${join_args[@]}"
+  ;;
+demo|go)
+  # Thin dispatch: the flows are the `demo` and `go` targets of dag.md.
+  verb=$1; shift
+  params=()
+  goal=
+  while (( $# )); do
+    case $1 in
+      --people=*|--minutes=*|--format=*|--agent=*|--port=*)
+        name=${1%%=*}; params+=("$(printf '%s' "${name#--}" | tr a-z A-Z)=${1#*=}") ;;
+      --people|--minutes|--format|--agent|--port)
+        name=${1#--}; params+=("$(printf '%s' "$name" | tr a-z A-Z)=${2:-}"); shift ;;
+      --json=*|--help=*) ;;
+      -*) echo "tutor $verb: unknown flag $1" >&2; exit 2 ;;
+      *) goal=${goal:+$goal }$1 ;;
+    esac
+    shift
+  done
+  if [[ $verb == go && ( -z $goal || " ${params[*]} " != *" PEOPLE="* ) ]]; then
+    echo 'usage: tutor go "GOAL" --people a,b [--minutes 60] [--format F] [--agent A] [--port P]' >&2; exit 2
+  fi
+  [[ -n $goal ]] && params+=("GOAL=$goal")
+  # The shell captures a non-tty stdout until the command ends, which would hold
+  # the links back while the server runs; /dev/fd/N reaches the real fd directly.
+  if [[ -e /dev/fd/1 ]]; then
+    exec "${BASHY:-bashy}" dag --plain "$here/dag.md" "$verb" "TUTOR_DIR=$here" "${params[@]}" >/dev/fd/1 2>/dev/fd/2
+  fi
+  exec "${BASHY:-bashy}" dag --plain "$here/dag.md" "$verb" "TUTOR_DIR=$here" "${params[@]}"
   ;;
 serve|stop)                   exec bash "$here/server/run.sh" "$@" ;;
 test)

@@ -4,12 +4,12 @@ export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 runner=${BASHY_BIN:-bashy}
 guide=$("$runner" --bashsharp "$here/tutor.bsh" --skill)
-verbs=(plan apply next done extend status nudge render prep serve join stop test)
+verbs=(plan apply next done extend status nudge render prep serve join stop demo go test)
 args=()
 for i in "${!verbs[@]}"; do
   args+=(--set "args.positionals.0.enum.$i=${verbs[$i]}")
 done
-flags=(json minutes people format agent title epic for owner by message line person edition from help goal addr prefix data done open)
+flags=(json minutes people format agent title epic for owner by message line person edition from help goal addr prefix data done open port)
 for i in "${!flags[@]}"; do
   kind=string
   case ${flags[$i]} in json|line|help|done|open) kind=bool ;; esac

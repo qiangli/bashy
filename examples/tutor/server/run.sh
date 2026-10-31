@@ -3,7 +3,7 @@
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 verb=${1:-}
-[[ $verb == serve || $verb == join || $verb == stop ]] || { echo "usage: tutor serve|join|stop" >&2; exit 2; }
+[[ $verb == serve || $verb == join || $verb == stop || $verb == build ]] || { echo "usage: tutor serve|join|stop" >&2; exit 2; }
 
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/tutor
 exe=$cache/tutor-server
@@ -16,5 +16,6 @@ elif [[ ! -x $exe || -n $(find "$here" -maxdepth 1 \( -name '*.go' -o -name go.m
   command -v go >/dev/null 2>&1 || gocmd=("${BASHY:-bashy}" go)
   (cd "$here" && GOWORK=off CGO_ENABLED=0 "${gocmd[@]}" build -trimpath -o "$exe" .) || { echo "tutor: cannot build the server (need Go)" >&2; exit 1; }
 fi
+if [[ $verb == build ]]; then echo "$exe"; exit 0; fi
 export BASHY_BIN=${BASHY_BIN:-${BASHY:-bashy}}
 exec "$exe" "$@"
