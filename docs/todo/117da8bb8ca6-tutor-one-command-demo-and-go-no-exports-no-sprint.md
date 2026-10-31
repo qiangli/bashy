@@ -3,16 +3,18 @@ id: 117da8bb8ca6
 kind: enhancement
 title: 'tutor: one-command demo and go (no exports, no sprint number, opens the page)'
 seq: 3031
-status: assigned
+status: done
 priority: p0
 labels:
     - tutor
 created: 2026-10-31T06:00:40.141277Z
-weave: 411
+weave: 412
 assignee: claude-sonnet5.5
 sprint: 547
 sprint_id: 1422bece-2466-50b8-986f-160a56a64f00
 sprint_title: Teacher tools · tutor — AI-guided timeboxed sessions
+closed: 2026-10-31T07:29:26.2993Z
+closed_by: s547-manager
 ---
 
 Operator 2026-10-31 (blocks close): the try flow is too complicated even for an engineer; make it one command, inside examples/tutor only.
