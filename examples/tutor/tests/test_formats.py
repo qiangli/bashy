@@ -102,10 +102,10 @@ class FormatFlows(TempBashy):
     def test_class_is_an_example_format(self):
         draft, sprint = self.apply_format('class')
         self.assertEqual(draft['roles'], ['teacher', 'student'])
-        self.assertEqual(draft['audience'], 'students aged 13 and up')
+        self.assertEqual(draft['audience'], 'learners; keep language plain and encouraging')
         value = json.loads(self.tutor('next', sprint, '--json').stdout)
         self.assertEqual(value['roles'], {'owner': 'teacher', 'participants': ['student']})
-        self.assertIn('students aged 13 and up', common.metadata(int(sprint))['audience'])
+        self.assertIn('learners; keep language plain and encouraging', common.metadata(int(sprint))['audience'])
         item = self.repo / 'example.md'
         item.write_text('---\nformat: class\n---\n~~~private\nAnswer\n~~~\n')
         self.assertIn('Answer', self.tutor('render', str(item), '--edition', 'teacher').stdout)

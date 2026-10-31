@@ -201,6 +201,7 @@ def template_draft(fmt, args, people):
             "goal": args.goal, "epic": args.epic, "minutes": args.minutes,
             "format": fmt["name"], "roles": fmt["roles"],
             "audience": fmt["audience"], "tone": fmt["tone"], "people": people, "source": "template",
+            "default_done_when": fmt["default_done_when"],
             "steps": template_steps(fmt, args.minutes, people, args.goal)}
 
 
@@ -421,12 +422,12 @@ def cmd_apply(argv):
     for index, step in enumerate(draft["steps"], 1):
         labels = common.step_labels(index, step["minutes"],
                                    step.get("role", common.participant_roles(draft.get("roles", ["owner", "participant"]))[0]), step.get("phase", ""))
-        todo = ["todo", "add", step["title"], "--sprint", str(sprint)]
+        todo = ["todo", "add", "--user", step["title"], "--sprint", str(sprint)]
         if step.get("owner"):
             todo += ["--owner", step["owner"]]
         for label in labels:
             todo += ["--label", label]
-        todo += ["--note", step.get("done_when") or ""]
+        todo += ["--note", step.get("done_when") or draft.get("default_done_when") or DEFAULT_DONE_WHEN]
         result = common.bashy(*todo, "--json", json_out=True)
         created.append({"index": index, "id": result.get("id"),
                         "title": step["title"], "owner": step.get("owner", "")})

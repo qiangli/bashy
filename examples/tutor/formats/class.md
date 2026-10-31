@@ -3,7 +3,7 @@ name: class
 roles:
 - teacher
 - student
-audience: students aged 13 and up
+audience: learners; keep language plain and encouraging
 minutes: 90
 phases:
 - warm-up 10

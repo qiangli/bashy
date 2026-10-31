@@ -70,7 +70,7 @@ class NudgeTest(TempBashy):
         self.real_bashy = _real_bashy()
 
     def _add_step(self, title, owner, step_label, done_when="", timebox="10m", role="participant"):
-        args = ["bashy", "todo", "add", title, "--sprint", str(self.sprint), "--owner", owner, "--label", step_label, "--label", f"timebox-{timebox}", "--label", f"role-{role}", "--json"]
+        args = ["bashy", "todo", "add", "--user", title, "--sprint", str(self.sprint), "--owner", owner, "--label", step_label, "--label", f"timebox-{timebox}", "--label", f"role-{role}", "--json"]
         if done_when:
             args.extend(["--note", done_when])
         proc = subprocess.run(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -80,7 +80,7 @@ class NudgeTest(TempBashy):
         return data["id"]
 
     def _start(self, todo_id):
-        proc = subprocess.run(["bashy", "todo", "start", todo_id], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        proc = subprocess.run(["bashy", "todo", "start", "--user", todo_id], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if proc.returncode != 0:
             self.fail(f"todo start failed: {proc.stderr}")
 

@@ -4,7 +4,7 @@ tutor composes plain bashy commands; it never imports klatch, form or any
 other tool. State lives in existing primitives:
 
   session      = a sprint card       (bashy sprint add / start / extend / stop)
-  step         = a todo on that card (bashy todo add --sprint N --owner PERSON)
+  step         = a todo on that card (bashy todo add --user --sprint N --owner PERSON)
   people       = registered persons  (bashy person add)
   run log      = $XDG_DATA_HOME/bashy/tutor/<sprint>.jsonl (append-only events)
 

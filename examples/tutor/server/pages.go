@@ -2,11 +2,6 @@ package main
 
 import kit "desk-kit"
 
-// Gaps in the desk kit (no countdown or full-width action element); sizing only, kit tokens only.
-const gapCSS = `.tutor-clock{font-variant-numeric:tabular-nums;font-size:clamp(3.5rem,22vw,6rem);line-height:1}
-.tutor-clock.proj{font-size:clamp(5rem,26vw,22rem);margin:2vh 0}.tutor-clock[data-over]{color:var(--desk-danger-ink)}
-.tutor-proj{text-align:center}.tutor-done{width:100%;justify-content:center;padding:14px}`
-
 const pageJS = `
 function h(tag,attrs,...kids){const e=document.createElement(tag);for(const k in attrs||{})e.setAttribute(k,attrs[k]);for(const c of kids)e.append(c);return e}
 function fmt(s){const a=Math.abs(s);return (s<0?'+':'')+Math.floor(a/60)+':'+String(a%60).padStart(2,'0')}
@@ -22,7 +17,7 @@ function start(url,render,headers){URL_=url;RENDER=render;HDR=headers||{};load()
 function safeLink(t){return /^https?:\/\/[^\s]+$/.test(t||'')?h('a',{href:t,target:'_blank',rel:'noopener noreferrer'},t):document.createTextNode(t||'')}
 async function post(path,body,headers){const r=await fetch(PFX+path,{method:'POST',headers:{'content-type':'application/json',...(headers||{})},body:JSON.stringify(body||{})});const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||r.statusText);return j}
 function stepBadges(steps){return h('div',{class:'desk-statuses'},...(steps||[]).map(s=>h('span',{class:'desk-badge','data-status':s.status==='done'?'filled-by-agent':s.status==='doing'?(s.overdue?'failed':'answered'):'pending'},s.index+'. '+s.title)))}
-function clockEl(sec,cls){const c=h('div',{class:'desk-h1 tutor-clock'+(cls?' '+cls:''),id:'clock','aria-live':'off'},fmt(sec));if(sec<0)c.dataset.over='';return c}
+function clockEl(sec,cls){const c=h('div',{class:'desk-h1',id:'clock','aria-live':'off'},fmt(sec));if(sec<0)c.dataset.over='';return c}
 function setClock(sec){const c=document.getElementById('clock');if(!c)return false;c.textContent=fmt(sec);if(sec<0)c.dataset.over='';else delete c.dataset.over;return true}
 function roleLabel(word,fallback){return word?word[0].toUpperCase()+word.slice(1):fallback}
 
@@ -42,7 +37,7 @@ function renderParticipant(root,st){
   const old=document.getElementById('evidence');
   if(old&&root.dataset.step===m.id){setClock(sec);return}
   const ev=h('input',{id:'evidence',placeholder:'Link to your work (optional)',type:'url',inputmode:'url',autocomplete:'off'});
-  const b=h('button',{class:'desk-btn tutor-done',id:'done',type:'button'},'Done');
+  const b=h('button',{class:'desk-btn',id:'done',type:'button'},'Done');
   b.onclick=async()=>{b.disabled=true;try{await post('/s/'+TOKEN+'/done',{evidence:ev.value.trim()});say('Marked done.');await load()}catch(e){say(e.message,'error');b.disabled=false}};
   kids.push(h('div',{class:'desk-panel'},h('p',{class:'desk-muted'},'Step '+m.index+' of '+m.total),h('h1',{class:'desk-h1'},m.title),clockEl(sec),
     h('p',{class:'desk-muted'},m.done_when?'Done when: '+m.done_when:'')),
@@ -70,7 +65,7 @@ function renderOwner(root,st){
 `
 
 const (
-	displayMain     = `<main class="desk-main tutor-proj"><div id="root"><p class="desk-muted">Loading…</p></div></main>`
+	displayMain     = `<main class="desk-main"><div id="root"><p class="desk-muted">Loading…</p></div></main>`
 	ownerMain       = `<main class="desk-main"><div id="root"><p class="desk-muted">Loading…</p></div></main>`
 	participantMain = `<main class="desk-main"><div id="root"><p class="desk-muted">Loading…</p></div></main>`
 )
@@ -79,7 +74,7 @@ func page(title, id, main, script string) []byte {
 	header := `<div class="desk-item-header"><span class="desk-id">` + id + `</span>` +
 		`<span class="desk-badge" id="statusBadge" data-status="pending">waiting</span></div>`
 	return kit.Page("tutor", title, kit.AppBar("tutor", "", header, "")+
-		`<style>`+gapCSS+`</style>`+main+
+		main+
 		`<div id="msg" class="desk-alert" data-kind="ok" data-desk-alert role="status" aria-live="polite"></div>`+
 		`<script>`+pageJS+script+`</script>`)
 }

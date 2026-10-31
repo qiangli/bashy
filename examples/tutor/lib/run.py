@@ -6,6 +6,7 @@ import os
 import re
 import sys
 
+from nudge import fetch_body
 from common import bashy, emit, fail, log_path, metadata, participant_roles
 
 
@@ -84,7 +85,7 @@ def status(sprint, at=None):
     path = log_path(sprint)
     if path.exists():
         events = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-    todos = records(bashy('todo', 'list', '--all', '--json'), 'todo')
+    todos = records(bashy('todo', 'list', "--user", '--all', '--json'), 'todo')
     steps = []
     current = None
     for item in todos:
@@ -101,7 +102,8 @@ def status(sprint, at=None):
                     owner=item.get('assignee', item.get('owner', '')),
                     role=role, status=item.get('state', item.get('status', 'todo')),
                     timebox_s=minutes * 60, started_at=None, done_at=None,
-                    overdue=False, evidence=None)
+                    overdue=False, evidence=None,
+                    done_when=fetch_body(str(item['id'])) or 'Show the outcome of this step.')
         if 'step-done' in labels:
             step['status'] = 'done'
         for event in events:
@@ -141,7 +143,11 @@ def one_line(value):
         participants = [s for s in value['steps'] if s['role'] in (value.get('roles', {}).get('participants') or [value.get('roles', {}).get('owner', 'participant')])]
         total = len(participants)
         done = sum(s['status'] == 'done' for s in participants)
-        return 'Done · %d/%d steps' % (done, total) if total and done == total else 'Not started · %d steps' % total
+        if total and done == total:
+            return 'Done · %d/%d steps' % (done, total)
+        if done:
+            return '%d/%d done' % (done, total)
+        return 'Not started · %d steps' % total
     seconds = abs(step['remaining_s'])
     line = 'Step %d/%d · %s · %d:%02d %s' % (
         step['index'], step['total'], step['title'], seconds // 60, seconds % 60,
@@ -164,9 +170,9 @@ def transition(sprint, step, target, at, evidence=None):
     if target == 'done':
         # People cannot close sprint stories; the session manager (the owner's
         # agent) accepts them later with `bashy sprint accept N ID -m EVIDENCE`.
-        bashy('todo', 'edit', step['id'], '--label', 'step-done')
+        bashy('todo', 'edit', "--user", step['id'], '--label', 'step-done')
     else:
-        bashy('todo', 'status', step['id'], target)
+        bashy('todo', 'status', "--user", step['id'], target)
     log(sprint, step, 'step_start' if target == 'doing' else 'done', at,
         **({'evidence': evidence} if target == 'done' else {}))
 

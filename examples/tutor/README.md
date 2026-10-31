@@ -23,7 +23,7 @@ including a separate app registry, and removes them afterward.
 
 ```sh
 bashy tutor plan 'Build and demonstrate a small improvement' \
-  --minutes 90 --people ana,ben --format examples/tutor/formats/session.md \
+  --minutes 90 --people alice,bob --format examples/tutor/formats/session.md \
   --title 'Session' --json > draft.json
 # Review/edit titles, owners, timeboxes and observable done_when evidence.
 bashy tutor apply draft.json --json
@@ -34,7 +34,7 @@ bashy tutor status N --line
 bashy tutor done N STEP -m 'Working result demonstrated' --json
 bashy tutor next N --json
 bashy tutor extend N STEP --by 5m --json
-bashy tutor nudge N --person ana --json
+bashy tutor nudge N --person alice --json
 ```
 
 STEP is the todo ID or its original numbered step label. Participant progress
@@ -60,9 +60,9 @@ your own phases.
 
 ```sh
 bashy tutor plan 'Agree on a release decision' --minutes 30 \
-  --people ana,ben --format meeting --json > meeting.json
+  --people alice,bob --format meeting --json > meeting.json
 bashy tutor plan 'Build and demonstrate one small improvement' --minutes 25 \
-  --people me --format solo --json > solo.json
+  --people alice --format solo --json > solo.json
 ```
 
 Review either draft, then `apply`, start the sprint with a manager, and use
@@ -75,7 +75,7 @@ draft; an unavailable or invalid agent response falls back to the template.
 cp examples/tutor/formats/session.md my-meeting.md
 # Edit my-meeting.md, then:
 bashy tutor plan 'Decide the next experiment' --format ./my-meeting.md \
-  --minutes 30 --people ana,ben --json > draft.json
+  --minutes 30 --people alice,bob --json > draft.json
 ```
 
 The format is the software-shaping surface: change phases and their minute
@@ -154,3 +154,10 @@ build an example (25m), demonstrate the result (20m), and reflect (10m),
 plus three owner steps. The no-agent run plans from the template; the stub run supplies a
 deterministic planning response. Neither starts a sprint clock. It does not prove a real agent launch, LAN/phone access or chat delivery.
 No live board, accounts or server are changed.
+
+Session data is private and local. Plans print to stdout (save them in your chosen
+local data directory); steps live in bashy's personal todo store under HOME.
+The run log lives in `$XDG_DATA_HOME/bashy/tutor` (default
+`~/.local/share/bashy/tutor`). Server state uses the shared kit directory
+`$BASHY_HOME/desk/tutor`, falling back to `$XDG_DATA_HOME/bashy/desk/tutor`
+or `~/.local/share/bashy/desk/tutor`; `--data` can override it.

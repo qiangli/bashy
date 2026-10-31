@@ -2,7 +2,7 @@
 """Real registration and rehearsal; every mutable store is temporary.
 
 The stub only supplies a chat draft. It never
-launches an agent. This proves tutor's boundary, not a managed agent session.
+launches an agent. This proves tutor's boundary, not an agent-led session.
 """
 import argparse
 import json
@@ -41,7 +41,7 @@ def verify(mode):
         assert "tutor.bsh" in atlas
         assert list((root / "apps").glob("*")), "app must be in isolated registry"
         goal = "Build and demonstrate a small improvement"
-        draft = json.loads(tutor("plan", goal, "--minutes", "90", "--people", "ana,ben", "--json"))
+        draft = json.loads(tutor("plan", goal, "--minutes", "90", "--people", "alice,bob", "--json"))
         assert draft["source"] == "template"
         if mode == "stub":
             # A deterministic response at the chat boundary; no provider credentials.
@@ -73,7 +73,7 @@ def verify(mode):
         owners = [s for s in draft["steps"] if s["role"] == "owner"]
         draft["steps"] = [
             dict(title=title, minutes=minutes, done_when=done, phase=phase,
-                 role="participant", owner=["ana", "ben"][i % 2])
+                 role="participant", owner=["alice", "bob"][i % 2])
             for i, (title, minutes, done, phase) in enumerate(agenda)
         ] + owners
         path = root / "session.json"
@@ -86,13 +86,13 @@ def verify(mode):
         tutor("done", sprint, result["steps"][0]["id"], "-m", "Rehearsal goal evidence", "--json")
         tutor("next", sprint, "--json")
         line = tutor("status", sprint, "--line").strip()
-        assert line == "Step 2/5 · Explore options · 20:00 left · ben", line
+        assert line == "Step 2/5 · Explore options · 20:00 left · bob", line
         print(f"{mode}: {line}")
         direct = json.loads(call("--bashsharp", HERE / "tutor.bsh", "status", sprint, "--json"))
         registered = json.loads(tutor("status", sprint, "--json"))
         assert direct == registered and len(direct["steps"]) == 8
         assert direct["steps"][0]["evidence"] == "Rehearsal goal evidence"
-        hint = json.loads(tutor("nudge", sprint, "--person", "ben", "--json"))
+        hint = json.loads(tutor("nudge", sprint, "--person", "bob", "--json"))
         assert hint["done_when"] == "Options compared"
         os.environ["TUTOR_SPRINT"] = sprint
         receipt = json.loads(call("skill", "run", "tutor", "--json"))
