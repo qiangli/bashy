@@ -33,6 +33,28 @@ class SmokeRegressions(TempBashy):
 
 
 class RegistrationTest(TempBashy):
+    def test_server_build_ignores_unrelated_go_workspace(self):
+        import os
+        import subprocess
+        from tests.helpers import HERE
+
+        unrelated = self.root / 'unrelated'
+        unrelated.mkdir()
+        (unrelated / 'go.mod').write_text('module unrelated\n\ngo 1.22\n')
+        workspace = self.root / 'go.work'
+        workspace.write_text('go 1.22\n\nuse ./unrelated\n')
+        cache = self.root / 'cache'
+        env = dict(os.environ, GOWORK=str(workspace), XDG_CACHE_HOME=str(cache))
+        env.pop('TUTOR_SERVER_BIN', None)
+        # Missing sprint exits at argument validation after building, without
+        # opening a listener or reading any session state.
+        result = subprocess.run(['bash', str(HERE / 'server' / 'run.sh'), 'serve'],
+                                env=env, text=True, capture_output=True, timeout=120)
+        self.assertTrue((cache / 'bashy' / 'tutor' / 'tutor-server').is_file(),
+                        result.stdout + result.stderr)
+        self.assertIn('usage: tutor serve N', result.stderr)
+        self.assertNotIn('cannot build the server', result.stderr)
+
     def test_join_message_forwarding(self):
         import os
         import subprocess

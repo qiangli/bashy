@@ -14,7 +14,7 @@ const here=dirname(fileURLToPath(import.meta.url));
 const dir=await mkdtemp(join(tmpdir(),'tutor-browser-'));
 let exe=process.env.TUTOR_SERVER_BIN;
 if(!exe){exe=join(dir,'tutor-server');
- const b=spawnSync('go',['build','-o',exe,'.'],{cwd:join(here,'server'),encoding:'utf8'});
+ const b=spawnSync('go',['build','-o',exe,'.'],{cwd:join(here,'server'),encoding:'utf8',env:{...process.env,GOWORK:'off',CGO_ENABLED:'0'}});
  assert.equal(b.status,0,b.stderr)}
 
 const state=join(dir,'status.json'),calls=join(dir,'calls.log');

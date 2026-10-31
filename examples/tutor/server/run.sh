@@ -14,7 +14,7 @@ elif [[ ! -x $exe || -n $(find "$here" -maxdepth 1 \( -name '*.go' -o -name go.m
   mkdir -p "$cache"
   gocmd=(go)
   command -v go >/dev/null 2>&1 || gocmd=("${BASHY:-bashy}" go)
-  (cd "$here" && "${gocmd[@]}" build -o "$exe" .) || { echo "tutor: cannot build the server (need Go)" >&2; exit 1; }
+  (cd "$here" && GOWORK=off CGO_ENABLED=0 "${gocmd[@]}" build -trimpath -o "$exe" .) || { echo "tutor: cannot build the server (need Go)" >&2; exit 1; }
 fi
 export BASHY_BIN=${BASHY_BIN:-${BASHY:-bashy}}
 exec "$exe" "$@"
