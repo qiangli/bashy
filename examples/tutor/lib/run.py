@@ -130,7 +130,8 @@ def status(sprint, at=None):
     for step, elapsed in steps:
         if step['status'] == 'doing' and current is None:
             owners = [s.strip() for s in step['owner'].split(',') if s.strip()]
-            current = dict(index=step['index'], total=len(steps), id=step['id'],
+            sequence = [s for s, _ in steps if s['role'] == step['role']]
+            current = dict(index=sequence.index(step) + 1, total=len(sequence), id=step['id'],
                            title=step['title'], owners=owners, timebox_s=step['timebox_s'],
                            elapsed_s=elapsed, remaining_s=step['timebox_s'] - elapsed,
                            overdue=step['overdue'])
@@ -141,8 +142,9 @@ def status(sprint, at=None):
 def one_line(value):
     step = value['current']
     if step is None:
-        total = len(value['steps'])
-        done = sum(s['status'] == 'done' for s in value['steps'])
+        students = [s for s in value['steps'] if s['role'] == 'student']
+        total = len(students)
+        done = sum(s['status'] == 'done' for s in students)
         return 'Done · %d/%d steps' % (done, total) if total and done == total else 'Not started · %d steps' % total
     seconds = abs(step['remaining_s'])
     line = 'Step %d/%d · %s · %d:%02d %s' % (
@@ -228,7 +230,7 @@ def main(argv):
             if current:
                 transition(args.sprint, select_step(steps, current['id']), 'done', at)
             pending = [s for s in steps if s['status'] in ('todo', 'assigned')
-                       and (not current or s['index'] > current['index'])]
+                       and (not current or s['index'] > select_step(steps, current['id'])['index'])]
             if pending:
                 transition(args.sprint, pending[0], 'doing', at)
         elif args.verb == 'done':

@@ -411,7 +411,7 @@ def cmd_apply(argv):
             todo += ["--owner", step["owner"]]
         for label in labels:
             todo += ["--label", label]
-        todo += ["--note", "done when: %s" % (step.get("done_when") or "")]
+        todo += ["--note", step.get("done_when") or ""]
         result = common.bashy(*todo, "--json", json_out=True)
         created.append({"index": index, "id": result.get("id"),
                         "title": step["title"], "owner": step.get("owner", "")})
