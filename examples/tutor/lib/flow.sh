@@ -56,11 +56,32 @@ start_session() {
   return 1
 }
 
+# kill_tree PID: TERM then KILL PID and all its descendants (the server's own
+# `bashy tutor ...` polling children must not outlive it).
+kill_tree() {
+  local pid=$1 kid
+  for kid in $(pgrep -P "$pid" 2>/dev/null); do kill_tree "$kid"; done
+  kill "$pid" 2>/dev/null || true
+}
+
 stop_server() {
   [[ -n ${SERVE_PID:-} ]] || return 0
-  kill "$SERVE_PID" 2>/dev/null || true
+  kill_tree "$SERVE_PID"
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$SERVE_PID" 2>/dev/null || break; sleep 0.1; done
+  kill -9 "$SERVE_PID" 2>/dev/null || true
   wait "$SERVE_PID" 2>/dev/null || true
   SERVE_PID=
+}
+
+# rm_dir DIR: remove DIR, retrying briefly while late writers drain.
+rm_dir() {
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    rm -rf "$1" 2>/dev/null && [[ ! -e $1 ]] && return 0
+    sleep 0.2
+  done
+  rm -rf "$1"
 }
 
 # print_links WORK SPRINT [PERSON]: labelled links, then open the OWNER page.
