@@ -41,3 +41,7 @@ All verbs except serve/join/stop/prep now work (plan, apply, start, next, done, 
 Bugs found by the manager's smoke (fix them in this story, each with a focused test; you may edit lib/run.py and lib/plan.py for these only):
 1. `status --line` / `current.total` counts teacher steps: with 5 student + 3 teacher steps it prints `Step 2/8`. Student sequence must count role-student steps only (`Step 2/5`); teacher steps stay in `steps[]`.
 2. `apply` stores the todo note as `done when: X` and nudge/status read it back with the prefix, giving `done when: done when: X`. Strip the prefix on read (or store without it) so `done_when` is just `X`.
+
+## Rework (manager, 2026-10-30 ~19:45 PDT — run #398 merged at bashy 4cdcf20b/79086fd0)
+Bug found in the manager's registered-command smoke: `bashy tutor join URL --done -m EVIDENCE` reaches the Go join as `--message=EVIDENCE` (the registry canonicalizes -m to --message) and fails: `tutor: flag provided but not defined: -message`. Students could never attach evidence through `bashy tutor join`.
+Fix in `tutor.bsh` (your file): for the join verb, map `--message=X` / `--message X` to `-m X` before handing off to server/run.sh (leave server/ untouched). Add a focused test to tests/test_registration.py that registers into a temp home (BASHY_APPS_DIR temp) and runs `bashy tutor join http://127.0.0.1:1/s/x --done -m ev` against a stub or an unreachable URL, asserting the error is NOT "flag provided but not defined". Run the tutor suite; commit with this story's trailers; submit.
