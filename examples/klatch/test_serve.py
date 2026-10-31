@@ -53,8 +53,8 @@ def opener(url, timeout=None):
 
 
 class Runner:
-    def __init__(self, binary="/pinned/klatch"):
-        self.calls, self.binary, self.secrets = [], binary, {}
+    def __init__(self, binary="/pinned/klatch", outpost=False):
+        self.calls, self.binary, self.secrets, self.outpost = [], binary, {}, outpost
 
     def __call__(self, *args, stdin=None, check=True):
         self.calls.append((args, stdin))
@@ -63,6 +63,8 @@ class Runner:
                 "version": "9-bashy.1",
                 "assets": {"test/arm64": {"url": SERVER_URL, "sha256": SHA["server"]}},
                 "notes": "web bundle. Web asset URL: %s (sha256 %s)." % (WEB_URL, SHA["web"])}}})
+        if args[:3] == ("outpost", "apps", "list") and not self.outpost:
+            raise SystemExit(1)
         if args[:2] == ("secret", "show"):
             return self.secrets.get(args[2], "")
         if args[:2] == ("secret", "gen"):
@@ -76,7 +78,7 @@ class Runner:
 
 
 def args(data, **kw):
-    base = dict(data=str(data), port=7199, lan=False, route=None, mesh=None, domain=None,
+    base = dict(data=str(data), port=7199, lan=False, domain=None,
                 min_free=0.0, admin_ref="klatch/admin", url_ref="klatch/url")
     base.update(kw)
     return argparse.Namespace(**base)
@@ -120,23 +122,22 @@ class ServeTest(unittest.TestCase):
         self.assertIn('"0.0.0.0:7199"', unit)
         self.assertEqual(out["reach"], ["lan"])
         self.assertRegex(out["url"], r"^http://\d+\.\d+\.\d+\.\d+:7199$")
-        self.assertNotIn("outpost", " ".join(r.verbs()))
+        self.assertNotIn("outpost apps add", " ".join(r.verbs()))
 
-    def test_route_uses_owner_outpost_app_and_stays_loopback(self):
-        out, r = self.run_serve(route="chat")
-        self.assertIn(("outpost", "apps", "add", "chat", "--url", "http://127.0.0.1:7199"),
-                      [a for a, _ in r.calls])
+    def test_outpost_present_registers_one_app_and_stays_loopback(self):
+        out, r = self.run_serve(runner=Runner(outpost=True))
+        calls = [a for a, _ in r.calls]
+        self.assertIn(("outpost", "apps", "add", "klatch", "--url", "http://127.0.0.1:7199"), calls)
+        self.assertFalse([a for a in calls if a[:2] == ("outpost", "mesh")])
         unit = next(stdin for a, stdin in r.calls if a[:2] == ("service", "add"))
         self.assertIn('"127.0.0.1:7199"', unit)
-        self.assertEqual(out["url"], "outpost-app:chat")
+        self.assertEqual(out["url"], "outpost-app:klatch")
+        self.assertEqual(out["reach"], ["outpost"])
 
-    def test_route_mesh_and_lan_combine(self):
-        out, r = self.run_serve(route="chat", mesh="chat", lan=True)
-        calls = [a for a, _ in r.calls]
-        self.assertIn(("outpost", "mesh", "service", "add", "chat", "127.0.0.1:7199"), calls)
-        self.assertIn(("outpost", "apps", "add", "chat", "--url", "http://127.0.0.1:7199"), calls)
-        self.assertEqual(out["reach"], ["lan", "mesh", "route"])
-        self.assertEqual(out["reaches"]["mesh"], "outpost-mesh:chat")
+    def test_no_outpost_lan_is_the_fallback(self):
+        out, r = self.run_serve(lan=True)
+        self.assertNotIn(("outpost", "apps", "add"), [a[:3] for a, _ in r.calls])
+        self.assertEqual(out["reach"], ["lan"])
 
     def test_existing_admin_secret_is_kept(self):
         r = Runner()
