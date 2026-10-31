@@ -33,6 +33,38 @@ class SmokeRegressions(TempBashy):
 
 
 class RegistrationTest(TempBashy):
+    def test_join_message_forwarding(self):
+        import os
+        import subprocess
+        from tests.helpers import HERE
+
+        os.environ['BASHY_APPS_DIR'] = str(self.root / 'apps')
+        stub = self.root / 'join-stub'
+        stub.write_text('#!/usr/bin/env python3\n'
+                        'import json, sys\n'
+                        'print(json.dumps(sys.argv[1:]))\n')
+        stub.chmod(0o755)
+        os.environ['TUTOR_SERVER_BIN'] = str(stub)
+        registered = subprocess.run(['bash', str(HERE / 'register.sh')],
+                                    text=True, capture_output=True, timeout=30)
+        self.assertEqual(registered.returncode, 0, registered.stdout + registered.stderr)
+        url = 'http://127.0.0.1:1/s/x'
+        for flags in [('-m', 'ev'), ('--message=ev',), ('--message', 'ev')]:
+            for registered_command in (True, False):
+                with self.subTest(flags=flags, registered=registered_command):
+                    command = (['bashy', 'tutor'] if registered_command else
+                               ['bashy', '--bashsharp', str(HERE / 'tutor.bsh')])
+                    result = subprocess.run(command + ['join', url, '--done', *flags],
+                                            text=True, capture_output=True, timeout=30)
+                    self.assertNotIn('flag provided but not defined', result.stderr)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    args = json.loads(result.stdout)
+                    self.assertEqual(args[:2], ['join', url])
+                    self.assertTrue('--done' in args or '--done=true' in args)
+                    self.assertIn('-m', args)
+                    self.assertEqual(args[args.index('-m') + 1], 'ev')
+                    self.assertFalse(any(arg.startswith('--message') for arg in args))
+
     def test_real_registration_duality_and_rehearsal(self):
         import subprocess
         import sys

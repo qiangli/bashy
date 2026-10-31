@@ -85,7 +85,19 @@ start|next|done|extend|status) exec python3 "$here/lib/run.py" "$@" ;;
 nudge)                        exec python3 "$here/lib/nudge.py" "$@" ;;
 render)                       exec python3 "$here/lib/render.py" "$@" ;;
 prep)                         exec python3 "$here/lib/prep.py" "$@" ;;
-serve|join|stop)              exec bash "$here/server/run.sh" "$@" ;;
+join)
+  # The command registry expands -m to --message; Go join accepts only -m.
+  join_args=()
+  for arg in "$@"; do
+    case $arg in
+      --message=*) join_args+=(-m "${arg#--message=}") ;;
+      --message)   join_args+=(-m) ;;
+      *)           join_args+=("$arg") ;;
+    esac
+  done
+  exec bash "$here/server/run.sh" "${join_args[@]}"
+  ;;
+serve|stop)                   exec bash "$here/server/run.sh" "$@" ;;
 test)
   cd "$here"
   python3 -m unittest discover -s tests -t . -v
