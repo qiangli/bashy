@@ -24,3 +24,10 @@ CLI (lib/run.py; register.sh flags; skill text one line each):
 4. `tutor move N STEP --up|--down|--to K` — reorder upcoming (not done) steps by rewriting their `step-NN` labels via `bashy todo edit --label/--unlabel` (personal store, as today) and a `reorder` event; done/current steps keep their place.
 Owner page (server, desk kit only — no new styling): Pause/Resume toggle, buttons -1 / +1 / +5 min and a small custom minutes input, a step list where each row has Go (jump) and ↑/↓ for upcoming rows, and Skip. All actions go through the existing owner-key-protected POST path and call the CLI verbs above (server holds no second state). Display + participant pages show "Paused" while paused and the updated remaining time.
 Tests: one focused test per control in tests/test_run.py (pause freezes elapsed with TUTOR_NOW; resume continues; time ±; goto back and forward; skip; move up/down/to and that labels are rewritten); Go tests for the new owner actions (owner key required, participant token refused); browser-test: owner page shows the controls and Display shows "Paused" after pause. Keep all existing gates and closure greps green. Commit with this story's trailers; submit with the exact CLI examples.
+
+## Bundled UX bug (operator): owner page must be obvious in demo/go
+`tutor demo` and `tutor go` print clearly labelled lines and OPEN THE OWNER PAGE by default (not the Display):
+  `<Owner role title> (private): URL`   e.g. "Teacher (private): …" with the class format, "Owner (private): …" with the default format (title = capitalized owner role from the format — generic, no hard-coded "Teacher")
+  `Display (projector): URL`
+  `Phone for <name>: URL`   (one line per participant; demo prints one)
+Update lib/flow.sh + dag.md targets + test_flows.py (assert the three labels and that the opener receives the owner URL first).
