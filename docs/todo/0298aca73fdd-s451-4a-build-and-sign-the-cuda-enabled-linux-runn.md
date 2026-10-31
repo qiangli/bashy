@@ -1,0 +1,20 @@
+---
+id: 0298aca73fdd
+kind: task
+title: 'S451.4a: build and sign the CUDA-enabled Linux runner prerequisite'
+seq: 2487
+status: todo
+priority: p1
+labels:
+    - gpu
+    - release
+    - deferred
+created: 2026-10-20T17:14:54.220334Z
+sprint: 546
+sprint_id: ae111a75-889f-50a4-a423-de1bab0fbca6
+sprint_title: On-demand cloud GPU workers for large/custom Ollama models via Cloudbox and Outpost (AWS EC2 first)
+---
+
+Scoped S451.4 prerequisite from docs/sprint-451-master-execution-plan.md. Build the official pinned Ollama Linux amd64 CUDA runner in the existing Bashy verified-build pipeline; retain pristine upstream provenance, native protocol/no-egress gate, compiled-input license/vulnerability/SBOM review, per-asset Sigstore identity and digest verification. Do not clear a hold without measured evidence. First red: a recipe fixture test must fail when the CUDA target lacks its compiled backend/shared libraries or release manifest/signatures. Host: Dragon for recipe/unit only, puppy.local for local NVIDIA runtime qualification; hosted CI for native build/audit/sign. No GPU droplet without explicit operator approval. Gate: bash builds/check.sh ollama, hosted build/audit success, gh release asset/signature verification, then puppy CUDA model-load probe. Evidence: docs/sprint-451/evidence.md S451.4. The S451.4 story remains owner of GPU provisioning and final acceptance.
+
+Operator decision 2026-10-20 (Sprint 451 card): a pinned, sha256-verified NVIDIA CUDA toolkit may be used as a build-only SDK in Bashy CI, with its exact version in the SBOM. The NVIDIA driver and CUDA runtime libraries are host-provided and dynamically loaded; never bundle, statically link, or redistribute them. Missing host driver/runtime must fail closed with an actionable message, with CPU only on explicit selection. Audit, SBOM, keyless Sigstore, and binmgr identity/digest verification still apply to our runner bytes. Prove GPU model load on puppy.local before release. The policy clarification is in docs/bashy-service-supply-chain-policy.md. This does not authorize a GPU droplet.
