@@ -50,3 +50,7 @@ Shape each step around a visible outcome:
   too; they are what makes the session repeatable next week.
 - Honour the tone: the session is timeboxed so participants can be stuck safely.
   Hints stay hints.
+- Timers are guides, never limits. Overtime shows as a neutral "+M:SS over",
+  never as an error. Participants can browse every step and mark Done at any
+  time; the owner moves the tempo live (pause, add or remove time, jump, skip,
+  reorder) and the plan is only the starting point.
