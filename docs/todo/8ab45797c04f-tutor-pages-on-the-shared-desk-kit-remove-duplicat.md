@@ -3,12 +3,11 @@ id: 8ab45797c04f
 kind: refactor
 title: 'tutor: pages on the shared desk kit + remove duplicate start (audit)'
 seq: 3024
-status: assigned
+status: todo
 priority: p0
 labels:
     - tutor
 created: 2026-10-31T04:34:25.711791Z
-weave: 406
 assignee: claude-sonnet5.5
 sprint: 547
 sprint_id: 1422bece-2466-50b8-986f-160a56a64f00
@@ -29,3 +28,10 @@ B. Duplicate audit removals (operator rule: keep only what bashy lacks):
 Acceptance: `git grep -n -E "func .*Token|Content-Security-Policy|SameSite" examples/tutor/server` shows only kit calls (no local reimplementation); `git grep -n -w start examples/tutor/tutor.bsh examples/tutor/register.sh` has no tutor `start` verb; tutor suite, `GOWORK=off go test -race ./...` in server, verify-duality.py and browser-test.mjs all green (Playwright: PLAYWRIGHT_MODULE=/private/tmp/d1pw/node_modules/playwright/index.mjs CHROMIUM_PATH=$HOME/Library/Caches/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64/chrome-headless-shell). Commit with this story's trailers; submit with the grep outputs and a screenshot path of the phone page.
 
 D. The moved doc (examples/tutor/docs/plan-generic-formats.md) must be scrubbed: no cohort, school, date or host names (the quoted acceptance grep pattern counts — describe it generically, e.g. "forbidden cohort/host names"). Nothing tutor-related stays in bashy/docs/ (story records in docs/todo are the store and stay).
+
+## Final cleanup (manager, 2026-10-30 ~23:20 PDT; run #406 merged at bashy bf60ba86) — tutor files only, no new design
+1. `git mv docs/plan-tutor-generic-formats.md examples/tutor/docs/plan-generic-formats.md`; reword it generically (no cohort, school, date or host names; describe the acceptance grep generically).
+2. Placeholders only: formats/class.md `audience:` without any age (e.g. "learners; keep language plain and encouraging") + matching tests/test_formats.py; browser-test.mjs title 'Robotics session' -> 'Example session'; test dates 2026-10-30 -> 2030-01-01 (tests/test_run.py etc.). Names only alice/bob/carol/owner.
+3. Session data stays in the user's data dir, never the repo/cwd by default: `tutor apply` adds step todos to the user's personal store (`bashy todo add --user ...`) and run/status/nudge/serve read them from there (`--user`); tests/helpers.py TempBashy also sets HOME to the temp dir (bashy's person and personal todo stores live under HOME, not BASHY_HOME — tests must not touch the real home). README: one short "Session data is private and local" paragraph (where plans, steps, run log and server state live). No redaction/privacy code.
+4. Bugs from the manager's live test: (a) `status --line` with no running step mid-session prints "Not started · 5 steps" — show progress instead (e.g. "Step 2/5 done · next: <title>" or "2/5 done"); (b) template steps carry an empty done_when on the participant page — use the format's default_done_when (or generic text) when the draft has none.
+Gates: tutor suite, server go -race, verify-duality, browser-test; greps: 'aged|Robotics|2026-' and '\b(ana|ben|bo)\b' over examples/tutor = 0; only examples/tutor (+ this doc move + this record) changed. Commit with this story's trailers; submit.
