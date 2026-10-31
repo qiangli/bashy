@@ -3,15 +3,18 @@ id: c4fba141e7a9
 kind: feature
 title: 'tutor: owner controls tempo — pause/resume, adjust time, jump/skip, reorder'
 seq: 3033
-status: todo
+status: done
 priority: p0
 labels:
     - tutor
 created: 2026-10-31T21:04:06.229375Z
+weave: 421
 assignee: claude-sonnet5.5
 sprint: 547
 sprint_id: 1422bece-2466-50b8-986f-160a56a64f00
 sprint_title: Teacher tools · tutor — AI-guided timeboxed sessions
+closed: 2026-10-31T21:53:45.885277Z
+closed_by: s547-manager
 ---
 
 Operator-approved feature (tutor only): the session format is a starting plan; the owner controls the tempo live.
