@@ -208,6 +208,7 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [A second forge, bare release tags, and the module half of the security override](plan-builds-second-forge-and-module-overrides.md) — `UPSTREAM_TAG_FORM` (seaweedfs tags bare `4.48`), a derived non-GitHub forge that `git clone`s the pinned tag (act_runner lives on gitea.com), and `GO_SECURITY_OVERRIDES` with its go.mod-diff gate; the `builds/seaweedfs` and `builds/act_runner` declarations.
 - [An audit toolchain of its own, and the EOL-minor security override](plan-builds-audit-toolchain-and-eol-minor.md) — `GO_AUDIT_TOOLCHAIN` (the audit tools' own pin, because govulncheck v1.9.0 needs go>=1.26), `GO_SUPPORTED_MINORS` and the EOL-minor shape of `GO_TOOLCHAIN_SECURITY_OVERRIDE`, the go/toolchain directive gate, and `GO_AUDIT_TAGS` with the audit scoped to the shipped package; the gitea, zot and kopia declarations.
 - `public-claims-evidence.md` — current public-claim sources, platform boundaries, yash measurement units, registry counting rule, and RC recheck commands (Sprint 379 B6).
+- `sprint-526-evidence.md` — public shaped-app registration and per-user revision proof for desk notepad and form (Sprint 526 B1b).
 
 - [Prima two-rank timeout](plan-prima-two-rank-timeout.md) — candidate -4 authenticated evidence, bounded producer diagnostics and required first-party shutdown repair; gate remains red.
 

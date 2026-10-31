@@ -8,7 +8,6 @@ mkdir -p "$(dirname "$bin")"
 
 runner=${BASHY_BIN:-bashy}
 name=${1:-notepad}
-port=${NOTEPAD_PORT:-18095}
 
 # Register command for atlas entry and CLI invocation
 guide=$("$runner" --bashsharp "$here/notepad.bsh" --skill 2>/dev/null || cat << 'EOF'
@@ -50,7 +49,8 @@ printf '%s\n' "$guide" > "$tmp/SKILL.md"
 "$runner" --bashsharp "$here/notepad.bsh" --contract > "$tmp/skill.dhnt" 2>/dev/null || true
 "$runner" skill add "$tmp" --force 2>/dev/null || true
 
-# Register launcher tile via bashy app add
-"$runner" app add "$name" --port "$port" --label "Notepad" --icon "📝" --tip "View and edit notes in Markdown, HTML, JSON, PDF" --force
+# Register through the public shaped-app path used by external apps.
+"$runner" app add "$name" --type shaped --source "$here" \
+  --label "Notepad" --icon "📝" --tip "View and edit notes in Markdown, HTML, JSON, PDF" --force
 
-echo "Registered $name -> $bin on loopback port $port"
+echo "Registered $name -> $bin as a shaped app"

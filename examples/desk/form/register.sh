@@ -22,10 +22,9 @@ printf '%s\n' "$guide" > "$tmp/SKILL.md"
 "$runner" --bashsharp "$here/form.bsh" --contract > "$tmp/skill.dhnt"
 "$runner" skill add "$tmp" --force
 
-# Register launcher tile via bashy app add
-port=${FORM_PORT:-18107}
-"$runner" app add "$name" --port "$port" --label "Form" --icon "📋" \
+# Register through the public shaped-app path used by external apps.
+"$runner" app add "$name" --type shaped --source "$here" --label "Form" --icon "📋" \
   --tip "Ad-hoc forms and questionnaires: define in JSON/YAML, human fills, agent reads answers" \
-  --start "$runner" --start "$name" --start serve --force
+  --force
 
 echo "Registered $name: one Bash# body, command and executable skill."

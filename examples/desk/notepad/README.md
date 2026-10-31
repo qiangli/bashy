@@ -35,7 +35,7 @@ the identical `/api/action` JSON API.
   - Responsive keyboard-friendly layout
 - **Atlas & App Launcher**:
   - Atlas entry exposed via `bashy help notepad --format=mcp`
-  - Web launcher tile registered via `bashy app add notepad --port 18095 --label Notepad`
+  - Web launcher tile registered via `bashy app add notepad --type shaped --source "$PWD" --label Notepad`
 
 ## Dependencies and Licenses
 
