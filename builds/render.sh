@@ -56,6 +56,8 @@ done
 # of its own: both gates compare the captured middle against UPSTREAM_TAG.
 # shellcheck disable=SC2034  # read indirectly, as @@UPSTREAM_TAG_REGEX@@ etc.
 SOURCE_ADMISSION=${SOURCE_ADMISSION:-official-release}
+RELEASE_PRERELEASE=${RELEASE_PRERELEASE:-0}
+[[ $RELEASE_PRERELEASE == [01] ]] || die "RELEASE_PRERELEASE must be 0 or 1"
 case $SOURCE_ADMISSION in
 official-release) ;;
 prima-first-party)

@@ -956,6 +956,33 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         self.assertNotEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertNotIn("PACKAGED", r.stdout)
 
+    def test_prerelease_is_per_tool_and_cuda_libs_are_release_assets(self):
+        wf = (self.fork / ".github/workflows/bashy-build.yml").read_text()
+        create = wf.split("gh release create", 1)[1]
+        self.assertIn("--prerelease", create)
+        other = self.root / "other"
+        run("bash", str(ROOT / "builds/render.sh"), "zot", str(other))
+        owf = (other / ".github/workflows/bashy-build.yml").read_text()
+        self.assertNotIn("--prerelease", owf)
+        env = dict(l.split("=", 1) for l in (RECIPE / "tool.env").read_text().splitlines()
+                   if re.match(r"^(RELEASE_ASSETS|RELEASE_PRERELEASE)=", l))
+        self.assertEqual(env.get("RELEASE_PRERELEASE"), "1")
+        assets = env["RELEASE_ASSETS"].strip('"').split()
+        packaged = {"runner-linux-amd64-cuda-libggml-cuda.so", "runner-linux-amd64-cuda-libggml-base.so.0"}
+        for name in packaged:
+            self.assertIn(name, assets)
+        # the check refuses a packaged backend file the static release list omits
+        tool = self.helpers / "release-assets-check.py"
+        d = Path(tempfile.mkdtemp())
+        (d / "libggml-cuda.so").write_bytes(b"c")
+        (d / "libggml-base.so.0").write_bytes(b"b")
+        (d / "runner.json").write_text(json.dumps({"backend_artifacts": [
+            {"name": "libggml-cuda.so", "sha256": hashlib.sha256(b"c").hexdigest()},
+            {"name": "libggml-base.so.0", "sha256": hashlib.sha256(b"b").hexdigest()}]}))
+        r = subprocess.run(["python3", str(tool), str(d), "libggml-cuda.so runner.json"], capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("libggml-base.so.0", r.stderr)
+
     def test_release_note_and_gates_describe_cuda_six_targets(self):
         env = (RECIPE / "tool.env").read_text()
         note = re.search(r'RELEASE_NOTE="([^"]*)"', env).group(1)

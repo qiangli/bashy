@@ -393,5 +393,8 @@ jobs:
             echo "Gates passed before signing: $RELEASE_GATES"
           } >notes.md
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag \
+#@@IFEQ RELEASE_PRERELEASE 1@@
+            --prerelease \
+#@@END@@
             --title "$GITHUB_REF_NAME ($TOOL $UPSTREAM_TAG, bashy-signed)" --notes-file notes.md \
             dist/*

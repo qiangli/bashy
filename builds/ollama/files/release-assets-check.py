@@ -29,7 +29,8 @@ def main(dist, static):
                 sys.exit(f"release-assets-check: backend artifact missing or not a real file: {name!r}")
             if hashlib.sha256(path.read_bytes()).hexdigest() != item.get("sha256"):
                 sys.exit(f"release-assets-check: backend artifact digest differs from manifest: {name}")
-            required.add(name)
+            if name not in required:
+                sys.exit(f"release-assets-check: backend artifact packaged by the build but missing from the release asset list: {name}")
     for path in sorted(dist.iterdir()):
         if path.is_file() and ".so" in path.name and path.name not in required:
             sys.exit(f"release-assets-check: shared library not listed by any manifest: {path.name}")
