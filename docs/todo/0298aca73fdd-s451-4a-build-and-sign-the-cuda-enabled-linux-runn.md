@@ -3,7 +3,7 @@ id: 0298aca73fdd
 kind: task
 title: 'S451.4a: build and sign the CUDA-enabled Linux runner prerequisite'
 seq: 2487
-status: doing
+status: done
 priority: p1
 labels:
     - gpu
@@ -14,6 +14,8 @@ assignee: claude-sonnet5.5
 sprint: 546
 sprint_id: ae111a75-889f-50a4-a423-de1bab0fbca6
 sprint_title: On-demand cloud GPU workers for large/custom Ollama models via Cloudbox and Outpost (AWS EC2 first)
+closed: 2026-10-31T18:39:35.214412Z
+closed_by: s546-manager
 ---
 
 Scoped S451.4 prerequisite from docs/sprint-451-master-execution-plan.md. Build the official pinned Ollama Linux amd64 CUDA runner in the existing Bashy verified-build pipeline; retain pristine upstream provenance, native protocol/no-egress gate, compiled-input license/vulnerability/SBOM review, per-asset Sigstore identity and digest verification. Do not clear a hold without measured evidence. First red: a recipe fixture test must fail when the CUDA target lacks its compiled backend/shared libraries or release manifest/signatures. Host: Dragon for recipe/unit only, puppy.local for local NVIDIA runtime qualification; hosted CI for native build/audit/sign. No GPU droplet without explicit operator approval. Gate: bash builds/check.sh ollama, hosted build/audit success, gh release asset/signature verification, then puppy CUDA model-load probe. Evidence: docs/sprint-451/evidence.md S451.4. The S451.4 story remains owner of GPU provisioning and final acceptance.
