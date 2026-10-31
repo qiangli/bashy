@@ -9,6 +9,7 @@ labels:
     - tutor
 created: 2026-10-31T04:34:25.711791Z
 weave: 406
+assignee: claude-sonnet5.5
 sprint: 547
 sprint_id: 1422bece-2466-50b8-986f-160a56a64f00
 sprint_title: Teacher tools · tutor — AI-guided timeboxed sessions
@@ -27,4 +28,4 @@ B. Duplicate audit removals (operator rule: keep only what bashy lacks):
 
 Acceptance: `git grep -n -E "func .*Token|Content-Security-Policy|SameSite" examples/tutor/server` shows only kit calls (no local reimplementation); `git grep -n -w start examples/tutor/tutor.bsh examples/tutor/register.sh` has no tutor `start` verb; tutor suite, `GOWORK=off go test -race ./...` in server, verify-duality.py and browser-test.mjs all green (Playwright: PLAYWRIGHT_MODULE=/private/tmp/d1pw/node_modules/playwright/index.mjs CHROMIUM_PATH=$HOME/Library/Caches/ms-playwright/chromium_headless_shell-1243/chrome-headless-shell-mac-arm64/chrome-headless-shell). Commit with this story's trailers; submit with the grep outputs and a screenshot path of the phone page.
 
-C. (operator 2026-10-30 ~22:45) "tutor is just an example, not part of bashy": `git mv docs/plan-tutor-generic-formats.md examples/tutor/docs/plan-generic-formats.md` (the only tutor reference outside examples/tutor); README.md opens with "an example built on bashy" (not a bashy feature) and states it is opt-in via `bash examples/tutor/register.sh` on the user's own machine — never auto-registered, embedded, shipped or listed by default. HARD RULE: change ONLY files under examples/tutor (+ this record, + that one doc move); if anything else seems needed, stop and report.
+D. The moved doc (examples/tutor/docs/plan-generic-formats.md) must be scrubbed: no cohort, school, date or host names (the quoted acceptance grep pattern counts — describe it generically, e.g. "forbidden cohort/host names"). Nothing tutor-related stays in bashy/docs/ (story records in docs/todo are the store and stay).
