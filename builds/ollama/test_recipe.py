@@ -12,8 +12,10 @@ import sys
 import tempfile
 import unittest
 
-# The bashy shim has a built-in cygpath that would shadow the test mock; use a real bash.
-REAL_BASH = "/bin/bash" if os.path.exists("/bin/bash") else shutil.which("bash")
+# Whatever bash is on PATH (bashy on agent hosts). bashy runs its own cygpath
+# applet ahead of PATH by design, so the mock is passed by path through
+# BASHY_CYGPATH instead of relying on PATH order.
+BASH = shutil.which("bash")
 
 ROOT = Path(__file__).resolve().parents[2]
 RECIPE = ROOT / "builds/ollama"
@@ -578,7 +580,8 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         objdump.chmod(0o755)
         env = dict(os.environ, PATH=str(mock) + os.pathsep + os.environ["PATH"],
                    BASHY_WINDOWS_CC=str(mock / 'gcc'), BASHY_WINDOWS_CXX=str(mock / 'g++'),
-                   BASHY_WINDOWS_OBJDUMP=str(mock / 'llvm-objdump'))
+                   BASHY_WINDOWS_OBJDUMP=str(mock / 'llvm-objdump'),
+                   BASHY_CYGPATH=str(mock / 'cygpath'))
         for target in TARGETS:
             with self.subTest(target=target):
                 asset = "runner-" + target
@@ -588,7 +591,7 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
                 # fixture must be restored to pristine so each leg exercises
                 # the override from the pinned tree (verify-pin runs first).
                 run("git", "-C", str(src), "checkout", "--", "go.mod", "go.sum")
-                run(REAL_BASH, str(self.helpers / "build-runner.sh"), str(src), str(out), asset, env=env)
+                run(BASH, str(self.helpers / "build-runner.sh"), str(src), str(out), asset, env=env)
                 captured = json.loads((out / (asset + ".compiler-inputs.json")).read_text())
                 self.assertIn("llama/llama.cpp/native.c", captured["files"])
                 self.assertIn("llama/llama.cpp/vendor/nlohmann/json.hpp", captured["files"])
@@ -645,7 +648,7 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
         lean = self.root / "lean-bin"
         lean.mkdir()
         for tool, target in [("go", mock / "go"), ("python3", Path(sys.executable)),
-                             ("bash", Path(REAL_BASH)),
+                             ("bash", Path(BASH)),
                              
                              ("git", Path(shutil.which("git"))),
                              ("cygpath", mock / "cygpath")]:
@@ -661,10 +664,10 @@ dep.write_text('object: ' + source + ' ' + str(pathlib.Path.cwd() / 'llama/llama
             str(src), str(lean_out), "runner-windows-amd64", env=lean_env)
         self.assertTrue((lean_out / "runner-windows-amd64.exe").is_file())
         env["TEST_HOST"] = "linux/amd64"
-        p = run(REAL_BASH, str(self.helpers / "build-runner.sh"), str(src), str(self.root / "bad"),
+        p = run(BASH, str(self.helpers / "build-runner.sh"), str(src), str(self.root / "bad"),
                 "runner-windows-amd64", env=env, ok=False)
         self.assertIn("native builder required", p.stderr)
-        run(REAL_BASH, str(self.helpers / "build-runner.sh"), str(src), str(self.root / "bad"),
+        run(BASH, str(self.helpers / "build-runner.sh"), str(src), str(self.root / "bad"),
             "runner-windows-arm64", env=env, ok=False)
     def test_capture_is_unique_under_parallel_compiles_and_keeps_compiler_argv(self):
         capture = self.root / "capture"

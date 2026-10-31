@@ -67,10 +67,13 @@ BASHY_COMPILER_GOROOT=$(go env GOROOT)
 BASHY_COMPILER_TMP=$(mktemp -d)
 export BASHY_COMPILER_SOURCE="$src" BASHY_COMPILER_GOROOT BASHY_COMPILER_TMP
 # Native Windows Go uses TMP/TEMP; normalize shell paths for native Python/Go.
+# BASHY_CYGPATH names the converter by path (tests pass a mock; bashy runs
+# its own cygpath applet ahead of PATH).
+cygpath_bin=${BASHY_CYGPATH:-cygpath}
 if [[ $os == windows ]]; then
-  BASHY_COMPILER_TMP=$(cygpath -m "$BASHY_COMPILER_TMP")
-  BASHY_COMPILER_SOURCE=$(cygpath -m "$src")
-  BASHY_COMPILER_CAPTURE_DIR=$(cygpath -m "$capture")
+  BASHY_COMPILER_TMP=$("$cygpath_bin" -m "$BASHY_COMPILER_TMP")
+  BASHY_COMPILER_SOURCE=$("$cygpath_bin" -m "$src")
+  BASHY_COMPILER_CAPTURE_DIR=$("$cygpath_bin" -m "$capture")
 fi
 export TMPDIR="$BASHY_COMPILER_TMP" GOTMPDIR="$BASHY_COMPILER_TMP"
 export TMP="$BASHY_COMPILER_TMP" TEMP="$BASHY_COMPILER_TMP"
@@ -80,7 +83,7 @@ trap 'rm -rf "$BASHY_COMPILER_TMP"' EXIT
 export BASHY_REAL_CC="$real_cc" BASHY_REAL_CXX="$real_cxx"
 if [[ $os == windows ]]; then
   # Go CreateProcess cannot execute a Python shebang script on Windows.
-  native_here=$(cygpath -m "$here")
+  native_here=$("$cygpath_bin" -m "$here")
   export CC="python3 \"$native_here/compiler-capture-cc\"" CXX="python3 \"$native_here/compiler-capture-cxx\""
 else
   export CC="$here/compiler-capture-cc" CXX="$here/compiler-capture-cxx"
