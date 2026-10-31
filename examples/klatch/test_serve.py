@@ -76,7 +76,7 @@ class Runner:
 
 
 def args(data, **kw):
-    base = dict(data=str(data), port=7199, lan=False, route=None, domain=None,
+    base = dict(data=str(data), port=7199, lan=False, route=None, mesh=None, domain=None,
                 min_free=0.0, admin_ref="klatch/admin", url_ref="klatch/url")
     base.update(kw)
     return argparse.Namespace(**base)
@@ -101,7 +101,7 @@ class ServeTest(unittest.TestCase):
 
     def test_loopback_default_installs_signed_pin_and_writes_unit(self):
         out, r = self.run_serve()
-        self.assertEqual(out["reach"], "loopback")
+        self.assertEqual(out["reach"], ["loopback"])
         self.assertEqual(out["url"], "http://127.0.0.1:7199")
         self.assertIn("tools install klatch", r.verbs())
         unit = next(stdin for a, stdin in r.calls if a[:2] == ("service", "add"))
@@ -118,7 +118,7 @@ class ServeTest(unittest.TestCase):
         out, r = self.run_serve(lan=True)
         unit = next(stdin for a, stdin in r.calls if a[:2] == ("service", "add"))
         self.assertIn('"0.0.0.0:7199"', unit)
-        self.assertEqual(out["reach"], "lan")
+        self.assertEqual(out["reach"], ["lan"])
         self.assertRegex(out["url"], r"^http://\d+\.\d+\.\d+\.\d+:7199$")
         self.assertNotIn("outpost", " ".join(r.verbs()))
 
@@ -129,6 +129,14 @@ class ServeTest(unittest.TestCase):
         unit = next(stdin for a, stdin in r.calls if a[:2] == ("service", "add"))
         self.assertIn('"127.0.0.1:7199"', unit)
         self.assertEqual(out["url"], "outpost-app:chat")
+
+    def test_route_mesh_and_lan_combine(self):
+        out, r = self.run_serve(route="chat", mesh="chat", lan=True)
+        calls = [a for a, _ in r.calls]
+        self.assertIn(("outpost", "mesh", "service", "add", "chat", "127.0.0.1:7199"), calls)
+        self.assertIn(("outpost", "apps", "add", "chat", "--url", "http://127.0.0.1:7199"), calls)
+        self.assertEqual(out["reach"], ["lan", "mesh", "route"])
+        self.assertEqual(out["reaches"]["mesh"], "outpost-mesh:chat")
 
     def test_existing_admin_secret_is_kept(self):
         r = Runner()

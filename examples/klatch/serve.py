@@ -5,7 +5,12 @@ Nothing here names a host, a count or a handle. The owner chooses the data
 directory, the port and the reach:
   default   loopback only (http://127.0.0.1:PORT)
   --lan     bind the LAN address so devices on the same network can join
-  --route N publish through the owner's own outpost app route NAME (paired hosts)
+  --route N publish through the owner's own outpost app route NAME (satellite
+            /matrix/h/<host>/app/NAME/ on a paired host)
+  --mesh N  expose the loopback service over the outpost mesh as service NAME;
+            any peer reaches it with `outpost mesh dial NAME`
+Reach options combine; LAN is the offline fallback. Everything is composed from
+existing outpost verbs — no new transport.
 
 Supply chain: the server binary comes from `bashy tools install klatch` (the
 bashy-built, sigstore-verified pin). The transform helpers and the web bundle
@@ -197,20 +202,24 @@ def serve(args, runner=run, opener=urllib.request.urlopen, healthy=wait_healthy,
     runner("service", "start", "klatch")
     local = "http://127.0.0.1:%d" % args.port
     healthy(local)
+    reach = {"local": local}
+    if args.lan:
+        reach["lan"] = "http://%s:%d" % (lan_ip(), args.port)
     if args.route:
         runner("outpost", "apps", "add", args.route, "--url", local)
-        # The public address is the owner's satellite route for this app; outpost
-        # prints it in `outpost apps list`. Store the route name, not a guessed URL.
-        url = "outpost-app:" + args.route
-    elif args.lan:
-        url = "http://%s:%d" % (lan_ip(), args.port)
-    else:
-        url = local
+        # The public address is this host's satellite route for the app; outpost
+        # lists it in `outpost apps list`. Record the route name, not a guessed URL.
+        reach["route"] = "outpost-app:" + args.route
+    if args.mesh:
+        runner("outpost", "mesh", "service", "add", args.mesh, "127.0.0.1:%d" % args.port)
+        reach["mesh"] = "outpost-mesh:" + args.mesh
+    url = reach.get("route") or reach.get("lan") or local
     ensure_secret(args.admin_ref, runner)
     domain = args.domain or (url.split("://", 1)[1].rstrip("/") if "://" in url else "%s:%d" % (socket.gethostname(), args.port))
     (setup or admin_setup)(local, args.admin_ref, domain)
     runner("secret", "set", args.url_ref, stdin=url + "\n")
-    return {"url": url, "local": local, "reach": "route" if args.route else "lan" if args.lan else "loopback",
+    return {"url": url, "local": local, "reach": sorted(k for k in reach if k != "local") or ["loopback"],
+            "reaches": reach,
             "data": str(data), "version": pins["version"], "free_gb": round(free, 1),
             "admin_ref": args.admin_ref, "url_ref": args.url_ref}
 
@@ -235,9 +244,9 @@ def main(argv):
     s = sub.add_parser("serve", help="install (signed) and run Klatch on this machine")
     s.add_argument("--data", default=os.path.join(os.environ.get("BASHY_HOME", os.path.expanduser("~/.bashy")), "klatch"))
     s.add_argument("--port", type=int, default=7100)
-    reach = s.add_mutually_exclusive_group()
-    reach.add_argument("--lan", action="store_true", help="bind the LAN address")
-    reach.add_argument("--route", help="publish through this outpost app route (paired hosts)")
+    s.add_argument("--lan", action="store_true", help="bind the LAN address (offline fallback)")
+    s.add_argument("--route", help="publish as this outpost app (satellite route on a paired host)")
+    s.add_argument("--mesh", help="expose over the outpost mesh as this service name")
     s.add_argument("--domain", help="federation domain (default: the reach address)")
     s.add_argument("--min-free", type=float, default=5.0, help="GB that must stay free (default 5)")
     s.add_argument("--admin-ref", default="klatch/admin")
