@@ -3,12 +3,12 @@ id: c4fba141e7a9
 kind: feature
 title: 'tutor: owner controls tempo — pause/resume, adjust time, jump/skip, reorder'
 seq: 3033
-status: assigned
+status: todo
 priority: p0
 labels:
     - tutor
 created: 2026-10-31T21:04:06.229375Z
-weave: 419
+assignee: claude-sonnet5.5
 sprint: 547
 sprint_id: 1422bece-2466-50b8-986f-160a56a64f00
 sprint_title: Teacher tools · tutor — AI-guided timeboxed sessions
@@ -26,11 +26,10 @@ CLI (lib/run.py; register.sh flags; skill text one line each):
 Owner page (server, desk kit only — no new styling): Pause/Resume toggle, buttons -1 / +1 / +5 min and a small custom minutes input, a step list where each row has Go (jump) and ↑/↓ for upcoming rows, and Skip. All actions go through the existing owner-key-protected POST path and call the CLI verbs above (server holds no second state). Display + participant pages show "Paused" while paused and the updated remaining time.
 Tests: one focused test per control in tests/test_run.py (pause freezes elapsed with TUTOR_NOW; resume continues; time ±; goto back and forward; skip; move up/down/to and that labels are rewritten); Go tests for the new owner actions (owner key required, participant token refused); browser-test: owner page shows the controls and Display shows "Paused" after pause. Keep all existing gates and closure greps green. Commit with this story's trailers; submit with the exact CLI examples.
 
-## Presenter navigation (operator, same story)
-Feels like presenting slides: big Previous / Next buttons on the Owner page; keyboard ← / → plus Space / PageDown (next) and PageUp (previous) — what presentation clickers send — on the Owner AND Display pages (Display keys need the owner key: only act when the Display was opened from the owner session, otherwise ignore). Display follows instantly (poll/refresh after each action). Clicking any step in the owner list jumps there (= goto). DECISION (manager): going back RESUMES that step's timer where it stopped (elapsed is preserved across goto; show the remaining time); the run log keeps per-step elapsed. Test: prev/next via CLI (`tutor prev N`, `tutor next N`) and that elapsed resumes; browser-test presses ArrowRight/ArrowLeft on the owner page and asserts the Display's current step changes.
-
-## Navigation is FREE (operator, supersedes any restriction above)
-No restrictions: any step, any order, unlimited, including steps already done or skipped. Revisiting a done/skipped step makes it current again (todo status doing; remove its step-done/step-skipped label; the earlier done event stays in the run log), and it is marked done again on the next Next/Done. Timer on revisit RESUMES where it left off (accumulated elapsed per step; no reset); the owner adjusts with +/-. Reordering (move) still applies to steps other than the current one. Tests: revisit a done step, its elapsed resumes, then Next marks it done again.
-
-## Principle (operator): teaching, not a test
-Timers are guides, never limits: no auto-advance, no locking, nothing refused when time runs out. Overtime shows gently — "+2:10 over" — no red/failure wording or styling (use the kit's neutral/info tone, not error). Participants can browse earlier and later steps on their own page (current one highlighted) and mark any step Done at any time. Say this in the generic default format (formats/session.md guidance/tone) and in the README's short description. Tests: done on a non-current step from the participant page is accepted; overtime status text is "+M:SS over" and carries no error class.
+## Continue (manager review of run #419, commit aa4d5574 in refs/salvage/abandoned-419) — finish, do not redo
+Start from aa4d5574 (cherry-pick it; tests already green: tutor 64, server race). Required before merge:
+1. REMOVE the committed binary `examples/tutor/server/tutor-server` (10.9 MB) from the commit, and add `examples/tutor/server/tutor-server` to examples/tutor/.gitignore (create it) so a build never lands again.
+2. Labelled links + owner page first (missing): lib/flow.sh (demo/go) prints exactly `<Owner role title> (private): URL`, `Display (projector): URL`, `Phone for <name>: URL` and opens the OWNER URL; test_flows.py asserts the labels and opener order.
+3. Teaching principle (missing): formats/session.md guidance says timers are guides, never limits; participants can browse all steps and mark Done any time. Verify overtime text is "+M:SS over" with no error/red class on all three pages (add an assertion if absent).
+4. Presenter keys: confirm Owner AND Display pages handle ArrowLeft/ArrowRight, PageUp/PageDown, Space; browser-test presses ArrowRight then ArrowLeft on the owner page and asserts the Display's current step follows.
+Keep everything inside examples/tutor; one clean commit on top (or amend) with this story's trailers; submit.
