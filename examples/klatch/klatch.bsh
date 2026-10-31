@@ -21,6 +21,9 @@ handles to guids and group keys to ids. Reruns create no duplicates.
 (empty TEXT restores NAME). `-` reads TEXT from stdin, so anything composes:
 `some-status --line | bashy klatch topic CONFIG.json class -`. Both print
 `{"group", "ok"}`.
+`invite CONFIG.json COUNT [SECRET_REF]` mints COUNT one-time sign-up links
+(`<base_url>/?add=TOKEN`, one account each) into the vault (default
+`klatch/signup-links`); it prints only the count and the reference.
 Passwords are vault references via `bashy secret show REF`; never put one in
 the config or on a command line. See `examples/klatch/README.md`.
 ~~~
@@ -43,6 +46,7 @@ if [[ ${1:-} == --contract ]]; then
 fi
 case ${1:-} in
   post|topic) (( $# == 4 )) || { echo "Usage: klatch $1 CONFIG.json GROUP TEXT|-" >&2; exit 2; } ;;
+  invite) (( $# == 3 || $# == 4 )) || { echo 'Usage: klatch invite CONFIG.json COUNT [SECRET_REF]' >&2; exit 2; } ;;
   *) (( $# == 2 )) || { echo 'Usage: klatch setup|provision|status CONFIG.json | post|topic CONFIG.json GROUP TEXT|-' >&2; exit 2; } ;;
 esac
 exec python3 "$here/provision.py" "$@"

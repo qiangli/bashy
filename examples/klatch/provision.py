@@ -391,6 +391,27 @@ def topic(client, cfg, key, text):
     return {"group": key, "ok": True, "subject": data["subject"]}
 
 
+def vault_store(ref, value):
+    if not re.fullmatch(r"[A-Za-z0-9_./-]+", ref):
+        fail("invalid secret reference")
+    subprocess.run(["bashy", "secret", "set", ref], input=value, check=True, text=True,
+                   stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+def invite(client, cfg, session, count, ref, store=vault_store):
+    """Mint COUNT one-time sign-up links (<base_url>/?add=TOKEN) into the vault at REF.
+
+    Each link is a Databag admin account token: it creates exactly one account.
+    The links are written to the vault only; the output carries the count and REF.
+    """
+    if count < 1 or count > 100:
+        fail("invite count must be 1..100")
+    links = ["%s/?add=%s" % (cfg["base_url"], client.call("POST", "/admin/accounts", {"token": session}))
+             for _ in range(count)]
+    store(ref, "\n".join(links) + "\n")
+    return {"links": count, "ref": ref}
+
+
 def message_text(arg, stdin=sys.stdin):
     text = stdin.read() if arg == "-" else arg
     return text.strip()
@@ -402,6 +423,15 @@ def main(argv):
         client = Client(cfg["base_url"])
         session, admin_pw = admin_session(client, cfg, bootstrap=False)
         print(json.dumps(reset_passwords(client, cfg, session, admin_pw, argv[2:]), indent=2))
+        return
+    if len(argv) in (3, 4) and argv[0] == "invite":
+        cfg = config(argv[1])
+        if not argv[2].isdigit():
+            fail("Usage: provision.py invite CONFIG.json COUNT [SECRET_REF]")
+        client = Client(cfg["base_url"])
+        session, _ = admin_session(client, cfg, bootstrap=False)
+        ref = argv[3] if len(argv) == 4 else "klatch/signup-links"
+        print(json.dumps(invite(client, cfg, session, int(argv[2]), ref), sort_keys=True))
         return
     if len(argv) == 4 and argv[0] in ("post", "topic"):
         action, path, key, arg = argv
@@ -415,6 +445,7 @@ def main(argv):
     if len(argv) != 2 or argv[0] not in ("setup", "provision", "status"):
         fail("Usage: provision.py setup|provision|status CONFIG.json\n"
              "       provision.py post|topic CONFIG.json GROUP TEXT|-\n"
+             "       provision.py invite CONFIG.json COUNT [SECRET_REF]\n"
              "       provision.py reset-passwords CONFIG.json HANDLE...")
     action, path = argv
     cfg = config(path)

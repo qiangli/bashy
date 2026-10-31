@@ -36,6 +36,7 @@ never printed or placed in argv. There is no built-in roster.
 
 | `post GROUP TEXT\|-` | post TEXT (or stdin with `-`) to the group as the bot |
 | `topic GROUP TEXT\|-` | set the group's conversation header to `NAME — TEXT`; empty TEXT restores `NAME` |
+| `invite COUNT [REF]` | mint COUNT one-time sign-up links (`<base_url>/?add=TOKEN`) into the vault at REF (default `klatch/signup-links`); prints only the count and REF |
 
 `post` and `topic` take `CONFIG.json GROUP TEXT|-` and print
 `{"group": key, "ok": true}`. They act as the config's `"bot"` handle (a normal

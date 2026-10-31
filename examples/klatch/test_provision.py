@@ -286,6 +286,28 @@ class ProvisionTest(unittest.TestCase):
         with self.assertRaises(SystemExit):
             module.admin_session(self.client, self.cfg, bootstrap=False)
 
+    def test_invite_links_go_to_vault_only(self):
+        self.run_setup()
+        session, _ = module.admin_session(self.client, self.cfg, bootstrap=False)
+        stored = {}
+        out = module.invite(self.client, self.cfg, session, 3, "klatch/signup-links",
+                            store=lambda ref, value: stored.update({ref: value}))
+        self.assertEqual(out, {"links": 3, "ref": "klatch/signup-links"})
+        links = stored["klatch/signup-links"].split()
+        self.assertEqual(len(links), 3)
+        self.assertEqual(len(set(links)), 3)
+        for link in links:
+            self.assertTrue(link.startswith(self.cfg["base_url"] + "/?add=create-"), link)
+            self.assertNotIn(link.split("=", 1)[1], json.dumps(out))
+        self.assertEqual(len(self.st.creates), 3 + 3)  # 3 provisioned accounts + 3 unused invites
+
+    def test_invite_count_bounds(self):
+        self.run_setup()
+        session, _ = module.admin_session(self.client, self.cfg, bootstrap=False)
+        for bad in (0, 101):
+            with self.assertRaises(SystemExit):
+                module.invite(self.client, self.cfg, session, bad, "klatch/x", store=lambda *a: None)
+
     def test_status(self):
         self.assertFalse(module.status(self.client, self.cfg)["bootstrapped"])
         self.run_setup()
