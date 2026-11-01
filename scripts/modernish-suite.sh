@@ -76,9 +76,17 @@ case "$ARCH" in
   *) echo "modernish-suite: unsupported arch $ARCH" >&2; exit 0;;
 esac
 BIN="$HERE/bin/.bashy-linux-modernish"
+mkdir -p "$(dirname "$BIN")"
 echo "modernish-suite: building linux/$GOARCH bashy drop-in…" >&2
-GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" ./cmd/bash || { echo "modernish-suite: go build failed" >&2; exit 0; }
+CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" scripts/go-product.sh build -o "$BIN" ./cmd/bash || { echo "modernish-suite: go build failed" >&2; exit 2; }
 trap 'rm -f "$BIN"' EXIT
+
+# The host may use glibc while the panel uses musl. Build the same product
+# runtime statically, then prove it executes before counting any assertions.
+if ! $OCI run --rm -v "$BIN:/bashy:ro" "$IMG" timeout 10 /bashy --posix -c 'exit 0'; then
+  echo "modernish-suite: testee cannot execute in $IMG; no corpus results measured" >&2
+  exit 2
+fi
 
 # bashy first (the shell-under-test), then the reference shells. Each entry is
 # label=command. modernish is invoked as: <command> bin/modernish --test -qq

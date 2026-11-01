@@ -71,8 +71,15 @@ esac
 BIN="$PWD/bin/.bashy-linux-posixdiff-$$"
 mkdir -p "$(dirname "$BIN")"
 echo "posix-diff: building linux/$GOARCH bashy…" >&2
-GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" ./cmd/bash || { echo "posix-diff: bashy build failed" >&2; exit 2; }
+CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" scripts/go-product.sh build -o "$BIN" ./cmd/bash || { echo "posix-diff: bashy build failed" >&2; exit 2; }
 trap 'rm -f "$BIN"' EXIT
+
+# The host may use glibc while the panel uses musl. Build the same product
+# runtime statically, then prove it executes before counting any assertions.
+if ! $OCI run --rm -v "$BIN:/bashy:ro" "$IMAGE" timeout 10 /bashy --posix -c 'exit 0'; then
+  echo "posix-diff: testee cannot execute in $IMAGE; no corpus results measured" >&2
+  exit 2
+fi
 
 # Run the whole comparison inside the image: bashy (mounted) + native oracles,
 # every shell file-arg in a fresh cwd, identical environment.
