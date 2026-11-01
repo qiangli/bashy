@@ -716,6 +716,9 @@ func ListRepairProfile(opts RepairProfileOptions, w io.Writer) ([]RepairPlanRow,
 				kept = append(kept, s)
 			}
 		}
+		if len(kept) == 0 {
+			return nil, fmt.Errorf("repair profile: -only selected no suite (have %v)", suiteNames(specs))
+		}
 		specs = kept
 	}
 	laneProbe := opts.LaneProbe

@@ -479,3 +479,20 @@ func TestRepairProfilesRecipeDryRunPlansProfile(t *testing.T) {
 		t.Fatalf("dry-run plan does not name the profile target:\n%s", out.String())
 	}
 }
+
+func TestRepairProfileListOnlySelectingNothingErrors(t *testing.T) {
+	var out bytes.Buffer
+	_, err := ListRepairProfile(RepairProfileOptions{
+		Component: "bashy",
+		Only:      []string{"no-such-suite"},
+	}, &out)
+	if err == nil {
+		t.Fatal("-only selecting no suite must be a usage error in -list too, not an empty plan")
+	}
+	if !strings.Contains(err.Error(), "no suite") {
+		t.Fatalf("error = %v, want the -only selected no suite wording", err)
+	}
+	if strings.Contains(out.String(), "component=") {
+		t.Fatalf("a failed plan must not print a header first:\n%s", out.String())
+	}
+}
