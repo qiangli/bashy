@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 )
 
 // TestDeskToolsForkAndRollback is the shaped fork proof per desk tool, driven
@@ -91,7 +92,7 @@ func productBashy(t *testing.T) string {
 		bin := filepath.Join(dir, "bashy")
 		cmd := exec.Command("./scripts/go-product.sh", "build", "-o", bin, "./cmd/bashy")
 		cmd.Dir = filepath.Join("..", "..")
-		if out, err := cmd.CombinedOutput(); err != nil {
+		if out, err := runDeskCommand(t, cmd); err != nil {
 			productErr = err.Error() + "\n" + string(out)
 			return
 		}
@@ -119,7 +120,10 @@ func newForkHome(t *testing.T, bin, git string) *forkHome {
 	root := t.TempDir()
 	// app add vendors the module: keep the host Go caches so an isolated HOME
 	// neither re-downloads them nor leaves a read-only module cache behind.
+	started := time.Now()
+	deskStageLog(t, "start go-env caches")
 	caches, err := exec.Command("go", "env", "GOMODCACHE", "GOCACHE").Output()
+	deskStageLog(t, "end go-env caches elapsed=%s error=%v", time.Since(started).Round(time.Millisecond), err)
 	if err != nil {
 		t.Fatalf("go env: %v", err)
 	}
@@ -142,7 +146,7 @@ func (f *forkHome) run(dir, bin string, args ...string) string {
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
 	cmd.Env = f.env
-	out, err := cmd.CombinedOutput()
+	out, err := runDeskCommand(f.t, cmd)
 	if err != nil {
 		f.t.Fatalf("%s %s: %v\n%s", filepath.Base(bin), strings.Join(args, " "), err, out)
 	}
