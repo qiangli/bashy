@@ -24,3 +24,19 @@ Validation: bash syntax and diff checks passed. Six isolated mocked checks
 verified Linux/amd64 CGO0 product builds, successful startup reaching the corpus,
 and startup exit127 returning2 before corpus execution across all three scripts.
 Actual container suites remain remote validation work.
+
+
+Fresh hosted evidence: public validation run 41332727797 completed. Its Yash
+panel measured Bashy 1778 OK / 55 ERROR of 1833; every Bashy ERROR is also an
+ERROR for Bash 5.3, with zero Bashy-only errors and 18 Bashy-only passes. These
+remain ERROR, not normalized passes. All 751 recorded fixture runner exits
+were zero. Dash loaded 6/8 for both Bashy and Bash 5.3: login/newgrp use a
+non-compound function body rejected by both. Modernish remains BLOCKED with
+exit 128; the Bash reference measured 380 successes, 8 skips, and 1 warning.
+
+Diagnostic follow-up: pinned modernish cde49fa37f93e943b9cb9b9536ce83836c4864ae
+fatal.sh explicitly supports MSH_FTL_DEBUG (lines 37–41). The loader runs that
+initialization before handling --version. After a blocked Bashy initialization,
+retain separate Bashy and Bash reference --version traces with MSH_FTL_DEBUG=1
+and timeout -s KILL 60. Do not rerun the corpus, modify upstream fixtures, or
+change the original verdict. Actual diagnostic execution is hosted-only.

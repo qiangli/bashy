@@ -128,6 +128,18 @@ $OCI run --rm "${EVIDENCE_MOUNT[@]}" -e LANG=C -e SHELLS="$SHELLS" \
         | head -1 | sed "s/^[[:space:]]*//; s/[[:space:]]*$//")
       [ -n "$blk" ] || blk="modernish init failed (no test summary emitted)"
       printf "  %-8s OK=0 FAIL=0 (skip=0 xfail=0) -> 0%% pass [BLOCKED: %s]\n" "$label" "$blk"
+      if [ "$label" = bashy ] && [ -d /out ]; then
+        # fatal.sh supports MSH_FTL_DEBUG explicitly. --version runs the same
+        # initialization without rerunning the self-test corpus. Keep these
+        # bounded diagnostic attempts separate from the original verdict.
+        for trace_spec in bashy=/bashy bash=bash; do
+          trace_label=${trace_spec%%=*}; trace_cmd=${trace_spec#*=}
+          MSH_FTL_DEBUG=1 timeout -s KILL 60 "$trace_cmd" bin/modernish --version \
+            >"/out/$trace_label.init-trace.log" 2>&1
+          trace_rc=$?
+          printf "%s\n" "$trace_rc" >"/out/$trace_label.init-trace.exit"
+        done
+      fi
       continue
     fi
     ok=$(printf    "%s\n" "$out" | sed -n "s/^- \([0-9][0-9]*\) succeeded.*/\1/p"          | head -1)
