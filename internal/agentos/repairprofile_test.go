@@ -1118,3 +1118,22 @@ func TestRepairPosixUtilNamesIncludeShells(t *testing.T) {
 		}
 	}
 }
+
+// The outpost profile tests the configuration that ships (CGO_ENABLED=0);
+// live macOS run: a cgo build needs CoreServices headers no runtime has.
+func TestRepairOutpostProfileTestsShippedCgoSetting(t *testing.T) {
+	specs, err := RepairSuitesFor("outpost")
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := repairSuiteEnv(RepairProfileOptions{Env: []string{"PATH=/nowhere"}}, specs[0], "")
+	got := ""
+	for _, e := range env {
+		if strings.HasPrefix(e, "CGO_ENABLED=") {
+			got = e
+		}
+	}
+	if got != "CGO_ENABLED=0" {
+		t.Fatalf("outpost suite env CGO_ENABLED = %q, want CGO_ENABLED=0", got)
+	}
+}

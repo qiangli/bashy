@@ -240,8 +240,12 @@ func RepairSuitesFor(component string) ([]RepairSuiteSpec, error) {
 				Tools:      []string{"go"},
 				GoTestArgs: []string{"-short", "-tags", "fb_archives"},
 				Exclude:    []string{"internal/agent/shell"}, // needs a real TTY
-				Timeout:    repairDefaultTimeout,
-				Command:    "go test -short -tags fb_archives $(go list ./... | grep -v internal/agent/shell)",
+				// Test what ships: outpost releases are CGO_ENABLED=0
+				// (release.yml, scripts/build.sh). A cgo build would need a
+				// platform SDK (e.g. macOS CoreServices) no runtime provides.
+				Env:     []string{"CGO_ENABLED=0"},
+				Timeout: repairDefaultTimeout,
+				Command: "CGO_ENABLED=0 go test -short -tags fb_archives $(go list ./... | grep -v internal/agent/shell)",
 			},
 		}, nil
 	}
