@@ -1104,3 +1104,17 @@ func TestRepairProfileListOnlySelectingNothingErrors(t *testing.T) {
 		t.Fatalf("a failed plan must not print a header first:\n%s", out.String())
 	}
 }
+
+// A bashy-only host has no bash or sh of its own: the suite PATH must link
+// both names to bashy (live S549.R4b run: outpost tests exec "bash").
+func TestRepairPosixUtilNamesIncludeShells(t *testing.T) {
+	names := map[string]bool{}
+	for _, n := range repairPosixUtilNames() {
+		names[n] = true
+	}
+	for _, want := range []string{"bash", "sh", "sleep", "ls", "head"} {
+		if !names[want] {
+			t.Errorf("suite PATH lacks %q", want)
+		}
+	}
+}

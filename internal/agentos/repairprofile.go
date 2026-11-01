@@ -1032,6 +1032,10 @@ func repairPosixUtilNames() []string {
 	for _, n := range atlas.GNUCoreutilsUpstream() {
 		add(n)
 	}
+	// bashy is the shell too: suites and the code under test exec "bash"
+	// and "sh" by name, and on a bashy-only host those are bashy itself.
+	add("sh")
+	add("bash")
 	sort.Strings(names)
 	return names
 }
