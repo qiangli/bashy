@@ -1047,8 +1047,8 @@ github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb h1:sZ0O1FtouYq/i
 github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb/go.mod h1:G9TZ3lljDx9Cy/MDxevTV4W+VmBelEAF+SJIHLc+zrQ=
 github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4 h1:jFEDhq2xCnc71hq0C/qEYzIuWQSwINigzSrYUGTvYHc=
 github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4/go.mod h1:a0jdwCqW+MTJWBjQRHa9kRNipGLv1Y8Ep26hoLGNTQ8=
-github.com/qiangli/sh/v3 v3.0.0-20261101180949-11e672e3ac27 h1:gTag96UUKxtfHthfw42VThpmHn4SpKB0UvTFGB6rC80=
-github.com/qiangli/sh/v3 v3.0.0-20261101180949-11e672e3ac27/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
+github.com/qiangli/sh/v3 v3.0.0-20261101182214-5b45bcda4a33 h1:Ex+1J9gzUYK3wd4axov0UmJj6618tcXGXu8txHb1JeI=
+github.com/qiangli/sh/v3 v3.0.0-20261101182214-5b45bcda4a33/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb h1:LLfdQXY/uXHpJm9eYP0sdcFg4IHQHzIOUwslX9TpqxI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb/go.mod h1:tcNzv5p84E0skkmJn038y+hWJbLQXQqEnQfeh5r2JLM=
 github.com/qiangli/yamux v0.1.0 h1:nmfx1HPvOMR3x6ZkctdBuk98fmUHSp2DOxnbYA7gGR0=
@@ -1059,6 +1059,8 @@ github.com/qiangli/yamux/v5 v5.0.0 h1:c0Jbq9IkVOO0kD2n8cTlHHIRqKtyy5Gy08RR3uEoyU
 github.com/qiangli/yamux/v5 v5.0.0/go.mod h1:YmWeys9yLj7O+j3afOEuWqgda3tbg7NOLsLmBtvD//o=
 github.com/qiangli/ycode v0.3.1-dev.0.20261101173917-9411250ceb14 h1:J79vYQWmASt08rFArRMRdlQj+qWP1GKsnKKFn/AZRmY=
 github.com/qiangli/ycode v0.3.1-dev.0.20261101173917-9411250ceb14/go.mod h1:Kid9UShmOmu/r8kseE3ZU+5ocZLESYOuSMPVnPHiO9k=
+github.com/qiangli/ycode v0.3.1-dev.0.20261101182243-14ac8733c882 h1:BN0yo3xkxN/3vGc56TB3+Ly7dvBdv4jUBq0xNMoGo6I=
+github.com/qiangli/ycode v0.3.1-dev.0.20261101182243-14ac8733c882/go.mod h1:Kid9UShmOmu/r8kseE3ZU+5ocZLESYOuSMPVnPHiO9k=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2 h1:bFDhUDkjVspcsLYaKnlN4hZAja61IZdNQ+0YYoGoTJc=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2/go.mod h1:+ZCbIbIbjxqk8derYesSoxwxIMOylG87DtzJqzOUGGM=
 github.com/qiangli/yoke v0.0.0-20261101171808-9bce1ec1bb0a h1:CNaOtNanvcSa/HBcScJR9a8IUE/OS/CCPis8aAD/C4c=
