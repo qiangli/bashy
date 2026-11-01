@@ -230,8 +230,56 @@ func (s *server) snapshot() (*Status, string) {
 func (s *server) personOf(token string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	p, ok := s.byToken[token]
-	return p, ok
+	if p, ok := s.byToken[token]; ok {
+		return p, ok
+	}
+	for name, sl := range slugsLocked(s.tok.Participants) {
+		if sl == token {
+			return name, true
+		}
+	}
+	return "", false
+}
+
+// slugsLocked gives every participant a readable link name from their own
+// name ("Ana Li" -> "ana-li"); a duplicate gets -2, -3 … in name order.
+// Callers hold s.mu.
+func slugsLocked(participants map[string]string) map[string]string {
+	names := make([]string, 0, len(participants))
+	for n := range participants {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	out, used := map[string]string{}, map[string]bool{}
+	for _, n := range names {
+		base := slugify(n)
+		sl := base
+		for i := 2; used[sl]; i++ {
+			sl = fmt.Sprintf("%s-%d", base, i)
+		}
+		used[sl] = true
+		out[n] = sl
+	}
+	return out
+}
+
+func slugify(name string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(name)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			dash = false
+		} else if !dash && b.Len() > 0 {
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	sl := strings.TrimRight(b.String(), "-")
+	if sl == "" {
+		sl = "person"
+	}
+	return sl
 }
 
 func (s *server) ownerOK(r *http.Request) bool {
@@ -662,9 +710,10 @@ func cmdServe(args []string) error {
 	s.mu.Lock()
 	names := make([]string, 0, len(s.tok.Participants))
 	links := map[string]string{}
-	for k, t := range s.tok.Participants {
+	slugs := slugsLocked(s.tok.Participants)
+	for k := range s.tok.Participants {
 		names = append(names, k)
-		links[k] = origin + s.prefix + "/s/" + t
+		links[k] = origin + s.prefix + "/s/" + slugs[k]
 	}
 	s.mu.Unlock()
 	sort.Strings(names)

@@ -369,3 +369,23 @@ func TestOwnerTempoActions(t *testing.T) {
 		}
 	}
 }
+
+func TestParticipantSlugs(t *testing.T) {
+	got := slugsLocked(map[string]string{"Ana Li": "t1", "ana-li": "t2", "Bob": "t3", "  ": "t4"})
+	want := map[string]string{"Ana Li": "ana-li", "ana-li": "ana-li-2", "Bob": "bob", "  ": "person"}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("slug(%q) = %q, want %q (all: %v)", k, got[k], v, got)
+		}
+	}
+	s := &server{byToken: map[string]string{"t1": "Ana Li"}}
+	s.tok.Participants = map[string]string{"Ana Li": "t1", "ana-li": "t2"}
+	for in, who := range map[string]string{"t1": "Ana Li", "ana-li": "Ana Li", "ana-li-2": "ana-li"} {
+		if p, ok := s.personOf(in); !ok || p != who {
+			t.Fatalf("personOf(%q) = %q,%v want %q", in, p, ok, who)
+		}
+	}
+	if _, ok := s.personOf("nobody"); ok {
+		t.Fatal("unknown slug resolved")
+	}
+}
