@@ -587,7 +587,14 @@ func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions, bashy strin
 	// Bound the pipe-drain after a watchdog kill: grandchildren that inherit
 	// the pipes cannot hold the evidence hostage past the suite's own death.
 	cmd.WaitDelay = 30 * time.Second
-	runErr := cmd.Run()
+	// The watchdog and the final reap reach the suite's whole process tree,
+	// not only the bashy shell: no descendant outlives the suite holding its
+	// working directory, pipes or the private bin dir removed above.
+	reap, runErr := startRepairTree(cmd)
+	if runErr == nil {
+		runErr = cmd.Wait()
+	}
+	reap()
 	res.DurationMS = time.Since(start).Milliseconds()
 
 	res.Counts = capw.countsOrNil()

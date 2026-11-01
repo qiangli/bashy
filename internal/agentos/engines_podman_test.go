@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -123,7 +124,8 @@ func TestApparmorUsernsHint(t *testing.T) {
 
 func TestPodmanConfOverrideLinuxPaths(t *testing.T) {
 	conf := podmanConfOverrideLinux("/c/podman/v6/podman-linux-amd64")
-	if want := `helper_binaries_dir = ["` + nfthelper.Dir() + `", `; !strings.Contains(conf, want) {
+	// The helper dir is a TOML basic string: Windows backslashes are escaped.
+	if want := `helper_binaries_dir = [` + strconv.Quote(nfthelper.Dir()) + `, `; !strings.Contains(conf, want) {
 		t.Errorf("nft helper must be first in helper_binaries_dir: %s", conf)
 	}
 	for _, want := range []string{

@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -37,6 +38,20 @@ func TestRepairSuiteHelperProcess(t *testing.T) {
 		// Well past the 500 ms suite bound but short enough that the pipe a
 		// watchdog orphan holds (WaitDelay) does not slow the test batch.
 		time.Sleep(5 * time.Second)
+		os.Exit(0)
+	case "tree":
+		// A suite with a descendant: spawn a lingering grandchild, record
+		// its pid, then outlive the suite timeout.
+		child := exec.Command(os.Args[0], "-test.run=TestRepairSuiteHelperProcess")
+		child.Env = append(os.Environ(), "REPAIR_HELPER_BEHAVIOR=linger")
+		if err := child.Start(); err != nil {
+			os.Exit(4)
+		}
+		_ = os.WriteFile(os.Getenv("REPAIR_HELPER_PIDFILE"), []byte(strconv.Itoa(child.Process.Pid)), 0o644)
+		time.Sleep(20 * time.Second)
+		os.Exit(0)
+	case "linger":
+		time.Sleep(20 * time.Second)
 		os.Exit(0)
 	case "flood":
 		chunk := strings.Repeat("x", 4096)
@@ -278,7 +293,9 @@ func TestRepairUnitsMaterializeAsBashSharpShims(t *testing.T) {
 		}
 	}
 	if goShim, err := os.ReadFile(filepath.Join(bin.path, "go")); err == nil {
-		if !strings.Contains(string(goShim), `"`+bashy+`" go "$@"`) {
+		// The Bash# body spells the pin with forward slashes on every OS
+		// (materializeRepairShims: {{bashy}} → filepath.ToSlash).
+		if !strings.Contains(string(goShim), `"`+filepath.ToSlash(bashy)+`" go "$@"`) {
 			t.Fatalf("go shim must run the pinned bashy's go:\n%s", goShim)
 		}
 	}
@@ -455,6 +472,44 @@ func TestRepairSuiteTimeoutKilledNeverPasses(t *testing.T) {
 	}
 	if !strings.Contains(res.Reason, "timeout") {
 		t.Fatalf("reason = %q, want it to name the timeout kill", res.Reason)
+	}
+}
+
+// TestRepairSuiteTimeoutKillReachesDescendants: the watchdog kills the suite's
+// whole process tree, not only the bashy shell — a surviving grandchild would
+// keep running past the verdict and, on Windows, hold the suite's directories.
+func TestRepairSuiteTimeoutKillReachesDescendants(t *testing.T) {
+	pidFile := filepath.Join(t.TempDir(), "grandchild.pid")
+	spec := helperSpec(t, "tree-suite", "tree")
+	spec.Env = append(spec.Env, "REPAIR_HELPER_PIDFILE="+pidFile)
+	spec.Timeout = 2 * time.Second
+	start := time.Now()
+	res := runSpecForTest(t, spec)
+	if res.Pass || res.Complete || !strings.Contains(res.Reason, "timeout") {
+		t.Fatalf("a timeout-killed suite: pass=%v complete=%v reason=%q", res.Pass, res.Complete, res.Reason)
+	}
+	if took := time.Since(start); took > 15*time.Second {
+		t.Fatalf("the run waited %s: a descendant held the suite's pipes past the kill", took)
+	}
+	b, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatalf("the suite never recorded its grandchild: %v", err)
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+	if err != nil {
+		t.Fatalf("grandchild pid %q: %v", b, err)
+	}
+	t.Cleanup(func() {
+		if p, err := os.FindProcess(pid); err == nil {
+			_ = p.Kill()
+		}
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for stewardProcAlive(pid) {
+		if time.Now().After(deadline) {
+			t.Fatalf("grandchild %d outlived the timeout kill", pid)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
@@ -834,15 +889,28 @@ func TestRepairPosixLinksNeverShadowWrapperUnits(t *testing.T) {
 		t.Fatalf("materializeRepairShims: %v", err)
 	}
 	defer os.RemoveAll(bin.path)
-	// The doctored wrapper's `sleep` is the Bash# unit, not a link.
+	// The doctored wrapper's `sleep` is the Bash# unit, not a link. The unit
+	// is the extensionless file on every OS; Windows adds a .cmd twin.
 	for _, name := range []string{"sleep", "go", "cc", "c++"} {
-		p := filepath.Join(bin.path, repairShimName(name))
+		p := filepath.Join(bin.path, name)
 		b, err := os.ReadFile(p)
 		if err != nil {
 			t.Fatalf("wrapper %s must be materialized: %v", name, err)
 		}
 		if !strings.HasPrefix(string(b), "#!"+bashy+" --bashsharp\n") {
 			t.Fatalf("wrapper %s must stay the authoritative Bash# unit:\n%s", name, b)
+		}
+	}
+	if runtime.GOOS == "windows" {
+		// PATHEXT resolution prefers sleep.exe/sleep.cmd over the bare
+		// unit, so neither may be the POSIX link: the .cmd twin must run
+		// the go wrapper, and no sleep.exe hard link may exist.
+		b, err := os.ReadFile(filepath.Join(bin.path, repairShimName("sleep")))
+		if run := units.runs[doctored.unit]; err != nil || string(b) != "@\""+bashy+"\" "+run+" %*\r\n" {
+			t.Fatalf("sleep.cmd must be the go wrapper's twin (run %q):\n%v\n%s", run, err, b)
+		}
+		if _, err := os.Lstat(filepath.Join(bin.path, "sleep.exe")); err == nil {
+			t.Fatal("a posix sleep.exe link must never shadow the wrapper")
 		}
 	}
 }
