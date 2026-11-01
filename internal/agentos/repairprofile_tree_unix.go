@@ -12,11 +12,11 @@ import "os/exec"
 // shell's go/make/test children), not just the shell. The returned reap kills
 // whatever the group still holds once the suite is done; a setsid'd daemon
 // deliberately left the group and is not ours.
-func startRepairTree(cmd *exec.Cmd) (reap func(), err error) {
+func startRepairTree(cmd *exec.Cmd) (reap func() error, err error) {
 	cmd.SysProcAttr = ownProcessGroupAttr()
 	cmd.Cancel = func() error { return killProcessGroup(cmd.Process) }
 	if err := cmd.Start(); err != nil {
-		return func() {}, err
+		return func() error { return nil }, err
 	}
-	return func() { _ = killProcessGroup(cmd.Process) }, nil
+	return func() error { _ = killProcessGroup(cmd.Process); return nil }, nil
 }

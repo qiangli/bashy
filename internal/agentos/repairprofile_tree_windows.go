@@ -7,48 +7,100 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sync"
+	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
 )
 
-// startRepairTree starts a suite inside a kill-on-close Job Object, so the
-// watchdog kill and the final reap reach every descendant. Windows has no
-// process groups: killing only the bashy shell leaves its children running,
-// holding the suite's working directory and pipes open (a TempDir that cannot
-// be removed, a Wait that blocks for WaitDelay). The shell is assigned right
-// after Start, before it has spawned anything in practice; a job that cannot
-// be created or joined degrades to killing the direct child, as before.
-func startRepairTree(cmd *exec.Cmd) (reap func(), err error) {
-	job, jobErr := newRepairKillOnCloseJob()
+// startRepairTree creates the suite suspended, assigns it to a kill-on-close
+// Job Object, then resumes its initial thread. No suite code can run (and spawn
+// an escaping descendant) before job assignment. Failure to establish this
+// containment aborts the launch instead of silently reverting to a direct kill.
+func startRepairTree(cmd *exec.Cmd) (reap func() error, err error) {
+	job, err := newRepairKillOnCloseJob()
+	if err != nil {
+		return func() error { return nil }, err
+	}
+	// CommandContext may call Cancel as soon as Start returns. Serialize it
+	// with assignment/resume and handle closure, including the failed-start path.
+	var mu sync.Mutex
+	mu.Lock()
 	cmd.Cancel = func() error {
-		if job != 0 {
-			if err := windows.TerminateJobObject(job, 1); err == nil {
-				return nil
-			}
-		}
-		return cmd.Process.Kill()
-	}
-	if err := cmd.Start(); err != nil {
-		if job != 0 {
-			_ = windows.CloseHandle(job)
-		}
-		return func() {}, err
-	}
-	if jobErr == nil {
-		if err := assignRepairPIDToJob(job, cmd.Process.Pid); err != nil {
-			_ = windows.CloseHandle(job)
-			job = 0
-		}
-	}
-	return func() {
+		mu.Lock()
+		defer mu.Unlock()
 		if job == 0 {
-			return
+			return os.ErrProcessDone
 		}
-		_ = windows.TerminateJobObject(job, 1)
-		_ = windows.CloseHandle(job)
-		job = 0
-	}, nil
+		return windows.TerminateJobObject(job, 1)
+	}
+	closeJob := func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		if job != 0 {
+			defer func() {
+				_ = windows.CloseHandle(job)
+				job = 0
+			}()
+			if err := windows.TerminateJobObject(job, 1); err != nil {
+				return fmt.Errorf("terminate suite job: %w", err)
+			}
+			return waitRepairJobEmpty(job)
+		}
+		return nil
+	}
+	if cmd.SysProcAttr == nil {
+		cmd.SysProcAttr = &syscall.SysProcAttr{}
+	}
+	cmd.SysProcAttr.CreationFlags |= windows.CREATE_SUSPENDED
+	if err := cmd.Start(); err != nil {
+		mu.Unlock()
+		closeJob()
+		return func() error { return nil }, err
+	}
+	if err = assignRepairPIDToJob(job, cmd.Process.Pid); err == nil {
+		err = resumeRepairInitialThread(cmd.Process.Pid)
+	}
+	if err != nil {
+		// The child is still suspended, so there are no descendants. Kill it
+		// directly even if job assignment failed, and Wait to drain exec's
+		// goroutines. Unlock first: Wait may wait for the cancellation callback.
+		_ = cmd.Process.Kill()
+		mu.Unlock()
+		closeJob()
+		_ = cmd.Wait()
+		return func() error { return nil }, fmt.Errorf("repair suite containment: %w", err)
+	}
+	mu.Unlock()
+	return closeJob, nil
+}
+
+// os/exec closes CreateProcess's thread handle. The suspended child has only
+// its initial thread, which Toolhelp lets us reopen using documented APIs.
+func resumeRepairInitialThread(pid int) error {
+	snapshot, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPTHREAD, 0)
+	if err != nil {
+		return fmt.Errorf("snapshot initial thread: %w", err)
+	}
+	defer windows.CloseHandle(snapshot)
+	entry := windows.ThreadEntry32{Size: uint32(unsafe.Sizeof(windows.ThreadEntry32{}))}
+	for err = windows.Thread32First(snapshot, &entry); err == nil; err = windows.Thread32Next(snapshot, &entry) {
+		if entry.OwnerProcessID != uint32(pid) {
+			continue
+		}
+		thread, err := windows.OpenThread(windows.THREAD_SUSPEND_RESUME, false, entry.ThreadID)
+		if err != nil {
+			return fmt.Errorf("open initial thread: %w", err)
+		}
+		defer windows.CloseHandle(thread)
+		if _, err := windows.ResumeThread(thread); err != nil {
+			return fmt.Errorf("resume initial thread: %w", err)
+		}
+		return nil
+	}
+	return fmt.Errorf("find initial thread for suspended suite: %w", err)
 }
 
 // newRepairKillOnCloseJob creates an anonymous job whose processes die with
@@ -75,4 +127,29 @@ func assignRepairPIDToJob(job windows.Handle, pid int) error {
 	}
 	defer windows.CloseHandle(proc)
 	return windows.AssignProcessToJobObject(job, proc)
+}
+
+// TerminateJobObject is asynchronous. Wait for every member to finish so file
+// and directory handles cannot outlive cleanup. A failed/slow drain is a failed
+// suite, never a successful result with lingering children.
+func waitRepairJobEmpty(job windows.Handle) error {
+	// JOBOBJECT_BASIC_ACCOUNTING_INFORMATION (Windows SDK layout).
+	var accounting struct {
+		TotalUserTime, TotalKernelTime, ThisPeriodTotalUserTime, ThisPeriodTotalKernelTime int64
+		TotalPageFaultCount, TotalProcesses, ActiveProcesses, TotalTerminatedProcesses     uint32
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if err := windows.QueryInformationJobObject(job, windows.JobObjectBasicAccountingInformation,
+			uintptr(unsafe.Pointer(&accounting)), uint32(unsafe.Sizeof(accounting)), nil); err != nil {
+			return fmt.Errorf("query suite job: %w", err)
+		}
+		if accounting.ActiveProcesses == 0 {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("suite job still has %d active processes after termination", accounting.ActiveProcesses)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

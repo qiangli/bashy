@@ -505,7 +505,7 @@ func TestRepairSuiteTimeoutKillReachesDescendants(t *testing.T) {
 		}
 	})
 	deadline := time.Now().Add(5 * time.Second)
-	for stewardProcAlive(pid) {
+	for repairTestProcessRunning(pid) {
 		if time.Now().After(deadline) {
 			t.Fatalf("grandchild %d outlived the timeout kill", pid)
 		}
@@ -1204,4 +1204,17 @@ func TestRepairOutpostProfileTestsShippedCgoSetting(t *testing.T) {
 	if got != "CGO_ENABLED=0" {
 		t.Fatalf("outpost suite env CGO_ENABLED = %q, want CGO_ENABLED=0", got)
 	}
+}
+
+// A Linux zombie has exited and released its file handles but may await an
+// unrelated PID 1's reap. It is not a surviving descendant of the test suite.
+func repairTestProcessRunning(pid int) bool {
+	if runtime.GOOS == "linux" {
+		if stat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid)); err == nil {
+			if end := strings.LastIndexByte(string(stat), ')'); end >= 0 && len(stat) > end+2 && stat[end+2] == 'Z' {
+				return false
+			}
+		}
+	}
+	return stewardProcAlive(pid)
 }

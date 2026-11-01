@@ -594,8 +594,14 @@ func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions, bashy strin
 	if runErr == nil {
 		runErr = cmd.Wait()
 	}
-	reap()
+	reapErr := reap()
 	res.DurationMS = time.Since(start).Milliseconds()
+
+	if reapErr != nil {
+		res.Reason = "suite process cleanup failed: " + reapErr.Error()
+		res.OutputTail, res.OutputTruncated = capw.tail()
+		return res, nil
+	}
 
 	res.Counts = capw.countsOrNil()
 	res.OutputTail, res.OutputTruncated = capw.tail()
