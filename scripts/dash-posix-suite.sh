@@ -38,6 +38,11 @@ set -u
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 cd "$HERE" || exit 2
 DT="$HERE/.dash-tests"   # gitignored clone cache
+EVIDENCE_MOUNT=()
+if [ -n "${POSIX_SUITE_EVIDENCE:-}" ]; then
+  mkdir -p "$POSIX_SUITE_EVIDENCE" || exit 2
+  EVIDENCE_MOUNT=(-v "$POSIX_SUITE_EVIDENCE:/out")
+fi
 
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
@@ -97,7 +102,7 @@ fi
 # same $HOME) — isolates SHELL behavior. For each func file, source it in POSIX
 # mode in a fresh subshell; PASS = the shell loads dash's code without error.
 # bashy emits the `bashy …` line the aggregator (posix-certdryrun.sh) greps for.
-$OCI run --rm -e LANG=C \
+$OCI run --rm "${EVIDENCE_MOUNT[@]}" -e LANG=C \
   -v "$FUNCS_DIR:/df:ro" -v "$BIN:/bashy:ro" "$IMAGE" busybox ash -c '
   export LANG=C
   # "label=cmd" — cmd is the shell invocation put in POSIX mode.
@@ -116,7 +121,12 @@ $OCI run --rm -e LANG=C \
     ok=0; detail=""
     for f in $FILES; do
       b=$(basename "$f")
-      if echo "" | timeout 8 $cmd -c ". $f" >/dev/null 2>&1; then
+      raw=/dev/null
+      [ -d /out ] && raw="/out/$label.$b.log"
+      echo "" | timeout 8 $cmd -c ". $f" >"$raw" 2>&1
+      runner_rc=$?
+      [ -d /out ] && printf "%s\n" "$runner_rc" >"/out/$label.$b.exit"
+      if [ "$runner_rc" -eq 0 ]; then
         ok=$((ok+1)); detail="$detail +$b"
       else
         detail="$detail -$b"

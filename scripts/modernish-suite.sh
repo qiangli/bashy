@@ -36,6 +36,11 @@ set -u
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 cd "$HERE" || exit 2
 MT="$HERE/.modernish-tests"   # gitignored clone cache
+EVIDENCE_MOUNT=()
+if [ -n "${POSIX_SUITE_EVIDENCE:-}" ]; then
+  mkdir -p "$POSIX_SUITE_EVIDENCE" || exit 2
+  EVIDENCE_MOUNT=(-v "$POSIX_SUITE_EVIDENCE:/out")
+fi
 
 OCI=${OCI:-}
 if [ -z "$OCI" ]; then
@@ -96,7 +101,7 @@ echo "##### modernish self-test (regression/feature suite) vs bashy + reference 
 echo "# INFO suite: modernish is strict about its host shell; not all shells initialise."
 echo "# OK=succeeded  FAIL=failed-unexpectedly  (skip / xfail=known-shell-bug shown in parens)"
 
-$OCI run --rm -e LANG=C -e SHELLS="$SHELLS" \
+$OCI run --rm "${EVIDENCE_MOUNT[@]}" -e LANG=C -e SHELLS="$SHELLS" \
   -v "$MT:/msh:ro" -v "$BIN:/bashy:ro" "$IMG" bash -c '
   export LANG=C
   # Run from a writable copy so the loader can derive MSH_PREFIX cleanly.
@@ -106,7 +111,14 @@ $OCI run --rm -e LANG=C -e SHELLS="$SHELLS" \
     if ! command -v "$cmd" >/dev/null 2>&1; then
       printf "  %-8s (not found)\n" "$label"; continue
     fi
-    out=$(timeout 420 "$cmd" bin/modernish --test -qq 2>&1)
+    if [ -d /out ]; then
+      timeout 420 "$cmd" bin/modernish --test -qq >"/out/$label.log" 2>&1
+      runner_rc=$?
+      printf "%s\n" "$runner_rc" >"/out/$label.exit"
+      out=$(cat "/out/$label.log")
+    else
+      out=$(timeout 420 "$cmd" bin/modernish --test -qq 2>&1)
+    fi
     total=$(printf "%s\n" "$out" | sed -n "s/^Out of \([0-9][0-9]*\) test.*/\1/p" | head -1)
     if [ -z "$total" ]; then
       # modernish never reached the test run: init/parse failure. Report the

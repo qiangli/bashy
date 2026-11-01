@@ -35,7 +35,7 @@ if [ "${1:-}" = "--list" ]; then
   LIST_ONLY=1
   shift
 fi
-OUTDIR=${1:-}
+OUTDIR=${1:-${POSIX_SUITE_EVIDENCE:-}}
 YT="$HERE/.yash-tests"   # gitignored clone cache
 
 OCI=${OCI:-}
@@ -123,7 +123,11 @@ run_panel() { # panel-label image "label=cmd …"
       ok=0; er=0; vf="/out/$PANEL.$label.verdicts"; [ -d /out ] && : > "$vf"
       for t in $TESTS; do
         start=$(date +%s)
-        timeout -s KILL 8 busybox ash run-test.sh "$cmd" "$t" >/dev/null 2>&1
+        raw=/dev/null
+        [ -d /out ] && raw="/out/$PANEL.$label.${t%.tst}.log"
+        timeout -s KILL 8 busybox ash run-test.sh "$cmd" "$t" >"$raw" 2>&1
+        runner_rc=$?
+        [ -d /out ] && printf "%s\n" "$runner_rc" >"/out/$PANEL.$label.${t%.tst}.exit"
         end=$(date +%s)
         trs="${t%.tst}.trs"; [ -f "$trs" ] || continue
         casevf="/tmp/$PANEL.$label.$$.$trs.verdicts"
@@ -139,7 +143,7 @@ run_panel() { # panel-label image "label=cmd …"
         e=$(grep -c " ERROR$" "$casevf" 2>/dev/null); er=$((er + ${e:-0}))
         if [ -d /out ]; then
           cat "$casevf" >> "$vf"
-          if [ "$label" = bashy ] && [ "${e:-0}" -gt 0 ]; then
+          if [ "${e:-0}" -gt 0 ]; then
             cp "$trs" "/out/$PANEL.$label.$trs"
           fi
         fi

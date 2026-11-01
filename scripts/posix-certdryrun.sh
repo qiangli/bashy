@@ -73,7 +73,11 @@ for entry in "${SUITES[@]}"; do
   fi
   log="$OUTDIR/$key.log"
   echo ">>> running $key …" >&2
-  bash "$script" >"$log" 2>&1; rc=$?
+  # Keep suite-generated diagnostics beside the existing summary log so a
+  # retained dry-run directory contains the evidence needed to triage INFO.
+  mkdir -p "$OUTDIR/$key"
+  POSIX_SUITE_EVIDENCE="$OUTDIR/$key" bash "$script" >"$log" 2>&1; rc=$?
+  printf '%s\n' "$rc" >"$OUTDIR/$key/runner.exit"
   ran=$((ran+1))
   if [ "$info_only" = 1 ]; then
     # Reporting harness: surface bashy's own line, not a pass/fail gate.
