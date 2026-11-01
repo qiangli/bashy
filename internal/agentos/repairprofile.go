@@ -11,6 +11,11 @@
 //     never host binaries ("bashy is all you need"); the evidence records
 //     which bashy ran (path + version) and which provider each tool resolved
 //     to;
+//   - the suite bin dir also carries bashy's own POSIX/coreutils utilities
+//     as links to the running bashy (argv[0] multicall dispatch; `sh` takes
+//     the shell route), so an external `/bin/sh -c "sleep 30"` finds sleep
+//     on the suite PATH of a bare host — the evidence records count + bin
+//     dir (runtime.posix_links);
 //   - a run with the network disabled passes from the SHA-pinned cache;
 //   - a killed, partial or truncated run is a failure, never a pass;
 //   - GPL suites are fetched by SHA into the gitignored user cache, never
@@ -36,11 +41,15 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/qiangli/coreutils/tool"
 	"github.com/qiangli/yoke/external/gotoolchain"
+	"github.com/qiangli/yoke/pkg/atlas"
 )
 
 // RepairProfileSchema versions the evidence record. Bump (v2, v3…) on any
@@ -156,10 +165,24 @@ type RepairToolResolution struct {
 }
 
 // RepairRuntime is the S549.R4b evidence block: the bashy every suite ran
-// inside, and the provider each tool the profile needs resolved to.
+// inside, the provider each tool the profile needs resolved to, and the
+// POSIX/coreutils links that carried the suite PATH's utilities.
 type RepairRuntime struct {
-	Bashy RepairBashyIdent       `json:"bashy"`
-	Tools []RepairToolResolution `json:"tools,omitempty"`
+	Bashy      RepairBashyIdent       `json:"bashy"`
+	Tools      []RepairToolResolution `json:"tools,omitempty"`
+	PosixLinks *RepairPosixLinks      `json:"posix_links,omitempty"`
+}
+
+// RepairPosixLinks is the S549.R4b rework evidence: the suite bin dir carries
+// bashy's POSIX/coreutils utilities as links to the running bashy executable,
+// so a bare host's external shells still find sh/sleep/ls/head/… through
+// bashy's own userland — never a host binary, never a per-name copy of the
+// ~250 MB binary. The bin dir is per-suite and removed after the run; the
+// record proves provenance, not a live path.
+type RepairPosixLinks struct {
+	Count  int    `json:"count"`
+	BinDir string `json:"bin_dir,omitempty"`
+	Kind   string `json:"kind,omitempty"` // symlink (unix) · hard link .exe / cmd shim fallback (windows)
 }
 
 // RepairProfileOptions parameterizes RunRepairProfile.
@@ -411,7 +434,7 @@ func RunRepairProfile(opts RepairProfileOptions) (*RepairProfileEvidence, error)
 			ev.Suites = append(ev.Suites, skippedRepairToolSuite(spec, missing))
 			continue
 		}
-		res, err := runRepairSuite(spec, opts, bashy, units)
+		res, err := runRepairSuite(spec, opts, bashy, units, ev.Runtime)
 		if err != nil {
 			return ev, err
 		}
@@ -486,8 +509,10 @@ func repairDisplayCommand(spec RepairSuiteSpec) string {
 // `<bashy> -c '<suite command>'`, and inside that shell make, go and cc
 // resolve to bashy's own commands/providers (coreutils in-process make;
 // wrapper units from ci/bin on the suite's private PATH for go/cc/c++),
-// never host binaries.
-func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions, bashy string, units repairUnits) (RepairSuiteResult, error) {
+// never host binaries. The S549.R4b rework adds the POSIX/coreutils links:
+// the same private PATH carries bashy's own sh/sleep/ls/…, so external
+// shells a suite spawns find the POSIX utilities on a bashy-only host.
+func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions, bashy string, units repairUnits, rt *RepairRuntime) (RepairSuiteResult, error) {
 	res := RepairSuiteResult{Name: spec.Name, Lane: spec.Lane}
 
 	timeout := spec.Timeout
@@ -502,21 +527,27 @@ func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions, bashy strin
 		return skippedRepairToolSuite(spec, missing), nil
 	}
 
-	shimDir, err := materializeRepairShims(units, bashy)
+	bin, err := materializeRepairShims(units, bashy)
+	if bin.path != "" {
+		defer os.RemoveAll(bin.path)
+	}
 	if err != nil {
 		res.Command = repairDisplayCommand(spec)
 		res.Reason = "bashy runtime wrappers: " + err.Error()
 		return res, nil
 	}
-	if shimDir != "" {
-		defer os.RemoveAll(shimDir)
+	if bin.path != "" && rt != nil {
+		// The bin dir is per-suite and cleaned up after the run; the evidence
+		// records the provenance (count + a representative bin dir), not a
+		// promise the path still exists.
+		rt.PosixLinks = &RepairPosixLinks{Count: bin.posix, BinDir: bin.path, Kind: bin.posixKind}
 	}
 
 	command := repairDisplayCommand(spec)
 	argv := spec.Args
 	switch spec.Kind {
 	case "go-test-list":
-		expanded, cmdDisplay, err := expandGoTestList(opts.Root, spec, bashy, shimDir, repairSuiteEnv(opts, spec, shimDir))
+		expanded, cmdDisplay, err := expandGoTestList(opts.Root, spec, bashy, bin.path, repairSuiteEnv(opts, spec, bin.path))
 		if err != nil {
 			res.Command = command
 			res.Reason = "go list: " + err.Error()
@@ -546,7 +577,7 @@ func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions, bashy strin
 	start := time.Now()
 	cmd := exec.CommandContext(ctx, invocation[0], invocation[1:]...)
 	cmd.Dir = opts.Root
-	cmd.Env = repairSuiteEnv(opts, spec, shimDir)
+	cmd.Env = repairSuiteEnv(opts, spec, bin.path)
 	cmd.Stdout = capw
 	cmd.Stderr = capw
 	// Bound the pipe-drain after a watchdog kill: grandchildren that inherit
@@ -618,10 +649,12 @@ func repairPlainWord(s string) bool {
 
 // repairSuiteEnv assembles the suite process environment: the base env
 // (opts.Env, else the runner's own), the spec's overrides, then the R4b
-// runtime rules — the wrapper shim dir FIRST on PATH (so go/cc inside the
-// suite shell resolve to bashy's own providers before any host binary), and
-// CC/CXX pointing at the wrapper units when the environment provides no
-// compiler. Later entries win, so spec.Env genuinely overrides the base.
+// runtime rules — the suite bin dir (wrapper units + the POSIX/coreutils
+// links) FIRST on PATH with the host PATH as a trailing fallback, so go/cc
+// and every POSIX utility inside the suite shell resolve to bashy's own
+// before any host binary, and CC/CXX pointing at the wrapper units when the
+// environment provides no compiler. Later entries win, so spec.Env genuinely
+// overrides the base.
 func repairSuiteEnv(opts RepairProfileOptions, spec RepairSuiteSpec, shimDir string) []string {
 	base := opts.Env
 	if base == nil {
@@ -957,31 +990,129 @@ func skippedRepairToolSuite(spec RepairSuiteSpec, tool string) RepairSuiteResult
 	}
 }
 
-// materializeRepairShims writes the wrapper units as executables into a fresh
-// private dir: each alias becomes a Bash# unit whose shebang runs it through
-// the pinned bashy (`#!<bashy> --bashsharp` — the shell's own shebang probe
-// executes it on every OS, Windows included). On Windows each also gets a
-// .cmd twin so direct CreateProcess consumers (cgo's CC/CXX) can run it —
-// cmd.exe ships with the OS; nothing is installed. The dir is returned for
-// the caller to clean up; "" when no unit is available.
-func materializeRepairShims(units repairUnits, bashy string) (string, error) {
-	if strings.ContainsAny(bashy, " \t") {
-		return "", fmt.Errorf("pinned bashy path %q contains whitespace — the wrapper shebang cannot carry it", bashy)
-	}
-	var have bool
+// --- bashy's POSIX/coreutils utilities on the suite PATH (S549.R4b rework) ---
+
+// repairPosixUtilNames returns the POSIX/coreutils utility names the suite
+// bin dir links to the running bashy. The source of record is the data
+// behind `bashy commands --view posix`: the 116 POSIX-required utilities
+// (atlas.PosixRequired) plus the GNU coreutils inventory
+// (atlas.GNUCoreutilsUpstream) — never a second hardcoded list. Two filters:
+// a name becomes a link only when the bashy binary dispatches it on argv[0]
+// (the same multicall registry lookup cmd/bashy's route does, plus the
+// sh shell route; shell builtins like cd/alias/wait are served in-process by
+// any shell, and a name bashy cannot dispatch would be a broken link
+// shadowing a working host binary on the suite PATH), and never a name a
+// wrapper unit already provides — the wrappers stay authoritative
+// (go/cc/c++ and their spellings).
+func repairPosixUtilNames() []string {
+	reserved := map[string]bool{}
 	for _, row := range repairBashyToolRows {
-		if row.unit != "" {
-			have = true
-			break
+		if row.unit == "" {
+			continue
+		}
+		for _, a := range row.aliases {
+			reserved[a] = true
 		}
 	}
-	if !have {
-		return "", nil
+	seen := map[string]bool{}
+	var names []string
+	add := func(n string) {
+		if seen[n] || reserved[n] {
+			return
+		}
+		if n != "sh" && n != "bash" && tool.Lookup(n) == nil {
+			return
+		}
+		seen[n] = true
+		names = append(names, n)
+	}
+	for _, n := range atlas.PosixRequired() {
+		add(n)
+	}
+	for _, n := range atlas.GNUCoreutilsUpstream() {
+		add(n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// The POSIX-utility link kinds the evidence records.
+const (
+	repairLinkSymlink  = "symlink"
+	repairLinkHardLink = "hard link"
+	repairLinkCmdShim  = "cmd shim"
+)
+
+// repairOSLinks is the filesystem seam the POSIX-utility links go through.
+// The production instance wraps the os package; tests substitute fakes to
+// pin the Windows link-or-shim decision without a Windows host.
+type repairOSLinks struct {
+	goos      string
+	symlink   func(target, link string) error
+	hardlink  func(target, link string) error
+	writeFile func(path string, body []byte) error
+}
+
+// repairUtilLinks is the production seam instance.
+var repairUtilLinks = repairOSLinks{
+	goos:      runtime.GOOS,
+	symlink:   os.Symlink,
+	hardlink:  os.Link,
+	writeFile: func(path string, body []byte) error { return os.WriteFile(path, body, 0o644) },
+}
+
+// repairWriteUtilLink materializes one utility name that runs the pinned
+// bashy's own userland, dispatching on argv[0]:
+//
+//   - unix: a symlink — free to create, and the executed link's argv[0]
+//     names the utility (multicall dispatch; a `sh` link takes the
+//     shell-only route);
+//   - windows: a same-volume hard link with the .exe suffix — CreateProcess
+//     runs it directly and argv[0] still names the utility; a hard link that
+//     cannot be made (cross-volume temp dir, a link-less filesystem) falls
+//     back to a small .cmd shim naming the utility (`bashy <name> %*`;
+//     cmd.exe ships with the OS, nothing is installed).
+//
+// Never a copy: the binary is ~250 MB and every name shares one inode.
+// Returns the evidence kind of the entry.
+func repairWriteUtilLink(l repairOSLinks, dir, name, bashy string) (string, error) {
+	if l.goos == "windows" {
+		if err := l.hardlink(bashy, filepath.Join(dir, name+".exe")); err == nil {
+			return repairLinkHardLink, nil
+		}
+		body := "@\"" + bashy + "\" " + name + " %*\r\n"
+		return repairLinkCmdShim, l.writeFile(filepath.Join(dir, name+".cmd"), []byte(body))
+	}
+	return repairLinkSymlink, l.symlink(bashy, filepath.Join(dir, name))
+}
+
+// repairBinDir is the private bin dir the runner prepares for each suite:
+// the Bash# wrapper units (go/cc/c++) PLUS bashy's own POSIX/coreutils
+// utilities as links to the pinned bashy (S549.R4b rework) — on a host with
+// nothing but bashy, every POSIX name the suite PATH needs is there.
+type repairBinDir struct {
+	path      string
+	posix     int    // POSIX/coreutils utility links created
+	posixKind string // evidence label: symlink · hard link · hard link + cmd shim
+}
+
+// materializeRepairShims writes the suite's private bin dir into a fresh
+// temp dir. Each wrapper alias becomes a Bash# unit whose shebang runs it
+// through the pinned bashy (`#!<bashy> --bashsharp` — the shell's own
+// shebang probe executes it on every OS, Windows included; on Windows each
+// also gets a .cmd twin so direct CreateProcess consumers (cgo's CC/CXX) can
+// run it). Then every POSIX/coreutils name bashy dispatches becomes a link
+// to the pinned bashy — the wrappers' names are never shadowed. The dir is
+// returned for the caller to clean up.
+func materializeRepairShims(units repairUnits, bashy string) (repairBinDir, error) {
+	if strings.ContainsAny(bashy, " \t") {
+		return repairBinDir{}, fmt.Errorf("pinned bashy path %q contains whitespace — the wrapper shebang cannot carry it", bashy)
 	}
 	dir, err := os.MkdirTemp("", "bashy-repair-bin-*")
 	if err != nil {
-		return "", err
+		return repairBinDir{}, err
 	}
+	bin := repairBinDir{path: dir}
 	bodyFor := func(row repairToolRow) (string, bool) {
 		body, ok := units.bodies[row.unit]
 		if !ok {
@@ -1009,7 +1140,7 @@ func materializeRepairShims(units repairUnits, bashy string) (string, error) {
 		}
 		for _, alias := range row.aliases {
 			if err := writeUnit(alias, body); err != nil {
-				return "", err
+				return bin, err
 			}
 			if runtime.GOOS == "windows" {
 				run := units.runs[row.unit]
@@ -1018,12 +1149,32 @@ func materializeRepairShims(units repairUnits, bashy string) (string, error) {
 				}
 				cmdBody := "@\"" + bashy + "\" " + run + " %*\r\n"
 				if err := os.WriteFile(filepath.Join(dir, alias+".cmd"), []byte(cmdBody), 0o644); err != nil {
-					return "", err
+					return bin, err
 				}
 			}
 		}
 	}
-	return dir, nil
+	// S549.R4b rework: bashy's POSIX/coreutils utilities, linked to the
+	// pinned bashy. The name list never carries a wrapper-owned name, and an
+	// existing file in the dir is never overwritten (belt and braces: the
+	// wrappers stay authoritative).
+	var kinds []string
+	for _, name := range repairPosixUtilNames() {
+		if _, err := os.Lstat(filepath.Join(dir, name)); err == nil {
+			continue
+		}
+		kind, err := repairWriteUtilLink(repairUtilLinks, dir, name, bashy)
+		if err != nil {
+			return bin, fmt.Errorf("posix utility %s: %w", name, err)
+		}
+		bin.posix++
+		if !slices.Contains(kinds, kind) {
+			kinds = append(kinds, kind)
+		}
+	}
+	sort.Strings(kinds)
+	bin.posixKind = strings.Join(kinds, " + ")
+	return bin, nil
 }
 
 // gitCommit reports the component checkout's HEAD ("unknown" when git cannot

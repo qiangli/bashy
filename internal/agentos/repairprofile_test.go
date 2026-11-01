@@ -254,13 +254,13 @@ func TestRepairUnitsMaterializeAsBashSharpShims(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		bashy = `C:\opt\bashy\bin\bashy.exe`
 	}
-	dir, err := materializeRepairShims(units, bashy)
+	bin, err := materializeRepairShims(units, bashy)
 	if err != nil {
 		t.Fatalf("materializeRepairShims: %v", err)
 	}
-	defer os.RemoveAll(dir)
+	defer os.RemoveAll(bin.path)
 	for _, name := range []string{"go", "cc", "gcc", "clang", "c++", "g++", "clang++"} {
-		p := filepath.Join(dir, name)
+		p := filepath.Join(bin.path, name)
 		b, err := os.ReadFile(p)
 		if err != nil {
 			t.Fatalf("shim %s: %v", name, err)
@@ -272,18 +272,18 @@ func TestRepairUnitsMaterializeAsBashSharpShims(t *testing.T) {
 			t.Fatalf("shim %s must be executable", name)
 		}
 	}
-	if cc, err := os.ReadFile(filepath.Join(dir, "cc")); err == nil {
+	if cc, err := os.ReadFile(filepath.Join(bin.path, "cc")); err == nil {
 		if !strings.Contains(string(cc), `zig cc "$@"`) {
 			t.Fatalf("cc shim must run bashy zig cc:\n%s", cc)
 		}
 	}
-	if goShim, err := os.ReadFile(filepath.Join(dir, "go")); err == nil {
+	if goShim, err := os.ReadFile(filepath.Join(bin.path, "go")); err == nil {
 		if !strings.Contains(string(goShim), `"`+bashy+`" go "$@"`) {
 			t.Fatalf("go shim must run the pinned bashy's go:\n%s", goShim)
 		}
 	}
 	if runtime.GOOS == "windows" {
-		b, err := os.ReadFile(filepath.Join(dir, "cc.cmd"))
+		b, err := os.ReadFile(filepath.Join(bin.path, "cc.cmd"))
 		if err != nil || !strings.Contains(string(b), "zig cc") {
 			t.Fatalf("windows cc.cmd twin missing or wrong:\n%v\n%s", err, b)
 		}
@@ -711,6 +711,230 @@ func TestRepairHermeticStrippedPathRunsThroughBashyRuntime(t *testing.T) {
 	}
 	if r, ok := resolutions["make"]; !ok || !strings.Contains(r.Provider, "coreutils make") {
 		t.Fatalf("make resolution = %+v, want the in-process coreutils make", r)
+	}
+}
+
+// --- S549.R4b rework: the suite bin dir carries bashy's POSIX utilities ---
+
+// TestRepairHermeticPosixUtilitiesFromBashyLinks is the rework's acceptance
+// lane, from the live finding on a bare Linux host (PATH = only the bashy
+// binary): a suite payload ran `/bin/sh -c "sleep 30"` and failed — the
+// external sh resolves its utilities on PATH, and no POSIX utilities were
+// there. Here PATH is ONLY the prepared suite bin dir, and `command sh -c
+// 'sleep 0 && ls / >/dev/null && head -c1 </dev/null; echo ok'` must succeed
+// entirely through bashy's own utilities: `command` bypasses the preamble's
+// in-shell sh, so sh/sleep/ls/head resolve on PATH — the bin dir's links to
+// the running bashy (argv[0] dispatch), never a host binary.
+func TestRepairHermeticPosixUtilitiesFromBashyLinks(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix hermetic lane (sh -c + /dev/null); the windows link path is unit-tested at the seam")
+	}
+	spec := RepairSuiteSpec{
+		Name: "posix-utilities", Lane: "native", Kind: "argv",
+		Args:    []string{"command", "sh", "-c", "sleep 0 && ls / >/dev/null && head -c1 </dev/null; echo ok"},
+		Timeout: time.Minute,
+		Command: `command sh -c 'sleep 0 && ls / >/dev/null && head -c1 </dev/null; echo ok'`,
+	}
+	ev := runProfileForTest(t, RepairProfileOptions{
+		Component:    "bashy",
+		Bashy:        repairTestBashy(t),
+		Env:          repairHermeticEnv(t), // PATH= → the prepared bin dir only
+		CustomSuites: []RepairSuiteSpec{spec},
+	})
+	res := ev.Suites[0]
+	if !res.Complete || !res.Pass {
+		t.Fatalf("hermetic POSIX-utility suite must pass via bashy's own commands: "+
+			"complete=%v pass=%v reason=%q tail=%q", res.Complete, res.Pass, res.Reason, res.OutputTail)
+	}
+	if !strings.Contains(res.OutputTail, "ok") {
+		t.Fatalf("suite output must carry the payload's ok: %q", res.OutputTail)
+	}
+	if strings.Contains(res.OutputTail, "not found") {
+		t.Fatalf("no utility may be missing from the bashy runtime: %q", res.OutputTail)
+	}
+	// The evidence records that the POSIX utilities came from bashy.
+	if ev.Runtime == nil || ev.Runtime.PosixLinks == nil {
+		t.Fatalf("runtime.posix_links must record the bashy-provided POSIX utilities: %+v", ev.Runtime)
+	}
+	links := ev.Runtime.PosixLinks
+	if links.Count < 100 || links.BinDir == "" || links.Kind == "" {
+		t.Fatalf("posix_links = %+v, want count >= 100, the bin dir and the link kind", links)
+	}
+}
+
+// TestRepairPosixUtilNamesSourcedFromAtlas pins the name list's source: the
+// 116 POSIX-required utilities plus the GNU coreutils inventory — the data
+// behind `bashy commands --view posix` (atlas.PosixRequired +
+// atlas.GNUCoreutilsUpstream, never a second hardcoded list) — filtered to
+// the names the bashy binary dispatches on argv[0] (the multicall registry,
+// plus the sh shell route), with shell builtins (cd, alias, wait…) left out:
+// the shell serves them in-process, and a link that cannot dispatch would
+// shadow nothing and fool no one.
+func TestRepairPosixUtilNamesSourcedFromAtlas(t *testing.T) {
+	names := repairPosixUtilNames()
+	if len(names) < 100 {
+		t.Fatalf("posix utility names = %d, want the POSIX+coreutils set (>= 100): %v", len(names), names)
+	}
+	set := map[string]bool{}
+	for _, n := range names {
+		set[n] = true
+	}
+	for _, want := range []string{"sh", "sleep", "ls", "head", "cat", "make"} {
+		if !set[want] {
+			t.Fatalf("posix utility names must carry %q (the live finding was a missing sleep): %v", want, names)
+		}
+	}
+	for _, builtin := range []string{"cd", "alias", "wait", "command", "umask"} {
+		if set[builtin] {
+			t.Fatalf("shell builtins are served in-process, never linked: %q in %v", builtin, names)
+		}
+	}
+	// The names bashy cannot dispatch as utilities (the three coreutils
+	// bashy does not implement) must not become broken links shadowing a
+	// working host binary on the suite PATH.
+	for _, unimplemented := range []string{"chroot", "coreutils", "runcon"} {
+		if set[unimplemented] {
+			t.Fatalf("%q cannot dispatch in bashy's multicall — a link would be broken: %v", unimplemented, names)
+		}
+	}
+	// Sorted, unique (evidence and bin-dir listings stay deterministic).
+	for i := 1; i < len(names); i++ {
+		if names[i-1] >= names[i] {
+			t.Fatalf("names must be sorted and unique: %v", names)
+		}
+	}
+}
+
+// TestRepairPosixLinksNeverShadowWrapperUnits: the wrapper units stay
+// authoritative for their names. With the real table nothing collides, and a
+// doctored row claiming a POSIX name (go also answering to `sleep`) proves
+// the exclusion: the wrapper unit is written, the link is not.
+func TestRepairPosixLinksNeverShadowWrapperUnits(t *testing.T) {
+	units := repairUnitsIndex(findRepairUnitsDir(RepairProfileOptions{}))
+	bashy := "/opt/bashy/bin/bashy"
+	if runtime.GOOS == "windows" {
+		bashy = `C:\opt\bashy\bin\bashy.exe`
+	}
+
+	// Doctor the go row to also claim the POSIX name `sleep`.
+	goRow := repairBashyToolRows["go"]
+	doctored := goRow
+	doctored.aliases = append([]string{"sleep"}, goRow.aliases...)
+	repairBashyToolRows["go"] = doctored
+	t.Cleanup(func() { repairBashyToolRows["go"] = goRow })
+
+	names := repairPosixUtilNames()
+	for _, n := range names {
+		if n == "sleep" || n == "go" {
+			t.Fatalf("a wrapper-owned name must never become a posix link: %v", n)
+		}
+	}
+	bin, err := materializeRepairShims(units, bashy)
+	if err != nil {
+		t.Fatalf("materializeRepairShims: %v", err)
+	}
+	defer os.RemoveAll(bin.path)
+	// The doctored wrapper's `sleep` is the Bash# unit, not a link.
+	for _, name := range []string{"sleep", "go", "cc", "c++"} {
+		p := filepath.Join(bin.path, repairShimName(name))
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("wrapper %s must be materialized: %v", name, err)
+		}
+		if !strings.HasPrefix(string(b), "#!"+bashy+" --bashsharp\n") {
+			t.Fatalf("wrapper %s must stay the authoritative Bash# unit:\n%s", name, b)
+		}
+	}
+}
+
+// TestRepairUtilLinkDecision pins the platform link-or-shim decision at the
+// seam (no Windows host needed): unix symlinks; windows prefers a same-volume
+// hard link with the .exe suffix; a failed hard link (cross-volume temp dir,
+// link-less FS) falls back to a small .cmd shim that names the utility — and
+// no route ever copies the ~250 MB binary.
+func TestRepairUtilLinkDecision(t *testing.T) {
+	dir := t.TempDir()
+	bashy := `/mock/bashy.exe`
+	var symlinks, hardlinks, written []string
+	linker := repairOSLinks{
+		goos: "windows",
+		symlink: func(target, link string) error {
+			symlinks = append(symlinks, link)
+			return nil
+		},
+		hardlink: func(target, link string) error {
+			hardlinks = append(hardlinks, link)
+			return nil
+		},
+		writeFile: func(path string, body []byte) error {
+			written = append(written, path+"|"+string(body))
+			return nil
+		},
+	}
+
+	// windows, hard link succeeds: name.exe, no shim, no symlink.
+	kind, err := repairWriteUtilLink(linker, dir, "sleep", bashy)
+	if err != nil || kind != repairLinkHardLink {
+		t.Fatalf("windows hard-link route: kind=%q err=%v", kind, err)
+	}
+	if len(hardlinks) != 1 || filepath.Base(hardlinks[0]) != "sleep.exe" {
+		t.Fatalf("windows must hard-link sleep.exe: %v", hardlinks)
+	}
+	if len(written) != 0 || len(symlinks) != 0 {
+		t.Fatalf("a working hard link needs no shim or symlink: %v %v", written, symlinks)
+	}
+
+	// windows, hard link fails: fall back to the .cmd shim naming the utility.
+	linker.hardlink = func(target, link string) error { return fmt.Errorf("cross-volume link") }
+	kind, err = repairWriteUtilLink(linker, dir, "head", bashy)
+	if err != nil || kind != repairLinkCmdShim {
+		t.Fatalf("windows shim fallback: kind=%q err=%v", kind, err)
+	}
+	if len(written) != 1 || filepath.Base(strings.Split(written[0], "|")[0]) != "head.cmd" {
+		t.Fatalf("windows fallback must write head.cmd: %v", written)
+	}
+	if body := strings.SplitN(written[0], "|", 2)[1]; body != "@\""+bashy+"\" head %*\r\n" {
+		t.Fatalf("shim body must run bashy's own head: %q", body)
+	}
+
+	// unix: a symlink, no suffix, no shim.
+	linker.goos = "linux"
+	kind, err = repairWriteUtilLink(linker, dir, "ls", bashy)
+	if err != nil || kind != repairLinkSymlink {
+		t.Fatalf("unix route: kind=%q err=%v", kind, err)
+	}
+	if len(symlinks) != 1 || symlinks[0] != filepath.Join(dir, "ls") {
+		t.Fatalf("unix must symlink ls: %v", symlinks)
+	}
+}
+
+// TestRepairMaterializePosixLinksOnDisk: on unix the bin dir really carries
+// symlinks pointing at the pinned bashy — `ls` resolves to it through the
+// link, the count is recorded, and no name is a copy of the binary.
+func TestRepairMaterializePosixLinksOnDisk(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink shape is unix; the windows decision is covered at the seam")
+	}
+	units := repairUnitsIndex(findRepairUnitsDir(RepairProfileOptions{}))
+	bashy := repairTestBashy(t)
+	bin, err := materializeRepairShims(units, bashy)
+	if err != nil {
+		t.Fatalf("materializeRepairShims: %v", err)
+	}
+	defer os.RemoveAll(bin.path)
+	if bin.posix < 100 {
+		t.Fatalf("posix link count = %d, want >= 100", bin.posix)
+	}
+	for _, name := range []string{"sh", "sleep", "ls", "head"} {
+		p := filepath.Join(bin.path, name)
+		fi, err := os.Lstat(p)
+		if err != nil || fi.Mode()&os.ModeSymlink == 0 {
+			t.Fatalf("%s must be a symlink to the pinned bashy: %v %+v", name, err, fi)
+		}
+		target, err := os.Readlink(p)
+		if err != nil || target != bashy {
+			t.Fatalf("%s -> %q, want the pinned bashy %q (%v)", name, target, bashy, err)
+		}
 	}
 }
 

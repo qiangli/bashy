@@ -30,6 +30,23 @@ cc over `bashy zig cc`) instead of installing anything on the host.
 - `CC`/`CXX` default to the `cc`/`cxx` wrapper units (→ `bashy zig cc` /
   `bashy zig c++`) whenever the suite environment does not provide a
   compiler, so cgo works on a bare host.
+- The same private PATH carries **bashy's own POSIX utilities** (S549.R4b
+  rework): every name from the data behind `bashy commands --view posix`
+  (the 116 POSIX-required utilities plus the GNU coreutils inventory) that
+  the bashy binary dispatches on argv[0] — `sh`/`sleep`/`ls`/`head`/… — is
+  linked into the suite bin dir pointing at the running bashy. An external
+  shell a suite spawns (`/bin/sh -c "sleep 30"`, the live finding on a
+  bashy-only host) resolves its utilities on PATH and finds bashy's own,
+  never a host binary. Unix links are symlinks; Windows prefers same-volume
+  hard links with the `.exe` suffix (argv[0] still names the utility) and
+  falls back to a small `.cmd` shim naming the utility when a hard link
+  cannot be made — never a copy of the ~250 MB binary. Wrapper-owned names
+  (`go`/`cc`/`c++` and their spellings) are never shadowed, and names bashy
+  cannot dispatch are never linked (a broken link would shadow a working
+  host binary). The bin dir stays **first** on the suite PATH with the host
+  PATH as a trailing fallback (the existing R4b semantics). The evidence
+  records the provenance in `runtime.posix_links` (count, bin dir, link
+  kind).
 - If a suite needs a tool the bashy runtime cannot provide, the evidence
   records that suite `skipped (tool <x> unavailable in bashy runtime)` —
   never pass — and names the missing tool.
@@ -92,7 +109,8 @@ failure.
       { "tool": "go", "provider": "bashy go (pinned provider go1.27.2)", "via": "wrapper unit ci/bin/go.md on the suite PATH" },
       { "tool": "cc", "provider": "bashy zig cc (pinned zig provider; zig cc is clang)", "via": "wrapper unit ci/bin/cc.md on the suite PATH (CC default)" },
       { "tool": "c++", "provider": "bashy zig c++ (pinned zig provider)", "via": "wrapper unit ci/bin/cxx.md on the suite PATH (CXX default)" }
-    ]
+    ],
+    "posix_links": { "count": 150, "bin_dir": "/tmp/bashy-repair-bin-123", "kind": "symlink" }
   },
   "start": "2026-10-31T22:19:07Z",
   "end": "2026-10-31T22:31:44Z",
