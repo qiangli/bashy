@@ -12,7 +12,7 @@
 // The fake is a POSIX shell fixture, which the OS cannot execute on
 // Windows, so the exec tests skip there (the Windows path-conversion
 // branch is covered by TestWindowsOutPathConversion on unix via a fake
-// uname/cygpath). TestSkillDocMatchesScript runs on every OS.
+// converter function). TestSkillDocMatchesScript runs on every OS.
 package outpostprofile
 
 import (
@@ -484,16 +484,21 @@ func TestXDGConfigHomeHonored(t *testing.T) {
 
 // On Windows the --out path handed to the native outpost.exe uses the
 // Windows spelling. Simulated everywhere with OS=Windows_NT (what Git
-// Bash/MSYS2/Cygwin all set) plus a fake cygpath. A fake uname would not
-// work: bashy resolves uname in-process, ahead of PATH.
+// Bash/MSYS2/Cygwin all set) plus an explicitly injected cygpath function.
+// PATH shims cannot override bashy's in-process uname or cygpath commands.
 func TestWindowsOutPathConversion(t *testing.T) {
 	f := newFixture(t, map[string]string{
 		"cygpath": "#!/bin/sh\nlast=\"\"; for a in \"$@\"; do last=\"$a\"; done\nprintf 'C:%s\\n' \"$last\"\n",
 	})
-	f.env = append(f.env, "OS=Windows_NT")
-	_, _, code := f.run("add", "winalpha", "--code", "C", "--server", "https://s.example")
+	// Inject only the conversion dependency through a shell function; leave
+	// the real command body and its outpost invocation unchanged.
+	wrapper := filepath.Join(f.root, "windows-conversion.bsh")
+	writeFile(t, wrapper, "cygpath() { \"$FAKE_CYGPATH\" \"$@\"; }\nsource \"$OUTPOST_PROFILE_SCRIPT\" \"$@\"\n")
+	f.env = append(f.env, "OS=Windows_NT", "FAKE_CYGPATH="+filepath.Join(f.root, "fakebin", "cygpath"), "OUTPOST_PROFILE_SCRIPT="+f.script)
+	f.script = wrapper
+	out, stderr, code := f.run("add", "winalpha", "--code", "C", "--server", "https://s.example")
 	if code != 0 {
-		t.Fatalf("add: exit %d", code)
+		t.Fatalf("add: exit %d\nstdout=%s\nstderr=%s", code, out, stderr)
 	}
 	calls := f.calls()
 	if len(calls) != 1 {

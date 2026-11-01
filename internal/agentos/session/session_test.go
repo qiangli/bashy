@@ -6,6 +6,7 @@ import (
 	"encoding/gob"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -52,18 +53,42 @@ func TestRunSessionCommand(t *testing.T) {
 // TestServeRoundTrip starts a warm session and drives one request over the
 // socket, asserting the response carries the command output and exit code.
 func TestServeRoundTrip(t *testing.T) {
-	// Keep the socket path short — macOS caps sun_path at 104 bytes, well
-	// under a typical t.TempDir() path, so use the shorter os.TempDir().
-	sock := filepath.Join(os.TempDir(), "bst-roundtrip.sock")
-	_ = os.Remove(sock)
-	t.Cleanup(func() { _ = os.Remove(sock) })
-
-	go func() { _ = Serve(sock) }()
+	// Keep Serve in an owned child so cleanup can stop its listener and signal
+	// handler without terminating the test process.
+	if socket := os.Getenv("BASHY_SESSION_ROUNDTRIP_SOCKET"); socket != "" {
+		if err := Serve(socket); err != nil {
+			t.Fatal(err)
+		}
+		return
+	}
+	// A short private directory satisfies both the Unix socket length limit
+	// and secureSocketDir ownership checks. Never serve directly from /tmp.
+	dir, err := os.MkdirTemp(os.TempDir(), "bst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "s.sock")
+	cmd := exec.Command(os.Args[0], "-test.run=^TestServeRoundTrip$")
+	cmd.Env = append(os.Environ(), "BASHY_SESSION_ROUNDTRIP_SOCKET="+sock)
+	var output bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &output, &output
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan struct{})
+	var serveErr error
+	go func() { serveErr = cmd.Wait(); close(done) }()
+	t.Cleanup(func() { _ = cmd.Process.Kill(); <-done })
 
 	// Wait for the listener to come up.
 	var conn net.Conn
-	var err error
 	for i := 0; i < 100; i++ {
+		select {
+		case <-done:
+			t.Fatalf("session exited before becoming ready: %v\n%s", serveErr, output.String())
+		default:
+		}
 		conn, err = net.Dial("unix", sock)
 		if err == nil {
 			break
@@ -74,6 +99,9 @@ func TestServeRoundTrip(t *testing.T) {
 		t.Fatalf("session never came up: %v", err)
 	}
 	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(time.Second)); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := gob.NewEncoder(conn).Encode(Request{Command: "echo served; exit 7", Dir: os.TempDir(), Env: os.Environ()}); err != nil {
 		t.Fatal(err)
