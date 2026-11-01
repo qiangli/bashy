@@ -20,6 +20,9 @@
 #
 # Usage: scripts/yash-posix-suite.sh [--list] [verdict-outdir]
 #   No arg: just print per-shell pass rates.
+#   YASH_PROFILE=bash-dropin (default): cmd/bash, historical bashy label.
+#   YASH_PROFILE=strict: cmd/sh, distinct bashy-strict label and raw files.
+#     This is a separate public diagnostic, not a certification verdict.
 #   --list: print the chunkable shell-only *-p.tst file list and exit.
 #   YASH_TESTS="alias-p arith-p.tst": run only those suite files. The .tst
 #                suffix is optional for convenience with DAG fanout.
@@ -30,6 +33,12 @@ set -u
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 cd "$HERE" || exit 2
 BASHY_EXE=${BASHY:-bashy}
+YASH_PROFILE=${YASH_PROFILE:-bash-dropin}
+case "$YASH_PROFILE" in
+  bash-dropin) BUILD_TARGET=./cmd/bash; TESTEE_LABEL=bashy; PANEL_SUFFIX=;;
+  strict) BUILD_TARGET=./cmd/sh; TESTEE_LABEL=bashy-strict; PANEL_SUFFIX=-strict;;
+  *) echo "yash-suite: invalid YASH_PROFILE=$YASH_PROFILE (want bash-dropin or strict)" >&2; exit 2;;
+esac
 LIST_ONLY=0
 if [ "${1:-}" = "--list" ]; then
   LIST_ONLY=1
@@ -53,6 +62,13 @@ if [ ! -d "$YT/tests" ]; then
   rm -rf "$YT"; "$BASHY_EXE" git clone --depth 1 https://github.com/magicant/yash.git "$YT" >&2 || { echo "clone failed" >&2; exit 2; }
 fi
 TESTS_DIR="$YT/tests"
+YASH_COMMIT=$(git -C "$YT" rev-parse HEAD) || exit 2
+# Keep the additional measurement on the same public fixture as the retained
+# Sprint557 compatibility panel. A changed fixture needs an explicit review.
+if [ "$YASH_PROFILE" = strict ] && [ "$YASH_COMMIT" != 0105ae707bce655034522372f8b2a20072819c28 ]; then
+  echo "yash-suite: strict profile requires reviewed Yash fixture 0105ae707bce655034522372f8b2a20072819c28, got $YASH_COMMIT" >&2
+  exit 2
+fi
 
 list_tests() {
   ( cd "$TESTS_DIR" || exit 2
@@ -83,12 +99,12 @@ build_image localhost/posix-shells-deb $'FROM debian:stable-slim\nRUN apt-get up
 ARCH=$($OCI run --rm localhost/posix-shells-broad uname -m | tr -d '\r')
 case "$ARCH" in aarch64|arm64) GOARCH=arm64;; x86_64|amd64) GOARCH=amd64;; *) echo "bad arch $ARCH" >&2; exit 2;; esac
 BIN="$HERE/bin/.bashy-linux-yash-$$"
-echo "yash-suite: building linux/$GOARCH bashy…" >&2
+echo "yash-suite: building linux/$GOARCH $BUILD_TARGET ($YASH_PROFILE)…" >&2
 # CGO_ENABLED=0: on a native Linux host with a C compiler, Go would otherwise
 # link glibc and the testee is "not found" inside the musl (Alpine) panel —
 # every case errors and the panel reports ~9%. The release archives are
 # static for the same reason.
-CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" "$BASHY_EXE" go build -o "$BIN" ./cmd/bash || exit 2
+CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" "$BASHY_EXE" go build -o "$BIN" "$BUILD_TARGET" || exit 2
 trap 'rm -f "$BIN"' EXIT
 
 [ -n "$OUTDIR" ] && { mkdir -p "$OUTDIR"; OUTMOUNT="-v $OUTDIR:/out"; } || OUTMOUNT=""
@@ -104,10 +120,29 @@ normalize_yash_tests() {
 }
 
 SELECTED_TESTS=$(normalize_yash_tests | tr '\n' ' ')
+BASHY_COMMIT=$(git rev-parse HEAD) || exit 2
+if command -v sha256sum >/dev/null 2>&1; then
+  BINARY_SHA=$(sha256sum "$BIN") || exit 2
+else
+  BINARY_SHA=$(shasum -a 256 "$BIN") || exit 2
+fi
+BINARY_SHA=${BINARY_SHA%% *}
+profile_provenance() {
+  printf 'profile\t%s\nlabel\t%s\nbuild_target\t%s\nargv0\tsh\n' "$YASH_PROFILE" "$TESTEE_LABEL" "$BUILD_TARGET"
+  printf 'bashy_commit\t%s\nyash_commit\t%s\nbinary_sha256\t%s\n' "$BASHY_COMMIT" "$YASH_COMMIT" "$BINARY_SHA"
+  printf 'goos\tlinux\ngoarch\t%s\nselected_tests\t%s\n' "$GOARCH" "$SELECTED_TESTS"
+}
+profile_provenance
+if [ -n "$OUTDIR" ]; then
+  profile_provenance > "$OUTDIR/$YASH_PROFILE.provenance.tsv" || exit 2
+fi
 
 run_panel() { # panel-label image "label=cmd …"
   echo "### Panel: $1 ###"
-  $OCI run --rm $OUTMOUNT -e LANG=C -e PANEL="$1" -e SPECS="$3" -e YASH_SELECTED_TESTS="$SELECTED_TESTS" \
+  # OUTMOUNT is the historical optional pair of mount arguments; the quoted
+  # program is interpreted by the container shell, not this driver.
+  # shellcheck disable=SC2086,SC2016
+  $OCI run --rm $OUTMOUNT -e LANG=C -e PANEL="$1" -e SPECS="$3" -e TESTEE_LABEL="$TESTEE_LABEL" -e YASH_SELECTED_TESTS="$SELECTED_TESTS" \
     -v "$TESTS_DIR:/yt:ro" -v "$BIN:/bashy:ro" "$2" busybox ash -c '
     export LANG=C; cp -r /yt /work; cd /work
     excluded_case() {
@@ -148,7 +183,7 @@ run_panel() { # panel-label image "label=cmd …"
           fi
         fi
         rm -f "$casevf"
-        if [ "$label" = bashy ]; then
+        if [ "$label" = "$TESTEE_LABEL" ]; then
           printf "DURATION\t%s\t%s\n" "${t%.tst}" "$((end - start))"
         fi
       done
@@ -157,9 +192,9 @@ run_panel() { # panel-label image "label=cmd …"
     done' 2>&1 | grep -vE 'WARN|sysctl'
 }
 
-echo "##### yash POSIX (-p) suite vs bashy + reference shells #####"
-run_panel alpine localhost/posix-shells-broad "bashy=/bashy bash53=bash dash=dash ash=/bin/ash yash=yash mksh=mksh loksh=ksh zsh=zsh"
-run_panel debian localhost/posix-shells-deb "bashy=/bashy bash52=bash dash=dash posh=posh ksh93=ksh mksh=mksh zsh=zsh"
+echo "##### yash POSIX (-p) suite: $YASH_PROFILE ($BUILD_TARGET, argv0 sh) + reference shells #####"
+run_panel "alpine$PANEL_SUFFIX" localhost/posix-shells-broad "$TESTEE_LABEL=/bashy bash53=bash dash=dash ash=/bin/ash yash=yash mksh=mksh loksh=ksh zsh=zsh"
+run_panel "debian$PANEL_SUFFIX" localhost/posix-shells-deb "$TESTEE_LABEL=/bashy bash52=bash dash=dash posh=posh ksh93=ksh mksh=mksh zsh=zsh"
 [ -n "$OUTDIR" ] && echo "verdicts written to $OUTDIR/ (<panel>.<shell>.verdicts)"
 echo
 echo "Results: 1 passed, 0 failed, 0 skipped, 0 timed out"
