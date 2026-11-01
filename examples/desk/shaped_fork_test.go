@@ -16,7 +16,9 @@ import (
 // through the real CLI: a principal forks the tool, the verifier passes the
 // fork against the contract the tool ships, the gate activates it, and undo
 // returns the principal to the revision it ran before. A tool that ships no
-// base contract (no effect cap, no checks/) fails at verify.
+// base contract (no effect cap, no checks/) fails at verify. A tool with an
+// installer (registerScripts) is registered through it, so the round trip
+// also proves what the installer registered.
 func TestDeskToolsForkAndRollback(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds bashy, and each verify provisions the Go toolchain in the clone")
@@ -37,8 +39,12 @@ func TestDeskToolsForkAndRollback(t *testing.T) {
 				t.Fatal(err)
 			}
 			f := newForkHome(t, bashy, gitBin)
-			f.bashy("app", "add", name, "--type", "shaped", "--source", src)
 			repo := filepath.Join(f.home, "src", name)
+			if registerScripts[name] {
+				f.register(name, src, repo)
+			} else {
+				f.bashy("app", "add", name, "--type", "shaped", "--source", src)
+			}
 
 			prev := f.fork(name, repo, "alice-fork", "first")
 			f.bashy("src", "activate", name, prev, "--principal", alice)
