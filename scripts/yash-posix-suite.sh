@@ -104,7 +104,10 @@ echo "yash-suite: building linux/$GOARCH $BUILD_TARGET ($YASH_PROFILE)…" >&2
 # link glibc and the testee is "not found" inside the musl (Alpine) panel —
 # every case errors and the panel reports ~9%. The release archives are
 # static for the same reason.
-CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" "$BASHY_EXE" go build -o "$BIN" "$BUILD_TARGET" || exit 2
+# Match make build-bash/build-sh and modernish: plain `bashy go build` only
+# selects the SDK and does not apply the product startup-signal runtime overlay.
+BASHY_EXE="$BASHY_EXE" CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" \
+  scripts/go-product.sh build -o "$BIN" "$BUILD_TARGET" || exit 2
 trap 'rm -f "$BIN"' EXIT
 
 [ -n "$OUTDIR" ] && { mkdir -p "$OUTDIR"; OUTMOUNT="-v $OUTDIR:/out"; } || OUTMOUNT=""
@@ -131,6 +134,8 @@ profile_provenance() {
   printf 'profile\t%s\nlabel\t%s\nbuild_target\t%s\nargv0\tsh\n' "$YASH_PROFILE" "$TESTEE_LABEL" "$BUILD_TARGET"
   printf 'bashy_commit\t%s\nyash_commit\t%s\nbinary_sha256\t%s\n' "$BASHY_COMMIT" "$YASH_COMMIT" "$BINARY_SHA"
   printf 'goos\tlinux\ngoarch\t%s\nselected_tests\t%s\n' "$GOARCH" "$SELECTED_TESTS"
+  printf 'build_driver\tscripts/go-product.sh\nruntime_contract\tpinned-go1.27.2-product-overlay\n'
+  printf 'build_recipe\tCGO_ENABLED=0 GOOS=linux GOARCH=%s scripts/go-product.sh build -o <testee> %s\n' "$GOARCH" "$BUILD_TARGET"
 }
 profile_provenance
 if [ -n "$OUTDIR" ]; then

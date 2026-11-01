@@ -29,3 +29,15 @@ routing, distinct provenance, invalid-profile refusal, and wrong-fixture
 refusal. Bash syntax and ShellCheck passed. No local foreign-suite execution,
 container build, or product build occurred. Hosted strict measurement remains
 pending manager dispatch and does not replace licensed certification.
+
+Build-recipe follow-up: plain `bashy go build` selects Go but does not apply
+the product runtime overlay. Both future profile measurements now use
+`scripts/go-product.sh`, matching make build-bash/build-sh and the modernish
+harness. This authenticates the pinned Go runtime source, applies the product
+startup-signal contract, and enforces trimpath. Existing retained scores remain
+historical observations from their original recipe; no scores are rewritten.
+Provenance now explicitly records the driver, runtime contract, and complete
+cross-build recipe. Mock verification exercised the real shell wrapper with a
+fake Go launcher, asserting host bootstrap variables and preserved Linux/amd64
+CGO=0 target arguments for both profiles. Syntax/ShellCheck passed; no actual
+SDK overlay, build, container, or foreign suite was executed locally.
