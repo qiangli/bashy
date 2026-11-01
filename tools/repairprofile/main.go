@@ -2,8 +2,9 @@
 // See LICENSE for licensing information
 
 // repairprofile runs one core component's repair test profile on the host it
-// runs on and writes the bashy-repair-profile-v1 evidence record (S549.R4a).
-// Driven by the ci/repair-profiles.dag.md recipe — see docs/repair-profiles.md.
+// runs on and writes the bashy-repair-profile-v1 evidence record (S549.R4a,
+// R4b). Every suite runs inside the bashy shell — see docs/repair-profiles.md.
+// Driven by the ci/repair-profiles.dag.md recipe.
 package main
 
 import (
@@ -31,6 +32,8 @@ func run() int {
 		only      = flag.String("only", "", "comma-separated suite names to run (default: the full matrix)")
 		timeoutS  = flag.Int("timeout", 0, "default per-suite wall bound in seconds (0 = built-in default)")
 		cacheBase = flag.String("cache", "", "fixture cache base directory (default: the OS user cache dir)")
+		bashy     = flag.String("bashy", "", "bashy executable every suite runs inside (default: this executable when built into bashy, else bashy on PATH)")
+		commit    = flag.String("commit", "", "commit identity to record (default: $BASHY_REPAIR_COMMIT, else git HEAD; a git-archive tree has none)")
 	)
 	var overrides suiteOverrides
 	flag.Var(&overrides, "suite", "override a suite command: -suite name=argv (whitespace-split), repeatable")
@@ -50,10 +53,16 @@ func run() int {
 		outPath = fmt.Sprintf("results/repair-profile-%s-%s-%s.json", *component, runtime.GOOS, runtime.GOARCH)
 	}
 	offline := boolEnv("BASHY_OFFLINE")
+	commitID := strings.TrimSpace(*commit)
+	if commitID == "" {
+		commitID = strings.TrimSpace(os.Getenv("BASHY_REPAIR_COMMIT"))
+	}
 
 	opts := agentos.RepairProfileOptions{
 		Component: *component,
 		Root:      *root,
+		Bashy:     strings.TrimSpace(*bashy),
+		Commit:    commitID,
 		Out:       outPath,
 		Offline:   offline,
 		CacheBase: *cacheBase,

@@ -1,11 +1,16 @@
 // Copyright (c) 2026 qiangli
 // See LICENSE for licensing information
 
-// Repair profiles (S549.R4a): for each core component, one command runs its
-// full repair profile natively on the host it runs on — Linux, macOS or
+// Repair profiles (S549.R4a, R4b): for each core component, one command runs
+// its full repair profile natively on the host it runs on — Linux, macOS or
 // Windows, like the release gate — and writes the evidence record the repair
 // gate (S549.R3a `src pr`) consumes. Rules of record (docs/repair-profiles.md):
 //
+//   - every suite runs INSIDE the bashy shell — `<bashy> -c '<suite command>'`
+//     — where make, go and cc resolve to bashy's own commands/providers,
+//     never host binaries ("bashy is all you need"); the evidence records
+//     which bashy ran (path + version) and which provider each tool resolved
+//     to;
 //   - a run with the network disabled passes from the SHA-pinned cache;
 //   - a killed, partial or truncated run is a failure, never a pass;
 //   - GPL suites are fetched by SHA into the gitignored user cache, never
@@ -13,7 +18,10 @@
 //   - VSC/PCTS is excluded (licensed; a different lane, never auto-fetched);
 //   - only landmine suites (uutils) run in the Linux oci sandbox lane, and a
 //     structurally unavailable lane is reported "skipped (lane unavailable)",
-//     never "pass".
+//     never "pass";
+//   - a suite that needs a tool the bashy runtime cannot provide is reported
+//     "skipped (tool <x> unavailable in bashy runtime)" — never pass, and the
+//     missing tool is named.
 
 package agentos
 
@@ -26,10 +34,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/qiangli/yoke/external/gotoolchain"
 )
 
 // RepairProfileSchema versions the evidence record. Bump (v2, v3…) on any
@@ -58,6 +69,11 @@ type RepairSuiteSpec struct {
 	Args    []string
 	Env     []string // extra KEY=VALUE for the suite process
 	Timeout time.Duration
+
+	// Tools names the tools the suite needs resolved in the bashy runtime
+	// (canonical spellings: "make", "go", "cc", "c++"). A tool the runtime
+	// cannot provide skips the suite — never pass — naming the tool.
+	Tools []string
 
 	// go-test-list kind: the suite is `go test <GoTestArgs> <pkgs>` where pkgs
 	// is `go list ./...` minus every package path containing an Exclude
@@ -105,13 +121,14 @@ type RepairSuiteResult struct {
 // RepairProfileEvidence is the versioned record a repair gate consumes.
 // Complete=true only if every eligible suite ran to completion; Pass=true
 // only if complete and every eligible suite passed. Skipped (lane
-// unavailable) suites are recorded, never counted as pass.
+// unavailable, tool unavailable) suites are recorded, never counted as pass.
 type RepairProfileEvidence struct {
 	Schema    string              `json:"schema"`
 	Component string              `json:"component"`
 	Commit    string              `json:"commit"`
 	OS        string              `json:"os"`
 	Arch      string              `json:"arch"`
+	Runtime   *RepairRuntime      `json:"runtime,omitempty"`
 	Start     string              `json:"start"`
 	End       string              `json:"end"`
 	Suites    []RepairSuiteResult `json:"suites"`
@@ -120,10 +137,39 @@ type RepairProfileEvidence struct {
 	Reason    string              `json:"reason,omitempty"`
 }
 
+// RepairBashyIdent records which bashy ran every suite (S549.R4b): the
+// absolute path of the executable the runner shelled out to, and the first
+// line of its `--version` banner.
+type RepairBashyIdent struct {
+	Path    string `json:"path"`
+	Version string `json:"version,omitempty"`
+}
+
+// RepairToolResolution records how one tool resolved inside the bashy runtime
+// that ran the suites — the provider bashy served it from, and the route
+// (in-process shell handler, or the wrapper unit materialized on the suite's
+// private PATH).
+type RepairToolResolution struct {
+	Tool     string `json:"tool"`
+	Provider string `json:"provider"`
+	Via      string `json:"via"`
+}
+
+// RepairRuntime is the S549.R4b evidence block: the bashy every suite ran
+// inside, and the provider each tool the profile needs resolved to.
+type RepairRuntime struct {
+	Bashy RepairBashyIdent       `json:"bashy"`
+	Tools []RepairToolResolution `json:"tools,omitempty"`
+}
+
 // RepairProfileOptions parameterizes RunRepairProfile.
 type RepairProfileOptions struct {
 	Component    string
 	Root         string                // component checkout; suite commands run with Dir=Root
+	Bashy        string                // pinned bashy every suite runs under ("" = resolve: this executable when built into bashy, else PATH)
+	Commit       string                // recorded verbatim when set (git archive trees carry no .git; -commit / BASHY_REPAIR_COMMIT)
+	Env          []string              // base environment for suites (nil = os.Environ(); tests strip PATH here)
+	UnitsDir     string                // Bash# wrapper units directory ("" = BASHY_REPAIR_UNITS, else ci/bin found upward from the cwd)
 	CacheBase    string                // fixture cache base ("" = os.UserCacheDir)
 	Offline      bool                  // BASHY_OFFLINE=1: never fetch, fail clearly on an empty cache
 	Out          string                // evidence path ("" = do not write a file)
@@ -146,18 +192,21 @@ func RepairSuitesFor(component string) ([]RepairSuiteSpec, error) {
 		return []RepairSuiteSpec{
 			{
 				Name: "make-test", Lane: RepairLaneNative, Kind: "argv",
-				Args: []string{"make", "test"}, Timeout: repairDefaultTimeout,
+				Args: []string{"make", "test"}, Tools: []string{"make"},
+				Timeout: repairDefaultTimeout,
 				Command: "make test",
 			},
 			{
 				Name: "test-bash", Lane: RepairLaneNative, Kind: "argv",
-				Args: []string{"make", "test-bash"}, Timeout: repairDefaultTimeout,
+				Args: []string{"make", "test-bash"}, Tools: []string{"make"},
+				Timeout:  repairDefaultTimeout,
 				Fixtures: true, // SHA-pinned GPL fixture cache, never vendored
 				Command:  "make test-bash",
 			},
 			{
 				Name: "test-uutils", Lane: RepairLaneOCILinux, Kind: "argv",
-				Args: []string{"make", "test-uutils"}, Timeout: repairDefaultTimeout,
+				Args: []string{"make", "test-uutils"}, Tools: []string{"make"},
+				Timeout: repairDefaultTimeout,
 				Command: "make test-uutils",
 			},
 		}, nil
@@ -165,6 +214,7 @@ func RepairSuitesFor(component string) ([]RepairSuiteSpec, error) {
 		return []RepairSuiteSpec{
 			{
 				Name: "go-test-short-headless", Lane: RepairLaneNative, Kind: "go-test-list",
+				Tools:      []string{"go"},
 				GoTestArgs: []string{"-short", "-tags", "fb_archives"},
 				Exclude:    []string{"internal/agent/shell"}, // needs a real TTY
 				Timeout:    repairDefaultTimeout,
@@ -250,9 +300,26 @@ func RunRepairProfile(opts RepairProfileOptions) (*RepairProfileEvidence, error)
 	start := time.Now().UTC()
 	ev := &RepairProfileEvidence{
 		Schema: RepairProfileSchema, Component: opts.Component,
-		Commit: gitCommit(opts.Root), OS: opts.Goos, Arch: opts.Arch,
+		Commit: repairCommit(opts), OS: opts.Goos, Arch: opts.Arch,
 		Start: start.Format(time.RFC3339),
 	}
+
+	// S549.R4b: every suite runs inside the bashy shell. Resolve that bashy
+	// once, up front — no bashy, no profile (never silently fall back to host
+	// make/go). The runtime block is evidence, not decoration: it names the
+	// executable that ran every suite and the provider each tool resolved to.
+	bashy, bashyErr := resolveRepairBashy(opts.Bashy)
+	if bashyErr == nil {
+		ev.Runtime = &RepairRuntime{Bashy: RepairBashyIdent{
+			Path: bashy, Version: repairBashyVersion(bashy),
+		}}
+	} else {
+		ev.Runtime = &RepairRuntime{}
+	}
+
+	// The wrapper units behind the tool table: their absence makes every
+	// unit-backed tool unavailable (suite-level skip, never pass).
+	units := repairUnitsIndex(findRepairUnitsDir(opts))
 
 	// The SHA-pinned fixture cache, offline-aware: an empty cache under
 	// BASHY_OFFLINE fails the whole profile closed before anything runs.
@@ -295,7 +362,37 @@ func RunRepairProfile(opts RepairProfileOptions) (*RepairProfileEvidence, error)
 		}
 	}
 
+	recordedTools := map[string]bool{}
+	recordTool := func(name string) {
+		if recordedTools[name] {
+			return
+		}
+		recordedTools[name] = true
+		if bashyErr == nil {
+			if row, canonical, ok := repairToolRowFor(name); ok && units.rowAvailable(canonical) {
+				via := row.via
+				if name != canonical && row.unitPath() != "" {
+					via = "wrapper unit ci/bin/" + row.unitPath() + " as " + name + " (" + row.via + ")"
+				}
+				ev.Runtime.Tools = append(ev.Runtime.Tools, RepairToolResolution{
+					Tool: name, Provider: row.provider, Via: via,
+				})
+				return
+			}
+		}
+		ev.Runtime.Tools = append(ev.Runtime.Tools, RepairToolResolution{
+			Tool: name, Provider: "unavailable in the bashy runtime", Via: "-",
+		})
+	}
+	// CC/CXX default to the wrapper units for every suite, so the compilers
+	// are evidence even when no suite names them explicitly.
+	recordTool("cc")
+	recordTool("c++")
+
 	for _, spec := range specs {
+		for _, tool := range spec.Tools {
+			recordTool(tool)
+		}
 		if spec.Lane == RepairLaneOCILinux {
 			ok, reason := laneProbe()
 			if !ok {
@@ -303,7 +400,18 @@ func RunRepairProfile(opts RepairProfileOptions) (*RepairProfileEvidence, error)
 				continue
 			}
 		}
-		res, err := runRepairSuite(spec, opts)
+		if bashyErr != nil {
+			ev.Suites = append(ev.Suites, RepairSuiteResult{
+				Name: spec.Name, Lane: spec.Lane, Command: repairDisplayCommand(spec),
+				Reason: "not run: " + bashyErr.Error(),
+			})
+			continue
+		}
+		if missing := repairMissingTool(spec.Tools, units); missing != "" {
+			ev.Suites = append(ev.Suites, skippedRepairToolSuite(spec, missing))
+			continue
+		}
+		res, err := runRepairSuite(spec, opts, bashy, units)
 		if err != nil {
 			return ev, err
 		}
@@ -362,9 +470,24 @@ func suiteNames(specs []RepairSuiteSpec) []string {
 	return names
 }
 
+// repairDisplayCommand is the evidence command string for a spec before any
+// expansion.
+func repairDisplayCommand(spec RepairSuiteSpec) string {
+	if spec.Command != "" {
+		return spec.Command
+	}
+	return repairCommandString(spec.Args)
+}
+
 // runRepairSuite runs one suite under a wall-time bound and captures its
 // combined output into a bounded tail plus parseable counts.
-func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions) (RepairSuiteResult, error) {
+//
+// S549.R4b: the suite NEVER runs as a host process — the runner executes
+// `<bashy> -c '<suite command>'`, and inside that shell make, go and cc
+// resolve to bashy's own commands/providers (coreutils in-process make;
+// wrapper units from ci/bin on the suite's private PATH for go/cc/c++),
+// never host binaries.
+func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions, bashy string, units repairUnits) (RepairSuiteResult, error) {
 	res := RepairSuiteResult{Name: spec.Name, Lane: spec.Lane}
 
 	timeout := spec.Timeout
@@ -375,50 +498,55 @@ func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions) (RepairSuit
 		timeout = repairDefaultTimeout
 	}
 
-	argv := spec.Args
-	display := spec.Command
-	if display == "" {
-		display = strings.Join(spec.Args, " ")
+	if missing := repairMissingTool(spec.Tools, units); missing != "" {
+		return skippedRepairToolSuite(spec, missing), nil
 	}
+
+	shimDir, err := materializeRepairShims(units, bashy)
+	if err != nil {
+		res.Command = repairDisplayCommand(spec)
+		res.Reason = "bashy runtime wrappers: " + err.Error()
+		return res, nil
+	}
+	if shimDir != "" {
+		defer os.RemoveAll(shimDir)
+	}
+
+	command := repairDisplayCommand(spec)
+	argv := spec.Args
 	switch spec.Kind {
 	case "go-test-list":
-		expanded, cmdDisplay, err := expandGoTestList(opts.Root, spec)
+		expanded, cmdDisplay, err := expandGoTestList(opts.Root, spec, bashy, shimDir, repairSuiteEnv(opts, spec, shimDir))
 		if err != nil {
-			res.Command = display
+			res.Command = command
 			res.Reason = "go list: " + err.Error()
 			return res, nil // a failed expansion is a failed suite, not a runner error
 		}
-		argv, display = expanded, cmdDisplay
+		argv, command = expanded, cmdDisplay
 	case "argv":
 		if len(argv) == 0 {
-			res.Command = display
+			res.Command = command
 			res.Reason = "suite has no command"
 			return res, nil
 		}
+		command = repairCommandString(argv)
 	default:
-		res.Command = display
+		res.Command = command
 		res.Reason = fmt.Sprintf("unknown suite kind %q", spec.Kind)
 		return res, nil
 	}
+	res.Command = command
 
-	eff, resolved, err := resolveRepairArgv(argv)
-	if err != nil {
-		res.Command = display
-		res.Reason = "start: " + err.Error()
-		return res, nil
-	}
-	if resolved {
-		display = strings.Join(eff, " ")
-	}
-	res.Command = display
-
+	// THE rule of R4b: the suite runs inside the bashy shell, as
+	// `<bashy> -c '<command>'` — never `make`/`go` exec'd directly.
+	invocation := []string{bashy, "-c", command}
 	capw := newSuiteCapture(opts.TailBytes)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	start := time.Now()
-	cmd := exec.CommandContext(ctx, eff[0], eff[1:]...)
+	cmd := exec.CommandContext(ctx, invocation[0], invocation[1:]...)
 	cmd.Dir = opts.Root
-	cmd.Env = append(os.Environ(), spec.Env...)
+	cmd.Env = repairSuiteEnv(opts, spec, shimDir)
 	cmd.Stdout = capw
 	cmd.Stderr = capw
 	// Bound the pipe-drain after a watchdog kill: grandchildren that inherit
@@ -449,18 +577,14 @@ func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions) (RepairSuit
 	var exitErr *exec.ExitError
 	if errors.As(runErr, &exitErr) {
 		code := exitErr.ExitCode()
-		if code == -1 { // killed by a signal before exiting on its own
+		if code == -1 { // the bashy shell itself was killed by a signal
 			res.Signal = cmd.ProcessState.String()
 			res.Reason = "killed by signal (" + res.Signal + ") — incomplete run, never a pass"
 			return res, nil
 		}
-		// Through the bashy multicall fallback, 127 is the dispatch layer
-		// saying the applet does not exist: the suite never started.
-		if resolved && code == 127 {
-			res.ExitCode = &code
-			res.Reason = fmt.Sprintf("start: %s not found on PATH and not a bashy applet (exit 127)", argv[0])
-			return res, nil
-		}
+		// Any other non-zero status is the suite's own verdict as reported by
+		// the bashy shell — including 127 (a name that resolved nowhere
+		// inside the runtime), which is a failed suite, never a pass.
 		res.ExitCode = &code
 		res.Complete = true
 		res.Pass = false
@@ -471,18 +595,97 @@ func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions) (RepairSuit
 	return res, nil
 }
 
+// repairCommandString renders a suite argv as the shell text handed to
+// `<bashy> -c`: plain words stay readable, anything the shell would reparse
+// is single-quoted.
+func repairCommandString(argv []string) string {
+	parts := make([]string, 0, len(argv))
+	for _, a := range argv {
+		if repairPlainWord(a) {
+			parts = append(parts, a)
+		} else {
+			parts = append(parts, shellQuote(a))
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+var repairPlainWordRe = regexp.MustCompile(`^[A-Za-z0-9_./:=,+@%-]+$`)
+
+func repairPlainWord(s string) bool {
+	return s != "" && repairPlainWordRe.MatchString(s)
+}
+
+// repairSuiteEnv assembles the suite process environment: the base env
+// (opts.Env, else the runner's own), the spec's overrides, then the R4b
+// runtime rules — the wrapper shim dir FIRST on PATH (so go/cc inside the
+// suite shell resolve to bashy's own providers before any host binary), and
+// CC/CXX pointing at the wrapper units when the environment provides no
+// compiler. Later entries win, so spec.Env genuinely overrides the base.
+func repairSuiteEnv(opts RepairProfileOptions, spec RepairSuiteSpec, shimDir string) []string {
+	base := opts.Env
+	if base == nil {
+		base = os.Environ()
+	}
+	kv := map[string]string{}
+	var order []string
+	set := func(k, v string) {
+		if _, seen := kv[k]; !seen {
+			order = append(order, k)
+		}
+		kv[k] = v
+	}
+	apply := func(entries []string) {
+		for _, e := range entries {
+			k, v, _ := strings.Cut(e, "=")
+			set(k, v)
+		}
+	}
+	apply(base)
+	apply(spec.Env)
+	if shimDir != "" {
+		if p := kv["PATH"]; p == "" {
+			set("PATH", shimDir)
+		} else {
+			set("PATH", shimDir+string(os.PathListSeparator)+p)
+		}
+		if _, ok := kv["CC"]; !ok {
+			set("CC", filepath.Join(shimDir, repairShimName("cc")))
+		}
+		if _, ok := kv["CXX"]; !ok {
+			set("CXX", filepath.Join(shimDir, repairShimName("c++")))
+		}
+	}
+	out := make([]string, 0, len(order))
+	for _, k := range order {
+		out = append(out, k+"="+kv[k])
+	}
+	return out
+}
+
+// repairShimName spells a shim file name the platform can execute directly:
+// on Windows cgo's CreateProcess needs a PATHEXT suffix, so the compiler
+// wrappers carry a .cmd twin (cmd.exe ships with Windows — nothing is
+// installed); elsewhere the Bash# unit itself is the executable.
+func repairShimName(tool string) string {
+	if runtime.GOOS == "windows" {
+		return tool + ".cmd"
+	}
+	return tool
+}
+
 // expandGoTestList resolves a go-test-list suite into a concrete go test
 // argv: `go list ./...` in the component root minus the excluded packages
 // (fail closed on an empty package set), then go test with the spec's flags.
-func expandGoTestList(root string, spec RepairSuiteSpec) ([]string, string, error) {
-	goArgv, _, err := resolveRepairArgv([]string{"go", "list", "./..."})
-	if err != nil {
-		return nil, "", err
-	}
+// The `go list` probe itself runs through the bashy runtime —
+// `<bashy> -c 'go list ./...'` with the suite's wrapper PATH — so it never
+// execs a host go either.
+func expandGoTestList(root string, spec RepairSuiteSpec, bashy, shimDir string, env []string) ([]string, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, goArgv[0], goArgv[1:]...)
+	cmd := exec.CommandContext(ctx, bashy, "-c", "go list ./...")
 	cmd.Dir = root
+	cmd.Env = env
 	cmd.WaitDelay = 30 * time.Second
 	out, err := cmd.Output()
 	if err != nil {
@@ -513,19 +716,314 @@ func expandGoTestList(root string, spec RepairSuiteSpec) ([]string, string, erro
 	return argv, strings.Join(argv, " "), nil
 }
 
-// resolveRepairArgv resolves argv[0] on PATH. When the program is absent but
-// a bashy is on PATH, the suite runs through bashy's multicall (bashy go /
-// bashy make …) — on a QA host bashy IS the userland (see ci.dag.md). The
-// display string always shows the effective command.
-func resolveRepairArgv(argv []string) ([]string, bool, error) {
-	if _, err := exec.LookPath(argv[0]); err == nil {
-		return argv, false, nil
+// --- the bashy runtime every suite runs inside (S549.R4b) ---
+
+// resolveRepairBashy pins the bashy executable every suite runs under. Order:
+// an explicit value (the runner's -bashy flag / opts.Bashy), then the current
+// executable when the runner is built into bashy, then $BASHY_SELF, then
+// `bashy` on PATH. No hit is a hard error — the profile never silently falls
+// back to host make/go.
+func resolveRepairBashy(explicit string) (string, error) {
+	candidates := []string{explicit}
+	if explicit == "" {
+		if RunningAsBashy {
+			if exe, err := os.Executable(); err == nil {
+				candidates = append(candidates, exe)
+			}
+		}
+		if self := strings.TrimSpace(os.Getenv("BASHY_SELF")); self != "" {
+			candidates = append(candidates, self)
+		}
+		if p, err := exec.LookPath("bashy"); err == nil {
+			candidates = append(candidates, p)
+		}
 	}
-	if _, err := exec.LookPath("bashy"); err == nil {
-		eff := append([]string{"bashy"}, argv...)
-		return eff, true, nil
+	for _, c := range candidates {
+		if c == "" {
+			continue
+		}
+		abs, err := filepath.Abs(c)
+		if err != nil {
+			continue
+		}
+		if fi, err := os.Stat(abs); err == nil && !fi.IsDir() {
+			return abs, nil
+		}
 	}
-	return nil, false, fmt.Errorf("%s not found on PATH (and no bashy to dispatch it)", argv[0])
+	return "", fmt.Errorf("no bashy runtime found — every repair suite runs inside the bashy shell; pass -bashy <path> or put bashy on PATH")
+}
+
+// repairBashyVersion records the first line of the pinned bashy's --version
+// banner (best-effort; "" when the probe cannot run).
+func repairBashyVersion(bashy string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bashy, "--version")
+	cmd.WaitDelay = 5 * time.Second
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	v := strings.TrimSpace(string(out))
+	if i := strings.IndexByte(v, '\n'); i >= 0 {
+		v = v[:i]
+	}
+	return v
+}
+
+// repairCommit is the evidence commit: an explicit -commit /
+// BASHY_REPAIR_COMMIT wins (a `git archive` tree has no .git to ask), else
+// the component checkout's HEAD, else the recorded fact "unknown".
+func repairCommit(opts RepairProfileOptions) string {
+	if c := strings.TrimSpace(opts.Commit); c != "" {
+		return c
+	}
+	return gitCommit(opts.Root)
+}
+
+// repairToolRow describes one tool the bashy runtime provides for suites.
+type repairToolRow struct {
+	unit     string   // unit stem under ci/bin ("" = no unit: served in-process)
+	aliases  []string // shim names materialized from the unit
+	provider string   // evidence label
+	via      string   // evidence route
+}
+
+func (r repairToolRow) unitPath() string {
+	if r.unit == "" {
+		return ""
+	}
+	return r.unit + ".md"
+}
+
+// repairBashyToolRows is the tool table of the bashy runtime: what suites may
+// ask for by name, and where each resolves. make is the in-process coreutils
+// applet of the shell itself; go/cc/c++ are the pinned providers reached
+// through the Bash# wrapper units in ci/bin (materialized onto the suite's
+// private PATH, so bare `go`/`cc` inside a suite — including from a Makefile
+// recipe or cgo — is bashy's own, never a host binary).
+var repairBashyToolRows = map[string]repairToolRow{
+	"make": {
+		provider: "bashy make (in-process coreutils make)",
+		via:      "bashy shell ExecHandler, ahead of PATH",
+	},
+	"go": {
+		unit:     "go",
+		aliases:  []string{"go"},
+		provider: "bashy go (pinned provider go" + gotoolchain.DefaultVersion + ")",
+		via:      "wrapper unit ci/bin/go.md on the suite PATH",
+	},
+	"cc": {
+		unit:     "cc",
+		aliases:  []string{"cc", "gcc", "clang"},
+		provider: "bashy zig cc (pinned zig provider; zig cc is clang)",
+		via:      "wrapper unit ci/bin/cc.md on the suite PATH (CC default)",
+	},
+	"c++": {
+		unit:     "cxx",
+		aliases:  []string{"c++", "g++", "clang++"},
+		provider: "bashy zig c++ (pinned zig provider)",
+		via:      "wrapper unit ci/bin/cxx.md on the suite PATH (CXX default)",
+	},
+}
+
+// repairToolRowFor resolves a tool name (canonical or alias) to its row.
+func repairToolRowFor(name string) (row repairToolRow, canonical string, ok bool) {
+	if r, hit := repairBashyToolRows[name]; hit {
+		return r, name, true
+	}
+	for canon, r := range repairBashyToolRows {
+		for _, a := range r.aliases {
+			if a == name {
+				return r, canon, true
+			}
+		}
+	}
+	return repairToolRow{}, "", false
+}
+
+// repairUnits is the parsed ci/bin wrapper-unit set available to a run.
+type repairUnits struct {
+	dir    string
+	bodies map[string]string // unit stem ("cc") → substituted Bash# body
+	runs   map[string]string // unit stem → front-matter run words ("zig cc")
+}
+
+// findRepairUnitsDir locates the Bash# wrapper units: opts.UnitsDir or
+// $BASHY_REPAIR_UNITS when set (authoritative — a bad path means no units,
+// never a silent fallback), else ci/bin found by walking up from the working
+// directory (a `go run ./tools/repairprofile` or `go test` invocation starts
+// inside the checkout). "" means no units on disk.
+func findRepairUnitsDir(opts RepairProfileOptions) string {
+	explicit := ""
+	for _, c := range []string{opts.UnitsDir, os.Getenv("BASHY_REPAIR_UNITS")} {
+		if c = strings.TrimSpace(c); c == "" {
+			continue
+		}
+		if fi, err := os.Stat(filepath.Join(c, "go.md")); err == nil && !fi.IsDir() {
+			return c
+		}
+		explicit = c
+	}
+	if explicit != "" {
+		return ""
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	dir := wd
+	for i := 0; i < 12; i++ {
+		cand := filepath.Join(dir, "ci", "bin")
+		if fi, err := os.Stat(filepath.Join(cand, "go.md")); err == nil && !fi.IsDir() {
+			return cand
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
+	return ""
+}
+
+var repairUnitFence = regexp.MustCompile("(?s)```(?:bashpp|bsh|bash)\\s*\\n(.*?)```")
+
+// repairUnitsIndex reads every unit the tool table needs from dir. Missing
+// dir or missing files leave the corresponding tools unavailable (suites
+// needing them skip, never pass) — a run without its wrappers never pretends.
+func repairUnitsIndex(dir string) repairUnits {
+	units := repairUnits{dir: dir, bodies: map[string]string{}, runs: map[string]string{}}
+	if dir == "" {
+		return units
+	}
+	for _, row := range repairBashyToolRows {
+		if row.unit == "" {
+			continue
+		}
+		path := filepath.Join(dir, row.unitPath())
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		m := repairUnitFence.FindStringSubmatch(string(b))
+		if m == nil || !strings.Contains(m[1], "{{bashy}}") {
+			continue
+		}
+		units.bodies[row.unit] = strings.TrimSpace(m[1])
+		for _, ln := range strings.Split(string(b), "\n") {
+			if v, ok := strings.CutPrefix(strings.TrimSpace(ln), "run:"); ok {
+				units.runs[row.unit] = strings.TrimSpace(v)
+			}
+		}
+	}
+	return units
+}
+
+// rowAvailable reports whether the unit backing a canonical tool row is on
+// disk and parsed.
+func (u repairUnits) rowAvailable(canonical string) bool {
+	row, ok := repairBashyToolRows[canonical]
+	if !ok {
+		return false
+	}
+	if row.unit == "" {
+		return true // served by the shell itself, no unit needed
+	}
+	_, have := u.bodies[row.unit]
+	return have
+}
+
+// repairMissingTool returns the first tool in needs the bashy runtime cannot
+// provide (unknown name, or a wrapper unit missing/unparsable), or "".
+func repairMissingTool(needs []string, units repairUnits) string {
+	for _, name := range needs {
+		_, canonical, ok := repairToolRowFor(name)
+		if !ok || !units.rowAvailable(canonical) {
+			return name
+		}
+	}
+	return ""
+}
+
+// skippedRepairToolSuite is the S549.R4b skip record: the suite needs a tool
+// the bashy runtime cannot provide — skipped, never pass, tool named.
+func skippedRepairToolSuite(spec RepairSuiteSpec, tool string) RepairSuiteResult {
+	return RepairSuiteResult{
+		Name: spec.Name, Lane: spec.Lane, Command: repairDisplayCommand(spec),
+		Skipped:  true,
+		Complete: false, Pass: false,
+		Reason: fmt.Sprintf("skipped (tool %s unavailable in bashy runtime)", tool),
+	}
+}
+
+// materializeRepairShims writes the wrapper units as executables into a fresh
+// private dir: each alias becomes a Bash# unit whose shebang runs it through
+// the pinned bashy (`#!<bashy> --bashsharp` — the shell's own shebang probe
+// executes it on every OS, Windows included). On Windows each also gets a
+// .cmd twin so direct CreateProcess consumers (cgo's CC/CXX) can run it —
+// cmd.exe ships with the OS; nothing is installed. The dir is returned for
+// the caller to clean up; "" when no unit is available.
+func materializeRepairShims(units repairUnits, bashy string) (string, error) {
+	if strings.ContainsAny(bashy, " \t") {
+		return "", fmt.Errorf("pinned bashy path %q contains whitespace — the wrapper shebang cannot carry it", bashy)
+	}
+	var have bool
+	for _, row := range repairBashyToolRows {
+		if row.unit != "" {
+			have = true
+			break
+		}
+	}
+	if !have {
+		return "", nil
+	}
+	dir, err := os.MkdirTemp("", "bashy-repair-bin-*")
+	if err != nil {
+		return "", err
+	}
+	bodyFor := func(row repairToolRow) (string, bool) {
+		body, ok := units.bodies[row.unit]
+		if !ok {
+			return "", false
+		}
+		// The unit templates already quote the pin ("{{bashy}}"); a path with
+		// whitespace was refused above, so the raw slash-spelled path is safe.
+		return strings.ReplaceAll(body, "{{bashy}}", filepath.ToSlash(bashy)), true
+	}
+	writeUnit := func(name, body string) error {
+		unit := "#!" + bashy + " --bashsharp\n" + body + "\n"
+		p := filepath.Join(dir, name)
+		if err := os.WriteFile(p, []byte(unit), 0o755); err != nil {
+			return err
+		}
+		return os.Chmod(p, 0o755)
+	}
+	for _, row := range repairBashyToolRows {
+		if row.unit == "" {
+			continue
+		}
+		body, ok := bodyFor(row)
+		if !ok {
+			continue
+		}
+		for _, alias := range row.aliases {
+			if err := writeUnit(alias, body); err != nil {
+				return "", err
+			}
+			if runtime.GOOS == "windows" {
+				run := units.runs[row.unit]
+				if run == "" {
+					continue
+				}
+				cmdBody := "@\"" + bashy + "\" " + run + " %*\r\n"
+				if err := os.WriteFile(filepath.Join(dir, alias+".cmd"), []byte(cmdBody), 0o644); err != nil {
+					return "", err
+				}
+			}
+		}
+	}
+	return dir, nil
 }
 
 // gitCommit reports the component checkout's HEAD ("unknown" when git cannot

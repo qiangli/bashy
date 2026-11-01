@@ -1,6 +1,6 @@
 ---
 name: repair-profiles
-description: S549.R4a repair test profiles — one command runs a core component's (bashy, outpost) full repair profile natively on the host it runs on (Linux, macOS, Windows, like the release gate); landmine suites (uutils) only in the Linux oci lane; writes the bashy-repair-profile-v1 evidence record the repair gate consumes. Use when asked to produce repair-profile evidence or to run a component's full suite set on a test host.
+description: S549.R4a/R4b repair test profiles — one command runs a core component's (bashy, outpost) full repair profile natively on the host it runs on (Linux, macOS, Windows, like the release gate), every suite inside the bashy shell (S549.R4b: make/go/cc resolve to bashy's own commands/providers, never host binaries — works on a bare host with only bashy); landmine suites (uutils) only in the Linux oci lane; writes the bashy-repair-profile-v1 evidence record the repair gate consumes. Use when asked to produce repair-profile evidence or to run a component's full suite set on a test host.
 type: dag
 default: profile
 vars:
@@ -8,9 +8,17 @@ vars:
   OUT ?= results/repair-profile.json
   ROOT ?= .
   OUTPOST_ROOT ?= ../outpost
+  COMMIT ?=
 ---
 
-# repair-profiles — S549.R4a
+# repair-profiles — S549.R4a/R4b
+
+R4b runtime rule: the recipe itself never needs a host make/go — it pins the
+bashy it runs as (`$BASHY`, the shell executing this body) and drives the
+runner through that bashy's own Go provider (`bashy go run`); the runner then
+executes every suite as `<bashy> -c '<suite command>'` with the Bash# wrapper
+units (ci/bin) on the suite's private PATH. Set COMMIT (or BASHY_REPAIR_COMMIT)
+when the source tree has no .git (a git archive).
 
 For each core component, ONE command runs its full repair profile natively on
 the host it runs on — Linux, macOS or Windows, like the release gate — and
@@ -34,6 +42,9 @@ Rules of record, enforced by the runner (`tools/repairprofile`), not by trust:
 - **Only landmine suites (uutils) run in the Linux oci lane**, and only when
   that lane is available; otherwise the evidence records
   `skipped (lane unavailable)` — never "pass".
+- **A suite needing a tool the bashy runtime cannot provide is skipped**
+  (`skipped (tool <x> unavailable in bashy runtime)`), never pass, and the
+  missing tool is named.
 
 The per-OS targets below are the lanes a host can run individually;
 `profile` is the one-command entry that runs everything valid on THIS host.
@@ -54,12 +65,14 @@ Effects: read, write, exec, net
 ```bash
 set -e
 : "${COMPONENT:?set COMPONENT=bashy|outpost}"
-BASHY_EXE="${BASHY:-bashy}"
+if [ -n "${BASHY:-}" ]; then BASHY_EXE="${BASHY}"
+elif [ -n "${BASH:-}" ]; then BASHY_EXE="${BASH}"
+else BASHY_EXE=bashy; fi
 case "${COMPONENT}" in
   outpost) R="${OUTPOST_ROOT}" ;;
   *)       R="${ROOT}" ;;
 esac
-"$BASHY_EXE" go run ./tools/repairprofile -component "${COMPONENT}" -root "${R}" -out "${OUT}"
+"$BASHY_EXE" go run ./tools/repairprofile -bashy "$BASHY_EXE" -commit "${COMMIT}" -component "${COMPONENT}" -root "${R}" -out "${OUT}"
 ```
 
 ### bashy-linux
@@ -71,8 +84,10 @@ Effects: read, write, exec, net
 
 ```bash
 set -e
-BASHY_EXE="${BASHY:-bashy}"
-"$BASHY_EXE" go run ./tools/repairprofile -component bashy -root "${ROOT}" \
+if [ -n "${BASHY:-}" ]; then BASHY_EXE="${BASHY}"
+elif [ -n "${BASH:-}" ]; then BASHY_EXE="${BASH}"
+else BASHY_EXE=bashy; fi
+"$BASHY_EXE" go run ./tools/repairprofile -bashy "$BASHY_EXE" -commit "${COMMIT}" -component bashy -root "${ROOT}" \
   -out "results/repair-profile-bashy-linux.json"
 ```
 
@@ -84,22 +99,27 @@ Effects: read, write, exec, net
 
 ```bash
 set -e
-BASHY_EXE="${BASHY:-bashy}"
-"$BASHY_EXE" go run ./tools/repairprofile -component bashy -root "${ROOT}" \
+if [ -n "${BASHY:-}" ]; then BASHY_EXE="${BASHY}"
+elif [ -n "${BASH:-}" ]; then BASHY_EXE="${BASH}"
+else BASHY_EXE=bashy; fi
+"$BASHY_EXE" go run ./tools/repairprofile -bashy "$BASHY_EXE" -commit "${COMMIT}" -component bashy -root "${ROOT}" \
   -out "results/repair-profile-bashy-darwin.json"
 ```
 
 ### bashy-windows
 The bashy profile on a Windows host: make test + make test-bash (86/86), both
-native (`make` resolves through bashy's multicall when the host has no make);
+native (`make` and `go` resolve inside the bashy shell — the host needs no
+make or go of its own);
 the uutils lane reports skipped (Linux-oci-only), never pass.
 When: test "$(uname -s)" = Windows_NT
 Effects: read, write, exec, net
 
 ```bash
 set -e
-BASHY_EXE="${BASHY:-bashy}"
-"$BASHY_EXE" go run ./tools/repairprofile -component bashy -root "${ROOT}" \
+if [ -n "${BASHY:-}" ]; then BASHY_EXE="${BASHY}"
+elif [ -n "${BASH:-}" ]; then BASHY_EXE="${BASH}"
+else BASHY_EXE=bashy; fi
+"$BASHY_EXE" go run ./tools/repairprofile -bashy "$BASHY_EXE" -commit "${COMMIT}" -component bashy -root "${ROOT}" \
   -out "results/repair-profile-bashy-windows.json"
 ```
 
@@ -113,8 +133,10 @@ Effects: read, write, exec, net
 
 ```bash
 set -e
-BASHY_EXE="${BASHY:-bashy}"
-"$BASHY_EXE" go run ./tools/repairprofile -component bashy -root "${ROOT}" \
+if [ -n "${BASHY:-}" ]; then BASHY_EXE="${BASHY}"
+elif [ -n "${BASH:-}" ]; then BASHY_EXE="${BASH}"
+else BASHY_EXE=bashy; fi
+"$BASHY_EXE" go run ./tools/repairprofile -bashy "$BASHY_EXE" -commit "${COMMIT}" -component bashy -root "${ROOT}" \
   -only test-uutils -out "results/repair-profile-bashy-uutils.json"
 ```
 
@@ -127,8 +149,10 @@ Effects: read, write, exec, net
 
 ```bash
 set -e
-BASHY_EXE="${BASHY:-bashy}"
-"$BASHY_EXE" go run ./tools/repairprofile -component outpost -root "${OUTPOST_ROOT}" \
+if [ -n "${BASHY:-}" ]; then BASHY_EXE="${BASHY}"
+elif [ -n "${BASH:-}" ]; then BASHY_EXE="${BASH}"
+else BASHY_EXE=bashy; fi
+"$BASHY_EXE" go run ./tools/repairprofile -bashy "$BASHY_EXE" -commit "${COMMIT}" -component outpost -root "${OUTPOST_ROOT}" \
   -out "results/repair-profile-outpost-linux.json"
 ```
 
@@ -139,8 +163,10 @@ Effects: read, write, exec, net
 
 ```bash
 set -e
-BASHY_EXE="${BASHY:-bashy}"
-"$BASHY_EXE" go run ./tools/repairprofile -component outpost -root "${OUTPOST_ROOT}" \
+if [ -n "${BASHY:-}" ]; then BASHY_EXE="${BASHY}"
+elif [ -n "${BASH:-}" ]; then BASHY_EXE="${BASH}"
+else BASHY_EXE=bashy; fi
+"$BASHY_EXE" go run ./tools/repairprofile -bashy "$BASHY_EXE" -commit "${COMMIT}" -component outpost -root "${OUTPOST_ROOT}" \
   -out "results/repair-profile-outpost-darwin.json"
 ```
 
@@ -151,7 +177,9 @@ Effects: read, write, exec, net
 
 ```bash
 set -e
-BASHY_EXE="${BASHY:-bashy}"
-"$BASHY_EXE" go run ./tools/repairprofile -component outpost -root "${OUTPOST_ROOT}" \
+if [ -n "${BASHY:-}" ]; then BASHY_EXE="${BASHY}"
+elif [ -n "${BASH:-}" ]; then BASHY_EXE="${BASH}"
+else BASHY_EXE=bashy; fi
+"$BASHY_EXE" go run ./tools/repairprofile -bashy "$BASHY_EXE" -commit "${COMMIT}" -component outpost -root "${OUTPOST_ROOT}" \
   -out "results/repair-profile-outpost-windows.json"
 ```

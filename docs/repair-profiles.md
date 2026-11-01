@@ -1,12 +1,43 @@
-# Repair test profiles (S549.R4a)
+# Repair test profiles (S549.R4a, R4b)
 
-Sprint #549, Story #3070 (S549.R4a). For each core component, ONE command
-runs its full repair profile natively on the host it runs on — Linux, macOS or
-Windows, like the release gate — and writes the evidence record the repair
-gate (S549.R3a `src pr`) consumes. Orchestration is the
+Sprint #549, Stories #3070 (R4a) and #3074 (R4b). For each core component,
+ONE command runs its full repair profile natively on the host it runs on —
+Linux, macOS or Windows, like the release gate — and writes the evidence
+record the repair gate (S549.R3a `src pr`) consumes. Orchestration is the
 [`ci/repair-profiles.dag.md`](../ci/repair-profiles.dag.md) recipe (a `bashy
 dag` task file, not ad-hoc shell); the runner is `tools/repairprofile` over
 `internal/agentos/repairprofile.go`.
+
+## Every suite runs inside the bashy shell (R4b)
+
+The operator rule this implements: *"bashy is all you need"* — repair should
+always assume the Bash#/bashy runtime, and where a tool is missing, add a
+simple Bash# wrapper over another bashy command (make over `bashy make`,
+cc over `bashy zig cc`) instead of installing anything on the host.
+
+- The runner executes each suite as `<bashy> -c '<suite command>'`, where
+  `<bashy>` is the running bashy: the current executable when the runner is
+  built into bashy, else `bashy` resolved on PATH, else the runner's
+  `-bashy` flag (the dag recipe pins the bashy it runs as). Inside that
+  shell `make` is bashy's in-process coreutils make, and `go`, `cc`, `c++`
+  (with their `gcc`/`clang`/`g++`/`clang++` spellings) resolve through the
+  **Bash# wrapper units** in [`ci/bin/`](../ci/bin) — small markdown units
+  the runner materializes onto each suite's private PATH as
+  `#!<bashy> --bashsharp` executables (plus a `.cmd` twin on Windows, where
+  cgo's CreateProcess cannot run a shebang script; cmd.exe ships with the
+  OS). Host make/go/gcc are never exec'd, and a host that has none of them
+  still runs the profile.
+- `CC`/`CXX` default to the `cc`/`cxx` wrapper units (→ `bashy zig cc` /
+  `bashy zig c++`) whenever the suite environment does not provide a
+  compiler, so cgo works on a bare host.
+- If a suite needs a tool the bashy runtime cannot provide, the evidence
+  records that suite `skipped (tool <x> unavailable in bashy runtime)` —
+  never pass — and names the missing tool.
+- The evidence records **which bashy ran** (`runtime.bashy`: path + version)
+  and **which provider each tool resolved to** (`runtime.tools`).
+- Commit identity for a source tree with no `.git` (a `git archive`):
+  `BASHY_REPAIR_COMMIT=<sha>` or the runner's `-commit <sha>` flag (the dag
+  recipe forwards `COMMIT=`).
 
 ## The entry command
 
@@ -51,6 +82,18 @@ failure.
   "commit": "ea1baa7",
   "os": "darwin",
   "arch": "arm64",
+  "runtime": {
+    "bashy": {
+      "path": "/Users/qa/.local/bin/bashy",
+      "version": "bashy, GNU Bash 5.3 compatible, version 5.3.0(1)-bashy-dev (b75e1bf)"
+    },
+    "tools": [
+      { "tool": "make", "provider": "bashy make (in-process coreutils make)", "via": "bashy shell ExecHandler, ahead of PATH" },
+      { "tool": "go", "provider": "bashy go (pinned provider go1.27.2)", "via": "wrapper unit ci/bin/go.md on the suite PATH" },
+      { "tool": "cc", "provider": "bashy zig cc (pinned zig provider; zig cc is clang)", "via": "wrapper unit ci/bin/cc.md on the suite PATH (CC default)" },
+      { "tool": "c++", "provider": "bashy zig c++ (pinned zig provider)", "via": "wrapper unit ci/bin/cxx.md on the suite PATH (CXX default)" }
+    ]
+  },
   "start": "2026-10-31T22:19:07Z",
   "end": "2026-10-31T22:31:44Z",
   "suites": [
@@ -95,15 +138,18 @@ Verdict rules (unit-tested with fake suites: `true`, `false`, a timeout-kill,
 a signal-kill, truncated output):
 
 - **`complete`** is true only if every ELIGIBLE suite ran to completion —
-  exited on its own, not killed by the per-suite wall bound (`timeout:
-  killed after …`) or by a signal (`killed by signal …`), and actually
-  started (`start: … not found` fails closed; through the bashy multicall
-  fallback, exit 127 is a start failure, not a suite verdict).
+  exited on its own (the bashy shell carrying the suite included), not
+  killed by the per-suite wall bound (`timeout: killed after …`) or by a
+  signal (`killed by signal …`), and actually started. Inside the bashy
+  shell a command that resolves nowhere exits 127 — a completed, FAILED
+  suite, never a pass.
 - **`pass`** is true only if complete and every eligible suite exited 0.
   A killed or partial run is NEVER a pass.
-- **Skipped** suites (structurally unavailable lane) are recorded with
-  `skipped: true` and the spec wording `skipped (lane unavailable: …)` —
-  never counted as pass, never failing the native lanes that did run.
+- **Skipped** suites (structurally unavailable lane, or a tool the bashy
+  runtime cannot provide) are recorded with `skipped: true` and the spec
+  wording `skipped (lane unavailable: …)` / `skipped (tool <x> unavailable
+  in bashy runtime)` — never counted as pass, never failing the native
+  lanes that did run.
 - **A profile where nothing ran fails closed** (`"no suite ran on this
   host"`): measuring nothing is not passing.
 - `output_tail` is bounded (default 16 KiB); `output_truncated: true` marks
@@ -134,8 +180,10 @@ The uutils landmine lane additionally needs the sibling clone at
 
 ## Exact commands per host
 
-Run from the bashy checkout (a peer needs only bashy + the checkout; the
-recipe runs the runner through `bashy go`):
+Run from the bashy checkout — the host needs **only bashy** (R4b): the
+recipe drives the runner through the bashy it runs as (`bashy go run`),
+and every suite then runs inside that bashy's shell where make/go/cc are
+bashy's own. No make, go or gcc on the host is required.
 
 ```sh
 # Linux test host (native + the oci landmine lane when available)
@@ -144,12 +192,16 @@ bashy dag ci/repair-profiles.dag.md profile COMPONENT=bashy OUT=results/repair-e
 # macOS test host (native; uutils recorded skipped — Linux-oci-only)
 bashy dag ci/repair-profiles.dag.md profile COMPONENT=bashy OUT=results/repair-evidence-macos.json
 
-# Windows test host (native; make resolves through bashy's multicall when the
-# host has no make on PATH)
+# Windows test host (native; make/go/cc resolve inside the bashy shell —
+# the host needs no make/go/gcc of its own)
 bashy dag ci/repair-profiles.dag.md profile COMPONENT=bashy OUT=results/repair-evidence-windows.json
 
 # Any OS — the outpost profile (OUTPOST_ROOT names the outpost checkout)
 bashy dag ci/repair-profiles.dag.md profile COMPONENT=outpost OUTPOST_ROOT=../outpost
+
+# A source tree with no .git (git archive): record the commit identity
+BASHY_REPAIR_COMMIT=<sha> bashy dag ci/repair-profiles.dag.md profile COMPONENT=bashy
+#   (equivalently: … profile COMPONENT=bashy COMMIT=<sha>)
 
 # Offline proof (works from a warm cache; fails clearly when the cache is empty)
 BASHY_OFFLINE=1 bashy dag ci/repair-profiles.dag.md profile COMPONENT=bashy OUT=results/repair-evidence-offline.json

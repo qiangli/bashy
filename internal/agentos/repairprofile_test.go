@@ -8,9 +8,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -32,7 +34,9 @@ func TestRepairSuiteHelperProcess(t *testing.T) {
 		os.Exit(1)
 	case "sleep":
 		fmt.Println("helper: sleeping past the suite timeout")
-		time.Sleep(30 * time.Second)
+		// Well past the 500 ms suite bound but short enough that the pipe a
+		// watchdog orphan holds (WaitDelay) does not slow the test batch.
+		time.Sleep(5 * time.Second)
 		os.Exit(0)
 	case "flood":
 		chunk := strings.Repeat("x", 4096)
@@ -69,22 +73,73 @@ func helperSpec(t *testing.T, name string, behavior string) RepairSuiteSpec {
 		Kind:    "argv",
 		Args:    []string{os.Args[0], "-test.run=TestRepairSuiteHelperProcess", "-test.v"},
 		Env:     []string{"GO_WANT_HELPER_PROCESS=1", "REPAIR_HELPER_BEHAVIOR=" + behavior},
-		Timeout: 30 * time.Second,
+		Timeout: 60 * time.Second,
 	}
+}
+
+// repairTestBashy is the REAL bashy binary the R4b suite tests run every
+// suite inside — resolved the same way the synergy dag tests resolve it
+// (BASHY_E2E_BIN, the checkout's bin/bashy, else a plain `go build` into a
+// per-process temp dir), built at most once per test binary. The test binary
+// itself is never exec'd as bashy.
+var (
+	repairBashyOnce sync.Once
+	repairBashyBin  string
+)
+
+func repairTestBashy(t *testing.T) string {
+	t.Helper()
+	repairBashyOnce.Do(func() {
+		if p := strings.TrimSpace(os.Getenv("BASHY_E2E_BIN")); p != "" {
+			repairBashyBin = p
+			return
+		}
+		root, ok := findBashySourceRoot(mustGetwd())
+		if !ok {
+			return
+		}
+		suffix := ""
+		if runtime.GOOS == "windows" {
+			suffix = ".exe"
+		}
+		built := filepath.Join(root, "bin", "bashy"+suffix)
+		if st, err := os.Stat(built); err == nil && !st.IsDir() && st.Mode()&0o111 != 0 {
+			repairBashyBin = built
+			return
+		}
+		if testing.Short() {
+			return
+		}
+		dir, err := os.MkdirTemp("", "bashy-repair-test-")
+		if err != nil {
+			return
+		}
+		out := filepath.Join(dir, "bashy"+suffix)
+		cmd := exec.Command("go", "build", "-o", out, "./cmd/bashy")
+		cmd.Dir = root
+		if b, err := cmd.CombinedOutput(); err != nil {
+			t.Logf("build bashy: %v\n%s", err, b)
+			return
+		}
+		repairBashyBin = out
+	})
+	if repairBashyBin == "" {
+		t.Skip("needs a built bashy: run `make build-bashy` or set BASHY_E2E_BIN (not built under -short)")
+	}
+	return repairBashyBin
 }
 
 func runSpecForTest(t *testing.T, spec RepairSuiteSpec) RepairSuiteResult {
 	t.Helper()
-	res, err := runRepairSuite(spec, RepairProfileOptions{
-		Root:      t.TempDir(),
-		TailBytes: 4096,
-		Goos:      runtime.GOOS,
-		Arch:      runtime.GOARCH,
+	ev := runProfileForTest(t, RepairProfileOptions{
+		Component:    "bashy",
+		Bashy:        repairTestBashy(t),
+		CustomSuites: []RepairSuiteSpec{spec},
 	})
-	if err != nil {
-		t.Fatalf("runRepairSuite(%s): %v", spec.Name, err)
+	if len(ev.Suites) != 1 {
+		t.Fatalf("expected exactly one suite result, got %d", len(ev.Suites))
 	}
-	return res
+	return ev.Suites[0]
 }
 
 // --- evidence writer ---
@@ -96,6 +151,10 @@ func TestWriteRepairEvidenceRoundTrip(t *testing.T) {
 	ev := &RepairProfileEvidence{
 		Schema: RepairProfileSchema, Component: "bashy", Commit: "deadbee",
 		OS: "linux", Arch: "amd64", Start: "2026-10-31T00:00:00Z", End: "2026-10-31T00:01:00Z",
+		Runtime: &RepairRuntime{
+			Bashy: RepairBashyIdent{Path: "/opt/bashy/bin/bashy", Version: "bashy 5.3.0(1)-bashy-dev"},
+			Tools: []RepairToolResolution{{Tool: "go", Provider: "bashy go (pinned provider go1.27.2)"}},
+		},
 		Suites: []RepairSuiteResult{
 			{Name: "make-test", Lane: "native", Command: "make test", ExitCode: &code,
 				Complete: true, Pass: true, OutputTail: "ok"},
@@ -119,8 +178,240 @@ func TestWriteRepairEvidenceRoundTrip(t *testing.T) {
 	if !back.Pass || !back.Complete || back.Component != "bashy" || back.Commit != "deadbee" {
 		t.Fatalf("round trip lost fields: %+v", back)
 	}
+	if back.Runtime == nil || back.Runtime.Bashy.Path != "/opt/bashy/bin/bashy" ||
+		len(back.Runtime.Tools) != 1 || back.Runtime.Tools[0].Tool != "go" {
+		t.Fatalf("round trip lost the runtime block: %+v", back.Runtime)
+	}
 	if len(back.Suites) != 1 || back.Suites[0].Name != "make-test" {
 		t.Fatalf("round trip lost suites: %+v", back.Suites)
+	}
+}
+
+// --- the R4b invocation: every suite runs as `<bashy> -c …` ---
+
+func TestRepairCommandStringQuotesShellWords(t *testing.T) {
+	if got := repairCommandString([]string{"make", "test"}); got != "make test" {
+		t.Fatalf("plain suite argv must render readably: %q", got)
+	}
+	if got := repairCommandString([]string{"go", "test", "-run", "Two Words", "./..."}); got != `go test -run 'Two Words' ./...` {
+		t.Fatalf("shell-reparsed words must be quoted: %q", got)
+	}
+	if got := repairCommandString([]string{"make", "VAR=a'b"}); got != `make 'VAR=a'\''b'` {
+		t.Fatalf("embedded quote must be escaped: %q", got)
+	}
+}
+
+func TestRepairSuiteEnvPinsWrapperPathAndCompilers(t *testing.T) {
+	shims := filepath.Join(t.TempDir(), "shims") // any label; env math only
+	env := repairSuiteEnv(RepairProfileOptions{Env: []string{"HOME=/h", "PATH=/usr/bin"}},
+		RepairSuiteSpec{Env: []string{"CUSTOM=1"}}, shims)
+	m := map[string]string{}
+	for _, e := range env {
+		k, v, _ := strings.Cut(e, "=")
+		m[k] = v
+	}
+	if want := shims + string(os.PathListSeparator) + "/usr/bin"; m["PATH"] != want {
+		t.Fatalf("PATH = %q, want the wrapper dir FIRST: %q", m["PATH"], want)
+	}
+	if m["CC"] != filepath.Join(shims, repairShimName("cc")) {
+		t.Fatalf("CC = %q, want the wrapper default", m["CC"])
+	}
+	if m["CXX"] != filepath.Join(shims, repairShimName("c++")) {
+		t.Fatalf("CXX = %q, want the wrapper default", m["CXX"])
+	}
+	if m["CUSTOM"] != "1" {
+		t.Fatal("spec env entries must apply")
+	}
+
+	// A provided compiler is never overridden.
+	env = repairSuiteEnv(RepairProfileOptions{Env: []string{"PATH=/x", "CC=clang-14", "CXX=clang++-14"}}, RepairSuiteSpec{}, shims)
+	m = map[string]string{}
+	for _, e := range env {
+		k, v, _ := strings.Cut(e, "=")
+		m[k] = v
+	}
+	if m["CC"] != "clang-14" || m["CXX"] != "clang++-14" {
+		t.Fatalf("an environment-provided compiler must stand: CC=%q CXX=%q", m["CC"], m["CXX"])
+	}
+
+	// A stripped PATH stays stripped down to the wrapper dir (hermetic runs).
+	env = repairSuiteEnv(RepairProfileOptions{Env: []string{"PATH="}}, RepairSuiteSpec{}, shims)
+	for _, e := range env {
+		if k, v, _ := strings.Cut(e, "="); k == "PATH" && v != shims {
+			t.Fatalf("empty PATH must become exactly the wrapper dir: %q", v)
+		}
+	}
+}
+
+func TestRepairUnitsMaterializeAsBashSharpShims(t *testing.T) {
+	units := repairUnitsIndex(findRepairUnitsDir(RepairProfileOptions{}))
+	for _, tool := range []string{"make", "go", "cc", "c++"} {
+		if _, canonical, ok := repairToolRowFor(tool); !ok || !units.rowAvailable(canonical) {
+			t.Fatalf("the repo's ci/bin units must provide %q (units dir %q)", tool, units.dir)
+		}
+	}
+	bashy := "/opt/bashy/bin/bashy"
+	if runtime.GOOS == "windows" {
+		bashy = `C:\opt\bashy\bin\bashy.exe`
+	}
+	dir, err := materializeRepairShims(units, bashy)
+	if err != nil {
+		t.Fatalf("materializeRepairShims: %v", err)
+	}
+	defer os.RemoveAll(dir)
+	for _, name := range []string{"go", "cc", "gcc", "clang", "c++", "g++", "clang++"} {
+		p := filepath.Join(dir, name)
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatalf("shim %s: %v", name, err)
+		}
+		if !strings.HasPrefix(string(b), "#!"+bashy+" --bashsharp\n") {
+			t.Fatalf("shim %s must run through the pinned bashy as a Bash# unit:\n%s", name, b)
+		}
+		if fi, err := os.Stat(p); err == nil && runtime.GOOS != "windows" && fi.Mode()&0o111 == 0 {
+			t.Fatalf("shim %s must be executable", name)
+		}
+	}
+	if cc, err := os.ReadFile(filepath.Join(dir, "cc")); err == nil {
+		if !strings.Contains(string(cc), `zig cc "$@"`) {
+			t.Fatalf("cc shim must run bashy zig cc:\n%s", cc)
+		}
+	}
+	if goShim, err := os.ReadFile(filepath.Join(dir, "go")); err == nil {
+		if !strings.Contains(string(goShim), `"`+bashy+`" go "$@"`) {
+			t.Fatalf("go shim must run the pinned bashy's go:\n%s", goShim)
+		}
+	}
+	if runtime.GOOS == "windows" {
+		b, err := os.ReadFile(filepath.Join(dir, "cc.cmd"))
+		if err != nil || !strings.Contains(string(b), "zig cc") {
+			t.Fatalf("windows cc.cmd twin missing or wrong:\n%v\n%s", err, b)
+		}
+	}
+	// A bashy path with whitespace cannot ride a shebang — refuse clearly.
+	if _, err := materializeRepairShims(units, "/opt/ba shy/bashy"); err == nil {
+		t.Fatal("a whitespace bashy path must be refused, not half-work")
+	}
+}
+
+func TestRepairBashyResolutionPrecedence(t *testing.T) {
+	// Explicit wins over everything else.
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "bashy")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := resolveRepairBashy(fake)
+	if err != nil || got != fake {
+		t.Fatalf("explicit bashy = %q, %v; want %q", got, err, fake)
+	}
+	// Nothing anywhere → hard error (the profile never falls back to host
+	// make/go). BASHY_SELF is honored before PATH.
+	t.Setenv("PATH", "")
+	t.Setenv("BASHY_SELF", "")
+	if _, err := resolveRepairBashy(""); err == nil {
+		t.Fatal("no bashy anywhere must be an error, not a silent host-binary run")
+	}
+	t.Setenv("BASHY_SELF", fake)
+	if got, err := resolveRepairBashy(""); err != nil || got != fake {
+		t.Fatalf("BASHY_SELF = %q, %v; want %q", got, err, fake)
+	}
+}
+
+// --- commit identity for trees without .git (R4b) ---
+
+// repairDummyBashy is a stat-valid placeholder for tests whose suites all
+// skip before any execution — resolution only checks the file exists; nothing
+// ever exec's it (and never the test binary).
+func repairDummyBashy(t *testing.T) string {
+	t.Helper()
+	p := filepath.Join(t.TempDir(), "bashy")
+	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestRepairCommitOverrideBeatsUnknown(t *testing.T) {
+	// A suite needing a nonexistent tool skips before any exec, so this runs
+	// hermetically with no bashy involved.
+	skip := RepairSuiteSpec{Name: "f95", Lane: "native", Kind: "argv",
+		Args: []string{"f95", "x"}, Tools: []string{"f95"}, Command: "f95 x"}
+	ev := runProfileForTest(t, RepairProfileOptions{
+		Component:    "bashy",
+		Bashy:        repairDummyBashy(t),
+		Commit:       "feedc0d",
+		CustomSuites: []RepairSuiteSpec{skip},
+	})
+	if ev.Commit != "feedc0d" {
+		t.Fatalf("-commit must be recorded verbatim: %q", ev.Commit)
+	}
+	ev = runProfileForTest(t, RepairProfileOptions{
+		Component:    "bashy",
+		Bashy:        repairDummyBashy(t),
+		CustomSuites: []RepairSuiteSpec{skip},
+	})
+	// t.TempDir() has no .git — R4a recorded "unknown"; R4b keeps that honest
+	// fallback while BASHY_REPAIR_COMMIT/-commit override it.
+	if ev.Commit != "unknown" {
+		t.Fatalf("a tree with no .git and no -commit records the fact, want \"unknown\": %q", ev.Commit)
+	}
+}
+
+// --- suites needing tools the runtime cannot provide: skip, never pass ---
+
+func TestRepairMissingToolSkipsSuiteNeverPasses(t *testing.T) {
+	ev := runProfileForTest(t, RepairProfileOptions{
+		Component: "bashy",
+		Bashy:     repairDummyBashy(t),
+		CustomSuites: []RepairSuiteSpec{
+			{Name: "fortran-check", Lane: "native", Kind: "argv",
+				Args: []string{"f95", "x"}, Tools: []string{"f95"}, Command: "f95 x"},
+		},
+	})
+	entry := ev.Suites[0]
+	if !entry.Skipped || entry.Pass || entry.Complete {
+		t.Fatalf("missing-tool suite: skipped=%v pass=%v complete=%v — never a pass",
+			entry.Skipped, entry.Pass, entry.Complete)
+	}
+	want := "skipped (tool f95 unavailable in bashy runtime)"
+	if entry.Reason != want {
+		t.Fatalf("reason = %q, want %q", entry.Reason, want)
+	}
+	if ev.Complete || ev.Pass {
+		t.Fatal("a profile whose only suite never ran must fail closed")
+	}
+}
+
+func TestRepairMissingWrapperUnitSkipsGoSuites(t *testing.T) {
+	// The tool table knows `go`, but the wrapper units are unavailable (a
+	// bad explicit units dir is authoritative, never a fallback) — the suite
+	// skips naming the tool, and a sibling native suite still passes.
+	ok := RepairSuiteSpec{Name: "ok", Lane: "native", Kind: "argv",
+		Args: []string{"true"}, Command: "true", Timeout: 30 * time.Second}
+	needsGo := RepairSuiteSpec{Name: "go-suite", Lane: "native", Kind: "argv",
+		Args: []string{"go", "version"}, Tools: []string{"go"}, Command: "go version"}
+	ev := runProfileForTest(t, RepairProfileOptions{
+		Component:    "bashy",
+		Bashy:        repairTestBashy(t),
+		UnitsDir:     filepath.Join(t.TempDir(), "no-units"),
+		CustomSuites: []RepairSuiteSpec{ok, needsGo},
+	})
+	if !ev.Pass || !ev.Complete {
+		t.Fatalf("the runnable suite must still carry the profile: complete=%v pass=%v (%s)",
+			ev.Complete, ev.Pass, ev.Reason)
+	}
+	var skip *RepairSuiteResult
+	for i := range ev.Suites {
+		if ev.Suites[i].Name == "go-suite" {
+			skip = &ev.Suites[i]
+		}
+	}
+	if skip == nil || !skip.Skipped || skip.Pass {
+		t.Fatalf("go suite without its wrapper unit must be skipped, never pass: %+v", skip)
+	}
+	if !strings.Contains(skip.Reason, "skipped (tool go unavailable in bashy runtime)") {
+		t.Fatalf("reason = %q, want the tool-unavailable skip naming go", skip.Reason)
 	}
 }
 
@@ -172,11 +463,16 @@ func TestRepairSuiteSignalKilledNeverPasses(t *testing.T) {
 		t.Skip("signal-shape test is unix-only; the timeout-kill test covers the windows kill path")
 	}
 	res := runSpecForTest(t, helperSpec(t, "signal-suite", "signal"))
-	if res.Complete || res.Pass {
-		t.Fatalf("signal-killed suite: complete=%v pass=%v — killed is never a pass", res.Complete, res.Pass)
+	// The suite payload kills itself; the bashy shell carrying it survives to
+	// report 128+9 — a completed run that FAILED, never a pass.
+	if res.Pass {
+		t.Fatal("a signal-killed payload must NEVER be pass")
 	}
-	if !strings.Contains(res.Reason, "signal") && !strings.Contains(res.Reason, "killed") {
-		t.Fatalf("reason = %q, want it to name the signal kill", res.Reason)
+	if res.ExitCode == nil || *res.ExitCode != 137 {
+		t.Fatalf("exit code = %v, want 137 (128+SIGKILL)", res.ExitCode)
+	}
+	if !res.Complete {
+		t.Fatalf("the shell reported the kill (exit 137): complete=%v reason=%q", res.Complete, res.Reason)
 	}
 }
 
@@ -208,16 +504,18 @@ func TestRepairSuiteCountsParsedWhenParseable(t *testing.T) {
 
 func TestRepairSuiteMissingCommandFailsClosed(t *testing.T) {
 	spec := RepairSuiteSpec{Name: "no-such-bin", Lane: "native", Kind: "argv",
-		Args: []string{"repairprofile-no-such-binary-xyz", "--version"}, Timeout: time.Second}
-	res, err := runRepairSuite(spec, RepairProfileOptions{Root: t.TempDir(), TailBytes: 4096})
-	if err != nil {
-		t.Fatalf("a start failure is a failed suite, not a runner error: %v", err)
+		Args: []string{"repairprofile-no-such-binary-xyz", "--version"}, Timeout: time.Minute}
+	res := runSpecForTest(t, spec)
+	if res.Pass {
+		t.Fatal("a command that resolves nowhere inside the runtime must not pass")
 	}
-	if res.Complete || res.Pass {
-		t.Fatalf("a command that never started: complete=%v pass=%v", res.Complete, res.Pass)
+	// The bashy shell ran the command and reported 127 — a completed, failed
+	// suite (start failures are now failures OF the bashy runtime itself).
+	if res.ExitCode == nil || *res.ExitCode != 127 {
+		t.Fatalf("exit code = %v, want 127 (command not found in the bashy runtime)", res.ExitCode)
 	}
-	if !strings.Contains(res.Reason, "start") {
-		t.Fatalf("reason = %q, want a start failure", res.Reason)
+	if !res.Complete {
+		t.Fatalf("the shell reported 127 itself: complete=%v reason=%q", res.Complete, res.Reason)
 	}
 }
 
@@ -232,6 +530,7 @@ func runProfileForTest(t *testing.T, opts RepairProfileOptions) *RepairProfileEv
 	opts.Goos = runtime.GOOS
 	opts.Arch = runtime.GOARCH
 	opts.TailBytes = 4096
+	opts.Stderr = nil
 	ev, err := RunRepairProfile(opts)
 	if err != nil {
 		t.Fatalf("RunRepairProfile: %v", err)
@@ -240,8 +539,10 @@ func runProfileForTest(t *testing.T, opts RepairProfileOptions) *RepairProfileEv
 }
 
 func TestRepairProfileAllGreenPasses(t *testing.T) {
+	bin := repairTestBashy(t)
 	ev := runProfileForTest(t, RepairProfileOptions{
 		Component: "bashy",
+		Bashy:     bin,
 		CustomSuites: []RepairSuiteSpec{
 			helperSpec(t, "ok1", "true"),
 			helperSpec(t, "ok2", "true"),
@@ -259,11 +560,19 @@ func TestRepairProfileAllGreenPasses(t *testing.T) {
 	if ev.Commit == "" {
 		t.Fatal("evidence must record a commit (or \"unknown\")")
 	}
+	// R4b: the runtime block names the bashy that ran every suite.
+	if ev.Runtime == nil || ev.Runtime.Bashy.Path != bin {
+		t.Fatalf("runtime.bashy.path = %+v, want the pinned test bashy %q", ev.Runtime, bin)
+	}
+	if ev.Runtime.Bashy.Version == "" {
+		t.Fatal("runtime.bashy.version must carry the --version banner")
+	}
 }
 
 func TestRepairProfileOneFailureBlocksPass(t *testing.T) {
 	ev := runProfileForTest(t, RepairProfileOptions{
 		Component: "bashy",
+		Bashy:     repairTestBashy(t),
 		CustomSuites: []RepairSuiteSpec{
 			helperSpec(t, "ok", "true"),
 			helperSpec(t, "bad", "false"),
@@ -282,6 +591,7 @@ func TestRepairProfileKilledSuiteBlocksPassAndCompletion(t *testing.T) {
 	sleep.Timeout = 500 * time.Millisecond
 	ev := runProfileForTest(t, RepairProfileOptions{
 		Component:    "bashy",
+		Bashy:        repairTestBashy(t),
 		CustomSuites: []RepairSuiteSpec{helperSpec(t, "ok", "true"), sleep},
 	})
 	if ev.Complete {
@@ -297,6 +607,7 @@ func TestRepairProfileLaneUnavailableRecordsSkipNeverPass(t *testing.T) {
 	landmine.Lane = "oci-linux"
 	ev := runProfileForTest(t, RepairProfileOptions{
 		Component:    "bashy",
+		Bashy:        repairTestBashy(t),
 		CustomSuites: []RepairSuiteSpec{helperSpec(t, "ok", "true"), landmine},
 		LaneProbe:    func() (bool, string) { return false, "oci runtime not found on this host" },
 	})
@@ -325,6 +636,7 @@ func TestRepairProfileNoEligibleSuiteFailsClosed(t *testing.T) {
 	landmine.Lane = "oci-linux"
 	ev := runProfileForTest(t, RepairProfileOptions{
 		Component:    "bashy",
+		Bashy:        repairTestBashy(t),
 		CustomSuites: []RepairSuiteSpec{landmine},
 		LaneProbe:    func() (bool, string) { return false, "oci runtime not found on this host" },
 	})
@@ -333,6 +645,72 @@ func TestRepairProfileNoEligibleSuiteFailsClosed(t *testing.T) {
 	}
 	if !strings.Contains(ev.Reason, "no suite ran") {
 		t.Fatalf("reason = %q, want the fail-closed no-suite explanation", ev.Reason)
+	}
+}
+
+// --- the hermetic proof: stripped PATH, only the bashy binary supplied ---
+
+// repairHermeticEnv is a bare environment: no PATH content, no inherited
+// toolchain vars — whatever the suites resolve must come from the bashy
+// runtime itself (the wrapper dir the runner prepends).
+func repairHermeticEnv(t *testing.T) []string {
+	t.Helper()
+	env := []string{
+		"HOME=" + os.Getenv("HOME"),
+		"TMPDIR=" + os.TempDir(),
+		"PATH=",
+	}
+	if runtime.GOOS == "windows" {
+		for _, k := range []string{"SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "USERPROFILE", "LOCALAPPDATA"} {
+			if v, ok := os.LookupEnv(k); ok {
+				env = append(env, k+"="+v)
+			}
+		}
+	}
+	return env
+}
+
+// TestRepairHermeticStrippedPathRunsThroughBashyRuntime is the S549.R4b
+// acceptance lane: with PATH stripped to an empty dir and only the bashy
+// binary supplied, a profile whose suites run `go version` and
+// `make --version` succeeds via bashy's own commands — the pinned Go
+// provider through the ci/bin/go.md wrapper on the suite's private PATH, the
+// in-process coreutils make with no PATH at all.
+func TestRepairHermeticStrippedPathRunsThroughBashyRuntime(t *testing.T) {
+	bin := repairTestBashy(t)
+	ev := runProfileForTest(t, RepairProfileOptions{
+		Component: "bashy",
+		Bashy:     bin,
+		Env:       repairHermeticEnv(t),
+		CustomSuites: []RepairSuiteSpec{
+			{Name: "go-version", Lane: "native", Kind: "argv",
+				Args: []string{"go", "version"}, Tools: []string{"go"},
+				Timeout: 10 * time.Minute, Command: "go version"},
+			{Name: "make-version", Lane: "native", Kind: "argv",
+				Args: []string{"make", "--version"}, Tools: []string{"make"},
+				Timeout: time.Minute, Command: "make --version"},
+		},
+	})
+	if !ev.Complete || !ev.Pass {
+		var tails []string
+		for _, s := range ev.Suites {
+			tails = append(tails, fmt.Sprintf("%s: pass=%v reason=%q tail=%q", s.Name, s.Pass, s.Reason, s.OutputTail))
+		}
+		t.Fatalf("hermetic profile must pass via bashy's own commands: complete=%v pass=%v\n%s",
+			ev.Complete, ev.Pass, strings.Join(tails, "\n"))
+	}
+	if ev.Runtime == nil || ev.Runtime.Bashy.Path != bin {
+		t.Fatalf("evidence must name the bashy that ran the suites: %+v", ev.Runtime)
+	}
+	resolutions := map[string]RepairToolResolution{}
+	for _, r := range ev.Runtime.Tools {
+		resolutions[r.Tool] = r
+	}
+	if r, ok := resolutions["go"]; !ok || !strings.Contains(r.Provider, "bashy go") {
+		t.Fatalf("go resolution = %+v, want the pinned bashy go provider", r)
+	}
+	if r, ok := resolutions["make"]; !ok || !strings.Contains(r.Provider, "coreutils make") {
+		t.Fatalf("make resolution = %+v, want the in-process coreutils make", r)
 	}
 }
 
@@ -359,6 +737,9 @@ func TestRepairSuitesForMatrix(t *testing.T) {
 		t.Fatalf("test-bash must be the native lane and need the sha-pinned fixture cache: %+v", names["test-bash"])
 	}
 	for _, s := range bashy {
+		if len(s.Tools) != 1 || s.Tools[0] != "make" {
+			t.Fatalf("bashy suites run make inside the bashy shell: %+v", s.Tools)
+		}
 		if strings.Contains(strings.ToLower(s.Name), "vsc") || strings.Contains(strings.ToLower(s.Name), "pcts") {
 			t.Fatalf("VSC/PCTS is excluded from repair profiles: %q", s.Name)
 		}
@@ -374,6 +755,9 @@ func TestRepairSuitesForMatrix(t *testing.T) {
 	spec := outpost[0]
 	if spec.Kind != "go-test-list" || len(spec.Exclude) != 1 || spec.Exclude[0] != "internal/agent/shell" {
 		t.Fatalf("outpost suite must be go-test-list excluding internal/agent/shell: %+v", spec)
+	}
+	if len(spec.Tools) != 1 || spec.Tools[0] != "go" {
+		t.Fatalf("outpost suite needs go from the bashy runtime: %+v", spec.Tools)
 	}
 
 	if _, err := RepairSuitesFor("nonsense"); err == nil {
@@ -426,7 +810,7 @@ func TestRepairProfileFixtureFailureFailsClosed(t *testing.T) {
 		Component: "bashy",
 		CustomSuites: []RepairSuiteSpec{
 			{Name: "test-bash", Lane: "native", Kind: "argv", Args: []string{"make", "test-bash"},
-				Fixtures: true, Timeout: time.Minute, Command: "make test-bash"},
+				Tools: []string{"make"}, Fixtures: true, Timeout: time.Minute, Command: "make test-bash"},
 		},
 		CacheBase: t.TempDir(), // empty cache: offline + Fixtures must fail closed
 		Offline:   true,
