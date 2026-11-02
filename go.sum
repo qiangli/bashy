@@ -1031,6 +1031,8 @@ github.com/qiangli/bonsai v0.0.0-20261101235535-48195f218ade h1:xxC7HabRs/7ItL9X
 github.com/qiangli/bonsai v0.0.0-20261101235535-48195f218ade/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
 github.com/qiangli/bonsai v0.0.0-20261102022722-b5e82e593cdb h1:H8Nwbl9u2W3/0an1MQIFZ+uJF9kFQxEJ1vB1lkT2KXc=
 github.com/qiangli/bonsai v0.0.0-20261102022722-b5e82e593cdb/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
+github.com/qiangli/bonsai v0.0.0-20261102033342-cc5b3dc3c28d h1:VnVkWmupSA7oFvbcfRnNonlibwpQXnmCPCBKrHWQSuY=
+github.com/qiangli/bonsai v0.0.0-20261102033342-cc5b3dc3c28d/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
 github.com/qiangli/coreutils v0.0.0-20261101171139-2ff8ab0f9ed3 h1:k8Wmm71EmXxcBWCEUxfzf+UCFqVcqEUNyI2eUumptgo=
 github.com/qiangli/coreutils v0.0.0-20261101171139-2ff8ab0f9ed3/go.mod h1:xXYB1mvBD/zkHYNIIXNRBtyFIx8MWEGleP0UrLnmF6Q=
 github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261101171139-2ff8ab0f9ed3 h1:0tRnKdDyhiRzd7w65zPI8dZm5pAlGR6diZh3WEHOJbw=
