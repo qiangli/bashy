@@ -106,3 +106,69 @@ Validation status: compiled and vetted for linux/amd64, linux/arm64 and windows.
 The focused darwin race selection (TestReclaimOrphans*, the hard-killed-monitor regression, captured stale-identity escalation, ownership-record lifecycle) passed on dev in 10.572s. The
 new regression and the repair have NOT run on Linux: that needs the
 manager-coordinated hosted lane.
+
+## Review rework (613f2a1 → this commit)
+
+Independent review (`/tmp/s557-service3042-review-613f2a1.md`) required three
+corrections; all are made.
+
+1. **Read errors are not completion.** Liveness is now tri-state: live, proven
+   gone (an error wrapping `errProcessGone`), or unknown (any other error).
+   Only a vanished `/proc` entry (ENOENT/ESRCH) or a counted-out thread group
+   proves exit; EACCES, EIO and malformed stat stay unknown. `sameProcess`
+   (the signal condition) still requires proven identity, but it is no longer
+   the completion test. `processMatches` returns the error, and its callers
+   fail closed: reclaim keeps the ownership record and reports `liveness
+   unknown` for an unreadable orphan or monitor; `waitProcessesGone` waits for
+   a member until it is *proven* gone (`provenGone`); group capture fails
+   instead of dropping an unreadable member. The boot-id read error, which
+   was silently ignored before, is now unknown, so it can no longer produce a
+   mismatched identity. Darwin now uses `SysctlKinfoProcSlice`, because
+   `SysctlKinfoProc` returns EIO for an absent pid (x/sys source) and would
+   now read as unknown. Windows maps ERROR_INVALID_PARAMETER and a
+   non-STILL_ACTIVE exit code to proven gone.
+2. **No completion from a missing/empty task directory.** The proof is
+   `num_threads` (field 20) from the leader's own stat snapshot. That is the
+   same snapshot that names the incarnation, so it cannot mix two
+   incarnations. Per the kernel source the review cites, a non-leader thread
+   is released (and the count decremented) only after its `exit_files`. A
+   zombie leader counting at most itself therefore owns no descriptors.
+   `>1` is live. An unparsable or negative count is unknown. `/proc/PID/task`
+   only corroborates: it can keep a group live but never prove it gone. A
+   missing or empty listing decides nothing beyond the count. Task-stat EACCES,
+   EIO or malformed data is unknown, and a vanished task is skipped. A running
+   task the count did not include triggers a re-read of the leader. The group
+   is live only while that re-read shows the same start time: a changed or
+   vanished leader is proven gone, and a failed re-read is unknown. The 0-count
+   case (the leader itself mid-release) is treated as gone. Neither that case
+   nor the count's ordering has been observed on a hosted kernel; both rest on
+   source review.
+3. **Listener retained.** The leader-thread-exit child stores its listener in
+   the package variable `leaderExitListener`.
+
+The /proc decision logic moved to the untagged `supervisord_procstat.go`
+(`procFS`, with injectable reads). Linux wires it to the real `/proc`, and the
+fault tests run on every platform. New tests:
+`TestProcStartTimeProvesExitOnlyFromVanishingOrThreadCount`,
+`TestProcStartTimeRevalidatesLeaderIncarnation`,
+`TestProcGroupIdentitiesFailsOnUnknownMember`,
+`TestReclaimKeepsOwnershipWhenLivenessUnknown`. A mutation that restores
+"ignore task-stat and task-dir errors" fails four of the subtests.
+
+Unchanged: signaling targets, group selection, identity matching, grace, the
+5 s final join, the 10 s monitor deadline, and the foreign-listener and
+reused-pid guards. No sleeps were added, and nothing is identified by port.
+
+Dev evidence (darwin/arm64, `-race -count=3`, 4.904s): the four new tests,
+TestReclaimOrphans*, TestCapturedOrphanEscalationSparesChangedIdentity,
+TestServiceMonitorReclaimsOrphanOfHardKilledMonitor and
+TestProcessProviderOwnershipRecordLifecycle all passed. `go vet` was clean for
+darwin, linux/amd64, linux/arm64 and windows/amd64.
+
+**Not run on Linux.** No hosted Linux pass is claimed. The original hosted
+port-held failures remain unresolved. Hosted selector to run:
+
+    GOWORK=off go test -race ./internal/agentos -run '^(TestReclaimOrphansWaitsForThreadsOfExitedLeader|TestReclaimOrphansJoinsTermIgnoringGroupListener|TestReclaimOrphansSparesUnprovenProcesses|TestCapturedOrphanEscalationSparesChangedIdentity|TestServiceMonitorReclaimsOrphanOfHardKilledMonitor|TestProcStartTimeProvesExitOnlyFromVanishingOrThreadCount|TestProcStartTimeRevalidatesLeaderIncarnation|TestProcGroupIdentitiesFailsOnUnknownMember|TestReclaimKeepsOwnershipWhenLivenessUnknown)$' -count=3 -timeout=120s
+
+On failure, record `uname -r` along with the `portDiagnosis` output, which
+covers dial/bind, /proc/net/tcp states and task states.

@@ -17,6 +17,10 @@ import (
 	"time"
 )
 
+// leaderExitListener stays reachable from a package variable, so a garbage
+// collection after the main thread exits cannot finalize and close it.
+var leaderExitListener net.Listener
+
 // The leader-thread-exit child runs from init, which Go runs on the main
 // thread: it binds the port, announces, then exits only that thread. The
 // kernel then reports the group leader as a zombie while the runtime's other
@@ -27,7 +31,8 @@ func init() {
 		return
 	}
 	port, ready, _ := strings.Cut(arg, ",")
-	if _, err := net.Listen("tcp", "127.0.0.1:"+port); err != nil {
+	var err error
+	if leaderExitListener, err = net.Listen("tcp", "127.0.0.1:"+port); err != nil {
 		os.Exit(3)
 	}
 	if err := os.WriteFile(ready, []byte(strconv.Itoa(os.Getpid())), 0o600); err != nil {
