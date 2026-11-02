@@ -49,6 +49,18 @@ func (p procFS) stat(path string) ([]string, error) {
 	if len(f) < 20 {
 		return nil, errors.New("malformed /proc stat")
 	}
+	// These fields decide incarnation equality and group membership. Treat
+	// malformed identities as unknown, never as a different (gone) process
+	// or an unrelated group member that can be silently omitted.
+	for _, field := range []struct {
+		index int
+		name  string
+		bits  int
+	}{{2, "pgrp", 32}, {19, "starttime", 64}} {
+		if _, err := strconv.ParseUint(f[field.index], 10, field.bits); err != nil {
+			return nil, fmt.Errorf("malformed /proc stat %s %q", field.name, f[field.index])
+		}
+	}
 	return f, nil
 }
 

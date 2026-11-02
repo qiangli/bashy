@@ -155,6 +155,33 @@ func TestProcStartTimeRevalidatesLeaderIncarnation(t *testing.T) {
 	}
 }
 
+// Full-width records still need valid numeric identity fields. Otherwise a
+// malformed starttime can masquerade as a new incarnation, or a malformed
+// pgrp can silently remove an unreadable process from the captured group.
+func TestProcStatRejectsMalformedIdentityFields(t *testing.T) {
+	for _, field := range []struct {
+		index int
+		name  string
+	}{{2, "pgrp"}, {19, "starttime"}} {
+		for _, value := range []string{"oops", "-1", "18446744073709551616"} {
+			t.Run(field.name+"/"+value, func(t *testing.T) {
+				line := statLine(7, "S", 7, "1", 900)
+				end := strings.LastIndexByte(line, ')')
+				fields := strings.Fields(line[end+1:])
+				fields[field.index] = value
+				line = line[:end+1] + " " + strings.Join(fields, " ")
+				p := fakeProc(map[string]string{testBoot: "b", "/proc/7/stat": line}, nil)
+				if _, err := p.startTime(7); err == nil || errors.Is(err, errProcessGone) {
+					t.Fatalf("malformed %s %q returned %v, want unknown", field.name, value, err)
+				}
+				if members, err := p.groupIdentities(7); err == nil {
+					t.Fatalf("malformed %s captured %v without error", field.name, members)
+				}
+			})
+		}
+	}
+}
+
 // Group capture skips proven-gone members and fails, rather than drops, a
 // member whose liveness is unknown.
 func TestProcGroupIdentitiesFailsOnUnknownMember(t *testing.T) {

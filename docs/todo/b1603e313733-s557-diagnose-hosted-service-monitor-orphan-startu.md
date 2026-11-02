@@ -172,3 +172,12 @@ port-held failures remain unresolved. Hosted selector to run:
 
 On failure, record `uname -r` along with the `portDiagnosis` output, which
 covers dial/bind, /proc/net/tcp states and task states.
+
+
+Independent review correction — Codex repair_review internal helper, root delegated:
+
+Reviewed Claude commits613f2a1 and72ea8d04 without rewriting either. The tri-state completion callers, count-based conservative Linux task handling, Darwin absent-process distinction, Windows gone-error mapping, and explicit global test-listener lifetime address the three prior review concerns. Linux execution remains pending.
+
+One remaining full-length malformed-stat case was identified: a nonnumeric field22 could be compared as a different incarnation, while a nonnumeric field5 could silently exclude a group member. Added only numeric validation of consumed pgrp/starttime fields before either identity or membership decisions. Errors remain unknown rather than proven gone. Six authored cases cover text, negative and overflowing values for both fields; group capture must also reject them. No signal targets, grace/deadlines, ownership assertions or platform selection changed.
+
+Focused Darwin race selection (unknown liveness, task/read errors, leader revalidation, malformed identities, TERM-ignoring listener, foreign/reused identity protections and hard-killed monitor) PASS3.571s. Prior rework without numeric addition passed the same selection minus new cases in3.643s. Negative-control overlay restoring72ea8d04 procstat source fails all6 new cases (1.477s total), proving the guard is not vacuous. Canonical filesystem overlay paths used. No full suite/build or Linux fixture execution. Hosted Linux must include TestReclaimOrphansWaitsForThreadsOfExitedLeader and these new fault cases; neither original hosted cause nor full lifecycle acceptance is claimed by Darwin success.
