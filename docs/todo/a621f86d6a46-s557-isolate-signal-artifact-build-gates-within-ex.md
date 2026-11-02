@@ -3,12 +3,14 @@ id: a621f86d6a46
 kind: task
 title: S557 isolate signal artifact build gates within existing per-build deadlines
 seq: 3043
-status: assigned
+status: done
 created: 2026-11-02T02:48:08.962727Z
 assignee: s557-public-tooling
 sprint: 557
 sprint_id: f5ccf563-f5d1-5b94-8be4-9388e51ef86d
 sprint_title: 'Bashy v1.0.0 preparation: split private/public development and retire qiangli/dhnt'
+closed: 2026-11-02T04:14:43.402333Z
+closed_by: s557-manager
 ---
 
 Full hosted run41370653870 at umbrella58a2442 exhausted tools/elfaudit package default10m across four sequential real product cross-build/audit cases. Linux retained/stripped consumed about234s, Darwin product about278s, plain88s before aggregate kill. Stack is waiting on go build, not post-exit pipe drain. Preserve all four positive/negative assertions and exact architectures; isolate each existing subtest in its own bounded invocation rather than increase package/global timeout. Integrate into canonical make test with exhaustive named coverage and fail-fast mock checks. No full product builds on development host; root reviews/pushes.
@@ -31,3 +33,12 @@ discovery, first-child failure with exact nonzero propagation and no later
 child, missing/skipped/duplicate child results, and absent package completion.
 No local product build or full suite was executed. Hosted full `make test`
 remains required for final validation; this story is not accepted yet.
+
+## Scoped acceptance
+
+Full Bashy run https://github.com/dhnt/umbrella/actions/runs/41384053269
+passed at umbrella64995c0/Bashye574663a. Retained JSONL confirms all four
+unchanged ELF build subgates passed: Linux retained/stripped and Darwin
+product/plain. Discovery and per-child outcomes are preserved. The subsequent
+broad elfaudit package intentionally excludes those already executed children.
+This accepts the gate-isolation repair, not final validation of later shell changes.
