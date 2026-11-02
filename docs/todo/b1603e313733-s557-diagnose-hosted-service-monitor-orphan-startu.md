@@ -59,3 +59,50 @@ again (3.492s). Independent read-only review found no further required changes.
 Exact candidate58a2442 native run41370643706 fails new TestReclaimOrphansJoinsTermIgnoringGroupListener on BOTH Linux jobs125040178282 and125040178542 at line146, after only0.19s: captured child identity considered gone but listener still held. Darwin focused success does not establish Linux correctness. Diagnose Linux completion semantics and distinguish active connection versus bind failure/TIME_WAIT before repair. Linux /proc pgrp/start indices were independently checked correct; helper announces ready only after IgnoreTERM and Listen. Hypothesis of zombie leader while other Go threads release sockets is unproven. Preserve identity-safe signaling, foreign-listener/PID-reuse guards, all existing deadlines and original monitor test. Do not add sleeps, relax ports/deadlines, or kill by port.
 
 Assigned implementation scope: source review and bounded authored diagnostic/regression fixes in isolated managed workspace. No local full builds/suites/containers on Dragon. Native Linux validation requires manager-coordinated hosted lane or dedicated test host; do not touch the private POSIX runner. Commit with Sprint557/Story3042 trailers, report exact evidence and any unproven hypothesis. Root owns independent review, merge, hosted dispatch and consumer pins.
+
+## Linux follow-up diagnosis and repair
+
+Evidence. Both failing jobs report `port N/tcp (127.0.0.1:N) is held by a
+foreign listener` at line 146. `checkPorts` formats its dial-accepted path and
+its bind-EADDRINUSE path identically, so the hosted log alone cannot separate an
+active listener from a bind failure. On Linux, however, TIME_WAIT cannot cause
+the bind failure: Go sets SO_REUSEADDR on every listener, and the only sockets
+on the port are the listener and the backlog child of the precondition probe
+(aborted with RST when the listener closes). Either path therefore means a LISTEN
+socket still exists on the port. A different process binding the
+just-released port inside 0.19s on both jobs is the less likely explanation. It
+is not excluded by the hosted evidence.
+
+Mechanism (kernel semantics, not yet observed on a hosted Linux runner).
+`/proc/PID/stat` reports only the thread-group leader's state. Under SIGKILL every
+thread runs its own exit path. The leader can reach exit_notify and show `Z`
+(a delayed group leader) while sibling threads have not yet run exit_files on the
+shared descriptor table, which still holds the listening socket. Go processes always
+have several threads, and a loaded runner can delay the scheduling of the sibling
+threads. `procStartTime` and `processGroupIdentities` treated a `Z` leader as
+gone, so `waitProcessesGone` could return before the socket closed. The same
+mechanism also explains the original hard-killed-monitor failure: reclaim returns
+early, and the successor's `checkPorts` sees the still-closing orphan as a
+foreign listener, a failed state with no retry.
+
+Repair. On Linux, a process is live while any task in `/proc/PID/task` is short
+of zombie (`threadGroupLive`). A non-leader task leaves that directory only
+after it has released its files. An unreadable but present task directory counts
+as live. This applies to identity (`procStartTime`) and group capture. The PID
+cannot be recycled while the zombie leader exists, so identity-safe signaling
+is unchanged. Deadlines, grace, the guards against foreign listeners and reused
+PIDs, and the original tests are unchanged. No sleeps were added, and nothing is
+identified by its port.
+
+Regression. `TestReclaimOrphansWaitsForThreadsOfExitedLeader` (Linux only) makes
+the mechanism deterministic. A child exits only its main thread (raw SYS_EXIT
+from init, which Go runs on the main thread) while its runtime threads keep the
+listener. The test asserts that identity, group capture and reclaim completion
+all treat that process as live. Failures in this test and at line 146 now
+append `portDiagnosis`: separate dial/bind results, `/proc/net/tcp{,6}` states for
+the port, and the task states of each PID.
+
+Validation status: compiled and vetted for linux/amd64, linux/arm64 and windows.
+The focused darwin race selection (TestReclaimOrphans*, the hard-killed-monitor regression, captured stale-identity escalation, ownership-record lifecycle) passed on dev in 10.572s. The
+new regression and the repair have NOT run on Linux: that needs the
+manager-coordinated hosted lane.
