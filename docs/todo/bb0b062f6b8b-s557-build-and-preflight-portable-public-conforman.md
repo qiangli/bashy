@@ -61,3 +61,16 @@ The diagnostic copier now grants read/traverse permission on its completed
 artifact copies only and records that operation's exit status. It leaves
 fixture and live-trace modes unchanged. The failed upload provided no raw
 self-test trace, so exact signal attribution remains unresolved.
+
+Diagnostic followup: the separate, opt-in 60-second Modernish self-test trace
+now inherits descriptor 9 with BASH_XTRACEFD=9, retained as
+bashy.selftest-xtrace.log. This keeps trace output visible when a capability
+probe suppresses stderr. Original stdout/stderr, exit status, score and test
+invocation are unchanged. Diagnostic copies, including the new file, receive
+host-readable permissions; fixture/live trace modes are untouched.
+
+Validation: shell syntax PASS; authored extracted-block mocks PASS with trace
+opt-out and diagnostic exits 0, 142 and 137. The mocks verified descriptor 9
+capture separately from stdout/stderr, exact timeout argv, readable copied
+artifacts and unchanged original log/status. No foreign suite or product build
+was run locally. Hosted evidence remains required; no runtime/PID change.

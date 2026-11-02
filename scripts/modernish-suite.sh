@@ -151,10 +151,11 @@ $OCI run --rm "${EVIDENCE_MOUNT[@]}" -e LANG=C -e SHELLS="$SHELLS" \
             printf "%s\n" "diagnostic trace setup failed; no trace attempt" > /out/bashy.selftest-trace.meta
             continue
           fi
-          printf "%s\n" "diagnostic-only; budget=60s; loader=-x; tests=-xxx; original=bashy.log,bashy.exit" \
+          printf "%s\n" "diagnostic-only; budget=60s; loader=-x; tests=-xxx; xtrace-fd=9; original=bashy.log,bashy.exit" \
             > /out/bashy.selftest-trace.meta
-          timeout -s KILL 60 /bashy bin/modernish -x --test -xxx \
-            >/out/bashy.selftest-trace.log 2>&1
+          # Keep xtrace visible even when a probe redirects its stderr.
+          BASH_XTRACEFD=9 timeout -s KILL 60 /bashy bin/modernish -x --test -xxx \
+            >/out/bashy.selftest-trace.log 2>&1 9>/out/bashy.selftest-xtrace.log
           printf "%s\n" "$?" > /out/bashy.selftest-trace.exit
           trace_copy_rc=0
           for trace_dir in /tmp/msh-xtrace.*; do
@@ -165,7 +166,7 @@ $OCI run --rm "${EVIDENCE_MOUNT[@]}" -e LANG=C -e SHELLS="$SHELLS" \
           # The suite deliberately uses restrictive modes; container-root
           # copies must be readable by the host artifact uploader. Normalize
           # only these diagnostic copies, never the fixture or live traces.
-          chmod -R a+rX /out/bashy.selftest-traces
+          chmod -R a+rX /out/bashy.selftest-traces /out/bashy.selftest-xtrace.log
           printf "%s\n" "$?" > /out/bashy.selftest-trace.permissions.exit
         fi
       fi
