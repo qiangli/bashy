@@ -34,7 +34,10 @@ func TestDeskToolsForkAndRollback(t *testing.T) {
 	bashy := productBashy(t)
 	for name, root := range shapedTools {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
+			// Each verify cold-provisions Go in a fresh contained HOME. Run
+			// these independently bounded checks serially: concurrent cold
+			// builds compete for the hosted runner's CPUs and can exhaust the
+			// unchanged two-minute production check deadline.
 			src, err := filepath.Abs(root)
 			if err != nil {
 				t.Fatal(err)
@@ -148,6 +151,7 @@ func (f *forkHome) run(dir, bin string, args ...string) string {
 	cmd.Env = f.env
 	out, err := runDeskCommand(f.t, cmd)
 	if err != nil {
+		logForkCheckEvidence(f.t, f.home)
 		f.t.Fatalf("%s %s: %v\n%s", filepath.Base(bin), strings.Join(args, " "), err, out)
 	}
 	return string(out)
