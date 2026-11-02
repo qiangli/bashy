@@ -143,7 +143,7 @@ func TestReclaimOrphansJoinsTermIgnoringGroupListener(t *testing.T) {
 		t.Fatalf("reclaim returned before owned listener exited: %q", lines)
 	}
 	if err := checkPorts(listenerUnit(port)); err != nil {
-		t.Fatalf("reclaimed listener still holds port: %v", err)
+		t.Fatalf("reclaimed listener still holds port: %v; %s", err, portDiagnosis(port, leader.Process.Pid, listener))
 	}
 }
 
