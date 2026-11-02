@@ -6,7 +6,8 @@ seq: 3042
 status: assigned
 priority: p1
 created: 2026-11-01T23:01:13.521937Z
-assignee: s557-manager
+weave: 3
+assignee: claude-opus5.5
 sprint: 557
 sprint_id: f5ccf563-f5d1-5b94-8be4-9388e51ef86d
 sprint_title: 'Bashy v1.0.0 preparation: split private/public development and retire qiangli/dhnt'
