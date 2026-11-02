@@ -3,7 +3,7 @@ id: b1603e313733
 kind: bug
 title: S557 diagnose hosted service-monitor orphan startup port ownership failure
 seq: 3042
-status: assigned
+status: done
 priority: p1
 created: 2026-11-01T23:01:13.521937Z
 weave: 3
@@ -11,6 +11,8 @@ assignee: claude-opus5.5
 sprint: 557
 sprint_id: f5ccf563-f5d1-5b94-8be4-9388e51ef86d
 sprint_title: 'Bashy v1.0.0 preparation: split private/public development and retire qiangli/dhnt'
+closed: 2026-11-02T03:37:24.008203Z
+closed_by: s557-manager
 ---
 
 Hosted fullBashy41356815864 at4b3e283: TestServiceMonitorReclaimsOrphanOfHardKilledMonitor fails10.17s listenerneveractive foreignport41325. Preserve ownership/orphan assertions,10sdeadline, realprocesschecks; diagnose race or fixturecollision beforechange. Evidence private local /tmp/s557-bashy-full-41356815864-failed.log; public run URL supports sanitized evidence. Bounded focused authoredtests only ondev; fullsuitehosted. No release. Rootdelivery trailersrequired.
@@ -182,3 +184,12 @@ Reviewed Claude commits613f2a1 and72ea8d04 without rewriting either. The tri-sta
 One remaining full-length malformed-stat case was identified: a nonnumeric field22 could be compared as a different incarnation, while a nonnumeric field5 could silently exclude a group member. Added only numeric validation of consumed pgrp/starttime fields before either identity or membership decisions. Errors remain unknown rather than proven gone. Six authored cases cover text, negative and overflowing values for both fields; group capture must also reject them. No signal targets, grace/deadlines, ownership assertions or platform selection changed.
 
 Focused Darwin race selection (unknown liveness, task/read errors, leader revalidation, malformed identities, TERM-ignoring listener, foreign/reused identity protections and hard-killed monitor) PASS3.571s. Prior rework without numeric addition passed the same selection minus new cases in3.643s. Negative-control overlay restoring72ea8d04 procstat source fails all6 new cases (1.477s total), proving the guard is not vacuous. Canonical filesystem overlay paths used. No full suite/build or Linux fixture execution. Hosted Linux must include TestReclaimOrphansWaitsForThreadsOfExitedLeader and these new fault cases; neither original hosted cause nor full lifecycle acceptance is claimed by Darwin success.
+
+## Scoped acceptance
+
+Hosted native run https://github.com/dhnt/umbrella/actions/runs/41381899440
+ran the reviewed service source at Bashy 1c4e9e4b on Linux and macOS.
+The selected original orphan and added lifecycle regressions passed three
+repetitions under the race detector (3.685s and 3.836s). Independent manager
+review and the focused local gate also passed. This accepts the service
+repair scope; full product validation remains a separate release requirement.
