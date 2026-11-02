@@ -118,6 +118,7 @@ func reclaimOne(path, name string) string {
 	if err != nil {
 		return fmt.Sprintf("%s: orphan pid %d: %v", name, rec.PID, err)
 	}
+	defer p.Release()
 	sig := syscall.Signal(rec.Signal)
 	if sig == 0 {
 		sig = syscall.SIGTERM
@@ -126,28 +127,63 @@ func reclaimOne(path, name string) string {
 	if grace <= 0 {
 		grace = supervisordGrace
 	}
-	if err := signalProcessGroup(p, sig); err != nil || !waitNotSame(rec.PID, rec.Start, grace) {
-		// Still the same process: identity was re-checked just above.
-		_ = killProcessGroup(p)
-		if !waitNotSame(rec.PID, rec.Start, 5*time.Second) {
-			return fmt.Sprintf("%s: orphan pid %d survived SIGKILL", name, rec.PID)
+	members, err := processGroupIdentities(rec.PID)
+	if err != nil {
+		return fmt.Sprintf("%s: cannot identify orphan group %d: %v", name, rec.PID, err)
+	}
+	// Recheck the leader after enumeration, before addressing its group.
+	if !sameProcess(rec.PID, rec.Start) {
+		return fmt.Sprintf("%s: orphan leader %d exited during ownership snapshot", name, rec.PID)
+	}
+	members = append(members, processIdentity{rec.PID, rec.Start})
+	if err := signalProcessGroup(p, sig); err != nil || !waitProcessesGone(members, grace) {
+		// The leader may already have exited. Never address its possibly
+		// recycled process-group ID here: only signal captured incarnations.
+		killCapturedProcesses(members)
+		if !waitProcessesGone(members, 5*time.Second) {
+			return fmt.Sprintf("%s: orphan group %d has captured members surviving SIGKILL", name, rec.PID)
 		}
 	}
 	_ = os.Remove(path)
 	return fmt.Sprintf("%s: stopped orphan pid %d left by dead monitor pid %d", name, rec.PID, rec.Monitor)
 }
 
-// waitNotSame polls until pid no longer has start (exited, reaped or a
-// zombie), or d passes.
-func waitNotSame(pid int, start string, d time.Duration) bool {
+// processIdentity is captured while the recorded group leader is still live.
+// Membership is not inferred from a listener or from a dead leader's group ID.
+type processIdentity struct {
+	pid   int
+	start string
+}
+
+func waitProcessesGone(members []processIdentity, d time.Duration) bool {
 	deadline := time.Now().Add(d)
 	for {
-		if !sameProcess(pid, start) {
+		alive := false
+		for _, member := range members {
+			alive = alive || sameProcess(member.pid, member.start)
+		}
+		if !alive {
 			return true
 		}
 		if time.Now().After(deadline) {
 			return false
 		}
 		time.Sleep(25 * time.Millisecond)
+	}
+}
+
+func killCapturedProcesses(members []processIdentity) {
+	for _, member := range members {
+		// Acquire the process handle before rechecking identity. Platforms
+		// with pinned handles retain that incarnation through Kill. Darwin's
+		// PID-based signaling still has the kernel check/signal race.
+		child, err := os.FindProcess(member.pid)
+		if err != nil {
+			continue
+		}
+		if sameProcess(member.pid, member.start) {
+			_ = child.Kill()
+		}
+		_ = child.Release()
 	}
 }

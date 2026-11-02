@@ -26,3 +26,19 @@ func procStartTime(pid int) (string, error) {
 	t := kp.Proc.P_starttime
 	return fmt.Sprintf("%d.%06d", t.Sec, t.Usec), nil
 }
+
+func processGroupIdentities(pgid int) ([]processIdentity, error) {
+	processes, err := unix.SysctlKinfoProcSlice("kern.proc.pgrp", pgid)
+	if err != nil {
+		return nil, err
+	}
+	var members []processIdentity
+	for _, kp := range processes {
+		if int(kp.Eproc.Pgid) != pgid || kp.Proc.P_stat == 5 {
+			continue
+		}
+		t := kp.Proc.P_starttime
+		members = append(members, processIdentity{int(kp.Proc.P_pid), fmt.Sprintf("%d.%06d", t.Sec, t.Usec)})
+	}
+	return members, nil
+}
