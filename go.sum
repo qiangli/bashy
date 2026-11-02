@@ -1027,8 +1027,8 @@ github.com/prometheus/procfs v0.20.1/go.mod h1:o9EMBZGRyvDrSPH1RqdxhojkuXstoe4Ul
 github.com/prometheus/statsd_exporter v0.22.7/go.mod h1:N/TevpjkIh9ccs6nuzY3jQn9dFqnUakOjnEuMPJJJnI=
 github.com/prometheus/statsd_exporter v0.29.0 h1:2iaiBLpAg/WcdW4nF0UTQfjCE2DXD+1NVnCM1ulPKd8=
 github.com/prometheus/statsd_exporter v0.29.0/go.mod h1:3t+fT5ESGc0KBUfadCp43KOnVPFmbAF4c58Osotz3Zk=
-github.com/qiangli/bonsai v0.0.0-20261101225220-8baad6983b62 h1:W5GiIXvu8UgQWs1WQrulR14Z/m8ncQ/ZhnOsgybgk34=
-github.com/qiangli/bonsai v0.0.0-20261101225220-8baad6983b62/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
+github.com/qiangli/bonsai v0.0.0-20261101235535-48195f218ade h1:xxC7HabRs/7ItL9XWuqQeKx5z3IOOqtZ8DnaGRJzaqQ=
+github.com/qiangli/bonsai v0.0.0-20261101235535-48195f218ade/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
 github.com/qiangli/coreutils v0.0.0-20261101171139-2ff8ab0f9ed3 h1:k8Wmm71EmXxcBWCEUxfzf+UCFqVcqEUNyI2eUumptgo=
 github.com/qiangli/coreutils v0.0.0-20261101171139-2ff8ab0f9ed3/go.mod h1:xXYB1mvBD/zkHYNIIXNRBtyFIx8MWEGleP0UrLnmF6Q=
 github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261101171139-2ff8ab0f9ed3 h1:0tRnKdDyhiRzd7w65zPI8dZm5pAlGR6diZh3WEHOJbw=
@@ -1047,8 +1047,8 @@ github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb h1:sZ0O1FtouYq/i
 github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb/go.mod h1:G9TZ3lljDx9Cy/MDxevTV4W+VmBelEAF+SJIHLc+zrQ=
 github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4 h1:jFEDhq2xCnc71hq0C/qEYzIuWQSwINigzSrYUGTvYHc=
 github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4/go.mod h1:a0jdwCqW+MTJWBjQRHa9kRNipGLv1Y8Ep26hoLGNTQ8=
-github.com/qiangli/sh/v3 v3.0.0-20261101230144-8d8ce12b925c h1:dhk+l6IGRT3upkrl7aPB738PGcG5Uv9psulAgheTrhc=
-github.com/qiangli/sh/v3 v3.0.0-20261101230144-8d8ce12b925c/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
+github.com/qiangli/sh/v3 v3.0.0-20261101235713-48af783e2dde h1:nGQuraf49AdmY+g+n7SxAwbgvwILVOBeLdnolQ0WWp0=
+github.com/qiangli/sh/v3 v3.0.0-20261101235713-48af783e2dde/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb h1:LLfdQXY/uXHpJm9eYP0sdcFg4IHQHzIOUwslX9TpqxI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb/go.mod h1:tcNzv5p84E0skkmJn038y+hWJbLQXQqEnQfeh5r2JLM=
 github.com/qiangli/yamux v0.1.0 h1:nmfx1HPvOMR3x6ZkctdBuk98fmUHSp2DOxnbYA7gGR0=

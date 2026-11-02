@@ -374,7 +374,7 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
-	github.com/qiangli/bonsai v0.0.0-20261101225220-8baad6983b62 // indirect
+	github.com/qiangli/bonsai v0.0.0-20261101235535-48195f218ade // indirect
 	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261031185218-5b633ceb4995 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
@@ -532,7 +532,7 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261101230144-8d8ce12b925c
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261101235713-48af783e2dde
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
