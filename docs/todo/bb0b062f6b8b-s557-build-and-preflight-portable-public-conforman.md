@@ -74,3 +74,31 @@ opt-out and diagnostic exits 0, 142 and 137. The mocks verified descriptor 9
 capture separately from stdout/stderr, exact timeout argv, readable copied
 artifacts and unchanged original log/status. No foreign suite or product build
 was run locally. Hosted evidence remains required; no runtime/PID change.
+
+Windows redirection diagnostic followup (linked Sh story #187,
+de21afd1cbc8): --redir-probe-dir adds a separate, explicitly unscored runner
+invocation after normal private fixture/userland preparation. Run the original
+`--tests redir` measurement first against the same retained candidate. The new
+flag runs four authored CLI assertions and unchanged redir11.sub directly,
+through THIS_SH, and separately with xtrace. Each phase has the existing
+60-second execution bound and process-tree guard; raw combined stdout/stderr,
+actual process status and timeout are retained without fixture normalization.
+Only authored cases receive assertion results; upstream subfixture phases
+remain raw diagnostic observations, never invented pass counts.
+
+Candidate and extensionless THIS_SH binary hashes must match. All candidate,
+userland and upstream input hashes are recorded and checked after every phase.
+The evidence destination must be new; previous evidence is never overwritten.
+No candidate rebuild or upstream fixture edit occurs between phases. Scored
+fixtures reuse their unchanged execution body through a shared helper.
+
+Bounded local verification: authored mock success/failure retention, wrong
+nested binary rejection, previous evidence refusal and existing normal/idle
+stdin/JSON runner guards passed. Windows amd64 test cross-compilation passed.
+No foreign suite or product build was run locally. Native hosted execution and
+Sh187 root-cause attribution remain pending; Windows84/86 is not reclassified.
+
+Review hardening: every diagnostic phase starts with a fresh hermetic fixture
+copy; candidate/userland bytes remain shared and fixed. An authored mock leaves
+a sentinel file and fails if any later phase sees it. Flag conflicts fail before
+preparation. The final six focused runner/mock checks passed in 3.450s.
