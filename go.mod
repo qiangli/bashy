@@ -18,9 +18,9 @@ require (
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261101171139-2ff8ab0f9ed3
-	github.com/qiangli/ycode v0.3.1-dev.0.20261101182243-14ac8733c882
+	github.com/qiangli/ycode v0.3.1-dev.0.20261102005223-5518a658f6f4
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261101224418-1c8269b9b046
+	github.com/qiangli/yoke v0.0.0-20261102004912-556b27f01f72
 	github.com/qiangli/yoke/external/otel v0.0.0-20261101171808-9bce1ec1bb0a
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -532,7 +532,7 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261101235713-48af783e2dde
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261102005124-ed938a78c4e6
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
