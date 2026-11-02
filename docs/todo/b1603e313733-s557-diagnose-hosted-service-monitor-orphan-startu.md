@@ -52,3 +52,10 @@ kernel-level PID-reuse immunity there.
 
 After the handle-order correction, the same focused race selection passed
 again (3.492s). Independent read-only review found no further required changes.
+
+
+## Linux follow-up assignment
+
+Exact candidate58a2442 native run41370643706 fails new TestReclaimOrphansJoinsTermIgnoringGroupListener on BOTH Linux jobs125040178282 and125040178542 at line146, after only0.19s: captured child identity considered gone but listener still held. Darwin focused success does not establish Linux correctness. Diagnose Linux completion semantics and distinguish active connection versus bind failure/TIME_WAIT before repair. Linux /proc pgrp/start indices were independently checked correct; helper announces ready only after IgnoreTERM and Listen. Hypothesis of zombie leader while other Go threads release sockets is unproven. Preserve identity-safe signaling, foreign-listener/PID-reuse guards, all existing deadlines and original monitor test. Do not add sleeps, relax ports/deadlines, or kill by port.
+
+Assigned implementation scope: source review and bounded authored diagnostic/regression fixes in isolated managed workspace. No local full builds/suites/containers on Dragon. Native Linux validation requires manager-coordinated hosted lane or dedicated test host; do not touch the private POSIX runner. Commit with Sprint557/Story3042 trailers, report exact evidence and any unproven hypothesis. Root owns independent review, merge, hosted dispatch and consumer pins.
