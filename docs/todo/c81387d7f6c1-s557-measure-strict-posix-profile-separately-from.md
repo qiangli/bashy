@@ -3,13 +3,16 @@ id: c81387d7f6c1
 kind: test
 title: S557 measure strict POSIX profile separately from Bash compatibility
 seq: 3040
-status: assigned
+status: wontfix
 priority: p1
+labels:
+    - superseded
 created: 2026-11-01T18:09:33.573856Z
 assignee: s557-manager
 sprint: 557
 sprint_id: f5ccf563-f5d1-5b94-8be4-9388e51ef86d
 sprint_title: 'Bashy v1.0.0 preparation: split private/public development and retire qiangli/dhnt'
+closed: 2026-11-02T05:32:08.024612Z
 ---
 
 Existing pinned Yash panel builds cmd/bash and invokes it as sh, intentionally exercising Bash-compatible POSIX behavior; its1778OK55ERROR are sharedwithBash5.3 and mustremainunchanged. Add explicitseparate strict cmd/sh profile measurement with clearlabel/provenance, samefixturepin/denominator/oracles and rawlogs. Never reinterpret Bashprofileerrorsasstrictcertification results. Keep defaultscript behavior and aggregatorcompatible. Public hostedcontainer execution only; boundedmock/syntax checks local. Licensedcertification is separate and private. Root ownsdispatch/review/pins.
@@ -41,3 +44,7 @@ cross-build recipe. Mock verification exercised the real shell wrapper with a
 fake Go launcher, asserting host bootstrap variables and preserved Linux/amd64
 CGO=0 target arguments for both profiles. Syntax/ShellCheck passed; no actual
 SDK overlay, build, container, or foreign suite was executed locally.
+
+## Superseded by consolidation — 2026-11-02
+
+Operator requested consolidation of implementation repairs into acceptance owners. Scope, original acceptance, unresolved work and evidence transfer to public umbrella #6, story `bf7624a5c2f2`. This record is closed by decision with label `superseded`; it is NOT a delivery acceptance, test pass, waiver or feature retirement. The parent remains open. Continue corrections under that parent rather than creating another repair story. Original content above is retained unchanged.
