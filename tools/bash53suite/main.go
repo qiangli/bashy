@@ -90,6 +90,7 @@ type jsonSummary struct {
 func run(args []string, stdout, stderr io.Writer) int {
 	var testsDir, bashPath, tests, skip, chunk, chunksManifest, bashPPMode, userland string
 	var listOnly, chunkCountOnly, shared, jsonOutput, filetimeProbe, localeProbe bool
+	var redirProbeDir string
 	var shard, of int
 	var timeout, jobsTimeout time.Duration
 	var userlandNote string
@@ -113,6 +114,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.BoolVar(&listOnly, "list", false, "list fixture names and exit")
 	flags.BoolVar(&chunkCountOnly, "chunk-count", false, "print pinned chunk_count from the chunk manifest and exit")
 	flags.BoolVar(&shared, "shared-tree", false, "run in the source fixture tree instead of a private copy (unsafe: leaks platform-built helpers across venues and races concurrent chunks)")
+	flags.StringVar(&redirProbeDir, "redir-probe-dir", "", "Windows only: separate bounded CLI/redir11 diagnostics; raw artifacts, no suite verdict")
 	flags.BoolVar(&filetimeProbe, "filetime-probe", false, "Windows only: run the test.tests test -N timestamp probe in the prepared Bashy fixture context")
 	flags.BoolVar(&localeProbe, "locale-probe", false, "Windows only: print direct host and prepared-root locale provider diagnostics, then exit")
 	flags.DurationVar(&timeout, "timeout", 60*time.Second, "per-fixture timeout")
@@ -125,6 +127,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 			return infrastructureFailure(true, stdout, stderr, &report, err)
 		}
 		return infrastructureFailure(jsonOutput, stdout, stderr, &report, err)
+	}
+	if redirProbeDir != "" && (runtime.GOOS != "windows" || shared || userland == "" || jsonOutput || filetimeProbe || localeProbe || listOnly || chunkCountOnly || bashPPMode != "") {
+		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("redir probe requires Windows private userland and separate non-JSON invocation"))
 	}
 	if bashPPMode == "" && os.Getenv("BASH53_BASHPP") != "" {
 		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("BASH53_BASHPP requires -bashpp-mode: missing harness mode assertion"))
@@ -332,6 +337,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	if err := prepareFixtures(testsDir, stderr); err != nil {
 		return infrastructureFailure(jsonOutput, stdout, stderr, &report, fmt.Errorf("prepare fixtures: %v", err))
+	}
+	if redirProbeDir != "" {
+		if err := runRedirectProbe(root, testsDir, bashPath, userland, redirProbeDir, stdout); err != nil {
+			return infrastructureFailure(false, stdout, stderr, &report, err)
+		}
+		return 0
 	}
 	if filetimeProbe {
 		if err := runFiletimeProbe(root, testsDir, bashPath, stdout, stderr); err != nil {
@@ -1005,19 +1016,52 @@ func ensureStub(path string, lines int, name, reason string) error {
 // fixture got — and is empty for every other verdict; an error means the
 // harness itself could not run the fixture.
 func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duration, bashppOpt ...bool) (string, string, error) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 	args := []string{}
 	if len(bashppOpt) > 0 {
 		args = fixtureCommandArgs(f, bashppOpt[0])
 	} else if f.Name != "input-test" {
 		args = append(args, "./"+filepath.ToSlash(f.Test))
 	}
+	rawBytes, timedOut, runErr, err := runFixtureProcess(root, testsDir, bashPath, f, timeout, args)
+	if err != nil {
+		return "FAIL", "", err
+	}
+	if timedOut {
+		// A timeout with no evidence is a dead end: the fixture is a few
+		// hundred lines and the harness knows only that it stopped. Say how
+		// far it got — its last lines of output, and the .right line they
+		// correspond to — so the next reader can name the construct that
+		// blocked instead of bisecting a corpus file on a remote runner.
+		return "TIME", timeoutProgress(f, testsDir, normalizeOutput(f.Name, rawBytes)), nil
+	}
+	if runErr != nil {
+		// Bash's own harness gates on output, not process status. Keep going.
+	}
+
+	got := normalizeOutput(f.Name, rawBytes)
+	want, err := os.ReadFile(filepath.Join(testsDir, f.Right))
+	if err != nil {
+		return "FAIL", "", err
+	}
+	got = normalizeHostSignalOrder(f.Name, got)
+	want = normalizeHostSignalOrder(f.Name, want)
+	if bytes.Equal(got, want) {
+		return "PASS", "", nil
+	}
+	writeDebugOutput(f.Name, want, got)
+	return "FAIL", "", fmt.Errorf("output differs from %s\n%s", f.Right, firstDiff(want, got))
+}
+
+// runFixtureProcess retains the suite's idle stdin, environment, process guard,
+// timeout and raw combined output for both scored fixtures and diagnostics.
+func runFixtureProcess(root, testsDir, bashPath string, f fixture, timeout time.Duration, args []string) ([]byte, bool, error, error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	var stdin *os.File
 	if f.Name == "input-test" {
 		in, err := os.Open(filepath.Join(testsDir, "input-line.sh"))
 		if err != nil {
-			return "FAIL", "", err
+			return nil, false, nil, err
 		}
 		defer in.Close()
 		stdin = in
@@ -1033,7 +1077,7 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 		// terminal's readiness without needing a pty.
 		r, w, err := os.Pipe()
 		if err != nil {
-			return "FAIL", "", err
+			return nil, false, nil, err
 		}
 		defer r.Close()
 		// The write end stays open for the fixture's whole life so the read
@@ -1055,12 +1099,12 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 
 	parentWatch, err := armParentDeathWatch(cmd)
 	if err != nil {
-		return "FAIL", "", err
+		return nil, false, nil, err
 	}
 	startErr := cmd.Start()
 	parentDeathWatchStarted(parentWatch, startErr)
 	if startErr != nil {
-		return "FAIL", "", startErr
+		return nil, false, nil, startErr
 	}
 	defer func() { stopParentDeathWatch(parentWatch) }()
 	done := make(chan error, 1)
@@ -1107,30 +1151,7 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	// on normal completion as well as timeout so no fixture process survives
 	// the harness iteration.
 	killProcessTree(cmd.Process.Pid)
-	if timedOut {
-		// A timeout with no evidence is a dead end: the fixture is a few
-		// hundred lines and the harness knows only that it stopped. Say how
-		// far it got — its last lines of output, and the .right line they
-		// correspond to — so the next reader can name the construct that
-		// blocked instead of bisecting a corpus file on a remote runner.
-		return "TIME", timeoutProgress(f, testsDir, normalizeOutput(f.Name, raw.Bytes())), nil
-	}
-	if runErr != nil {
-		// Bash's own harness gates on output, not process status. Keep going.
-	}
-
-	got := normalizeOutput(f.Name, raw.Bytes())
-	want, err := os.ReadFile(filepath.Join(testsDir, f.Right))
-	if err != nil {
-		return "FAIL", "", err
-	}
-	got = normalizeHostSignalOrder(f.Name, got)
-	want = normalizeHostSignalOrder(f.Name, want)
-	if bytes.Equal(got, want) {
-		return "PASS", "", nil
-	}
-	writeDebugOutput(f.Name, want, got)
-	return "FAIL", "", fmt.Errorf("output differs from %s\n%s", f.Right, firstDiff(want, got))
+	return raw.Bytes(), timedOut, runErr, nil
 }
 
 // fixtureThisSH overrides the $THIS_SH the fixtures are handed; it is set
