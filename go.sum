@@ -1033,6 +1033,8 @@ github.com/qiangli/bonsai v0.0.0-20261102022722-b5e82e593cdb h1:H8Nwbl9u2W3/0an1
 github.com/qiangli/bonsai v0.0.0-20261102022722-b5e82e593cdb/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
 github.com/qiangli/bonsai v0.0.0-20261102033342-cc5b3dc3c28d h1:VnVkWmupSA7oFvbcfRnNonlibwpQXnmCPCBKrHWQSuY=
 github.com/qiangli/bonsai v0.0.0-20261102033342-cc5b3dc3c28d/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
+github.com/qiangli/bonsai v0.0.0-20261102040328-98dcbb2eb32e h1:Hr8EoQt14Z8S+ksYB7L09NVJ60U4z/29r3Saz2KT1aA=
+github.com/qiangli/bonsai v0.0.0-20261102040328-98dcbb2eb32e/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
 github.com/qiangli/coreutils v0.0.0-20261101171139-2ff8ab0f9ed3 h1:k8Wmm71EmXxcBWCEUxfzf+UCFqVcqEUNyI2eUumptgo=
 github.com/qiangli/coreutils v0.0.0-20261101171139-2ff8ab0f9ed3/go.mod h1:xXYB1mvBD/zkHYNIIXNRBtyFIx8MWEGleP0UrLnmF6Q=
 github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261101171139-2ff8ab0f9ed3 h1:0tRnKdDyhiRzd7w65zPI8dZm5pAlGR6diZh3WEHOJbw=
@@ -1059,6 +1061,8 @@ github.com/qiangli/sh/v3 v3.0.0-20261102030407-dbb5734b285a h1:HNB7yj1H4WA6IsGUm
 github.com/qiangli/sh/v3 v3.0.0-20261102030407-dbb5734b285a/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
 github.com/qiangli/sh/v3 v3.0.0-20261102035227-c890bf4a4b54 h1:nhgTszVVPxh3ZBvo3BSOei7NS/O2eiicg3kdDyKw6xw=
 github.com/qiangli/sh/v3 v3.0.0-20261102035227-c890bf4a4b54/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
+github.com/qiangli/sh/v3 v3.0.0-20261102041218-dc51034ce22a h1:VoPcJSKBWReRanDUNTg+Ur8Ia56OUUqpmLOO3RE8sl4=
+github.com/qiangli/sh/v3 v3.0.0-20261102041218-dc51034ce22a/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb h1:LLfdQXY/uXHpJm9eYP0sdcFg4IHQHzIOUwslX9TpqxI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb/go.mod h1:tcNzv5p84E0skkmJn038y+hWJbLQXQqEnQfeh5r2JLM=
 github.com/qiangli/yamux v0.1.0 h1:nmfx1HPvOMR3x6ZkctdBuk98fmUHSp2DOxnbYA7gGR0=
@@ -1071,6 +1075,8 @@ github.com/qiangli/ycode v0.3.1-dev.0.20261102005223-5518a658f6f4 h1:aApo56zesZM
 github.com/qiangli/ycode v0.3.1-dev.0.20261102005223-5518a658f6f4/go.mod h1:Kid9UShmOmu/r8kseE3ZU+5ocZLESYOuSMPVnPHiO9k=
 github.com/qiangli/ycode v0.3.1-dev.0.20261102023548-f6825c41f887 h1:0h7wZhHC7qRtg59WVSnhMaCkVzmi6uz6KwMq7drNv/4=
 github.com/qiangli/ycode v0.3.1-dev.0.20261102023548-f6825c41f887/go.mod h1:Kid9UShmOmu/r8kseE3ZU+5ocZLESYOuSMPVnPHiO9k=
+github.com/qiangli/ycode v0.3.1-dev.0.20261102034820-23d0ff4f5df7 h1:AoDdH+rVbDMNkRzE8eHMs/pcxu+brMx6Lt4zoTB863A=
+github.com/qiangli/ycode v0.3.1-dev.0.20261102034820-23d0ff4f5df7/go.mod h1:Kid9UShmOmu/r8kseE3ZU+5ocZLESYOuSMPVnPHiO9k=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2 h1:bFDhUDkjVspcsLYaKnlN4hZAja61IZdNQ+0YYoGoTJc=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2/go.mod h1:+ZCbIbIbjxqk8derYesSoxwxIMOylG87DtzJqzOUGGM=
 github.com/qiangli/yoke v0.0.0-20261102004912-556b27f01f72 h1:sSK9GlLfMZpmAVdHA7QXoiHxgGSBM+fg0xx9BRc0wQM=

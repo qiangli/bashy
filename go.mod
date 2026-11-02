@@ -18,7 +18,7 @@ require (
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261101171139-2ff8ab0f9ed3
-	github.com/qiangli/ycode v0.3.1-dev.0.20261102023548-f6825c41f887
+	github.com/qiangli/ycode v0.3.1-dev.0.20261102034820-23d0ff4f5df7
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261102004912-556b27f01f72
 	github.com/qiangli/yoke/external/otel v0.0.0-20261101171808-9bce1ec1bb0a
@@ -374,7 +374,7 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
-	github.com/qiangli/bonsai v0.0.0-20261102033342-cc5b3dc3c28d // indirect
+	github.com/qiangli/bonsai v0.0.0-20261102040328-98dcbb2eb32e // indirect
 	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261031185218-5b633ceb4995 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
@@ -532,7 +532,7 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261102035227-c890bf4a4b54
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261102041218-dc51034ce22a
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
