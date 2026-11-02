@@ -162,6 +162,11 @@ $OCI run --rm "${EVIDENCE_MOUNT[@]}" -e LANG=C -e SHELLS="$SHELLS" \
             cp -R "$trace_dir" /out/bashy.selftest-traces/ || trace_copy_rc=$?
           done
           printf "%s\n" "$trace_copy_rc" > /out/bashy.selftest-trace.copy.exit
+          # The suite deliberately uses restrictive modes; container-root
+          # copies must be readable by the host artifact uploader. Normalize
+          # only these diagnostic copies, never the fixture or live traces.
+          chmod -R a+rX /out/bashy.selftest-traces
+          printf "%s\n" "$?" > /out/bashy.selftest-trace.permissions.exit
         fi
       fi
       continue

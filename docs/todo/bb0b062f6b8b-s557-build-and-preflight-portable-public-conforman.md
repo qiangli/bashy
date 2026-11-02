@@ -54,3 +54,10 @@ Four suite-free mocks passed: opt-out, diagnostic success, SIGALRM and timeout
 statuses, retaining original evidence and copying completed-attempt traces.
 Shell syntax and diff checks passed. No foreign suite or product build ran
 locally; exact failure attribution and hosted validation remain pending.
+
+Run 41381899105 reproduced the original SIGALRM result and created per-test
+traces, but artifact upload failed with EACCES on a copied trace directory.
+The diagnostic copier now grants read/traverse permission on its completed
+artifact copies only and records that operation's exit status. It leaves
+fixture and live-trace modes unchanged. The failed upload provided no raw
+self-test trace, so exact signal attribution remains unresolved.
