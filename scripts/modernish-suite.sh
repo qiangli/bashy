@@ -102,6 +102,7 @@ echo "# INFO suite: modernish is strict about its host shell; not all shells ini
 echo "# OK=succeeded  FAIL=failed-unexpectedly  (skip / xfail=known-shell-bug shown in parens)"
 
 $OCI run --rm "${EVIDENCE_MOUNT[@]}" -e LANG=C -e SHELLS="$SHELLS" \
+  -e MODERNISH_SELFTEST_TRACE="${MODERNISH_SELFTEST_TRACE:-0}" \
   -v "$MT:/msh:ro" -v "$BIN:/bashy:ro" "$IMG" bash -c '
   export LANG=C
   # Run from a writable copy so the loader can derive MSH_PREFIX cleanly.
@@ -139,6 +140,29 @@ $OCI run --rm "${EVIDENCE_MOUNT[@]}" -e LANG=C -e SHELLS="$SHELLS" \
           trace_rc=$?
           printf "%s\n" "$trace_rc" >"/out/$trace_label.init-trace.exit"
         done
+        if [ "${MODERNISH_SELFTEST_TRACE:-0}" = 1 ]; then
+          # Diagnostic only: preserve the original log/status and panel counts.
+          # Loader -x traces the suite driver; test -xxx retains every per-test
+          # trace. Hashbang module preload precedes loader xtrace activation.
+          mkdir -p /out/bashy.selftest-traces
+          trace_setup_rc=$?
+          printf "%s\n" "$trace_setup_rc" > /out/bashy.selftest-trace.setup.exit
+          if [ "$trace_setup_rc" -ne 0 ]; then
+            printf "%s\n" "diagnostic trace setup failed; no trace attempt" > /out/bashy.selftest-trace.meta
+            continue
+          fi
+          printf "%s\n" "diagnostic-only; budget=60s; loader=-x; tests=-xxx; original=bashy.log,bashy.exit" \
+            > /out/bashy.selftest-trace.meta
+          timeout -s KILL 60 /bashy bin/modernish -x --test -xxx \
+            >/out/bashy.selftest-trace.log 2>&1
+          printf "%s\n" "$?" > /out/bashy.selftest-trace.exit
+          trace_copy_rc=0
+          for trace_dir in /tmp/msh-xtrace.*; do
+            [ -d "$trace_dir" ] || continue
+            cp -R "$trace_dir" /out/bashy.selftest-traces/ || trace_copy_rc=$?
+          done
+          printf "%s\n" "$trace_copy_rc" > /out/bashy.selftest-trace.copy.exit
+        fi
       fi
       continue
     fi

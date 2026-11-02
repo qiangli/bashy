@@ -40,3 +40,17 @@ initialization before handling --version. After a blocked Bashy initialization,
 retain separate Bashy and Bash reference --version traces with MSH_FTL_DEBUG=1
 and timeout -s KILL 60. Do not rerun the corpus, modify upstream fixtures, or
 change the original verdict. Actual diagnostic execution is hosted-only.
+
+Diagnostic follow-up for run 41380385436: the separate initialization/version
+attempt now exits zero, while the original self-test terminates with SIGALRM
+and no summary. Opt-in MODERNISH_SELFTEST_TRACE=1 now retains a separate
+60-second KILL-bounded self-test trace after the original verdict is recorded.
+Loader -x traces the driver; test -xxx retains all per-test traces. Setup,
+execution and trace-copy statuses are separate; original log/status/counters
+remain unchanged. Hashbang module preload precedes loader xtrace activation,
+so a failure during preload may still require a narrower diagnostic.
+Only the explicit umbrella Modernish diagnostic lane enables this opt-in.
+Four suite-free mocks passed: opt-out, diagnostic success, SIGALRM and timeout
+statuses, retaining original evidence and copying completed-attempt traces.
+Shell syntax and diff checks passed. No foreign suite or product build ran
+locally; exact failure attribution and hosted validation remain pending.
