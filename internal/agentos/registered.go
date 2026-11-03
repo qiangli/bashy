@@ -349,18 +349,7 @@ func registeredHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 			}
 			cmd.Env = interp.NativeExecEnv(append(handlerEnv(hc.Env), rec.Env...), argv[0])
 			cmd.Stdin, cmd.Stdout, cmd.Stderr = hc.Stdin, hc.Stdout, hc.Stderr
-			cleanup, err := hc.PrepareChildDescriptors(cmd)
-			if err != nil {
-				cleanup()
-				fmt.Fprintf(hc.Stderr, "bashy: %s: %v\n", args[0], err)
-				return interp.ExitStatus(126)
-			}
-			err = cmd.Start()
-			cleanup()
-			if err == nil {
-				err = cmd.Wait()
-			}
-			if err != nil {
+			if err := cmd.Run(); err != nil {
 				if ee, ok := err.(*exec.ExitError); ok {
 					return interp.ExitStatus(uint8(ee.ExitCode()))
 				}

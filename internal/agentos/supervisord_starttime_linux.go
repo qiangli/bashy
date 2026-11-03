@@ -3,18 +3,33 @@
 
 package agentos
 
-import "os"
+import (
+	"errors"
+	"os"
+	"strconv"
+	"strings"
+)
 
-// hostProc reads the real /proc; supervisord_procstat.go holds the liveness
-// decisions.
-var hostProc = procFS{readFile: os.ReadFile, readDir: os.ReadDir}
-
-// procStartTime names a live process's incarnation (procFS.startTime).
-func procStartTime(pid int) (string, error) { return hostProc.startTime(pid) }
-
-// procStatFields returns /proc stat fields from field 3 (state) on.
-func procStatFields(path string) ([]string, error) { return hostProc.stat(path) }
-
-func processGroupIdentities(pgid int) ([]processIdentity, error) {
-	return hostProc.groupIdentities(pgid)
+// procStartTime names a live process's incarnation: the boot it belongs to
+// and its start time in clock ticks since that boot (/proc/PID/stat field
+// 22). A zombie is not live — its start time no longer owns anything.
+func procStartTime(pid int) (string, error) {
+	b, err := os.ReadFile("/proc/" + strconv.Itoa(pid) + "/stat")
+	if err != nil {
+		return "", err
+	}
+	s := string(b)
+	i := strings.LastIndexByte(s, ')')
+	if i < 0 {
+		return "", errors.New("malformed /proc stat")
+	}
+	f := strings.Fields(s[i+1:]) // f[0] is field 3 (state)
+	if len(f) < 20 {
+		return "", errors.New("malformed /proc stat")
+	}
+	if f[0] == "Z" || f[0] == "X" {
+		return "", errors.New("zombie")
+	}
+	boot, _ := os.ReadFile("/proc/sys/kernel/random/boot_id")
+	return strings.TrimSpace(string(boot)) + ":" + f[19], nil
 }

@@ -96,7 +96,7 @@ func buildLikeConsole(t *testing.T, root, main string) string {
 	cmd := exec.Command("go", "build", "-trimpath", "-o", bin, "./"+main)
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "GOWORK=off", "CGO_ENABLED=0")
-	if out, err := runDeskCommand(t, cmd); err != nil {
+	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build ./%s in %s: %v\n%s", main, root, err, out)
 	}
 	return bin
@@ -106,11 +106,6 @@ func buildLikeConsole(t *testing.T, root, main string) string {
 // port and waits for the desk health probe.
 func runLikeConsole(t *testing.T, bin string, srv appserver.Server) {
 	t.Helper()
-	started := time.Now()
-	deskStageLog(t, "start health-probe binary=%q", bin)
-	defer func() {
-		deskStageLog(t, "end health-probe binary=%q elapsed=%s", bin, time.Since(started).Round(time.Millisecond))
-	}()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

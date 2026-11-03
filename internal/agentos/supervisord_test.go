@@ -348,28 +348,6 @@ func supervisordTestChild() int {
 	case "grandchild":
 		_, _ = io.ReadAll(os.Stdin) // EOF when the parent is gone
 		return 0
-	case "group-listener-leader":
-		port, ready, _ := strings.Cut(arg, ",")
-		child := exec.Command(os.Args[0], "group-listener")
-		child.Env = append(os.Environ(), "BASHY_SUPERVISORD_TEST_CHILD=listen-ignore:"+port+","+ready)
-		if err := child.Start(); err != nil {
-			return 3
-		}
-		// Inherit this leader's group; only the listener ignores TERM.
-		_ = child.Wait()
-		return 0
-	case "listen-ignore":
-		port, ready, _ := strings.Cut(arg, ",")
-		signalIgnoreTerm()
-		l, err := net.Listen("tcp", "127.0.0.1:"+port)
-		if err != nil {
-			return 3
-		}
-		defer l.Close()
-		if err := os.WriteFile(ready, []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
-			return 3
-		}
-		select {}
 	case "listen":
 		l, err := net.Listen("tcp", "127.0.0.1:"+arg)
 		if err != nil {

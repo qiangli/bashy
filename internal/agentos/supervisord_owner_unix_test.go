@@ -12,7 +12,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -93,69 +92,5 @@ func TestServiceMonitorReclaimsOrphanOfHardKilledMonitor(t *testing.T) {
 	}
 	if err := checkPorts(u); !errors.Is(err, errForeignListener) {
 		t.Fatalf("foreign listener not reported: %v", err)
-	}
-}
-
-// A leader's exit does not release a listener held by another group member.
-// Escalation must follow proven process identities, never the occupied port.
-func TestReclaimOrphansJoinsTermIgnoringGroupListener(t *testing.T) {
-	needStartTime(t)
-	root, port := t.TempDir(), freePort(t)
-	ready := filepath.Join(root, "ready")
-	leader := exec.Command(os.Args[0], "group-listener-leader")
-	leader.Env = append(os.Environ(), "BASHY_SUPERVISORD_TEST_CHILD=group-listener-leader:"+port+","+ready)
-	leader.SysProcAttr = ownProcessGroupAttr()
-	if err := leader.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = syscall.Kill(-leader.Process.Pid, syscall.SIGKILL); _ = leader.Wait() })
-	var listener int
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		if b, err := os.ReadFile(ready); err == nil {
-			listener, _ = strconv.Atoi(string(b))
-			if listener > 0 {
-				break
-			}
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("listener never ready")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if group, err := syscall.Getpgid(listener); err != nil || group != leader.Process.Pid {
-		t.Fatalf("listener group=%d error=%v", group, err)
-	}
-	start, err := procStartTime(leader.Process.Pid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	listenerStart, err := procStartTime(listener)
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeOwner(t, root, "listener", unitOwner{PID: leader.Process.Pid, Start: start, Monitor: 1 << 30, MonitorStart: "gone", Signal: int(syscall.SIGTERM), GraceMS: 100})
-	if err := checkPorts(listenerUnit(port)); !errors.Is(err, errForeignListener) {
-		t.Fatalf("precondition listener: %v", err)
-	}
-	lines := reclaimOrphans(root)
-	if len(lines) != 1 || sameProcess(listener, listenerStart) {
-		t.Fatalf("reclaim returned before owned listener exited: %q", lines)
-	}
-	if err := checkPorts(listenerUnit(port)); err != nil {
-		t.Fatalf("reclaimed listener still holds port: %v; %s", err, portDiagnosis(port, leader.Process.Pid, listener))
-	}
-}
-
-func TestCapturedOrphanEscalationSparesChangedIdentity(t *testing.T) {
-	needStartTime(t)
-	child := startHeld(t)
-	start, err := procStartTime(child.Process.Pid)
-	if err != nil {
-		t.Fatal(err)
-	}
-	killCapturedProcesses([]processIdentity{{child.Process.Pid, start + "-stale"}})
-	if !sameProcess(child.Process.Pid, start) {
-		t.Fatal("escalation signaled a different incarnation")
 	}
 }

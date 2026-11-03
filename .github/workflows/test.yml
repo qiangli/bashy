@@ -53,10 +53,11 @@ jobs:
       - name: Release QA lane xfail-card rule and summary counts
         shell: bash
         run: ./scripts/test-release-qa-lane.sh
-      - name: Build and vet native shell core and lean agentos
+      - name: Build + vet + test (shell core + lean agentos)
         shell: bash
-        # Run 41329133475 spent 9m04s building/vetting before tests. Keep the
-        # existing 20m bound for this phase, independent of later test budgets.
+        # Windows: build + vet + agentos (~2m tests) + bash53suite exceeds 10m
+        # on hosted runners; the per-package go test -timeout values still bound
+        # a hang.
         timeout-minutes: 20
         run: |
           set -euxo pipefail
@@ -70,42 +71,18 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then
             go build ./cmd/bash ./cmd/sh ./cmd/bashy
             go vet  ./cmd/bash ./cmd/sh ./cmd/bashy ./internal/agentos
-          else
-            go build ./cmd/bash ./cmd/sh ./cmd/bashy ./internal/...
-            go vet  ./cmd/bash ./cmd/sh ./cmd/bashy ./internal/...
-          fi
-      - name: Test native shell core and lean agentos
-        shell: bash
-        # Windows agentos consumed 9m49s wall time, including compilation and
-        # post-PASS overhead, while its test binary took 286.848s. Retain the
-        # 5m test timer and the existing 20m outer bound for this phase alone.
-        timeout-minutes: 20
-        run: |
-          set -euxo pipefail
-          export PATH="$PWD/bin:$PATH"
-          if [ "$RUNNER_OS" = "Windows" ]; then
             go test -run '^TestStrictPosixEngagedByArgv0Sh$' ./internal/cli
             # internal/cli's readline / forced-interactive tests hang without a PTY
             go test -v -timeout 5m ./internal/agentos
+            # the fixture runner's Windows job-object containment: proven on
+            # every push here; conformance.yml measures the suite itself on
+            # this OS (tags / workflow_dispatch)
+            go test -v -timeout 5m ./tools/bash53suite
           else
+            go build ./cmd/bash ./cmd/sh ./cmd/bashy ./internal/...
+            go vet  ./cmd/bash ./cmd/sh ./cmd/bashy ./internal/...
             go test ./internal/cli ./internal/agentos
           fi
-      - name: Test Windows fixture-runner containment
-        if: runner.os == 'Windows'
-        shell: bash
-        # Keep the 5m test bound with a separate compilation/cleanup allowance.
-        timeout-minutes: 10
-        run: |
-          set -euxo pipefail
-          export PATH="$PWD/bin:$PATH"
-          # conformance.yml measures the suite itself on this OS.
-          go test -v -timeout 5m ./tools/bash53suite
-      - name: Test native executable source routing
-        shell: bash
-        timeout-minutes: 10
-        run: |
-          set -euxo pipefail
-          export PATH="$PWD/bin:$PATH"
           # Route selection is implemented at the executable boundary, so its
           # tests must run on every OS rather than only during local package
           # testing. This covers .go compilation, selector precedence, caller
