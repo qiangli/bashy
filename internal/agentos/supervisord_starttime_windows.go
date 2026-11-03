@@ -5,7 +5,6 @@ package agentos
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 
 	"golang.org/x/sys/windows"
@@ -15,9 +14,6 @@ import (
 // exited process whose handle is still held somewhere is not live.
 func procStartTime(pid int) (string, error) {
 	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
-	if errors.Is(err, windows.ERROR_INVALID_PARAMETER) { // no such process
-		return "", fmt.Errorf("%w: %v", errProcessGone, err)
-	}
 	if err != nil {
 		return "", err
 	}
@@ -27,7 +23,7 @@ func procStartTime(pid int) (string, error) {
 		return "", err
 	}
 	if code != 259 { // STILL_ACTIVE
-		return "", fmt.Errorf("%w: exited", errProcessGone)
+		return "", errors.New("exited")
 	}
 	var created, exited, kernel, user windows.Filetime
 	if err := windows.GetProcessTimes(h, &created, &exited, &kernel, &user); err != nil {

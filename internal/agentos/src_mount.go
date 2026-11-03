@@ -14,14 +14,11 @@ import (
 // Full dependency revisions are needed by src fetch: Go's module build info
 // carries only the 12-character pseudo-version suffix. Keep these in step
 // with go.mod; the version check below fails closed after an unpaired bump.
-// Regenerate after dependency updates with the standalone module graph.
-//
-//go:generate python3 ../../scripts/update-src-pins.py --write
-var srcModulePins = map[string]struct{ module, upstream, commit string }{
-	"yoke":        {"github.com/qiangli/yoke", "", "4895bc9fbf2f68bbf45419221f4eeb36a085a39f"},
-	"coreutils":   {"github.com/qiangli/coreutils", "", "a7e78d74bc0c4c468b7927328dc126f562c3974a"},
-	"sh":          {"github.com/qiangli/sh/v3", "mvdan.cc/sh/v3", "f8ee4168f180c0eed2a685b9b66e83b8e8c57678"},
-	"filebrowser": {"github.com/qiangli/filebrowser/v2", "github.com/filebrowser/filebrowser/v2", "d1d2feab447319ff2b37b471829b59bc3cace390"},
+var srcModulePins = map[string]struct{ module, commit string }{
+	"yoke":        {"github.com/qiangli/yoke", "89df473c6035d6b07471a0267e41fdb466d939a0"},
+	"coreutils":   {"github.com/qiangli/coreutils", "211789fadf75a29b73772b8ab2923ac03b6935ec"},
+	"sh":          {"github.com/qiangli/sh/v3", "6663c93a2d3cd3528a8d270080cfb10ead828135"},
+	"filebrowser": {"github.com/qiangli/filebrowser/v2", "d1d2feab447319ff2b37b471829b59bc3cace390"},
 }
 
 func srcPinnedCommit(repo string) (string, error) {
@@ -36,7 +33,7 @@ func srcPinnedCommit(repo string) (string, error) {
 		// its history is the file's, so there is no release pin to report.
 		return "registered (see the source file's own history)", nil
 	}
-	_, ok := srcModulePins[repo]
+	pin, ok := srcModulePins[repo]
 	if !ok {
 		return "", nil // managed externals and providers have their own pins
 	}
@@ -44,36 +41,16 @@ func srcPinnedCommit(repo string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("src: cannot read module versions for %s", repo)
 	}
-	return srcPinnedCommitFromBuildInfo(repo, bi)
-}
-
-// Only the effective linked module can authenticate a release pin. A local
-// workspace/replacement has no published revision in its build metadata, so
-// it must fail closed rather than borrow the replaced version's commit or
-// inspect an unrelated checkout at runtime.
-func srcPinnedCommitFromBuildInfo(repo string, bi *debug.BuildInfo) (string, error) {
-	pin, ok := srcModulePins[repo]
-	if !ok || bi == nil {
-		return "", fmt.Errorf("src: cannot read module versions for %s", repo)
-	}
 	for _, dep := range bi.Deps {
-		if dep.Path != pin.module && (pin.upstream == "" || dep.Path != pin.upstream) {
-			continue
+		for mod := dep; mod != nil; mod = mod.Replace {
+			if mod.Path != pin.module {
+				continue
+			}
+			if !strings.HasSuffix(mod.Version, "-"+pin.commit[:12]) {
+				return "", fmt.Errorf("src: %s pin is out of sync with the linked module version %s", repo, mod.Version)
+			}
+			return pin.commit, nil
 		}
-		mod := dep
-		for mod.Replace != nil {
-			mod = mod.Replace
-		}
-		if mod.Version == "" || mod.Version == "(devel)" {
-			return "", fmt.Errorf("src: %s is an unversioned local module; no release commit can be authenticated", repo)
-		}
-		if mod.Path != pin.module {
-			return "", fmt.Errorf("src: %s linked module %s is not the pinned module %s", repo, mod.Path, pin.module)
-		}
-		if !strings.HasSuffix(mod.Version, "-"+pin.commit[:12]) {
-			return "", fmt.Errorf("src: %s pin is out of sync with the linked module version %s", repo, mod.Version)
-		}
-		return pin.commit, nil
 	}
 	return "", fmt.Errorf("src: %s module is absent from this build", repo)
 }

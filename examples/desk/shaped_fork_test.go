@@ -10,16 +10,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 )
 
 // TestDeskToolsForkAndRollback is the shaped fork proof per desk tool, driven
 // through the real CLI: a principal forks the tool, the verifier passes the
 // fork against the contract the tool ships, the gate activates it, and undo
 // returns the principal to the revision it ran before. A tool that ships no
-// base contract (no effect cap, no checks/) fails at verify. A tool with an
-// installer (registerScripts) is registered through it, so the round trip
-// also proves what the installer registered.
+// base contract (no effect cap, no checks/) fails at verify.
 func TestDeskToolsForkAndRollback(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds bashy, and each verify provisions the Go toolchain in the clone")
@@ -34,21 +31,14 @@ func TestDeskToolsForkAndRollback(t *testing.T) {
 	bashy := productBashy(t)
 	for name, root := range shapedTools {
 		t.Run(name, func(t *testing.T) {
-			// Each verify cold-provisions Go in a fresh contained HOME. Run
-			// these independently bounded checks serially: concurrent cold
-			// builds compete for the hosted runner's CPUs and can exhaust the
-			// unchanged two-minute production check deadline.
+			t.Parallel()
 			src, err := filepath.Abs(root)
 			if err != nil {
 				t.Fatal(err)
 			}
 			f := newForkHome(t, bashy, gitBin)
+			f.bashy("app", "add", name, "--type", "shaped", "--source", src)
 			repo := filepath.Join(f.home, "src", name)
-			if registerScripts[name] {
-				f.register(name, src, repo)
-			} else {
-				f.bashy("app", "add", name, "--type", "shaped", "--source", src)
-			}
 
 			prev := f.fork(name, repo, "alice-fork", "first")
 			f.bashy("src", "activate", name, prev, "--principal", alice)
@@ -95,7 +85,7 @@ func productBashy(t *testing.T) string {
 		bin := filepath.Join(dir, "bashy")
 		cmd := exec.Command("./scripts/go-product.sh", "build", "-o", bin, "./cmd/bashy")
 		cmd.Dir = filepath.Join("..", "..")
-		if out, err := runDeskCommand(t, cmd); err != nil {
+		if out, err := cmd.CombinedOutput(); err != nil {
 			productErr = err.Error() + "\n" + string(out)
 			return
 		}
@@ -123,10 +113,7 @@ func newForkHome(t *testing.T, bin, git string) *forkHome {
 	root := t.TempDir()
 	// app add vendors the module: keep the host Go caches so an isolated HOME
 	// neither re-downloads them nor leaves a read-only module cache behind.
-	started := time.Now()
-	deskStageLog(t, "start go-env caches")
 	caches, err := exec.Command("go", "env", "GOMODCACHE", "GOCACHE").Output()
-	deskStageLog(t, "end go-env caches elapsed=%s error=%v", time.Since(started).Round(time.Millisecond), err)
 	if err != nil {
 		t.Fatalf("go env: %v", err)
 	}
@@ -149,9 +136,8 @@ func (f *forkHome) run(dir, bin string, args ...string) string {
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
 	cmd.Env = f.env
-	out, err := runDeskCommand(f.t, cmd)
+	out, err := cmd.CombinedOutput()
 	if err != nil {
-		logForkCheckEvidence(f.t, f.home)
 		f.t.Fatalf("%s %s: %v\n%s", filepath.Base(bin), strings.Join(args, " "), err, out)
 	}
 	return string(out)

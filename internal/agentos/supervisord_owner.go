@@ -31,13 +31,6 @@ const unitOwnerName = "owner.json"
 // ownership cannot be proven and nothing is reclaimed.
 var errStartTimeUnsupported = errors.New("process start time unsupported on this OS")
 
-// errProcessGone is wrapped by procStartTime when the process is proven to
-// have exited. Any other procStartTime error leaves its liveness unknown.
-var errProcessGone = errors.New("process gone")
-
-// startTimeOf is procStartTime; tests inject unknown liveness through it.
-var startTimeOf = procStartTime
-
 type unitOwner struct {
 	PID          int    `json:"pid"`
 	Start        string `json:"start"`
@@ -47,35 +40,13 @@ type unitOwner struct {
 	GraceMS      int64  `json:"grace_ms"`
 }
 
-// processMatches reports whether pid is alive as incarnation start. False
-// with a nil error is proof: that incarnation exited, or pid names another.
-// An error means its liveness is unknown.
-func processMatches(pid int, start string) (bool, error) {
-	if pid <= 0 || start == "" {
-		return false, nil
-	}
-	got, err := startTimeOf(pid)
-	if errors.Is(err, errProcessGone) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return got == start, nil
-}
-
-// sameProcess reports whether pid is proven alive with start time — the
-// condition for signaling it.
+// sameProcess reports whether pid is alive (not a zombie) with start time.
 func sameProcess(pid int, start string) bool {
-	ok, err := processMatches(pid, start)
-	return ok && err == nil
-}
-
-// provenGone reports whether incarnation start of pid is proven gone — the
-// condition for treating it as finished.
-func provenGone(pid int, start string) bool {
-	ok, err := processMatches(pid, start)
-	return !ok && err == nil
+	if pid <= 0 || start == "" {
+		return false
+	}
+	got, err := procStartTime(pid)
+	return err == nil && got == start
 }
 
 // recordOwner writes the ownership record for a just-started unit child. A
@@ -134,22 +105,12 @@ func reclaimOne(path, name string) string {
 		_ = os.Remove(path)
 		return fmt.Sprintf("%s: dropped unreadable ownership record", name)
 	}
-	if rec.Monitor != os.Getpid() {
-		live, err := processMatches(rec.Monitor, rec.MonitorStart)
-		if err != nil {
-			return fmt.Sprintf("%s: kept ownership record: monitor pid %d liveness unknown: %v", name, rec.Monitor, err)
-		}
-		if live {
-			// The monitor that started it is still alive (another home
-			// sharing this tree): its unit, not ours to touch.
-			return ""
-		}
+	if rec.Monitor != os.Getpid() && sameProcess(rec.Monitor, rec.MonitorStart) {
+		// The monitor that started it is still alive (another home sharing
+		// this tree): its unit, not ours to touch.
+		return ""
 	}
-	live, err := processMatches(rec.PID, rec.Start)
-	if err != nil {
-		return fmt.Sprintf("%s: kept ownership record: orphan pid %d liveness unknown: %v", name, rec.PID, err)
-	}
-	if !live {
+	if !sameProcess(rec.PID, rec.Start) {
 		_ = os.Remove(path)
 		return "" // gone, or the pid now names somebody else
 	}
@@ -157,7 +118,6 @@ func reclaimOne(path, name string) string {
 	if err != nil {
 		return fmt.Sprintf("%s: orphan pid %d: %v", name, rec.PID, err)
 	}
-	defer p.Release()
 	sig := syscall.Signal(rec.Signal)
 	if sig == 0 {
 		sig = syscall.SIGTERM
@@ -166,65 +126,28 @@ func reclaimOne(path, name string) string {
 	if grace <= 0 {
 		grace = supervisordGrace
 	}
-	members, err := processGroupIdentities(rec.PID)
-	if err != nil {
-		return fmt.Sprintf("%s: cannot identify orphan group %d: %v", name, rec.PID, err)
-	}
-	// Recheck the leader after enumeration, before addressing its group.
-	if !sameProcess(rec.PID, rec.Start) {
-		return fmt.Sprintf("%s: orphan leader %d exited during ownership snapshot", name, rec.PID)
-	}
-	members = append(members, processIdentity{rec.PID, rec.Start})
-	if err := signalProcessGroup(p, sig); err != nil || !waitProcessesGone(members, grace) {
-		// The leader may already have exited. Never address its possibly
-		// recycled process-group ID here: only signal captured incarnations.
-		killCapturedProcesses(members)
-		if !waitProcessesGone(members, 5*time.Second) {
-			return fmt.Sprintf("%s: orphan group %d has captured members surviving SIGKILL", name, rec.PID)
+	if err := signalProcessGroup(p, sig); err != nil || !waitNotSame(rec.PID, rec.Start, grace) {
+		// Still the same process: identity was re-checked just above.
+		_ = killProcessGroup(p)
+		if !waitNotSame(rec.PID, rec.Start, 5*time.Second) {
+			return fmt.Sprintf("%s: orphan pid %d survived SIGKILL", name, rec.PID)
 		}
 	}
 	_ = os.Remove(path)
 	return fmt.Sprintf("%s: stopped orphan pid %d left by dead monitor pid %d", name, rec.PID, rec.Monitor)
 }
 
-// processIdentity is captured while the recorded group leader is still live.
-// Membership is not inferred from a listener or from a dead leader's group ID.
-type processIdentity struct {
-	pid   int
-	start string
-}
-
-// waitProcessesGone reports whether every member is proven gone within d. A
-// member of unknown liveness is waited for, never counted as finished.
-func waitProcessesGone(members []processIdentity, d time.Duration) bool {
+// waitNotSame polls until pid no longer has start (exited, reaped or a
+// zombie), or d passes.
+func waitNotSame(pid int, start string, d time.Duration) bool {
 	deadline := time.Now().Add(d)
 	for {
-		alive := false
-		for _, member := range members {
-			alive = alive || !provenGone(member.pid, member.start)
-		}
-		if !alive {
+		if !sameProcess(pid, start) {
 			return true
 		}
 		if time.Now().After(deadline) {
 			return false
 		}
 		time.Sleep(25 * time.Millisecond)
-	}
-}
-
-func killCapturedProcesses(members []processIdentity) {
-	for _, member := range members {
-		// Acquire the process handle before rechecking identity. Platforms
-		// with pinned handles retain that incarnation through Kill. Darwin's
-		// PID-based signaling still has the kernel check/signal race.
-		child, err := os.FindProcess(member.pid)
-		if err != nil {
-			continue
-		}
-		if sameProcess(member.pid, member.start) {
-			_ = child.Kill()
-		}
-		_ = child.Release()
 	}
 }

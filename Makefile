@@ -218,15 +218,8 @@ test-awd-installed-stress:
 # test-meet-spa-fresh(-regression) run FIRST, before any recipe that could
 # rebuild-and-promote the tracked meet SPA artifact and thereby mask a stale
 # bundle the freshness gate exists to catch.
-test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-isolated-lanes test-release-qa-lane test-build-tag-matrix test-bash-container-mode verify-bashy-scratch test-startup-linux test-elfaudit-build-gates
-	# The required lane above runs Linux retained/stripped and Darwin product/plain
-	# separately; all four keep their original assertions and 10m process bound.
-	go test ./... -skip '^(TestLinuxBashySignalSymbolBuildGate|TestDarwinBashySignalSnapshotBuildGate)$$'
-
-.PHONY: test-elfaudit-build-gates
-test-elfaudit-build-gates:
-	python3 scripts/test-elfaudit-build-gates.py
-	bash scripts/test-elfaudit-build-gates.sh
+test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-isolated-lanes test-release-qa-lane test-build-tag-matrix test-bash-container-mode verify-bashy-scratch test-startup-linux
+	go test ./...
 
 ## test-startup-linux: Gate package initialization and 100 background jobs on Linux.
 test-startup-linux:
