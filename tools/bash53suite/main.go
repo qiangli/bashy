@@ -1027,12 +1027,19 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 		return "FAIL", "", err
 	}
 	if timedOut {
+		got := normalizeOutput(f.Name, rawBytes)
+		want, _ := os.ReadFile(filepath.Join(testsDir, f.Right))
+		writeDebugOutput(f.Name, want, got)
+		if dir := os.Getenv("BASH53_DEBUG_DIR"); dir != "" {
+			// Preserve the captured combined stream before normalization too.
+			_ = os.WriteFile(filepath.Join(dir, f.Name+".raw"), rawBytes, 0o644)
+		}
 		// A timeout with no evidence is a dead end: the fixture is a few
 		// hundred lines and the harness knows only that it stopped. Say how
 		// far it got — its last lines of output, and the .right line they
 		// correspond to — so the next reader can name the construct that
 		// blocked instead of bisecting a corpus file on a remote runner.
-		return "TIME", timeoutProgress(f, testsDir, normalizeOutput(f.Name, rawBytes)), nil
+		return "TIME", timeoutProgress(f, testsDir, got), nil
 	}
 	if runErr != nil {
 		// Bash's own harness gates on output, not process status. Keep going.

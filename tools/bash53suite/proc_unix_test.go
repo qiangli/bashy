@@ -217,3 +217,35 @@ func waitFixtureGone(pid int, within time.Duration) bool {
 	}
 	return syscall.Kill(pid, 0) == syscall.ESRCH
 }
+
+func TestFixtureTimeoutRetainsCapturedEvidence(t *testing.T) {
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	evidence := filepath.Join(t.TempDir(), "evidence")
+	t.Setenv("BASH53_DEBUG_DIR", evidence)
+	if err := os.WriteFile(filepath.Join(dir, "idle.sh"), []byte("printf 'out\\000line\\n'\nprintf 'error\\n' >&2\nread line\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "idle.right"), []byte("never\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	status, detail, err := runFixture(dir, dir, sh, fixture{Name: "printf", Test: "idle.sh", Right: "idle.right"}, 200*time.Millisecond)
+	if err != nil || status != "TIME" {
+		t.Fatalf("status=%s err=%v", status, err)
+	}
+	if !strings.Contains(detail, "stopped after 2 output line(s)") {
+		t.Fatalf("detail=%q", detail)
+	}
+	for suffix, want := range map[string]string{"raw": "out\x00line\nerror\n", "got": "out^@line\nerror\n", "want": "never\n"} {
+		got, err := os.ReadFile(filepath.Join(evidence, "printf."+suffix))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(got) != want {
+			t.Fatalf("%s=%q want%q", suffix, got, want)
+		}
+	}
+}
