@@ -14,10 +14,13 @@ import (
 // Full dependency revisions are needed by src fetch: Go's module build info
 // carries only the 12-character pseudo-version suffix. Keep these in step
 // with go.mod; the version check below fails closed after an unpaired bump.
+// Regenerate after dependency updates with the standalone module graph.
+//
+//go:generate python3 ../../scripts/update-src-pins.py --write
 var srcModulePins = map[string]struct{ module, upstream, commit string }{
-	"yoke":        {"github.com/qiangli/yoke", "", "556b27f01f72d1178011a11931300bbb5f52b79a"},
-	"coreutils":   {"github.com/qiangli/coreutils", "", "5f99083738a29310175cc094d5680230a06e86fe"},
-	"sh":          {"github.com/qiangli/sh/v3", "mvdan.cc/sh/v3", "d77276f3355a2c132567b89e578e83110a2a915f"},
+	"yoke":        {"github.com/qiangli/yoke", "", "4895bc9fbf2f68bbf45419221f4eeb36a085a39f"},
+	"coreutils":   {"github.com/qiangli/coreutils", "", "a7e78d74bc0c4c468b7927328dc126f562c3974a"},
+	"sh":          {"github.com/qiangli/sh/v3", "mvdan.cc/sh/v3", "f8ee4168f180c0eed2a685b9b66e83b8e8c57678"},
 	"filebrowser": {"github.com/qiangli/filebrowser/v2", "github.com/filebrowser/filebrowser/v2", "d1d2feab447319ff2b37b471829b59bc3cace390"},
 }
 
