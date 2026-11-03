@@ -1069,6 +1069,8 @@ github.com/qiangli/sh/v3 v3.0.0-20261102160934-26a5590f8dae h1:SSVRzGWDykmK2osQn
 github.com/qiangli/sh/v3 v3.0.0-20261102160934-26a5590f8dae/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
 github.com/qiangli/sh/v3 v3.0.0-20261102200919-c5d0341c0b41 h1:VbmDUnihCfP9lTyqYvDUdX/9qCycvoR8wTYRELmCHq0=
 github.com/qiangli/sh/v3 v3.0.0-20261102200919-c5d0341c0b41/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
+github.com/qiangli/sh/v3 v3.0.0-20261103013849-555f068d0174 h1:LRvdKfygE3Rnu+bugCrlBt6Y9Y2yMdsHmTMYtzSpusw=
+github.com/qiangli/sh/v3 v3.0.0-20261103013849-555f068d0174/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb h1:LLfdQXY/uXHpJm9eYP0sdcFg4IHQHzIOUwslX9TpqxI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb/go.mod h1:tcNzv5p84E0skkmJn038y+hWJbLQXQqEnQfeh5r2JLM=
 github.com/qiangli/yamux v0.1.0 h1:nmfx1HPvOMR3x6ZkctdBuk98fmUHSp2DOxnbYA7gGR0=
