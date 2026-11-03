@@ -17,7 +17,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261103045256-1185b1848c26
+	github.com/qiangli/coreutils v0.0.0-20261103052448-a7e78d74bc0c
 	github.com/qiangli/ycode v0.3.1-dev.0.20261102034820-23d0ff4f5df7
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261103051540-4895bc9fbf2f
@@ -532,7 +532,7 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261103045221-30ec9d5693a9
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261103052328-f8ee4168f180
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.

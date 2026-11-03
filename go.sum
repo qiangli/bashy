@@ -1041,6 +1041,8 @@ github.com/qiangli/coreutils v0.0.0-20261103042105-5f99083738a2 h1:7EaiU9391rH74
 github.com/qiangli/coreutils v0.0.0-20261103042105-5f99083738a2/go.mod h1:eHV896pJl7Ujmh7Fsz0eZz6c7HA0oIZ0zj3VAP+Wxvw=
 github.com/qiangli/coreutils v0.0.0-20261103045256-1185b1848c26 h1:wxzWJbddhkeZOTO0CRSrl/slx6Wz5itHxQwVx/BoTaM=
 github.com/qiangli/coreutils v0.0.0-20261103045256-1185b1848c26/go.mod h1:p19AsBNKiI8Z+6O6/fWylxhyNrJrvkz7MdKxybrxhFk=
+github.com/qiangli/coreutils v0.0.0-20261103052448-a7e78d74bc0c h1:8eSLU4rQRwC5mi9izKVXpgUsJMaKkdaPxgZ/ToiB4hQ=
+github.com/qiangli/coreutils v0.0.0-20261103052448-a7e78d74bc0c/go.mod h1:BEL3YQC2xGOcgaDCnUeTk7KrhOL6SyZV8cQh5rrASZ0=
 github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261101171139-2ff8ab0f9ed3 h1:0tRnKdDyhiRzd7w65zPI8dZm5pAlGR6diZh3WEHOJbw=
 github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261101171139-2ff8ab0f9ed3/go.mod h1:p0JkVxHS3JKYxDz8kOYvMdPM8YRH94vZoWaFljD1vAg=
 github.com/qiangli/filebrowser/v2 v2.0.0-20261021004418-d1d2feab4473 h1:3L6uJHiZ+gliJlpEjAjdnxTsVNr06+twiJvVpoYLNlI=
@@ -1079,6 +1081,8 @@ github.com/qiangli/sh/v3 v3.0.0-20261103041853-d77276f3355a h1:OjZA5U5Oehf4axNkM
 github.com/qiangli/sh/v3 v3.0.0-20261103041853-d77276f3355a/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
 github.com/qiangli/sh/v3 v3.0.0-20261103045221-30ec9d5693a9 h1:k9VwpjXDzsaiiFncj4cGc8GawxZmlQerkWQzDc+6CUw=
 github.com/qiangli/sh/v3 v3.0.0-20261103045221-30ec9d5693a9/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
+github.com/qiangli/sh/v3 v3.0.0-20261103052328-f8ee4168f180 h1:NTFQd7IbwFzZ0nOxc4ZkY7L1vchRr3mPISxVJGFrsdY=
+github.com/qiangli/sh/v3 v3.0.0-20261103052328-f8ee4168f180/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb h1:LLfdQXY/uXHpJm9eYP0sdcFg4IHQHzIOUwslX9TpqxI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb/go.mod h1:tcNzv5p84E0skkmJn038y+hWJbLQXQqEnQfeh5r2JLM=
 github.com/qiangli/yamux v0.1.0 h1:nmfx1HPvOMR3x6ZkctdBuk98fmUHSp2DOxnbYA7gGR0=
