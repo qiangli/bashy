@@ -83,7 +83,13 @@ tooling noted above). Artifact sha256:
 
 (`bash.real`/`bashy` differ from the A1 baseline hashes as expected: the
 candidate bumps the sh pin and build stamps `buildID f1bcd71` /
-`ShellRuntimeCommit ...74586fde5f24`.)
+`ShellRuntimeCommit ...74586fde5f24`. They also differ from the superseded
+attempt's manifest for a benign, verified reason: the binaries embed a Go VCS
+stamp (`go version -m bin/bashy` here reports
+`vcs.revision=ecf5fff28fe9a59e899b4baf40950a0b4e10f425`,
+`vcs.modified=true` from the other agent's uncommitted `KB.md` note), so
+hashes are checkout-stamp-sensitive while all compiled content equals
+`f1bcd711`. The stamp-free `bin/bash` wrapper is byte-identical to baseline.)
 
 ## 4. Container gate — runtime NOT usable; exact blocker + native fallback
 
