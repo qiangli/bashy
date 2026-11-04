@@ -58,6 +58,31 @@ merging. The bashy `sh` pin is intentionally unchanged pending review.
 With the CLI rework in this branch and the frozen sh pin, `GOWORK=off make
 test-bash` completed: 86 passed, 0 failed, 0 skipped, 0 timed out.
 
+## Manager rework: package regression from `-c` presence tracking
+
+Red (manager gate, reproduced locally from the pre-repair build):
+`GOWORK=off go test -count=1 ./internal/cli/` failed
+`TestRunBacktickComsubUnclosedQuote` (want exit 0, got status 2) and
+`TestBashExecutionStringNotExported` (got `v=[]`). Both tests set the
+nonempty `*command` directly without calling `Main`, so the new
+`commandGiven` bit was false. The repair treats a nonempty command as
+command-string mode for these direct callers while retaining the bit for
+process-level `sh -c ''`.
+
+Green focused run: `GOWORK=off go test -count=1 ./internal/cli/ -run
+'TestRunBacktickComsubUnclosedQuote|TestBashExecutionStringNotExported|TestShCommandOptionBoundaryForms|TestShCommandOperandEndsOptionParsing' -v`
+passed all four tests, including all seven option forms. The approved sh
+patch `74586fde` and the frozen sh pin are unchanged.
+The required `PATH=/bin:/usr/bin:$(dirname $(which go)) GOWORK=off make
+test-bash` gate passed: 86 passed, 0 failed, 0 skipped, 0 timed out.
+The first post-repair full CLI run reached `TestGoSourceExecutableEnvironment`
+but its nested `cmd/bashy` build failed in the host linker/strip step with
+`No space left on device`; neither previously failing test was reported.
+Only this lane's disposable `/tmp/s561-a3b-*` binaries were removed to free
+space before the full package rerun.
+The rerun `GOWORK=off go test -count=1 ./internal/cli/` passed (`ok`,
+135.244s). No CLI test was skipped or weakened.
+
 ### sh diff for manager review
 
 ```diff

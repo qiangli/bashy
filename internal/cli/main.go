@@ -230,6 +230,10 @@ func stripIgnoredOperandHyphen(args []string) []string {
 	return args
 }
 
+// commandStringMode preserves direct run/newRunner callers that set command
+// without going through Main, while commandGiven distinguishes -c "".
+func commandStringMode() bool { return commandGiven || *command != "" }
+
 // Go's flag parser keeps consuming options after -c's command value. The
 // shell's option scan ends at that value: any following -s, -e, or similar
 // token is $0 (or a later positional parameter), not a shell option.
@@ -683,14 +687,14 @@ func Main() {
 // operand), mirroring bash. For the `-c` and script-file forms it is a no-op,
 // since those set $0 from the command-name operand or the script path.
 func stdinArgv0Option() interp.RunnerOption {
-	if !commandGiven && (flag.NArg() == 0 || *readStdin) {
+	if !commandStringMode() && (flag.NArg() == 0 || *readStdin) {
 		return interp.WithArgv0(os.Args[0])
 	}
 	return func(*interp.Runner) error { return nil }
 }
 
 func shouldRunInteractive(stdinTTY bool) bool {
-	return *forceI || (!*plusI && !commandGiven && (flag.NArg() == 0 || *readStdin) && stdinTTY)
+	return *forceI || (!*plusI && !commandStringMode() && (flag.NArg() == 0 || *readStdin) && stdinTTY)
 }
 
 // defaultPathValue mirrors bash's DEFAULT_PATH_VALUE (config-top.h): the
@@ -756,8 +760,8 @@ func newRunner() (*interp.Runner, error) {
 		// interactive shell, unlike a `set -n` issued later — which an
 		// interactive shell ignores. See interp.CommandLineNoExec.
 		interp.CommandLineNoExec(cmdlineNoExec() || AgentOSCommandLineNoExec(startupPosix)),
-		interp.CommandString(commandGiven),
-		interp.StandardInput(!commandGiven && (flag.NArg() == 0 || *readStdin)),
+		interp.CommandString(commandStringMode()),
+		interp.StandardInput(!commandStringMode() && (flag.NArg() == 0 || *readStdin)),
 		interp.WithLoginShell(isLoginShell()),
 		// bash reports $0 as the name the shell was invoked with (argv[0])
 		// for the stdin / `-s` / interactive forms, where no script file
@@ -1278,7 +1282,7 @@ func runWithLoginLogout(r *interp.Runner, fn func() error) error {
 
 func runAll() error {
 	filename := ""
-	if !commandGiven && !*readStdin && flag.NArg() > 0 {
+	if !commandStringMode() && !*readStdin && flag.NArg() > 0 {
 		filename = flag.Arg(0)
 	}
 	binary := front.BashPPBinaryBash
@@ -1395,7 +1399,7 @@ func runAll() error {
 	}
 	if *dumpStrs || *dumpShort || *dumpPO {
 		po := *dumpPO
-		if commandGiven {
+		if commandStringMode() {
 			return dumpTranslatableStrings(strings.NewReader(*command), "-c", po)
 		}
 		if flag.NArg() == 0 || *readStdin {
@@ -1403,10 +1407,10 @@ func runAll() error {
 		}
 		return dumpTranslatableStringsPath(flag.Arg(0), po)
 	}
-	if commandGiven && bashConditionalParseError(*command) {
+	if commandStringMode() && bashConditionalParseError(*command) {
 		return interp.ExitStatus(2)
 	}
-	if commandGiven && bashAliasReservedWordParseError(*command) {
+	if commandStringMode() && bashAliasReservedWordParseError(*command) {
 		return interp.ExitStatus(2)
 	}
 	r, err := newRunner()
@@ -1416,7 +1420,7 @@ func runAll() error {
 	// NB: BASH_EXECUTION_STRING is assigned inside run() AFTER r.Reset() (which
 	// clears the variable scope); setting it here would be wiped by that Reset.
 
-	if commandGiven {
+	if commandStringMode() {
 		// Bash 5.3 syntax: `bash -c COMMAND [argv0 [arg1 arg2 …]]`.
 		// The first positional after the -c command sets $0 (used
 		// for parse-error prefixes and as the script name within the
@@ -2914,7 +2918,7 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	if errPrefix == "" {
 		errPrefix = "bashy"
 	}
-	if commandGiven {
+	if commandStringMode() {
 		errPrefix += ": -c"
 	}
 	// A malformed `[[ ]]` conditional is a parse error bash aborts the whole
@@ -2956,7 +2960,7 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	// affected tests (comsub-eof, exportfunc, …) behave like bash.
 	ctx := context.Background()
 	startupLastArg := r.LiveVar("_")
-	if commandGiven {
+	if commandStringMode() {
 		assign := "BASH_EXECUTION_STRING=" + singleQuote(*command)
 		p := syntax.NewParser()
 		if prog, perr := p.Parse(strings.NewReader(assign), "bes-init"); perr == nil {
@@ -2979,7 +2983,7 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 	if err := interp.WithIncrementalFilename(name)(r); err != nil {
 		return err
 	}
-	if commandGiven && perr != nil {
+	if commandStringMode() && perr != nil {
 		if pe, ok := bashRecoverableParseError(perr); ok {
 			if stripped, msg, handled := backtickComsubUnclosedQuote(src, pe, name); handled {
 				fmt.Fprintln(os.Stderr, msg)
@@ -3032,7 +3036,7 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 		}
 		return f, syntax.ParseError{}, false
 	}
-	followStdin := name == "" && !commandGiven && needsStdinExecRedirect(preflightFile)
+	followStdin := name == "" && !commandStringMode() && needsStdinExecRedirect(preflightFile)
 	var runCurrentStdin func(*os.File) error
 	runStmtsFollowingStdin := func(stmts []*syntax.Stmt, current *os.File) error {
 		var lastErr error
@@ -3068,7 +3072,7 @@ func run(r *interp.Runner, reader io.Reader, name string) error {
 		}
 		return runStmtsFollowingStdin(prog.Stmts, current)
 	}
-	if commandGiven {
+	if commandStringMode() {
 		prog, pe, gotErr := parseOnce(src, lang)
 		if gotErr {
 			if stripped, msg, handled := backtickComsubUnclosedQuote(src, pe, name); handled {
