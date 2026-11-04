@@ -4,7 +4,7 @@ kind: bug
 title: B3 Repair current fence corpus defects and prerequisites
 seq: 3040
 status: todo
-priority: p1
+priority: p2
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:40.239759Z

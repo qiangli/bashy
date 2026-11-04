@@ -7,10 +7,15 @@ Develops Sprint 562 under `plan-clean-baseline-campaign.md`.
 Revised the same day at the operator's direction: the by-example corpora
 planned in the `fence-corpora` epic (Sprints 391–396) are consolidated into
 this sprint as its first phase, and must be green. The four existing stories
-(B1–B4) become the last phase. The new phase needs new stories on the card;
-this plan proposes them but does not create them.
+(B1–B4) become the last phase. Operator follow-up the same day: stories E1–E4
+are added to the card, Sprints 391–396 are closed as superseded (no work was
+delivered under them), and every example targets every platform.
 
 ## Main goal
+
+**Bashy is all you need, on every platform.** A user writing Python, Go,
+TypeScript, C#, C/C++, Rust or PowerShell inside Bash# fences gets the same
+working result on Linux, macOS and Windows from the one `bashy` download.
 
 One frozen Bashy candidate on which **every official example the fence
 corpora promised is covered** — inventoried from a pinned source, generated
@@ -63,13 +68,13 @@ existing three-mode Go-by-example gate unchanged.
   fragment, interactive, browser/DOM, MSVC-only, Windows-only on a non-Windows
   leg, network/environment-dependent, intentionally non-compiling (these
   become **diagnostic cases** that must match the official error).
-- **Contract gap:** an example that needs a fence feature the fence does not
-  support (for example TypeScript top-level imports, classes as handles, JS/TSX
-  fences; see the epic's linked cards). It is neither a pass nor hidden. Each
-  gap is resolved one of two ways before closure: implement the feature (a
-  repair, costed and reviewed first if broad), or record an explicit,
-  reviewed narrowing of the fence's declared contract. The sprint does not
-  close with an unresolved gap.
+- **Missing Bash# feature:** an example that needs a fence feature Bash#
+  does not support yet (for example TypeScript top-level imports, classes as
+  handles, JS/TSX fences; see the epic's linked cards). Finding these is a
+  purpose of the corpora: each is a feature Bash# must support, not a reason to
+  narrow the contract. It is never hidden or counted as a pass; it is recorded
+  with its owning story and implemented (broad ones costed and reviewed
+  first). The sprint does not close with an unimplemented in-scope feature.
 
 ## Regression guard
 
@@ -151,8 +156,8 @@ modes, then classify every non-pass as fence defect / contract gap / A cause
 (→561/A3) / C cause (→563/C3) / prerequisite. Fix fence defects at the owner
 (`../sh` polyglot/interp/lower, `../bashsharp`, `internal/agentos`,
 `../yoke/external`), with a focused regression and the original case rerun.
-Resolve contract gaps as defined above. Exit when every case PASSes and every
-gap is resolved. Commits carry `Sprint: 562` and the owning story trailers.
+Implement missing Bash# features as defined above. Exit when every case
+PASSes on the platforms in the current rollout step. Commits carry `Sprint: 562` and the owning story trailers.
 
 ## Phase 2 — last phase (B1–B4)
 
@@ -204,21 +209,33 @@ manager independently accepts. No release.
   held 665 snippet files in October; Rust by Example, the Book, the C/C++ and
   PowerShell references add hundreds each). Generation is mechanical; the
   cost is in classification and fixes.
-- **Contract gaps** are the main risk: the epic already names TypeScript
-  imports, class handles, JS/TSX fences, streaming, tsconfig analysis, and
-  similar Rust/C#/PowerShell limits. Implementing these is feature work; each
-  broad one is costed and reviewed first, or the contract is narrowed.
+- **Missing Bash# features** are the main cost: the epic already names
+  TypeScript imports, class handles, JS/TSX fences, streaming, tsconfig
+  analysis, and similar Rust/C#/PowerShell limits. Each is feature work; each
+  broad one is costed and reviewed with the operator before implementation.
 - **Compiled mode** for rows without lowering would be new lowering work and
   is excluded by the E1 rule above.
 
+## Platform rollout
+
+Target: every example on every supported OS/arch. Rollout, as time permits:
+
+1. **Step 1 (this sprint's first gate):** Linux for every corpus; Windows
+   additionally for C# and PowerShell.
+2. **Step 2:** Windows for the remaining corpora.
+3. **Step 3:** macOS for every corpus; then each remaining arch.
+
+Each step adds its cells to the ratchet; a platform once green stays a gate.
+A platform-specific failure is a defect to fix, not a permanent exclusion.
+Examples that are inherently OS-specific upstream (Windows-only API samples)
+are dispositions on the other OSes only.
+
 ## Recommendations for open decisions
 
-1. Platforms: Linux for every corpus; Windows additionally for C# and
-   PowerShell; macOS through the B-phase matrix only.
-2. TypeScript: one compiler leg, the pinned default; a TypeScript 7 leg is
+1. TypeScript: one compiler leg, the pinned default; a TypeScript 7 leg is
    advisory evidence only.
-3. Tour "by-example" chapter and promoted tour rows: optional, not a gate.
-4. Bun, MSVC, `compose`, Java: optional or out of scope.
+2. Tour "by-example" chapter and promoted tour rows: optional, not a gate.
+3. Bun, MSVC, `compose`, Java: optional or out of scope.
 
 ## Stopping rules
 

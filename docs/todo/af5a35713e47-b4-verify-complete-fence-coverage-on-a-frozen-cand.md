@@ -4,7 +4,7 @@ kind: test
 title: B4 Verify complete fence coverage on a frozen candidate
 seq: 3041
 status: todo
-priority: p1
+priority: p2
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:40.394272Z

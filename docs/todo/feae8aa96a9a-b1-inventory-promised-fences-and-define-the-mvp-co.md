@@ -4,7 +4,7 @@ kind: requirement
 title: B1 Inventory promised fences and define the MVP corpus matrix
 seq: 3038
 status: todo
-priority: p0
+priority: p2
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:39.956118Z

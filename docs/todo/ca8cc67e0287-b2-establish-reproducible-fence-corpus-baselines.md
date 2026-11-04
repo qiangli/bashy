@@ -4,7 +4,7 @@ kind: test
 title: B2 Establish reproducible fence corpus baselines
 seq: 3039
 status: todo
-priority: p1
+priority: p2
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:40.087251Z
