@@ -3,11 +3,13 @@ id: 25dff6cbb152
 kind: requirement
 title: A1 Define the minimal foundation profile and freeze its baseline
 seq: 3034
-status: todo
+status: assigned
 priority: p0
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:39.236765Z
+weave: 8
+assignee: codex-gpt6-sol
 sprint: 561
 sprint_id: 3d035bd3-fa1c-5b4d-a3cc-386b0ec789a4
 sprint_title: 'Foundation A: current-baseline repairs and POSIX certification readiness'

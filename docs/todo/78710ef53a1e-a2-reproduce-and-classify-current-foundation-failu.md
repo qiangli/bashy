@@ -3,11 +3,13 @@ id: 78710ef53a1e
 kind: test
 title: A2 Reproduce and classify current foundation failures
 seq: 3035
-status: todo
+status: assigned
 priority: p1
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:39.368634Z
+weave: 9
+assignee: muse-conductor
 sprint: 561
 sprint_id: 3d035bd3-fa1c-5b4d-a3cc-386b0ec789a4
 sprint_title: 'Foundation A: current-baseline repairs and POSIX certification readiness'
