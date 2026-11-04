@@ -6,7 +6,7 @@ before the change on the same tree; green = after.
 | ID | Test | Class | Disposition | Commit |
 | --- | --- | --- | --- | --- |
 | F2 | agentos `TestCommandDocSourceNames` | metadata (stale test) | fixed | 03d0ace8 |
-| F3 | agentos `TestRunSignaledIsNonLossy` | test-env | fixed (hermetic probe) | 0ce2d9aa |
+| F3 | agentos `TestRunSignaledIsNonLossy` | product defect | routed to A3b (ddf0079e); test left red until fixed | - |
 | F4 | agentos `TestSrcPinsMatchLinkedModules` | metadata | fixed | a079c31d |
 | F5 | bash53suite `TestBashPPGateInputFixtureGetsExplicitSelector/0` | test-env | recorded, no change | - |
 | F1 | cmd/bashy `TestYAMLAgentFenceCompilerRunner` | setup | prerequisite recorded | - |
@@ -18,12 +18,15 @@ was stale. Not a registered-vs-documented contract defect, so no routing to A1b.
 Fix: add `desk` to the expected list. Green: test passes.
 
 ## F3
-Red: `signaled=true` not reported. Cause: the test ran `sh` from PATH, and on
-this host `$HOME/bin/sh` is a Go shell that exits 137 rather than dying by
-signal. `procStatus` (run_unix.go) is correct: with PATH=/bin:/usr/bin:... the
-unchanged test passed, and `/bin/sh -c 'kill -KILL $$'` signals. This is the
-CLAUDE.md "wrapper shim in PATH" gotcha. Fix: probe uses `/bin/sh`; assertions
-unchanged. Green on the default PATH.
+Red: `signaled=true` not reported. Initially read as test-env (a Go shell at
+`$HOME/bin/sh` on PATH exits 137), but manager reproduction on the frozen
+candidate (c3dd9e38, `GOWORK=off make build`) shows it is a product defect:
+`bin/bash.real -c 'kill -KILL $$'` exits 137 and `kill -TERM $$` exits 143,
+while `/bin/sh` and GNU Bash die by the signal. The shell converts a
+self-signal into exit 128+N. Owner: sh/interp, routed to A3b (ddf0079e).
+`procStatus` (run_unix.go) is correct. The hermetic-probe change 0ce2d9aa was
+reverted (8e9b6432); the test runs PATH `sh` unchanged and stays red until
+A3b fixes the shell.
 
 ## F4
 Red: `yoke pin is out of sync with ... 89df473c6035`. Only `yoke` was stale in
