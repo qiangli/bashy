@@ -4,11 +4,12 @@
 **POSIX frontier**: current yash claims point to [`yash-chunks.json`](../yash-chunks.json) and [measurement boundaries](public-claims-evidence.md). The committed fixture-completion record does not establish a current assertion pass percentage; recheck on RC with `bashy dag dag.md yash`.
 
 **VSC-PCTS campaign (current scope)** — the shell-isolation milestone is complete: all 493 shell TPs are in the certification PASS group with zero blockers/manual resolutions/caps under the proven GNU Coreutils 9.11 provider PATH (`vsc-pcts-posix-shell-2026-08-08`). The primary corrective arm is **Profile B: Bashy `sh` plus frozen GNU/system providers**, excluding Bashy's Go multicall. Profiles C/D separately measure the Bashy Go utility provider across the complete 116-set/8,844-TP inventory. The one-page scope and inventory routing source is `docs/posix-command-coverage.md`. Publication consent for utilities-suite results was granted 2026-07-29 (ticket #280298), for conformance-work purposes on the same terms as the shell arm. Raw journals remain private, and no "certified"/"passes the Open Group suite" claim is made.
-  - **C/D name-coverage checkpoint:** the assembled 116-name surface is complete:
-    92 registered Go applets, 14 shell-only entries, and 10 pinned external
-    providers (effective selection 84 Go / 22 shell / 10 provider). `make`, `bc`,
-    `ed`, `patch`, `mail`/`mailx`, and `talk` are pure-Go applets with
-    no external-provider pins or fallback. Behavioral conformance remains gated
+  - **Certification scope (fixed):** Sprint 341 base scope — 102 mandatory
+    targets via 92 Go applets + 10 shell commands, **zero external providers**,
+    plus `gencat` in Go; the 14 optional targets do not gate. The full 116-name
+    catalog is 96 Go / 14 shell / 6 optional external providers
+    (`ar ctags ex nm strip vi`). See `docs/posix-command-coverage.md`; do not
+    re-open the profile or add utilities/providers for certification. Behavioral conformance remains gated
     by focused tests and the staged Profile C/D evidence.
   - **`pkg/bre` regex cluster CLOSED (sed+grep): 5 flips + 1 parity lock**, all in `../coreutils/pkg/bre`, each independently gate-verified: `RE_DUP_MAX` intervals (`65dce2e`) · bracket validation (`b3de4d3`) · anchor parity (`b5fbf7a`) · back-ref edges (`7bc67cd`) · collating/equivalence classes (`4dca9f6`) · ERE/BRE operator lock (`b852d57`).
   - **In flight**: `expr` (`cmds/expr`). **Next**: `ls/xargs/od/mkdir/rm` (non-NO-list). **PENDING USER DECISION**: `find -exec` is a NO-list reversal — do not implement without explicit go-ahead.

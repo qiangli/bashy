@@ -45,11 +45,15 @@ Inventory, finite and written down (one table, required vs advisory column):
 - **Shell, required:** GNU Bash 5.3 fixture gate (86 fixtures, authoritative
   lane `make test-bash-container`); the licensed 493-TP VSC shell arm
   (`make test-bash-system`, proprietary harness, Profile B).
-- **Coreutils, required:** the agreed subset of the 116-name POSIX utility
-  inventory (`docs/posix-command-coverage.md`), measured via Profiles C/D. The
-  key A1 decision is *which* utilities are required for the foundation profile
-  versus optional/provider-backed; pending decisions (e.g. `find -exec`
-  NO-list reversal) are recorded as decisions, not silently included.
+- **Coreutils, required (already decided — not an A1 choice):** the Sprint
+  341 base scope (`../vsc-pcts-harness-kit/docs/SPRINT-341-BASE-SCOPE.md`,
+  routed in `docs/posix-command-coverage.md`): the 102 mandatory VSC utility
+  targets via exactly 92 Go applets + 10 Bashy shell commands, **zero external
+  providers**, plus `gencat` in Go; measured via Profile D (C as diagnostic).
+  The 14 optional targets (`ar bg ctags ex fc fg jobs localedef make more nm
+  strip talk vi`) do not gate. The product is pure Go: no utility is added,
+  re-implemented or provider-backed for this sprint. Pending decisions (e.g.
+  `find -exec` NO-list reversal) are recorded as decisions, not included.
 - **Supported certification environment:** OS/arch, locale, PTY, containment,
   provider PATH, toolchain (`scripts/go-product.sh`, Go 1.27.2 overlay,
   `CGO_ENABLED`, build tags).
@@ -118,8 +122,9 @@ profile. No broad refactor. No legacy 539/560/557 reconciliation prerequisite.
 
 ## Decision points and stopping rules
 
-- A1's required coreutils set and environment are operator decisions; stop and
-  ask where the inventory is ambiguous.
+- The required utility set is fixed by the Sprint 341 base scope; do not
+  present it as an open profile choice. Stop and ask only where the inventory
+  is genuinely ambiguous against that scope or the certification environment.
 - Deadline hit = retained incomplete evidence + diagnosis, not an automatic
   retry, timeout growth or skip.
 - Run broad gates on frozen candidates, not after every small edit.

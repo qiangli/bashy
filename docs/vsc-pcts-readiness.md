@@ -105,8 +105,9 @@ bash-fidelity warrants relaxing the parser before the run.
 - [ ] **Complete the Commands and Utilities profiles** — run the primary
       Profile B arm with Bashy `sh` plus frozen GNU/system providers, excluding
       Bashy's Go multicall. Run Profiles C/D separately for Go-utility coverage.
-      Use `posix-command-coverage.md` for the 116-name provider accounting and
-      preserve the complete 117-set/9,337-TP denominator.
+      The claim is the Sprint 341 base scope (102 mandatory targets, pure Go,
+      zero external providers); `posix-command-coverage.md` routes it. The
+      scored denominator comes from the licensed configured suite and report.
 - [ ] **Certification submission / mark decision** remains separate from having
       run the licensed suite. No Open Group certification claim is made.
 - [ ] **Decide dual-mode JC P1+** based on measured interactive-JC coverage.

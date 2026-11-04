@@ -64,10 +64,12 @@ Two narrower registries must not be confused with that count:
 - The pinned Yoke `external/registry.Names()` has **6** entries:
   `doctl gcloud gitea ollama rg tofu`. This is the declarative managed-CLI
   registry, not every external/provisioner implementation or public origin.
-- The POSIX external-provider subset has **10** names:
-  `ar ctags ex localedef lp m4 man nm strip vi`. The other 39 external names
-  are outside that POSIX subset. The 116-name POSIX inventory has a different
-  denominator; see [posix-command-coverage.md](posix-command-coverage.md).
+- The agent-mode catalog lists **10** POSIX-named entries with an external
+  origin: `ar ctags ex localedef lp m4 man nm strip vi`. The other 39
+  external names are outside that POSIX subset. This catalog is not the
+  certification route: the certified base profile is pure Go with zero
+  external providers (`lp`, `m4`, `man` and `localedef` route to Go applets);
+  see [posix-command-coverage.md](posix-command-coverage.md).
 
 Reproduce the source count with:
 

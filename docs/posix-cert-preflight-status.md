@@ -3,7 +3,8 @@
 Status: **historical GO pre-flight snapshot, superseded by the 2026-08-08 shell
 milestone.** Agent-drivable pre-flight is complete; the licensed 493-TP shell
 isolation arm now has 493 certification PASS-group outcomes and zero blockers.
-The 116 utility sets and complete 117-set formal run remain. Results are
+The utility campaign and formal run remain; the current claim is the Sprint
+341 base scope routed in `posix-command-coverage.md`. Results are
 published in `vsc-pcts-run-status.md` under the consent grants.
 
 ## Go/no-go criteria (from vsc-pcts-readiness.md §Go/no-go)

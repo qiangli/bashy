@@ -62,9 +62,10 @@ Standard or certification program. `UNSUPPORTED`, `NOT IN USE`, and `UNTESTED`
 are included in the certification PASS group only under the declared profile
 and retained rationale. Current corrective work uses Profile B—Bashy `sh` with
 the frozen GNU/system provider environment—and excludes Bashy's Go multicall.
-Profiles C/D separately exercise the Go-utility provider. The exact 116-name
-accounting is routed through `posix-command-coverage.md`; the complete formal
-denominator remains 117 sets and 9,337 TPs.
+Profiles C/D separately exercise the Go-utility provider. The certification
+claim is the Sprint 341 base scope (102 mandatory targets, pure Go, zero
+external providers), routed through `posix-command-coverage.md`; the scored
+denominator comes from the licensed configured suite and its official report.
 
 ## Shell scenario results (published under the 2026-07-16 grant)
 
