@@ -381,3 +381,33 @@ func TestInboxRoleMailRequiresAuthorization(t *testing.T) {
 		t.Fatalf("role peek changed state: %v, %v", pending, err)
 	}
 }
+
+// A registered agent owns its mailbox even while several live instances make
+// its bare name ambiguous as a SEND target. Every concurrent conversation on a
+// family opens its own instance, so a busy family (three sprint managers on
+// claude-opus5.5) refused `bashy inbox --as claude-opus5.5` with "owns no
+// mailbox here", hiding the ambiguity behind an identity error.
+func TestInboxRegisteredAgentWithSeveralLiveInstances(t *testing.T) {
+	isolateUnifiedInbox(t)
+	store := fleet.NewInstanceStore("")
+	family := fleet.Family{Name: "claude-opus5", Bindings: []string{"claude:opus5"}}
+	for _, label := range []string{"Rosalind", "Rosalind-2"} {
+		if _, err := store.Open(family, fleet.OpenOptions{Label: label}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := bus.PostMessage(bus.Post{From: "human", To: "claude-opus5", Body: "agent-addressed mail"}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	cmd := newUnifiedInboxCmd()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SetArgs([]string{"--as", "claude-opus5", "--peek"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("registered agent with two live instances refused: %v", err)
+	}
+	if !strings.Contains(out.String(), "agent-addressed mail") {
+		t.Fatalf("agent mailbox read missing its mail:\n%s", out.String())
+	}
+}

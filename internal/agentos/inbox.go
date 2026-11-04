@@ -325,10 +325,31 @@ func resolveInboxReader(as string) (string, error) {
 	// every prior read, was refused while an alias of the same person passed.
 	// Someone who owns a cursor is by definition an inbox owner.
 	addr, kind, ok := bus.ResolveSendTarget(as)
+	if !ok {
+		// A registered agent owns its mailbox even while several live
+		// instances make its bare name ambiguous as a SEND target. Every
+		// concurrent conversation on a family opens its own instance, so a
+		// busy family otherwise lost its own inbox to "owns no mailbox here".
+		if name := registeredAgentName(as); name != "" {
+			addr, kind, ok = name, bus.TargetAgent, true
+		}
+	}
 	if !ok || kind == bus.TargetRole {
 		return "", fmt.Errorf("inbox: --as %q owns no mailbox here; establish an identity first — declare BASHY_AGENT=NAME (or register with `bashy agent add` / `bashy person add`), then choose an agent from `bashy agent list --all` or a person from `bashy person list` (`bashy whois %s` says what it resolves to). %s", as, as, inboxReaderHint)
 	}
 	return addr, nil
+}
+
+// registeredAgentName returns the roster name as names, after the board's own
+// name folding, or "" when it names no registered agent.
+func registeredAgentName(as string) string {
+	canon := fleetResolveAgentName(as)
+	for _, n := range fleetAgentNames() {
+		if strings.EqualFold(n, as) || (canon != "" && strings.EqualFold(n, canon)) {
+			return n
+		}
+	}
+	return ""
 }
 
 // inboxWatcherClaim is one registered watcher's hold on a fleet identity: how
