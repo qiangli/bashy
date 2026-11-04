@@ -240,3 +240,4 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [Relative script operands](plan-s531-relative-script-operand.md) — S531 story 2840 cwd resolution, focused red/green evidence and pending native Windows reproduction.
 - [Desk family look](plan-desk-family-look.md) — S537.D1 launcher-derived kit tokens, family accents, one app shell + renderer for every desk tool, contracttest kit conformance and light/dark gallery.
 - [Desk viewer](plan-desk-viewer.md) — S537.V1 view-only books of agent reports: template + JSON data (never HTML) through the kit renderer, sprint/session books, changed-since-previous highlight, self-contained export, contracttest ViewOnly.
+- [Layer delineation](plan-layer-delineation.md) — A Classic (bash+coreutils, POSIX-certified) · B Bash#/fenced runtimes · C Yoke; stories L1–L5, deferred until after the S561 licensed run
