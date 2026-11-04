@@ -99,7 +99,7 @@ The card runs PRIORITY-FIRST; invite and chat come before everything else.
 | P1 | Invite/chat in the product: single sign-on, team mode and named owner released in the Klatch fork and pinned by Bashy (F8); J5 setup command (F4); J1 |
 | P2 | Native Windows (F2, F3); J2/J3 native; J8 satellite move; J10 shapeable-ready |
 | P3 | F5–F7, F10–F13 unless they block P0/P1 |
-| Deferred | General software shaping → Sprint 564 (F14) |
+| Deferred | General software shaping → Sprint 564 (F14); satellite-less single-node outpost by default, joining and switching satellites → Sprint 565 (J1, J8) |
 
 ## Story chain
 
@@ -142,7 +142,7 @@ every problem they hit recorded as a finding against the product.
 
 | ID | Finding | Evidence | Owner |
 | --- | --- | --- | --- |
-| F1 | `klatch` app entry vanished from elephant's outpost config | `outpost apps list` 11-03; daemon unchanged since 10-31 | C3 (outpost) |
+| F1 | `klatch` app entry vanished from elephant's outpost config. `agent.json` was rewritten without it at 11-03 00:03 and 12:03 (rotated `.3`/`.2`, identical, differ from the live file only by the `klatch` entry); no CLI call at those times (`cli-trace.log`); one daemon (`supervisord` + `start`, since 10-31 18:54, before Klatch was added). Leading hypothesis: the 12 h upgrade-puller cycle (logged 00:05, 12:02) persists the daemon's startup copy of the config, dropping apps added since | `~/.config/matrix/agent.json*`, `daemon.log`, `cli-trace.log` on elephant | C3 (outpost) — P0 |
 | F2 | Klatch has no `windows/amd64` build (cgo SQLite driver) | release assets linux/darwin only | C3 (klatch build) |
 | F3 | Transform scripts need `/bin/sh`, `ffmpeg`, ImageMagick | `transform/*.sh` | C3 (provisioning) |
 | F4 | Klatch provisioner needs `python3`; absent on elephant | `examples/klatch/provision.py` | C3 (bashy command) |
@@ -155,6 +155,7 @@ every problem they hit recorded as a finding against the product.
 | F11 | `TestSrcPinsMatchLinkedModules`: yoke src pin out of sync | fails on `main` | C3 (migration follow-up) |
 | F12 | `TestRunSignaledIsNonLossy` fails on `main` | fails on `main` | A3 (561) — to confirm with 561 |
 | F13 | `TestCommandDocSourceNames` fails on `main` | fails on `main` | C3 |
+| F15 | Outpost `sshd` unit restarts every few seconds on Windows (`firewall: show rule "outpost sshd": exit status 1`); `daemon.log` has grown to 3.4 GB | `daemon.log` on elephant | C3 (outpost) |
 | F14 | No supported way for a Bashy user to shape an app on their host: elephant's shaping was manual (host git, two podman builds, image swap, secret copy) | session 11-01/11-02 | Sprint 564 (deferred, backlog); 563 keeps J10 only |
 | T1 | Satellite forwards `admin` for every sharee; no custom roles | cloudbox `host_proxy.go:199` | support ticket |
 | T2 | New app takes up to 60 s to become reachable | poller interval | support ticket |
