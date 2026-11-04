@@ -1,5 +1,11 @@
 # bashy docs index
 
+- [Clean-baseline campaign: sprints 561–563](plan-clean-baseline-campaign.md) — KISS/MVP foundation certification readiness, fence corpus repairs and clean-install UAT; current execution direction with legacy work retained as reference.
+
+- [Sprint 561 master execution plan](plan-s561-master-execution.md) — Foundation A: profile/baseline freeze, failure classification, causal repairs and one certification-ready candidate.
+
+- [Sprint 560 and selected 539 master execution plan](plan-s560-s539-master-execution.md) — bounded post-migration repairs, sandbox and guard follow-ups, protected conformance investigation, architecture decisions, and evidence-based acceptance.
+
 - `transcribe-contract.md` — Sprint 503 S503.1: public transcription command, replaceable stage JSON v1 contract, existing infrastructure seams and unfinished adapter prerequisites.
 - `transcribe-adapter-authoring.md` — Sprint 503 S503.8: setup, registration, extension walkthrough, offline use and dependency licensing for source and decoder authors.
 - `transcribe-seed-adapters.md` — Sprint 503 S503.4: local acquisition, PCM/media decoding, offline CPU whisper.cpp and transcript export; implementation gates and separate native acceptance requirements.
