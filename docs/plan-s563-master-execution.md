@@ -116,8 +116,12 @@ The elephant container stays; goal is J6 working for the UAT cohort, with
 every problem they hit recorded as a finding against the product.
 
 1. Re-verify browser single sign-on after the 11-03 app restore (operator).
-2. Diagnose F1 (vanished app entry) before the cohort starts; add a check
-   that `outpost apps list` still contains `klatch` (daily, until fixed).
+2. Diagnose F1 (vanished app entry) before the cohort starts. No custom
+   watchdog: outpost's own OpenTelemetry export is enabled on elephant
+   (user environment `OTEL_EXPORTER_OTLP_ENDPOINT=127.0.0.1:31416`, the local
+   `bashy otel serve` gRPC port; `OTEL_SERVICE_NAME=outpost`), effective at
+   the next outpost restart, so a later config change is searchable in the
+   local VictoriaLogs. Until then, reinstall by hand if the entry is lost.
 3. Team-topic owner: the host owner's choice of account (named-owner setting
    `KLATCH_SSO_TEAM_OWNER`; product setting, prototyped on elephant first).
 4. Load check: several members at once from one network (satellite 429 risk).
@@ -143,6 +147,8 @@ every problem they hit recorded as a finding against the product.
 | ID | Finding | Evidence | Owner |
 | --- | --- | --- | --- |
 | F1 | `klatch` app entry vanished from elephant's outpost config. The journal ring (`agent.json.1..3`, rotated on every save) shows `klatch` already absent before the 11-03 00:03 save; the 00:03/12:03 saves match the 12 h host-cert refresh, which reloads the file before saving (`cmd/outpost/main.go:1558`), so they are not the cause. `cli-trace.log` has no outpost command removing it (only the three `apps add klatch` calls). Removal happened between 11-02 (team mode verified) and 11-03 00:03, via the daemon or its admin API; journal depth 3 is too shallow to show it. One daemon (`supervisord` + `start`) since 10-31 18:54 | `~/.config/matrix/agent.json*`, `daemon.log`, `cli-trace.log` on elephant | C3 (outpost) — P0 |
+| F16 | Bashy on native Windows intermittently reports an external program as "command not found" (`curl.exe`, `where.exe`) although `command -v` resolves it; seen in pipelines | elephant session 11-03 | A3 (561) — shell exec/lookup |
+| F17 | Sprint goal links kept the pre-migration story repo path (`~/projects/poc/bashy`, renamed `bashy.stale-20261103`), so 563's stories showed as dangling; relinked to `umbrella/bashy` with `sprint goal link` | `sprint show 563` 11-03 | C3 (migration follow-up) |
 | F2 | Klatch has no `windows/amd64` build (cgo SQLite driver) | release assets linux/darwin only | C3 (klatch build) |
 | F3 | Transform scripts need `/bin/sh`, `ffmpeg`, ImageMagick | `transform/*.sh` | C3 (provisioning) |
 | F4 | Klatch provisioner needs `python3`; absent on elephant | `examples/klatch/provision.py` | C3 (bashy command) |
