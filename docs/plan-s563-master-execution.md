@@ -89,6 +89,19 @@ J6 with the UAT cohort is the weekend gate. J2–J6 and J10 on the product
 release (no host-scoped shaping), native on every platform, is the production
 gate. The general shaping workflow is not a 563 gate (see F14).
 
+Automated happy paths (11-04):
+
+- J6 in the browser: `tests/klatch-e2e/run.py` drives the owner's real
+  Chrome through the browser hub (sign-in gate, single sign-on into the
+  session, topics listed, post and read back; exit 2 = BLOCKED). PASS on
+  elephant via zoo, 11-04 11:27.
+- Server side: klatch `TestVerifyOutpostIdentity`, `TestSetSSOAccess`,
+  `TestSSOTeam` (all pairs connected, topic membership) and
+  `TestSSOTeamMessaging` (member posts, another member reads it), in
+  `shape/elephant-sso` `c5cac3f9`.
+- Negative paths: unsigned or forged identity refused (401), anonymous
+  access gated by the satellite, disabled account refused.
+
 ## Priorities (operator, 2026-11-03)
 
 The card runs PRIORITY-FIRST; invite and chat come before everything else.
@@ -148,6 +161,8 @@ every problem they hit recorded as a finding against the product.
 | --- | --- | --- | --- |
 | F1 | **Confirmed root cause.** The 12 h cluster-token rotation (`vknode` refresher → `persistClusterCredential`, `cmd/outpost/main.go:2908`) saved the daemon's boot-time `FileConfig` snapshot over `agent.json`, erasing every app added since boot. Reproduced live: 11-04 00:03:06 `vknode: refresh ok`, and `agent.json` lost the `klatch` entry (the only difference from `agent.json.1`); same at 11-03 00:03 and 12:03. No CLI call involved (`cli-trace.log`). Fix: outpost `e4d3e6a` (branch `s563/f1-cluster-credential-keeps-config`) applies the credential to the file as it is now, like the host-cert refresh; red/green tests in `cmd/outpost`. Until a fixed outpost runs on elephant, klatch must be re-added after each rotation (next ~12:03 and 00:03) | `~/.config/matrix/agent.json*`, `~/klatch/f1-agent.json.{before,after}-0003`, `daemon.log` on elephant | C3 (outpost) — P0 |
 | F16 | Bashy on native Windows intermittently reports an external program as "command not found" (`curl.exe`, `where.exe`) although `command -v` resolves it; seen in pipelines | elephant session 11-03 | A3 (561) — shell exec/lookup |
+| F19 | Klatch web client: Enter does not send a message (adds a line); only the send icon sends. Members may expect Enter to send | J6 browser run 11-04 | C3 (Klatch web, P2) |
+| F20 | Klatch opened SQLite with no busy timeout, and the SSO first visit ran a read-then-write transaction: concurrent sign-ins failed with "database is locked" (2 of 5 test runs). Fixed in klatch `c5cac3f9` (`_busy_timeout=5000`, write-only sign-in transaction, config reset fix); `_txlock=immediate` rejected (broke TestContactSync). Deployed on elephant as `klatch:1.2.5-sso-team2` 11-04 (rollback container `klatch-team-pre-lockfix`, backup `backup-klatch-data-pre-lockfix.tar`) | SSO tests 6/6 separate runs | C3 — fixed |
 | F18 | `bashy browser hub --port N` advertised but rejected (top-level parser takes GNU-interspersed flags); hub ignored `--live-port` and always bound 58082. Fixed: hub listens on `--live-port` (yoke `e57567cf`, red/green `TestHubListensOnLivePort`); new opt-in `browser-hub` service unit so the owner or an agent starts it from the outpost admin (yoke `68a20e27`, story C3b `0bb55463319c`). Ships with the next Bashy yoke pin bump (S561 freeze now lifted; verify the current consumer pin) | live run on dragon 11-04 | C3 — fixed |
 | F17 | Sprint goal links kept the pre-migration story repo path (`~/projects/poc/bashy`, renamed `bashy.stale-20261103`), so 563's stories showed as dangling; relinked to `umbrella/bashy` with `sprint goal link` | `sprint show 563` 11-03 | C3 (migration follow-up) |
 | F2 | Klatch has no `windows/amd64` build (cgo SQLite driver) | release assets linux/darwin only | C3 (klatch build) |
