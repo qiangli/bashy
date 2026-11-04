@@ -11,6 +11,11 @@ run was invalidated by host disk exhaustion (46 ENOSPC errors) and which left
 lanes 2 and 4 undone. It ran here with 21–36 GB free on
 `/System/Volumes/Data`; all four lanes executed to completion.
 
+Lane-4 addendum (2026-11-04, steering-authorized): the container gate was run
+once on a freshly provisioned `applehv` podman machine (created, then stopped
+and removed afterwards). §4 below records the authoritative result; lanes 1–3
+were not re-run (run-once rule — their evidence above stands).
+
 ## Candidate identity vs checkout
 
 Checkout HEAD at run time: `ecf5fff2`. `git diff f1bcd711 HEAD -- go.mod
@@ -91,32 +96,42 @@ stamp (`go version -m bin/bashy` here reports
 hashes are checkout-stamp-sensitive while all compiled content equals
 `f1bcd711`. The stamp-free `bin/bash` wrapper is byte-identical to baseline.)
 
-## 4. Container gate — runtime NOT usable; exact blocker + native fallback
+## 4. Container gate — AUTHORITATIVE RUN, exit 0, 86/86
 
-`make test-bash-container` was not run: no container runtime is usable on this
-host. No system `podman` or `docker` on PATH; `bashy podman info` reports
-`provider: libkrun, version 6.1.2` but cannot connect (`dial unix
-.../podman.sock: connect: no such file or directory`); `bashy podman machine
-list` shows zero machines and `system connection list` is empty. Provisioning
-a new VM plus pulling the pinned Ubuntu base image would be new
-host-exclusive setup, out of bounds for this story — no machine was created
-or started. This is a setup blocker, not a candidate verdict.
-
-Fallback (non-authoritative): `GOWORK=off make test-bash` exit 0 —
+`GOWORK=off make test-bash-container` exit 0 —
 **86 passed, 0 failed, 0 skipped, 0 timed out**
-(`/tmp/a4a-verify/test-bash.log`). Native macOS execution, not the hermetic
-Linux image, so it does not substitute for the authoritative container gate;
-the container lane stays open for a provisioned host.
+(`/tmp/a4a-verify/test-bash-container.log`, out of git). Hermetic Linux image,
+`BASH53_BASHPP=0` (the `test-bash-container` default), non-root uid,
+read-only root, no network, PTY attached. This is the authoritative gate, not
+a fallback; the native `make test-bash` 86/86 from the prior attempt stays on
+record as corroboration only.
+
+- Test image (built once for this run, `SELFCHECK=inventory` passed during
+  `scripts/build-conformance-image.sh`):
+  `localhost/bash53-conformance-hermetic:ws-683882422-arm64`,
+  digest `sha256:1be0e33645d642978e33ce331d838ded0637f0b9b0ec99ee3e9bfcb6f2270d36`.
+- Base image (pinned, matches `docs/s561/candidate-manifest.json`):
+  `docker.io/library/ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517`.
+- Provisioning (steering-authorized, `podman-machine` claim held then
+  released): `bashy podman machine init` defaulted to VM type `libkrun` and
+  `machine start` failed with the exact error `exec: "krunkit": executable
+  file not found in $PATH`. The machine was removed and re-created with
+  `--provider applehv` (host carries `vfkit`), then started successfully
+  (6 CPUs, 2 GiB, 100 GiB disk). After the gate: `machine stop` +
+  `machine rm -f` — `machine list` is empty again and ~29 GB is free, so no
+  VM residue remains on the shared host.
 
 ## Ownership and hygiene
 
-- No source, test, timeout, or skip was changed; `git status` shows only the
-  two deliverable files touched by this story (plus another agent's
-  pre-existing uncommitted `KB.md` note, left alone).
+- No source, test, timeout, or skip was changed; only
+  `docs/s561/a4a-results.md` is modified by this addendum
+  (`docs/s561/candidate-manifest.json` stands as committed — no rebuild, per
+  the run-once rule). No other agent's files were touched.
 - Raw logs stay out of git under `/tmp/a4a-verify/` (`gotest.log`,
   `dist.log`, `dist.sha256`, `build.log`, `test-bash.log`,
-  `manifest.err`); `bin/dist/` (~1.1 GB) was removed after hashing. No other
-  agent's files were touched.
+  `test-bash-container.log`, `manifest.err`); `bin/dist/` (~1.1 GB) was
+  removed after hashing. The provisioned podman machine was stopped and
+  removed; the `podman-machine` claim is released.
 - A4 acceptance is unchanged; this story delivers only the four public lanes
-  above. Open item for A4: the authoritative `test-bash-container` hermetic
-  gate still needs a provisioned host.
+  above. The authoritative `test-bash-container` hermetic gate is now closed
+  (86/86, exit 0, §4) — no open lane remains for A4 from this story.
