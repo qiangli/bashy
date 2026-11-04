@@ -3,11 +3,12 @@ id: 6a4f4591bc8e
 kind: bug
 title: B3 Repair current fence corpus defects and prerequisites
 seq: 3040
-status: todo
+status: assigned
 priority: p2
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:40.239759Z
+assignee: codex-gpt6-astra
 sprint: 562
 sprint_id: 2e8945a5-d199-539c-aaea-321a738ab9df
 sprint_title: 'Fence corpora: complete required coverage and repair current failures'

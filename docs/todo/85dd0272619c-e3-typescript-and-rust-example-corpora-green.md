@@ -3,12 +3,13 @@ id: 85dd0272619c
 kind: test
 title: E3 TypeScript and Rust example corpora green
 seq: 3049
-status: todo
+status: assigned
 priority: p1
 labels:
     - clean-baseline
     - fence-corpora
 created: 2026-11-04T03:51:00.918193Z
+assignee: claude-opus5
 sprint: 562
 sprint_id: 2e8945a5-d199-539c-aaea-321a738ab9df
 sprint_title: 'Fence corpora: complete required coverage and repair current failures'

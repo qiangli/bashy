@@ -3,12 +3,13 @@ id: 98e7589729ed
 kind: feature
 title: E1 Shared fence-corpus runner and generated inventories for all seven example sources
 seq: 3047
-status: todo
+status: assigned
 priority: p0
 labels:
     - clean-baseline
     - fence-corpora
 created: 2026-11-04T03:51:00.602611Z
+assignee: codex-gpt6-astra
 sprint: 562
 sprint_id: 2e8945a5-d199-539c-aaea-321a738ab9df
 sprint_title: 'Fence corpora: complete required coverage and repair current failures'

@@ -3,12 +3,13 @@ id: df328510d106
 kind: test
 title: E4 C/C++, C# and PowerShell example corpora green
 seq: 3050
-status: todo
+status: assigned
 priority: p1
 labels:
     - clean-baseline
     - fence-corpora
 created: 2026-11-04T03:51:01.075638Z
+assignee: claude-fable5.1
 sprint: 562
 sprint_id: 2e8945a5-d199-539c-aaea-321a738ab9df
 sprint_title: 'Fence corpora: complete required coverage and repair current failures'
