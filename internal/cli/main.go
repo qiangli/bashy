@@ -229,6 +229,31 @@ func stripIgnoredOperandHyphen(args []string) []string {
 	return args
 }
 
+// Go's flag parser keeps consuming options after -c's command value. The
+// shell's option scan ends at that value: any following -s, -e, or similar
+// token is $0 (or a later positional parameter), not a shell option.
+func stopOptionsAfterCommand(args []string) []string {
+	for i := 1; i < len(args); i++ {
+		a := args[i]
+		if a == "-c" {
+			if i+2 >= len(args) {
+				return args
+			}
+			out := make([]string, 0, len(args)+1)
+			out = append(out, args[:i+2]...)
+			out = append(out, "--")
+			return append(out, args[i+2:]...)
+		}
+		if a == "--" || a == "-" || !strings.HasPrefix(a, "-") {
+			return args
+		}
+		if front.InvocationFlagTakesValue(a) || a == "-bashy-plus-o" || a == "-bashy-plus-O" {
+			i++
+		}
+	}
+	return args
+}
+
 // relocatePendingCommandFlag makes `-c` behave as in bash: `-c` only marks
 // that a command string is pending (shell.c: want_pending_command); option
 // parsing continues past it, and the command string is the first NON-OPTION
@@ -620,6 +645,7 @@ func Main() {
 	// Drop the leading `-`/`--` operand bash ignores before the command or
 	// script (e.g. `-c - 'echo x'`, `-c -- 'echo x'`, a lone `-`).
 	os.Args = stripIgnoredOperandHyphen(os.Args)
+	os.Args = stopOptionsAfterCommand(os.Args)
 	flag.Parse()
 	err := prepareStartupCredentials(commandLinePrivilegedMode())
 	if err == nil {

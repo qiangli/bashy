@@ -51,3 +51,25 @@ exit 23`
 		t.Fatalf("sh stderr = %q, want %q", got, want)
 	}
 }
+
+// Once -c has consumed its command operand, later option-looking words are
+// positional parameters. In particular, POSIX sh -c '...' -s must expose -s
+// as $0 and leave standard input available to the command.
+func TestShCommandOperandEndsOptionParsing(t *testing.T) {
+	bin := builtBashBin(t)
+	dir := t.TempDir()
+	sh := filepath.Join(dir, "sh")
+	if err := os.Symlink(bin, sh); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(sh, "-c", `IFS= read -r line; printf 'zero=%s one=%s stdin=%s\n' "$0" "$1" "$line"`, "-s", "operand")
+	cmd.Env = []string{"PATH=/bin:/usr/bin", "HOME=" + dir}
+	cmd.Stdin = bytes.NewBufferString("data\n")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("sh exited with %v: %s", err, out)
+	}
+	if got, want := string(out), "zero=-s one=operand stdin=data\n"; got != want {
+		t.Fatalf("sh output = %q, want %q", got, want)
+	}
+}
