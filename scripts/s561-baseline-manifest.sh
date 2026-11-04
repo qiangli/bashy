@@ -53,5 +53,6 @@ out = {
   "host": {"os": platform.system(), "arch": platform.machine(),
            "inspected_licensed_harness_commit": optional_harness_commit()},
 }
+out["cert_closure"] = json.loads(run("python3", "scripts/cert-closure.py", "--rev", source))
 print(json.dumps(out, indent=2, sort_keys=True))
 ' "$source_commit"
