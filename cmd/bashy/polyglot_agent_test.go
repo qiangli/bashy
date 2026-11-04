@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -36,6 +37,16 @@ func (p *yamlAgentFixtureProvider) Send(context.Context, *ycode.ProviderRequest)
 }
 
 func TestYAMLAgentFenceCompilerRunner(t *testing.T) {
+	// Resolve before HOME is redirected below: the module cache lives under it.
+	pinnedDir := func(module string) string {
+		out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", module).Output()
+		if err != nil || len(bytes.TrimSpace(out)) == 0 {
+			t.Fatalf("resolve pinned module %s: %v", module, err)
+		}
+		return string(bytes.TrimSpace(out))
+	}
+	ycodeDir := pinnedDir("github.com/qiangli/ycode")
+	genieDir := pinnedDir("github.com/qiangli/ycode/examples/genie")
 	// Install the same effect gate as the executable's front door before
 	// constructing an interpreter directly in this integration test.
 	args := os.Args
@@ -58,7 +69,10 @@ func TestYAMLAgentFenceCompilerRunner(t *testing.T) {
 		return func() (agentos.YAMLAgentSession, error) { return open(ycode.WithHarnessProvider("openai", provider)) }, nil
 	}
 	for _, definition := range []string{"agent.yaml", "genie/agent.yaml"} {
-		path, _ := filepath.Abs(filepath.Join("..", "..", "..", "ycode", "examples", definition))
+		path := filepath.Join(ycodeDir, "examples", definition)
+		if definition == "genie/agent.yaml" {
+			path = filepath.Join(genieDir, "agent.yaml")
+		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
