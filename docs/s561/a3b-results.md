@@ -34,3 +34,115 @@ GA26 and the original inputs for #46, #59, #244, and #801 remain evidence
 gaps, not claims that the licensed TPs now pass. A4 should compare the final
 candidate under the approved harness and retain any differing inputs and
 diagnostics for further causal triage.
+
+## Manager rework: option boundary and F3 self-signal
+
+GNU Bash 5.3.15 and dash were compared with the seven requested `sh` forms.
+All agreed on `-ec`, options between `-c` and its command, `--` after its
+command, `-s` on either side of `-c`, and `+o errexit` before `-c`.
+`sh -c '' a` exposed a second CLI defect: the frozen CLI tried to open `a`
+as a script (127), while both references exit 0 with empty output. The
+process-level table test was red only on that case; it and the prior
+`-c ... -s` regression are green after recording the presence of `-c`
+independently of its string value. A script operand followed by `-c` remains
+a script argument, verified by the same test.
+
+F3: `kill -KILL $$` and `kill -TERM $$` on the pinned interpreter returned
+normal exit status 137/143. Both reference shells terminate by signal 9/15.
+The new sh regression test observed ordinary exit in both cases (red); after
+relaying the default signal in a standalone runner it observes `WIFSIGNALED`
+with the exact signal in both cases (green). Focused command:
+`GOWORK=off go test ./interp -run 'TestBuiltinSelfSignal|TestTrapResetRestoresOSDefault|TestRunPreservesSignaledForegroundTermination' -count=1`
+passed in `/tmp/s561-a3b-f3-codex`. Review commit `74586fde` there before
+merging. The bashy `sh` pin is intentionally unchanged pending review.
+With the CLI rework in this branch and the frozen sh pin, `GOWORK=off make
+test-bash` completed: 86 passed, 0 failed, 0 skipped, 0 timed out.
+
+### sh diff for manager review
+
+```diff
+diff --git a/interp/builtin.go b/interp/builtin.go
+index 4e841bad..50961ce0 100644
+--- a/interp/builtin.go
++++ b/interp/builtin.go
+@@ -2018,6 +2018,14 @@ func (r *Runner) builtin(ctx context.Context, pos syntax.Pos, name string, args
+                             // would suspend all in-process runners.
+                             continue
+                         }
++                        // A standalone shell owns its process signal disposition.
++                        // Relay the default action so its parent observes WIFSIGNALED,
++                        // rather than a normal exit with status 128+signal.
++                        if _, standalone := r.sigReset.(OSSignalResetter); standalone {
++                            if err := relayAsyncOwnerSignal(sig); err == nil {
++                                continue
++                            }
++                        }
+                         exit.code = uint8(128 + sigNum(sig))
+                         exit.exiting = true
+                         return exit
+diff --git a/interp/self_signal_unix_test.go b/interp/self_signal_unix_test.go
+new file mode 100644
+index 00000000..da5de1dd
+--- /dev/null
++++ b/interp/self_signal_unix_test.go
+@@ -0,0 +1,59 @@
++//go:build unix
++
++package interp_test
++
++import (
++    "context"
++    "errors"
++    "os"
++    "os/exec"
++    "strings"
++    "syscall"
++    "testing"
++
++    "mvdan.cc/sh/v3/interp"
++    "mvdan.cc/sh/v3/syntax"
++)
++
++func TestBuiltinSelfSignalTerminatesStandaloneShell(t *testing.T) {
++    for _, tc := range []struct {
++        name string
++        sig  syscall.Signal
++    }{
++        {"KILL", syscall.SIGKILL},
++        {"TERM", syscall.SIGTERM},
++    } {
++        t.Run(tc.name, func(t *testing.T) {
++            cmd := exec.Command(os.Args[0], "-test.run=^TestBuiltinSelfSignalChild$")
++            cmd.Env = append(os.Environ(), "GOSH_PROG=", "SH_SELF_SIGNAL="+tc.name)
++            out, err := cmd.CombinedOutput()
++            var exit *exec.ExitError
++            if !errors.As(err, &exit) {
++                t.Fatalf("child exit = %v, output = %q, want signal %v", err, out, tc.sig)
++            }
++            status, ok := exit.Sys().(syscall.WaitStatus)
++            if !ok || !status.Signaled() || status.Signal() != tc.sig {
++                t.Fatalf("child wait status = %v, output = %q, want signal %v", exit.Sys(), out, tc.sig)
++            }
++        })
++    }
++}
++
++func TestBuiltinSelfSignalChild(t *testing.T) {
++    name := os.Getenv("SH_SELF_SIGNAL")
++    if name == "" {
++        return
++    }
++    file, err := syntax.NewParser().Parse(strings.NewReader("kill -"+name+" $$"), "")
++    if err != nil {
++        t.Fatal(err)
++    }
++    runner, err := interp.New(interp.WithSignalResetter(interp.OSSignalResetter{}))
++    if err != nil {
++        t.Fatal(err)
++    }
++    if err := runner.Run(context.Background(), file); err != nil {
++        t.Fatalf("shell returned normally: %v", err)
++    }
++    t.Fatal("shell returned normally")
++}
+```
