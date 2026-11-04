@@ -1,0 +1,203 @@
+# Sprint 563 master execution plan: product UAT through Klatch group chat
+
+Review date: 2026-11-03. Manager: `claude-opus5.5-s563` (conductor lease
+taken 2026-11-03). Develops Sprint 563 under `plan-clean-baseline-campaign.md`.
+Draft for operator review: no story text has been changed yet.
+
+## Main goal
+
+**Any Bashy user can run group chat for the people they invite, from a clean
+Bashy install.** A host owner installs Klatch on their own outpost as a Bashy
+service, publishes it through their satellite, and every cloudbox member they
+share it with opens it, signs in once with their cloudbox identity and is
+already connected with the rest of the team. Klatch is a Bashy feature for
+all Bashy users, not a deployment for one group.
+
+Two product properties are part of the goal:
+
+- **Who can join.** Any cloudbox user can be invited: a member needs only a
+  cloudbox account and a browser to join the chat on the host owner's
+  satellite — no satellite, outpost or Bashy of their own. The host that
+  runs Klatch always has outpost installed and paired.
+- **Software-shapeable.** Software shaping is a Bashy feature for every Bashy
+  user and every Bashy app, not something only a satellite owner can do: any
+  user changes an app's source on their own host, builds and tests it there,
+  runs it in place of the pinned release and can return to the release.
+  That general workflow is **deferred to Sprint 564** (F14). Sprint 563
+  only keeps Klatch shapeable-ready: the pinned release rebuilds from its
+  pinned source on the host through Bashy's existing build path, and the
+  manual elephant shaping is handed over as that sprint's first worked
+  example.
+
+**Real-user UAT.** The 2026–2027 Presidential SI Challenge group (`psic2027`)
+is the first real cohort: its members use it from school, home and the
+library, starting by Saturday 2026-11-07. Their use is the UAT evidence; any
+cohort-specific setup (who is invited, topic names) is test data, not scope.
+
+Each step a host owner or invited member takes is a journey with a defined
+input and expected outcome. Klatch's own vocabulary is host owner, member and
+team; role words of a particular cohort (teacher, student, class) never
+appear in the product. Every defect met on the way is fixed at its
+owning layer (C here, A/B via 561/562, satellite issues by support ticket)
+and the affected journey is rerun.
+
+Production target: the features this UAT needs — single sign-on with the
+trusted cloudbox identity, team mode, native Windows — ship in the **product**
+(the Klatch fork's release and Bashy's pinned tool and service), and Klatch
+runs **natively** on the outpost. The elephant container and its host-scoped
+shaping branch are the test vehicle and the weekend fallback, not the end
+state.
+
+Out of scope: release publication, shared-install replacement, cloudbox
+(satellite) code changes — the satellite is proprietary, so its gaps become
+support tickets, never shaping.
+
+## Current state (2026-11-03)
+
+- Card: backlog → manager assigned; 0/4 stories closed; PRIORITY-FIRST.
+- Live: Klatch 1.2.5 + elephant shaping (single sign-on, team mode) runs in
+  a podman container on `elephant` (native Windows, x86_64), published
+  through the `zoo` satellite with login + trusted cloudbox identity.
+  Shaping commits `469031ce`, `0fe385ad` on klatch branch
+  `shape/elephant-sso` exist only on elephant.
+- 2026-11-03: the `klatch` app entry had vanished from elephant's outpost
+  config (cause unknown); restored and secret refreshed. Browser sign-in not
+  yet re-verified.
+- C3 fix ready: inbox refusal for a registered agent with several live
+  instances, branch `s563/c3-inbox-registered-agent` (`51998d67`), not merged.
+
+## Journey matrix (C1)
+
+Each journey has one expected outcome and one or more failure checks.
+Platforms: **W** = elephant (native Windows), **M** = macOS arm64 (dragon),
+**L** = a claimed Linux test host. Satellite: `zoo`; J8 adds `zoo-aws`.
+
+| ID | Journey | Expected outcome | Failure checks | Platforms |
+| --- | --- | --- | --- | --- |
+| J1 | Clean install: `bashy` + `outpost`, pair to satellite | host listed on the satellite; `outpost status` active | wrong invite refused | W, M, L |
+| J2 | Install Klatch natively as a Bashy service from the pinned, signed release | service running on loopback 7100; `/admin/status` 200; signature verified | tampered archive refused | M, L now; W after F2/F3 |
+| J3 | Provide Klatch's media dependencies through Bashy only (`ffmpeg`, ImageMagick, `sh`) | image/video thumbnails produced | missing tool reported, never silent | W, M, L |
+| J4 | Publish via outpost with login + trusted identity | app reachable only through the satellite; survives an outpost restart | anonymous 401; app entry still present after restart (F1) | W, M |
+| J5 | Host owner setup: one Bashy command bootstraps the admin, sets the domain, enables single sign-on and team mode | admin claimed; sign-ups closed; team topic exists; no Python or manual API calls | second bootstrap refused | W, M, L |
+| J6 | Invited member with only a cloudbox account (no satellite, outpost or Bashy): added as a member + app shared → open tile on the owner's satellite → single sign-on → chat in team topic | lands in chat with no Klatch login; sees teammates; messages delivered both ways | unshared member refused; forged/unsigned identity refused | W (UAT cohort browsers at school/home) |
+| J7 | Host reboot | Klatch and its publication come back without manual steps | — | W, M |
+| J8 | Move the host from `zoo` to `zoo-aws` | app re-registers; same accounts/chats; domain updated | — | W |
+| J9 | Agent coordination used to run this sprint (`bashy mb`, `inbox`, `sprint`) | managers read their mail; sprint commands finish promptly | registered identity never refused (F9) | M |
+| J10 | Shapeable-ready: rebuild the pinned Klatch release from its pinned source on the host with Bashy's existing build path | rebuilt server and web bundle match the pinned source commit; recorded build identity | build from a source that does not match the pin is refused | W, M, L |
+
+J6 with the UAT cohort is the weekend gate. J2–J6 and J10 on the product
+release (no host-scoped shaping), native on every platform, is the production
+gate. The general shaping workflow is not a 563 gate (see F14).
+
+## Priorities (operator, 2026-11-03)
+
+The card runs PRIORITY-FIRST; invite and chat come before everything else.
+
+| Priority | Work |
+| --- | --- |
+| P0 | Invite/chat: J4, J6, J7 on elephant for the UAT cohort; F1 (app entry vanished); T3 load check; F9 merge so managers can coordinate |
+| P1 | Invite/chat in the product: single sign-on, team mode and named owner released in the Klatch fork and pinned by Bashy (F8); J5 setup command (F4); J1 |
+| P2 | Native Windows (F2, F3); J2/J3 native; J8 satellite move; J10 shapeable-ready |
+| P3 | F5–F7, F10–F13 unless they block P0/P1 |
+| Deferred | General software shaping → Sprint 564 (F14) |
+
+## Story chain
+
+| Order | Story | Gate to start | Exit evidence |
+| --- | --- | --- | --- |
+| C1 `883c9048b024` | journey matrix above, with inputs/expected outcomes and prerequisites | now | this table agreed by operator; card text updated |
+| C2 `86c744779ff1` | early smoke: run J1–J9 as far as they go, keep raw failures | C1 | per-cell result or blocker; every defect routed (table below) |
+| C3 `f04323bd2836` | fix C-owned defects, consume A/B fixes, rerun affected journeys | per-finding baseline from C2 | red/green per fix; affected journey rerun |
+| C4 `00480e8f2c3c` | final UAT from clean install on frozen candidates | C3 + stable 561/562 candidates | every cell passes; limitations documented |
+
+## Phase 0 — weekend UAT start (by Fri 2026-11-06)
+
+The elephant container stays; goal is J6 working for the UAT cohort, with
+every problem they hit recorded as a finding against the product.
+
+1. Re-verify browser single sign-on after the 11-03 app restore (operator).
+2. Diagnose F1 (vanished app entry) before the cohort starts; add a check
+   that `outpost apps list` still contains `klatch` (daily, until fixed).
+3. Team-topic owner: the host owner's choice of account (named-owner setting
+   `KLATCH_SSO_TEAM_OWNER`; product setting, prototyped on elephant first).
+4. Load check: several members at once from one network (satellite 429 risk).
+5. J7 on elephant: reboot, confirm podman machine + container + publication
+   return (claim elephant first; other sprints use it).
+6. Operator invites the cohort and shares the app; dry run with two accounts.
+
+## Phase 1 — product (C3, after the weekend)
+
+1. Land single sign-on, team mode and the named owner in the Klatch fork with
+   their tests; cut a release; bump Bashy's pinned tool and service (F8).
+2. Replace the Python provisioner with a Bashy command (F4, J5).
+3. Native Windows: pure-Go SQLite build and Bashy-provided media tools
+   (F2, F3); run J2–J7 native on W, M, L.
+4. Shapeable-ready (J10): confirm the pinned Klatch release rebuilds from
+   its pinned source on W, M and L through Bashy's existing build path; hand
+   the elephant shaping record to Sprint 564 (F14).
+5. Re-run the cohort's journeys on the product release, then retire the
+   elephant shaping branch and container.
+
+## Defect routing (C2/C3)
+
+| ID | Finding | Evidence | Owner |
+| --- | --- | --- | --- |
+| F1 | `klatch` app entry vanished from elephant's outpost config | `outpost apps list` 11-03; daemon unchanged since 10-31 | C3 (outpost) |
+| F2 | Klatch has no `windows/amd64` build (cgo SQLite driver) | release assets linux/darwin only | C3 (klatch build) |
+| F3 | Transform scripts need `/bin/sh`, `ffmpeg`, ImageMagick | `transform/*.sh` | C3 (provisioning) |
+| F4 | Klatch provisioner needs `python3`; absent on elephant | `examples/klatch/provision.py` | C3 (bashy command) |
+| F5 | podman machine start after Windows reboot unverified | — | C3 (J7) |
+| F6 | Piping stdin into Bashy's SSH shell on Windows hangs | session 11-01 | C3 |
+| F7 | Bashy built-in `git`: no `checkout -B B START`, no `-q` | session 11-01 | C3 |
+| F8 | SSO + team mode live only on an elephant branch | `shape/elephant-sso` | C3 (land in klatch fork + pin) |
+| F9 | `inbox --as` refuses registered agent with 2+ live instances | red/green test; blocks `conductor:561` mail | C3 — fixed `51998d67`, merge pending |
+| F10 | `sprint take` 4m34s (3.5 min CPU); `sprint show` > 90 s | timed 11-03 | C3 |
+| F11 | `TestSrcPinsMatchLinkedModules`: yoke src pin out of sync | fails on `main` | C3 (migration follow-up) |
+| F12 | `TestRunSignaledIsNonLossy` fails on `main` | fails on `main` | A3 (561) — to confirm with 561 |
+| F13 | `TestCommandDocSourceNames` fails on `main` | fails on `main` | C3 |
+| F14 | No supported way for a Bashy user to shape an app on their host: elephant's shaping was manual (host git, two podman builds, image swap, secret copy) | session 11-01/11-02 | Sprint 564 (deferred, backlog); 563 keeps J10 only |
+| T1 | Satellite forwards `admin` for every sharee; no custom roles | cloudbox `host_proxy.go:199` | support ticket |
+| T2 | New app takes up to 60 s to become reachable | poller interval | support ticket |
+| T3 | Anonymous rate limit (429) may hit many members behind one IP | provisioning 11-01 | support ticket (if reproduced in J6) |
+
+Findings stay grouped in C3; a separate story only for independent ownership.
+
+## Coordination
+
+- 561 (A, `conductor:561`, held by `claude-opus5.5`): F12 and any shell or
+  coreutils cause; F9 currently blocks its mailbox — workaround posted on the
+  561 thread.
+- 562 (B, `claude-opus5.5-s562`): any fence/language cause; shared-code
+  fixes (sh, bashsharp, bashy, yoke) announced on its thread before landing.
+- Test hosts: claim elephant/dragon/Linux host before reboots or long runs.
+
+## Cost and risk
+
+- **Weekend:** F1 is the main risk; a silent loss of the app entry takes the
+  chat down for everyone. Container is the fallback for native work.
+- **Native Windows (F2/F3):** a pure-Go SQLite driver swap plus Bashy-provided
+  media tools; moderate, reviewed before implementation.
+- **F8:** moving the elephant shaping into the Klatch fork makes it the
+  default for every Bashy user; review the security path (signature check,
+  account creation on first visit) before the release.
+
+## Open decisions (recommendations)
+
+1. Merge `51998d67` to `main`: yes. Replacing the installed `bashy`: operator
+   call, needed for F9 to help 561 now.
+2. Team-topic owner: a product setting the host owner sets (named owner);
+   until satellite roles exist (T1), first sign-in remains the default.
+3. Native Windows Klatch and the product release of single sign-on and team
+   mode: after the weekend, target C4.
+4. Who can join (J6): confirmed so far only for members whose cloudbox account
+   signs in on the owner's satellite. If members' accounts live on a
+   different cloudbox than the owner's satellite, that identity path is a
+   satellite capability — check in C2, ticket if missing (no shaping).
+
+## Stopping rules
+
+- Deadline hit = retained incomplete evidence and diagnosis, not retries,
+  skips or timeout increases.
+- No change to the live UAT deployment without a backup and a kept
+  rollback container.
+- Satellite gaps go to tickets; no satellite shaping.
