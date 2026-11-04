@@ -57,12 +57,14 @@ V2 `sh/interp` Bash++ bridge → `go/types` etc. in `cmd/bash`; V3
   name-set ratchet) plus the Sprint 561 A5 content-addressed evidence identity
   reported per layer.
 
-## Decision needed before L1/L2
+## Decision (operator, 2026-11-04): approved
 
 Today `bash --bashsharp` / `--bashpp` works in the Classic `bash` binary
-(since Sprint 97). Full delineation removes Bash# from `cmd/bash`; Bash# would
-remain available through `bashy` and the `bashsharp` binary. That is a
-user-visible change and needs operator confirmation.
+(since Sprint 97). Full delineation removes Bash# from `cmd/bash`; Bash#
+remains available through `bashy` and the `bashsharp` binary. The operator
+approved this user-visible change. L1/L2 must ship it with a clear error that
+points `--bashsharp`/`--bashpp` users of `bash` to `bashy` or `bashsharp`, and a
+changelog/release-notes entry.
 
 ## Sequencing and coordination
 
