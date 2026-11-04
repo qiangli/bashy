@@ -3,8 +3,8 @@
     "artifact_note": "A null hash means this Makefile build did not emit that path; do not invent a .real payload.",
     "artifacts_sha256": {
       "bin/bash": "b0d19ed071ba4bd93811ba5aba26b8a5bf7aa82e3e920ebf1b720a713d575efc",
-      "bin/bash.real": "26ac0cbcd794a774b8507f063abbb8a86b0cb837b171555b757e90a3e81612c9",
-      "bin/bashy": "68c3ddda387e73031ccef05200db30bd5508423d3933d03f2892e9d9606fd19d",
+      "bin/bash.real": "206ae8f80ccd542213fe9bd2446bcdcd39c1229a5307e714851698bdfddfe77a",
+      "bin/bashy": "81e616813181762ba992b10c60fa9e311fad9033e3a005359e8f740827976da5",
       "bin/bashy.real": null
     },
     "bash_ldflags": [
