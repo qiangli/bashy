@@ -7,6 +7,7 @@ package agentos
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -123,7 +124,7 @@ func TestApparmorUsernsHint(t *testing.T) {
 
 func TestPodmanConfOverrideLinuxPaths(t *testing.T) {
 	conf := podmanConfOverrideLinux("/c/podman/v6/podman-linux-amd64")
-	if want := `helper_binaries_dir = ["` + nfthelper.Dir() + `", `; !strings.Contains(conf, want) {
+	if want := `helper_binaries_dir = [` + fmt.Sprintf("%q", nfthelper.Dir()) + `, `; !strings.Contains(conf, want) {
 		t.Errorf("nft helper must be first in helper_binaries_dir: %s", conf)
 	}
 	for _, want := range []string{
@@ -175,7 +176,7 @@ func TestManagedPodmanNftHelperOnlyForEmbeddedEngine(t *testing.T) {
 		t.Fatalf("nft helper was not staged: %v", err)
 	}
 	conf, err := os.ReadFile(os.Getenv("CONTAINERS_CONF_OVERRIDE"))
-	if err != nil || !strings.Contains(string(conf), `helper_binaries_dir = ["`+nfthelper.Dir()+`", `) {
+	if err != nil || !strings.Contains(string(conf), `helper_binaries_dir = [`+fmt.Sprintf("%q", nfthelper.Dir())+`, `) {
 		t.Fatalf("managed config missing nft helper: %v\n%s", err, conf)
 	}
 }

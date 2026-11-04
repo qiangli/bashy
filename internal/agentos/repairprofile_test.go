@@ -278,7 +278,7 @@ func TestRepairUnitsMaterializeAsBashSharpShims(t *testing.T) {
 		}
 	}
 	if goShim, err := os.ReadFile(filepath.Join(bin.path, "go")); err == nil {
-		if !strings.Contains(string(goShim), `"`+bashy+`" go "$@"`) {
+		if !strings.Contains(string(goShim), `"`+filepath.ToSlash(bashy)+`" go "$@"`) {
 			t.Fatalf("go shim must run the pinned bashy's go:\n%s", goShim)
 		}
 	}
@@ -836,7 +836,7 @@ func TestRepairPosixLinksNeverShadowWrapperUnits(t *testing.T) {
 	defer os.RemoveAll(bin.path)
 	// The doctored wrapper's `sleep` is the Bash# unit, not a link.
 	for _, name := range []string{"sleep", "go", "cc", "c++"} {
-		p := filepath.Join(bin.path, repairShimName(name))
+		p := filepath.Join(bin.path, name)
 		b, err := os.ReadFile(p)
 		if err != nil {
 			t.Fatalf("wrapper %s must be materialized: %v", name, err)

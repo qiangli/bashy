@@ -587,7 +587,19 @@ func runRepairSuite(spec RepairSuiteSpec, opts RepairProfileOptions, bashy strin
 	// Bound the pipe-drain after a watchdog kill: grandchildren that inherit
 	// the pipes cannot hold the evidence hostage past the suite's own death.
 	cmd.WaitDelay = 30 * time.Second
-	runErr := cmd.Run()
+	var contain repairContain
+	contain.prepare(cmd)
+	runErr := cmd.Start()
+	if runErr == nil {
+		if err := contain.attach(cmd); err != nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			res.Reason = "containment: " + err.Error()
+			return res, nil
+		}
+		runErr = cmd.Wait()
+		contain.finish()
+	}
 	res.DurationMS = time.Since(start).Milliseconds()
 
 	res.Counts = capw.countsOrNil()
