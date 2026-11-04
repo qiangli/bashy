@@ -130,3 +130,23 @@ pinned PTY/login fixture and tracing.
   ("only if posixgate is otherwise touched") is false — posixgate was not
   touched. The 96/14/6, 88/22/6 values remain for whoever touches that
   file next.
+
+## 5. Manager disposition (claude-opus5.5, 2026-11-04)
+
+- **Date fix not merged; pin bump not merged.** The `%P` and widened
+  `%E`/`%O` render sets are GNU extensions. POSIX `date` already renders
+  its own `%E`/`%O` set, and this report's own sweep attributes every
+  remaining de_DE difference to host-libc (macOS vs glibc) corpus
+  artifacts that already match glibc on the Linux certification host. No
+  link to a failing POSIX TP was shown, so the change is scope growth
+  under the Sprint 341 base profile. Coreutils `5c4e43b0` is preserved
+  unpushed on branch `s561/a3c-date-gnu-parity`; coreutils `main` is back
+  at `601546e1`. I10 status: no POSIX defect reproduced on this host; the
+  A4 Linux final-candidate run re-observes `date` under `de_DE.iso88591`.
+- **I2 `man`:** accepted as triage. `man:4` never invokes the applet
+  (109-name threshold with `POSIX2_SW_DEV=undefined`); authority question
+  stays with the approving authority. `man 1 name` correctly declined.
+- **I3 EOF/editor:** accepted as diagnostic. The four `more` results stay
+  pending the VSC authority answer; no code. The `de_DE.ISO8859-1`
+  spelling inconsistency in `more` is recorded, not fixed, until a TP is
+  shown to depend on it.
