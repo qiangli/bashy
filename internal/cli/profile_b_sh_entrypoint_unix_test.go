@@ -73,3 +73,45 @@ func TestShCommandOperandEndsOptionParsing(t *testing.T) {
 		t.Fatalf("sh output = %q, want %q", got, want)
 	}
 }
+
+func TestShCommandOptionBoundaryForms(t *testing.T) {
+	bin := builtBashBin(t)
+	dir := t.TempDir()
+	sh := filepath.Join(dir, "sh")
+	if err := os.Symlink(bin, sh); err != nil {
+		t.Fatal(err)
+	}
+	const script = `case $- in *e*) e=on;; *) e=off;; esac; printf 'zero=%s one=%s errexit=%s\n' "$0" "$1" "$e"`
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"clustered-c", []string{"-ec", script, "-s", "x"}, "zero=-s one=x errexit=on\n"},
+		{"option-after-c", []string{"-c", "-e", script, "x"}, "zero=x one= errexit=on\n"},
+		{"double-dash-after-command", []string{"-c", script, "--", "a"}, "zero=-- one=a errexit=off\n"},
+		{"s-after-command", []string{"-c", script, "-s"}, "zero=-s one= errexit=off\n"},
+		{"s-before-c", []string{"-s", "-c", script, "a"}, "zero=a one= errexit=off\n"},
+		{"plus-o-before-c", []string{"+o", "errexit", "-c", script, "-x"}, "zero=-x one= errexit=off\n"},
+		{"empty-command", []string{"-c", "", "a"}, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := exec.Command(sh, tc.args...)
+			cmd.Env = []string{"PATH=/bin:/usr/bin", "HOME=" + dir}
+			out, err := cmd.CombinedOutput()
+			if err != nil || string(out) != tc.want {
+				t.Fatalf("sh %q: exit %v, output %q; want exit 0, output %q", tc.args, err, out, tc.want)
+			}
+		})
+	}
+	file := filepath.Join(dir, "script.sh")
+	if err := os.WriteFile(file, []byte(`printf 'one=%s two=%s\n' "$1" "$2"`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(sh, file, "-c", "operand")
+	cmd.Env = []string{"PATH=/bin:/usr/bin", "HOME=" + dir}
+	out, err := cmd.CombinedOutput()
+	if err != nil || string(out) != "one=-c two=operand\n" {
+		t.Fatalf("script operands: exit %v, output %q", err, out)
+	}
+}
