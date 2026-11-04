@@ -16,5 +16,9 @@ TPs, 493 in the certification PASS group; missing 0, caps 0, runner failures
 
 ## Profile D — full Sprint-341 base run
 
-Pending (host preparation started 2026-11-04 after the Profile B host was
-retired; the ephemeral team's budget ceiling allows one host at a time).
+Running. Arm `profile-d-s561-20261104` launched 2026-11-04 on a leased
+disposable host after readiness PASS; clean-host gate PASS: 102 commands =
+92 Go + 10 shell, 0 external providers, 14 optional excluded, 0 GNU
+reference prefixes. Durable systemd unit, 9 h process ceiling. Retrieve with
+the kit's Profile D lifecycle (`profile-d-do.sh status` / retrieval), then
+retire the host with `do-retire-ephemeral.sh`.
