@@ -844,6 +844,15 @@ func TestRepairPosixLinksNeverShadowWrapperUnits(t *testing.T) {
 		if !strings.HasPrefix(string(b), "#!"+bashy+" --bashsharp\n") {
 			t.Fatalf("wrapper %s must stay the authoritative Bash# unit:\n%s", name, b)
 		}
+		if runtime.GOOS == "windows" {
+			cmdBody, err := os.ReadFile(filepath.Join(bin.path, repairShimName(name)))
+			if err != nil {
+				t.Fatalf("PATH-resolved launcher %s must exist: %v", repairShimName(name), err)
+			}
+			if !strings.Contains(string(cmdBody), bashy) {
+				t.Fatalf("launcher %s must invoke the pinned bashy unit:\n%s", repairShimName(name), cmdBody)
+			}
+		}
 	}
 }
 
