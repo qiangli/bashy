@@ -1,0 +1,5 @@
+--- FAIL: TestCommandDocSourceNames (0.00s)
+    commanddocs_test.go:31: Names() = [account adapt collaborate common-options conductor desk dks feed feed-setup force-agent-shell inbox knowledge-transfer lens sprint steward supervisor transcribe], want [account adapt collaborate common-options conductor dks feed feed-setup force-agent-shell inbox knowledge-transfer lens sprint steward supervisor transcribe]
+FAIL
+FAIL	github.com/qiangli/bashy/internal/agentos	2.230s
+FAIL
