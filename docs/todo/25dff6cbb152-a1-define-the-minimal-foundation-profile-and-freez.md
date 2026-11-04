@@ -3,7 +3,7 @@ id: 25dff6cbb152
 kind: requirement
 title: A1 Define the minimal foundation profile and freeze its baseline
 seq: 3034
-status: assigned
+status: done
 priority: p0
 labels:
     - clean-baseline
@@ -13,6 +13,8 @@ assignee: codex-gpt6-sol
 sprint: 561
 sprint_id: 3d035bd3-fa1c-5b4d-a3cc-386b0ec789a4
 sprint_title: 'Foundation A: current-baseline repairs and POSIX certification readiness'
+closed: 2026-11-04T04:53:42.73741Z
+closed_by: claude-opus5.5
 ---
 
 Enumerate required shell/POSIX and promised GNU behavior, required core utilities, supported certification environment, authoritative suites and dependencies. Record current source/module/toolchain/provider/harness identities. Separate required acceptance from advisory probes. Adopt B -> A and C -> A/B with product-entrypoint composition; record actual violations, without broad refactoring. Acceptance: finite inventory and reproducible immutable baseline manifest; no legacy ticket reconciliation prerequisite.

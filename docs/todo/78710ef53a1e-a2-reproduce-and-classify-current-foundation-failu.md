@@ -3,7 +3,7 @@ id: 78710ef53a1e
 kind: test
 title: A2 Reproduce and classify current foundation failures
 seq: 3035
-status: assigned
+status: done
 priority: p1
 labels:
     - clean-baseline
@@ -13,6 +13,8 @@ assignee: muse-conductor
 sprint: 561
 sprint_id: 3d035bd3-fa1c-5b4d-a3cc-386b0ec789a4
 sprint_title: 'Foundation A: current-baseline repairs and POSIX certification readiness'
+closed: 2026-11-04T04:32:29.804006Z
+closed_by: claude-opus5.5
 ---
 
 Depends on A1. Run the agreed current-baseline suites under their supported containment and finite bounds. Distinguish product defects, setup failures, applicability and manual review. Retain raw verdicts, denominators and hashes. Consult 560/3059 and 3063 receipts only where relevant; do not import historical verdicts as current results. Licensed runs require the exact supported approval. Acceptance: all required inventory entries have an execution result or explicit blocker with cause and next action.
