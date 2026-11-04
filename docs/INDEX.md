@@ -3,6 +3,7 @@
 - [Clean-baseline campaign: sprints 561–563](plan-clean-baseline-campaign.md) — KISS/MVP foundation certification readiness, fence corpus repairs and clean-install UAT; current execution direction with legacy work retained as reference.
 
 - [Sprint 561 master execution plan](plan-s561-master-execution.md) — Foundation A: profile/baseline freeze, failure classification, causal repairs and one certification-ready candidate.
+- [Sprint 562 master execution plan](plan-s562-master-execution.md) — Fence corpora B: consolidated by-example corpora from Sprints 391–396 made green first, then the fence × platform × provider inventory, baselines, repairs and one frozen-candidate full-matrix verification.
 
 - [Sprint 560 and selected 539 master execution plan](plan-s560-s539-master-execution.md) — bounded post-migration repairs, sandbox and guard follow-ups, protected conformance investigation, architecture decisions, and evidence-based acceptance.
 
