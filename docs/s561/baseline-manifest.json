@@ -37,7 +37,7 @@
     "product_wrapper_sha256": "31f222f5134b3e08d943ea6c4ea4af26970425914ffd651a9ad9bdd1e3d273f4"
   },
   "certification": {
-    "profile_b_note": "Licensed provider host and exact versions await operator approval.",
+    "profile_b_note": "Baseline not rerun by operator decision; record exact provider versions at A4 final-candidate run.",
     "profile_b_system_provider_versions": null,
     "profile_d_external_utility_providers": []
   },

@@ -46,7 +46,7 @@ out = {
             "artifact_note": "A null hash means this Makefile build did not emit that path; do not invent a .real payload."},
   "fixtures": {"gnu_bash_5_3_tarball_sha256": tar.group(1), "tarball_url": "https://ftp.gnu.org/gnu/bash/bash-5.3.tar.gz"},
   "certification": {"profile_d_external_utility_providers": [], "profile_b_system_provider_versions": None,
-                    "profile_b_note": "Licensed provider host and exact versions await operator approval."},
+                    "profile_b_note": "Baseline not rerun by operator decision; record exact provider versions at A4 final-candidate run."},
   "container": {"test_bash_container_image_digest": None,
                 "base_image": "docker.io/library/ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517",
                 "note": "No test image built for A1; fill from inspected image after an authorized run."},
