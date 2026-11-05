@@ -38,6 +38,18 @@ H1-H3 are local and additive. They keep existing MB, Meet, claims and sprint
 behavior, as Sprint 568 requires. H4 adopts Sprint 568's routing contracts once
 D3/D4 exist, and does not invent a separate local addressing scheme.
 
+## Reuse of the existing offer/adopt pattern
+
+`bashy src offer/offers/adopt/decline` (Software Shaping, Sprint 526; CLI and
+web front-ends in Sprint 564) is already bashy's offer/accept handshake, with a
+notice to the recipient. This sprint reuses that vocabulary and its notice and
+record mechanism for ownership handoffs, so one handshake covers handing over a
+version and handing over a sprint, story, todo, claim or run. It adds only what
+is specific to ownership: the snapshot (H1) and the atomic move of lease, claims
+and assignees (H3). H1 settles whether the user-facing verb is `handoff accept`
+or `handoff adopt`. Sprint 570 stories may themselves be delivered with
+`bashy shape` (Sprint 564); S570 H1 is S564 H5's bashy-self dogfood case.
+
 ## Proposed surface
 
 ```
