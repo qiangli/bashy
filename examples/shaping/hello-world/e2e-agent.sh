@@ -18,6 +18,10 @@ if [ -z "${BASHY_HOME:-}" ] || [ ! -d "$BASHY_HOME" ]; then
   echo 'BLOCKED: set BASHY_HOME to the prepared disposable installation directory.' >&2
   exit 2
 fi
+if [ -z "${BASHY_FLEET_DIR:-}" ] || [ ! -d "$BASHY_FLEET_DIR" ]; then
+  echo 'BLOCKED: set BASHY_FLEET_DIR to the prepared disposable catalog directory.' >&2
+  exit 2
+fi
 if [ -z "${E2E_CONTEXT:-}" ] || [ ! -f "$E2E_CONTEXT" ]; then
   echo 'BLOCKED: E2E_CONTEXT must name the operator-prepared run context (see e2e-matrix.md).' >&2
   exit 2

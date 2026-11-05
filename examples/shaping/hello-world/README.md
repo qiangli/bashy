@@ -82,13 +82,16 @@ Bashy and example revisions. Public posting is a separate step.
 
 ## Agent E2E
 
-[e2e-agent.md](e2e-agent.md) is the executable task specification for H7's CLI
-cell. Prepare an isolated registration, two paired principals, browser access
+[e2e-agent.md](e2e-agent.md) and [e2e-self-agent.md](e2e-self-agent.md) describe
+H7's two scenarios. [e2e-matrix.md](e2e-matrix.md) documents isolated setup,
+interface selection and evidence requirements. Prepare an isolated registration, two paired principals, browser access
 and a disposable submission story. Configure those details in the agent's test
-session, then run `bash e2e-agent.sh codex exec -` (or another actual agent
+session through `E2E_CONTEXT`, set the disposable `BASHY_HOME`, then run
+`bash e2e-agent.sh codex exec -` (or another actual agent
 command that reads stdin). Set `BASHY_BIN` to the candidate executable and make
 that same executable available as `bashy` in the agent's PATH.
 The runner exits 2 when the shaping CLI is unavailable. Capture sanitized
 agent logs and browser artifacts using the existing test runner. A zero agent
 exit code does not establish an E2E pass; review the task's evidence checklist.
-MCP/REST cells use H7's supported adapters once available, not invented tools.
+Set `E2E_SCENARIO=hello-world|self-shape` and `E2E_INTERFACE=cli|mcp|rest`.
+Each cell requires the agent to call its selected supported interface.

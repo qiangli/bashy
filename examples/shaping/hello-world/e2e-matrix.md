@@ -10,6 +10,9 @@ exits with the agent's status; zero means the process finished, not E2E PASS.
 Pin the candidate Bashy executable, matching dependencies and fixture revision.
 Create a fresh workspace outside shared checkouts, isolated `BASHY_HOME`, and
 isolated catalog/config roots using the candidate's documented environment.
+Set `BASHY_FLEET_DIR` to the disposable catalog; clear inherited noun-specific
+`BASHY_*_DIR` overrides or explicitly bind them inside that catalog. Otherwise
+an app registration can still write shared configuration despite BASHY_HOME.
 Set a private PATH directory containing that same candidate as `bashy`; keep
 the released executable and PATH on the host unchanged. Do not reuse an active
 self-shaping slot across cells. Register a fresh Hello World source with
@@ -36,6 +39,7 @@ Run from the disposable workspace, so auto tracking cannot touch this repo.
 ```sh
 export BASHY_BIN=/path/to/pinned/bashy
 export BASHY_HOME=/path/to/disposable/state
+export BASHY_FLEET_DIR=/path/to/disposable/catalog
 export E2E_CONTEXT=/path/to/private/run-context.md
 export E2E_SCENARIO=hello-world # or self-shape
 export E2E_INTERFACE=cli       # or mcp, rest
