@@ -14,11 +14,50 @@ verified retrieval). Result: **PASS** — 1 set, 493 declared / 493 observed
 TPs, 493 in the certification PASS group; missing 0, caps 0, runner failures
 0, blockers 0, manual resolutions 0.
 
-## Profile D — full Sprint-341 base run
+## Profile D — full Sprint-341 base run (2026-11-04)
 
-Running. Arm `profile-d-s561-20261104` launched 2026-11-04 on a leased
-disposable host after readiness PASS; clean-host gate PASS: 102 commands =
-92 Go + 10 shell, 0 external providers, 14 optional excluded, 0 GNU
-reference prefixes. Durable systemd unit, 9 h process ceiling. Retrieve with
-the kit's Profile D lifecycle (`profile-d-do.sh status` / retrieval), then
-retire the host with `do-retire-ephemeral.sh`.
+Arm `profile-d-s561-20261104` on a leased disposable host (retired after
+verified licensed and public retrieval). Clean-host gate: 102 commands =
+92 Go + 10 shell, 0 external providers, 14 optional excluded. Runner:
+`ARM_DONE tsets=117 scope=full caps=0 failures=0`, 0 rejected attempts,
+0 skipped. Campaign retrieval PASS (`full_profile_d=1`).
+
+| Metric | Value |
+| --- | ---: |
+| journals / test sets | 117 |
+| test purposes | 9,337 |
+| certification PASS group | 9,270 |
+| FAIL (code 1) | 4 |
+| UNRESOLVED (code 2) | 54 |
+| INSPECT (code 102, manual resolution) | 9 |
+| UNINITIATED / UNREPORTED | 0 / 0 |
+
+These counts are identical to the previous full Profile D run (4 FAIL, 54
+UNRESOLVED, 9 INSPECT): **no regression**. Items from the S355 five-TP list
+(`hash:9`, `write:22`, `renice:16`, `kill:19`) no longer appear as blockers.
+
+### Residual non-pass results (dispositions, not code)
+
+| Results | Test sets | Disposition route (existing private packets in the harness kit) |
+| --- | --- | --- |
+| 53 UNRESOLVED | one empty-symlink setup TP in each of 53 sets | S355 symlink-53 authority packet: no configuration predicate resolves them; needs a VSC authority ruling (prepared, unsent) |
+| 1 UNRESOLVED | `man:4` | S355 five-TP questions: the suite's >109-name command-list prerequisite is reached with exactly 109, so `man` is never invoked (prepared, unsent) |
+| 4 FAIL | `more` | S355 `more` scope question: editor dispatch at final EOF (prepared, unsent) |
+| 9 INSPECT | `stty` (7), `df`, `locale` | S377 operator manual-inspection decisions (manual PASS rule on recorded evidence) |
+
+All 62 are outside Bashy's code: none is a product defect found by S561
+triage (A2/A3c). Closing them requires the operator to apply the S377 manual
+resolutions to this journal and to send the S355 authority packets.
+
+## Handoff pack
+
+- Candidate: Bashy `f1bcd711`, sh `74586fde` (on sh `master` via `52e71801`),
+  coreutils `211789fa`; umbrella approval revision `4e6c63ed`; harness
+  `0b2b185d`; approval `309645b7` (private, `cert-approval/341-d`).
+- Evidence identity: `scripts/cert-identity-check.sh
+  docs/s561/candidate-manifest.json HEAD` prints `SAME` for both cert builds
+  on current `main`.
+- Public gates on the candidate line: CI green on Linux/macOS/Windows
+  (`93a7ce03`), `make test-bash-container` 86/86, full `GOWORK=off go test
+  ./...` clean after F1, `make dist` 12 binaries hashed.
+- Licensed evidence: private, outside Git (operator's evidence store).
