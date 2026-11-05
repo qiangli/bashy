@@ -17,7 +17,7 @@ sprint_title: 'Software shaping for Bashy apps: any user shapes an app on their 
 
 ## Goal
 
-Prove that supported third-party agentic tools can drive the same Software Shaping workflow through Bashy CLI, MCP and REST API, using one minimal Hello World web app. Tools: Codex, Claude, Muse and agy. This is a planning/backlog story only; filing it authorizes no implementation or test execution in the current session.
+Prove that supported third-party agentic tools can drive the same Software Shaping workflow through Bashy CLI, MCP and REST API, using two explicit E2E scenarios: (A) a minimal Hello World web app and (B) Software Shaping shaping its own bashy shape CLI/app. Tools: Codex, Claude, Muse and agy. This is a planning/backlog story only; filing it authorizes no implementation or test execution in the current session.
 
 ## Dependencies and scope
 
@@ -25,9 +25,9 @@ Depends on H1 (workflow and identity contract), H2 (CLI/shared-engine parity) an
 
 ## Coverage matrix
 
-Twelve tool-by-interface combinations: Codex, Claude, Muse and agy, each through (1) Bashy CLI, (2) the supported MCP shaping surface and (3) REST /api/shape. Each tool must actually invoke the selected interface. A direct HTTP harness alone does not establish a third-party-agent E2E pass. Record the supported host/platform for each cell and link reused H5 platform evidence by exact candidate identity.
+Run both E2E A and E2E B across the twelve tool-by-interface combinations (24 scenario/tool/interface cells): Codex, Claude, Muse and agy, each through (1) Bashy CLI, (2) the supported MCP shaping surface and (3) REST /api/shape. Each tool must actually invoke the selected interface. A direct HTTP harness alone does not establish a third-party-agent E2E pass. Record the supported host/platform for each cell and link reused H5 platform evidence by exact candidate identity.
 
-## Shared fixture and happy path
+## E2E A: Hello World
 
 Use a tiny app initially displaying exactly "Hello, World!", with a deterministic verifier and no external data dependency. For each cell, start from the same pinned source in a fresh isolated workspace and use the same request: change the displayed greeting to "Hello, Shaping!".
 
@@ -44,8 +44,8 @@ Exercise status/discovery, candidate creation (wish or the supported --from equi
 
 ## Acceptance and evidence
 
-All twelve requested cells have real integration/E2E evidence and pass the common lifecycle assertions. Unsupported or unavailable cells remain explicitly blocked; no mock-only pass, unexplained skip or unverified completion. Preserve a compact matrix with tool/model version, interface, host role/OS, pinned app and Bashy candidate, exact commands or sanitized requests, raw logs, browser assertions and verifier evidence. Reuse existing runners and gates where possible. The manager reviews evidence before closing this story; a reproducible test recipe and fixture accompany the final delivery. This story complements H5 and does not close or replace it.
+Both scenarios pass across all twelve tool/interface combinations, with 24 separately recorded scenario results and real integration/E2E evidence and pass the common lifecycle assertions. Unsupported or unavailable cells remain explicitly blocked; no mock-only pass, unexplained skip or unverified completion. Preserve a compact matrix with tool/model version, interface, host role/OS, pinned app and Bashy candidate, exact commands or sanitized requests, raw logs, browser assertions and verifier evidence. Reuse existing runners and gates where possible. The manager reviews evidence before closing this story; a reproducible test recipe and fixture accompany the final delivery. This story complements H5 and does not close or replace it.
 
-## User requirement: shaping must itself be shapeable
+## E2E B: Software Shaping shapes bashy shape itself
 
-The bashy shape CLI and the Software Shaping app/UI must themselves support Software Shaping. A user or supported agent can shape the shaping tool through the same governed workflow; this is not limited to shaping the Hello World target app. Coordinate the self-shaping path with H3 and H5: preserve the released CLI/app and protected parts, verify candidates before activation, keep a working recovery path, and demonstrate status/identity plus one-step rollback. Include an integration/E2E self-shaping case using a small visible change to the shaping CLI/app, without bypassing verifier, authorization, isolation or normal submission gates. H3 is also a dependency for this self-shaping case. This records a requirement for future delivery only; no implementation or execution is authorized in this session.
+The bashy shape CLI and the Software Shaping app/UI must themselves support Software Shaping. A user or supported agent can shape the shaping tool through the same governed workflow; this is not limited to shaping the Hello World target app. Coordinate the self-shaping path with H3 and H5: preserve the released CLI/app and protected parts, verify candidates before activation, keep a working recovery path, and demonstrate status/identity plus one-step rollback. Use the same shaping lifecycle as E2E A, with bashy shape itself as the target. Request a small visible help-text change to bashy shape, verify and preview the isolated candidate, explicitly activate the shaped side-slot binary, and assert that the running command displays the change and reports the shaped identity. Then use the shaped tool to inspect the Hello World app, proving that it still performs shaping operations. Restore the retained release in one step and assert that the original help text and release identity return; submit the approved candidate through normal gates without an automatic merge. Preserve the matching app/UI self-shaping requirement, but the concrete second E2E fixture is the bashy shape CLI. Do not bypass verifier, authorization, isolation or normal submission gates. H3 is also a dependency for this self-shaping case. This records a requirement for future delivery only; no implementation or execution is authorized in this session.
