@@ -44,3 +44,41 @@ remaining acceptance follow the master's
 [evidence and completion rules](plan-s564-master-execution.md#evidence-and-completion).
 Other operating systems and the remaining H5/H7 checks need their own matching
 candidate evidence.
+
+## Native shaping candidate (2026-11-05)
+
+The shared native implementation is committed in yoke `06d844da`; the CLI adapter
+is committed in Bashy `cc878fc1`. These are implementation candidates, not sprint
+acceptance or an installed release. Focused workspace checks passed:
+
+```sh
+go test ./yoke/pkg/shape ./yoke/pkg/src ./yoke/pkg/shape/verify \
+  ./yoke/pkg/fleet ./bashy/internal/agentos \
+  -run 'TestNativeSubmit|TestShape|TestProgram|TestNativeGo|TestService|TestAppShaping|TestSlot' \
+  -count=1
+```
+
+This includes native proposal verification refresh followed by the ordinary merge
+gate, policy/artifact drift refusal, side-slot recovery, and retained-controller
+routing. Earlier focused web lifecycle and browser submission checks also passed;
+they do not establish the real-agent matrix.
+
+The first macOS test-host full run did not pass. The existing yoke ratchet and
+cross-vet gates failed; the product and Bash gates encountered insufficient disk
+space, and the general test target also lacked its Node/package-manager
+prerequisites. Only the census failures above have a completed exact-baseline
+comparison. The remaining failures are unresolved; they cannot be described as
+baseline-only or passing. Raw outputs remain in the manager's private evidence
+bundle. Owned test artifacts were reclaimed without deleting unrelated caches.
+
+The first native Windows focused run passed the shared shape and source packages,
+but web fixtures failed with POSIX-only shell paths and escaped-path assertions.
+Its runner also failed to record the process exit code reliably. That run is not
+a passing qualification. The runner now treats a missing exit code as failure;
+portable fixture repairs are separate yoke commits `d01a48a4` and `c30f9d85`.
+A fresh native build and rerun are required.
+
+Remaining acceptance includes standalone dependency pins, full Linux/macOS/native
+Windows gates, original console regression, actual Klatch image/data activation,
+Bashy self-shaping with Sprint 570 H1, and all 24 real-agent/interface cells.
+Sprint 570 H1 is still backlog; a help-text demonstration cannot replace it.
