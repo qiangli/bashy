@@ -6,6 +6,7 @@
 - [Sprint 561 certification evidence identity](s561/evidence-identity.md) — Linked input closure digests, artifact hash rule, and revision comparison.
 - [Sprint 562 master execution plan](plan-s562-master-execution.md) — Fence corpora B: consolidated by-example corpora from Sprints 391–396 made green first, then the fence × platform × provider inventory, baselines, repairs and one frozen-candidate full-matrix verification.
 - [Sprint 570 live handoff plan](plan-live-handoff.md) — offer/accept handoff of sprints, stories, todos, claims and runs between humans and agents; local bashy layer under Sprint 568's routing design.
+- [Sprint 564 master plan](plan-s564-master-execution.md) — software shaping: any user (or agent) shapes a CLI or service app on their own host in an isolated weave workspace, swaps it in per host, swaps back, and submits it into the sprint flow.
 - [Sprint 562 manager handoff retro](retro-s562-manager-handoff.md) — what worked and what hurt in the S562 warm handoff; input to Sprints 568 and 570.
 
 - [Sprint 560 and selected 539 master execution plan](plan-s560-s539-master-execution.md) — bounded post-migration repairs, sandbox and guard follow-ups, protected conformance investigation, architecture decisions, and evidence-based acceptance.
