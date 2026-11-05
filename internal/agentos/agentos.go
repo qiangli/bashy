@@ -1634,6 +1634,8 @@ func dispatch() {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
+	case "shape":
+		dispatchExit(runShape(os.Args[2:]))
 	case "src":
 		dispatchExit(runSrc(os.Args[2:]))
 	case "transcribe":

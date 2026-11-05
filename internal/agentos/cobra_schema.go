@@ -166,6 +166,8 @@ func cobraVerb(name string) *cobra.Command {
 		return verifyCmd()
 	case "self":
 		return selfCmd()
+	case "shape":
+		return bashyShapeCmd()
 	case "src":
 		return bashySrcCmd()
 	case "bootstrap", "upgrade":

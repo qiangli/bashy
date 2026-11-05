@@ -585,6 +585,7 @@ var verbSynopsis = map[string]string{
 	"sdlc":               "route intake issues through agentic implementation and deployment gates",
 	"web":                "web inspection helpers for SDLC verification",
 	"dag":                "agent-first markdown DAG task runner",
+	"shape":              "shape app versions through requests, verification, preview, scoped activation and undo",
 	"src":                "pinned source checkouts with local branches, PRs, patches and upgrades (show/fetch/check/branch/status/diff/log/pr/patch/upgrade), plus `src run` to execute the local state",
 	"transpile":          "compile Bash++ source to ordinary Go with source maps",
 	"explain":            "explain go: the table of Go constructs that differ in Bash#; resolve a refusal to its row and workaround",
