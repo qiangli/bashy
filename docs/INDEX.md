@@ -1,5 +1,7 @@
 # bashy docs index
 
+- [Software Shaping Flow identity](software-shaping-design/README.md) — Sprint 564 H6: selected B Flow mark, badge/action wording, violet screen and monochrome treatments, preserved PNG/ICO assets and validation limits.
+
 - [Clean-baseline campaign: sprints 561–563](plan-clean-baseline-campaign.md) — KISS/MVP foundation certification readiness, fence corpus repairs and clean-install UAT; current execution direction with legacy work retained as reference.
 
 - [Sprint 561 master execution plan](plan-s561-master-execution.md) — Foundation A: profile/baseline freeze, failure classification, causal repairs and one certification-ready candidate.
