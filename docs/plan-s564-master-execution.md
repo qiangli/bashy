@@ -60,6 +60,26 @@ offer/adopt, and upstreamed into the sprint flow.
 | CLI app (new) | bashy itself | per host: shaped binary in a side slot, release kept, PATH unchanged | build, then the app's declared test gate |
 | service app (new) | Klatch | per host: unit points at the shaped image, data kept | build, tests, health check |
 
+## Tracking (KISS/MVP)
+
+- **Tracking is required and automatic.** `shape wish` (or `--from`) creates
+  and links a todo, unless the caller links an existing story or todo with
+  `--story`/`--todo`. Each change stays traceable with no extra step.
+- **Shaped work is marked by origin, in the same workflow.** It has no separate
+  process:
+  - the todo or story gets the label `shaping`;
+  - its frontmatter gets `origin: shape`, with the app, the candidate or version
+    ID, the actor and the represented user;
+  - submitted commits carry `Shape: <app>@<version>` and
+    `Shaped-By: <actor>[ for <represented user>]` beside the existing
+    `Sprint:`/`Story:`/`Story-ID:` trailers;
+  - the story links to the candidate's verifier evidence.
+- **Everything else is optional.** Filing it into a sprint, planning, review
+  meetings and acceptance ceremonies are decided case by case by the human or
+  the agent, as in a regular planning session. A todo needs no sprint.
+- **Only existing gates apply.** `shape submit` merges through the normal review
+  and merge gates; shaping adds no new mandatory gate.
+
 ## Rules
 
 - **Isolation.** A candidate is always built in its own isolated workspace
