@@ -73,8 +73,34 @@ Reuse the webconsole `verifydom` chromedp harness and its browser allocator
 policy. Chrome may be installed as an application bundle even when absent
 from PATH. Its current `domEnv` starts an in-process test server: those tests
 prove web behavior but cannot by themselves prove what a separately launched
-agent changed. Agent acceptance needs the existing harness attached to the
-actual disposable console, or an agent-accessible real browser integration.
+agent changed. Use the opt-in external-console checkpoint below, or an
+agent-accessible real browser integration. The checkpoint starts no server and
+performs no lifecycle mutations:
+
+```sh
+# Run in the pinned umbrella workspace. Use a fresh private directory per observation.
+BASHY_E2E_CONSOLE_URL=http://127.0.0.1:22749 \
+BASHY_E2E_COOKIE_FILE=/path/to/private/principal-session \
+BASHY_E2E_ARTIFACT_DIR=/path/to/private/evidence/before \
+BASHY_E2E_APP=hello-world \
+BASHY_E2E_PAGE_PATH=/hello-world/ \
+BASHY_E2E_GREETING='Hello, World!' \
+BASHY_E2E_ACTIVE=FULL_ACTUAL_ACTIVE_SOURCE_COMMIT \
+go test ./yoke/pkg/webconsole -tags verifydom \
+  -run '^TestDOMExternalShapeCheckpoint$' -count=1 -v
+```
+
+Use the actual registered app mount for PAGE_PATH. For preview use
+`/shape/hello-world/preview/ACTUAL_CANDIDATE_ID/` and the preview greeting,
+while ACTIVE remains the expected live source revision. Run again after
+approval and rollback, and with the other principal's session. The cookie file
+contains only the paired `bashy_console` value; it is never printed. HTTPS is
+required except on loopback. The checkpoint asserts visible `#greeting` text
+and the `#shape-active` revision prefix, saves both pages as screenshots and
+records browser errors in `checkpoint.json`. Artifacts are private raw
+evidence: review before sharing. With no console URL, the test explicitly
+skips without launching a browser; that skip establishes no evidence. The
+checkpoint alone establishes no real-agent cell PASS.
 Record heading visibility and active identity before, in preview, after
 approval, under the other principal, and after rollback, plus screenshots and
 browser errors. An HTTP body check or model narration cannot replace this.
