@@ -71,14 +71,34 @@ comparison. The remaining failures are unresolved; they cannot be described as
 baseline-only or passing. Raw outputs remain in the manager's private evidence
 bundle. Owned test artifacts were reclaimed without deleting unrelated caches.
 
-The first native Windows focused run passed the shared shape and source packages,
-but web fixtures failed with POSIX-only shell paths and escaped-path assertions.
-Its runner also failed to record the process exit code reliably. That run is not
-a passing qualification. The runner now treats a missing exit code as failure;
-portable fixture repairs are separate yoke commits `d01a48a4` and `c30f9d85`.
-A fresh native build and rerun are required.
+A subsequent native Windows focused run passed all seven selected packages after
+portable shell fixtures and archive metadata were corrected. The latest targeted
+rerun passed first-activation undo, legacy attribution, presentation and schema
+checks, but exposed an invalid TODO directory for actor identities containing a
+colon. That failure remains open while its path handling is repaired.
 
-Remaining acceptance includes standalone dependency pins, full Linux/macOS/native
-Windows gates, original console regression, actual Klatch image/data activation,
-Bashy self-shaping with Sprint 570 H1, and all 24 real-agent/interface cells.
+Fresh Linux checks of yoke `9da6d256` and Bashy `0fc8d967` passed all `shape/...`
+packages and `src`. The complete earlier ratchet remains failed. Three failures
+in DAG/source/startup telemetry passed on unchanged source after correcting the
+runner PATH and moving temporary files outside HOME. The schema golden,
+presentation suffix and legacy attribution defects have separate fixes; their
+passing focused reruns do not make the earlier full ratchet pass.
+
+The original Linux Bashy general target failed its startup budget under load
+before reaching the Go suite. The Bash 5.3 gate was **80/86, failed**: several
+fixtures require an unprivileged user or locales absent from the test image.
+Corrected environment runs and baseline comparisons are pending. Expectations
+and startup budgets have not been weakened.
+
+The first real Codex/CLI greeting lifecycle verified, previewed and activated the
+candidate with real Chrome assertions and independent-principal isolation. Its
+first undo failed because the implicit release had not been retained as the
+previous version. Explicit restoration recovered the original greeting; ordinary
+proposal submission then completed with an unstarted review run. This cell is
+**failed**, pending a fresh first-activation test of the separate undo repair.
+It does not establish any other agent/interface cell.
+
+Remaining acceptance includes complete Linux/macOS/native Windows gates,
+original console regression, actual Klatch image/data activation, Bashy
+self-shaping with Sprint 570 H1, and all 24 real-agent/interface cells.
 Sprint 570 H1 is still backlog; a help-text demonstration cannot replace it.

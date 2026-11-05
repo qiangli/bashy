@@ -33,7 +33,7 @@ fi
 if [ "$#" -eq 0 ]; then
   echo 'Usage: bash e2e-agent.sh AGENT [ARGS...]' >&2
   echo 'Example: bash e2e-agent.sh codex exec -' >&2
-  echo 'The agent command must accept the task on stdin; configure browser access and a disposable story first.' >&2
+  echo 'The agent command must accept the task on stdin; configure browser access and a disposable installation first.' >&2
   exit 2
 fi
 # Feed the task to the existing real-agent launcher contract. Context contains
