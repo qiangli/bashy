@@ -169,8 +169,8 @@ do not redefine full sprint completion.
    record the adapter gap as an explicit dependency. Agent narration and a
    direct HTTP-only harness do not establish agent E2E passes. Reuse H5 OS
    evidence rather than multiplying all 24 cells by three platforms.
-7. **Spike 167b0f281c49:** inspect existing agentic-block behavior and write a
-   concise concept/examples/gaps document. No syntax/runtime implementation;
+7. **Spike 167b0f281c49:** [agentic blocks and shaping](agentic-block-shaping.md)
+   records inspected behavior, explicit composition examples and follow-up gaps. No syntax/runtime implementation;
    unresolved ideas become follow-up work, not a shaping delivery dependency.
    H6's accepted assets remain complete and need no redesign.
 
