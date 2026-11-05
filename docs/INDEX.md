@@ -249,3 +249,5 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [Layer delineation](plan-layer-delineation.md) — A Classic (bash+coreutils, certification candidate) · B Bash#/fenced runtimes · C Yoke; stories L1–L5, S561 freeze lifted
 
 - [Current POSIX campaign status](vsc-pcts-run-status.md) — S561 full-run evidence, 67 residual non-passes and S571 authority/manual-resolution ownership.
+
+- [Hello World shaping plan](plan-hello-world-shaping.md) — minimal example and Sprint 564 acceptance fixture.

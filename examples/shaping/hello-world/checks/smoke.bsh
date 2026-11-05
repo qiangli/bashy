@@ -1,0 +1,4 @@
+set -eu
+test -s public/index.html
+grep -q 'id="greeting"' public/index.html
+grep -q '</h1>' public/index.html

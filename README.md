@@ -53,6 +53,23 @@ macOS and Windows; inherited ignored signals are preserved by bashy's product
 runtime build, not by C. The Linux `bashy` still loads glibc dynamically for its
 locale gate. See [build evidence](docs/public-claims-evidence.md).
 
+## Software Shaping: make your tools fit you
+
+Describe a change to an app you use, review and verify the candidate, then
+keep your own version—with a way back. Web shaping is an **opt-in trial**:
+personal versions affect the selected user, with history and undo.
+
+**[Start with Hello World →](examples/shaping/hello-world/README.md)**
+
+The example follows one small change, **Hello, World! → Hello, Shaping!**,
+through preview, explicit approval and rollback. It includes web and CLI
+walkthroughs and an agent E2E task for Sprint 564.
+
+**Status:** the web trial requires a shaping-capable build and configured
+agent. The `bashy shape` CLI, CLI/service app support and the full agent E2E
+matrix are Sprint 564 work; the example documents those acceptance recipes,
+not completed tests. See the [web trial guide](docs/shaping-trial.md).
+
 ## Ten minutes
 
 Install bashy using one of the methods in [Install bashy](#install-bashy), then
