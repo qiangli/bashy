@@ -13,6 +13,16 @@ isolated catalog/config roots using the candidate's documented environment.
 Set `BASHY_FLEET_DIR` to the disposable catalog; clear inherited noun-specific
 `BASHY_*_DIR` overrides or explicitly bind them inside that catalog. Otherwise
 an app registration can still write shared configuration despite BASHY_HOME.
+For isolated execution, give Bashy itself a disposable operator `HOME` as
+well: weave queues and some coordination/telemetry stores use the host home
+rather than `BASHY_HOME`. A run-scoped executable wrapper can set that HOME,
+`BASHY_COORD_DIR` and `BASHY_OTEL_SPOOL` before executing the pinned real binary.
+Keep the actual agent CLI on its normal provider HOME. If a console's configured
+shaping agent needs that provider login, reference its existing private profile
+from the operator home; never copy credentials into app state, prompts or evidence.
+Record both the wrapper and real executable path/digest. Do not grant a test
+write access to shared queues merely to get past a sandbox refusal.
+
 Set a private PATH directory containing that same candidate as `bashy`; keep
 the released executable and PATH on the host unchanged. Do not reuse an active
 self-shaping slot across cells. Register a fresh Hello World source with
@@ -106,6 +116,32 @@ records browser errors in `checkpoint.json`. Artifacts are private raw
 evidence: review before sharing. With no console URL, the test explicitly
 skips without launching a browser; that skip establishes no evidence. The
 checkpoint alone establishes no real-agent cell PASS.
+
+If the real agent's sandbox permits loopback access but cannot launch Chrome,
+the operator may first launch an isolated headless Chrome outside that sandbox
+with a disposable profile and a loopback-only remote-debugging listener. Read
+its actual `webSocketDebuggerUrl` from the run-scoped browser discovery output;
+never use a personal browsing profile or a public listener. Add that private
+run reference to the checkpoint command:
+
+```sh
+export BASHY_E2E_BROWSER_WS=ws://127.0.0.1:ACTUAL_PORT/devtools/browser/ACTUAL_BROWSER_ID
+# Run the same TestDOMExternalShapeCheckpoint command and environment above.
+```
+
+Only loopback `ws`/`wss` browser endpoints without credentials, query or fragment
+are accepted; do not include tokens. The checkpoint attaches through the
+existing chromedp remote allocator and creates a fresh incognito browser
+context, disposing it afterward so principals do not share cookies.
+Current headless Chrome requires an explicit new window for that incognito
+target; the checkpoint creates and disposes this through the existing CDP
+connection. Browser failures retain their redacted underlying error in both
+the test output and private checkpoint JSON. It leaves the operator's Chrome
+process running for the next checkpoint; the operator
+owns final process/profile cleanup. The endpoint is a private run reference,
+not a new product API. Without this variable, the existing disposable browser
+launch path is unchanged. A failed remote connection is a failed checkpoint,
+never an automatic fallback to another browser or a passing cell.
 Record heading visibility and active identity before, in preview, after
 approval, under the other principal, and after rollback, plus screenshots and
 browser errors. An HTTP body check or model narration cannot replace this.
