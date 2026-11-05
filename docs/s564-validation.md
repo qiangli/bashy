@@ -66,19 +66,24 @@ they do not establish the real-agent matrix.
 The first macOS test-host full run did not pass. The existing yoke ratchet and
 cross-vet gates failed; the product and Bash gates encountered insufficient disk
 space, and the general test target also lacked its Node/package-manager
-prerequisites. Only the census failures above have a completed exact-baseline
-comparison. The remaining failures are unresolved; they cannot be described as
-baseline-only or passing. Raw outputs remain in the manager's private evidence
+prerequisites. The later Linux cross-vet comparison below attributes the
+matching platform diagnostics to the baseline. Other failures need their own
+resolution or comparison; neither full gate is passing. Raw outputs remain in the manager's private evidence
 bundle. Owned test artifacts were reclaimed without deleting unrelated caches.
 
 A subsequent native Windows focused run passed all seven selected packages after
 portable shell fixtures and archive metadata were corrected. The latest targeted
 rerun passed first-activation undo, legacy attribution, presentation and schema
 checks, but exposed an invalid TODO directory for actor identities containing a
-colon. That failure remains open while its path handling is repaired.
+colon. A bounded repair now keeps the actor identity intact and uses a collision-safe
+Windows directory locator shared with ordinary TODO resolution. A native
+Windows overlay rerun passed the exact Genie test, locator/API tests and
+tracking attribution tests; it reused the recorded shell checker rather than
+claiming a new product build.
 
 Fresh Linux checks of yoke `9da6d256` and Bashy `0fc8d967` passed all `shape/...`
-packages and `src`. The complete earlier ratchet remains failed. Three failures
+packages, `src`, `webconsole` and `fleet`. Focused CLI checks also passed.
+The complete earlier ratchet remains failed. Three failures
 in DAG/source/startup telemetry passed on unchanged source after correcting the
 runner PATH and moving temporary files outside HOME. The schema golden,
 presentation suffix and legacy attribution defects have separate fixes; their
@@ -102,3 +107,16 @@ Remaining acceptance includes complete Linux/macOS/native Windows gates,
 original console regression, actual Klatch image/data activation, Bashy
 self-shaping with Sprint 570 H1, and all 24 real-agent/interface cells.
 Sprint 570 H1 is still backlog; a help-text demonstration cannot replace it.
+
+## Cross-vet baseline comparison
+
+The complete Linux-host cross-vet run was repeated against the pre-shaping
+sources: yoke `2c22ccb619d432d4f3b71c57e6a65c80c4e3af64` and Bashy
+`5a9da7c63b390fe5256a0e37a3387b9ae80644f1`, with the other nineteen source
+inputs unchanged and Go 1.27.2. Both candidate and baseline reported Windows,
+Darwin and AIX failure and Linux success. Their normalized diagnostic sets
+matched exactly, with no candidate-only or baseline-only reasons: Windows
+GPGME/Podman build constraints and resource-limit symbols, Darwin libkrun build
+constraints, and AIX file-lock/Unix symbols. Raw logs and all source manifests
+remain in the manager's private evidence bundle. This establishes unchanged
+cross-vet failures; it does not establish a passing cross-vet gate.
