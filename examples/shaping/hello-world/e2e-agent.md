@@ -14,6 +14,7 @@ Do not expose credentials in prompts or logs.
 5. Verify through the selected interface. On failure stop; never approve a failed candidate.
 6. Preview using the supported interface/browser route. In a real browser assert Hello, Shaping! in preview
    and Hello, World! in the active app. Retain browser assertion evidence.
+   If either browser assertion fails or is unavailable, stop before approval and report FAIL or BLOCKED.
 7. Explicitly approve through the selected interface. Assert Hello, Shaping! in the active app,
    the matching active version, and Hello, World! for a second principal.
 8. Undo through the selected interface. Assert Hello, World! and restored version identity.

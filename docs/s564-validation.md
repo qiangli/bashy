@@ -185,3 +185,36 @@ baseline listing and candidate output. Named skips, unknown package skips,
 missing checks, failures and early exit still refuse verification. Real Go
 1.27.2 multi-package and focused lifecycle tests pass. Actual Klatch revalidation,
 preview, activation, data preservation and rollback remain pending.
+
+A fresh Muse/CLI retest also passed manager review, bringing coverage to
+**4 of 24 cells**. Muse 1.4.3-R5018.1 used the real Meta `muse-spark-1.3`
+provider. Its per-run network setting enabled the external Chrome observer while
+retaining the filesystem sandbox; the earlier browser-blocked run remains
+blocked. The fresh cell records separate baseline, preview, active-before-approval,
+approved, second-principal and undo checkpoints. Proposal
+`f90afb3d87f74906364452f299bb6e24d1bb7c78` changes only the greeting file
+and has an ordinary unstarted review run. Manager review uses the original
+agent event outputs for transitions; later read-only captures are labeled as
+post-run inspection.
+
+| H7 A agent | CLI | MCP | REST |
+| --- | --- | --- | --- |
+| Codex | PASS | BLOCKED, client did not expose configured server | PASS |
+| Claude | BLOCKED, provider weekly quota | NOT RUN, provider prerequisite blocked | NOT RUN, provider prerequisite blocked |
+| Muse | PASS, fresh network-enabled retest | NOT RUN | NOT RUN |
+| agy | PASS | NOT RUN | NOT RUN |
+
+All twelve H7 B cells remain NOT RUN. A private Linux CLI fixture is being
+prepared with exact retained-release provenance; required accompanying app/UI
+proof is still missing. No H7 B or full-matrix acceptance is claimed.
+
+## Startup gate remains unresolved
+
+The first paired quiet-host hard gate passed on baseline and failed on the
+candidate. Three additional paired traces showed overlapping totals (baseline
+13.811–15.450 ms; candidate 14.643–19.809 ms), with the same 390 initialized
+packages and no added or removed package identities. Differences were spread
+across existing dependencies; these samples do not isolate a shaping source
+regression or prove environment-only causation. The unchanged 15 ms budget
+remains enforced. The general target's own startup check and remaining general
+suite results are pending; earlier failures are preserved.
