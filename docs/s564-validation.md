@@ -92,8 +92,12 @@ passing focused reruns do not make the earlier full ratchet pass.
 The original Linux Bashy general target failed its startup budget under load
 before reaching the Go suite. The Bash 5.3 gate was **80/86, failed**: several
 fixtures require an unprivileged user or locales absent from the test image.
-Corrected environment runs and baseline comparisons are pending. Expectations
-and startup budgets have not been weakened.
+A corrected run using an unprivileged fixture owner, the matching launcher and
+companion binary, and seven generated locale providers passed the canonical
+fixture loop **86/86**, with no skips or timeouts. The original failure and a
+separate staging failure remain preserved. Startup-budget baseline comparisons
+and the general test target remain pending. Expectations and startup budgets
+have not been weakened.
 
 The first real Codex/CLI greeting lifecycle verified, previewed and activated the
 candidate with real Chrome assertions and independent-principal isolation. Its
@@ -120,3 +124,64 @@ GPGME/Podman build constraints and resource-limit symbols, Darwin libkrun build
 constraints, and AIX file-lock/Unix symbols. Raw logs and all source manifests
 remain in the manager's private evidence bundle. This establishes unchanged
 cross-vet failures; it does not establish a passing cross-vet gate.
+
+## Fresh real-agent greeting retest
+
+A fresh H7 A / Codex / CLI cell passed independent manager review on native
+macOS arm64. The immutable binary was built on Linux for Darwin arm64 with
+CGO disabled, Bashy `0fc8d9675c2645038dfd97ffb76e4c41aa6fdd79`, yoke
+`9da6d2566a72ed63605900586f9d2479fe540850`, and clean version-control metadata.
+Its SHA-256 is
+`7bb7a793c8589a5e55a13add33799b0ea9e11bab0217a66f13a161710f0055d1`.
+The real agent was Codex 0.157.1 using `gpt-6-sol`.
+
+The original fixture commit `8654cf6a389a2fb3640271b6136ef31641bcc5d2`
+was reused in a new instance with no prior activation history. Six actual Chrome
+checkpoints covered baseline, candidate preview, unchanged active app, approved
+app, independent second principal and first undo. Undo restored the exact fixture
+revision and greeting. Verifier evidence passed; the reviewed final proposal
+`90a7ace02c48c014fdc7bd4abb96b9d1c5dfb677` changes only the greeting file,
+contains the expected shaping attribution, and has an open ordinary source PR
+and an unstarted review run. The earlier failed cell remains preserved.
+This is **one of 24 cells**, not H7 acceptance.
+
+A separate Claude/CLI cell was prepared and its real Chrome baseline passed,
+but Claude Code 2.1.284 using the registered `claude-opus-5-5` returned HTTP 429
+with a weekly quota limit before any lifecycle tool use. That cell is
+**BLOCKED**, not passed; no alternate model or retry was substituted.
+
+The same immutable binary and fixture also passed manager review for H7 A /
+agy / CLI and H7 A / Codex / REST. agy 1.5.1 used the registered
+`gemini-3.8-flash-high`; its final proposal is
+`72392f8e430eb4e144017b049167e9085585da89`. The Codex REST run used actual
+paired HTTP requests, natural-wish generation, six Chrome checkpoints and
+proposal `111c1e5799f5219335dbfabd7d3fa963ba82fc5e`. In both cases first undo
+restored the exact fixture revision, the second principal stayed unchanged,
+and submission produced an ordinary unstarted review run. The REST candidate
+reported its delegate executable; optional delegate identity/receipt fields
+were absent and are not invented. This brings reviewed passing coverage to
+**3 of 24 cells**. Other cells remain open.
+
+The Codex MCP cell is blocked: per-invocation server configuration was recognized
+by the client's MCP configuration listing, but the real agent execution did not
+start or expose the selected server. Both attempts are retained, with no lifecycle
+calls or substitute interface. An independent operator protocol preflight did
+initialize the actual Bashy MCP server, discover `shape`, and call status. That
+preflight demonstrates the server surface only; it is not an agent E2E pass.
+
+## Actual Klatch validation in progress
+
+The disposable Linux service serves the pinned real Klatch source and immutable
+base image. The initial shallow checkout exposed a local transport limitation;
+a separate repair now refuses shallow sources before candidate/tracking writes
+with instructions for an explicit full-history fetch. The operator completed
+history while preserving the exact source commit/tree and base image identity.
+The retained earlier candidate remains failed.
+
+The next real candidate built and passed all seventeen named Go tests, but the
+native accounting rejected a package-level `[no test files]` result. A separate
+repair now accepts only exact empty-package metadata recorded from the same
+baseline listing and candidate output. Named skips, unknown package skips,
+missing checks, failures and early exit still refuse verification. Real Go
+1.27.2 multi-package and focused lifecycle tests pass. Actual Klatch revalidation,
+preview, activation, data preservation and rollback remain pending.
