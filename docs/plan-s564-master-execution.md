@@ -19,6 +19,8 @@ its stories are authoritative.
 
 ## One model, two front-ends
 
+Implementation contract: [Software Shaping contract](shape-contract.md) (H1).
+
 Shaping is one feature. A principal holds a version history of an app. Each
 version is produced by a human, by genie, or by a human assisted by genie. The
 trusted verifier checks it. It is activated for its scope, shared through
@@ -117,3 +119,80 @@ offer/adopt, and upstreamed into the sprint flow.
 - **Sprint 563** keeps F14's provenance. The Klatch shaping is H3's service-kind
   worked example.
 - **Sprint 568:** shaped apps keep the same accounts and identity semantics.
+
+## Reviewed execution sequence (2026-11-05)
+
+Planning update only. The eight stories are H1-H7 and spike 167b0f281c49;
+H6 is done. H7 and the spike need goal-checklist coverage. H7 scenario B
+also depends on H3. Keep the existing acceptance scope; milestones below
+do not redefine full sprint completion.
+
+1. **H1: settle the minimum contract.** Inventory existing web handlers,
+   shape packages, src plumbing, registration and MCP capabilities. Specify
+   the existing candidate lifecycle once, actor/represented-user resolution,
+   local and remote authorization, CLI/API mapping and JSON results. Retain
+   existing records; add only required identity/tracking fields. Auto-link a
+   todo unless an existing item is supplied. No new planning ceremony.
+2. **H2: deliver the web-app vertical slice first.** Extract only the
+   candidate operations currently coupled to webconsole into a reusable
+   shape service. Web handlers and local CLI call that service; remote CLI
+   uses existing authenticated REST. Start status/wish/show/diff/verify/
+   preview/approve/reject, then add remaining declared verbs and src wrappers.
+   Preserve web behavior and gates. Exercise the Hello World example in a
+   real browser through web and CLI. Audit its registration, contract and
+   runner assumptions against actual runtime behavior before calling it
+   supported. Hand-made --from tests isolate lifecycle checks from model
+   variance; one real wish proves agent integration.
+3. **H4: finish the useful web loop.** Add CLI and REST submit through src PR
+   and weave, with matching origin/identity/evidence and checked trailers.
+   Submit the retained approved Hello World revision after rollback. No new
+   merge process, automatic merge or dependency on Sprint 570 handoff.
+4. **H3: add app kinds one at a time.** Reuse existing selfbin/build/service
+   machinery. First CLI: isolated build, declared checks, preview, explicit
+   activation in a side slot, retained release, unchanged PATH, recoverable
+   interrupted activation. Then Klatch service: isolated image build, tests,
+   side-port health check, host-local image activation, data preserved and
+   one-step rollback. Status identifies the active artifact. Never rebuild
+   candidates in shared workspaces or activate failed/stale candidates.
+5. **H5: validate one pinned candidate on three platforms.** Use existing
+   self-hosted runners on Linux, macOS and native Windows. Exercise Klatch,
+   bashy-self with Sprint 570 H1, failing candidates and original console
+   web shaping. Hello World supplements but never replaces that console
+   regression. If the H1 payload is unavailable, record that exact dependency;
+   H7's help-text change does not substitute for H5 acceptance.
+6. **H7: expand proven recipes, not the framework.** Start Codex/CLI Hello
+   World, then Codex/CLI self-shaping (small help-text change, verify/preview/
+   activate, inspect Hello World using the shaped command, restore, submit).
+   Expand those two recipes across Codex/Claude/Muse/agy and CLI/MCP/REST:
+   24 separately evidenced cells. Discover actual supported MCP operations;
+   use existing authorized MCP command execution if sufficient, otherwise
+   record the adapter gap as an explicit dependency. Agent narration and a
+   direct HTTP-only harness do not establish agent E2E passes. Reuse H5 OS
+   evidence rather than multiplying all 24 cells by three platforms.
+7. **Spike 167b0f281c49:** inspect existing agentic-block behavior and write a
+   concise concept/examples/gaps document. No syntax/runtime implementation;
+   unresolved ideas become follow-up work, not a shaping delivery dependency.
+   H6's accepted assets remain complete and need no redesign.
+
+### Evidence and completion
+
+Use focused shared-service/adapter tests for parity, identity, rejection,
+wrong-scope denial, stale/failed verification and timeout/retry coherence.
+Test interrupted CLI/service activation and recovery. Run relevant existing
+web/src/selfbin regressions. Real-browser assertions cover baseline, preview,
+active greeting, second principal and rollback; real agents actually invoke
+selected interfaces. Preserve sanitized raw logs, source/tool/model/artifact
+identities and verifier/browser evidence using existing runner conventions.
+A generic agent task file or zero agent exit is not a test pass.
+
+First usable milestone: H1 + H2 web lifecycle + H4 submission, with both
+Hello World walkthroughs reproduced. Full sprint closure additionally requires
+H3, H5, all H7 cells, spike documentation, and existing H6 evidence. Blocked
+cells remain blocked. Close each story on its own criteria and relevant
+regressions; do not claim release or publication authorization.
+
+Deliver in dependency order with submodule commits/pushes followed by umbrella
+pin bumps and required provenance trailers. Preserve unrelated concurrent
+work. Link the spike and H7 into the goal checklist when the manager adopts
+this plan; update H7's H3 dependency. This review does not take the sprint lease
+or start feature implementation.
