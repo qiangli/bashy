@@ -118,6 +118,12 @@ func executeShapeRemote(ctx context.Context, r shapeCLIRequest) (any, error) {
 func shapeRemoteOperation(r shapeCLIRequest) (string, string, any, error) {
 	id := url.PathEscape(r.ID)
 	switch r.Verb {
+	case "submit":
+		body := map[string]string{"rev": r.ID}
+		if r.Story != "" {
+			body["story"] = r.Story
+		}
+		return "POST", "/submit", body, nil
 	case "status":
 		return "GET", "", nil, nil
 	case "wish":

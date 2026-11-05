@@ -61,6 +61,7 @@ func bashyShapeCmd() *cobra.Command {
 		{"release", "release APP REV", "Name a release through the existing source rules", 2, 2},
 		{"offer", "offer APP REV", "Offer a released version to other principals", 2, 2},
 		{"adopt", "adopt APP OFFER", "Preview or adopt an offering through the trusted gate", 2, 2},
+		{"submit", "submit APP REV", "Submit an approved version through existing review gates", 2, 2},
 	} {
 		spec := spec
 		var from, story, todo, page, element, incidentKind, incidentPath, incidentID string
@@ -73,6 +74,9 @@ func bashyShapeCmd() *cobra.Command {
 			sub.Flags().StringVar(&todo, "todo", "", "link an existing todo")
 			sub.Flags().StringVar(&page, "page", "", "request's app page context")
 			sub.Flags().StringVar(&element, "element", "", "request's element context")
+		}
+		if spec.verb == "submit" {
+			sub.Flags().StringVar(&story, "story", "", "link submission to an existing story")
 		}
 		if spec.verb == "incident" {
 			sub.Flags().StringVar(&incidentKind, "kind", "script", "reported failure kind: script or asset")

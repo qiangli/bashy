@@ -43,6 +43,15 @@ bound instead of abandoning background work when the CLI exits.
 History, undo, restore, release, offer and adopt delegate to the existing source
 operations and their verification gates. `adopt --preview` does not activate.
 
+## Submit an approved version
+
+`bashy shape submit APP REV [--story ID]` creates a reviewable source proposal
+and ordinary weave run through the existing gates. REV is the approved candidate
+ID or source revision; the retained approved version remains submittable after
+undo. With no `--story`, submission reuses the tracked item and store recorded
+with the candidate. An explicit story is resolved in the invocation's ordinary
+tracking store. Submission never automatically merges or starts a worker.
+
 ## Remote console
 
 `--remote URL --cookie-file FILE` uses an existing paired console session.
@@ -52,7 +61,7 @@ messages, and redirects are refused. The server resolves caller and principal;
 `--user`, `--principal` and `--as` cannot override remote identity.
 
 The remote adapter supports the existing status, wish, show, diff, verify,
-approve, reject, suggest, history, undo, restore and incident report/show endpoints. Local workspace
+approve, reject, suggest, history, undo, restore, submit and incident report/show endpoints. Local workspace
 import, incident listing and source operations lacking console endpoints return an explicit
 unsupported-operation error. Remote wish retains the web API's asynchronous
 candidate response; inspect status/show until generation finishes.

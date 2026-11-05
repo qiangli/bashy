@@ -28,6 +28,9 @@ var shapeAppLookup = func(name string) (shape.App, error) {
 }
 
 var shapeServiceOptions = shape.ProductionOptions
+var shapeSubmit = func(ctx context.Context, svc shape.Service, caller shape.Caller, revision string, opts shape.SubmitOptions) (shape.Submission, error) {
+	return svc.Submit(ctx, caller, revision, opts)
+}
 var shapeTrackingRoot = func(actor string) (string, error) {
 	store, _, err := todo.ResolveStore(actor, false, false, "")
 	if err != nil {
@@ -84,6 +87,16 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 		}
 	}
 	switch r.Verb {
+	case "submit":
+		submitOpts := shape.SubmitOptions{Story: r.Story}
+		if r.Story != "" {
+			root, err := shapeTrackingRoot(r.Actor)
+			if err != nil {
+				return nil, err
+			}
+			submitOpts.TrackingRoot = root
+		}
+		return shapeSubmit(ctx, svc, caller, r.ID, submitOpts)
 	case "status":
 		return svc.Status(ctx, caller)
 	case "wish":
