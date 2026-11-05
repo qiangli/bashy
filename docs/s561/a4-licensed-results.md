@@ -45,7 +45,7 @@ UNRESOLVED, 9 INSPECT): **no regression**. Items from the S355 five-TP list
 | 4 FAIL | `more` | S355 `more` scope question: editor dispatch at final EOF (prepared, unsent) |
 | 9 INSPECT | `stty` (7), `df`, `locale` | S377 operator manual-inspection decisions (manual PASS rule on recorded evidence) |
 
-All 62 are outside Bashy's code: none is a product defect found by S561
+All 67 are outside Bashy's code: none is a product defect found by S561
 triage (A2/A3c). Closing them requires the operator to apply the S377 manual
 resolutions to this journal and to send the S355 authority packets.
 
@@ -61,3 +61,25 @@ resolutions to this journal and to send the S355 authority packets.
   (`93a7ce03`), `make test-bash-container` 86/86, full `GOWORK=off go test
   ./...` clean after F1, `make dist` 12 binaries hashed.
 - Licensed evidence: private, outside Git (operator's evidence store).
+
+## Operator-approved engineering closure
+
+The operator requested Sprint 561 closure after confirming that engineering
+was complete, the final licensed run finished at 7:13 PM PST, both disposable
+hosts were retired, all delivery changes were pushed, and the other sprints
+could resume. This supersedes the original requirement to finish all authority
+and manual dispositions before A4 acceptance: engineering closes with no
+regression and the exact raw non-pass counts preserved. It does not establish
+full certification readiness, official certification, or release approval.
+
+Evidence reviewed for closure: this licensed aggregate report, the frozen
+candidate manifest, A4a public-lane report, and A3d repair report. Existing run
+evidence is reused; cleanup does not constitute a fresh test or licensed run.
+The residual total is **67** (4 + 54 + 9); the earlier prose total of 62 was
+an arithmetic error, with no change to any recorded result.
+
+Outstanding decisions remain with the operator and VSC authority through the
+existing S355/S377 harness-kit packets: send the prepared S355 questions for
+53 symlink setup results, man:4 and four more failures; apply S377 manual
+resolutions to the nine INSPECT results in this run's private journal. Packets
+remain unsent and manual dispositions are not claimed complete by this closure.

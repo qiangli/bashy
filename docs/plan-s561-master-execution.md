@@ -130,3 +130,13 @@ profile. No broad refactor. No legacy 539/560/557 reconciliation prerequisite.
 - Run broad gates on frozen candidates, not after every small edit.
 - One finding grouping per repair story; a new story only for genuinely
   independent ownership or acceptance.
+
+## Closure amendment authorized by the operator
+
+The final handoff and explicit request to close Sprint 561 supersede the
+original A4 requirement to finish every authority/manual disposition before
+sprint closure. Engineering is accepted on the frozen candidate with no
+regression. See docs/s561/a4-licensed-results.md for the exact 67 non-passes,
+reused evidence, retired-host confirmation, lifted freeze, and outstanding
+S355/S377 decisions. Full certification readiness remains unestablished;
+there is no certification or release authorization.
