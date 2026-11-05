@@ -17,7 +17,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261027072617-211789fadf75
+	github.com/qiangli/coreutils v0.0.0-20261104031828-601546e19e1a
 	github.com/qiangli/ycode v0.3.1-dev.0.20261029230636-9392338234d3
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261031184001-89df473c6035

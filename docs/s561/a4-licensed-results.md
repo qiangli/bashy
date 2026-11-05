@@ -83,3 +83,9 @@ existing S355/S377 harness-kit packets: send the prepared S355 questions for
 53 symlink setup results, man:4 and four more failures; apply S377 manual
 resolutions to the nine INSPECT results in this run's private journal. Packets
 remain unsent and manual dispositions are not claimed complete by this closure.
+
+Closure pin reconciliation: coreutils `601546e19e1a` differs from the frozen
+`211789fadf75` tree only in `docs/commands.md` and
+`docs/posix-external-providers.md`. The consumer pin now includes those
+already-published S561 documentation changes. The licensed run remains
+attributed to the original frozen candidate and original artifacts.
