@@ -143,3 +143,26 @@ web behavior and stored principal histories remain compatible throughout.
   source into the managed store.
 - `yoke/pkg/bus/actor.go` and `yoke/pkg/issue/issue.go`: current authored-actor
   resolution and ordinary tracking records; H1 does not replace either system.
+
+## H3 MVP host-kind sharing boundary
+
+Native CLI/service incident repair is explicitly unsupported until its failing
+operation can be reproduced without the web replay path. Web incident behavior
+is unchanged.
+
+CLI/service history and activation use one host scope while preserving the
+requesting actor and represented user in candidate/tracking records. Host-kind
+offer/adopt are explicitly refused until kind-aware artifact adoption can
+verify and switch source and executable/image together. Web offer/adopt is
+unchanged. Host release tags known host source and retains actor attribution.
+Artifact sharing is follow-up work, not an implicit per-user source fork.
+
+Self-shaping retains a released control plane: shaping mutations, verification,
+approval, preview and submission plus source/app/service/self control paths are
+routed through retained released code. MCP server startup and shell/script
+entrypoints also stay released; explicit frontend invocations may select shaped
+features from a released interactive shell. Shaped help and read-only web-app
+inspection may execute the selected image; host status and recovery remain
+released. Directly entered selected images delegate controls to the retained
+release. This is a routing boundary within the existing local OS-account trust
+model, not a sandbox for malicious approved native code.

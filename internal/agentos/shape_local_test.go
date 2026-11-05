@@ -116,6 +116,16 @@ func TestShapeConsoleLookupUsesEmbeddedSeedAndProtection(t *testing.T) {
 }
 
 func TestShapeCommandSchemaIncludesLifecycle(t *testing.T) {
+	_, _, verbs := commandsCatalog()
+	found := false
+	for _, verb := range verbs {
+		if verb == "shape" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("shape absent from command discovery/MCP catalog")
+	}
 	cmd := cobraVerb("shape")
 	if cmd == nil {
 		t.Fatal("shape missing from schema")

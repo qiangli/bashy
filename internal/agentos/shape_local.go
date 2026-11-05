@@ -24,7 +24,15 @@ var shapeAppLookup = func(name string) (shape.App, error) {
 	if !a.IsShaped() {
 		return shape.App{}, fmt.Errorf("shape: app %q is not a shaped app", name)
 	}
-	return shape.App{Name: a.Name, SourceDir: a.Source}, nil
+	app := shape.App{Name: a.Name, SourceDir: a.Source, Shaping: a.Shaping}
+	if a.Shaping != nil && a.Shaping.Kind == "cli" {
+		path, revision, err := shapeCLIRelease(a.Name)
+		if err != nil {
+			return shape.App{}, err
+		}
+		app.ReleasePath, app.ReleaseRevision = path, revision
+	}
+	return app, nil
 }
 
 var shapeServiceOptions = shape.ProductionOptions
@@ -49,24 +57,27 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 			return nil, err
 		}
 	}
-	// Version operations use precisely the src store and its sealed gates.
-	switch r.Verb {
-	case "history":
-		return src.History("", r.App, r.User)
-	case "restore":
-		return src.RestoreSealed(ctx, "", r.App, r.ID, r.User, src.RestoreSealedOptions{})
-	case "undo":
-		return src.UndoSealed(ctx, "", r.App, r.User, src.RestoreSealedOptions{})
-	case "release":
-		return src.Release("", r.App, r.ID, r.User, src.ReleaseOptions{Repair: r.Repair, Contract: r.Contract})
-	case "offer":
-		return src.Offer("", r.App, r.ID, r.User, src.OfferOptions{To: r.To, All: r.All})
-	case "adopt":
-		return src.Adopt("", r.App, r.ID, r.User, src.AdoptOptions{Preview: r.Preview})
+	app, lookupErr := shapeAppLookup(r.App)
+	hostKind := lookupErr == nil && app.Shaping != nil && app.Shaping.Kind != "" && app.Shaping.Kind != "web"
+	if !hostKind {
+		// Existing web version operations retain their original principal semantics.
+		switch r.Verb {
+		case "history":
+			return src.History("", r.App, r.User)
+		case "restore":
+			return src.RestoreSealed(ctx, "", r.App, r.ID, r.User, src.RestoreSealedOptions{})
+		case "undo":
+			return src.UndoSealed(ctx, "", r.App, r.User, src.RestoreSealedOptions{})
+		case "release":
+			return src.Release("", r.App, r.ID, r.User, src.ReleaseOptions{Repair: r.Repair, Contract: r.Contract})
+		case "offer":
+			return src.Offer("", r.App, r.ID, r.User, src.OfferOptions{To: r.To, All: r.All})
+		case "adopt":
+			return src.Adopt("", r.App, r.ID, r.User, src.AdoptOptions{Preview: r.Preview})
+		}
 	}
-	app, err := shapeAppLookup(r.App)
-	if err != nil {
-		return nil, err
+	if lookupErr != nil {
+		return nil, lookupErr
 	}
 	opts := shapeServiceOptions(src.Home())
 	opts.Track = shape.NewTracking(src.Home())
@@ -75,6 +86,37 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 	}
 	svc := shape.Service{App: app, Options: opts}
 	caller := shape.Caller{Principal: r.User, Actor: r.Actor, RepresentedUser: r.User}
+	if hostKind {
+		switch r.Verb {
+		case "status":
+			host, err := svc.HostStatus(ctx, caller)
+			if err != nil {
+				return host, err
+			}
+			state, err := svc.Status(ctx, caller)
+			if err != nil {
+				return host, err
+			}
+			return shapeHostStatusView{Status: state, Host: host}, nil
+		case "history":
+			return src.History("", r.App, shape.HostPrincipal)
+		case "undo":
+			return svc.HostUndo(ctx, caller)
+		case "restore":
+			return svc.HostRestore(ctx, caller, r.ID)
+		case "release":
+			return src.Release("", r.App, r.ID, shape.HostPrincipal, src.ReleaseOptions{Repair: r.Repair, Contract: r.Contract, Actor: r.Actor})
+		case "incident":
+			return nil, fmt.Errorf("shape: native CLI/service incident repair is not supported in this MVP; web incidents are unchanged")
+		case "offer", "adopt":
+			return nil, fmt.Errorf("shape: %s is not supported for host-kind artifacts in this MVP; web sharing is unchanged", r.Verb)
+		case "preview":
+			if svc.Kind() == "cli" {
+				return svc.RunProgramPreview(ctx, caller, r.ID, r.PreviewArgs...)
+			}
+			return svc.PreviewProgram(ctx, caller, r.ID)
+		}
+	}
 	wish := shape.Wish{Request: r.Request, Page: r.Page, Element: r.Element, Story: r.Story, Todo: r.Todo}
 	if r.Verb == "wish" {
 		root, err := shapeTrackingRoot(r.Actor)
@@ -102,6 +144,9 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 	case "wish":
 		if r.From != "" {
 			return svc.Import(ctx, caller, wish, r.From)
+		}
+		if hostKind {
+			return svc.Wish(ctx, caller, wish)
 		}
 		return webconsole.LocalShapeWish(ctx, app, caller, opts, wish)
 	case "show":
@@ -156,4 +201,10 @@ func shapeConsoleURL(raw string) (*url.URL, error) {
 		return nil, fmt.Errorf("shape: console URL must be an http(s) origin/base path without credentials, query or fragment")
 	}
 	return u, nil
+}
+
+// shapeHostStatusView keeps candidate discovery while exposing host artifact identity.
+type shapeHostStatusView struct {
+	shape.Status
+	Host shape.HostStatus `json:"host"`
 }

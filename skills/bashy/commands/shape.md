@@ -65,3 +65,52 @@ approve, reject, suggest, history, undo, restore, submit and incident report/sho
 import, incident listing and source operations lacking console endpoints return an explicit
 unsupported-operation error. Remote wish retains the web API's asynchronous
 candidate response; inspect status/show until generation finishes.
+
+## CLI and service kinds
+
+A trusted app registration may declare `shaping.kind` as `cli` or `service`,
+with build/test argument vectors. These policies are held outside candidate
+source. Build uses `{output}` and tests use `{artifact}`; arguments are expanded
+as vectors without shell interpolation. Web remains the default kind.
+
+For CLI kind, `preview APP ID -- ARGS...` runs the exact verified executable
+with bounded process/output capture and a private working directory/home.
+With no arguments it tries `--help`; apps without that option can supply
+explicit arguments. Nonzero exits remain inspectable failures. Service preview
+returns its isolated side-port URL and temporary unit.
+
+CLI/service versions activate for the host. `--user` still identifies the
+represented requester and tracking identity; it does not create a private
+executable or service instance. Status, history, preview and rollback use that
+host scope. CLI binaries occupy immutable side slots while the installed
+release and PATH remain intact. Service activation changes only an explicitly
+container-backed unit's image, preserving its declared data and other settings.
+
+Host-kind `incident` repair, `offer` and `adopt` are explicitly unsupported in
+this MVP. Native errors require kind-aware reproduction before automatic repair;
+the web repair path cannot safely stand in for it. CLI registration also needs
+an existing released executable for retention; a missing or unproven release
+source is never inferred from an imported directory. Source-only
+adoption would leave the executable/image inconsistent with history. Web
+sharing remains unchanged; kind-aware artifact sharing is follow-up work.
+`release` names a known host source revision and records the accountable actor.
+
+For bashy itself, `shape status bashy`, `shape undo bashy`, and
+`shape restore bashy REV` always execute the installed recovery implementation,
+so those commands do not depend on a healthy shaped CLI. Unknown retained
+release source identity is reported as unknown when embedded metadata is absent/dirty
+or dependencies came from unversioned workspace replacements. A development
+`BASHY_SRC_COMMIT` override remains declared metadata, not proof of the retained
+executable's source. Its artifact digest remains
+exact. Restoring source/code together may require rebuilding through the frozen
+gate and fails explicitly if the required source proof is unavailable.
+
+Authoritative shaping operations and the `src`, app/service and self-management
+control paths execute the retained released implementation. MCP server startup
+and shell/script entrypoints (`-c`, stdin scripts and interactive use) also stay
+released. From a released shell, invoke an explicit `bashy` frontend command to
+use a shaped feature. Shaped help and
+read-only web-app inspection remain available, while host status/recovery stays
+released. A selected image delegates those controls back to the retained release.
+This keeps gate routing stable; approved native code still has the local OS
+account's authority. It does not sandbox malicious native executables.

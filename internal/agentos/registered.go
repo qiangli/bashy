@@ -241,7 +241,7 @@ func registeredArgv(ctx context.Context, rec fleet.Command, args []string) ([]st
 	if len(argv) == 0 {
 		return nil, fmt.Errorf("registered command %q has no runnable implementation", rec.Name)
 	}
-	return argv, nil
+	return shapedRegisteredArgv(rec.Name, argv)
 }
 
 // registeredResolver is the ring's answer to the shell's OWN introspection —

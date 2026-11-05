@@ -156,7 +156,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "account", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile", "transcribe",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "account", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "shape", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile", "transcribe",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -593,6 +593,9 @@ func Dispatch() {
 	// signed Bashy build.
 	if len(os.Args) > 1 && os.Args[1] == "runner" {
 		dispatchExit(dispatchEmbeddedOllamaRunner(os.Args[2:]))
+	}
+	if code, handled := maybeRunShapedBashy(os.Args); handled {
+		dispatchExit(code)
 	}
 	// A fence never resolves its tool from PATH (Sprint 213): the island
 	// tool resolver is installed before anything can plan an island — the

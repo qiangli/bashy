@@ -14,6 +14,7 @@ import (
 )
 
 type shapeCLIRequest struct {
+	PreviewArgs                                                                  []string
 	IncidentKind, IncidentPath                                                   string
 	Verb, App, ID, Request, From, User, Actor, Agent, Story, Todo, Page, Element string
 	Remote, CookieFile, Console                                                  string
@@ -32,7 +33,7 @@ var shapeCLIExecute = executeShapeCLI
 
 func bashyShapeCmd() *cobra.Command {
 	var o shapeCLIOptions
-	cmd := &cobra.Command{Use: "shape", Short: "Shape an app: request, verify, preview, activate and undo", SilenceUsage: true, SilenceErrors: true}
+	cmd := &cobra.Command{Use: "shape", Short: shapeHelpShort, SilenceUsage: true, SilenceErrors: true}
 	cmd.PersistentFlags().StringVar(&o.User, "user", "", "principal whose app version is selected (default BASHY_PRINCIPAL)")
 	cmd.PersistentFlags().StringVar(&o.User, "principal", "", "alias for --user")
 	cmd.PersistentFlags().StringVar(&o.Actor, "as", "", "accountable caller, checked against the current session")
@@ -50,7 +51,7 @@ func bashyShapeCmd() *cobra.Command {
 		{"show", "show APP ID", "Inspect a candidate", 2, 2},
 		{"diff", "diff APP ID", "Show the candidate patch", 2, 2},
 		{"verify", "verify APP ID", "Run the trusted verifier", 2, 2},
-		{"preview", "preview APP ID", "Locate an isolated candidate preview", 2, 2},
+		{"preview", "preview APP ID [-- ARGS...]", "Preview an isolated candidate", 2, -1},
 		{"approve", "approve APP ID", "Verify again and activate explicitly", 2, 2},
 		{"reject", "reject APP ID", "Discard a candidate without activation", 2, 2},
 		{"suggest", "suggest APP", "Suggest requests for the current app", 1, 1},
@@ -67,7 +68,11 @@ func bashyShapeCmd() *cobra.Command {
 		var from, story, todo, page, element, incidentKind, incidentPath, incidentID string
 		var to, contract []string
 		var all, preview, repair bool
-		sub := &cobra.Command{Use: spec.use, Short: spec.short, Args: cobra.RangeArgs(spec.min, spec.max)}
+		checkArgs := cobra.RangeArgs(spec.min, spec.max)
+		if spec.max < 0 {
+			checkArgs = cobra.MinimumNArgs(spec.min)
+		}
+		sub := &cobra.Command{Use: spec.use, Short: spec.short, Args: checkArgs}
 		if spec.verb == "wish" {
 			sub.Flags().StringVar(&from, "from", "", "import a hand-made workspace into an isolated candidate")
 			sub.Flags().StringVar(&story, "story", "", "link an existing story")
@@ -100,6 +105,9 @@ func bashyShapeCmd() *cobra.Command {
 		sub.RunE = func(c *cobra.Command, args []string) error {
 			r := shapeCLIRequest{Verb: spec.verb, App: args[0], From: from, Agent: o.Agent, Story: story, Todo: todo, Page: page, Element: element, Remote: o.Remote, CookieFile: o.CookieFile, Console: o.Console, To: to, All: all, Preview: preview, Repair: repair, Contract: contract}
 			r.IncidentKind, r.IncidentPath = incidentKind, incidentPath
+			if spec.verb == "preview" && len(args) > 2 {
+				r.PreviewArgs = append([]string(nil), args[2:]...)
+			}
 			if spec.verb == "incident" {
 				r.ID = incidentID
 			}
