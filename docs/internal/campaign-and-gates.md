@@ -1,8 +1,12 @@
 # Campaign identity, regression gates, and the product sequence
 
+**Current campaign:** [S561 results](../s561/a4-licensed-results.md) record
+Profile B 493/493 and full Profile D 9,270/9,337 PASS-group with 67 non-passes.
+[S571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) owns remaining decisions and readiness; S561's freeze is lifted.
+
 Moved out of the README front page on 2026-09-18 (Sprint 212): these are the
 conformance-campaign and product-sequence notes that a contributor needs and a
-visitor does not. Unchanged text.
+visitor does not. Certification status and gate references updated after S561.
 
 ### POSIX conformance campaign identity
 
@@ -21,16 +25,16 @@ Running the suite provides conformance evidence; it does **not** by itself make
 Bashy POSIX certified. Certification and use of an Open Group mark require a
 separate submission and approval. Current runs are diagnostic campaigns used to
 find and fix failures before an uninterrupted formal run. See
-[`docs/conformance-statement.md`](docs/conformance-statement.md) for claim scope
-and [`docs/vsc-pcts-run-status.md`](docs/vsc-pcts-run-status.md) for the
+[conformance statement](../conformance-statement.md) for claim scope
+and [measured status](../vsc-pcts-run-status.md) for the
 public-safe measured status.
 
 ### Shell regression gates
 
 Shell development has two complementary regression gates:
 
-1. `make test-bash-parallel` runs the public GNU Bash 5.3 compatibility corpus
-   locally. Its current denominator is 86 fixtures and the required result is
+1. `make test-bash-container` runs the authoritative public GNU Bash 5.3
+   compatibility gate in its hermetic Linux environment. Its current denominator is 86 fixtures and the required result is
    86/86.
 2. On the licensed native VSC host,
    `make test-bash-system ARM=<unique-name>` in the sibling

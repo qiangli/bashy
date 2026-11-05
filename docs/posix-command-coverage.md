@@ -1,5 +1,12 @@
 # POSIX command coverage and provider scopes
 
+**Current certification status:** S561 engineering is closed. The frozen
+candidate has Profile B 493/493 and Profile D 9,270 PASS-group outcomes out of
+9,337, with 4 FAIL, 54 UNRESOLVED and 9 INSPECT (67 non-passes), no regression.
+[S561 results](s561/a4-licensed-results.md) retain the exact identities;
+[S571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) owns authority/manual resolution and submission readiness.
+No full clean pass, certification award or release approval is claimed.
+
 This is Bashy's routing page for the current Commands & Utilities inventory.
 Do not maintain another hand-written command list here.
 
@@ -19,7 +26,7 @@ already decided; do not re-open it as a sprint decision.
   `ctags`, `ex`, `fc`, `fg`, `jobs`, `localedef`, `make`, `more`, `nm`,
   `strip`, `talk`, `vi`. They stay in the full inventory but do not gate the
   claim.
-- The certified product is **pure Go**. No external provider, host utility or
+- The product submitted for certification must be **pure Go**. No external provider, host utility or
   new utility implementation is required for the claim; planning that proposes
   one (or a "shell + N utilities" profile choice) is scope creep. The six
   remaining external-provider names below are all in the optional set.

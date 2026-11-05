@@ -1,5 +1,12 @@
 # bashy v1.0.0 — release readiness
 
+**Current certification status:** S561 engineering is closed. The frozen
+candidate has Profile B 493/493 and Profile D 9,270 PASS-group outcomes out of
+9,337, with 4 FAIL, 54 UNRESOLVED and 9 INSPECT (67 non-passes), no regression.
+[S561 results](s561/a4-licensed-results.md) retain the exact identities;
+[S571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) owns authority/manual resolution and submission readiness.
+No full clean pass, certification award or release approval is claimed.
+
 Status: **revised draft, 2026-08-08.** The single source of truth for what
 "v1.0.0" means and the gate to tag it. The release order and version-number
 policy are defined in `release-roadmap-and-versioning.md`. v1.0 ties together:
@@ -58,27 +65,18 @@ strict discipline (§Claim discipline):
       Public-safe status is in `docs/vsc-pcts-run-status.md`; licensed journals
       and the reproducible run kit remain private. Shell-closure sprint #45 is
       ended; there are no remaining shell-failure work lanes.
-- [ ] **Utilities fail-delta campaign** ← the active workstream. Two known
-      engineering fronts, both stateable without suite results because they are
-      our own code: **(a)** regex/text-engine depth — `pkg/bre`, driving `sed`
-      and `grep`; **(b)** the NO-list lift — `find -exec`/`-ok`, `xargs`,
-      `env COMMAND`, `nice`, `nohup`, which exec a utility directly by argv and
-      so do *not* breach "never shell out"; one shared argv-runner routed through
-      Tier-1 dispatch serves them all. Then a per-command long tail.
-- [ ] Final scored run (default timers).
-- [ ] Conformance statement finalized (`docs/conformance-statement.md`).
-- [ ] **Open Group submission** — the human step (journal + conformance
-      statement + declared limitations). Not agent-completable.
+- [x] **S561 full licensed run completed** on the frozen candidate; see the
+      current result summary above. Completion is not a clean full-profile pass.
+- [ ] **S571 residual decisions and any resulting repairs:** resolve all 67
+      identities with supported authority/manual dispositions and verification.
+- [ ] **Certification dossier:** exact artifacts, configured scope, journals,
+      rulings, manual decisions, limitations and independent review.
+- [ ] **Official certification and explicit operator release approval:** required
+      before an official v1.0.0 release. S561 engineering closure supplies neither.
 
-The bar for this campaign is **zero fails that certified bash 5.3 / GNU do not
-also share** — not literal 100% PASS. Chasing raw GNU parity is a moving target,
-and PCTS charges some behaviors that exceed POSIX.
-
-**Engineering POSIX closure is a v1.0.0 blocker; an awarded certification is
-not.** The declared shell/utility scope must have repeatable matched-host
-evidence, no unexplained Bashy-only failures, and finalized limitations. The
-formal Open Group submission and award remain human/legal milestones and must
-be described as pending until actually granted (§Claim discipline).
+The readiness gate is no regression and complete supported accounting for the
+required profile, with no pending required authority or manual disposition.
+Matching a reference implementation's failure is not itself an authority ruling.
 
 ### License terms (binding — read before touching the suite or publishing a number)
 

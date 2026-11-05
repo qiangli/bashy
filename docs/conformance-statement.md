@@ -1,7 +1,14 @@
 # bashy — POSIX conformance statement
 
-Status: **public conformance statement, partially shipped; shell milestone
-complete 2026-08-08.** The licensed VSC-PCTS shell scenario has run and its
+**Current certification status:** S561 engineering is closed. The frozen
+candidate has Profile B 493/493 and Profile D 9,270 PASS-group outcomes out of
+9,337, with 4 FAIL, 54 UNRESOLVED and 9 INSPECT (67 non-passes), no regression.
+[S561 results](s561/a4-licensed-results.md) retain the exact identities;
+[S571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) owns authority/manual resolution and submission readiness.
+No full clean pass, certification award or release approval is claimed.
+
+Status: **public conformance statement; historical shell milestone
+completed 2026-08-08, latest licensed evidence 2026-11-04 above.** The licensed VSC-PCTS shell scenario has run and its
 public-safe status lives in `vsc-pcts-run-status.md`; certification submission
 and any Open Group mark remain separate. Utilities-sweep results are published
 in the same file under the 2026-07-29 consent extension.

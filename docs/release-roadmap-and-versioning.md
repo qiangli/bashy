@@ -83,9 +83,10 @@ v1.1 and v1.2; those deferrals are retired and all of it is part of v1.0.0.
 The v1.0.0 feature list is the Sprint 379 list, one story per line.
 
 1. **bash** — a GNU Bash 5.3-compatible shell and the declared IEEE Std 1003.1
-   Shell and Utilities profile with its limitations. Engineering closure of the
-   declared profile is a release gate; a certification award is a separate
-   human milestone and is never implied.
+   Shell and Utilities profile with its limitations. Engineering closure, official POSIX
+   certification and explicit operator release approval are required before an
+   official v1.0.0 release. S561 closed engineering; S571 owns the remaining
+   certification-readiness work. Neither sprint implies an award or release.
 2. **Bash#** — the opt-in language layer, inert under `--posix`:
    - Go-shaped constructs mixed into script text (the declared Go profile),
      with interpreted and compiled modes and `transpile`.

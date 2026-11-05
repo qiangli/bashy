@@ -1,5 +1,9 @@
 # Sprint 561 master execution plan: Foundation A certification readiness
 
+**Closed engineering:** the final [S561 results](s561/a4-licensed-results.md)
+and closure amendment at the end supersede this plan's original readiness gate.
+[S571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) owns the 67 remaining decisions and certification dossier.
+
 Review date: 2026-11-03. Planning only: no sprint takeover, test dispatch,
 licensed run, product change or release action was performed. Develops the
 four existing stories under `plan-clean-baseline-campaign.md`; creates no new

@@ -1,5 +1,34 @@
 # VSC-PCTS conformance run — status
 
+## Current campaign: S561 evidence, S571 resolution
+
+The final licensed run on 2026-11-04 measured frozen candidate bashy
+`f1bcd711`, sh `74586fde`, coreutils `211789fa` (harness `0b2b185d`):
+
+| Lane | Recorded result |
+| --- | --- |
+| Profile B, shell isolation | 493/493 PASS group; 0 blockers |
+| Profile D, full configured run | 117 sets; 9,337 test purposes; 9,270 PASS group; 4 FAIL; 54 UNRESOLVED; 9 INSPECT |
+
+Profile D matches the previous full run: no regression, but **67 non-passes**,
+not a clean pass. The earlier prose total of 62 was an arithmetic error.
+S561 closed engineering; both disposable hosts were retired and its freeze
+was lifted. Full certification readiness and official certification remain open.
+
+[Sprint 571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) owns the remaining decisions: S355 authority packets
+for 53 symlink setup results, `man:4` and four `more` failures remain unsent;
+nine INSPECT results (`stty` 7, `df` 1, `locale` 1) require supported S377
+manual decisions on this run's journal. Raw results stay intact; a ruling,
+manual disposition or optional-scope exclusion is recorded separately from PASS.
+Any newly confirmed defect requires a verified repair.
+
+See [S561 licensed results](s561/a4-licensed-results.md) and
+[evidence identity](s561/evidence-identity.md). These are results of the named
+candidate and exact artifacts, not an automatic claim for later HEADs or Bash#
+language modes. Restricted journals and correspondence remain outside public Git.
+
+## Earlier campaign records
+
 The official POSIX conformance work runs against **VSC-PCTS2016**, The Open
 Group's POSIX Verification Suite for Shell & Utilities, under a time-limited
 OSS license (agreement v1.4.OSS).

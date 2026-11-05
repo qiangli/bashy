@@ -3,7 +3,14 @@
 **Current status**: 🎉 86 bash tests passing, 0 failing, 0 skipped (of 86 measured fixtures) — **100% of those measured fixtures**, not proof of interactive completeness
 **POSIX frontier**: current yash claims point to [`yash-chunks.json`](../yash-chunks.json) and [measurement boundaries](public-claims-evidence.md). The committed fixture-completion record does not establish a current assertion pass percentage; recheck on RC with `bashy dag dag.md yash`.
 
-**VSC-PCTS campaign (current scope)** — the shell-isolation milestone is complete: all 493 shell TPs are in the certification PASS group with zero blockers/manual resolutions/caps under the proven GNU Coreutils 9.11 provider PATH (`vsc-pcts-posix-shell-2026-08-08`). The primary corrective arm is **Profile B: Bashy `sh` plus frozen GNU/system providers**, excluding Bashy's Go multicall. Profiles C/D separately measure the Bashy Go utility provider across the complete 116-set/8,844-TP inventory. The one-page scope and inventory routing source is `docs/posix-command-coverage.md`. Publication consent for utilities-suite results was granted 2026-07-29 (ticket #280298), for conformance-work purposes on the same terms as the shell arm. Raw journals remain private, and no "certified"/"passes the Open Group suite" claim is made.
+**VSC-PCTS campaign (current scope)** — S561 engineering closed with no
+regression. Profile B: 493/493; full Profile D: 117 sets, 9,337 test purposes,
+9,270 PASS group, 4 FAIL, 54 UNRESOLVED and 9 INSPECT (67 non-passes).
+[Licensed results](s561/a4-licensed-results.md) identify the frozen candidate.
+[S571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) owns authority rulings, current-journal manual decisions,
+any resulting repairs and certification readiness. Profile B isolates the
+shell with GNU/system providers; Profile D measures the declared pure-Go base.
+No certification award or clean full-profile pass is claimed.
   - **Certification scope (fixed):** Sprint 341 base scope — 102 mandatory
     targets via 92 Go applets + 10 shell commands, **zero external providers**,
     plus `gencat` in Go; the 14 optional targets do not gate. The full 116-name

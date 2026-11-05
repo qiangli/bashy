@@ -11,7 +11,7 @@ split is implemented here. The Sprint 355 Profile D rerun remains gated on the
 | **Base** | Yes | POSIX shell, Bash# grammar and runtime (including fence syntax), and Coreutils applets. This is the certified route. |
 | **Core** | Yes | Generic dispatch for already parsed fences, versioned runner protocol, minimal language/toolchain CRUD, and command atlas/registry plumbing. A new language is a record, not a Go import. |
 | **Builtin** | Mechanism in the executable; first-party records/payloads separately versioned | Curated first-party registrations such as Genie. They use the same runner contract as third-party rows. |
-| **Optional/experimental** | Registry metadata and digest-pinned payloads installed on demand | Feature-gated records, with their own lifecycle. They cannot extend the certified POSIX command route. |
+| **Optional/experimental** | Registry metadata and digest-pinned payloads installed on demand | Feature-gated records, with their own lifecycle. They cannot extend the declared POSIX certification command route. |
 
 The user downloads one `bashy` app. Existing `bashy commands
 add|show|set|rm|verify` keeps its `kind: command` behavior. Add explicit

@@ -1,5 +1,10 @@
 # Clean-baseline campaign: foundation, fences and UAT
 
+**Foundation A status:** S561 closed engineering with no regression; its
+original readiness acceptance below was superseded by the operator-approved
+[closure record](s561/a4-licensed-results.md). [S571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) owns the 67
+residual decisions and full certification readiness. B/C work is not frozen.
+
 Created at the operator's request. KISS/MVP: three outcome-based sprints, four
 stories each, existing harnesses and the smallest causal fixes. All cards start
 in backlog without managers; creating them does not launch execution.

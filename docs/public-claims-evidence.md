@@ -1,5 +1,12 @@
 # Public claims and their evidence
 
+**Current certification status:** S561 engineering is closed. The frozen
+candidate has Profile B 493/493 and Profile D 9,270 PASS-group outcomes out of
+9,337, with 4 FAIL, 54 UNRESOLVED and 9 INSPECT (67 non-passes), no regression.
+[S561 results](s561/a4-licensed-results.md) retain the exact identities;
+[S571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) owns authority/manual resolution and submission readiness.
+No full clean pass, certification award or release approval is claimed.
+
 Sprint 379 B6 (Story 1515, `34ea7be6eeec`), reviewed 2026-10-09.
 
 The audit plan is to compare public wording with the pinned source and committed
@@ -67,7 +74,7 @@ Two narrower registries must not be confused with that count:
 - The agent-mode catalog lists **10** POSIX-named entries with an external
   origin: `ar ctags ex localedef lp m4 man nm strip vi`. The other 39
   external names are outside that POSIX subset. This catalog is not the
-  certification route: the certified base profile is pure Go with zero
+  certification route: the base profile under certification evaluation is pure Go with zero
   external providers (`lp`, `m4`, `man` and `localedef` route to Go applets);
   see [posix-command-coverage.md](posix-command-coverage.md).
 

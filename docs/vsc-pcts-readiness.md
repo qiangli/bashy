@@ -1,5 +1,11 @@
 # VSC-PCTS readiness — cert-run pre-flight for bashy
 
+**Historical checklist:** the dated measurements and tasks below are retained
+as history, not the current execution queue. The 2026-11-04 full run is complete;
+see [current campaign results](vsc-pcts-run-status.md) and
+[S571 resolution plan](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md). S561 engineering closure does not resolve the
+67 remaining authority/manual results or authorize certification/release.
+
 Status: **historical pre-license readiness checklist.** Superseded for current
 licensed-run state by `vsc-pcts-run-status.md` as of 2026-07-16; keep this doc
 for scope, pre-flight rationale, and the distinction between agent-drivable

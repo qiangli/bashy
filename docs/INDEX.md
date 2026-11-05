@@ -4,7 +4,7 @@
 
 - [Clean-baseline campaign: sprints 561–563](plan-clean-baseline-campaign.md) — KISS/MVP foundation certification readiness, fence corpus repairs and clean-install UAT; current execution direction with legacy work retained as reference.
 
-- [Sprint 561 master execution plan](plan-s561-master-execution.md) — Foundation A: profile/baseline freeze, failure classification, causal repairs and one certification-ready candidate.
+- [Sprint 561 master execution plan](plan-s561-master-execution.md) — Foundation A engineering closed; frozen-candidate evidence retained, certification decisions continue in S571.
 - [Sprint 561 certification evidence identity](s561/evidence-identity.md) — Linked input closure digests, artifact hash rule, and revision comparison.
 - [Sprint 562 master execution plan](plan-s562-master-execution.md) — Fence corpora B: consolidated by-example corpora from Sprints 391–396 made green first, then the fence × platform × provider inventory, baselines, repairs and one frozen-candidate full-matrix verification.
 - [Sprint 570 live handoff plan](plan-live-handoff.md) — offer/accept handoff of sprints, stories, todos, claims and runs between humans and agents; local bashy layer under Sprint 568's routing design.
@@ -246,4 +246,6 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [Relative script operands](plan-s531-relative-script-operand.md) — S531 story 2840 cwd resolution, focused red/green evidence and pending native Windows reproduction.
 - [Desk family look](plan-desk-family-look.md) — S537.D1 launcher-derived kit tokens, family accents, one app shell + renderer for every desk tool, contracttest kit conformance and light/dark gallery.
 - [Desk viewer](plan-desk-viewer.md) — S537.V1 view-only books of agent reports: template + JSON data (never HTML) through the kit renderer, sprint/session books, changed-since-previous highlight, self-contained export, contracttest ViewOnly.
-- [Layer delineation](plan-layer-delineation.md) — A Classic (bash+coreutils, POSIX-certified) · B Bash#/fenced runtimes · C Yoke; stories L1–L5, deferred until after the S561 licensed run
+- [Layer delineation](plan-layer-delineation.md) — A Classic (bash+coreutils, certification candidate) · B Bash#/fenced runtimes · C Yoke; stories L1–L5, S561 freeze lifted
+
+- [Current POSIX campaign status](vsc-pcts-run-status.md) — S561 full-run evidence, 67 residual non-passes and S571 authority/manual-resolution ownership.

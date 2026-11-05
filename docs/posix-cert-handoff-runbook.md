@@ -1,5 +1,21 @@
 # POSIX cert handoff runbook — the licensed VSC-PCTS run
 
+## Current handoff
+
+S561's licensed run is complete; its hosts are retired and freeze lifted.
+Use [S561 results](s561/a4-licensed-results.md) for the exact candidate and
+67 non-passes. [S571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) now owns authority/manual resolution, any
+required repairs and the submission dossier. Its required base is 102 targets
+(92 Go + 10 shell), zero external utility providers, plus Go `gencat`.
+Profile B isolates the shell; its pass does not close the Profile D utility claim.
+
+The steps below are a historical procedure, not permission to provision a host,
+rerun licensed tests, send correspondence or submit certification. At execution,
+use the private harness kit's supported approval and lifecycle commands, exact
+candidate/artifact identities, and current authority requirements. Use
+`make test-bash-container` for the authoritative public Bash 5.3 gate;
+reuse unchanged evidence only under the [identity rule](s561/evidence-identity.md).
+
 Status: **historical handoff / rerun procedure.** The license and shell-scenario
 harness steps have been executed; retain this as the public-safe rerun and
 triage procedure. Certification submission and utilities-campaign scope remain

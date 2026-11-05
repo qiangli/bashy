@@ -1,5 +1,11 @@
 # POSIX cert (VSC-PCTS) pre-flight — GO status snapshot
 
+**Historical checklist:** the dated measurements and tasks below are retained
+as history, not the current execution queue. The 2026-11-04 full run is complete;
+see [current campaign results](vsc-pcts-run-status.md) and
+[S571 resolution plan](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md). S561 engineering closure does not resolve the
+67 remaining authority/manual results or authorize certification/release.
+
 Status: **historical GO pre-flight snapshot, superseded by the 2026-08-08 shell
 milestone.** Agent-drivable pre-flight is complete; the licensed 493-TP shell
 isolation arm now has 493 certification PASS-group outcomes and zero blockers.
@@ -17,7 +23,7 @@ published in `vsc-pcts-run-status.md` under the consent grants.
 | **`<<${a}` heredoc-delimiter decision** | ✅ **DECIDED — declared limitation** (see below) | bashy parse-errors an expansion in the heredoc delimiter word; bash treats it as a *literal* delimiter + EOF-warns. |
 | **Declared-limitations list final** | Unix job control shipped; Windows process-group/TTY boundary and `((` nested-subshell ambiguity remain declared | per `vsc-pcts-readiness.md` §Known limitations |
 | **Apply for VSC-PCTS license** (Open Group) | ✅ **LICENSED + SUITE IN HAND**; the shell-scenario run is complete (results held privately — see `vsc-pcts-run-status.md`) | VSC-PCTS2016 OSS v1.4 agreement, signed 2026-06-28, countersigned by The Open Group 2026-07-03 (ticket **#279890**); suite downloaded by 2026-07-04. Agreement held privately (personal data — never committed). The 12-month clock started at the suite-access email (early July 2026 → expires ~July 2027), with a 10-day destroy obligation after. Binding terms — suite not redistributable; **publishing results CONSENT GRANTED 2026-07-16 (ticket #280298) for shell-utility tests, EXTENDED 2026-07-29 to the utility test sets; both for conformance-work purposes only; no "certified"/trademark claim regardless** — see `bashy-v1.0.0-readiness.md` §License terms + `dhnt/docs/legal/pcts-publication-consent-granted.md`. |
-| **Stand up TET + wire bashy as SUT (POSIX mode)** | ✅ **493/493 shell certification pass group, zero blockers/caps** on 2026-08-08; historical utilities sweep also published | tag `vsc-pcts-posix-shell-2026-08-08`; full 117-set run still pending |
+| **Stand up TET + wire bashy as SUT (POSIX mode)** | ✅ **493/493 shell certification pass group, zero blockers/caps** on 2026-08-08; historical utilities sweep also published | tag `vsc-pcts-posix-shell-2026-08-08`; full 117-set run was pending at this historical snapshot; completed in S561 |
 
 ## What "0 deviations" means here (claim discipline)
 
@@ -104,7 +110,7 @@ running this gate. The umbrella campaign context lives one repository above at
 `../docs/bashy-three-workstreams.md`; its absence inside an isolated bashy-only
 clone is expected and is not a blocker.
 
-### Current preflight conclusion
+### Historical preflight conclusion (2026-08-02)
 
 Both agent-drivable serial gates were green on 2026-08-02: Bash 5.3 was 86/86
 and Yash POSIX mode was 1,832/1,832 with no Bashy-specific differential. At

@@ -1,5 +1,9 @@
 # Sprint 561 A1: finite Classic profile and baseline lanes
 
+**Historical A1 inventory:** blocked/pending labels below describe the baseline
+planning stage. The final [A4 report](a4-licensed-results.md) records both
+completed licensed arms; [S571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) owns the remaining dispositions.
+
 Source commit and artifact identities are in [baseline-manifest.json](baseline-manifest.json). Recreate it with `GOWORK=off sh scripts/s561-baseline-manifest.sh c3dd9e3822edf3692ad64d46176e48e1dab7be08`. The manifest source `c3dd9e38` is tree-identical to migration-validated `5a4bd03f` outside `docs/` (`git diff --exit-code 5a4bd03f c3dd9e38 -- . ':!docs'`). Reuse the S557 story `bf7624a5c2f2` frozen-tree evidence for unchanged inputs; this is an A1 inventory, not a claim that the later A2/A4 suites passed. `GOWORK=off` is mandatory for all evidence; the umbrella `go.work` is only for local development.
 
 The required scope is fixed by [Sprint 341 base scope](../../../vsc-pcts-harness-kit/docs/SPRINT-341-BASE-SCOPE.md) as routed in [POSIX command coverage](../posix-command-coverage.md): GNU Bash 5.3 compatibility and POSIX shell, 102 mandatory utility targets comprising 92 Go applets and 10 Bashy shell commands, no external utility providers, plus Go `gencat` proved separately. `man` is mandatory and Go routed. The 14 optional targets `ar bg ctags ex fc fg jobs localedef make more nm strip talk vi` are outside acceptance. Profile B is the prepared GNU/system utility control; Profile D is the integrated Bashy utility route; C is diagnostic. No utility or provider is added by A1.

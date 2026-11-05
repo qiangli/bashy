@@ -25,7 +25,8 @@ Every terminal step in it really ran, on our own machines.
   no GNU-vs-BSD drift.
 - **GNU Bash 5.3 compatible**: Bash's own 5.3 suite, 86/86.
 - **Built to POSIX.1-2016 (IEEE Std 1003.1-2016)**: 493/493 on the licensed
-  conformance suite; formal certification is in progress.
+  shell-isolation arm; the full Shell and Utilities run retains 67 non-passes.
+  [Measured status and certification follow-up](docs/vsc-pcts-run-status.md).
 - **Bash#, "Go with bash"**: the bash you know, typed Go where you need it.
   Skills and scripts are two sides of the same coin: read it as a skill, run
   it as a script.

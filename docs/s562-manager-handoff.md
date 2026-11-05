@@ -52,10 +52,11 @@ items are done. Accept it after one look at `tools/fence-corpus/README.md`.
 
 ## Agreements with S561
 
-No bashy go.mod/pin/source changes from S562 during S561's A4 freeze (they
-announce start/end). Neither manager pushes bashy main without the other's ACK;
-the operator approves pushes. S561's certification candidate pins sh
-`6663c93a+74586fde` only. S562 bumps bashy's sh pin only after S561 says so.
+S561's A4 licensed run is complete and the freeze is lifted. Its exact
+candidate and results remain in [S561 evidence](s561/a4-licensed-results.md).
+S562 may resume source/pin changes under its own coordination rules; evidence
+for a later candidate must satisfy [the identity rule](s561/evidence-identity.md).
+S571 owns the residual certification decisions and imposes no blanket freeze.
 
 ## Open bashy defects reported to S563
 
@@ -67,4 +68,4 @@ Workaround: no `--watch`; read with `inbox --as NAME`; reply on sprint threads.
 ## Remaining after the E-stories
 
 B1-B4: fence × platform × provider matrix, baselines, repairs, frozen candidate
-verification and the bashy sh pin bump — after S561's freeze ends.
+verification and the bashy sh pin bump. S561 no longer blocks this work.

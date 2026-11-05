@@ -1,8 +1,10 @@
 # Plan: three-layer delineation (A Classic · B Bash# · C Yoke)
 
-Status: planned 2026-11-04 (operator-approved direction), **deferred until the
-Sprint 561 licensed run on candidate `f1bcd711` is complete**. Changing any
-build input before then would void that run's evidence.
+Status: planned 2026-11-04 (operator-approved direction). **The S561 run is
+complete and its freeze is lifted.** S571 owns residual certification decisions.
+Changes to linked inputs require evidence revalidation under
+[s561/evidence-identity.md](s561/evidence-identity.md); the completed run remains
+attributed to candidate `f1bcd711` and its exact artifacts.
 
 ## Objective
 
@@ -10,7 +12,7 @@ A clear, enforced layering in the import graph:
 
 | Layer | Contents | May import |
 | --- | --- | --- |
-| **A — Classic** | GNU Bash 5.3 / POSIX shell + coreutils (POSIX ∪ GNU coreutils ∪ `gencat`) — the POSIX-certified surface | A only |
+| **A — Classic** | GNU Bash 5.3 / POSIX shell + coreutils (POSIX ∪ GNU coreutils ∪ `gencat`) — the surface being prepared for POSIX certification | A only |
 | **B — Bash#** | Bash# / Bash++ language, Go-source front end, fenced runtimes (py/ts/rs/c/go/…) | A, B |
 | **C — Yoke** | genie, software shaping, AgentOS, optional coreutils (external providers) | A, B, C |
 
