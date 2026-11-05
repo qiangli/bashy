@@ -56,8 +56,9 @@ from actual output rather than assuming names or version numbers.
 ## Submit the change (optional, H4)
 
 Keep the approved version ID before undoing. With H4 available, use
-`bashy shape submit hello-world VERSION --story STORY_ID` against your
-own disposable test story/run. Inspect the resulting proposal and normal
+`bashy shape submit hello-world VERSION` to retain its automatically linked
+TODO, or add `--story STORY_ID` for an explicit disposable story. Inspect the
+resulting tracked proposal/run, source identity, verifier evidence and normal
 gates. Submission does not mean approval or automatic merge.
 
 ## Repeatable acceptance and recording
@@ -85,7 +86,8 @@ Bashy and example revisions. Public posting is a separate step.
 [e2e-agent.md](e2e-agent.md) and [e2e-self-agent.md](e2e-self-agent.md) describe
 H7's two scenarios. [e2e-matrix.md](e2e-matrix.md) documents isolated setup,
 interface selection and evidence requirements. Prepare an isolated registration, two paired principals, browser access
-and a disposable submission story. Configure those details in the agent's test
+and a writable disposable tracking store for automatic TODO linkage (or an
+optional submission story). Configure those details in the agent's test
 session through `E2E_CONTEXT`, set the disposable `BASHY_HOME`, then run
 `bash e2e-agent.sh codex exec -` (or another actual agent
 command that reads stdin). Set `BASHY_BIN` to the candidate executable and make

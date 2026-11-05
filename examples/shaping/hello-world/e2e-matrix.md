@@ -16,7 +16,7 @@ an app registration can still write shared configuration despite BASHY_HOME.
 Set a private PATH directory containing that same candidate as `bashy`; keep
 the released executable and PATH on the host unchanged. Do not reuse an active
 self-shaping slot across cells. Register a fresh Hello World source with
-`register.sh`, create a disposable submission story in the workspace, and
+`register.sh`, prepare a writable disposable tracking store in the workspace, and
 prepare two distinct paired synthetic principals in fresh browser profiles.
 Use the existing app serve/pair commands and normal agent bindings. Selecting
 an agent tool must not install or silently change its model/authentication.
@@ -30,11 +30,16 @@ app available for the shaped tool's read-only inspection.
 
 Write a private `E2E_CONTEXT` file containing resource references: candidate
 and fixture commit/digest, app name, principal names, console origin, paired
-browser profiles, disposable story ID/store, evidence directory, chosen model
+browser profiles, disposable tracking store (and optional story ID), evidence directory, chosen model
 and selected MCP server name or REST session file path. Include no cookie,
 token or credential values. Agents retain their normal provider auth outside
 the disposable app state; do not copy provider auth into public artifacts.
 Run from the disposable workspace, so auto tracking cannot touch this repo.
+The ordinary automatically linked TODO is sufficient for submission: call
+`shape submit APP APPROVED_REV` without `--story` to retain its archived linkage.
+An explicit disposable story is optional. In either case inspect the actual
+reviewable tracked proposal/run, source identity, verifier evidence and normal
+gates; automatic linkage does not waive any submission acceptance criteria.
 
 ```sh
 export BASHY_BIN=/path/to/pinned/bashy

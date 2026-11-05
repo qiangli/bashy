@@ -3,7 +3,8 @@
 Use only the disposable installation and selected interface in the run context.
 The operator must supply a clean pinned Bashy source checkout matching the
 retained executable's embedded release identity, trusted CLI build/test argv,
-and a disposable tracking story. An unknown release source blocks rollback
+and a writable disposable tracking store for the automatically linked TODO
+(or an optional disposable story). An unknown release source blocks rollback
 acceptance. Do not change shared sources, protected control code, build gates,
 release/PATH installation, or credentials. A local OS account remains trusted;
 this exercise does not establish a sandbox for malicious native code.
@@ -24,7 +25,7 @@ this exercise does not establish a sandbox for malicious native code.
 6. Undo in one command. Confirm original help text and exact retained release
    artifact/source identity. No manual binary replacement or PATH edits.
 7. Submit the retained approved candidate through the selected interface to the
-   disposable story. Inspect reviewable proposal/run, origin, identities and
+   automatically linked TODO, or an optional disposable story. Inspect reviewable proposal/run, origin, identities and
    verifier evidence. Never merge automatically.
 8. Retain real browser evidence for the accompanying Software Shaping app/UI
    requirement and Hello World observation. CLI-only output does not close the

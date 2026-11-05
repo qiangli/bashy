@@ -17,13 +17,15 @@ Do not expose credentials in prompts or logs.
 7. Explicitly approve through the selected interface. Assert Hello, Shaping! in the active app,
    the matching active version, and Hello, World! for a second principal.
 8. Undo through the selected interface. Assert Hello, World! and restored version identity.
-9. Submit the retained approved version to the operator-supplied disposable
-   story through the selected interface. Inspect tracking, origin, actor/represented user,
+9. Submit the retained approved version through the selected interface using
+   its automatically linked TODO, or an optional operator-supplied disposable
+   story. Inspect tracking, origin, actor/represented user,
    source identity, verifier evidence, and reviewable proposal/run. Never merge.
 
 Report each step as PASS, FAIL or BLOCKED with supporting commands, sanitized
-output and artifact references. Missing browser access or a disposable story
-blocks the corresponding steps; narration is not browser evidence. Include
+output and artifact references. Missing browser access or a writable disposable
+tracking store blocks the corresponding steps; no extra sprint/story is required
+when the ordinary auto TODO supports submission. Narration is not browser evidence. Include
 Bashy/source revision, agent/model version and platform. An overall PASS needs
 all steps and independent review of the evidence. This task covers one H7 cell;
 it does not establish other interfaces, other agents, negative cases or E2E B coverage.
