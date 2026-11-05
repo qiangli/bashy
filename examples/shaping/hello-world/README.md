@@ -12,7 +12,7 @@ Run `bash register.sh /path/to/new/hello-world-source` from this directory,
 choosing a new directory outside this repository. The script copies only app
 files and creates an independent Git checkout. Keep it for the app’s lifetime. Registration deliberately omits
 `--force`; inspect an existing registration instead of overwriting it.
-Start `bashy app serve --pair --shape-agent <tool:model>`, replacing the agent
+Start `bashy app serve --bind lan --pair --shape-agent <tool:model>`, replacing the agent
 placeholder with your configured agent. Pair a browser using
 `bashy app pair --principal <you> --allow hello-world` and follow the printed
 URL. Open Hello World from the launcher. Confirm the original heading.
