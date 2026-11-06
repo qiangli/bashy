@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [host/page] Never run the foreign uutils conformance suite on a host — Host-crash guardrail WHEN running bashy/coreutils/uutils conformance: infinite-device and root-equivalent recursive cases can OOM or walk the host root; use disposable hard-capped containment and quarantine known cases. Do not run the full foreign uutils suite  (kb:never-run-the-foreign-uutils-conformance-suite-on-a-host)
+- [repo/page] Derive no-egress allowlists from the pinned test's full port set — When a sandbox profile or strace verdict allowlists loopback ports for a pinned test binary, enumerate every bind/connect in that test's source at the pinned commit, not the subset remembered from its description. Prima's ring test was allowed 5  (kb:derive-no-egress-allowlists-from-the-pinned-test-s-full-port-set)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 
