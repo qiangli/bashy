@@ -95,7 +95,7 @@ func TestTmplFenceEngineNonCompliantIsRefused(t *testing.T) {
 	ringDir(t)
 	writeRecord(t, fleet.Command{Name: "norender", Exec: []string{shPath(t), "-c", `[ "$1" = methods ] && printf '%s\n' '{"name":"lint"}'; exit 0`, "norender", fleet.ArgsToken}})
 	writeRecord(t, fleet.Command{Name: "nomethods", Exec: []string{shPath(t), "-c", `exit 0`, "nomethods", fleet.ArgsToken}})
-	for engine, want := range map[string]string{"norender": "package T is not imported", "nomethods": "declared no methods"} {
+	for engine, want := range map[string]string{"norender": "unknown function T.render", "nomethods": "declared no methods"} {
 		out, failure := tmplEngineFence(t, "~~~tmpl as T !"+engine+"\nhello {{ upper .name }}\n~~~\nT.render('{\"name\":\"x\"}')\necho after\n")
 		if !strings.Contains(failure, want) || out != "" {
 			t.Errorf("%s: out=%q failure=%q (want %q, no Go fallback)", engine, out, failure, want)
