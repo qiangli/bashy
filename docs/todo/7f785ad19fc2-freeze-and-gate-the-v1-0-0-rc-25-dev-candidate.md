@@ -20,3 +20,12 @@ After the pin reconciliation story lands: freeze one candidate commit and build 
 - govulncheck report attached (currently report-only; list counts per module).
 - Signing status line from the candidate notes (signed=true|false per platform).
 Reuse passing evidence only when tied to the same candidate; a pre-existing failure is tracked separately, never reported as passing.
+
+Added gates (sprint 580 plan, 2026-11-06), each tied to the candidate SHA:
+- make license-gate (blocking per docs/release-runbook.md).
+- test-bash locale pinned and stated in the receipt (see 9e8271251090: 83/86 with LANG unset).
+- Commit-pinned release/tier-verdicts/<sha>.json for the candidate (promote.yml requires it).
+- Layer ratchets from Sprint 575 S0 (72c55602dd2e, script/layer-gate.sh, GOWORK=off) green; pre-existing failures listed in the K1 ledger.
+- E1 Klatch E2E (a8c4da9c) run on the candidate; BLOCKED legs go to the ledger.
+- scripts/verify-signatures.sh on the native QA runner when reachable; otherwise record the signing status line only.
+Schedule: freeze and tag Saturday afternoon; build once.

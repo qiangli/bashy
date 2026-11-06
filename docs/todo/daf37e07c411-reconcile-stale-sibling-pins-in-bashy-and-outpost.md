@@ -31,3 +31,5 @@ Outpost's own go.mod also lags yoke (root 89df473c, pkg/provider 89df473c/63180e
 Procedure: producer before consumer. (1) For each sibling, review commits between pin and HEAD (git log PIN..HEAD) and record whether they are code or records. (2) Reconcile outpost's yoke pins in outpost, gate outpost (go test -short ./... on a test host), push. (3) In bashy run `bashy mod sync` (or targeted go get / go mod edit for replaces), update internal/agentos/src_mount.go srcModulePins for yoke/coreutils/sh, run `GOWORK=off go list -deps ./...`. (4) Decide ycode cycle bump explicitly. (5) Gates on a self-hosted test host, never the dev box: GOWORK=off make test, Windows cross-build + e2e dispatch, make test-bash-container. (6) Re-run `bashy mod drift`; acceptance = no stale entry except a documented, intentional one.
 
 Verification: drift report attached to the story; gate receipts with exact source SHAs; umbrella gitlinks bumped.
+
+Order (sprint 580 plan, 2026-11-06): run after P1 (a130d972) lands in yoke, so the single bashy pin bump carries the promotion-path change; outpost reconciles first. If P1 misses the Saturday-noon cut line, proceed without it.
