@@ -413,3 +413,18 @@ Integration is being coordinated with Sprint 562. Yoke shaping is already in
 public main through `698d3161`; the combined Bashy candidate preserves shaping,
 telemetry, fence and dependency-pin fixes. Earlier native lifecycle evidence
 remains tied to `282a314f` / `6b865c24`; it is not relabeled as a fresh merged run.
+
+
+## Final serial shell gate and remaining qualification
+
+The unchanged-budget Bash 5.3 gate on `282a314f` completed with **86 passed,
+0 failed, 0 skipped, 0 timed out**. The companion executable, runner and locale
+identities are retained with the raw results. This predates the combined shell
+pin and fixture-runner integration; merged-source shell qualification is separate.
+
+The H5 follow-up confirmed Sprint 570 H1 remains unimplemented, so genuine
+self-handoff cannot yet be qualified. Available macOS storage is below the
+observed build working set; no heavy build or shared-cache cleanup was attempted.
+The H7 follow-up remains 7/24 reviewed passes. A newer agent client accepts the
+session-only observer-read permission, and a guarded next MCP fixture is prepared;
+no provider lifecycle was run on an absent or mismatched merged artifact.
