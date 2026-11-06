@@ -3,13 +3,14 @@ id: 515557c02505
 kind: test
 title: H7 Integration and E2E shaping with Codex, Claude, Muse and agy over CLI, MCP and REST
 seq: 3080
-status: todo
+status: assigned
 priority: p2
 labels:
     - shaping
     - integration
     - e2e
 created: 2026-11-05T02:57:51.661013Z
+assignee: codex-gpt6-sol
 sprint: 564
 sprint_id: 0f09b646-9acd-5bec-849d-2cf3b0e4edef
 sprint_title: 'Software shaping for Bashy apps: any user shapes an app on their own host'

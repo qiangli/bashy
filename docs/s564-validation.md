@@ -2,13 +2,13 @@
 
 ## Current status
 
-Qualification remains draft. H2 and H4 are accepted; H3, H5 and H7 remain open.
-Seven of 24 actual agent/interface cells passed manager review. The real Bashy
-self-shaping run activated but failed undo; Klatch passed build/tests but failed
-disposable service cleanup. Repairs are being qualified with fresh controllers;
-failed runs remain failed. Full platform/UI/self-handoff coverage and the unchanged
-startup/general gates remain incomplete. Earlier sections below retain exact
-candidate identities and outcomes.
+Qualification remains draft. H2, H3 and H4 are accepted; H5 and H7 remain open.
+The repaired controller passed actual CLI and service activation/rollback, including
+exact retained binary restoration and Klatch data preservation. Seven of 24 actual
+agent/interface cells passed manager review on their recorded snapshots. The original
+failed Bashy agent cell remains failed; repaired-controller recovery is separate.
+Full platform/UI/self-handoff coverage and the unchanged startup/general gates remain
+incomplete. Earlier sections below retain exact candidate identities and outcomes.
 
 ## H2 atlas census baseline (2026-11-05)
 
@@ -362,3 +362,54 @@ transitions stop the current declaration before saving its replacement. Ownershi
 mismatches and cleanup failures retain the unit/data. Focused service, ownership,
 interrupted-transition and actual Go rollback checks pass together in standalone
 mode. Fresh real cycles remain pending; no manual cleanup is counted as a pass.
+
+
+## Verified native cycles on the repaired controller
+
+The clean standalone controller is Bashy `282a314f6c5936868f116980c7989531202d6908`,
+using Yoke `6b865c246871ede8423a07c2566a6ae1b5d12cc8`, Go 1.27.2 and go-git 5.19.3.
+Its SHA256 is `30ef98047d9083e083b0e03f9348e130d1c1efb07fc7c13f2d2f6e26fe0ccaea`.
+
+The Bashy CLI recovery used normal undo against the preserved installation.
+It restored source `fd6beb4aabebb6bfe1c622d18917f40c45b84289` and the exact retained
+binary digest `b04c0ae228ace9cc9607301c998ed0dc95aa95aa6e07b36137bba95dd7b897f5`.
+The selected help lost the candidate text, the secondary Hello World app stayed
+at its baseline, and a new real Chrome observation confirmed restored API identities.
+The original agent's failed run is retained independently.
+
+Actual Klatch verification, preview, approval and one-step undo completed.
+Source `fa70902bc414cb584c5cd8df4b0c120d87bf218e` changed to
+`1f2f7dedaafee52daf7290cba9ea66f481029139` and returned to the original source.
+The approved image was `sha256:d34be90d0311efdbc7936708e09d912fbe3cb2160d2eda2d1ba280cfccbcaa63`;
+undo restored `sha256:b98c00b0f0e4f41face83f0985acc9dc36773435b36e6dd39267732d554fbe7d`.
+The live page stayed original before approval; both approved and restored pages
+served their expected titles. The data directory and SQLite sentinel matched
+throughout. No manual container removal was used between qualification steps.
+
+The matching Linux `pkg/shape/...` and `pkg/src` regression passed in 316.49 s,
+including interrupted-publication/journal and negative guard tests. All 19 other
+source bindings were unchanged, and both updated targets matched their committed
+trees. The original snapshot's recorded source deletion remains unchanged.
+
+Normal native submission then reverified final proposal
+`00c56819207387c4b8f2faba9e0e94aca9fa7ef2`, produced ordinary open PR 1 and
+unstarted review run 1, and retained TODO `e3a953fd59c8` without a sprint association.
+The active source and binary stayed on the restored release. Read-only CLI
+argument/scope discovery errors are retained separately from lifecycle results.
+
+H3 was accepted after these checks. H5 still needs all three platforms, genuine
+self-handoff delivery and console regression; H7 still needs the complete matrix
+and actual accompanying UI self-shaping. The canonical Make run on these exact
+sources completed with exit 2 after 3572.745 s, with full system PATH, normal
+test parallelism and unchanged budgets. Fresh SPA, build-tag combinations,
+scratch-container execution and startup gate passed (13.94 ms total, 3.00 ms
+largest package, against the unchanged 15/5 ms limits). The complete suite
+failed in Desk (registration and aggregate 600 s timeout), outpost-profile
+Windows path conversion, source-pin consistency, skill help and ELF audit
+(600 s timeout). Prior baseline reproductions cover the path and source-pin
+failures; unresolved timeout/help coverage remains failed, not waived.
+
+Integration is being coordinated with Sprint 562. Yoke shaping is already in
+public main through `698d3161`; the combined Bashy candidate preserves shaping,
+telemetry, fence and dependency-pin fixes. Earlier native lifecycle evidence
+remains tied to `282a314f` / `6b865c24`; it is not relabeled as a fresh merged run.
