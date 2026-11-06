@@ -244,3 +244,22 @@ are dispositions on the other OSes only.
 - Full corpus runs on frozen candidates and on claimed test hosts only.
 - Findings grouped in the owning story; a new story only for independent
   ownership or acceptance.
+
+## Operator-authorized scope split to Sprint 573
+
+On 2026-11-05 the operator requested a new sprint for Windows, C# and
+PowerShell, while Sprint 562 completes its remaining stories. Sprint 573
+(UUID `a5f60348-0dc8-5af7-80aa-9dffe2c745ea`) owns those deferred platform
+and language obligations, described in the umbrella document
+`docs/plan-windows-csharp-powershell-followup.md`. Nine dedicated stories
+retain their IDs and evidence there; carried parent `83fe3d72eb62` captures
+the C#/PowerShell portion of E4. E4 `df328510d106` remains here for C/C++.
+
+For current acceptance, the historical all-platform/all-language wording
+above is amended only by this explicit split. Sprint 562 must finish its
+remaining Linux corpora and non-deferred fence obligations, source-bound
+regression gates and integration. C++, Rust, Python, Go and TypeScript
+remain here. Bash's final serial gate remains required. Deferral never
+counts as a pass; inventories and ratchets preserve the full denominators
+and separately identify follow-up ownership. No unexplained skip, timeout
+increase, weakened oracle or implicit waiver is permitted.
