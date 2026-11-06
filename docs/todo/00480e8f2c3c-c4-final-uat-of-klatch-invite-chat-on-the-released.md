@@ -8,9 +8,9 @@ priority: p1
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:41.105323Z
-sprint: 563
-sprint_id: 282b20a5-f15c-55eb-a314-eef9580e19d1
-sprint_title: 'Product UAT: clean-install user journeys and defect closure'
+sprint: 577
+sprint_id: d48e26ca-6b5d-50ba-a074-6af09d3fd177
+sprint_title: 'Klatch follow-up: fleet release, outpost and satellite support, product limitations'
 ---
 
 Depends on C3 and stable 561/562 candidates. Freeze integrated Bashy, outpost and Klatch release identities and execute every required J1-J10 cell from clean install on W, M and L, natively, with single sign-on and team mode from the Klatch release (no host-scoped shaping); rerun the UAT cohort's journeys on that release and retire the elephant shaping branch and container. Recheck affected journeys after any new fix; keep coverage and failure history visible. Acceptance: complete agreed UAT passes, all in-scope issues closed by evidence, minimal user-facing limitations documented. Candidate acceptance only, not authorization to deploy, publish or replace a shared installation. Deferred: general software shaping (Sprint 564), satellite-less default outpost and multi-satellite switching (Sprint 565).
