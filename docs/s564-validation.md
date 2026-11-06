@@ -280,3 +280,20 @@ The direct Linux Go suite finished failed. The two shaping command-name
 inventory omissions are corrected. Four deterministic failures reproduced
 against the frozen baseline; aggregate timeouts in two packages remain
 unresolved. Neither that suite nor the full Make target is reported passing.
+
+
+The refreshed Klatch controller passed its build, all seventeen named Go tests
+and source dependency checks. Disposable health then failed before preview
+creation: the real catalog wraps its missing-unit sentinel, whereas preview
+code used a filesystem-only absence check. Four runtime-load checks now unwrap
+the sentinel with `errors.Is`. A regression using the real catalog covers the
+verification probe, preview creation, missing-preview recovery and owned cleanup.
+The failed real-run seal remains preserved; a fresh-controller lifecycle retry
+is required before service acceptance.
+
+AGY MCP authentication now works through a narrow reference to the existing
+native login store. Its default headless policy separately denied discovery
+commands and a discovery tool before lifecycle calls. Those blocked attempts
+remain recorded; supported session-only grants are limited to exact schema
+reads and the selected server's discovery/shape tools. No completed lifecycle
+or cell pass is inferred from authentication, tool listing or process exit.

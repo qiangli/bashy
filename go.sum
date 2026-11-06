@@ -1932,5 +1932,5 @@ tags.cncf.io/container-device-interface v1.1.0 h1:RnxNhxF1JOu6CJUVpetTYvrXHdxw9j
 tags.cncf.io/container-device-interface v1.1.0/go.mod h1:76Oj0Yqp9FwTx/pySDc8Bxjpg+VqXfDb50cKAXVJ34Q=
 tags.cncf.io/container-device-interface/specs-go v1.1.0 h1:QRZVeAceQM+zTZe12eyfuJuuzp524EKYwhmvLd+h+yQ=
 tags.cncf.io/container-device-interface/specs-go v1.1.0/go.mod h1:u86hoFWqnh3hWz3esofRFKbI261bUlvUfLKGrDhJkgQ=
-github.com/qiangli/yoke v0.0.0-20261106005613-0dd429e093ee h1:nl+L180vEi6JdK12ll4W3gJh0h2WylBY0NnR99T044U=
-github.com/qiangli/yoke v0.0.0-20261106005613-0dd429e093ee/go.mod h1:1iYVqkJaq5rxfhGPrDJUtYWNj+jvrq+jdu3sT+jjA2k=
+github.com/qiangli/yoke v0.0.0-20261106012146-bbe98c78b2d6 h1:8JtN6Rs3nkMTdQckX/+kzSueVelnPSJKIFITw0odYmg=
+github.com/qiangli/yoke v0.0.0-20261106012146-bbe98c78b2d6/go.mod h1:1iYVqkJaq5rxfhGPrDJUtYWNj+jvrq+jdu3sT+jjA2k=
