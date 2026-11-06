@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -1005,7 +1006,11 @@ func ensureStub(path string, lines int, name, reason string) error {
 // fixture got — and is empty for every other verdict; an error means the
 // harness itself could not run the fixture.
 func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duration, bashppOpt ...bool) (string, string, error) {
-	ctx, cancel := context.WithCancel(context.Background())
+	return runFixtureContext(context.Background(), root, testsDir, bashPath, f, timeout, bashppOpt...)
+}
+
+func runFixtureContext(parent context.Context, root, testsDir, bashPath string, f fixture, timeout time.Duration, bashppOpt ...bool) (verdict, detail string, err error) {
+	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	args := []string{}
 	if len(bashppOpt) > 0 {
@@ -1052,16 +1057,38 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 	cmd.Stdout = &raw
 	cmd.Stderr = &raw
 	cmd.Env = fixtureEnv(root, testsDir, bashPath, f.Name)
+	terminal, err := openFixtureTerminal()
+	if err != nil {
+		return "FAIL", "", err
+	}
+	terminalRestored := false
+	defer func() {
+		if !terminalRestored {
+			if restoreErr := terminal.restore(); restoreErr != nil {
+				err = errors.Join(err, restoreErr)
+				verdict = "FAIL"
+			}
+		}
+	}()
 
 	parentWatch, err := armParentDeathWatch(cmd)
 	if err != nil {
 		return "FAIL", "", err
 	}
 	startErr := cmd.Start()
-	parentDeathWatchStarted(parentWatch, startErr)
 	if startErr != nil {
+		parentDeathWatchStarted(parentWatch, startErr)
 		return "FAIL", "", startErr
 	}
+	// The guard waits for Started's command specification. Transfer the PTY
+	// before releasing it, so read2.sub cannot race into SIGTTIN.
+	if err := terminal.handoff(cmd.Process.Pid); err != nil {
+		parentDeathWatchStarted(parentWatch, err)
+		killProcessTree(cmd.Process.Pid)
+		_ = cmd.Wait()
+		return "FAIL", "", err
+	}
+	parentDeathWatchStarted(parentWatch, nil)
 	defer func() { stopParentDeathWatch(parentWatch) }()
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
@@ -1101,12 +1128,33 @@ func runFixture(root, testsDir, bashPath string, f fixture, timeout time.Duratio
 			case <-time.After(2 * time.Second):
 			}
 		}
+	case <-ctx.Done():
+		killProcessTree(cmd.Process.Pid)
+		select {
+		case err := <-done:
+			reaped(err)
+		case <-time.After(5 * time.Second):
+			_ = cmd.Process.Kill()
+			select {
+			case err := <-done:
+				reaped(err)
+			case <-time.After(2 * time.Second):
+			}
+		}
 	}
 	// procguard reaps the requested shell, but a shell may exit after leaving
 	// background descendants in its inherited process group. Kill that group
 	// on normal completion as well as timeout so no fixture process survives
 	// the harness iteration.
 	killProcessTree(cmd.Process.Pid)
+	if err := terminal.restore(); err != nil {
+		terminalRestored = true
+		return "FAIL", "", err
+	}
+	terminalRestored = true
+	if parent.Err() != nil {
+		return "FAIL", "", parent.Err()
+	}
 	if timedOut {
 		// A timeout with no evidence is a dead end: the fixture is a few
 		// hundred lines and the harness knows only that it stopped. Say how
