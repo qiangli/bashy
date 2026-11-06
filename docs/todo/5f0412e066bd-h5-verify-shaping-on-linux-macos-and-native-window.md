@@ -3,13 +3,12 @@ id: 5f0412e066bd
 kind: test
 title: H5 Verify shaping on Linux, macOS and native Windows
 seq: 3075
-status: assigned
+status: todo
 priority: p2
 labels:
     - clean-baseline
     - shaping
 created: 2026-11-05T01:04:42.119414Z
-assignee: codex-gpt6-sol
 sprint: 579
 sprint_id: b3b68c8f-69de-5654-bab3-e0665d048fd4
 sprint_title: 'Software shaping: platform and agent E2E validation'
