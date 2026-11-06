@@ -3,12 +3,13 @@ id: 5f0412e066bd
 kind: test
 title: H5 Verify shaping on Linux, macOS and native Windows
 seq: 3075
-status: todo
+status: assigned
 priority: p2
 labels:
     - clean-baseline
     - shaping
 created: 2026-11-05T01:04:42.119414Z
+assignee: codex-gpt6-sol
 sprint: 564
 sprint_id: 0f09b646-9acd-5bec-849d-2cf3b0e4edef
 sprint_title: 'Software shaping for Bashy apps: any user shapes an app on their own host'

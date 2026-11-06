@@ -3,14 +3,17 @@ id: 67a325bc2095
 kind: feature
 title: 'H3 CLI and service app kinds: register, verify, activate per host'
 seq: 3057
-status: todo
+status: done
 priority: p2
 labels:
     - shaping
 created: 2026-11-04T06:51:48.400816Z
+assignee: codex-gpt6-sol
 sprint: 564
 sprint_id: 0f09b646-9acd-5bec-849d-2cf3b0e4edef
 sprint_title: 'Software shaping for Bashy apps: any user shapes an app on their own host'
+closed: 2026-11-06T02:39:31.041581Z
+closed_by: codex-gpt6-sol
 ---
 
 Depends on H2. Register CLI and service apps as shapeable (today app add --type shaped covers web only). Per-kind verifier checks: CLI = build + the app's declared test gate; service = build + tests + health check. Per-host activation on approve: bashy uses a side-slot binary with the release kept and PATH unchanged; Klatch's unit points at the shaped image with data kept. undo/restore returns to the previous or released version in one step. A failing candidate is never activated. Acceptance: activation and swap-back tested for both kinds, including an interrupted activation; status shows the active shaped identity.
