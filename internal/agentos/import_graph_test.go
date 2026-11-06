@@ -65,3 +65,39 @@ func TestBinaryImportGraphsIsolateGfy(t *testing.T) {
 		}
 	}
 }
+
+// classicBashAllowlist freezes the banned packages cmd/bash imports today.
+// It may only shrink: a new banned import fails, and a stale entry fails.
+var classicBashAllowlist = map[string]bool{
+	// S3 be8e90559755 removes the bashsharp front-door edge from cmd/bash.
+	"github.com/bashsharp/bashsharp/front": true,
+	// S3 be8e90559755 removes the polyglot edge from cmd/bash.
+	"mvdan.cc/sh/v3/polyglot": true,
+}
+
+func TestClassicBashImportGraphRatchet(t *testing.T) {
+	out, err := exec.Command("go", "list", "-deps", "github.com/qiangli/bashy/cmd/bash").CombinedOutput()
+	if err != nil {
+		t.Skipf("go list unavailable (%v): %s", err, out)
+	}
+	banned := []string{
+		"github.com/qiangli/yoke",
+		"github.com/qiangli/coreutils",
+		"github.com/bashsharp/bashsharp",
+		"mvdan.cc/sh/v3/polyglot",
+	}
+	seen := map[string]bool{}
+	for _, pkg := range strings.Fields(string(out)) {
+		seen[pkg] = true
+		for _, b := range banned {
+			if (pkg == b || strings.HasPrefix(pkg, b+"/")) && !classicBashAllowlist[pkg] {
+				t.Errorf("cmd/bash transitively imports banned package %s", pkg)
+			}
+		}
+	}
+	for pkg := range classicBashAllowlist {
+		if !seen[pkg] {
+			t.Errorf("allowlist entry %s is no longer imported; delete it (allowlist is shrink-only)", pkg)
+		}
+	}
+}
