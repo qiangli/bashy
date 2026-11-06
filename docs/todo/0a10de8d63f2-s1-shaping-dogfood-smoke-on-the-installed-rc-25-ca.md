@@ -14,4 +14,14 @@ sprint_id: 0cae3983-9725-5e31-b45d-3585e97e00de
 sprint_title: Bashy checkpoint and release candidate v1.0.0-rc.25
 ---
 
-Proves rc.25 is ready for shaping. On the dev host, from the installed frozen candidate (canonical installed path), run the hello-world CLI lifecycle (examples/shaping/hello-world): shape wish -> verify -> approve -> undo -> restore. Then one real shaped change through the promotion path: local shape -> shape submit --push to an org remote (P1) -> a teammate adopts via fetch + shape wish --from -> --gh opens the upstream PR. Record exact candidate SHA, installed binary digest, commands and results as one evidence record. A failure is tracked in the known-issues ledger, never reported as passing. Depends on P1 (if P1 misses the cut, record the local-only lifecycle and the push/PR legs as BLOCKED).
+Proves rc.25 is ready for shaping. On the dev host, use the installed frozen candidate (at the canonical installed path) to run the hello-world CLI lifecycle from examples/shaping/hello-world: shape wish -> verify -> approve -> undo -> restore.
+
+Then run one real round trip with the P1 rod (a130d972) between two hosts (named by role):
+1. Host A shapes a change.
+2. `shape outgoing` lists it (exit 3, --json).
+3. `shape push --to org`.
+4. Host B: `shape incoming --from org` lists it.
+5. Host B: `shape pull --from org` (gated, from the side slot), then `shape undo`.
+6. Host A: `shape push --to upstream` opens the upstream PR.
+
+Record the exact candidate SHA, the installed binary digest, the commands and the results as one evidence record. A failure is tracked in the known-issues ledger and never reported as passing. If P1 misses the cut, record the local lifecycle, and record the rod legs as BLOCKED.
