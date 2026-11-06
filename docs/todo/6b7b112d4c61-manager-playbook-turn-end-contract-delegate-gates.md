@@ -3,12 +3,14 @@ id: 6b7b112d4c61
 kind: doc
 title: 'Manager playbook: turn-end contract, delegate gates, operator section'
 seq: 3120
-status: todo
+status: assigned
 priority: p0
 labels:
     - sprint
     - operator
 created: 2026-11-06T17:13:24.136743Z
+weave: 23
+assignee: claude-sonnet5.5
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
 sprint_title: 'Proactive sprint manager: wake, supervise, review'

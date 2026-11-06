@@ -3,11 +3,13 @@ id: 92cb9ce54536
 kind: feature
 title: 'sprint take --force: cooperative takeover with operator approval and incumbent handoff'
 seq: 3121
-status: todo
+status: assigned
 priority: p0
 labels:
     - sprint
 created: 2026-11-06T17:24:36.293262Z
+weave: 24
+assignee: claude-opus5.5
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
 sprint_title: 'Proactive sprint manager: wake, supervise, review'

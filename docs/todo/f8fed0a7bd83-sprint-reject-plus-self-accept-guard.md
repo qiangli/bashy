@@ -3,11 +3,13 @@ id: f8fed0a7bd83
 kind: feature
 title: sprint reject plus self-accept guard
 seq: 3106
-status: todo
+status: assigned
 priority: p1
 labels:
     - sprint
 created: 2026-11-06T17:08:02.246552Z
+weave: 26
+assignee: claude-opus5
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
 sprint_title: 'Proactive sprint manager: wake, supervise, review'

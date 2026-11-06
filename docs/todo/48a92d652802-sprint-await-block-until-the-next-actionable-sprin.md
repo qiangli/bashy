@@ -3,11 +3,13 @@ id: 48a92d652802
 kind: feature
 title: 'sprint await: block until the next actionable sprint event'
 seq: 3102
-status: todo
+status: assigned
 priority: p0
 labels:
     - sprint
 created: 2026-11-06T17:08:01.641993Z
+weave: 25
+assignee: claude-fable5.1
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
 sprint_title: 'Proactive sprint manager: wake, supervise, review'
