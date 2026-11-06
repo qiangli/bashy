@@ -169,13 +169,17 @@ every problem they hit recorded as a finding against the product.
 | F2 | Klatch has no `windows/amd64` build (cgo SQLite driver) | release assets linux/darwin only | C3 (klatch build) |
 | F3 | Transform scripts need `/bin/sh`, `ffmpeg`, ImageMagick | `transform/*.sh` | C3 (provisioning) |
 | F4 | Klatch provisioner needs `python3`; absent on elephant | `examples/klatch/provision.py` | C3 (bashy command) |
-| F5 | podman machine start after Windows reboot unverified | — | C3 (J7) |
+| F5 | **Confirmed by J7 on puppy (11-06).** After a Windows reboot the podman machine is listed "Currently running" but its API refuses connections (`127.0.0.1:50081`) until `podman machine stop/start`; outpost and its app entry came back on their own | J7 reboot 09:54, puppy | C3 (Bashy podman service) — P1 |
+| F25 | Restart policy `always` is not honored when the podman machine starts: the Klatch container stayed Exited after the VM restart; only `podman start` brought it back (then 200). Native Klatch under Bashy's supervisor avoids this; container apps need the podman service to restart `always` containers at machine start | J7 on puppy 11-06 | C3 — P1 |
+| F24 | puppy's Bashy-managed podman machine (WSL, rootful, user-mode networking off) does not forward published container ports to Windows localhost; Klatch published via the VM address `172.17.254.194` (unchanged across the reboot) | J7 setup on puppy 11-06 | C3 (Bashy podman service) — P2 |
+| F23 | `outpost ssh exec` ends long-running commands silently (exit 0, no output); a `podman build` was cut off. Workaround: start detached and poll a log | puppy 11-06 | C3 (outpost) — P2 |
+| F22 | `outpost ssh exec` joins arguments into one shell line without quoting: `~`, `$VAR`, backslashes, `{{…}}`, quotes and parentheses are mangled. Workaround: direct commands with forward-slash paths, or `powershell -EncodedCommand` | puppy 11-06 | C3 (outpost) — P2 |
 | F6 | Piping stdin into Bashy's SSH shell on Windows hangs | session 11-01 | C3 |
 | F7 | Bashy built-in `git`: no `checkout -B B START`, no `-q` | session 11-01 | C3 |
-| F8 | SSO + team mode live only on an elephant branch | `shape/elephant-sso` | C3 (land in klatch fork + pin) |
+| F8 | **Released 11-06.** SSO + team mode merged in the Klatch fork (PR #1, `474bebae`), tagged `v1.2.6`, signed build `bashy-v1.2.6-1` (run 42263928634, cosign verified, 5 archives), Bashy build pin `8c3cd6d0`, yoke fleet pin `54262614` (yoke main `698d3161`), Bashy yoke pin `ea21154c`. Remaining: a Bashy release carrying it (rc.25) and switching elephant from the shaped container to the released native service | was `shape/elephant-sso` | C3 — released; rollout pending |
 | F9 | `inbox --as` refuses registered agent with 2+ live instances | red/green test; blocks `conductor:561` mail | C3 — fixed `51998d67`, merge pending |
 | F10 | `sprint take` 4m34s (3.5 min CPU); `sprint show` > 90 s | timed 11-03 | C3 |
-| F11 | `TestSrcPinsMatchLinkedModules`: yoke src pin out of sync | fails on `main` | C3 (migration follow-up) |
+| F11 | **Fixed 11-06** (`ea21154c` yoke, `62f5106b` coreutils; all four src pins match go.mod). Was: `TestSrcPinsMatchLinkedModules`: yoke src pin out of sync | fails on `main` | C3 (migration follow-up) |
 | F12 | `TestRunSignaledIsNonLossy` fails on `main` | fails on `main` | A3 (561) — to confirm with 561 |
 | F13 | `TestCommandDocSourceNames` fails on `main` | fails on `main` | C3 |
 | F15 | Outpost `sshd` unit restarts every few seconds on Windows (`firewall: show rule "outpost sshd": exit status 1`); `daemon.log` has grown to 3.4 GB | `daemon.log` on elephant | C3 (outpost) |
