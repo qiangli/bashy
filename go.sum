@@ -1071,8 +1071,6 @@ github.com/qiangli/yoke v0.0.0-20261105204950-95fd04126ae8 h1:I+RN6JETvzZufWpPIJ
 github.com/qiangli/yoke v0.0.0-20261105204950-95fd04126ae8/go.mod h1:1iYVqkJaq5rxfhGPrDJUtYWNj+jvrq+jdu3sT+jjA2k=
 github.com/qiangli/yoke v0.0.0-20261105211352-dd69db5b9159 h1:koOK45zH63RUmPbJ6jzP0+6TeUrRDj9zq6jmzSariA4=
 github.com/qiangli/yoke v0.0.0-20261105211352-dd69db5b9159/go.mod h1:1iYVqkJaq5rxfhGPrDJUtYWNj+jvrq+jdu3sT+jjA2k=
-github.com/qiangli/yoke v0.0.0-20261106000009-b195c3bce20f h1:ya9RMUr3wJhC/GJ3f2bmnL4KT56s+hF/7OjgQMuy3hc=
-github.com/qiangli/yoke v0.0.0-20261106000009-b195c3bce20f/go.mod h1:1iYVqkJaq5rxfhGPrDJUtYWNj+jvrq+jdu3sT+jjA2k=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261021004834-b008dcc14dfa h1:tvU9VJSqqtYJ/uc/IOLNMPQ5n4uZiC5nJp+x7lOI7xs=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261021004834-b008dcc14dfa/go.mod h1:Q0Q5T6VFoIzC2QCjcH2DnKhvD6lvneoJKxG0TYasq8E=
 github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9 h1:0pOjHOylgAWaCVmImyqwOBhA8xx5EZ/WxrddpBiVF+E=
@@ -1934,3 +1932,5 @@ tags.cncf.io/container-device-interface v1.1.0 h1:RnxNhxF1JOu6CJUVpetTYvrXHdxw9j
 tags.cncf.io/container-device-interface v1.1.0/go.mod h1:76Oj0Yqp9FwTx/pySDc8Bxjpg+VqXfDb50cKAXVJ34Q=
 tags.cncf.io/container-device-interface/specs-go v1.1.0 h1:QRZVeAceQM+zTZe12eyfuJuuzp524EKYwhmvLd+h+yQ=
 tags.cncf.io/container-device-interface/specs-go v1.1.0/go.mod h1:u86hoFWqnh3hWz3esofRFKbI261bUlvUfLKGrDhJkgQ=
+github.com/qiangli/yoke v0.0.0-20261106005613-0dd429e093ee h1:nl+L180vEi6JdK12ll4W3gJh0h2WylBY0NnR99T044U=
+github.com/qiangli/yoke v0.0.0-20261106005613-0dd429e093ee/go.mod h1:1iYVqkJaq5rxfhGPrDJUtYWNj+jvrq+jdu3sT+jjA2k=

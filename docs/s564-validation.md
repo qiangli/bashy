@@ -158,8 +158,9 @@ paired HTTP requests, natural-wish generation, six Chrome checkpoints and
 proposal `111c1e5799f5219335dbfabd7d3fa963ba82fc5e`. In both cases first undo
 restored the exact fixture revision, the second principal stayed unchanged,
 and submission produced an ordinary unstarted review run. The REST candidate
-reported its delegate executable; optional delegate identity/receipt fields
-were absent and are not invented. This brings reviewed passing coverage to
+recorded its delegate executable and `agent_identity`; optional `agent_receipt`
+was absent. An earlier manager lookup used incorrect field names and has been
+corrected. This brings reviewed passing coverage to
 **3 of 24 cells**. Other cells remain open.
 
 The Codex MCP cell is blocked: per-invocation server configuration was recognized
@@ -205,12 +206,13 @@ post-run inspection.
 | --- | --- | --- | --- |
 | Codex | PASS | BLOCKED, client did not expose configured server | PASS |
 | Claude | BLOCKED, provider weekly quota | NOT RUN, provider prerequisite blocked | NOT RUN, provider prerequisite blocked |
-| Muse | PASS, fresh network-enabled retest | NOT RUN | NOT RUN |
-| agy | PASS | NOT RUN | NOT RUN |
+| Muse | PASS, fresh network-enabled retest | PASS | PASS |
+| agy | PASS | IN PROGRESS | PASS |
 
-All twelve H7 B cells remain NOT RUN. A private Linux CLI fixture is being
-prepared with exact retained-release provenance; required accompanying app/UI
-proof is still missing. No H7 B or full-matrix acceptance is claimed.
+The first H7 B CLI run stopped at a test-harness entry error before build or
+tests ran. Its failed evidence is retained; the corrected harness is being
+retried against the same candidate and retained release. Required accompanying
+app/UI self-shaping proof is still missing. No H7 B or full-matrix acceptance is claimed.
 
 ## Startup gate remains unresolved
 
@@ -257,3 +259,24 @@ while excluding directory/package selectors. A real Go module regression changes
 production code inside the selected directory and creates runtime data; tracked
 test, fixture and dependency tampering still fails. The failed Klatch run is
 retained, and a fresh-controller rerun remains pending.
+
+
+The real Muse/REST and agy/REST greeting cells also passed manager review,
+including original HTTP lifecycle records, six actual Chrome checkpoints,
+first undo and ordinary unstarted proposals. Reviewed passing coverage is now
+**7/24 cells**. The AGY MCP cell is being exercised with an isolated native
+client profile; authentication and actual tool calls remain to be established.
+
+The next actual Klatch run passed its build and named tests but failed the
+source dependency fingerprint because the default verifier placed Go caches
+under its source-contained HOME. The repair allocates an owned runtime home,
+temporary directory and caches outside both source snapshots, shared across
+the baseline listing, build and tests. Dependency fingerprinting retains all
+source manifests; no generated-directory exemption was added. Focused real
+runner and regression tests pass. Klatch activation remains unverified until
+the refreshed controller completes the real lifecycle.
+
+The direct Linux Go suite finished failed. The two shaping command-name
+inventory omissions are corrected. Four deterministic failures reproduced
+against the frozen baseline; aggregate timeouts in two packages remain
+unresolved. Neither that suite nor the full Make target is reported passing.
