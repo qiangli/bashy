@@ -18,21 +18,23 @@ TOOL=klatch
 FORK_REPO=qiangli/klatch
 UPSTREAM_REPO=https://github.com/qiangli/klatch
 UPSTREAM_SLUG=qiangli/klatch
-# v1.2.5 is an annotated tag WE cut on qiangli/klatch at UPSTREAM_COMMIT,
+# v1.2.6 is an annotated tag WE cut on qiangli/klatch at UPSTREAM_COMMIT,
 # with a non-draft, non-prerelease GitHub Release — the same "pin job
 # queries the release API" shape every tool uses, just with us as the
 # release author (balzack/databag itself cuts no releases at all). The fork
 # also carries an unrelated 2022 upstream tag v0.1.0 (pre-rebrand, from
 # before this fork existed) — that tag is NOT this build's pin and must
 # never be used here. See README.md #Pin provenance for the exact operator
-# step that cut v1.2.5.
+# step that cut v1.2.6.
 #
-# v1.2.5 is v1.2.4 plus one app/sdk fix: the caret-prefixed mention token is
-# now matched correctly — no server, Dockerfile, or dependency-manifest
-# changes, so build.yml needs no changes (the v1.2.3 app/sdk-before-web
-# split described below is unchanged) — see README.md #Build configuration.
-UPSTREAM_TAG=v1.2.5
-UPSTREAM_COMMIT=bdc7a7173a1049947b634e3019d7b69c6ae0a991
+# v1.2.6 is v1.2.5 plus single sign-on through the outpost proxy, opt-in
+# team mode for single sign-on accounts, and a SQLite busy timeout — server
+# Go source and web-client source only, no Dockerfile or dependency-manifest
+# (go.mod/go.sum/package.json/yarn.lock) changes, so build.yml needs no
+# changes (the v1.2.3 app/sdk-before-web split described below is
+# unchanged) — see README.md #Build configuration.
+UPSTREAM_TAG=v1.2.6
+UPSTREAM_COMMIT=474bebae3b06fdd765491b6f2f6c33e0dc010563
 # Toolchain kind: the repo builds TWO different artifact shapes from one
 # matrix — a cgo Go server per linux arch (net/server), and one
 # architecture-independent Node/yarn web bundle (app/client/web) — so

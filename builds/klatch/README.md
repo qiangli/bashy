@@ -10,12 +10,21 @@ workflow checks out the pinned commit fresh on every run.
 |---|---|
 | Upstream | `https://github.com/qiangli/klatch` (bashy's own fork; see #Credit) |
 | License at the commit | **Apache-2.0** (`LICENSE`, verified at the pinned commit) |
-| Pinned commit | `bdc7a7173a1049947b634e3019d7b69c6ae0a991` (annotated tag `v1.2.5` — see #Pin provenance) |
+| Pinned commit | `474bebae3b06fdd765491b6f2f6c33e0dc010563` (annotated tag `v1.2.6` — see #Pin provenance) |
 | Toolchain | Go `1.26.9` (EOL-minor security override; the commit's `go.mod` names `go1.23.0`/`toolchain go1.24.5`, see #Build configuration) + Node `22` / Yarn `1.22.22` |
-| Trigger | push of tag `bashy-v1.2.5-N` on `bashy-build` (first: `bashy-v1.2.5-1`) |
-| Signing identity | `https://github.com/qiangli/klatch/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.2.5-1` |
+| Trigger | push of tag `bashy-v1.2.6-N` on `bashy-build` (first: `bashy-v1.2.6-1`) |
+| Signing identity | `https://github.com/qiangli/klatch/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.2.6-1` |
 | Issuer | `https://token.actions.githubusercontent.com` |
 
+`v1.2.6` is `v1.2.5` plus single sign-on through the outpost proxy (a new
+`POST /account/sso` route links an outpost-signed email to a Klatch account,
+stored in a new `SSOIdentity` table), opt-in team mode for single sign-on
+accounts, and a SQLite busy timeout (`_busy_timeout=5000` on the store's
+DSN) that fixes database-locked errors under concurrent first visits. Only
+`net/server/internal` Go source (plus new server tests) and
+`app/client/web/src/access/useAccess.hook.ts` changed (plus two `docs/todo`
+story records) — no `Dockerfile`,
+`go.mod`/`go.sum`, `package.json` or `yarn.lock` — so no build-step changed.
 `v1.2.5` is `v1.2.4` plus one `app/sdk` fix: the caret-prefixed `@mention`
 token is now matched correctly. No server or web-client code changed — only
 `app/sdk`'s mention-matching source, plus new `app/sdk` unit tests — so no
@@ -71,7 +80,7 @@ bashy's own fork. The **one** field that pins this build is
 field and cutting a matching `UPSTREAM_TAG` release to go with it (same two
 edits any tool.env bump needs — see `../README.md` "Adding a tool").
 
-The fork is tagged through `v1.2.5` at the pinned commit, with a
+The fork is tagged through `v1.2.6` at the pinned commit, with a
 **non-draft, non-prerelease** GitHub Release cut for it — that is the
 "upstream release" the `pin` job's `official-release` admission queries,
 satisfied here because bashy controls the fork, not because a third party
@@ -154,13 +163,13 @@ run build` (`tsc && vite build`) succeeds unchanged.
 ## Release assets: two shapes
 
 ```
-klatch-v1.2.5-linux-amd64.tar.gz    klatch binary + net/transform/*.sh
-klatch-v1.2.5-linux-arm64.tar.gz    klatch binary + net/transform/*.sh
-klatch-v1.2.5-darwin-arm64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
-klatch-v1.2.5-darwin-amd64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
-klatch-web-v1.2.5.tar.gz            the vite dist/ output (static, same for every arch)
-klatch-v1.2.5.govulncheck.json      klatch-sdk-v1.2.5.yarn-audit.json
-klatch-web-v1.2.5.yarn-audit.json   klatch-pin.txt
+klatch-v1.2.6-linux-amd64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v1.2.6-linux-arm64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v1.2.6-darwin-arm64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-v1.2.6-darwin-amd64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-web-v1.2.6.tar.gz            the vite dist/ output (static, same for every arch)
+klatch-v1.2.6.govulncheck.json      klatch-sdk-v1.2.6.yarn-audit.json
+klatch-web-v1.2.6.yarn-audit.json   klatch-pin.txt
 klatch-otel.env                     klatch-no-tracking.env
 SHA256SUMS
 ```
@@ -169,7 +178,7 @@ The server tarball's binary is already executable when tarred, so
 `RELEASE_EXECUTABLES` is empty — there is no raw executable asset to
 `chmod +x` after the fact. Each asset gets a sibling `<asset>.sigstore.json`
 bundle. URL shape:
-`https://github.com/qiangli/klatch/releases/download/bashy-v1.2.5-1/<asset>`.
+`https://github.com/qiangli/klatch/releases/download/bashy-v1.2.6-1/<asset>`.
 
 ## No tracking
 
@@ -243,7 +252,7 @@ follow-up work once the first reports are read.
 ## Operator steps (not in bashy CI)
 
 Once, before the first build (#Pin provenance): tag
-`bdc7a7173a1049947b634e3019d7b69c6ae0a991` as `v1.2.5` on `qiangli/klatch`
+`474bebae3b06fdd765491b6f2f6c33e0dc010563` as `v1.2.6` on `qiangli/klatch`
 (done) and cut a non-draft, non-prerelease GitHub Release for it. Do not
 reuse the fork's unrelated 2022 `v0.1.0` tag.
 
@@ -252,9 +261,9 @@ reuse the fork's unrelated 2022 `v0.1.0` tag.
 git switch --orphan bashy-build
 cp -R <bashy>/builds/klatch/fork/. .
 git add .github/workflows/bashy-build.yml bashy-build
-git commit -m "bashy-build: klatch v1.2.5 verified build"
+git commit -m "bashy-build: klatch v1.2.6 verified build"
 git push -u origin bashy-build
-git tag bashy-v1.2.5-1 && git push origin bashy-v1.2.5-1
+git tag bashy-v1.2.6-1 && git push origin bashy-v1.2.6-1
 ```
 
 Then wire the fleet to the signed fork release (outside this repo's
