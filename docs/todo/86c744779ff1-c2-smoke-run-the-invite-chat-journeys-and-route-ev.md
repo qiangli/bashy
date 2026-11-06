@@ -3,14 +3,17 @@ id: 86c744779ff1
 kind: test
 title: C2 Smoke-run the invite/chat journeys and route every failure
 seq: 3043
-status: todo
+status: done
 priority: p0
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:40.799189Z
+assignee: claude-opus5.5-s563
 sprint: 563
 sprint_id: 282b20a5-f15c-55eb-a314-eef9580e19d1
 sprint_title: 'Product UAT: clean-install user journeys and defect closure'
+closed: 2026-11-06T18:14:42.101159Z
+closed_by: claude-opus5.5-s563
 ---
 
 Depends on C1. Run J1-J10 as far as they go on W, M and L from clean isolated installs with exact binary/image identities; start with P0 on elephant for the UAT cohort by 2026-11-07 (J4 publish survives, J6 invited member chat, J7 reboot, T3 many members behind one IP). Preserve reproduction, actual output and logs for every failure; unavailable services are blockers, not passes. Route each finding once: product/optional-provider/Klatch/outpost causes to C3, shell/coreutils to 561 A3, fence/language to 562 B3, satellite (proprietary cloudbox) gaps to support tickets. Current findings F1-F15 and tickets T1-T3 are tracked in the plan. Acceptance: every journey cell measured or blocked with evidence, every defect routed without duplicate implementation.
