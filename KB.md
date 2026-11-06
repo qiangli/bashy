@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [host/page] bashy orientation: what it is + the gates and invariants that bite — Distilled map of bashy (pure-Go Bash 5.3 drop-in + agentic userland, dhnt tier-1 foundation): the 3-layer superset, the 4 test metrics and the mandatory release gate, lean-core build rules, supply-chain rules, standalone-first — WHEN doing any task in bashy/, sh/, or coreutils/ (keywords  (kb:bashy-orientation)
+- [repo/page] Derive no-egress allowlists from the pinned test's full port set — When a sandbox profile or strace verdict allowlists loopback ports for a pinned test binary, enumerate every bind/connect in that test's source at the pinned commit, not the subset remembered from its description. Prima's ring test was allowed 5  (kb:derive-no-egress-allowlists-from-the-pinned-test-s-full-port-set)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 
