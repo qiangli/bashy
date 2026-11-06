@@ -350,7 +350,23 @@ func newServiceCtlCmd(op string) *cobra.Command {
 					return err
 				}
 			}
-			resp, err := ctlCall(supervisordSocket(), ctlRequest{Op: op, Unit: args[0]}, 5*time.Second)
+			// Library writes need not pass through service add/set's reload
+			// hook. Consume the latest declaration before runtime control.
+			reloaded, reloadErr := ctlCall(supervisordSocket(), ctlRequest{Op: "reload"}, 5*time.Second)
+			if reloadErr == nil && reloaded.Error != "" {
+				reloadErr = errors.New(reloaded.Error)
+			}
+			if reloadErr != nil && op == "stop" {
+				fmt.Fprintf(cmd.ErrOrStderr(), "warning: service registry reload failed; stopping last known unit: %v\n", reloadErr)
+			}
+			var resp ctlResponse
+			err := reloadErr
+			if reloadErr == nil || op == "stop" {
+				resp, err = ctlCall(supervisordSocket(), ctlRequest{Op: op, Unit: args[0]}, 5*time.Second)
+				if err != nil && reloadErr != nil {
+					err = errors.Join(reloadErr, err)
+				}
+			}
 			if err != nil {
 				if errors.Is(err, errNoMonitor) {
 					return fmt.Errorf("%w; start it with `bashy supervisord` (or run one unit in the foreground: bashy service run %s)", err, args[0])

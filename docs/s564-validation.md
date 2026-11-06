@@ -207,7 +207,7 @@ post-run inspection.
 | Codex | PASS | BLOCKED, client did not expose configured server | PASS |
 | Claude | BLOCKED, provider weekly quota | NOT RUN, provider prerequisite blocked | NOT RUN, provider prerequisite blocked |
 | Muse | PASS, fresh network-enabled retest | PASS | PASS |
-| agy | PASS | IN PROGRESS | PASS |
+| agy | PASS | BLOCKED, native headless permissions | PASS |
 
 The first H7 B CLI run stopped at a test-harness entry error before build or
 tests ran. Its failed evidence is retained; the corrected harness is being
@@ -297,3 +297,42 @@ commands and a discovery tool before lifecycle calls. Those blocked attempts
 remain recorded; supported session-only grants are limited to exact schema
 reads and the selected server's discovery/shape tools. No completed lifecycle
 or cell pass is inferred from authentication, tool listing or process exit.
+
+
+The final bounded AGY MCP run authenticated and made actual native MCP calls
+for discovery and shape status/help/history. It stopped at an ordinary client
+read-file permission denial before creating a candidate. It has one baseline
+browser checkpoint and no completed shaping lifecycle. Its evidence was archived,
+its owned console stopped and the temporary login-store reference removed.
+This remains a blocked cell; reviewed passing coverage remains **7/24**.
+
+The real Codex Bashy CLI candidate passed verification, ran the changed help
+through preview and activated after explicit approval. Valid selected help
+then showed the added text, status bound the actual source and artifact, and
+the separate Hello World app stayed at its baseline. The first real undo
+crashed in go-git's cyclic pack-delta traversal. The cell is failed; no rollback,
+submission or complete accompanying UI self-shaping is claimed. Crash evidence
+and a full Git bundle preserve the approved state. An upstream stable patch
+contains the cycle fix; an updated independent controller and explicit recovery
+qualification are required, without changing the frozen candidate manifests or
+rewriting the failed record.
+
+
+Six targeted native Windows parent tests pass on exact Yoke `0dd429e0`, with
+zero skips, covering runtime-home isolation/cleanup and Go directory guards.
+Raw setup failures, checker build identities and clean-source proof are retained
+separately. This is focused runtime evidence, not a new product installation or
+complete platform qualification.
+
+Klatch's next real run again passed build and all seventeen named tests. Its
+health stage failed because the supervisor had not yet polled the new preview
+declaration when restart and cleanup stop arrived. The declared preview later
+started and became healthy, confirming the control/catalog race. Its failed
+seal remains preserved. Runtime controls must synchronously load current
+service declarations; a fresh real lifecycle remains required.
+
+The producer now requires stable go-git [`v5.19.3`](https://github.com/go-git/go-git/releases/tag/v5.19.3), containing upstream's cyclic
+pack-delta repair. Only required dependency floors changed; the existing
+filesystem adapter replacement remains. Standalone focused Git checks and
+readonly dependency resolution pass. Actual recovery of the preserved failed
+Bashy installation remains pending a fresh controller; the old cell stays failed.
