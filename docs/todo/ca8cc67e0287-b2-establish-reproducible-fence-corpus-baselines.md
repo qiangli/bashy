@@ -3,12 +3,11 @@ id: ca8cc67e0287
 kind: test
 title: B2 Establish reproducible fence corpus baselines
 seq: 3039
-status: assigned
+status: todo
 priority: p2
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:40.087251Z
-weave: 22
 assignee: agy-gemini3.8-flash-w1
 sprint: 578
 sprint_id: 70ba48be-af89-5ab1-8a8d-42a15fc1ddbe

@@ -3,13 +3,12 @@ id: 561bac1b3623
 kind: feature
 title: 'sprint directive: standing operator rules and pre-approvals on the card'
 seq: 3118
-status: assigned
+status: todo
 priority: p1
 labels:
     - sprint
     - operator
 created: 2026-11-06T17:13:23.850858Z
-weave: 27
 assignee: muse-spark1.2
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
