@@ -1,5 +1,15 @@
 # Sprint 564 validation evidence
 
+## Current status
+
+Qualification remains draft. H2 and H4 are accepted; H3, H5 and H7 remain open.
+Seven of 24 actual agent/interface cells passed manager review. The real Bashy
+self-shaping run activated but failed undo; Klatch passed build/tests but failed
+disposable service cleanup. Repairs are being qualified with fresh controllers;
+failed runs remain failed. Full platform/UI/self-handoff coverage and the unchanged
+startup/general gates remain incomplete. Earlier sections below retain exact
+candidate identities and outcomes.
+
 ## H2 atlas census baseline (2026-11-05)
 
 A fresh, narrow comparison on the local macOS development-role environment
@@ -336,3 +346,19 @@ pack-delta repair. Only required dependency floors changed; the existing
 filesystem adapter replacement remains. Standalone focused Git checks and
 readonly dependency resolution pass. Actual recovery of the preserved failed
 Bashy installation remains pending a fresh controller; the old cell stays failed.
+
+
+The first updated-controller Bashy recovery no longer hit the cyclic-delta crash,
+but verification refused an ancestor restore because the isolated clone lacked
+its descendant baseline. The verifier now advertises both revisions temporarily
+and restores HEAD plus any preexisting named refs. A real Go import, verification,
+approval and ancestor undo regression passes; a pre-fix overlay fails at undo.
+
+Klatch's next failed health run preserved a running preview container whose
+shell entrypoint outlived the supervised client. The adapter now completes the
+unit stop, checks the exact container name, immutable image and sole data bind,
+and removes only its inspected full ID through the declared backend. Image
+transitions stop the current declaration before saving its replacement. Ownership
+mismatches and cleanup failures retain the unit/data. Focused service, ownership,
+interrupted-transition and actual Go rollback checks pass together in standalone
+mode. Fresh real cycles remain pending; no manual cleanup is counted as a pass.

@@ -1936,5 +1936,5 @@ tags.cncf.io/container-device-interface v1.1.0 h1:RnxNhxF1JOu6CJUVpetTYvrXHdxw9j
 tags.cncf.io/container-device-interface v1.1.0/go.mod h1:76Oj0Yqp9FwTx/pySDc8Bxjpg+VqXfDb50cKAXVJ34Q=
 tags.cncf.io/container-device-interface/specs-go v1.1.0 h1:QRZVeAceQM+zTZe12eyfuJuuzp524EKYwhmvLd+h+yQ=
 tags.cncf.io/container-device-interface/specs-go v1.1.0/go.mod h1:u86hoFWqnh3hWz3esofRFKbI261bUlvUfLKGrDhJkgQ=
-github.com/qiangli/yoke v0.0.0-20261106013821-2a565d3a2fe7 h1:vuw6/18moHPi2AxjFSYt07MyQn85JOl0/hEURs6reLU=
-github.com/qiangli/yoke v0.0.0-20261106013821-2a565d3a2fe7/go.mod h1:q1GE0OD/RCGizN05QtsxtVUf2o3e/nDCgx6EknbawFw=
+github.com/qiangli/yoke v0.0.0-20261106020816-6b865c246871 h1:xVL0zLRtcotzttxCw2uqLtYcW2jIKAZVYOTjLOwyAmk=
+github.com/qiangli/yoke v0.0.0-20261106020816-6b865c246871/go.mod h1:dy4y+4zq/gr/AWxIwn/IPmQ/2oiTZIMExcSocX1QyfA=
