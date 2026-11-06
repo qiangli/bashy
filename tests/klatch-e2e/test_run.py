@@ -24,10 +24,12 @@ def make_args(topology="none", url=None, image=None, topic="General",
 class FakeBrowser:
     """Stands in for `bashy browser --mode live` with a scripted page."""
 
-    def __init__(self, hub=True, title="Klatch", session=True, login_form=False, topics=("General", "Team"), send_works=True):
+    def __init__(self, hub=True, title="Klatch", session=True, login_form=False, topics=("General", "Team"), send_works=True, human_id="human-local"):
         self.hub, self.title, self.session = hub, title, session
         self.login_form, self.topics, self.send_works = login_form, topics, send_works
+        self.human_id = human_id
         self.box, self.posted = "", []
+        self.senders = {}
 
     def body(self):
         return "\n".join(list(self.topics) + self.posted)
@@ -43,6 +45,7 @@ class FakeBrowser:
             return "typed"
         if verb == "click":
             if args[1] == runner.SEND_ICON and self.send_works:
+                self.senders[self.box] = self.human_id
                 self.posted.append(self.box)
                 self.box = ""
             return "clicked"
@@ -69,6 +72,7 @@ def pass_hooks_for(fake):
         msg = f"klatch-e2e agent {agent_tag}"
         fake.posted.append(msg)
         agent_id = agent.get("agent_id") if isinstance(agent, dict) else agent_tag
+        fake.senders[msg] = agent_id
         return {"sender": agent_id, "message": msg}
 
     return {
@@ -77,6 +81,7 @@ def pass_hooks_for(fake):
         "stop_server": lambda server: {"status": "done", "detail": f"removed container {server['container']}"},
         "register_agent": lambda url, tag: {"agent_id": tag, "account": "agent"},
         "agent_post": agent_post,
+        "read_sender": lambda tab, msg: fake.senders.get(msg),
         "ensure_meet": lambda url: {"meet_id": "meet-1"},
         "candidate_info": lambda: {"bashy_version": "v-test", "bashy_sha": "sha-test"},
         "teardown": lambda topology, ctx: {"status": "done", "detail": "test teardown"},
@@ -103,6 +108,10 @@ class RunnerDecisions(unittest.TestCase):
         self.assertNotEqual(posted["human"], posted["agent"])
         self.assertEqual(rec["steps"]["topic_exchange"]["detail"]["agent_sender"],
                          rec["steps"]["signup_login"]["detail"]["agent"]["agent_id"])
+        self.assertEqual(rec["steps"]["topic_exchange"]["detail"]["human_sender"],
+                         fake.human_id)
+        self.assertNotEqual(rec["steps"]["topic_exchange"]["detail"]["human_sender"],
+                            rec["steps"]["topic_exchange"]["detail"]["agent_sender"])
 
     def test_blocked_without_hub(self):
         rec = run_with(FakeBrowser(hub=False))
@@ -142,6 +151,44 @@ class RunnerDecisions(unittest.TestCase):
         self.assertEqual(rec["steps"]["signup_login"]["status"], "pass")
         self.assertEqual(rec["steps"]["topic_exchange"]["status"], "blocked")
         self.assertIn("S568", rec["steps"]["topic_exchange"]["reason"])
+
+    def test_agent_record_without_id_is_fail_never_skipped(self):
+        for bad in ({"account": "agent"}, {}, None, "agent-1"):
+            rec = run_with(FakeBrowser(),
+                           hooks={"register_agent": lambda url, tag, _bad=bad: _bad})
+            self.assertEqual(rec["result"], "FAIL", bad)
+            self.assertEqual(rec["steps"]["signup_login"]["status"], "fail")
+            self.assertIn("agent_id", rec["steps"]["signup_login"]["reason"])
+
+    def test_agent_receipt_without_sender_is_fail(self):
+        def no_sender(url, agent, agent_tag):
+            return {"sender": "", "message": f"klatch-e2e agent {agent_tag}"}
+
+        rec = run_with(FakeBrowser(), hooks={"agent_post": no_sender})
+        self.assertEqual(rec["result"], "FAIL")
+        self.assertEqual(rec["steps"]["topic_exchange"]["status"], "fail")
+        self.assertIn("sender", rec["steps"]["topic_exchange"]["reason"])
+
+    def test_human_sender_always_asserted(self):
+        rec = run_with(FakeBrowser(), hooks={"read_sender": lambda tab, msg: None})
+        self.assertEqual(rec["result"], "FAIL")
+        self.assertEqual(rec["steps"]["topic_exchange"]["status"], "fail")
+        self.assertIn("sender", rec["steps"]["topic_exchange"]["reason"])
+
+    def test_human_sender_matching_agent_is_fail(self):
+        def impersonate(tab, msg):
+            return "agent-x"
+
+        rec = run_with(FakeBrowser(),
+                       hooks={"register_agent": lambda url, tag: {"agent_id": "agent-x", "account": "agent"},
+                              "read_sender": impersonate})
+        self.assertEqual(rec["result"], "FAIL")
+        self.assertIn("misattributed", rec["steps"]["topic_exchange"]["reason"])
+
+    def test_default_read_sender_is_blocked_with_sprint(self):
+        with self.assertRaises(runner.Blocked) as ctx:
+            runner.default_read_sender(7, "hello")
+        self.assertIn("S568", str(ctx.exception))
 
 
 class TopologySelection(unittest.TestCase):
@@ -328,6 +375,73 @@ class LocalServerDefaults(unittest.TestCase):
             info = runner.default_stop_server({"container": "c1", "image": "i"})
         self.assertEqual(info["status"], "failed")
         self.assertEqual(runner.default_stop_server(None)["status"], "skipped")
+
+    def _oci_script(self, calls, run_result=None):
+        images = json.dumps([{"Names": ["localhost/klatch:latest"]}])
+
+        def fake_run(argv, **kwargs):
+            calls.append(argv)
+            if "images" in argv:
+                return types.SimpleNamespace(returncode=0, stdout=images, stderr="")
+            if "rm" in argv:
+                return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+            assert "run" in argv
+            if isinstance(run_result, BaseException):
+                raise run_result
+            return run_result
+
+        return fake_run
+
+    def test_oci_run_failure_removes_container(self):
+        calls = []
+        bad = types.SimpleNamespace(returncode=1, stdout="", stderr="boom")
+        with mock.patch.object(runner.subprocess, "run",
+                               side_effect=self._oci_script(calls, bad)):
+            with self.assertRaises(RuntimeError):
+                runner.default_start_server("none", runner.LOCAL_URL, None)
+        rms = [argv for argv in calls if "rm" in argv]
+        self.assertEqual(len(rms), 1)
+        self.assertIn("-f", rms[0])
+        run_argv = next(argv for argv in calls if "run" in argv)
+        name = run_argv[run_argv.index("--name") + 1]
+        self.assertEqual(rms[0][-1], name)
+
+    def test_health_failure_removes_container(self):
+        calls = []
+        ok = types.SimpleNamespace(returncode=0, stdout="deadbeef", stderr="")
+        with mock.patch.object(runner.subprocess, "run",
+                               side_effect=self._oci_script(calls, ok)):
+            with mock.patch.object(runner, "wait_for_health",
+                                   side_effect=RuntimeError("not healthy")):
+                with self.assertRaises(RuntimeError):
+                    runner.default_start_server("none", runner.LOCAL_URL, None)
+        rms = [argv for argv in calls if "rm" in argv]
+        self.assertEqual(len(rms), 1)
+        self.assertIn("-f", rms[0])
+        run_argv = next(argv for argv in calls if "run" in argv)
+        name = run_argv[run_argv.index("--name") + 1]
+        self.assertEqual(rms[0][-1], name)
+
+    def test_start_crash_fails_but_still_writes_evidence(self):
+        stopped = []
+
+        def boom(topology, url, image):
+            raise RuntimeError("oci run exploded")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "evidence.json")
+            rec = run_with(FakeBrowser(), args=make_args(topology="none", evidence=path),
+                           hooks={"start_server": boom,
+                                  "stop_server": lambda server: stopped.append(server) or {"status": "done", "detail": "x"}})
+            self.assertEqual(rec["result"], "FAIL")
+            for name in runner.STEPS:
+                self.assertEqual(rec["steps"][name]["status"], "fail")
+                self.assertIn("container start failed", rec["steps"][name]["reason"])
+            self.assertEqual(rec["server"], {"status": "not-started"})
+            self.assertEqual(stopped, [])
+            with open(path, encoding="utf-8") as f:
+                on_disk = json.load(f)
+            self.assertEqual(on_disk["result"], "FAIL")
 
 
 class CandidateIdentity(unittest.TestCase):
