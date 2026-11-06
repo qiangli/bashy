@@ -428,3 +428,13 @@ observed build working set; no heavy build or shared-cache cleanup was attempted
 The H7 follow-up remains 7/24 reviewed passes. A newer agent client accepts the
 session-only observer-read permission, and a guarded next MCP fixture is prepared;
 no provider lifecycle was run on an absent or mismatched merged artifact.
+
+
+## Coordinated integration checks
+
+Combined runtime tree `552b1928` passed standalone Linux AgentOS shaping,
+service-control reload, typed service status/telemetry, Go-fence and source-pin
+checks (271.166 s including compilation; package execution 1.324 s). The updated
+fixture runner's complete unit suite passed (7.617 s). Later validation/story
+commits change documentation only. These checks establish affected integration
+coverage; they do not replace the outstanding full platform or E2E criteria.
