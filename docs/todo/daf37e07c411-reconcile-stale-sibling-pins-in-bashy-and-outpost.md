@@ -3,12 +3,13 @@ id: daf37e07c411
 kind: task
 title: Reconcile stale sibling pins in bashy and outpost before the rc.25 candidate
 seq: 3129
-status: todo
+status: assigned
 priority: p0
 labels:
     - release
     - deps
 created: 2026-11-06T20:10:27.827767Z
+assignee: codex-gpt6-astra
 sprint: 580
 sprint_id: 0cae3983-9725-5e31-b45d-3585e97e00de
 sprint_title: Bashy checkpoint and release candidate v1.0.0-rc.25

@@ -3,12 +3,13 @@ id: a8c4da9cf37d
 kind: test
 title: E1 Klatch end-to-end MVP across four satellite/outpost topologies under bashy oci
 seq: 3148
-status: todo
+status: assigned
 priority: p0
 labels:
     - release
     - e2e
 created: 2026-11-06T21:50:00.164534Z
+assignee: muse-spark1.3
 sprint: 580
 sprint_id: 0cae3983-9725-5e31-b45d-3585e97e00de
 sprint_title: Bashy checkpoint and release candidate v1.0.0-rc.25

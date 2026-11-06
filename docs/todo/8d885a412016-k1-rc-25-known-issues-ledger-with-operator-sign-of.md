@@ -3,11 +3,12 @@ id: 8d885a412016
 kind: doc
 title: K1 rc.25 known-issues ledger with operator sign-off
 seq: 3150
-status: todo
+status: assigned
 priority: p0
 labels:
     - release
 created: 2026-11-06T21:50:00.494044Z
+assignee: claude-opus5
 sprint: 580
 sprint_id: 0cae3983-9725-5e31-b45d-3585e97e00de
 sprint_title: Bashy checkpoint and release candidate v1.0.0-rc.25
