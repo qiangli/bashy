@@ -128,6 +128,122 @@ func TestCheckBashPPHelpAndReportMode(t *testing.T) {
 	}
 }
 
+func TestCheckGoFenceShellCommands(t *testing.T) {
+	// These three positive scripts stay as written: they exercise the command
+	// boundary, including a function declared after its shell invocation.
+	positives := []string{
+		"~~~go as g\nfunc Main() {}\n~~~\ng.Main\n",
+		"g.Main\n~~~go as g\nfunc Main() {}\n~~~\n",
+		"~~~go as g\nfunc Add(a, b int) int { return a + b }\n~~~\ng.Add 1 2\n",
+	}
+	for i, source := range positives {
+		path := filepath.Join(t.TempDir(), "positive.bsh")
+		if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		report := newCheckAnalyzer(checkOptions{mode: "bashy", bashpp: true, maxDepth: 8}).run([]string{path})
+		if report.Summary.Errors != 0 || report.Summary.NotFound != 0 {
+			t.Fatalf("positive %d: summary=%#v diagnostics=%#v", i, report.Summary, report.Diagnostics)
+		}
+		found := false
+		for _, d := range report.Diagnostics {
+			if d.Resolver == "go-fence" && d.Code == "BASHY0204" {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("positive %d: missing Go fence resolution: %#v", i, report.Diagnostics)
+		}
+	}
+
+	const fence = "~~~go as g\nfunc Main() {}\nfunc hidden() {}\nvar Value = 1\nfunc (x *Thing) Method() {}\n~~~\n"
+	for _, command := range []string{"other.Main", "g.Missing", "g.hidden", "g.Value", "g.Method", "a.b", "g.Main.Extra"} {
+		t.Run(command, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "negative.bsh")
+			if err := os.WriteFile(path, []byte(fence+command+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			report := newCheckAnalyzer(checkOptions{mode: "bashy", bashpp: true, maxDepth: 8}).run([]string{path})
+			if report.Summary.NotFound != 1 || !invHas(report.Inventory.NotFound, command, "") {
+				t.Fatalf("%s: %#v %#v", command, report.Summary, report.Diagnostics)
+			}
+		})
+	}
+}
+
+func TestCheckGoFenceKeepsTypedCallsAndPATH(t *testing.T) {
+	dir := t.TempDir()
+	host := "host.tool"
+	if runtime.GOOS == "windows" {
+		host = "hosttool.cmd"
+	}
+	hostPath := filepath.Join(dir, host)
+	if err := os.WriteFile(hostPath, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	path := filepath.Join(dir, "commands.bsh")
+	source := "~~~go as g\nfunc Main() int { return 1 }\n~~~\n" +
+		"result := g.Main()\ng.Main\n" + host + "\nmissingordinarytool\n"
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report := newCheckAnalyzer(checkOptions{mode: "bashy", bashpp: true, maxDepth: 8}).run([]string{path})
+	if report.Summary.Commands != 3 || report.Summary.NotFound != 1 || !invHas(report.Inventory.System, host, hostPath) || !invHas(report.Inventory.NotFound, "missingordinarytool", "") {
+		t.Fatalf("unexpected command closure: summary=%#v inventory=%#v diagnostics=%#v", report.Summary, report.Inventory, report.Diagnostics)
+	}
+	plainPath := filepath.Join(dir, "plain.sh")
+	if err := os.WriteFile(plainPath, []byte("g.Main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	plain := newCheckAnalyzer(checkOptions{mode: "bashy", maxDepth: 8}).run([]string{plainPath})
+	if !invHas(plain.Inventory.NotFound, "g.Main", "") {
+		t.Fatalf("Go fence command admitted without --bashsharp: %#v", plain.Inventory)
+	}
+}
+
+func TestCheckGoFenceRejectsMalformedSource(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "malformed.bsh")
+	source := "~~~go as g\nfunc Main( {\n~~~\ng.Main\n"
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	report := newCheckAnalyzer(checkOptions{mode: "bashy", bashpp: true, maxDepth: 8}).run([]string{path})
+	if report.Summary.NotFound != 1 || !invHas(report.Inventory.NotFound, "g.Main", "") {
+		t.Fatalf("malformed Go source admitted a command: summary=%#v inventory=%#v diagnostics=%#v", report.Summary, report.Inventory, report.Diagnostics)
+	}
+}
+
+func TestCheckGoFenceAliasIsFileScoped(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.bsh")
+	second := filepath.Join(dir, "second.bsh")
+	for path, source := range map[string]string{
+		first:  "~~~go as g\nfunc First() {}\n~~~\ng.First\ng.Second\n",
+		second: "~~~go as g\nfunc Second() {}\n~~~\ng.Second\ng.First\n",
+	} {
+		if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	report := newCheckAnalyzer(checkOptions{mode: "bashy", bashpp: true, maxDepth: 8}).run([]string{first, second})
+	if report.Summary.NotFound != 2 || !invHas(report.Inventory.NotFound, "g.Second", "") || !invHas(report.Inventory.NotFound, "g.First", "") {
+		t.Fatalf("Go fence command leaked between files: summary=%#v inventory=%#v diagnostics=%#v", report.Summary, report.Inventory, report.Diagnostics)
+	}
+	resolved := 0
+	for _, d := range report.Diagnostics {
+		if d.Resolver == "go-fence" {
+			resolved++
+			if !((d.File == first && d.Command == "g.First") || (d.File == second && d.Command == "g.Second")) {
+				t.Fatalf("cross-file alias resolved: %#v", d)
+			}
+		}
+	}
+	if resolved != 2 {
+		t.Fatalf("same-file functions resolved %d times, want 2: %#v", resolved, report.Diagnostics)
+	}
+}
+
 func TestCheckRecursiveInventory(t *testing.T) {
 	dir := t.TempDir()
 	main := filepath.Join(dir, "main.sh")

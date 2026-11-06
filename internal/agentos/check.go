@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/qiangli/yoke/pkg/atlas"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"io"
 	"os"
 	"os/exec"
@@ -103,6 +106,7 @@ type checkAnalyzer struct {
 	report     checkReport
 	seen       map[string]bool
 	functions  map[string]bool
+	goCommands map[string]map[string]bool
 	builtins   map[string]bool
 	coreutils  map[string]bool
 	verbs      map[string]bool
@@ -246,14 +250,15 @@ func newCheckAnalyzer(opts checkOptions) *checkAnalyzer {
 	builtins, _, verbs := commandsCatalog()
 	core := tool.Names()
 	a := &checkAnalyzer{
-		opts:      opts,
-		seen:      map[string]bool{},
-		functions: map[string]bool{},
-		builtins:  sliceSet(builtins),
-		coreutils: sliceSet(core),
-		verbs:     sliceSet(append(append([]string{}, verbs...), "docker", "sh")),
-		gnuCore:   sliceSet(gnuCoreutilsCommands),
-		invSeen:   map[string]bool{},
+		opts:       opts,
+		seen:       map[string]bool{},
+		functions:  map[string]bool{},
+		goCommands: map[string]map[string]bool{},
+		builtins:   sliceSet(builtins),
+		coreutils:  sliceSet(core),
+		verbs:      sliceSet(append(append([]string{}, verbs...), "docker", "sh")),
+		gnuCore:    sliceSet(gnuCoreutilsCommands),
+		invSeen:    map[string]bool{},
 	}
 	a.report = checkReport{
 		SchemaVersion: checkSchemaVersion,
@@ -315,7 +320,42 @@ func (a *checkAnalyzer) analyzePath(path, role, from string, depth int) {
 		}
 	}
 	a.collectFunctions(file)
+	if a.opts.bashpp {
+		a.collectGoCommands(resolved, file)
+	}
 	a.walkFile(resolved, file, depth)
+}
+
+// A source fence is a declaration, not an executable in PATH. Admit only
+// exported, top-level Go functions from a parsed Go fence with an explicit alias.
+// Parsing here never builds or runs the user's Go program.
+func (a *checkAnalyzer) collectGoCommands(path string, file *syntax.File) {
+	commands := map[string]bool{}
+	a.goCommands[path] = commands
+	syntax.Walk(file, func(n syntax.Node) bool {
+		block, ok := n.(*syntax.SourceBlock)
+		if !ok || block.Language == nil || block.Language.Value != "go" || block.Alias == nil || block.Alias.Value == "" {
+			return true
+		}
+		source := block.Body
+		if block.Src != nil {
+			return true // embedded sources need separate file resolution
+		}
+		if _, err := parser.ParseFile(token.NewFileSet(), "fence.go", source, parser.PackageClauseOnly); err != nil {
+			source = "package main\n" + source
+		}
+		parsed, err := parser.ParseFile(token.NewFileSet(), "fence.go", source, 0)
+		if err != nil {
+			return true
+		}
+		for _, decl := range parsed.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if ok && fn.Recv == nil && fn.Body != nil && ast.IsExported(fn.Name.Name) {
+				commands[block.Alias.Value+"."+fn.Name.Name] = true
+			}
+		}
+		return true
+	})
 }
 
 func (a *checkAnalyzer) parserOptions() []syntax.ParserOption {
@@ -438,6 +478,9 @@ func (a *checkAnalyzer) resolveCommand(name, from string) checkResolution {
 	}
 	if a.functions[name] {
 		return checkResolution{Kind: "bashy", Code: "BASHY0200", Level: "ok", Resolver: "function", Message: "script function"}
+	}
+	if a.opts.bashpp && a.goCommands[from][name] {
+		return checkResolution{Kind: "bashy", Code: "BASHY0204", Level: "ok", Resolver: "go-fence", Message: "exported Go fence function"}
 	}
 	if a.builtins[name] {
 		return checkResolution{Kind: "bashy", Code: "BASHY0200", Level: "ok", Resolver: "builtin", Message: "bash builtin"}
