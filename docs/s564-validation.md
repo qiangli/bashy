@@ -164,10 +164,14 @@ were absent and are not invented. This brings reviewed passing coverage to
 
 The Codex MCP cell is blocked: per-invocation server configuration was recognized
 by the client's MCP configuration listing, but the real agent execution did not
-start or expose the selected server. Both attempts are retained, with no lifecycle
-calls or substitute interface. An independent operator protocol preflight did
-initialize the actual Bashy MCP server, discover `shape`, and call status. That
-preflight demonstrates the server surface only; it is not an agent E2E pass.
+expose the selected server. Attempts are retained, with no successful lifecycle
+calls or substitute interface. A later test found and repaired a harness path
+normalization error; earlier absence of tool traffic did not isolate a client
+limitation. An independent operator protocol preflight initialized the actual
+Bashy MCP server and discovered `shape`, but status was denied by the default
+capability guard. It is not a successful lifecycle or agent E2E pass. The isolated
+MCP fixture now grants the documented destroy/spend effects required by the
+aggregate shaping tool; actual agent qualification is being rerun.
 
 ## Actual Klatch validation in progress
 
@@ -218,3 +222,38 @@ across existing dependencies; these samples do not isolate a shaping source
 regression or prove environment-only causation. The unchanged 15 ms budget
 remains enforced. The general target's own startup check and remaining general
 suite results are pending; earlier failures are preserved.
+
+The fresh native Windows source run on yoke `57c0b51f` and Bashy `482b5c71`
+passed seventeen selected tests across six packages, including the real Go
+multi-package accounting case, Windows owner locator, shallow-source refusal,
+first undo, Genie/presentation and schema golden. The existing shell-checker
+artifact was reused and identified separately; no fresh installed Windows
+product qualification is inferred. A Windows symlink test's existing early
+return is excluded from the claimed platform evidence.
+
+The later Linux general target passed its build-tag/container/static-scratch
+prerequisites but failed its real scratch-container smoke because the test PATH
+omitted system sbin directories. An unchanged, previously working artifact
+reproduced that failure with the limited PATH and passed with the full standard
+PATH, where packet-filter helpers resolve. This establishes the environment
+cause for that smoke failure, not a passing general target. The direct Go suite
+is running separately; a full-target rerun still requires the corrected PATH.
+
+The real Muse/MCP greeting cell passed manager review after the harness path
+fix and explicit test-server effect grants. Actual `initialize`, `tools/list`
+and successful `shape` tool calls cover the full lifecycle; six real Chrome
+checkpoints and the normal proposal/unstarted run were independently reviewed.
+Proposal `9695900cfcafa65a0c88c0b238cdae15cfc82eba` changes only the greeting.
+Earlier startup/capability denials and an initial help-argument error remain
+retained. This brings reviewed coverage to **5/24 cells**, spanning all three
+interfaces. The matrix's Muse/MCP entry is now PASS; Codex/MCP remains blocked
+in the tested runtime after the corrected harness, without an isolated cause.
+
+Actual Klatch revalidation then exposed an argv guard bug: `go -C net/server`
+caused the module directory itself to be frozen as though it were a gate file.
+The tests' generated database was consequently refused after named tests passed.
+A narrow repair keeps argv-derived file guards and explicit protected directories,
+while excluding directory/package selectors. A real Go module regression changes
+production code inside the selected directory and creates runtime data; tracked
+test, fixture and dependency tampering still fails. The failed Klatch run is
+retained, and a fresh-controller rerun remains pending.
