@@ -27,6 +27,28 @@ Out of scope (backlog, label `post-mvp`): supervisor daemon, `sprint attach`,
 attention queue on show, vendor-spread alerts, manager-does-work detector,
 note lint, goal prompts, `sprint brief`, inbox instance routing.
 
+## Delivery through software shaping
+
+This sprint is itself a shaping use case: Sprint 562 needs these sprint/todo
+features while it is running, on the same host whose `bashy` it depends on.
+Ship each accepted story as a shaped bashy candidate instead of replacing the
+installed release:
+
+```sh
+bashy shape wish bashy --from WORKSPACE --story STORY_ID   # isolated candidate from the weave run
+bashy shape verify bashy CANDIDATE                         # trusted gate, inspectable verdict
+bashy shape preview bashy CANDIDATE -- sprint await --help # exact verified executable
+bashy shape approve bashy CANDIDATE                        # activates in a side slot; release stays intact
+bashy shape undo bashy                                     # always runs the retained release
+```
+
+The Sprint 562 manager then uses the new verbs through the `bashy` frontend; a
+bad candidate is undone without touching Sprint 562 state. `shape submit` turns
+an approved version into the reviewable source proposal and weave run. The
+installed binary must first be a shape-capable release; installing it is an
+operator decision. Friction found while shaping mid-sprint is filed as a story
+here (post-MVP unless it blocks).
+
 ## Rules
 
 - Extend existing code paths: `yoke/pkg/weave` (take/handoff/lease, claim/
