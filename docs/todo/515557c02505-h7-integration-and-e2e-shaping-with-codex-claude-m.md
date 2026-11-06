@@ -11,9 +11,9 @@ labels:
     - e2e
 created: 2026-11-05T02:57:51.661013Z
 assignee: codex-gpt6-sol
-sprint: 564
-sprint_id: 0f09b646-9acd-5bec-849d-2cf3b0e4edef
-sprint_title: 'Software shaping for Bashy apps: any user shapes an app on their own host'
+sprint: 579
+sprint_id: b3b68c8f-69de-5654-bab3-e0665d048fd4
+sprint_title: 'Software shaping: platform and agent E2E validation'
 ---
 
 ## Goal
