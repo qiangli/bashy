@@ -15,7 +15,7 @@ import (
 // carries only the 12-character pseudo-version suffix. Keep these in step
 // with go.mod; the version check below fails closed after an unpaired bump.
 var srcModulePins = map[string]struct{ module, commit string }{
-	"yoke":        {"github.com/qiangli/yoke", "698d316106ebcf416646d4ce77294d5f8335b8c8"},
+	"yoke":        {"github.com/qiangli/yoke", "a1f39ef256ab2329c18ebc877b9e625fcf57af09"},
 	"coreutils":   {"github.com/qiangli/coreutils", "601546e19e1adeb42f8e88ab07d79c40ceea30d2"},
 	"sh":          {"github.com/qiangli/sh/v3", "3cff5322b36f0fdcc8c8131f1f23e5739bb6f4e7"},
 	"filebrowser": {"github.com/qiangli/filebrowser/v2", "d1d2feab447319ff2b37b471829b59bc3cace390"},

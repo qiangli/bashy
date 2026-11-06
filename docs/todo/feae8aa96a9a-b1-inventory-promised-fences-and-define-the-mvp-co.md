@@ -3,12 +3,11 @@ id: feae8aa96a9a
 kind: requirement
 title: B1 Inventory promised fences and define the MVP corpus matrix
 seq: 3038
-status: assigned
+status: todo
 priority: p2
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:39.956118Z
-weave: 21
 assignee: muse-conductor
 sprint: 578
 sprint_id: 70ba48be-af89-5ab1-8a8d-42a15fc1ddbe
