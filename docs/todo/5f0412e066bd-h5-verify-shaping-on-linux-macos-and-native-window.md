@@ -20,3 +20,10 @@ Depends on H3, H4. On Linux, macOS and native Windows (not WSL): (a) shape Klatc
 Plan: docs/plan-s564-master-execution.md. Planning record; no implementation started. One shaping model, two front-ends: the existing web /shape/<app>/ page and /api/shape/{app}, and a new bashy shape CLI mirroring that API verb for verb; both use the shared yoke/pkg/shape engine; bashy src stays the version/source plumbing underneath. Same verbs and authorization for humans, agents and agent-assisted humans. Candidates always built in an isolated workspace, never a shared checkout. Sprint 526 web behavior unchanged. Record exact source, build and artifact identities. Managers verify evidence before acceptance. Delivery commits carry Sprint, Story and Story-ID trailers.
 
 Hello World tutorial/fixture: [walkthrough](../../examples/shaping/hello-world/README.md). Reuse pinned source in isolated runs; this documentation is not E2E pass evidence.
+
+
+Carry-forward (operator decision, 2026-11-06): moved unfinished from Sprint 564
+to Sprint 579 without acceptance. Earlier planning-only statements describe the
+original filing; current evidence and remaining execution are recorded in
+[the validation follow-up plan](../plan-shaping-validation-followup.md) and
+[the validation record](../s564-validation.md). Original acceptance remains in force.

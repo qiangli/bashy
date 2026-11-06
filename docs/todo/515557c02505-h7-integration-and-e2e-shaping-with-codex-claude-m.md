@@ -52,3 +52,10 @@ Both scenarios pass across all twelve tool/interface combinations, with 24 separ
 The bashy shape CLI and the Software Shaping app/UI must themselves support Software Shaping. A user or supported agent can shape the shaping tool through the same governed workflow; this is not limited to shaping the Hello World target app. Coordinate the self-shaping path with H3 and H5: preserve the released CLI/app and protected parts, verify candidates before activation, keep a working recovery path, and demonstrate status/identity plus one-step rollback. Use the same shaping lifecycle as E2E A, with bashy shape itself as the target. Request a small visible help-text change to bashy shape, verify and preview the isolated candidate, explicitly activate the shaped side-slot binary, and assert that the running command displays the change and reports the shaped identity. Then use the shaped tool to inspect the Hello World app, proving that it still performs shaping operations. Restore the retained release in one step and assert that the original help text and release identity return; submit the approved candidate through normal gates without an automatic merge. Preserve the matching app/UI self-shaping requirement, but the concrete second E2E fixture is the bashy shape CLI. Do not bypass verifier, authorization, isolation or normal submission gates. H3 is also a dependency for this self-shaping case. This records a requirement for future delivery only; no implementation or execution is authorized in this session.
 
 Hello World tutorial/fixture: [walkthrough](../../examples/shaping/hello-world/README.md). Reuse pinned source in isolated runs; this documentation is not E2E pass evidence.
+
+
+Carry-forward (operator decision, 2026-11-06): moved unfinished from Sprint 564
+to Sprint 579 without acceptance. Earlier planning-only statements describe the
+original filing; current evidence and remaining execution are recorded in
+[the validation follow-up plan](../plan-shaping-validation-followup.md) and
+[the validation record](../s564-validation.md). Original acceptance remains in force.

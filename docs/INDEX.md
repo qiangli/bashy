@@ -253,3 +253,5 @@ Weave-round verification + retro reports (historical, not load-bearing):
 - [Current POSIX campaign status](vsc-pcts-run-status.md) — S561 full-run evidence, 67 residual non-passes and S571 authority/manual-resolution ownership.
 
 - [Hello World shaping plan](plan-hello-world-shaping.md) — minimal example and Sprint 564 acceptance fixture.
+
+- [Software shaping validation follow-up](plan-shaping-validation-followup.md) — Sprint 579 carries H5/H7 unchanged from implementation Sprint 564.

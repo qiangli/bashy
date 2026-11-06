@@ -438,3 +438,16 @@ checks (271.166 s including compilation; package execution 1.324 s). The updated
 fixture runner's complete unit suite passed (7.617 s). Later validation/story
 commits change documentation only. These checks establish affected integration
 coverage; they do not replace the outstanding full platform or E2E criteria.
+
+
+## Operator-authorized implementation closure
+
+On 2026-11-06 the operator requested closure of Sprint 564 and transfer of
+remaining qualification to Sprint 579 (UUID
+`b3b68c8f-69de-5654-bab3-e0665d048fd4`). H5 `5f0412e066bd` and H7
+`515557c02505` move with their original IDs, open status and acceptance criteria.
+See [the follow-up plan](plan-shaping-validation-followup.md). The scope change
+is explicit: implementation delivery is complete; full platform/agent/UI
+qualification and unresolved broader-suite failures are not accepted as passing.
+Private raw evidence was verified off-host, including retained Git bundles and
+OCI image reload checks, before the owned temporary runner was deleted.
