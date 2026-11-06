@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [repo/page] Derive no-egress allowlists from the pinned test's full port set — When a sandbox profile or strace verdict allowlists loopback ports for a pinned test binary, enumerate every bind/connect in that test's source at the pinned commit, not the subset remembered from its description. Prima's ring test was allowed 5  (kb:derive-no-egress-allowlists-from-the-pinned-test-s-full-port-set)
+- [host/page] VSC-PCTS harness runbook (novicortex) — How to run the official POSIX VSC-PCTS suite against bashy/coreutils — WHEN doing any POSIX conformance scoring, shell or utilities (keywords: PCTS, VSC, POSIX cert, tcc, tet, conformance run) REBUILD IS SCRIPTED (2026-07-13). Do not hand-rebuild: `docs/vsc-pcts/harness/rebuild-vsc-build.sh` in the PRIVATE dh  (kb:vsc-pcts-harness-runbook)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 
