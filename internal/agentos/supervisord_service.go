@@ -24,6 +24,7 @@ import (
 	"github.com/qiangli/yoke/pkg/room"
 	"github.com/qiangli/yoke/pkg/secrets"
 	"github.com/qiangli/yoke/pkg/service"
+	"github.com/qiangli/yoke/pkg/telemetry"
 )
 
 const supervisordMonitorUsage = `usage: bashy supervisord [--pid1] [--until-done] [--only NAME] [--socket PATH] [--poll DUR]
@@ -192,9 +193,13 @@ func notifyServiceFailed(ev service.Event) {
 // reload request, so a running monitor applies it now instead of at its next
 // poll; with no monitor the write simply stands.
 func dispatchService(args []string) int {
+	return dispatchServiceContext(context.Background(), args)
+}
+
+func dispatchServiceContext(ctx context.Context, args []string) int {
 	cmd := newServiceCmd()
 	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
+	if err := cmd.ExecuteContext(ctx); err != nil {
 		fmt.Fprintln(os.Stderr, "bashy service:", err)
 		var ec interface{ ExitCode() int }
 		if errors.As(err, &ec) {
@@ -283,6 +288,70 @@ func serviceStatus(sock string, names []string, load func() ([]fleet.Service, []
 	return doc, nil
 }
 
+// reportServiceStatus publishes one typed observation per unit through the
+// telemetry status seam, which collapses identical polls into
+// first-observation + transition records. The command's JSON/stdout/exit
+// behavior is unchanged: this only adds the records the exec middleware's
+// typed-producer suppression already accounts for (it steps aside for exactly
+// `bashy service status ...`, so the suppression and these records ship in
+// the same producer build and neither exists without the other).
+//
+// States map from the REPORTED unit state to the seam's canonical vocabulary;
+// anything else (inactive units, starting/stopping, a monitor that is down)
+// is unknown with the reason preserved as detail. Health verdicts and reasons
+// travel as detail text, so a changed verdict survives as its own
+// transition — never inferred from the exit code, which stays the readiness
+// signal only.
+func reportServiceStatus(ctx context.Context, sock string, doc serviceStatusDoc, queryErr error) {
+	// Acknowledge only this actual typed producer, never an argv lookalike.
+	defer telemetry.MarkServiceStatusReported(ctx)
+	now := time.Now().UTC()
+	if queryErr != nil {
+		telemetry.ServiceStatusQueryFailed(ctx, telemetry.StatusQueryFailure{
+			Service: "bashy-service", Target: sock, Err: queryErr.Error(), ObservedAt: now,
+		})
+		return
+	}
+	for _, st := range doc.Units {
+		telemetry.ServiceStatus(ctx, telemetry.StatusObservation{
+			Service: st.Unit, Target: sock,
+			State:      serviceStatusState(st.State),
+			Detail:     serviceStatusDetail(st),
+			ObservedAt: now,
+		})
+	}
+}
+
+// serviceStatusState maps a reported unit state to the telemetry seam's
+// canonical vocabulary. Active is "running and healthy (or no probe
+// declared)" per the service package — the unit's own report, not an
+// inference.
+func serviceStatusState(state service.State) string {
+	switch state {
+	case service.Active:
+		return telemetry.StatusHealthy
+	case service.Degraded:
+		return telemetry.StatusDegraded
+	case service.Failed:
+		return telemetry.StatusError
+	default:
+		return telemetry.StatusUnknown
+	}
+}
+
+// serviceStatusDetail preserves the evidence behind a state: the health
+// verdict and the reason, so a changed verdict survives as its own
+// transition.
+func serviceStatusDetail(st service.Status) string {
+	if st.Health != "" && st.Reason != "" {
+		return "health=" + st.Health + "; " + st.Reason
+	}
+	if st.Health != "" {
+		return "health=" + st.Health
+	}
+	return st.Reason
+}
+
 func newServiceStatusCmd() *cobra.Command {
 	var asJSON bool
 	c := &cobra.Command{
@@ -291,7 +360,9 @@ func newServiceStatusCmd() *cobra.Command {
 		SilenceUsage:  true,
 		SilenceErrors: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			doc, err := serviceStatus(supervisordSocket(), args, func() ([]fleet.Service, []error) { return fleet.New().Services() })
+			sock := supervisordSocket()
+			doc, err := serviceStatus(sock, args, func() ([]fleet.Service, []error) { return fleet.New().Services() })
+			reportServiceStatus(cmd.Context(), sock, doc, err)
 			if err != nil {
 				return err
 			}

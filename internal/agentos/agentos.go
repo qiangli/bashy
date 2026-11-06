@@ -604,7 +604,7 @@ func Dispatch() {
 		return
 	}
 
-	h := interp.ExecHandlerFunc(func(_ context.Context, _ []string) (err error) {
+	h := interp.ExecHandlerFunc(func(ctx context.Context, _ []string) (err error) {
 		defer func() {
 			if v := recover(); v != nil {
 				if code, ok := v.(frontDoorExit); ok {
@@ -616,7 +616,7 @@ func Dispatch() {
 				panic(v)
 			}
 		}()
-		dispatch()
+		dispatchWithContext(ctx)
 		return nil
 	})
 	mws := observingExecMiddlewares()
@@ -756,6 +756,11 @@ func isFrontDoorInvocation(name string) bool {
 }
 
 func dispatch() {
+	dispatchWithContext(context.Background())
+}
+
+// dispatchWithContext preserves the observing middleware carrier through Cobra.
+func dispatchWithContext(ctx context.Context) {
 	if len(os.Args) < 2 {
 		return
 	}
@@ -1253,7 +1258,7 @@ func dispatch() {
 		// (yoke fleet.NewServiceCmd) plus the runtime verbs over the
 		// running `bashy supervisord` monitor. Direct-only: bare `service`
 		// is the host's SysV/BSD service(8).
-		dispatchExit(dispatchService(os.Args[2:]))
+		dispatchExit(dispatchServiceContext(ctx, os.Args[2:]))
 	case "supervise":
 		// Conductor-as-a-verb: one supervisor agent drives a fleet of workers
 		// against a goal decomposed into GATED tasks, in the current working
