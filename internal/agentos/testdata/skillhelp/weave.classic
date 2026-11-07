@@ -51,7 +51,7 @@ Available Commands:
   recall       Recall persistent memory observations related to a query
   reconcile    Settle a retained reservation after verifying its recorded child group stopped
   remember     Append a manual persistent memory observation
-  reset        Tear down every weave and remove all weave state for this project
+  reset        IRREVERSIBLY tear down EVERY weave for this project and delete all weave state
   resume       Relaunch paused weave workers from their recorded launch specs
   reverify     Refresh an issue's git and verify attestation from its workspace
   review       Re-verify submitted work in a fresh clean-room checkout
