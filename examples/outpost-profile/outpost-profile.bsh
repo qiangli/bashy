@@ -36,14 +36,23 @@ skill step (`--skill` prints this guidance); run it with
 
 ## Register
 
-Register the command once from the repo checkout:
+Every installation can fetch Bashy's own source pinned at the installed
+release, so register the command from that pin (no repo checkout needed):
 
 ```sh
+bashy src fetch bashy
 bashy commands add outpost-profile \
   --set exec.0=bashy --set exec.1=--bashsharp \
-  --set "exec.2=$PWD/examples/outpost-profile/outpost-profile.bsh" \
+  --set "exec.2=${BASHY_HOME:-$HOME/.bashy}/src/bashy/examples/outpost-profile/outpost-profile.bsh" \
   --set effects.0=read --set effects.1=write --set effects.2=exec
 ```
+
+`bashy src upgrade bashy` moves the pin with each release, and the
+registered command follows it. To adapt the command, shape it like any
+Bashy source: `bashy src branch bashy <name>`, edit, run
+`go test ./examples/outpost-profile/` in that tree, and register that
+path instead. From a repo checkout, use
+`$PWD/examples/outpost-profile/outpost-profile.bsh` as exec.2.
 
 `bashy commands show outpost-profile` identifies the registered body.
 The name stays free for registration: unlike Go front-door verbs, this

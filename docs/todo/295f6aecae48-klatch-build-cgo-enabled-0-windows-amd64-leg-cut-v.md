@@ -28,3 +28,5 @@ Progress (2026-11-07):
 Remaining:
 - bashy must pin yoke >= 1b05a5ad and ship in the next rc, because `bashy tool install klatch` uses the fleet baseline compiled into bashy.
 - Then switch the Windows test host to native Klatch, using the 2026-11-07 backup and snapshot counts.
+
+Also required in this release (Sprint 565 O5): build from bashy main that includes outpost-profile up/down/status (examples/outpost-profile, bashy 5ad1d9ce or later), so the release source pin carries it.

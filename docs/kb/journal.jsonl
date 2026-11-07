@@ -5,3 +5,4 @@
 {"op":"add","slug":"windows-gates-must-hand-native-exes-cygpath-converted-paths","id":"01a136d8-1431-72b7-91ca-b0f6f6ab4af1","tool":"muse-spark1.3-w106-b","episode":"weave-issue-106","at":"2026-10-13T19:58:13.041584Z"}
 {"op":"add","slug":"mingw-clang-windows-builds-need-wno-error-downgrades-for-socket","id":"01a13724-c923-76b6-a74e-48660200d59f","tool":"muse-spark1.3-i","episode":"weave-issue-113","at":"2026-10-13T21:22:00.099846Z"}
 {"op":"add","slug":"oci-release-tags-must-follow-byte-promotion","id":"01a18a4e-2cda-76f5-8d24-2ae3ca0a2602","tool":"codex-gpt5.6-sol-i","episode":"ep-fe4d7757a500d605","parent_episode":"ep-76eca2b24645f668","at":"2026-10-30T00:55:41.530869Z"}
+{"op":"add","slug":"connect-one-host-to-several-satellites-at-once-outpost-profile-u","id":"01a1b7c4-155c-75b8-8b16-8bb62ccfcffd","tool":"claude","at":"2026-11-07T20:47:23.484811Z"}
