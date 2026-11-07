@@ -24,3 +24,4 @@ Membership is mutual on cloudbox (each party on the other's member list; automat
 - Owner verified in the browser: Klatch SSO through the class satellite returns 200 and lands in the same account and team topic.
 - Remaining: invite and share Klatch with students (mutual membership), per-group topics, and a 1:1 check (in C6 with test accounts).
 - Side effect found: outpost-profile add restarted each host's main outpost for a few seconds (bug filed on Sprint 565).
+- Sandbox e2e (C6): owner + 3 member accounts SSO into the owner's Klatch through the satellite as separate accounts; the team topic holds the members; members are connected one to one. Remaining: a per-group topic visible only to its members, and an actual 1:1 message (Klatch UI).
