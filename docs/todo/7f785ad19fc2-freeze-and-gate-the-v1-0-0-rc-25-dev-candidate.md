@@ -29,3 +29,14 @@ Added gates (sprint 580 plan, 2026-11-06), each tied to the candidate SHA:
 - E1 Klatch E2E (a8c4da9c) run on the candidate; BLOCKED legs go to the ledger.
 - scripts/verify-signatures.sh on the native QA runner when reachable; otherwise record the signing status line only.
 Schedule: freeze and tag Saturday afternoon; build once.
+
+## Evidence (manager, 2026-11-06) — candidate v1.0.0-rc.27-dev @ 9187e1f0b5d8294fd83d97d24437bc05eb840a8d
+
+- Release build: release.yml run 42327125592, 49 min, all jobs green, 39 assets, published as a pre-release. Signing: darwin.signed=false windows.signed=false, the same as rc.23 and rc.24 (no Apple/Azure secrets configured). `releaseeligibility --signed-assets` PASS on the candidate tree.
+- In the release run: license-gate PASS (blocking); govulncheck report-only.
+- Strict `make test-bash-container` on the Windows test host, run in a dedicated rootful podman machine with cgroup v2 (cpu/memory/pids limits verified applied) and fixtures staged on the VM's Linux filesystem with upstream file modes: **86 passed, 0 failed, 0 skipped, 0 timed out**. Locale: container default POSIX, LANG unset; the image generates the locales the fixtures select themselves. Bash++ off.
+- Native Windows lanes on the same host: build of bashy and bash PASS; `go test -short ./internal/... ./tools/...` and the remaining packages show the same failure set as baseline 8524fcfb. Every failure is pre-existing (Windows shims, file modes, missing python, unix sockets); no NEW failures.
+- govulncheck v1.9.0 on ./cmd/bashy across the release tag sets: 4 reachable findings, the same as baseline (x/net GO-2026-6860/6866, klauspost/compress GO-2026-6865, stdlib GO-2026-6809); 6 package-level; 1 module-only. Report-only; listed in the known-issues ledger.
+- `make test` Linux OCI lane: BLOCKED (pre-existing harness gap). tools/dev-test-container lacks node and pnpm, so test-meet-spa-fresh fails closed on any host. Its Go portion ran natively with no new failures. Tracked separately.
+- Windows cross-build (CGO_ENABLED=0 GOOS=windows) PASS on the dev box. layer-gate PASS at umbrella pins.
+- Pending: native tier smoke (darwin, linux-wsl, windows) to produce the tier verdict, then QA refs and promotion.
