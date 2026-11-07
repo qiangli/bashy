@@ -237,7 +237,9 @@ test-startup-linux:
 ## node/pnpm toolchain is available. CI provisions Node/pnpm; see the
 ## meet-spa-fresh job in .github/workflows/test.yml.
 test-meet-spa-fresh:
-	scripts/build-meet-spa.sh check
+	@mkdir -p $(BIN_DIR)
+	GOWORK=off go build -o $(BIN_DIR)/bashy-spa-check ./cmd/bashy
+	BASHY_BIN="$(CURDIR)/$(BIN_DIR)/bashy-spa-check" scripts/build-meet-spa.sh check
 
 ## test-meet-spa-fresh-regression: Hermetic regression for the freshness gate —
 ## proves fresh accepted, stale rejected and left unchanged, and missing

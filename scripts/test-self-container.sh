@@ -13,6 +13,7 @@ base=${BASHY_TEST_BASE_IMAGE:-docker.io/library/ubuntu@sha256:33ceb71981b602c1a7
 containerfile=${BASHY_TEST_CONTAINERFILE:-$repo/tools/dev-test-container/Containerfile}
 image=${BASHY_TEST_IMAGE:-localhost/bashy-self-test:$lane}
 container=bashy-self-$lane
+cache_volume=bashy-self-cache-$lane
 target=${BASHY_TEST_TARGET:-test}
 case "$target" in ''|*[!A-Za-z0-9_.-]*) echo "test-self-container: unsafe BASHY_TEST_TARGET: $target" >&2; exit 2 ;; esac
 
@@ -36,9 +37,34 @@ done
 
 "${oci[@]}" build --pull=missing --build-arg "BASE_IMAGE=$base" -t "$image" -f "$containerfile" \
   "$repo/tools/dev-test-container"
+"${oci[@]}" volume create "$cache_volume" >/dev/null
+trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
+# Resolve the pinned Go module and provision Node/corepack/pnpm while the
+# container has network access. The same cache is mounted into the offline run.
+"${oci[@]}" run --rm --name "$container-warm" \
+  -e GOWORK=off -e GOMODCACHE=/cache/gomod -e XDG_CACHE_HOME=/cache -e COREPACK_HOME=/cache/corepack \
+  -e BASHY_BIN_CACHE=/cache/bashy -e npm_config_store_dir=/cache/pnpm-store \
+  -v "$cache_volume:/cache" -v "$dhnt/bashy:/source/bashy:ro" \
+  "$image" bash -lc '
+    cp -a /source/bashy/. /work/bashy/
+    cd /work/bashy
+    go mod download all
+    mkdir -p bin
+    go build -o bin/bashy-spa-check ./cmd/bashy
+    yoke_dir=$(go list -m -f "{{.Dir}}" github.com/qiangli/yoke)
+    cp -a "$yoke_dir/pkg/meet/web" /work/web
+    chmod -R u+w /work/web
+    cd /work/web
+    /work/bashy/bin/bashy-spa-check pnpm install --frozen-lockfile
+  '
 "${oci[@]}" run --rm --name "$container" --label "io.dhnt.test.lane=$lane" \
+  --network none \
   --cpus "${BASHY_TEST_CPUS:-2}" --memory "${BASHY_TEST_MEMORY:-4g}" --pids-limit 4096 \
-  -e GOTOOLCHAIN=auto -e "BASHY_TEST_TARGET=$target" \
+  -e GOTOOLCHAIN=auto -e GOWORK=off -e GOMODCACHE=/cache/gomod -e XDG_CACHE_HOME=/cache \
+  -e COREPACK_HOME=/cache/corepack -e BASHY_BIN_CACHE=/cache/bashy \
+  -e npm_config_store_dir=/cache/pnpm-store -e npm_config_offline=true \
+  -e "BASHY_TEST_TARGET=$target" \
+  -v "$cache_volume:/cache" \
   -v "$dhnt/bashy:/source/bashy:ro" -v "$dhnt/sh:/source/sh:ro" \
   -v "$dhnt/coreutils:/source/coreutils:ro" -v "$dhnt/readline:/source/readline:ro" \
   -v "$dhnt/filebrowser:/source/filebrowser:ro" \
