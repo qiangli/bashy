@@ -17,6 +17,7 @@ package outpostprofile
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -605,6 +606,9 @@ func TestSkillFenceIsComplete(t *testing.T) {
 		"use <name>",
 		"list",
 		"commands add outpost-profile",
+		"up <name> [--app <app>]... [--admin-port <port>]",
+		"down <name>",
+		"status",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("skill fence missing %q", want)
@@ -674,5 +678,229 @@ func TestAddMissingFileReportsOutpostOutput(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "saved to /elsewhere/agent.json") || !strings.Contains(stderr, "wrote no file") {
 		t.Errorf("stderr = %q, want outpost output and wrote-no-file", stderr)
+	}
+}
+
+// --- instances (S565 O2): one extra outpost per satellite ------------
+
+// fakeBashy records each service call with the store it targets, so a
+// test can tell instance-store writes from main-store writes.
+const fakeBashy = `#!/bin/sh
+echo "bashy fleet=${BASHY_FLEET_DIR:-main} $*" >> "$FAKE_LOG"
+`
+
+// instanceFixture is a fixture with a main outpost (active profile
+// alpha, two apps) and a second profile beta to run as an instance.
+func instanceFixture(t *testing.T) (*fixture, string) {
+	t.Helper()
+	f := newFixture(t, map[string]string{"fakebashy": fakeBashy})
+	f.env = append(f.env, "OUTPOST_PROFILE_BASHY_BIN="+filepath.Join(f.root, "fakebin", "fakebashy"))
+	base := filepath.Join(f.xcfg(), "matrix")
+	main := `{"sat":"alpha","apps":[{"name":"klatch","target":"http://127.0.0.1:7100","trust_cloud_identity":true,"sso_secret":"S3CRET"},{"name":"other","target":"http://127.0.0.1:9"}]}` + "\n"
+	writeFile(t, filepath.Join(base, "agent.json"), main)
+	writeFile(t, filepath.Join(base, "profiles", "alpha", "agent.json"), main)
+	writeFile(t, filepath.Join(base, ".active"), "alpha\n")
+	writeFile(t, filepath.Join(base, "profiles", "beta", "agent.json"), `{"sat":"beta","token":"T1","cluster":{"enabled":true}}`+"\n")
+	writeFile(t, filepath.Join(base, "profiles", "beta", "server"), "https://sat-beta.example\n")
+	return f, base
+}
+
+func jsonOf(t *testing.T, path string) map[string]any {
+	t.Helper()
+	var m map[string]any
+	if err := json.Unmarshal([]byte(readFile(t, path)), &m); err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	return m
+}
+
+// up seeds the instance config from the profile with every host-wide
+// feature off, copies the chosen app (SSO secret included), disables
+// the host-wide units in the INSTANCE store only, and adds, enables
+// and starts an outpost-<name> unit with the instance environment.
+func TestUpIsolatesInstance(t *testing.T) {
+	f, base := instanceFixture(t)
+	out, stderr, code := f.run("up", "beta", "--app", "klatch")
+	if code != 0 {
+		t.Fatalf("up: exit %d: %s", code, stderr)
+	}
+	if !strings.Contains(out, "admin http://127.0.0.1:17778") {
+		t.Errorf("up output %q missing admin address", out)
+	}
+	inst := filepath.Join(base, "profiles", "beta", "instance")
+	live := jsonOf(t, filepath.Join(inst, "cfg", "matrix", "agent.json"))
+	for _, k := range []string{"ssh_enabled", "mesh_enabled", "desktop_enabled", "clipboard_enabled", "shell_enabled", "discovery_enabled"} {
+		if v, ok := live[k].(bool); !ok || v {
+			t.Errorf("instance %s = %v, want false", k, live[k])
+		}
+	}
+	if _, ok := live["cluster"]; ok {
+		t.Error("instance config kept the cluster block")
+	}
+	if live["token"] != "T1" {
+		t.Errorf("instance token = %v, want the profile's pairing", live["token"])
+	}
+	apps, _ := live["apps"].([]any)
+	if len(apps) != 1 {
+		t.Fatalf("instance apps = %v, want only klatch", live["apps"])
+	}
+	app := apps[0].(map[string]any)
+	if app["name"] != "klatch" || app["sso_secret"] != "S3CRET" || app["trust_cloud_identity"] != true {
+		t.Errorf("copied app = %v, want klatch with its SSO settings", app)
+	}
+	if readFile(t, filepath.Join(base, "profiles", "beta", "agent.json")) != `{"sat":"beta","token":"T1","cluster":{"enabled":true}}`+"\n" {
+		t.Error("up modified the profile file; only the instance copy may change")
+	}
+	if got := readFile(t, filepath.Join(inst, "admin_port")); got != "17778\n" {
+		t.Errorf("admin_port = %q, want 17778", got)
+	}
+	if _, err := os.Stat(filepath.Join(inst, "up")); err != nil {
+		t.Errorf("up marker missing: %v", err)
+	}
+
+	calls := strings.Join(f.calls(), "\n")
+	fleet := "fleet=" + filepath.Join(inst, "fleet")
+	for _, u := range []string{"sshd", "shard", "ollama", "ollama-pool", "warm", "files", "podman", "otel", "apps", "meet", "otel-stack"} {
+		if !strings.Contains(calls, "bashy "+fleet+" service disable "+u+"\n") && !strings.HasSuffix(calls, "bashy "+fleet+" service disable "+u) {
+			t.Errorf("unit %s not disabled in the instance store; calls:\n%s", u, calls)
+		}
+	}
+	if strings.Contains(calls, "fleet=main service disable") {
+		t.Errorf("up disabled a unit in the main store:\n%s", calls)
+	}
+	outpost := filepath.Join(f.root, "fakebin", "outpost")
+	for _, want := range []string{
+		"bashy fleet=main service add outpost-beta --force",
+		"--exec " + outpost + " --exec start",
+		"--port 17778",
+		"restart.policy=always",
+		"env.XDG_CONFIG_HOME=" + filepath.Join(inst, "cfg"),
+		"env.XDG_CACHE_HOME=" + filepath.Join(inst, "cache"),
+		"env.BASHY_FLEET_DIR=" + filepath.Join(inst, "fleet"),
+		"env.OUTPOST_ADMIN_ADDR=127.0.0.1:17778",
+		"bashy fleet=main service enable outpost-beta",
+		"bashy fleet=main service start outpost-beta",
+	} {
+		if !strings.Contains(calls, want) {
+			t.Errorf("calls missing %q:\n%s", want, calls)
+		}
+	}
+}
+
+// A second up keeps the instance's live config (credentials refreshed in
+// place) and its admin port; another profile gets the next free port.
+func TestUpKeepsLiveConfigAndPort(t *testing.T) {
+	f, base := instanceFixture(t)
+	if _, stderr, code := f.run("up", "beta"); code != 0 {
+		t.Fatalf("up: exit %d: %s", code, stderr)
+	}
+	live := filepath.Join(base, "profiles", "beta", "instance", "cfg", "matrix", "agent.json")
+	writeFile(t, live, `{"sat":"beta","token":"REFRESHED"}`+"\n")
+	if _, stderr, code := f.run("up", "beta", "--app", "other"); code != 0 {
+		t.Fatalf("re-up: exit %d: %s", code, stderr)
+	}
+	m := jsonOf(t, live)
+	if m["token"] != "REFRESHED" {
+		t.Errorf("re-up replaced the live config: token = %v", m["token"])
+	}
+	if got := readFile(t, filepath.Join(base, "profiles", "beta", "instance", "admin_port")); got != "17778\n" {
+		t.Errorf("re-up admin port = %q, want 17778 kept", got)
+	}
+	writeFile(t, filepath.Join(base, "profiles", "gamma", "agent.json"), `{"sat":"gamma"}`+"\n")
+	out, stderr, code := f.run("up", "gamma")
+	if code != 0 {
+		t.Fatalf("up gamma: exit %d: %s", code, stderr)
+	}
+	if !strings.Contains(out, "127.0.0.1:17779") {
+		t.Errorf("second instance output %q, want admin port 17779", out)
+	}
+}
+
+// up refuses the main outpost's own pairing, an unknown profile, an app
+// the main outpost does not have and an app name unsafe for jq.
+func TestUpRefusals(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{"active profile", []string{"up", "alpha"}, "main outpost's active pairing"},
+		{"unknown profile", []string{"up", "nope"}, "no such profile: nope"},
+		{"unknown app", []string{"up", "beta", "--app", "ghost"}, "no app named ghost"},
+		{"unsafe app name", []string{"up", "beta", "--app", `x"|.`}, "invalid app name"},
+		{"bad port", []string{"up", "beta", "--admin-port", "12ab"}, "invalid admin port"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f, base := instanceFixture(t)
+			_, stderr, code := f.run(tc.args...)
+			if code == 0 {
+				t.Fatalf("%v succeeded", tc.args)
+			}
+			if !strings.Contains(stderr, tc.want) {
+				t.Errorf("stderr = %q, want %q", stderr, tc.want)
+			}
+			if _, err := os.Stat(filepath.Join(base, "profiles", "beta", "instance", "up")); err == nil {
+				t.Error("a refused up left the instance marked up")
+			}
+			for _, c := range f.calls() {
+				if strings.Contains(c, "service add") || strings.Contains(c, "service start") {
+					t.Errorf("refused up still called %q", c)
+				}
+			}
+		})
+	}
+}
+
+// down stops and removes the unit, keeps the instance config for the
+// next up, and refuses an instance that is not up.
+func TestDownRemovesUnitKeepsInstance(t *testing.T) {
+	f, base := instanceFixture(t)
+	if _, stderr, code := f.run("up", "beta"); code != 0 {
+		t.Fatalf("up: exit %d: %s", code, stderr)
+	}
+	before := len(f.calls())
+	if _, stderr, code := f.run("down", "beta"); code != 0 {
+		t.Fatalf("down: exit %d: %s", code, stderr)
+	}
+	calls := f.calls()[before:]
+	if len(calls) != 2 || !strings.Contains(calls[0], "service stop outpost-beta") || !strings.Contains(calls[1], "service rm outpost-beta") {
+		t.Fatalf("down calls = %v, want stop then rm of outpost-beta", calls)
+	}
+	inst := filepath.Join(base, "profiles", "beta", "instance")
+	if _, err := os.Stat(filepath.Join(inst, "up")); err == nil {
+		t.Error("down left the up marker")
+	}
+	if _, err := os.Stat(filepath.Join(inst, "cfg", "matrix", "agent.json")); err != nil {
+		t.Errorf("down removed the instance config: %v", err)
+	}
+	if _, stderr, code := f.run("down", "beta"); code == 0 || !strings.Contains(stderr, "not up") {
+		t.Errorf("second down: exit %d, stderr %q; want refusal", code, stderr)
+	}
+}
+
+// status lists each instance with its state, server and admin port;
+// use refuses a profile that is up as an instance.
+func TestStatusAndUseGuard(t *testing.T) {
+	f, _ := instanceFixture(t)
+	if _, stderr, code := f.run("up", "beta"); code != 0 {
+		t.Fatalf("up: exit %d: %s", code, stderr)
+	}
+	out, _, code := f.run("status")
+	if code != 0 {
+		t.Fatalf("status: exit %d", code)
+	}
+	for _, want := range []string{"beta", "up", "https://sat-beta.example", "admin=17778", "unit=outpost-beta"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("status %q missing %q", out, want)
+		}
+	}
+	_, stderr, code := f.run("use", "beta")
+	if code == 0 || !strings.Contains(stderr, "running as its own instance") {
+		t.Errorf("use of an up instance: exit %d, stderr %q; want refusal", code, stderr)
+	}
+	for _, c := range f.calls() {
+		if c == "restart" {
+			t.Error("refused use still restarted outpost")
+		}
 	}
 }
