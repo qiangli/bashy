@@ -31,14 +31,14 @@ frozen release candidate before the tag.
 
 ## [Unreleased]
 
-## [1.0.0-rc.25] — UNRELEASED (candidate; date set at promotion)
+## [1.0.0-rc.27] — UNRELEASED (candidate; date set at promotion)
 
 Cut from the unreleased pool that accumulated since [0.32.0]; the earlier
 rc-series candidates were never cut here. The changes new since
 `v1.0.0-rc.24-dev` are summarized first, by theme — docs-only commits are
 omitted except public-claim corrections — and the earlier unreleased entries
-follow. Release notes: [v1.0.0-rc.25](docs/releases/v1.0.0-rc.25.md); open
-issues: [known-issues ledger](docs/releases/v1.0.0-rc.25-known-issues.md).
+follow. Release notes: [v1.0.0-rc.27](docs/releases/v1.0.0-rc.27.md); open
+issues: [known-issues ledger](docs/releases/v1.0.0-rc.27-known-issues.md).
 
 ### Added — since v1.0.0-rc.24-dev
 
@@ -261,8 +261,8 @@ sprint managers. [Notes](docs/releases/v0.22.0.md).
 
 Earlier pre-1.0 releases; see the git history between the tags.
 
-[Unreleased]: https://github.com/qiangli/bashy/compare/v1.0.0-rc.25...HEAD
-[1.0.0-rc.25]: https://github.com/qiangli/bashy/compare/v0.32.0...v1.0.0-rc.25
+[Unreleased]: https://github.com/qiangli/bashy/compare/v1.0.0-rc.27...HEAD
+[1.0.0-rc.27]: https://github.com/qiangli/bashy/compare/v0.32.0...v1.0.0-rc.27
 [0.32.0]: https://github.com/qiangli/bashy/releases/tag/v0.32.0
 [0.31.0]: https://github.com/qiangli/bashy/releases/tag/v0.31.0
 [0.30.0]: https://github.com/qiangli/bashy/releases/tag/v0.30.0
