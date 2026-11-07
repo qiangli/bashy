@@ -10,6 +10,9 @@ labels:
     - e2e
 created: 2026-11-06T21:50:00.164534Z
 assignee: muse-spark1.3
+sprint: 585
+sprint_id: 73032105-b38f-5cd7-8f47-a732dfee103f
+sprint_title: Klatch v1.2.7 rebuild and end-to-end tests
 ---
 
 Klatch is already shipped; it is the test app for a full happy-path suite. Extend tests/klatch-e2e/run.py with --topology none|outpost|satellite|both.
