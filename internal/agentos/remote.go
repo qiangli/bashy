@@ -549,6 +549,8 @@ func findLocalBinaryForHost(goos, goarch string) (binPath, launcherPath string, 
 				filepath.Join(os.Getenv("HOME"), ".local", "bin", "bashy"),
 				"bin/bashy",
 				"bin/bashy.real",
+				filepath.Join("..", "..", "bin", "bashy"), // go test runs in the package dir
+				filepath.Join("..", "..", "bin", "bashy.real"),
 			}
 			found := ""
 			for _, c := range cands {
