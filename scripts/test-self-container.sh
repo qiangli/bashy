@@ -48,6 +48,7 @@ trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
   -e npm_config_offline=false -e pnpm_config_offline=false \
   -v "$cache_volume:/cache" -v "$dhnt/bashy:/source/bashy:ro" \
   "$image" bash -lc '
+    set -euo pipefail
     cp -a /source/bashy/. /work/bashy/
     cd /work/bashy
     go mod download all
@@ -90,6 +91,7 @@ trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
   -v "$dhnt/coreutils:/source/coreutils:ro" -v "$dhnt/readline:/source/readline:ro" \
   -v "$dhnt/filebrowser:/source/filebrowser:ro" \
   "$image" bash -lc '
+    set -euo pipefail
     cp -a /source/bashy/. /work/bashy/
     mkdir -p /work/sh /work/coreutils /work/readline /work/filebrowser
     cp -a /source/sh/. /work/sh/
