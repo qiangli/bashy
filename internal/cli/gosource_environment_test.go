@@ -87,6 +87,9 @@ func TestGoSourceExecutableEnvironment(t *testing.T) {
 	// GOTOOLCHAIN=local pins the installed SDK and GOPROXY=off keeps the
 	// compared runs off the network, matching the builds above.
 	baseEnv := []string{"HOME=" + dir, "GOCACHE=" + strings.TrimSpace(cache), "GOMODCACHE=" + strings.TrimSpace(moduleCache), "GOTOOLCHAIN=local", "GOPROXY=off"}
+	if cache := os.Getenv("BASHY_BIN_CACHE"); cache != "" {
+		baseEnv = append(baseEnv, "BASHY_BIN_CACHE="+cache)
+	}
 	for name, env := range map[string][]string{
 		"absent":        {"LAST=last", "BAR=original-bar", "FIRST=first"},
 		"explicit":      {"LAST=last", "BASH=caller-bash", "SHELL=caller-shell", "SHLVL=17", "UID=caller-uid", "EUID=caller-euid", "IFS=caller-ifs", "OPTIND=caller-optind", "BASH_VERSION=caller-version", "BASHY_AGENT_MANIFEST=caller-manifest", "BASHY_HARD_IGNORE=USR1", "FIRST=first"},
