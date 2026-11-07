@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [repo/page] Derive no-egress allowlists from the pinned test's full port set — When a sandbox profile or strace verdict allowlists loopback ports for a pinned test binary, enumerate every bind/connect in that test's source at the pinned commit, not the subset remembered from its description. Prima's ring test was allowed 5  (kb:derive-no-egress-allowlists-from-the-pinned-test-s-full-port-set)
+- [repo/page] MinGW-clang Windows builds need -Wno-error downgrades for SOCKET/HANDLE int-conversion in pinned C deps — When a pinned C dependency passes Windows SOCKET (UINT_PTR integer) to HANDLE (pointer) parameters without a cast — e.g. nng win_tcpconn.c CancelIoEx(s, ...) — newer MinGW clang promotes -Wint-conversion  (kb:mingw-clang-windows-builds-need-wno-error-downgrades-for-socket)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 
