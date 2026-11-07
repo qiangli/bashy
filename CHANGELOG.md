@@ -31,25 +31,101 @@ frozen release candidate before the tag.
 
 ## [Unreleased]
 
-### Changed
+## [1.0.0-rc.25] — UNRELEASED (candidate; date set at promotion)
 
-- The Darwin `bashy` release now builds with `CGO_ENABLED=0`, like Linux and
-  Windows. The product runtime build exposes the Go runtime's snapshot of
-  inherited ignored signals to pure Go, replacing the pre-Go C constructor.
-  See [build evidence](docs/public-claims-evidence.md).
+Cut from the unreleased pool that accumulated since [0.32.0]; the earlier
+rc-series candidates were never cut here. The changes new since
+`v1.0.0-rc.24-dev` are summarized first, by theme — docs-only commits are
+omitted except public-claim corrections — and the earlier unreleased entries
+follow. Release notes: [v1.0.0-rc.25](docs/releases/v1.0.0-rc.25.md); open
+issues: [known-issues ledger](docs/releases/v1.0.0-rc.25-known-issues.md).
 
-### Corrected
+### Added — since v1.0.0-rc.24-dev
 
-- Public claims now distinguish shipped Unix job control from the Windows
-  process-group/TTY boundary, link yash evidence without an unsupported assertion
-  percentage, and count 49 visible external commands from the pinned catalog.
-- Build documentation requires Go 1.27 with toolchain go1.27.1 and qualifies
-  CGo-free release claims: Darwin `bashy` links a pre-Go C constructor to preserve
-  inherited ignored signals. See [claim evidence](docs/public-claims-evidence.md).
+- **Software shaping** — `bashy shape` is the CLI front door to the shaping
+  lifecycle: `wish` (isolated candidate generation, or `--from` a workspace),
+  `show`/`diff`, `verify`, `preview`, `approve` through the sealed activation
+  gate, `undo`/`restore`, and `submit`, which opens a reviewable source
+  proposal and an ordinary weave through the existing gates. CLI- and
+  service-kind apps shape with build/test argument vectors held outside
+  candidate source; native versions activate through immutable side slots
+  while the installed release and PATH stay intact; bashy itself is
+  shapeable, with status, undo, restore and the authoritative control paths
+  always executing the retained released implementation. The same lifecycle
+  reaches the paired console's remote API, and the shared shaping engine
+  works in a standalone bashy.
+- **Desk suite** — a shared desk kit with one Markdown renderer and one
+  family look for every tool: notepad with multi-format export; forms with
+  persistent questionnaire rounds, replyforms from browser extracts, and
+  many respondents with a poll preset; charts with offline SVG widgets and
+  OTLP input; and a view-only viewer for books of agent reports.
+- **Tutor** — classroom sessions on the shared desk kit: `plan`/`apply` with
+  an editable class format and agent draft, `serve`/`join`/`stop` with
+  projector, teacher and per-student pages, guardrailed per-student nudges,
+  session prep before class, owner-controlled tempo (pause/resume, time,
+  goto, skip, move), one-command demo and go flows as dag targets, and
+  readable participant links.
+- **Klatch** — `serve` runs on the owner's own machine (signed pin, verified
+  bundle) and reaches peers over the outpost mesh with `--mesh`; `invite`
+  issues one-time sign-up links straight into the vault; generic post/topic
+  verbs run as a bot. End-to-end checks cover the invite/chat happy path
+  through the satellite in the owner's browser and the runner's
+  pass/fail/BLOCKED decisions.
+- **Repair profiles** — every conformance suite runs through the
+  bashy/Bash# runtime with bashy's own POSIX utilities on the suite PATH,
+  `-list` fails closed on an empty `-only` selection, and the outpost
+  profile tests the shipped `CGO_ENABLED=0` build.
+- `claim who PATH` — the four-source path-owner join; lapsed claims are
+  hidden by default and only the covering root is named.
 
-Changes after v0.32.0, toward 1.0.0.
+### Fixed — since v1.0.0-rc.24-dev
 
-### Added
+- CLI: an empty `sh -c` command operand is recognized, positional flags
+  after `-c command` are preserved, and direct command-string callers keep
+  working; a registered agent keeps its mailbox when its name is ambiguous.
+- Process supervision: a Linux process counts as live until every thread
+  exits, captured orphan-group members are joined before reclaim, unknown
+  process liveness is never read as an exit, and malformed proc identity
+  fields are rejected.
+- Service telemetry is typed and bounded, with dispatch context preserved.
+- Darwin descriptors are preserved across registered commands and startup,
+  with producer-isolated SIGPIPE handling.
+- The reviewed Bash# fence runtime and fixture controls are integrated; an
+  absent fence method is an explicit refusal.
+- Shell runtime repairs consumed through pins: virtual-subshell self-signal,
+  command-substitution EXIT trap, strict POSIX getopts and asynchronous EXIT,
+  bounded unset scanning, indexed arithmetic, alias grammar, Sh pointer
+  metadata race, SQLite object write transactions, and Bonsai log rotation.
+- The managed Linux podman engine stages its private nft helper; the tutor
+  demo cleanup kills the server process tree (exit 0 on Ctrl-C) and tutor
+  server builds are isolated from umbrella Go workspaces.
+
+### Build and supply chain — since v1.0.0-rc.24-dev
+
+- The tree moved onto standalone module pins: source metadata regenerated
+  from the pins, workspace sources distinguished from published pins, linked
+  Yoke and Coreutils provenance synchronized, and ycode example agents
+  resolved from pinned modules instead of the umbrella layout.
+- `sh` is pinned to public master with the merged fence runtime; yoke is
+  pinned to main; the Klatch fleet pin carries v1.2.6 (outpost single
+  sign-on, team mode, SQLite busy timeout).
+- The local-model Ollama engine's CUDA runner ships per-tool prereleases
+  with `libggml-cuda.so` (`$ORIGIN` RUNPATH, SONAME closure audited, NVIDIA
+  runtime libraries host-required), is admitted by a checklist record
+  instead of an unconditional hold, and builds the runner on go1.27.3
+  (GO-2026-6809).
+- CI: native validation stages are bounded separately, conformance testees
+  build portably, the repair root derives from its workspace, and Windows
+  repair suites run contained.
+- Shrink-only import ratchets guard the `cmd/bash` and core/cert-base import
+  graphs.
+
+### Changes since v0.32.0 (earlier unreleased entries)
+
+The entries below predate `v1.0.0-rc.24-dev` and were never cut into a
+release section; they ride along in this candidate.
+
+#### Added
 
 - `bashy explain go` serves the Go delta table (text, `--json`, `--tsv`, and a
   refusal lookup).
@@ -67,8 +143,12 @@ Changes after v0.32.0, toward 1.0.0.
 - `SECURITY.md` (how to report, supported versions, scope) and this
   `CHANGELOG.md`.
 
-### Changed
+#### Changed
 
+- The Darwin `bashy` release now builds with `CGO_ENABLED=0`, like Linux and
+  Windows. The product runtime build exposes the Go runtime's snapshot of
+  inherited ignored signals to pure Go, replacing the pre-Go C constructor.
+  See [build evidence](docs/public-claims-evidence.md).
 - Sibling modules are consumed as real `go.mod` pins rather than a separate
   sibling-pin file; outpost is a `go.mod` tool pin built by the release, never
   linked into bashy. A standalone clone builds without a yoke source tree.
@@ -81,7 +161,7 @@ Changes after v0.32.0, toward 1.0.0.
   Windows build, vet and test step has a 20-minute budget; source-routing
   tests run in CI.
 
-### Fixed
+#### Fixed
 
 - The installer enforces the corrected shell-pair contract; `bash` and `sh`
   stay off the Homebrew `PATH`, and the formula test is valid.
@@ -92,6 +172,18 @@ Changes after v0.32.0, toward 1.0.0.
 - Sprint monitor tracks live readings on active resource alerts.
 - Bash fixtures are gated with `LANG` unset.
 - Judge write denial exits 126 after the effect-cap change (docs corrected).
+
+#### Corrected
+
+- Public claims now distinguish shipped Unix job control from the Windows
+  process-group/TTY boundary, link yash evidence without an unsupported assertion
+  percentage, and count 49 visible external commands from the pinned catalog.
+- Build documentation requires Go 1.27 (toolchain go1.27.2) and states the
+  CGo-free release claim the builds satisfy: no release links C — every
+  platform, including the native Darwin job, builds `cmd/bashy` with
+  `CGO_ENABLED=0`, and the product runtime build exposes the Go runtime's
+  snapshot of inherited ignored signals to pure Go. See
+  [claim evidence](docs/public-claims-evidence.md).
 
 ## [0.32.0] — 2026-10-07
 
@@ -169,7 +261,8 @@ sprint managers. [Notes](docs/releases/v0.22.0.md).
 
 Earlier pre-1.0 releases; see the git history between the tags.
 
-[Unreleased]: https://github.com/qiangli/bashy/compare/v0.32.0...HEAD
+[Unreleased]: https://github.com/qiangli/bashy/compare/v1.0.0-rc.25...HEAD
+[1.0.0-rc.25]: https://github.com/qiangli/bashy/compare/v0.32.0...v1.0.0-rc.25
 [0.32.0]: https://github.com/qiangli/bashy/releases/tag/v0.32.0
 [0.31.0]: https://github.com/qiangli/bashy/releases/tag/v0.31.0
 [0.30.0]: https://github.com/qiangli/bashy/releases/tag/v0.30.0
