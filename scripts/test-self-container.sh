@@ -53,13 +53,24 @@ trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
     go mod download all
     # Nested example modules (desk kit, brainstorm server, …) are built by
     # tests that later run offline; resolve their dependencies now.
+    # Nested modules say "go 1.27" with no toolchain line; use the root
+    # module'"'"'s toolchain so the image go does not try to fetch it. Any failure
+    # fails the warm-up.
+    root_tc=$(awk '"'"'$1=="toolchain"{print $2}'"'"' go.mod)
+    [ -n "$root_tc" ] || root_tc=$(go env GOVERSION)
+    export GOTOOLCHAIN=$root_tc
     find . -name go.mod -not -path ./go.mod -not -path "./builds/*" -not -path "*/node_modules/*" |
-      while read -r mod; do (cd "$(dirname "$mod")" && go mod download all); done
+      while read -r mod; do
+        (cd "$(dirname "$mod")" && go mod download all) || { echo "warm-up: go mod download failed in $mod" >&2; exit 1; }
+      done
+    unset GOTOOLCHAIN
     mkdir -p bin
     go build -o bin/bashy-spa-check ./cmd/bashy
     # Provision bashy'"'"'s own Go SDK into the mounted cache so the offline
     # transpile/go-source tests find it without fetching the release index.
-    /work/bashy/bin/bashy-spa-check go version
+    # PATH is stripped of every go so the resolver downloads into BASHY_BIN_CACHE.
+    nogo_path=$(printf %s "$PATH" | tr ":" "\n" | while read -r d; do [ -x "$d/go" ] || printf "%s:" "$d"; done)
+    PATH=${nogo_path%:} /work/bashy/bin/bashy-spa-check go version
     yoke_dir=$(go list -m -f "{{.Dir}}" github.com/qiangli/yoke)
     cp -a "$yoke_dir/pkg/meet/web" /work/web
     chmod -R u+w /work/web
@@ -86,5 +97,7 @@ trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
     cp -a /source/readline/. /work/readline/
     cp -a /source/filebrowser/. /work/filebrowser/
     cd /work/bashy
+    mkdir -p bin
+    go build -o bin/bashy ./cmd/bashy
     make "$BASHY_TEST_TARGET"
   '
