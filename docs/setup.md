@@ -34,22 +34,11 @@ curl -fsSL https://dhnt.io/install.sh | sh
 irm https://dhnt.io/install.ps1 | iex
 ```
 
-**macOS (Homebrew):**
+Both install scripts show no operating-system prompt.
 
-```sh
-brew install dhnt/tap/bashy
-```
-
-**Windows (Scoop):**
-
-```powershell
-scoop bucket add dhnt https://github.com/dhnt/scoop-bucket
-scoop install dhnt/bashy
-```
-
-These script, Homebrew, and Scoop installs show no operating-system prompt.
-If PowerShell blocks Scoop's shim, allow current-user scripts once with
-`Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force`.
+**Package managers are not yet available.** Homebrew, Scoop and winget
+channels are **not supported** as of v1.0.0-rc.27 — no tap, bucket or winget
+package is published. Use an install script above or a release archive below.
 
 The v1.0 macOS and Windows binaries are not yet code-signed. A browser-downloaded
 archive prompts at launch: on macOS, right-click the executable and choose
