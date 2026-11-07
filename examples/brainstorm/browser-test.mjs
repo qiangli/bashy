@@ -169,6 +169,37 @@ try {
  assert.equal(await noah.locator('#composer').isHidden(),true);
  assert.equal((await nCtx.request.get(inv.origin+'/bs/api/state?session=club')).status(),404);
  assert.equal((await mCtx.request.get(inv.origin+'/bs/api/state?session=club')).status(),200);
+ // --- multi-round & preset cards happy path with fake emails ---
+ await owner.locator('#sessionInput').fill('rounds-e2e');
+ await owner.locator('#titleInput').fill('Multi-Round E2E');
+ await owner.locator('#presetsInput').fill('Preset idea A\nPreset idea B');
+ await owner.locator('#createSession').click();
+ await owner.locator('#connection').filter({hasText:'Connected · rounds-e2e'}).waitFor();
+ const roundsLink=(await owner.locator('#participantLink').textContent()).match(/http:\/\/[^\s]+/)[0];
+ await Promise.all([mia.goto(roundsLink),noah.goto(roundsLink)]);
+ await mia.locator('#connection').filter({hasText:'Connected · rounds-e2e'}).waitFor();
+ await noah.locator('#connection').filter({hasText:'Connected · rounds-e2e'}).waitFor();
+ // Both mia@example.test and noah@example.test see the 2 preset cards during Round 1 write.
+ await cards(mia,2);await cards(noah,2);
+ await mia.locator('#name').fill('mia@example.test');
+ await mia.locator('#text').fill('Mia round 1 idea');
+ await mia.locator('#submit').click();
+ await cards(mia,3);
+ await owner.getByRole('button',{name:'Reveal all ideas',exact:true}).click();
+ for(const p of [owner,mia,noah])await cards(p,3);
+ await owner.getByRole('button',{name:'Open voting',exact:true}).click();
+ await mia.getByRole('button',{name:'+ Vote',exact:true}).first().click();
+ await noah.getByRole('button',{name:'+ Vote',exact:true}).first().click();
+ // Advance to Round 2 (minVotes=2, start in Vote phase).
+ await owner.locator('#nextRoundPhase').selectOption('vote');
+ await owner.locator('#minVotesInput').fill('2');
+ await owner.locator('#startNextRound').click();
+ for(const p of [owner,mia,noah])await cards(p,1);
+ // Navigate back to Round 1 history and forward to Round 2.
+ await mia.getByRole('button',{name:'◀ Prev round',exact:true}).click();
+ await cards(mia,3);
+ await mia.getByRole('button',{name:'Next round ▶',exact:true}).click();
+ await cards(mia,1);
  await hold('brainstorm', second.origin, '/bs/api/state?session=e2e');
- console.log('PASS: create session, 3-context private writing, reveal, budget-constrained votes, close, JSON/markdown export, restart persistence, invite-only sessions with revocation, standalone + prefix paths');
+ console.log('PASS: create session, 3-context private writing, reveal, budget-constrained votes, close, JSON/markdown export, restart persistence, invite-only sessions with revocation, preset seed cards + multi-round history navigation, standalone + prefix paths');
 } finally {await browser?.close();if(first?.server&&!first.server.killed&&first.server.exitCode===null)try{await stopServer(first.server)}catch{}if(second)try{await stopServer(second.server)}catch{}await rm(dir,{recursive:true,force:true})}

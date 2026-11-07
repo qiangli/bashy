@@ -2,9 +2,15 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net"
+	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -239,6 +245,171 @@ func TestCLIMultiRoundPresetsAndHistory(t *testing.T) {
 	json.Unmarshal(out.Bytes(), &st2)
 	if st2.Round != 1 || len(st2.Cards) != 2 {
 		t.Fatalf("expected round 1 with 2 cards after reopen, got %+v", st2)
+	}
+}
+
+func participantTokenForEmail(email string) string {
+	sum := sha256.Sum256([]byte("brainstorm-e2e:" + email))
+	return hex.EncodeToString(sum[:24]) // 48 hex chars matching kit.ValidToken
+}
+
+func TestBashySandboxE2EHappyPathWithFakeEmails(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs isolated bashy sandbox E2E")
+	}
+	bashyBin, err := exec.LookPath("bashy")
+	if err != nil {
+		t.Skip("bashy not on PATH")
+	}
+	srv, _ := deskServer(t)
+	addr := strings.TrimPrefix(srv.URL, "http://")
+
+	sandbox := t.TempDir()
+	const (
+		facilitatorEmail = "facilitator@example.test"
+		aliceEmail       = "alice@example.test"
+		bobEmail         = "bob@example.test"
+	)
+	caches, err := exec.Command("go", "env", "GOMODCACHE", "GOCACHE").Output()
+	if err != nil {
+		t.Fatalf("go env: %v", err)
+	}
+	goenv := strings.Split(strings.TrimSpace(string(caches)), "\n")
+	env := append(os.Environ(),
+		"HOME="+filepath.Join(sandbox, "home"),
+		"BASHY_HOME="+filepath.Join(sandbox, "bashy-home"),
+		"BASHY_FLEET_DIR="+filepath.Join(sandbox, "fleet"),
+		"BASHY_COORD_DIR="+filepath.Join(sandbox, "coord"),
+		"BASHY_ROOM_DIR="+filepath.Join(sandbox, "room"),
+		"BASHY_APPS_DIR="+filepath.Join(sandbox, "apps"),
+		"XDG_CONFIG_HOME="+filepath.Join(sandbox, "config"),
+		"XDG_DATA_HOME="+filepath.Join(sandbox, "data"),
+		"XDG_CACHE_HOME="+filepath.Join(sandbox, "cache"),
+		"BRAINSTORM_ADDR="+addr,
+		"BASHY_SPRINT_ANNOUNCE=0",
+		"GOMODCACHE="+goenv[0],
+		"GOCACHE="+goenv[1],
+		"GIT_AUTHOR_NAME=Facilitator",
+		"GIT_AUTHOR_EMAIL="+facilitatorEmail,
+		"GIT_COMMITTER_NAME=Facilitator",
+		"GIT_COMMITTER_EMAIL="+facilitatorEmail,
+	)
+	if err := os.MkdirAll(filepath.Join(sandbox, "home"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	bshPath, err := filepath.Abs("../brainstorm.bsh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runSandboxBsh := func(key string, args ...string) string {
+		t.Helper()
+		argv := append([]string{"--bashsharp", bshPath}, args...)
+		cmd := exec.Command(bashyBin, argv...)
+		cmd.Env = env
+		if key != "" {
+			cmd.Env = append(cmd.Env, "BRAINSTORM_KEY="+key)
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("bashy %v failed: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+	httpJSON := func(method, path, key, email string, body any) map[string]any {
+		t.Helper()
+		var rBody *bytes.Reader
+		if body != nil {
+			raw, _ := json.Marshal(body)
+			rBody = bytes.NewReader(raw)
+		} else {
+			rBody = bytes.NewReader(nil)
+		}
+		req, err := http.NewRequest(method, srv.URL+path, rBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if body != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if key != "" {
+			req.Header.Set("X-Facilitator-Key", key)
+		}
+		if email != "" {
+			req.AddCookie(&http.Cookie{Name: "brainstorm-participant", Value: participantTokenForEmail(email)})
+		}
+		resp, err := srv.Client().Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != 200 {
+			t.Fatalf("%s %s (%s): status %d", method, path, email, resp.StatusCode)
+		}
+		var out map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+
+	// 1. Facilitator (facilitator@example.test) creates session with preset seed cards in the bashy sandbox.
+	var created map[string]any
+	if err := json.Unmarshal([]byte(runSandboxBsh("", "add", "--id", "sbx-e2e", "--title", "Sandbox Happy Path", "--preset", "Seed 1: Solar roof\nSeed 2: Rainwater harvesting", "--json")), &created); err != nil {
+		t.Fatal(err)
+	}
+	facKey, _ := created["ownerKey"].(string)
+
+	// 2. Invite and join alice@example.test and bob@example.test.
+	for _, email := range []string{aliceEmail, bobEmail} {
+		inv := httpJSON("POST", "/api/action", facKey, facilitatorEmail, map[string]any{"action": "invite", "session": "sbx-e2e", "name": email})
+		code, _ := inv["inviteCode"].(string)
+		httpJSON("POST", "/api/action", "", email, map[string]any{"action": "join", "session": "sbx-e2e", "invite": code})
+	}
+
+	// 3. Round 1 write phase: alice@example.test and bob@example.test see the 2 preset cards and add their own ideas.
+	httpJSON("POST", "/api/action", "", aliceEmail, map[string]any{"action": "add", "session": "sbx-e2e", "column": 0, "name": aliceEmail, "text": "Alice idea: grid battery"})
+	httpJSON("POST", "/api/action", "", bobEmail, map[string]any{"action": "add", "session": "sbx-e2e", "column": 1, "name": bobEmail, "text": "Bob idea: diesel generator"})
+
+	// 4. Reveal and vote in Round 1.
+	runSandboxBsh(facKey, "set", "sbx-e2e", "--phase", "discuss")
+	runSandboxBsh(facKey, "set", "sbx-e2e", "--phase", "vote")
+	st1 := httpJSON("GET", "/api/state?session=sbx-e2e", "", aliceEmail, nil)
+	cards1, _ := st1["cards"].([]any)
+	cardIDByText := map[string]string{}
+	for _, raw := range cards1 {
+		cm := raw.(map[string]any)
+		cardIDByText[cm["text"].(string)] = cm["id"].(string)
+	}
+	for _, voter := range []string{aliceEmail, bobEmail} {
+		httpJSON("POST", "/api/action", "", voter, map[string]any{"action": "vote", "session": "sbx-e2e", "id": cardIDByText["Seed 1: Solar roof"]})
+		httpJSON("POST", "/api/action", "", voter, map[string]any{"action": "vote", "session": "sbx-e2e", "id": cardIDByText["Alice idea: grid battery"]})
+	}
+
+	// 5. Advance to Round 2 in write phase with min-votes=2.
+	runSandboxBsh(facKey, "set", "sbx-e2e", "--next-round", "--start-phase", "write", "--min-votes", "2")
+	var st2 struct {
+		Round  int              `json:"round"`
+		Phase  string           `json:"phase"`
+		Cards  []map[string]any `json:"cards"`
+		Rounds []RoundSnapshot  `json:"rounds"`
+	}
+	if err := json.Unmarshal([]byte(runSandboxBsh(facKey, "show", "sbx-e2e")), &st2); err != nil {
+		t.Fatal(err)
+	}
+	if st2.Round != 2 || st2.Phase != "write" || len(st2.Cards) != 2 || len(st2.Rounds) != 1 || st2.Rounds[0].AdvancedCount != 2 {
+		t.Fatalf("unexpected round 2 state: %+v", st2)
+	}
+
+	// 6. Inspect Round 1 history via CLI (--round 1) and carry forward into a new session.
+	var r1Hist struct {
+		ViewingRound  int `json:"viewingRound"`
+		AdvancedCount int `json:"advancedCount"`
+	}
+	if err := json.Unmarshal([]byte(runSandboxBsh(facKey, "show", "sbx-e2e", "--round", "1")), &r1Hist); err != nil {
+		t.Fatal(err)
+	}
+	if r1Hist.ViewingRound != 1 || r1Hist.AdvancedCount != 2 {
+		t.Fatalf("unexpected round 1 history: %+v", r1Hist)
 	}
 }
 
