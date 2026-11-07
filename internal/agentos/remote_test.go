@@ -6,6 +6,7 @@ package agentos
 import (
 	"bytes"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -143,7 +144,7 @@ func TestRemoteInstallFake_FreshIdempotentAndUpgrade(t *testing.T) {
 		// No old cached binary; fabricate a mismatched install by truncating file.
 		// Write a small file that will report a different version via our fake remoteVersion override?
 		// Simpler: just remove and write different bytes.
-		if err := os.WriteFile(binPath, []byte("old"), 0o755); err != nil {
+		if err := atomicWriteFile(binPath, strings.NewReader("old"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 		if realPath != "" {
@@ -155,7 +156,7 @@ func TestRemoteInstallFake_FreshIdempotentAndUpgrade(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read old bin: %v", err)
 		}
-		if err := os.WriteFile(binPath, data, 0o755); err != nil {
+		if err := atomicWriteFile(binPath, bytes.NewReader(data), 0o755); err != nil {
 			t.Fatalf("seed old: %v", err)
 		}
 		if realPath != "" {
@@ -324,5 +325,35 @@ func TestRemoteDetectOSFake(t *testing.T) {
 	}
 	if goos == "" || goarch == "" {
 		t.Fatalf("empty fake os/arch: %s/%s", goos, goarch)
+	}
+}
+
+func TestAtomicReplaceWhileRunning(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("ETXTBSY scenario is Linux-specific")
+	}
+	sh, err := exec.LookPath("sleep")
+	if err != nil {
+		t.Skip("no sleep binary")
+	}
+	data, err := os.ReadFile(sh)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	target := filepath.Join(dir, "bashy")
+	if err := atomicWriteFile(target, bytes.NewReader(data), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	c := exec.Command(target, "30")
+	if err := c.Start(); err != nil {
+		t.Skipf("cannot run copy: %v", err)
+	}
+	defer func() { _ = c.Process.Kill(); _ = c.Wait() }()
+	if err := atomicWriteFile(target, bytes.NewReader(append(data, 0)), 0o755); err != nil {
+		t.Fatalf("upgrade while running: %v", err)
+	}
+	if got, _ := os.ReadFile(target); len(got) != len(data)+1 {
+		t.Fatalf("target not replaced")
 	}
 }

@@ -867,13 +867,7 @@ func (t *transport) copyFile(host, localPath, remoteTmp string) error {
 			return err
 		}
 		defer in.Close()
-		out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
-		if err != nil {
-			return err
-		}
-		_, cerr := io.Copy(out, in)
-		_ = out.Close()
-		return cerr
+		return atomicWriteFile(dst, in, 0o755)
 	}
 	return t.scpCopy(host, localPath, remoteTmp)
 }
@@ -884,7 +878,7 @@ func (t *transport) chmodAndMove(host, tmp, dst string) error {
 		if err := os.Chmod(tmp, 0o755); err != nil {
 			return err
 		}
-		return os.Rename(tmp, dst)
+		return replaceFile(tmp, dst)
 	}
 	// Use ssh to chmod and mv atomically.
 	// Quote paths for shell.
@@ -931,4 +925,50 @@ func (t *transport) scpCopy(host, localPath, remotePath string) error {
 		return fmt.Errorf("scp %s -> %s: %w: %s", localPath, dest, err, buf.String())
 	}
 	return nil
+}
+
+// atomicWriteFile writes r to a temp file beside path, fsyncs, chmods and
+// renames it over path, so a running copy of path is never opened for writing.
+func atomicWriteFile(path string, r io.Reader, mode os.FileMode) error {
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".new-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	_, err = io.Copy(f, r)
+	if err == nil {
+		err = f.Sync()
+	}
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp, mode)
+	}
+	if err == nil {
+		err = replaceFile(tmp, path)
+	}
+	if err != nil {
+		_ = os.Remove(tmp)
+	}
+	return err
+}
+
+// replaceFile renames src over dst. Windows cannot replace a running exe, so
+// the old file is first renamed aside to dst+".old".
+func replaceFile(src, dst string) error {
+	if runtime.GOOS == "windows" {
+		old := dst + ".old"
+		_ = os.Remove(old)
+		if err := os.Rename(dst, old); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+		if err := os.Rename(src, dst); err != nil {
+			_ = os.Rename(old, dst)
+			return err
+		}
+		_ = os.Remove(old)
+		return nil
+	}
+	return os.Rename(src, dst)
 }
