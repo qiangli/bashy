@@ -3,7 +3,7 @@ id: 8d885a412016
 kind: doc
 title: K1 rc.25 known-issues ledger with operator sign-off
 seq: 3150
-status: todo
+status: assigned
 priority: p0
 labels:
     - release
