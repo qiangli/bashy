@@ -80,8 +80,11 @@ trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
     cd /work/web
     /work/bashy/bin/bashy-spa-check pnpm install --frozen-lockfile
   '
+# Tests run WITH network, as in CI: shaped-app checks declare
+# @effects(...,net) and the shape verifier gives each check a fresh, isolated
+# toolchain and module cache by design. The warm caches above only speed the
+# run up; pnpm still installs offline from the warmed store.
 "${oci[@]}" run --rm --name "$container" --label "io.dhnt.test.lane=$lane" \
-  --network none \
   --cpus "${BASHY_TEST_CPUS:-2}" --memory "${BASHY_TEST_MEMORY:-4g}" --pids-limit 4096 \
   -e GOTOOLCHAIN=auto -e GOWORK=off -e GOMODCACHE=/cache/gomod -e XDG_CACHE_HOME=/cache \
   -e COREPACK_HOME=/cache/corepack -e BASHY_BIN_CACHE=/cache/bashy \
