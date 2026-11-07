@@ -76,28 +76,49 @@ func deskCard(s *Session, body, owner string) (string, bool) {
 	if len(s.Cards) >= 1000 {
 		return "This session has reached its 1,000-card limit", false
 	}
-	s.Cards = append(s.Cards, Card{ID: token(), Column: 0, Text: body, Name: "Anonymous", Owner: owner, Votes: map[string]bool{}})
+	orig := s.Round
+	if orig < 1 {
+		orig = 1
+	}
+	s.Cards = append(s.Cards, Card{ID: token(), Column: 0, Text: body, Name: "Anonymous", Owner: owner, Votes: map[string]bool{}, OriginRound: orig})
 	return "", true
 }
 
 // actionReq is the one /api/action request shape: the existing session
-// actions plus the desk door's body/fields.
+// actions plus the desk door's body/fields and multi-round / preset fields.
 type actionReq struct {
-	Action     string      `json:"action"`
-	Session    string      `json:"session"`
-	ID         string      `json:"id"`
-	Column     int         `json:"column"`
-	Text       string      `json:"text"`
-	Name       string      `json:"name"`
-	Phase      string      `json:"phase"`
-	Title      string      `json:"title"`
-	Columns    []string    `json:"columns"`
-	Prompts    []string    `json:"prompts"`
-	VoteBudget int         `json:"voteBudget"`
-	Private    bool        `json:"private"`
-	Invite     string      `json:"invite"`
-	Body       string      `json:"body"`
-	Fields     []kit.Field `json:"fields"`
+	Action       string            `json:"action"`
+	Session      string            `json:"session"`
+	ID           string            `json:"id"`
+	Column       int               `json:"column"`
+	Text         string            `json:"text"`
+	Name         string            `json:"name"`
+	Phase        string            `json:"phase"`
+	Title        string            `json:"title"`
+	Columns      []string          `json:"columns"`
+	Prompts      []string          `json:"prompts"`
+	VoteBudget   int               `json:"voteBudget"`
+	Private      bool              `json:"private"`
+	Invite       string            `json:"invite"`
+	Body         string            `json:"body"`
+	Fields       []kit.Field       `json:"fields"`
+	Preset       bool              `json:"preset,omitempty"`
+	PriorVotes   int               `json:"priorVotes,omitempty"`
+	Presets      []PresetCardInput `json:"presets,omitempty"`
+	FromSession  string            `json:"fromSession,omitempty"`
+	FromRound    int               `json:"fromRound,omitempty"`
+	FromKey      string            `json:"fromKey,omitempty"`
+	Round        int               `json:"round,omitempty"`
+	NextRound    bool              `json:"nextRound,omitempty"`
+	ReopenRound  int               `json:"reopenRound,omitempty"`
+	StartPhase   string            `json:"startPhase,omitempty"`
+	SelectedIDs  []string          `json:"selectedIds,omitempty"`
+	MinVotes     int               `json:"minVotes,omitempty"`
+	TopN         int               `json:"topN,omitempty"`
+	FilterColumn *int              `json:"filterColumn,omitempty"`
+	FilterAuthor string            `json:"filterAuthor,omitempty"`
+	FilterQuery  string            `json:"filterQuery,omitempty"`
+	KeepVotes    bool              `json:"keepVotes,omitempty"`
 }
 
 // a.mu must be held.
@@ -149,11 +170,30 @@ func (a *app) desk(w http.ResponseWriter, r *http.Request, who string, req *acti
 			fail(w, 400, "Give a 1-1000 character body")
 			return
 		}
+		startPhase := "write"
+		if req.StartPhase != "" {
+			if req.StartPhase != "write" && req.StartPhase != "discuss" && req.StartPhase != "vote" {
+				fail(w, 400, "Start a session in write, discuss, or vote phase")
+				return
+			}
+			startPhase = req.StartPhase
+		}
 		s := &Session{Version: 2, Name: name, Title: title, Columns: append([]string{}, defaultColumns...),
-			Prompts: append([]string{}, defaultPrompts...), VoteBudget: defaultVoteBudget, Facilitator: token(), Phase: "write", Cards: []Card{},
+			Prompts: append([]string{}, defaultPrompts...), VoteBudget: defaultVoteBudget, Facilitator: token(), Phase: startPhase, Round: 1, Cards: []Card{},
 			Private: true, Members: map[string]Member{}, Invites: map[string]string{}}
 		if strings.TrimSpace(req.Body) != "" {
 			deskCard(s, req.Body, deskOwner)
+			if req.Preset && len(s.Cards) > 0 {
+				s.Cards[len(s.Cards)-1].Preset = true
+				s.Cards[len(s.Cards)-1].Name = "Preset"
+				s.Cards[len(s.Cards)-1].PriorVotes = max(0, req.PriorVotes)
+			}
+		}
+		if req.FromSession != "" || len(req.Presets) > 0 {
+			if code, msg, ok := a.seedSessionLocked(r, who, s, req); !ok {
+				fail(w, code, msg)
+				return
+			}
 		}
 		if _, err := a.createLocked(s); err != nil {
 			if errors.Is(err, errSessionExists) {
@@ -196,15 +236,93 @@ func (a *app) desk(w http.ResponseWriter, r *http.Request, who string, req *acti
 				}
 			}
 		}
-		v := a.view(who, &seen, isFac)
+		maxRound := seen.Round
+		if maxRound < 1 {
+			maxRound = len(seen.Rounds) + 1
+		}
+		if req.Round < 0 || req.Round > maxRound {
+			fail(w, 404, "Round not found")
+			return
+		}
+		v := a.viewForRound(who, &seen, isFac, req.Round)
 		v["id"], v["url"], v["status"] = s.Name, a.sessionURL(r, s.Name), sessionStatus(s)
 		respond(w, v)
 	case "set":
+		next := cloneSession(s)
+		if next.Round < 1 {
+			next.Round = len(next.Rounds) + 1
+		}
+		if req.ReopenRound > 0 {
+			if !isFac {
+				fail(w, 403, "Facilitator link required")
+				return
+			}
+			if code, msg, ok := reopenRoundTo(&next, req.ReopenRound); !ok {
+				fail(w, code, msg)
+				return
+			}
+			if a.commit(w, &next) {
+				respond(w, a.openView(r, &next))
+			}
+			return
+		}
+		if req.NextRound {
+			if !isFac {
+				fail(w, 403, "Facilitator link required")
+				return
+			}
+			if code, msg, ok := advanceToNextRound(&next, req); !ok {
+				fail(w, code, msg)
+				return
+			}
+			if a.commit(w, &next) {
+				respond(w, a.openView(r, &next))
+			}
+			return
+		}
+		if req.Phase != "" && strings.TrimSpace(req.Body) == "" && len(req.Presets) == 0 && req.FromSession == "" {
+			if !isFac {
+				fail(w, 403, "Facilitator link required")
+				return
+			}
+			allowed := map[string]string{"write": "discuss", "discuss": "vote", "vote": "closed"}
+			if allowed[next.Phase] != req.Phase {
+				fail(w, 409, "Follow the phases in order")
+				return
+			}
+			next.Phase = req.Phase
+			if a.commit(w, &next) {
+				respond(w, a.openView(r, &next))
+			}
+			return
+		}
+		if req.Preset || len(req.Presets) > 0 || req.FromSession != "" {
+			if !isFac {
+				fail(w, 403, "Facilitator link required")
+				return
+			}
+			if next.Phase == "closed" {
+				fail(w, 409, "Start a new round before adding preset cards")
+				return
+			}
+			seedReq := *req
+			seedReq.Action = "preset"
+			if strings.TrimSpace(seedReq.Text) == "" && strings.TrimSpace(seedReq.Body) != "" {
+				seedReq.Text = seedReq.Body
+			}
+			if code, msg, ok := a.seedSessionLocked(r, who, &next, &seedReq); !ok {
+				fail(w, code, msg)
+				return
+			}
+			if a.commit(w, &next) {
+				respond(w, a.openView(r, &next))
+			}
+			return
+		}
 		if s.Phase != "write" {
 			fail(w, 409, "Writing has ended")
 			return
 		}
-		next := cloneSession(s)
 		owner := who
 		if isFac {
 			owner = deskOwner

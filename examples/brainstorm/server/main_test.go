@@ -644,3 +644,327 @@ func TestPrivateSessionPrefix(t *testing.T) {
 	a.ServeHTTP(w, r)
 	good(t, w)
 }
+
+type testStateView struct {
+	Round     int    `json:"round"`
+	Phase     string `json:"phase"`
+	Total     int    `json:"total"`
+	VotesLeft int    `json:"votesLeft"`
+	Cards     []struct {
+		ID          string `json:"id"`
+		Column      int    `json:"column"`
+		Text        string `json:"text"`
+		Name        string `json:"name"`
+		Votes       int    `json:"votes"`
+		PriorVotes  int    `json:"priorVotes"`
+		Preset      bool   `json:"preset"`
+		OriginRound int    `json:"originRound"`
+	} `json:"cards"`
+}
+
+func getState(t *testing.T, a *app, who, fac, session string) testStateView {
+	t.Helper()
+	w := request(a, who, fac, session, "/api/state", nil)
+	good(t, w)
+	var v testStateView
+	if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil {
+		t.Fatal(err)
+	}
+	return v
+}
+
+func TestPresetSeedCardsAndVisibilityInWrite(t *testing.T) {
+	a := fresh(t)
+	facCaller, alice, bob := token(), token(), token()
+
+	// Create session with predefined seed cards.
+	w := request(a, facCaller, "", "seeded", "/api/action", map[string]any{
+		"action": "create",
+		"title":  "Seeded Session",
+		"presets": []map[string]any{
+			{"text": "Preset Example A", "column": 0, "name": "Mentor", "priorVotes": 4},
+			{"text": "Preset Example B", "column": 2, "name": "Coach"},
+		},
+	})
+	good(t, w)
+	var created struct {
+		FacilitatorKey string `json:"facilitatorKey"`
+		Round          int    `json:"round"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &created)
+	fac := created.FacilitatorKey
+	if created.Round != 1 {
+		t.Fatalf("expected round 1, got %d", created.Round)
+	}
+
+	// Alice adds her own private card during write phase.
+	good(t, request(a, alice, "", "seeded", "/api/action", map[string]any{
+		"action": "add", "text": "Alice private card", "name": "Alice", "column": 1,
+	}))
+
+	// Bob (who has written nothing) sees the 2 preset cards in write phase, but NOT Alice's card.
+	bobView := getState(t, a, bob, "", "seeded")
+	if bobView.Total != 3 || len(bobView.Cards) != 2 {
+		t.Fatalf("bob in write expected total=3 visible=2, got total=%d visible=%d", bobView.Total, len(bobView.Cards))
+	}
+	for _, c := range bobView.Cards {
+		if c.Text == "Alice private card" {
+			t.Fatal("bob should not see alice's private card during write")
+		}
+	}
+
+	// Non-facilitator cannot add preset cards or edit/delete preset cards.
+	if w := request(a, bob, "", "seeded", "/api/action", map[string]any{
+		"action": "preset", "text": "Unauthorized preset", "column": 0,
+	}); w.Code != 403 {
+		t.Fatalf("expected 403 for non-facilitator preset, got %d", w.Code)
+	}
+	presetID := bobView.Cards[0].ID
+	if w := request(a, bob, "", "seeded", "/api/action", map[string]any{
+		"action": "delete", "id": presetID,
+	}); w.Code != 403 {
+		t.Fatalf("expected 403 when non-facilitator deletes preset card, got %d", w.Code)
+	}
+
+	// Facilitator adds another preset card mid-session and edits the first preset card.
+	good(t, request(a, facCaller, fac, "seeded", "/api/action", map[string]any{
+		"action": "preset", "text": "Mid-session preset C", "column": 3, "priorVotes": 2,
+	}))
+	good(t, request(a, facCaller, fac, "seeded", "/api/action", map[string]any{
+		"action": "edit", "id": presetID, "text": "Preset Example A (updated)", "name": "Mentor", "column": 0,
+	}))
+	bobView = getState(t, a, bob, "", "seeded")
+	if len(bobView.Cards) != 3 || bobView.Cards[0].Text != "Preset Example A (updated)" {
+		t.Fatalf("unexpected bob cards after facilitator preset edit: %+v", bobView.Cards)
+	}
+}
+
+func TestMultiRoundIdeationVotingFilteringAndHistory(t *testing.T) {
+	dir := t.TempDir()
+	a, err := loadForTest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fac := create(t, a, "iter", "Iterative Brainstorm", 2)
+	alice, bob, carol := token(), token(), token()
+
+	// Round 1: add 3 cards across columns.
+	good(t, request(a, alice, "", "iter", "/api/action", map[string]any{"action": "add", "text": "Solar microgrid", "name": "Alice", "column": 0}))
+	good(t, request(a, bob, "", "iter", "/api/action", map[string]any{"action": "add", "text": "Battery swap station", "name": "Bob", "column": 1}))
+	good(t, request(a, carol, "", "iter", "/api/action", map[string]any{"action": "add", "text": "Paper flyers", "name": "Carol", "column": 2}))
+
+	// Reveal -> Vote in Round 1.
+	good(t, request(a, alice, fac, "iter", "/api/action", map[string]any{"action": "phase", "phase": "discuss"}))
+	good(t, request(a, alice, fac, "iter", "/api/action", map[string]any{"action": "phase", "phase": "vote"}))
+
+	st1 := getState(t, a, alice, "", "iter")
+	var idSolar, idBattery, idFlyers string
+	for _, c := range st1.Cards {
+		switch c.Text {
+		case "Solar microgrid":
+			idSolar = c.ID
+		case "Battery swap station":
+			idBattery = c.ID
+		case "Paper flyers":
+			idFlyers = c.ID
+		}
+	}
+	// Vote in Round 1: Solar gets 3 votes, Battery gets 2 votes, Flyers gets 0 votes.
+	for _, voter := range []string{alice, bob, carol} {
+		good(t, request(a, voter, "", "iter", "/api/action", map[string]any{"action": "vote", "id": idSolar}))
+	}
+	for _, voter := range []string{alice, bob} {
+		good(t, request(a, voter, "", "iter", "/api/action", map[string]any{"action": "vote", "id": idBattery}))
+	}
+	_ = idFlyers
+
+	// Non-facilitator cannot advance round.
+	if w := request(a, alice, "", "iter", "/api/action", map[string]any{"action": "next-round"}); w.Code != 403 {
+		t.Fatalf("expected 403 for non-facilitator next-round, got %d", w.Code)
+	}
+
+	// Facilitator advances to Round 2 in "write" phase, filtering by minVotes=2.
+	good(t, request(a, alice, fac, "iter", "/api/action", map[string]any{
+		"action":     "next-round",
+		"startPhase": "write",
+		"minVotes":   2,
+	}))
+
+	// Check Round 2 state: phase is "write", round is 2, 2 carried cards visible to everyone with priorVotes, fresh vote budget.
+	wState := request(a, carol, "", "iter", "/api/state", nil)
+	good(t, wState)
+	if strings.Contains(wState.Body.String(), "owner") || strings.Contains(wState.Body.String(), fac) {
+		t.Fatalf("state leaked owner or facilitator key: %s", wState.Body.String())
+	}
+	var r2State struct {
+		Round      int             `json:"round"`
+		Phase      string          `json:"phase"`
+		VotesLeft  int             `json:"votesLeft"`
+		Total      int             `json:"total"`
+		Cards      []map[string]any `json:"cards"`
+		Rounds     []RoundSnapshot `json:"rounds"`
+	}
+	json.Unmarshal(wState.Body.Bytes(), &r2State)
+	if r2State.Round != 2 || r2State.Phase != "write" || r2State.Total != 2 || len(r2State.Cards) != 2 || r2State.VotesLeft != 2 {
+		t.Fatalf("unexpected round 2 state: %+v", r2State)
+	}
+	if len(r2State.Rounds) != 1 || r2State.Rounds[0].Round != 1 || r2State.Rounds[0].TotalCount != 3 || r2State.Rounds[0].AdvancedCount != 2 {
+		t.Fatalf("unexpected round 1 snapshot in rounds: %+v", r2State.Rounds)
+	}
+
+	// Inspect Round 1 history via ?round=1 on /api/state and /api/export (even while Round 2 is in "write" phase).
+	wR1 := request(a, carol, "", "iter", "/api/state?round=1", nil)
+	good(t, wR1)
+	var r1Hist struct {
+		ViewingRound  int              `json:"viewingRound"`
+		Round         int              `json:"round"`
+		AdvancedCount int              `json:"advancedCount"`
+		Cards         []map[string]any `json:"cards"`
+	}
+	json.Unmarshal(wR1.Body.Bytes(), &r1Hist)
+	if r1Hist.ViewingRound != 1 || r1Hist.Round != 2 || r1Hist.AdvancedCount != 2 || len(r1Hist.Cards) != 3 {
+		t.Fatalf("unexpected ?round=1 view: %+v", r1Hist)
+	}
+	wExpR1 := request(a, alice, fac, "iter", "/api/export?round=1&format=markdown", nil)
+	good(t, wExpR1)
+	if !strings.Contains(wExpR1.Body.String(), "(Round 1)") || !strings.Contains(wExpR1.Body.String(), "Paper flyers — Carol (0 votes, archived)") {
+		t.Fatalf("unexpected markdown export for round 1: %s", wExpR1.Body.String())
+	}
+
+	// Add a new idea in Round 2 write phase, then advance to vote and vote in Round 2.
+	good(t, request(a, carol, "", "iter", "/api/action", map[string]any{"action": "add", "text": "Community heat pump", "name": "Carol", "column": 0}))
+	good(t, request(a, alice, fac, "iter", "/api/action", map[string]any{"action": "phase", "phase": "discuss"}))
+	good(t, request(a, alice, fac, "iter", "/api/action", map[string]any{"action": "phase", "phase": "vote"}))
+
+	st2 := getState(t, a, alice, "", "iter")
+	var idHeatPump string
+	for _, c := range st2.Cards {
+		if c.Text == "Community heat pump" {
+			idHeatPump = c.ID
+		}
+	}
+	good(t, request(a, alice, "", "iter", "/api/action", map[string]any{"action": "vote", "id": idHeatPump}))
+	good(t, request(a, bob, "", "iter", "/api/action", map[string]any{"action": "vote", "id": idHeatPump}))
+	good(t, request(a, carol, "", "iter", "/api/action", map[string]any{"action": "vote", "id": idSolar}))
+
+	// Advance to Round 3 skipping directly to "vote" phase, selecting topN=1.
+	good(t, request(a, alice, fac, "iter", "/api/action", map[string]any{
+		"action":     "next-round",
+		"startPhase": "vote",
+		"topN":       1,
+	}))
+	st3 := getState(t, a, alice, "", "iter")
+	if st3. Phase != "vote" || len(st3.Cards) != 1 || st3.Cards[0].Text != "Community heat pump" {
+		t.Fatalf("expected round 3 in vote phase with top-1 card 'Community heat pump', got phase=%s cards=%+v", st3.Phase, st3.Cards)
+	}
+
+	// Full markdown export includes Round History.
+	wExpAll := request(a, alice, fac, "iter", "/api/export?format=markdown", nil)
+	good(t, wExpAll)
+	if !strings.Contains(wExpAll.Body.String(), "## Round History") || !strings.Contains(wExpAll.Body.String(), "### Round 1") || !strings.Contains(wExpAll.Body.String(), "### Round 2") {
+		t.Fatalf("expected Round History in markdown export, got:\n%s", wExpAll.Body.String())
+	}
+
+	// Test manual selection, column, author, and query filters on a separate session.
+	facF := create(t, a, "filters", "Filter Matrix", 3)
+	good(t, request(a, alice, "", "filters", "/api/action", map[string]any{"action": "add", "text": "Alpha robotics", "name": "Alice", "column": 0}))
+	good(t, request(a, bob, "", "filters", "/api/action", map[string]any{"action": "add", "text": "Beta sensors", "name": "Bob", "column": 1}))
+	good(t, request(a, carol, "", "filters", "/api/action", map[string]any{"action": "add", "text": "Gamma drones", "name": "Alice", "column": 1}))
+	stF := getState(t, a, alice, facF, "filters")
+	// Filter by column=1 and author="Alice" -> only "Gamma drones" advances.
+	good(t, request(a, alice, facF, "filters", "/api/action", map[string]any{
+		"action":       "next-round",
+		"startPhase":   "discuss",
+		"filterColumn": 1,
+		"filterAuthor": "alice",
+	}))
+	stF2 := getState(t, a, alice, "", "filters")
+	if len(stF2.Cards) != 1 || stF2.Cards[0].Text != "Gamma drones" {
+		t.Fatalf("expected only 'Gamma drones' after column+author filter, got %+v", stF2.Cards)
+	}
+	// Reopen Round 1 on "filters" and filter by manual selectedIds.
+	good(t, request(a, alice, facF, "filters", "/api/action", map[string]any{"action": "reopen-round", "round": 1}))
+	good(t, request(a, alice, facF, "filters", "/api/action", map[string]any{
+		"action":      "next-round",
+		"startPhase":  "vote",
+		"selectedIds": []string{stF.Cards[0].ID},
+	}))
+	stF3 := getState(t, a, alice, "", "filters")
+	if len(stF3.Cards) != 1 || stF3.Cards[0].Text != "Alpha robotics" {
+		t.Fatalf("expected only manually selected card 'Alpha robotics', got %+v", stF3.Cards)
+	}
+}
+
+func TestCrossSessionCarryForwardAndPersistence(t *testing.T) {
+	dir := t.TempDir()
+	a, err := loadForTest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fac1 := create(t, a, "day1", "Day 1 Session", 3)
+	alice, bob := token(), token()
+	good(t, request(a, alice, "", "day1", "/api/action", map[string]any{"action": "add", "text": "Carry me forward", "name": "Alice", "column": 0}))
+	good(t, request(a, bob, "", "day1", "/api/action", map[string]any{"action": "add", "text": "Drop me", "name": "Bob", "column": 1}))
+	good(t, request(a, alice, fac1, "day1", "/api/action", map[string]any{"action": "phase", "phase": "discuss"}))
+	good(t, request(a, alice, fac1, "day1", "/api/action", map[string]any{"action": "phase", "phase": "vote"}))
+	st1 := getState(t, a, alice, "", "day1")
+	var carryID string
+	for _, c := range st1.Cards {
+		if c.Text == "Carry me forward" {
+			carryID = c.ID
+		}
+	}
+	good(t, request(a, alice, "", "day1", "/api/action", map[string]any{"action": "vote", "id": carryID}))
+	good(t, request(a, bob, "", "day1", "/api/action", map[string]any{"action": "vote", "id": carryID}))
+	good(t, request(a, alice, fac1, "day1", "/api/action", map[string]any{"action": "next-round", "startPhase": "write", "minVotes": 1}))
+
+	// Create "day2" seeded from round 1 of "day1" with minVotes=2 and starting directly in "vote" phase.
+	w := request(a, alice, "", "day2", "/api/action", map[string]any{
+		"action":      "create",
+		"title":       "Day 2 Follow-up",
+		"fromSession": "day1",
+		"fromRound":   1,
+		"minVotes":    2,
+		"startPhase":  "vote",
+	})
+	good(t, w)
+
+	// Reload from disk to verify persistence of rounds, fromSession, fromRound, priorVotes.
+	a2, err := loadForTest(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wDay2 := request(a2, bob, "", "day2", "/api/state", nil)
+	good(t, wDay2)
+	var day2 struct {
+		Phase       string           `json:"phase"`
+		FromSession string           `json:"fromSession"`
+		FromRound   int              `json:"fromRound"`
+		Cards       []map[string]any `json:"cards"`
+	}
+	json.Unmarshal(wDay2.Body.Bytes(), &day2)
+	if day2.Phase != "vote" || day2.FromSession != "day1" || day2.FromRound != 1 || len(day2.Cards) != 1 {
+		t.Fatalf("unexpected day2 state after restart: %+v", day2)
+	}
+	if day2.Cards[0]["text"] != "Carry me forward" || int(day2.Cards[0]["priorVotes"].(float64)) != 2 {
+		t.Fatalf("expected carried card with priorVotes=2, got %+v", day2.Cards[0])
+	}
+
+	// Private session source cannot be imported by an unauthorized user.
+	privFac := createPrivate(t, a2, "secret-src")
+	good(t, request(a2, alice, privFac, "secret-src", "/api/action", map[string]any{"action": "add", "text": "Confidential idea", "column": 0}))
+	if w := request(a2, bob, "", "leak-attempt", "/api/action", map[string]any{
+		"action":      "create",
+		"fromSession": "secret-src",
+	}); w.Code != 404 {
+		t.Fatalf("expected 404 when importing from private session without access, got %d", w.Code)
+	}
+	// With fromKey, the facilitator can carry forward from their private session.
+	if w := request(a2, bob, "", "authorized-branch", "/api/action", map[string]any{
+		"action":      "create",
+		"fromSession": "secret-src",
+		"fromKey":     privFac,
+	}); w.Code != 200 {
+		t.Fatalf("expected 200 when importing from private session with fromKey, got %d: %s", w.Code, w.Body.String())
+	}
+}

@@ -153,6 +153,95 @@ func TestCLIOpenHidesContent(t *testing.T) {
 	}
 }
 
+func TestCLIMultiRoundPresetsAndHistory(t *testing.T) {
+	srv, _ := deskServer(t)
+	addr := strings.TrimPrefix(srv.URL, "http://")
+
+	var out bytes.Buffer
+	if c := runCLI([]string{"-addr", addr, "add", "--id", "r1", "--title", "Round CLI", "--preset", "Seed alpha", "--preset", "Seed beta", "--json"}, &out); c != 0 {
+		t.Fatalf("add with presets: %d %s", c, out.String())
+	}
+	var created map[string]any
+	json.Unmarshal(out.Bytes(), &created)
+	key, _ := created["ownerKey"].(string)
+
+	// Advance to Round 2 skipping directly to vote and filtering by query "alpha".
+	out.Reset()
+	if c := runCLI([]string{"-addr", addr, "set", "r1", "--key", key, "--next-round", "--start-phase", "vote", "--filter-query", "alpha"}, &out); c != 0 {
+		t.Fatalf("set --next-round: %d %s", c, out.String())
+	}
+
+	// Show current round (Round 2): only "Seed alpha" should be present.
+	out.Reset()
+	if c := runCLI([]string{"-addr", addr, "show", "r1", "--key", key}, &out); c != 0 {
+		t.Fatalf("show r1: %d %s", c, out.String())
+	}
+	if !strings.Contains(out.String(), "Seed alpha") || strings.Contains(out.String(), `"text":"Seed beta"`) {
+		// Note: rounds[0] in state has Seed beta, so parse JSON cards directly.
+	}
+	var st2 struct {
+		Round int              `json:"round"`
+		Phase string           `json:"phase"`
+		Cards []map[string]any `json:"cards"`
+	}
+	json.Unmarshal(out.Bytes(), &st2)
+	if st2.Round != 2 || st2.Phase != "vote" || len(st2.Cards) != 1 || st2.Cards[0]["text"] != "Seed alpha" {
+		t.Fatalf("unexpected round 2 show: %+v", st2)
+	}
+
+	// Show historical Round 1 via --round 1: both cards present with advanced flags.
+	out.Reset()
+	if c := runCLI([]string{"-addr", addr, "show", "r1", "--key", key, "--round", "1"}, &out); c != 0 {
+		t.Fatalf("show --round 1: %d %s", c, out.String())
+	}
+	var st1 struct {
+		ViewingRound  int              `json:"viewingRound"`
+		AdvancedCount int              `json:"advancedCount"`
+		Cards         []map[string]any `json:"cards"`
+	}
+	json.Unmarshal(out.Bytes(), &st1)
+	if st1.ViewingRound != 1 || st1.AdvancedCount != 1 || len(st1.Cards) != 2 {
+		t.Fatalf("unexpected round 1 show: %+v", st1)
+	}
+
+	// Create a new session seeded from Round 1 of r1.
+	out.Reset()
+	if c := runCLI([]string{"-addr", addr, "add", "--id", "r2", "--from-session", "r1", "--from-round", "1", "--from-key", key, "--json"}, &out); c != 0 {
+		t.Fatalf("add --from-session: %d %s", c, out.String())
+	}
+	var created2 map[string]any
+	json.Unmarshal(out.Bytes(), &created2)
+	key2, _ := created2["ownerKey"].(string)
+
+	out.Reset()
+	if c := runCLI([]string{"-addr", addr, "show", "r2", "--key", key2}, &out); c != 0 {
+		t.Fatalf("show r2: %d %s", c, out.String())
+	}
+	var stCarry struct {
+		FromSession string           `json:"fromSession"`
+		FromRound   int              `json:"fromRound"`
+		Cards       []map[string]any `json:"cards"`
+	}
+	json.Unmarshal(out.Bytes(), &stCarry)
+	if stCarry.FromSession != "r1" || stCarry.FromRound != 1 || len(stCarry.Cards) != 2 {
+		t.Fatalf("unexpected carried session r2: %+v", stCarry)
+	}
+
+	// Reopen Round 1 on r1.
+	out.Reset()
+	if c := runCLI([]string{"-addr", addr, "set", "r1", "--key", key, "--reopen-round", "1"}, &out); c != 0 {
+		t.Fatalf("set --reopen-round 1: %d %s", c, out.String())
+	}
+	out.Reset()
+	if c := runCLI([]string{"-addr", addr, "show", "r1", "--key", key}, &out); c != 0 {
+		t.Fatalf("show r1 after reopen: %d %s", c, out.String())
+	}
+	json.Unmarshal(out.Bytes(), &st2)
+	if st2.Round != 1 || len(st2.Cards) != 2 {
+		t.Fatalf("expected round 1 with 2 cards after reopen, got %+v", st2)
+	}
+}
+
 func deskCLICallback(base string) func(...string) (int, string) {
 	return func(args ...string) (int, string) {
 		var out bytes.Buffer

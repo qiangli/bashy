@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -77,24 +78,77 @@ const defaultVoteBudget = 3
 var sessionNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)
 
 type Card struct {
-	ID     string          `json:"id"`
-	Column int             `json:"column"`
-	Text   string          `json:"text"`
-	Name   string          `json:"name"`
-	Owner  string          `json:"owner"`
-	Votes  map[string]bool `json:"votes"`
+	ID          string          `json:"id"`
+	Column      int             `json:"column"`
+	Text        string          `json:"text"`
+	Name        string          `json:"name"`
+	Owner       string          `json:"owner"`
+	Votes       map[string]bool `json:"votes"`
+	Preset      bool            `json:"preset,omitempty"`
+	PriorVotes  int             `json:"priorVotes,omitempty"`
+	OriginRound int             `json:"originRound,omitempty"`
 }
+
+type PresetCardInput struct {
+	ID          string `json:"id,omitempty"`
+	Column      int    `json:"column,omitempty"`
+	Text        string `json:"text"`
+	Name        string `json:"name,omitempty"`
+	Votes       int    `json:"votes,omitempty"`
+	PriorVotes  int    `json:"priorVotes,omitempty"`
+	OriginRound int    `json:"originRound,omitempty"`
+}
+
+type RoundFilter struct {
+	SelectedIDs  []string `json:"selectedIds,omitempty"`
+	MinVotes     int      `json:"minVotes,omitempty"`
+	TopN         int      `json:"topN,omitempty"`
+	FilterColumn *int     `json:"filterColumn,omitempty"`
+	FilterAuthor string   `json:"filterAuthor,omitempty"`
+	FilterQuery  string   `json:"filterQuery,omitempty"`
+	KeepVotes    bool     `json:"keepVotes,omitempty"`
+	StartPhase   string   `json:"startPhase,omitempty"`
+	Summary      string   `json:"summary,omitempty"`
+}
+
+type RoundCard struct {
+	ID          string `json:"id"`
+	Column      int    `json:"column"`
+	Text        string `json:"text"`
+	Name        string `json:"name"`
+	Votes       int    `json:"votes"`
+	PriorVotes  int    `json:"priorVotes,omitempty"`
+	Preset      bool   `json:"preset,omitempty"`
+	OriginRound int    `json:"originRound,omitempty"`
+	Advanced    bool   `json:"advanced"`
+}
+
+type RoundSnapshot struct {
+	Round         int         `json:"round"`
+	EndedAt       string      `json:"endedAt,omitempty"`
+	Phase         string      `json:"phase"`
+	Cards         []RoundCard `json:"cards"`
+	RawCards      []Card      `json:"rawCards,omitempty"`
+	Filter        RoundFilter `json:"filter"`
+	TotalCount    int         `json:"totalCount"`
+	AdvancedCount int         `json:"advancedCount"`
+}
+
 type Session struct {
-	Version     int      `json:"version"`
-	Name        string   `json:"name"`
-	Title       string   `json:"title"`
-	Columns     []string `json:"columns"`
-	Prompts     []string `json:"prompts"`
-	VoteBudget  int      `json:"voteBudget"`
-	Facilitator string   `json:"facilitator"`
-	Phase       string   `json:"phase"`
-	Cards       []Card   `json:"cards"`
-	Revision    int      `json:"revision"`
+	Version     int             `json:"version"`
+	Name        string          `json:"name"`
+	Title       string          `json:"title"`
+	Columns     []string        `json:"columns"`
+	Prompts     []string        `json:"prompts"`
+	VoteBudget  int             `json:"voteBudget"`
+	Facilitator string          `json:"facilitator"`
+	Phase       string          `json:"phase"`
+	Round       int             `json:"round,omitempty"`
+	Rounds      []RoundSnapshot `json:"rounds,omitempty"`
+	FromSession string          `json:"fromSession,omitempty"`
+	FromRound   int             `json:"fromRound,omitempty"`
+	Cards       []Card          `json:"cards"`
+	Revision    int             `json:"revision"`
 	// Private sessions admit only the facilitator and invited members.
 	// Sessions saved before this field existed decode as open (false).
 	Private bool              `json:"private,omitempty"`
@@ -155,9 +209,25 @@ func normalizeSession(s *Session) error {
 	if s.Cards == nil {
 		s.Cards = []Card{}
 	}
+	if s.Round < 1 {
+		s.Round = len(s.Rounds) + 1
+	}
 	for i := range s.Cards {
 		if s.Cards[i].Votes == nil {
 			s.Cards[i].Votes = map[string]bool{}
+		}
+		if s.Cards[i].OriginRound < 1 {
+			s.Cards[i].OriginRound = 1
+		}
+	}
+	for i := range s.Rounds {
+		if s.Rounds[i].Cards == nil {
+			s.Rounds[i].Cards = []RoundCard{}
+		}
+		for j := range s.Rounds[i].RawCards {
+			if s.Rounds[i].RawCards[j].Votes == nil {
+				s.Rounds[i].RawCards[j].Votes = map[string]bool{}
+			}
 		}
 	}
 	s.Version = 2
@@ -239,7 +309,7 @@ func (a *app) ensureMainLocked() (*Session, error) {
 	s := &Session{Version: 2, Name: "main", Title: "Team Brainstorm",
 		Columns:    append([]string{}, defaultColumns...),
 		Prompts:    append([]string{}, defaultPrompts...),
-		VoteBudget: defaultVoteBudget, Facilitator: token(), Phase: "write", Cards: []Card{}}
+		VoteBudget: defaultVoteBudget, Facilitator: token(), Phase: "write", Round: 1, Cards: []Card{}}
 	if legacy, lerr := os.ReadFile(filepath.Join(a.dir, "board.json")); lerr == nil {
 		var old struct {
 			Version  int    `json:"version"`
@@ -355,7 +425,11 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			sessionNotFound(w)
 			return
 		}
-		respond(w, a.view(id, s, isFac))
+		roundNum, ok := parseRoundParam(w, r, s)
+		if !ok {
+			return
+		}
+		respond(w, a.viewForRound(id, s, isFac, roundNum))
 		return
 	}
 	if path == "/api/export" && r.Method == "GET" {
@@ -376,26 +450,21 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			fail(w, 403, "Facilitator link required")
 			return
 		}
-		if s.Phase == "write" {
+		roundNum, ok := parseRoundParam(w, r, s)
+		if !ok {
+			return
+		}
+		if (roundNum == 0 || roundNum == s.Round) && s.Phase == "write" {
 			fail(w, 409, "Reveal ideas before exporting")
 			return
 		}
 		if r.URL.Query().Get("format") == "markdown" {
 			w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 			w.Header().Set("Content-Disposition", "attachment; filename=brainstorm-"+s.Name+".md")
-			fmt.Fprintf(w, "# %s\n\n", s.Title)
-			for i, col := range s.Columns {
-				fmt.Fprintf(w, "## %s\n\n", col)
-				for _, c := range s.Cards {
-					if c.Column == i {
-						fmt.Fprintf(w, "- %s — %s (%d votes)\n", strings.ReplaceAll(c.Text, "\n", " "), c.Name, len(c.Votes))
-					}
-				}
-				fmt.Fprintln(w)
-			}
+			writeMarkdownExport(w, s, roundNum)
 		} else {
 			w.Header().Set("Content-Disposition", "attachment; filename=brainstorm-"+s.Name+".json")
-			respond(w, a.view("", s, false))
+			respond(w, a.viewForRound("", s, false, roundNum))
 		}
 		return
 	}
@@ -409,7 +478,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	// Card submissions already use add; their text distinguishes them from
 	// the desk add action, which creates a session.
-	if deskActions[req.Action] && !(req.Action == "add" && req.ID == "" && req.Title == "" && req.Body == "" && len(req.Fields) == 0) {
+	if deskActions[req.Action] && !(req.Action == "add" && req.ID == "" && req.Title == "" && req.Body == "" && len(req.Fields) == 0 && len(req.Presets) == 0 && req.FromSession == "") {
 		a.desk(w, r, id, &req)
 		return
 	}
@@ -473,12 +542,26 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			fail(w, 400, "Use a vote budget of 1-10")
 			return
 		}
+		startPhase := "write"
+		if req.StartPhase != "" {
+			if req.StartPhase != "write" && req.StartPhase != "discuss" && req.StartPhase != "vote" {
+				fail(w, 400, "Start a session in write, discuss, or vote phase")
+				return
+			}
+			startPhase = req.StartPhase
+		}
 		s := &Session{Version: 2, Name: req.Session, Title: title, Columns: columns,
-			Prompts: prompts, VoteBudget: budget, Facilitator: token(), Phase: "write", Cards: []Card{}}
+			Prompts: prompts, VoteBudget: budget, Facilitator: token(), Phase: startPhase, Round: 1, Cards: []Card{}}
 		if req.Private {
 			s.Private = true
 			s.Members = map[string]Member{}
 			s.Invites = map[string]string{}
+		}
+		if req.FromSession != "" || len(req.Presets) > 0 {
+			if code, msg, ok := a.seedSessionLocked(r, id, s, &req); !ok {
+				fail(w, code, msg)
+				return
+			}
 		}
 		if _, err := a.createLocked(s); err != nil {
 			if errors.Is(err, errSessionExists) {
@@ -550,6 +633,9 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	raw, _ := json.Marshal(s)
 	var next Session
 	json.Unmarshal(raw, &next)
+	if next.Round < 1 {
+		next.Round = len(next.Rounds) + 1
+	}
 	idx := -1
 	for i, c := range next.Cards {
 		if c.ID == req.ID {
@@ -563,7 +649,8 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			fail(w, 409, "Writing has ended; your draft is still in this browser")
 			return
 		}
-		if req.Action != "add" && (idx < 0 || next.Cards[idx].Owner != id) {
+		canModify := idx >= 0 && (next.Cards[idx].Owner == id || (isFac && next.Cards[idx].Preset))
+		if req.Action != "add" && !canModify {
 			fail(w, 403, "You can change only your own cards")
 			return
 		}
@@ -585,11 +672,42 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 				fail(w, 409, "This session has reached its 1,000-card limit")
 				return
 			}
-			next.Cards = append(next.Cards, Card{ID: token(), Column: req.Column, Text: req.Text, Name: req.Name, Owner: id, Votes: map[string]bool{}})
+			next.Cards = append(next.Cards, Card{ID: token(), Column: req.Column, Text: req.Text, Name: req.Name, Owner: id, Votes: map[string]bool{}, Preset: isFac && req.Preset, PriorVotes: max(0, req.PriorVotes), OriginRound: next.Round})
 		} else {
 			next.Cards[idx].Text = req.Text
 			next.Cards[idx].Column = req.Column
 			next.Cards[idx].Name = req.Name
+		}
+	case "preset":
+		if !isFac {
+			fail(w, 403, "Facilitator link required")
+			return
+		}
+		if next.Phase == "closed" {
+			fail(w, 409, "Start a new round before adding preset cards")
+			return
+		}
+		if code, msg, ok := a.seedSessionLocked(r, id, &next, &req); !ok {
+			fail(w, code, msg)
+			return
+		}
+	case "next-round":
+		if !isFac {
+			fail(w, 403, "Facilitator link required")
+			return
+		}
+		if code, msg, ok := advanceToNextRound(&next, &req); !ok {
+			fail(w, code, msg)
+			return
+		}
+	case "reopen-round":
+		if !isFac {
+			fail(w, 403, "Facilitator link required")
+			return
+		}
+		if code, msg, ok := reopenRoundTo(&next, req.Round); !ok {
+			fail(w, code, msg)
+			return
 		}
 	case "vote":
 		if next.Phase != "vote" {
@@ -697,17 +815,593 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	*s = next
 	respond(w, a.view(id, s, isFac))
 }
+
+func parseRoundParam(w http.ResponseWriter, r *http.Request, s *Session) (int, bool) {
+	q := strings.TrimSpace(r.URL.Query().Get("round"))
+	if q == "" {
+		return 0, true
+	}
+	n, err := strconv.Atoi(q)
+	maxRound := s.Round
+	if maxRound < 1 {
+		maxRound = len(s.Rounds) + 1
+	}
+	if err != nil || n < 1 || n > maxRound {
+		fail(w, 404, "Round not found")
+		return 0, false
+	}
+	return n, true
+}
+
+func writeMarkdownExport(w http.ResponseWriter, s *Session, roundNum int) {
+	curRound := s.Round
+	if curRound < 1 {
+		curRound = len(s.Rounds) + 1
+	}
+	if roundNum > 0 && roundNum < curRound && roundNum <= len(s.Rounds) {
+		snap := s.Rounds[roundNum-1]
+		fmt.Fprintf(w, "# %s (Round %d)\n\n", s.Title, snap.Round)
+		if snap.Filter.Summary != "" {
+			fmt.Fprintf(w, "Filter: %s (%d of %d advanced)\n\n", snap.Filter.Summary, snap.AdvancedCount, snap.TotalCount)
+		}
+		for i, col := range s.Columns {
+			fmt.Fprintf(w, "## %s\n\n", col)
+			for _, c := range snap.Cards {
+				if c.Column == i {
+					status := "archived"
+					if c.Advanced {
+						status = "advanced"
+					}
+					fmt.Fprintf(w, "- %s — %s (%d votes, %s)\n", strings.ReplaceAll(c.Text, "\n", " "), c.Name, c.Votes, status)
+				}
+			}
+			fmt.Fprintln(w)
+		}
+		return
+	}
+	fmt.Fprintf(w, "# %s\n\n", s.Title)
+	for i, col := range s.Columns {
+		fmt.Fprintf(w, "## %s\n\n", col)
+		for _, c := range s.Cards {
+			if c.Column == i {
+				fmt.Fprintf(w, "- %s — %s (%d votes)\n", strings.ReplaceAll(c.Text, "\n", " "), c.Name, len(c.Votes))
+			}
+		}
+		fmt.Fprintln(w)
+	}
+	if len(s.Rounds) > 0 {
+		fmt.Fprintf(w, "## Round History\n\n")
+		for _, snap := range s.Rounds {
+			fmt.Fprintf(w, "### Round %d (%d of %d advanced — %s)\n\n", snap.Round, snap.AdvancedCount, snap.TotalCount, snap.Filter.Summary)
+			for _, c := range snap.Cards {
+				status := "archived"
+				if c.Advanced {
+					status = "advanced"
+				}
+				fmt.Fprintf(w, "- %s — %s (%d votes, %s)\n", strings.ReplaceAll(c.Text, "\n", " "), c.Name, c.Votes, status)
+			}
+			fmt.Fprintln(w)
+		}
+	}
+}
+
+func publicRoundSnapshots(rounds []RoundSnapshot) []RoundSnapshot {
+	if len(rounds) == 0 {
+		return []RoundSnapshot{}
+	}
+	out := make([]RoundSnapshot, len(rounds))
+	for i, r := range rounds {
+		cards := make([]RoundCard, len(r.Cards))
+		copy(cards, r.Cards)
+		f := r.Filter
+		if len(r.Filter.SelectedIDs) > 0 {
+			f.SelectedIDs = append([]string{}, r.Filter.SelectedIDs...)
+		}
+		out[i] = RoundSnapshot{
+			Round:         r.Round,
+			EndedAt:       r.EndedAt,
+			Phase:         r.Phase,
+			Cards:         cards,
+			Filter:        f,
+			TotalCount:    r.TotalCount,
+			AdvancedCount: r.AdvancedCount,
+		}
+	}
+	return out
+}
+
+func filterCards(cards []Card, f RoundFilter, cols []string) ([]Card, map[string]bool, string) {
+	anyCurrentVotes := false
+	for _, c := range cards {
+		if len(c.Votes) > 0 {
+			anyCurrentVotes = true
+			break
+		}
+	}
+	cardVotes := func(c Card) int {
+		if anyCurrentVotes {
+			return len(c.Votes)
+		}
+		if len(c.Votes) > 0 {
+			return len(c.Votes)
+		}
+		return c.PriorVotes
+	}
+	sel := map[string]bool{}
+	for _, id := range f.SelectedIDs {
+		id = strings.TrimSpace(id)
+		if id != "" {
+			sel[id] = true
+		}
+	}
+	authorFilter := strings.ToLower(strings.TrimSpace(f.FilterAuthor))
+	queryFilter := strings.ToLower(strings.TrimSpace(f.FilterQuery))
+	type indexedCard struct {
+		idx  int
+		card Card
+	}
+	var matched []indexedCard
+	for i, c := range cards {
+		if len(sel) > 0 && !sel[c.ID] {
+			continue
+		}
+		if f.MinVotes > 0 && cardVotes(c) < f.MinVotes {
+			continue
+		}
+		if f.FilterColumn != nil && *f.FilterColumn >= 0 && c.Column != *f.FilterColumn {
+			continue
+		}
+		if authorFilter != "" && !strings.Contains(strings.ToLower(c.Name), authorFilter) {
+			continue
+		}
+		if queryFilter != "" && !strings.Contains(strings.ToLower(c.Text+" "+c.Name), queryFilter) {
+			continue
+		}
+		matched = append(matched, indexedCard{idx: i, card: c})
+	}
+	if f.TopN > 0 && len(matched) > f.TopN {
+		ranked := append([]indexedCard{}, matched...)
+		sort.SliceStable(ranked, func(i, j int) bool {
+			vi, vj := cardVotes(ranked[i].card), cardVotes(ranked[j].card)
+			if vi != vj {
+				return vi > vj
+			}
+			if ranked[i].card.PriorVotes != ranked[j].card.PriorVotes {
+				return ranked[i].card.PriorVotes > ranked[j].card.PriorVotes
+			}
+			return ranked[i].idx < ranked[j].idx
+		})
+		ranked = ranked[:f.TopN]
+		keepIdx := map[int]bool{}
+		for _, r := range ranked {
+			keepIdx[r.idx] = true
+		}
+		var topMatched []indexedCard
+		for _, m := range matched {
+			if keepIdx[m.idx] {
+				topMatched = append(topMatched, m)
+			}
+		}
+		matched = topMatched
+	}
+	advancedIDs := map[string]bool{}
+	kept := make([]Card, 0, len(matched))
+	for _, m := range matched {
+		advancedIDs[m.card.ID] = true
+		c := m.card
+		votes := map[string]bool{}
+		for k, v := range m.card.Votes {
+			votes[k] = v
+		}
+		c.Votes = votes
+		kept = append(kept, c)
+	}
+	var parts []string
+	if len(sel) > 0 {
+		parts = append(parts, fmt.Sprintf("manual selection (%d)", len(sel)))
+	}
+	if f.MinVotes > 0 {
+		parts = append(parts, fmt.Sprintf("min %d vote(s)", f.MinVotes))
+	}
+	if f.TopN > 0 {
+		parts = append(parts, fmt.Sprintf("top %d", f.TopN))
+	}
+	if f.FilterColumn != nil && *f.FilterColumn >= 0 {
+		colLabel := fmt.Sprintf("column %d", *f.FilterColumn)
+		if *f.FilterColumn < len(cols) {
+			colLabel = fmt.Sprintf("column %q", cols[*f.FilterColumn])
+		}
+		parts = append(parts, colLabel)
+	}
+	if f.FilterAuthor != "" {
+		parts = append(parts, fmt.Sprintf("author %q", strings.TrimSpace(f.FilterAuthor)))
+	}
+	if f.FilterQuery != "" {
+		parts = append(parts, fmt.Sprintf("query %q", strings.TrimSpace(f.FilterQuery)))
+	}
+	summary := "All cards"
+	if len(parts) > 0 {
+		summary = strings.Join(parts, ", ")
+	}
+	return kept, advancedIDs, summary
+}
+
+func advanceToNextRound(s *Session, req *actionReq) (int, string, bool) {
+	if len(s.Rounds) >= 50 {
+		return 409, "This session has reached its 50-round limit", false
+	}
+	startPhase := strings.TrimSpace(req.StartPhase)
+	if startPhase == "" {
+		startPhase = strings.TrimSpace(req.Phase)
+	}
+	if startPhase == "" {
+		startPhase = "write"
+	}
+	if startPhase != "write" && startPhase != "discuss" && startPhase != "vote" {
+		return 400, "Start the next round in write, discuss, or vote phase", false
+	}
+	if req.MinVotes < 0 || req.TopN < 0 {
+		return 400, "Vote filters cannot be negative", false
+	}
+	if req.FilterColumn != nil && (*req.FilterColumn < -1 || *req.FilterColumn >= len(s.Columns)) {
+		return 400, "Invalid column filter", false
+	}
+	f := RoundFilter{
+		SelectedIDs:  req.SelectedIDs,
+		MinVotes:     req.MinVotes,
+		TopN:         req.TopN,
+		FilterColumn: req.FilterColumn,
+		FilterAuthor: strings.TrimSpace(req.FilterAuthor),
+		FilterQuery:  strings.TrimSpace(req.FilterQuery),
+		KeepVotes:    req.KeepVotes,
+		StartPhase:   startPhase,
+	}
+	kept, advancedIDs, summary := filterCards(s.Cards, f, s.Columns)
+	f.Summary = summary
+	if s.Round < 1 {
+		s.Round = len(s.Rounds) + 1
+	}
+	roundCards := make([]RoundCard, 0, len(s.Cards))
+	rawCards := make([]Card, 0, len(s.Cards))
+	for _, c := range s.Cards {
+		orig := c.OriginRound
+		if orig < 1 {
+			orig = 1
+		}
+		roundCards = append(roundCards, RoundCard{
+			ID:          c.ID,
+			Column:      c.Column,
+			Text:        c.Text,
+			Name:        c.Name,
+			Votes:       len(c.Votes),
+			PriorVotes:  c.PriorVotes,
+			Preset:      c.Preset,
+			OriginRound: orig,
+			Advanced:    advancedIDs[c.ID],
+		})
+		votesCopy := map[string]bool{}
+		for k, v := range c.Votes {
+			votesCopy[k] = v
+		}
+		rawCopy := c
+		rawCopy.OriginRound = orig
+		rawCopy.Votes = votesCopy
+		rawCards = append(rawCards, rawCopy)
+	}
+	snap := RoundSnapshot{
+		Round:         s.Round,
+		EndedAt:       time.Now().UTC().Format(time.RFC3339),
+		Phase:         s.Phase,
+		Cards:         roundCards,
+		RawCards:      rawCards,
+		Filter:        f,
+		TotalCount:    len(s.Cards),
+		AdvancedCount: len(kept),
+	}
+	s.Rounds = append(s.Rounds, snap)
+	for i := range kept {
+		if kept[i].OriginRound < 1 {
+			kept[i].OriginRound = s.Round
+		}
+		if len(kept[i].Votes) > 0 || s.Phase == "vote" || s.Phase == "closed" {
+			kept[i].PriorVotes = len(kept[i].Votes)
+		}
+		kept[i].Preset = true
+		if !req.KeepVotes {
+			kept[i].Votes = map[string]bool{}
+		}
+	}
+	s.Cards = kept
+	s.Round++
+	s.Phase = startPhase
+	return 200, "", true
+}
+
+func reopenRoundTo(s *Session, targetRound int) (int, string, bool) {
+	if s.Round < 1 {
+		s.Round = len(s.Rounds) + 1
+	}
+	if targetRound < 1 || targetRound >= s.Round || targetRound > len(s.Rounds) {
+		return 400, "Choose a completed earlier round to reopen", false
+	}
+	snap := s.Rounds[targetRound-1]
+	if len(snap.RawCards) > 0 {
+		restored := make([]Card, len(snap.RawCards))
+		for i, rc := range snap.RawCards {
+			votes := map[string]bool{}
+			for k, v := range rc.Votes {
+				votes[k] = v
+			}
+			restored[i] = rc
+			restored[i].Votes = votes
+		}
+		s.Cards = restored
+	} else {
+		restored := make([]Card, len(snap.Cards))
+		for i, rc := range snap.Cards {
+			votes := map[string]bool{}
+			for v := 0; v < rc.Votes; v++ {
+				votes[fmt.Sprintf("prior-%d", v)] = true
+			}
+			restored[i] = Card{
+				ID:          rc.ID,
+				Column:      rc.Column,
+				Text:        rc.Text,
+				Name:        rc.Name,
+				Owner:       deskOwner,
+				Votes:       votes,
+				Preset:      rc.Preset,
+				PriorVotes:  rc.PriorVotes,
+				OriginRound: rc.OriginRound,
+			}
+		}
+		s.Cards = restored
+	}
+	phase := snap.Phase
+	if !validPhase(phase) {
+		phase = "vote"
+	}
+	s.Phase = phase
+	s.Round = targetRound
+	s.Rounds = s.Rounds[:targetRound-1]
+	return 200, "", true
+}
+
+// seedSessionLocked imports cards from req.FromSession (optional round + filters)
+// and/or appends preset cards from req.Presets (or req.Text when action == "preset").
+// Callers must hold a.mu.
+func (a *app) seedSessionLocked(r *http.Request, callerID string, dst *Session, req *actionReq) (int, string, bool) {
+	if dst.Round < 1 {
+		dst.Round = len(dst.Rounds) + 1
+	}
+	var toAdd []Card
+	if srcName := strings.TrimSpace(req.FromSession); srcName != "" {
+		if !sessionNameRe.MatchString(srcName) {
+			return 400, "Use 1-64 letters, digits, - or _ for a source session name", false
+		}
+		src, err := a.loadLocked(srcName)
+		if err != nil {
+			if errors.Is(err, errSessionNotFound) {
+				return 404, "Source session not found", false
+			}
+			return 400, err.Error(), false
+		}
+		isSrcFac := a.facilitator(r, src) || kit.Grant(strings.TrimSpace(req.FromKey), src.Facilitator)
+		if !src.allowed(callerID, isSrcFac) {
+			return 404, "Source session not found", false
+		}
+		srcRound := src.Round
+		if srcRound < 1 {
+			srcRound = len(src.Rounds) + 1
+		}
+		var sourceCards []Card
+		if req.FromRound > 0 && req.FromRound != srcRound {
+			if req.FromRound < 1 || req.FromRound > len(src.Rounds) {
+				return 404, "Source round not found", false
+			}
+			snap := src.Rounds[req.FromRound-1]
+			srcRound = snap.Round
+			if len(snap.RawCards) > 0 {
+				for _, c := range snap.RawCards {
+					sourceCards = append(sourceCards, c)
+				}
+			} else {
+				for _, rc := range snap.Cards {
+					votes := map[string]bool{}
+					for v := 0; v < rc.Votes; v++ {
+						votes[fmt.Sprintf("seed-%d", v)] = true
+					}
+					sourceCards = append(sourceCards, Card{
+						ID:          rc.ID,
+						Column:      rc.Column,
+						Text:        rc.Text,
+						Name:        rc.Name,
+						Owner:       deskOwner,
+						Votes:       votes,
+						Preset:      true,
+						PriorVotes:  rc.PriorVotes,
+						OriginRound: rc.OriginRound,
+					})
+				}
+			}
+		} else {
+			for _, c := range src.Cards {
+				if src.Phase == "write" && !isSrcFac && c.Owner != callerID && !c.Preset {
+					continue
+				}
+				sourceCards = append(sourceCards, c)
+			}
+		}
+		f := RoundFilter{
+			SelectedIDs:  req.SelectedIDs,
+			MinVotes:     req.MinVotes,
+			TopN:         req.TopN,
+			FilterColumn: req.FilterColumn,
+			FilterAuthor: strings.TrimSpace(req.FilterAuthor),
+			FilterQuery:  strings.TrimSpace(req.FilterQuery),
+			KeepVotes:    req.KeepVotes,
+		}
+		kept, _, _ := filterCards(sourceCards, f, src.Columns)
+		for _, c := range kept {
+			col := c.Column
+			if col < 0 || col >= len(dst.Columns) {
+				col = 0
+			}
+			prior := len(c.Votes)
+			if prior == 0 {
+				prior = c.PriorVotes
+			}
+			votes := map[string]bool{}
+			if req.KeepVotes {
+				for k, v := range c.Votes {
+					votes[k] = v
+				}
+			}
+			orig := c.OriginRound
+			if orig < 1 {
+				orig = srcRound
+			}
+			toAdd = append(toAdd, Card{
+				ID:          token(),
+				Column:      col,
+				Text:        c.Text,
+				Name:        c.Name,
+				Owner:       deskOwner,
+				Votes:       votes,
+				Preset:      true,
+				PriorVotes:  prior,
+				OriginRound: orig,
+			})
+		}
+		dst.FromSession = srcName
+		dst.FromRound = srcRound
+	}
+	presets := req.Presets
+	if len(presets) == 0 && req.Action == "preset" && strings.TrimSpace(req.Text) != "" {
+		presets = []PresetCardInput{{
+			Column:      req.Column,
+			Text:        req.Text,
+			Name:        req.Name,
+			PriorVotes:  req.PriorVotes,
+			OriginRound: dst.Round,
+		}}
+	}
+	for _, p := range presets {
+		text := strings.TrimSpace(p.Text)
+		name := strings.TrimSpace(p.Name)
+		if text == "" || len([]rune(text)) > 1000 || len([]rune(name)) > 40 {
+			return 400, "Use 1–1000 characters for a preset idea and at most 40 for a nickname", false
+		}
+		if name == "" {
+			name = "Preset"
+		}
+		col := p.Column
+		if col < 0 || col >= len(dst.Columns) {
+			return 400, "Invalid column for preset card", false
+		}
+		prior := p.PriorVotes
+		if prior == 0 && p.Votes > 0 {
+			prior = p.Votes
+		}
+		if prior < 0 {
+			prior = 0
+		}
+		orig := p.OriginRound
+		if orig < 1 {
+			orig = dst.Round
+		}
+		toAdd = append(toAdd, Card{
+			ID:          token(),
+			Column:      col,
+			Text:        text,
+			Name:        name,
+			Owner:       deskOwner,
+			Votes:       map[string]bool{},
+			Preset:      true,
+			PriorVotes:  prior,
+			OriginRound: orig,
+		})
+	}
+	if req.Action == "preset" && len(toAdd) == 0 && strings.TrimSpace(req.FromSession) == "" {
+		return 400, "Provide preset cards or a source session", false
+	}
+	if len(dst.Cards)+len(toAdd) > 1000 {
+		return 409, "This session has reached its 1,000-card limit", false
+	}
+	dst.Cards = append(dst.Cards, toAdd...)
+	return 200, "", true
+}
+
 func (a *app) view(id string, s *Session, facilitator bool) map[string]any {
+	return a.viewForRound(id, s, facilitator, 0)
+}
+
+func (a *app) viewForRound(id string, s *Session, facilitator bool, roundNum int) map[string]any {
+	curRound := s.Round
+	if curRound < 1 {
+		curRound = len(s.Rounds) + 1
+	}
+	if roundNum > 0 && roundNum < curRound && roundNum <= len(s.Rounds) {
+		snap := s.Rounds[roundNum-1]
+		cards := make([]map[string]any, 0, len(snap.Cards))
+		for _, c := range snap.Cards {
+			cm := map[string]any{
+				"id":       c.ID,
+				"column":   c.Column,
+				"text":     c.Text,
+				"name":     c.Name,
+				"mine":     false,
+				"votes":    c.Votes,
+				"voted":    false,
+				"advanced": c.Advanced,
+			}
+			if c.Preset {
+				cm["preset"] = true
+			}
+			if c.PriorVotes > 0 {
+				cm["priorVotes"] = c.PriorVotes
+			}
+			if c.OriginRound > 0 {
+				cm["originRound"] = c.OriginRound
+			}
+			cards = append(cards, cm)
+		}
+		v := a.baseView(id, s, facilitator, cards, 0)
+		v["phase"] = snap.Phase
+		v["total"] = len(snap.Cards)
+		v["viewingRound"] = snap.Round
+		v["roundFilter"] = snap.Filter
+		v["advancedCount"] = snap.AdvancedCount
+		return v
+	}
 	cards := []map[string]any{}
 	used := 0
 	for _, c := range s.Cards {
 		if c.Votes[id] {
 			used++
 		}
-		if s.Phase == "write" && c.Owner != id {
+		if s.Phase == "write" && c.Owner != id && !c.Preset {
 			continue
 		}
-		cards = append(cards, map[string]any{"id": c.ID, "column": c.Column, "text": c.Text, "name": c.Name, "mine": c.Owner == id, "votes": len(c.Votes), "voted": c.Votes[id]})
+		cm := map[string]any{
+			"id":     c.ID,
+			"column": c.Column,
+			"text":   c.Text,
+			"name":   c.Name,
+			"mine":   c.Owner == id || (facilitator && c.Preset),
+			"votes":  len(c.Votes),
+			"voted":  c.Votes[id],
+		}
+		if c.Preset {
+			cm["preset"] = true
+		}
+		if c.PriorVotes > 0 {
+			cm["priorVotes"] = c.PriorVotes
+		}
+		if c.OriginRound > 0 {
+			cm["originRound"] = c.OriginRound
+		}
+		cards = append(cards, cm)
 	}
 	v := a.baseView(id, s, facilitator, cards, used)
 	if facilitator && s.Private {
@@ -726,10 +1420,22 @@ func (a *app) view(id string, s *Session, facilitator bool) map[string]any {
 	return v
 }
 func (a *app) baseView(id string, s *Session, facilitator bool, cards []map[string]any, used int) map[string]any {
-	return map[string]any{"session": s.Name, "private": s.Private, "title": s.Title, "phase": s.Phase, "revision": s.Revision,
+	curRound := s.Round
+	if curRound < 1 {
+		curRound = len(s.Rounds) + 1
+	}
+	v := map[string]any{"session": s.Name, "private": s.Private, "title": s.Title, "phase": s.Phase, "revision": s.Revision,
+		"round": curRound, "rounds": publicRoundSnapshots(s.Rounds),
 		"columns": s.Columns, "prompts": s.Prompts, "voteBudget": s.VoteBudget,
 		"cards": cards, "total": len(s.Cards), "facilitator": facilitator, "teacher": facilitator,
 		"votesLeft": s.VoteBudget - used}
+	if s.FromSession != "" {
+		v["fromSession"] = s.FromSession
+		if s.FromRound > 0 {
+			v["fromRound"] = s.FromRound
+		}
+	}
+	return v
 }
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "cli" {

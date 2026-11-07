@@ -61,8 +61,39 @@ stays in the foreground; Ctrl-C stops it. Restart resumes the saved sessions.
 4. Select **Reveal all ideas**, then discuss the board. Revealing ends editing.
 5. Select **Open voting**. Each browser participant gets the session's vote
    budget (default three), one per card; clicking an existing vote removes it.
-6. Select **Close voting** and download JSON or Markdown. Phase changes are
-   irreversible. The facilitator can export after reveal.
+6. Select **Close voting** and download JSON or Markdown, or start another
+   round (**Iterative rounds & filtering**) to carry forward a filtered
+   shortlist, add more ideas, or vote again. The facilitator can export after
+   reveal.
+
+## Preset seed cards, iterative rounds & round history
+
+- **Preset / predefined seed cards**: Seed a session at creation (via the UI
+  **Preset / example cards** field, `--preset` on the CLI, or `presets` in
+  `/api/action` `create`/`add`) or mid-session (`action: "preset"`). Preset and
+  carried-over cards are visible to all participants even during the `"write"`
+  phase and display their `Prior: N votes` badge when carried from a prior
+  round or session.
+- **Iterative multi-round ideation & voting (`Round 1..N`)**: From the
+  facilitator panel (or `brainstorm set <id> --next-round`), start `Round N+1`
+  either in **Write** phase (participants add new ideas alongside carried-over
+  cards, then reveal and vote again with a fresh vote budget), **Discuss**
+  phase, or **Vote** phase (skip writing and vote directly on the shortlist).
+- **Filtering between rounds**: Filter which cards advance to the next round by
+  manual card selection (`selectedIds` / `--select`), minimum votes
+  (`minVotes` / `--min-votes`), top-N votes (`topN` / `--top-n`), column
+  (`filterColumn` / `--filter-column`), author (`filterAuthor` /
+  `--filter-author`), or keyword query (`filterQuery` / `--filter-query`).
+- **Team-visible round history & back/forth navigation**: Each completed round
+  is snapshotted in `rounds` with its vote tallies, filter summary, and per-card
+  `advanced: true/false` status. All participants can step back and forth across
+  rounds (`◀ Prev round` / `Round 1..N` / `Next round ▶`, or `?round=R` and
+  `brainstorm show <id> --round R`) to see how each prior round's shortlist was
+  made. Facilitators can also reopen an earlier round (`reopen-round` /
+  `--reopen-round R`).
+- **Save & restart across sessions**: Sessions can be created or seeded from any
+  round of an existing saved session (`fromSession` / `--from-session` and
+  `fromRound` / `--from-round`), preserving prior vote counts and provenance.
 
 Browser cookies identify participants; clearing cookies or using another browser
 creates a new participant, so vote limits suit a cooperative group,
