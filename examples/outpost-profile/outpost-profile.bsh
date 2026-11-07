@@ -434,6 +434,12 @@ cmd_up() {
     jq "$filter" "$live" > "$live.tmp" || { rm -f -- "$live.tmp"; fail "cannot update instance config for $name" 1; }
     mv -f -- "$live.tmp" "$live" || fail "cannot update instance config for $name" 1
     chmod 600 "$live" 2>/dev/null || true
+    # Outpost declares sshd (enabled, lan:2222) on its first start
+    # unless a declaration exists, and a fresh instance store has none:
+    # declare it first so the disable below has a unit to hold off.
+    BASHY_FLEET_DIR=$(native_path "$inst/fleet") "$(bashy_bin)" service add sshd --force --provider internal --port 2222 \
+        --set capability=outpost.sshd --set owner=outpost --set ports.0.name=ssh --set ports.0.bind=lan >/dev/null ||
+        fail "cannot declare sshd in the $name instance store" 1
     for u in $INSTANCE_UNITS; do
         BASHY_FLEET_DIR=$(native_path "$inst/fleet") "$(bashy_bin)" service disable "$u" >/dev/null ||
             fail "cannot disable unit $u in the $name instance store" 1

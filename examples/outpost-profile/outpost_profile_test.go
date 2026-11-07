@@ -765,6 +765,13 @@ func TestUpIsolatesInstance(t *testing.T) {
 			t.Errorf("unit %s not disabled in the instance store; calls:\n%s", u, calls)
 		}
 	}
+	// sshd is declared by outpost on its first start (enabled, lan:2222)
+	// unless a declaration exists, and a fresh instance store has none:
+	// up must declare it disabled before outpost can.
+	sshdAdd := "bashy " + fleet + " service add sshd --force --provider internal --port 2222 --set capability=outpost.sshd"
+	if i, j := strings.Index(calls, sshdAdd), strings.Index(calls, "bashy "+fleet+" service disable sshd"); i < 0 || j < i {
+		t.Errorf("up must declare sshd in the instance store before disabling it; calls:\n%s", calls)
+	}
 	if strings.Contains(calls, "fleet=main service disable") {
 		t.Errorf("up disabled a unit in the main store:\n%s", calls)
 	}
