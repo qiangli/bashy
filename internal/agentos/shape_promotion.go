@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
+	"github.com/qiangli/bashy/internal/cli"
 	"github.com/qiangli/yoke/pkg/shape"
 	"github.com/qiangli/yoke/pkg/src"
 	"github.com/spf13/cobra"
@@ -30,6 +32,9 @@ type shapePromotionEnvelope struct {
 	Remotes       map[string]string      `json:"remotes,omitempty"`
 	Changes       []shapePromotionChange `json:"changes,omitempty"`
 	Pushed        []shapePushed          `json:"pushed,omitempty"`
+	Incoming      []shape.IncomingChange `json:"incoming,omitempty"`
+	Pulled        *shape.PullResult      `json:"pulled,omitempty"`
+	NextSteps     []string               `json:"next_steps,omitempty"`
 	Pending       int                    `json:"pending"`
 }
 
@@ -50,7 +55,11 @@ func shapePromotionService(app string) (shape.Service, error) {
 	if err != nil {
 		return shape.Service{}, err
 	}
-	return shape.Service{App: a, Options: shapeServiceOptions(src.Home())}, nil
+	opts := shapeServiceOptions(src.Home())
+	if v := cli.BashyVersion(); v != "" && opts.InstalledVersion == "" {
+		opts.InstalledVersion = "v" + strings.TrimPrefix(v, "v")
+	}
+	return shape.Service{App: a, Options: opts}, nil
 }
 
 func shapeWriteEnvelope(w io.Writer, env shapePromotionEnvelope, asJSON bool) error {
@@ -83,6 +92,25 @@ func shapeWriteEnvelope(w io.Writer, env shapePromotionEnvelope, asJSON bool) er
 					b.WriteString("\n")
 				}
 			}
+		}
+	case "incoming":
+		if len(env.Incoming) == 0 {
+			fmt.Fprintf(&b, "nothing incoming from %s\n", env.Tier)
+		}
+		for _, c := range env.Incoming {
+			fmt.Fprintf(&b, "%s\t%s\t%s\t%s\n", c.Kind, c.ID, c.Status, c.Title)
+			if c.Warning != "" {
+				fmt.Fprintf(&b, "  warning: %s\n", c.Warning)
+			}
+		}
+	case "pull":
+		if env.Pulled != nil && env.Pulled.Kind == "release" {
+			fmt.Fprintf(&b, "release %s\n", env.Pulled.Tag)
+		} else if env.Pulled != nil {
+			fmt.Fprintf(&b, "pulled change into %s\n", env.Pulled.Path)
+		}
+		for _, n := range env.NextSteps {
+			fmt.Fprintf(&b, "next: %s\n", n)
 		}
 	case "push":
 		if len(env.Pushed) == 0 {
@@ -134,19 +162,28 @@ func shapeOutgoing(ctx context.Context, app, tier string, diff bool) ([]shapePro
 
 // shapePromotionStatusLine summarizes pending promotion without ever failing status.
 func shapePromotionStatusLine(ctx context.Context, app string) string {
-	part := func(tier string) string {
+	count := func(tier string, incoming bool) string {
 		svc, err := shapePromotionService(app)
 		if err != nil {
 			return "unconfigured"
 		}
+		n := 0
+		if incoming {
+			list, err := svc.Incoming(ctx, tier)
+			if err != nil {
+				return promotionTierErr(err)
+			}
+			for _, c := range list {
+				if c.Warning == "" {
+					n++
+				}
+			}
+			return fmt.Sprintf("%d incoming", n)
+		}
 		list, err := svc.Outgoing(ctx, tier)
 		if err != nil {
-			if strings.Contains(err.Error(), "not configured") {
-				return "unconfigured"
-			}
-			return "unavailable"
+			return promotionTierErr(err)
 		}
-		n := 0
 		for _, c := range list {
 			if c.Warning == "" {
 				n++
@@ -154,7 +191,23 @@ func shapePromotionStatusLine(ctx context.Context, app string) string {
 		}
 		return fmt.Sprintf("%d outgoing", n)
 	}
-	return fmt.Sprintf("promotion: %s (org) / %s (upstream)\nincoming: n/a", part("org"), part("upstream"))
+	return fmt.Sprintf("promotion: %s (org) / %s (upstream)\nincoming: %s (org) / %s (upstream)",
+		count("org", false), count("upstream", false), count("org", true), count("upstream", true))
+}
+
+func promotionTierErr(err error) string {
+	if strings.Contains(err.Error(), "not configured") {
+		return "unconfigured"
+	}
+	return "unavailable"
+}
+
+// shapeExpandIncomingRef turns a bare change id into its full ref.
+func shapeExpandIncomingRef(ref string) string {
+	if strings.HasPrefix(ref, "refs/") {
+		return ref
+	}
+	return "refs/heads/shape-submit/" + ref
 }
 
 func addShapePromotionCmds(cmd *cobra.Command, o *shapeCLIOptions) {
@@ -269,5 +322,86 @@ func addShapePromotionCmds(cmd *cobra.Command, o *shapeCLIOptions) {
 	push.Flags().BoolVar(&pushPR, "pr", false, "open a pull request (upstream; prints compare URL without gh)")
 	_ = push.MarkFlagRequired("to")
 
-	cmd.AddCommand(remote, outgoing, push)
+	var inFrom string
+	incoming := &cobra.Command{Use: "incoming", Short: "List changes and releases waiting in org/upstream (exit 3 when pending)", Args: cobra.NoArgs, RunE: func(c *cobra.Command, _ []string) error {
+		if err := local(c); err != nil {
+			return err
+		}
+		if err := shapeTierCheck(inFrom); err != nil {
+			return err
+		}
+		svc, err := shapePromotionService(app)
+		if err != nil {
+			return err
+		}
+		list, err := svc.Incoming(c.Context(), inFrom)
+		if err != nil {
+			return err
+		}
+		env := shapePromotionEnvelope{Verb: "incoming", App: app, Tier: inFrom, Incoming: list}
+		for _, ch := range list {
+			if ch.Warning == "" {
+				env.Pending++
+			}
+		}
+		if err := shapeWriteEnvelope(c.OutOrStdout(), env, o.JSON); err != nil {
+			return err
+		}
+		if env.Pending > 0 {
+			return errShapePending
+		}
+		return nil
+	}}
+	incoming.Flags().StringVar(&inFrom, "from", "org", "source tier: org or upstream")
+
+	var pullFrom string
+	pull := &cobra.Command{Use: "pull REF|ID", Short: "Fetch an incoming change into a gated wish, or name a release (never installs)", Args: cobra.ExactArgs(1), RunE: func(c *cobra.Command, args []string) error {
+		if err := local(c); err != nil {
+			return err
+		}
+		if err := shapeTierCheck(pullFrom); err != nil {
+			return err
+		}
+		svc, err := shapePromotionService(app)
+		if err != nil {
+			return err
+		}
+		res, err := svc.Pull(c.Context(), pullFrom, shapeExpandIncomingRef(args[0]))
+		if err != nil {
+			return err
+		}
+		env := shapePromotionEnvelope{Verb: "pull", App: app, Tier: pullFrom, Pulled: &res}
+		if res.Kind == "release" {
+			env.NextSteps = []string{"bashy upgrade (release " + res.Tag + " is available; nothing was installed)"}
+			return shapeWriteEnvelope(c.OutOrStdout(), env, o.JSON)
+		}
+		r := shapeCLIRequest{Verb: "wish", App: app, From: res.Path, Agent: o.Agent, Remote: o.Remote, CookieFile: o.CookieFile, Console: o.Console}
+		r.User = strings.TrimSpace(o.User)
+		if r.User == "" {
+			r.User = strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL"))
+		}
+		if r.User == "" {
+			return errors.New("shape: needs --user or BASHY_PRINCIPAL")
+		}
+		if r.Actor, err = shapeAuthoredActor(o.Actor); err != nil {
+			return err
+		}
+		result, err := shapeCLIExecute(c.Context(), r)
+		if err != nil {
+			return err
+		}
+		if !o.JSON && result != nil {
+			if err := writeShapeResult(c.OutOrStdout(), result, false); err != nil {
+				return err
+			}
+		}
+		for _, v := range []string{"verify", "preview", "approve", "undo"} {
+			env.NextSteps = append(env.NextSteps, "bashy shape "+v+" "+app)
+		}
+		return shapeWriteEnvelope(c.OutOrStdout(), env, o.JSON)
+	}}
+	pull.Flags().StringVar(&pullFrom, "from", "", "source tier: org or upstream (required)")
+	_ = pull.MarkFlagRequired("from")
+
+	cmd.AddCommand(remote, outgoing, push, incoming, pull)
 }

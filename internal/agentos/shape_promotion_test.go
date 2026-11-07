@@ -137,7 +137,51 @@ func TestPromotionPendingExitsThree(t *testing.T) {
 func TestPromotionStatusLineUnconfigured(t *testing.T) {
 	promotionFixture(t)
 	line := shapePromotionStatusLine(t.Context(), "bashy")
-	if !strings.Contains(line, "promotion: unconfigured (org)") || !strings.Contains(line, "incoming: n/a") {
+	if !strings.Contains(line, "promotion: unconfigured (org)") || !strings.Contains(line, "incoming: unconfigured") {
 		t.Fatalf("line=%q", line)
+	}
+}
+
+func TestPromotionIncomingPullRelease(t *testing.T) {
+	bare := promotionFixture(t)
+	home := os.Getenv("BASHY_HOME")
+	shapeServiceOptions = func(string) shape.Options {
+		o := shape.ProductionOptions(home)
+		o.InstalledVersion = "v0.0.1"
+		return o
+	}
+	if code, _, _ := runPromotion(t, "incoming", "--from", "org"); code != 1 {
+		t.Fatalf("unconfigured incoming exit %d, want 1", code)
+	}
+	if code, _, _ := runPromotion(t, "remote", "set", "org", bare); code != 0 {
+		t.Fatal("set failed")
+	}
+	if code, out, _ := runPromotion(t, "incoming", "--from", "org", "--json"); code != 0 || !strings.Contains(out, "bashy-shape-promotion-v1") {
+		t.Fatalf("empty incoming exit %d out=%s", code, out)
+	}
+	br, err := gogit.PlainOpen(bare)
+	if err != nil {
+		t.Fatal(err)
+	}
+	head, err := br.Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = br.CreateTag("v9.9.9", head.Hash(), nil); err != nil {
+		t.Fatal(err)
+	}
+	code, out, _ := runPromotion(t, "incoming", "--from", "org", "--json")
+	if code != 3 || !strings.Contains(out, `"kind": "release"`) {
+		t.Fatalf("release incoming exit %d out=%s", code, out)
+	}
+	code, out, errs := runPromotion(t, "pull", "--from", "org", "refs/tags/v9.9.9")
+	if code != 0 || !strings.Contains(out, "release v9.9.9") || !strings.Contains(out, "bashy upgrade") {
+		t.Fatalf("pull release exit %d out=%q err=%q", code, out, errs)
+	}
+	if code, _, _ := runPromotion(t, "pull", "--from", "org", "nosuchid"); code != 1 {
+		t.Fatalf("unknown ref exit %d, want 1", code)
+	}
+	if code, _, _ := runPromotion(t, "pull", "refs/tags/v9.9.9"); code != 1 {
+		t.Fatalf("pull without --from exit %d, want 1", code)
 	}
 }
