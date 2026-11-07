@@ -18,6 +18,11 @@ the bashy binary; the only built-in is bashy's own bootstrap skill.
   user's own registration, and reports the kb pages; the built-in skill
   points to it.
 - D3: nine verified, generic pages curated into `kb/defaults/`.
+- Bootstrap: `bashy self install` (alias `bashy bootstrap`, run by the
+  public installers) fetches the pin and applies the defaults on a FIRST
+  install only; an upgrade or reinstall with the pin present skips it
+  (operator decision). Best effort, never fails the install;
+  `--no-defaults` / `BASHY_SELF_NO_DEFAULTS=1` opt out.
 
 ## Stories
 
