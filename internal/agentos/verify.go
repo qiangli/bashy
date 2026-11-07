@@ -227,13 +227,22 @@ func runVerifyCompat(root string, args []string) int {
 // Bash 5.3 source tarball at runtime into a gitignored user-cache and symlinking
 // it in — the embedded-URL pattern. Idempotent; a no-op when already present.
 func EnsureBash53Fixtures(root string) (string, error) {
+	return ensureBash53FixturesIn(root, "")
+}
+
+// ensureBash53FixturesIn is EnsureBash53Fixtures with an explicit cache base
+// ("" means os.UserCacheDir).
+func ensureBash53FixturesIn(root, cacheBase string) (string, error) {
 	link := filepath.Join(root, "external", "bash-5.3")
 	if fi, err := os.Stat(filepath.Join(link, "tests")); err == nil && fi.IsDir() {
 		return link, nil // symlink or dir already satisfies the harness
 	}
-	cacheBase, err := os.UserCacheDir()
-	if err != nil {
-		return "", err
+	if cacheBase == "" {
+		d, err := os.UserCacheDir()
+		if err != nil {
+			return "", err
+		}
+		cacheBase = d
 	}
 	dst := filepath.Join(cacheBase, "bashy", "conformance", "bash-5.3")
 	if !validBash53Cache(dst) {

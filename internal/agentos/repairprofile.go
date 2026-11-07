@@ -1266,7 +1266,7 @@ func ensureRepairFixtures(root, cacheBase string, offline bool) error {
 		return fmt.Errorf("bash-5.3 fixture cache is empty at %s and BASHY_OFFLINE=1: "+
 			"populate it once online (make test-bash-fixtures) — refusing to fetch", dst)
 	}
-	if _, err := EnsureBash53Fixtures(root); err != nil {
+	if _, err := ensureBash53FixturesIn(root, cacheBase); err != nil {
 		return fmt.Errorf("bash-5.3 fixtures: %w", err)
 	}
 	return nil

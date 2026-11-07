@@ -51,8 +51,15 @@ trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
     cp -a /source/bashy/. /work/bashy/
     cd /work/bashy
     go mod download all
+    # Nested example modules (desk kit, brainstorm server, …) are built by
+    # tests that later run offline; resolve their dependencies now.
+    find . -name go.mod -not -path ./go.mod -not -path "./builds/*" -not -path "*/node_modules/*" |
+      while read -r mod; do (cd "$(dirname "$mod")" && go mod download all); done
     mkdir -p bin
     go build -o bin/bashy-spa-check ./cmd/bashy
+    # Provision bashy'"'"'s own Go SDK into the mounted cache so the offline
+    # transpile/go-source tests find it without fetching the release index.
+    /work/bashy/bin/bashy-spa-check go version
     yoke_dir=$(go list -m -f "{{.Dir}}" github.com/qiangli/yoke)
     cp -a "$yoke_dir/pkg/meet/web" /work/web
     chmod -R u+w /work/web
