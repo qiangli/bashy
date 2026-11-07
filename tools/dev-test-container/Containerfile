@@ -5,7 +5,8 @@ FROM ${BASE_IMAGE}
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates build-essential git golang-go make bash python3 && \
+      ca-certificates build-essential git golang-go make bash python3 \
+      pkg-config libgpgme-dev libbtrfs-dev libdevmapper-dev libseccomp-dev && \
     rm -rf /var/lib/apt/lists/*
 
 WORKDIR /work/bashy
