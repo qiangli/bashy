@@ -3,7 +3,7 @@ id: 4ad32e5ff295
 kind: feature
 title: P1b Wire the promotion rod into bashy shape CLI (child of P1 a130d972)
 seq: 3153
-status: assigned
+status: todo
 priority: p0
 labels:
     - release
