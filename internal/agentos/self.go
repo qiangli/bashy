@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -107,7 +108,7 @@ func bashyReleaseBaseURL(version string) string {
 
 func selfInstallCmd() *cobra.Command {
 	var version, dir, seed string
-	var source, service, userMode, systemMode bool
+	var source, service, userMode, systemMode, noDefaults bool
 	cmd := &cobra.Command{Use: "install [path]", Short: "Install bashy, bash, sh, and a dormant outpost", Long: `Install bashy, outpost, bash and sh together. By default, use the four files
 beside this executable (works offline). --version fetches a verified release.
 --dir selects the install directory (default $DHNT_BIN_DIR, else
@@ -117,7 +118,14 @@ the bashy executable path.
 
 The default install leaves outpost unconfigured: outpost installed, dormant until ` + "`bashy login`" + `.
 --service is the expert option to register and start the service
-during installation.`, Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
+during installation.
+
+On a first install (no source pin yet), the installed bashy sets up the
+default Bash# commands and kb pages from its release source pin (bashy src
+fetch bashy, then examples/defaults/bashy-defaults.bsh apply). An upgrade or
+reinstall leaves an existing setup alone. Best effort: offline or on failure
+the install still succeeds and prints the command to run later.
+--no-defaults (or BASHY_SELF_NO_DEFAULTS=1) skips it.`, Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Command, args []string) error {
 		if dir != "" && len(args) > 0 {
 			return errors.New("--dir and a target path are mutually exclusive")
 		}
@@ -227,6 +235,15 @@ during installation.`, Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Comman
 			}
 		}
 		fmt.Fprint(cmd.OutOrStdout(), selfInstallSummary(target, service))
+		if !source && !noDefaults && os.Getenv("BASHY_SELF_NO_DEFAULTS") != "1" {
+			ctx, cancel := context.WithTimeout(cmd.Context(), selfDefaultsTimeout)
+			defer cancel()
+			selfInstallDefaults(target, cmd.OutOrStdout(), func(name string, arg ...string) error {
+				c := exec.CommandContext(ctx, name, arg...)
+				c.Stdout, c.Stderr = cmd.OutOrStdout(), cmd.ErrOrStderr()
+				return c.Run()
+			})
+		}
 		return nil
 	}}
 	cmd.Flags().StringVar(&version, "version", envOr("BASHY_SELF_VERSION", "latest"), "Release tag to fetch instead of using adjacent files")
@@ -236,7 +253,53 @@ during installation.`, Args: cobra.MaximumNArgs(1), RunE: func(cmd *cobra.Comman
 	cmd.Flags().BoolVar(&service, "service", false, "Expert: register and start the installed outpost service (default leaves it dormant)")
 	cmd.Flags().BoolVar(&userMode, "user", false, "Register a per-user service")
 	cmd.Flags().BoolVar(&systemMode, "system", false, "Register a system service")
+	cmd.Flags().BoolVar(&noDefaults, "no-defaults", false, "Skip setting up the default commands and kb pages from the release source pin")
 	return cmd
+}
+
+// selfDefaultsTimeout bounds the best-effort defaults step so an install
+// never hangs on a slow network.
+const selfDefaultsTimeout = 3 * time.Minute
+
+// selfDefaultsScript is the defaults command inside the bashy source tree.
+const selfDefaultsScript = "examples/defaults/bashy-defaults.bsh"
+
+// selfInstallDefaults sets up the default commands and kb pages with the
+// freshly installed bashy: fetch its release source pin, then run
+// bashy-defaults apply from it. Scripts, skills and kb pages ship in the
+// source, not the binary, so this is how a new install gets them. It never
+// fails the install: any problem prints the command to run later.
+func selfInstallDefaults(bashy string, out io.Writer, run func(name string, arg ...string) error) {
+	home := strings.TrimSpace(os.Getenv("BASHY_HOME"))
+	if home == "" {
+		h, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(out, "defaults: skipped (%v)\n", err)
+			return
+		}
+		home = filepath.Join(h, ".bashy")
+	}
+	pin := filepath.Join(home, "src", "bashy")
+	script := filepath.Join(pin, filepath.FromSlash(selfDefaultsScript))
+	later := fmt.Sprintf("bashy src fetch bashy && bashy --bashsharp %q apply", script)
+	// Only a first install sets defaults up. When the source pin is already
+	// there (an upgrade, a reinstall), leave the host's setup alone; refreshing
+	// is a deliberate `bashy-defaults apply --upgrade`.
+	if _, err := os.Stat(pin); err == nil {
+		fmt.Fprintf(out, "defaults: already set up (source pin present); skipped. Refresh with: bashy --bashsharp %q apply --upgrade\n", script)
+		return
+	}
+	if err := run(bashy, "src", "fetch", "bashy"); err != nil {
+		fmt.Fprintf(out, "defaults: skipped, could not fetch the source pin (%v); later: %s\n", err, later)
+		return
+	}
+	if _, err := os.Stat(script); err != nil {
+		fmt.Fprintln(out, "defaults: this release's source has no defaults command; nothing to set up")
+		return
+	}
+	if err := run(bashy, "--bashsharp", script, "apply"); err != nil {
+		fmt.Fprintf(out, "defaults: not applied (%v); later: %s\n", err, later)
+	}
 }
 
 func selfInstallSummary(target string, service bool) string {
