@@ -1,0 +1,203 @@
+#!/usr/bin/env -S bashy --bashsharp
+# satellite-member: join someone's satellite as a member and share this
+# machine only by choice.
+# One editable Bash# body for the satellite-member command and skill.
+#
+#   satellite-member check
+#   satellite-member pair --code <code> [--server <url>] [--name <host>]
+#   satellite-member harden
+#   satellite-member publish <app> --port <port>
+#   satellite-member diag
+
+~~~skill as guide
+---
+name: satellite-member
+description: Join a satellite owned by another account as a member, keep this machine yours, and share only what the user chooses. For agentic tools acting for a member or an owner. The executable body is this Bash# file; run it with bashy --bashsharp.
+metadata:
+  requires: "has=bashy"
+---
+# satellite-member — join a satellite as a member
+
+Roles: the OWNER runs (and pays for) the satellite; a MEMBER joins it with
+their own machine. A machine belongs to the account whose pairing code
+paired it, so a member pairs with their OWN account and joins the
+satellite as a member. Membership is mutual: each side lists the other
+(accepting an invitation does both). Sharing is a trusted relationship.
+
+## Agent steps for a member
+
+1. `satellite-member check`: is Bashy/outpost installed and is this
+   machine paired? If Bashy is missing, ask the user to run the installer
+   (`curl -fsSL https://dhnt.io/install.sh | sh`, or on Windows
+   `irm https://dhnt.io/install.ps1 | iex`).
+2. Not paired: ask the user for a pairing code from THEIR OWN portal
+   account (their Hosts page, "Generate invite code"), then
+   `satellite-member pair --code <code>` (`--server <url>` for a portal
+   other than the default). Refuse a code that came from the satellite
+   owner: it would make the owner the owner of this machine.
+3. Membership: ask the user to accept the owner's member invitation (or
+   add the owner's email to their Members page).
+4. Ask the user to open the satellite address and choose Sign in with
+   their own account. Shared apps appear as tiles; an app is at
+   `<satellite-url>/matrix/h/<host>/app/<app>/`.
+5. By default nothing is shared beyond what identifies the machine for
+   troubleshooting (host name, alias, online status, names of shared
+   apps). To share an app the user runs, `satellite-member publish <app>
+   --port <port>` and ask the user to share it with chosen members from
+   their Hosts page.
+6. Optional: `satellite-member harden` turns off built-in services the
+   user does not use (podman, ollama, ollama-pool, files, meet, shell,
+   desktop, clipboard). It applies live and is safe to repeat.
+7. Troubleshooting: `satellite-member diag` prints `outpost status` for
+   the user to send to the owner.
+
+## Agent steps for an owner
+
+- Ask the owner to add each member's email on the satellite's Members
+  page, and to share each app with each member from the Hosts page of the
+  host that runs it.
+- Never give members a pairing code from the owner's satellite or
+  account.
+- A member can run apps for a sub-group on their own machine and share
+  them with that sub-group (step 5).
+
+`SATELLITE_MEMBER_OUTPOST_BIN` overrides the `outpost` executable.
+
+## Verification
+
+`go test ./examples/satellite-member/` drives each verb against a fake
+`outpost`; it never touches a real host.
+~~~
+
+set -e
+
+PROG=satellite-member
+
+usage() {
+    echo "Usage: $PROG check" >&2
+    echo "       $PROG pair --code <code> [--server <url>] [--name <host>]" >&2
+    echo "       $PROG harden" >&2
+    echo "       $PROG publish <app> --port <port>" >&2
+    echo "       $PROG diag" >&2
+    exit 2
+}
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+outpost_bin() {
+    if [ -n "${SATELLITE_MEMBER_OUTPOST_BIN:-}" ]; then
+        printf '%s\n' "$SATELLITE_MEMBER_OUTPOST_BIN"
+    else
+        printf 'outpost\n'
+    fi
+}
+
+cmd_check() {
+    command -v "$(outpost_bin)" >/dev/null 2>&1 || {
+        echo "outpost: not installed (install Bashy first)"
+        return 1
+    }
+    if out=$("$(outpost_bin)" status 2>&1) && printf '%s\n' "$out" | grep -qiE 'agent_name +[^ ]'; then
+        echo "outpost: installed and paired"
+    else
+        echo "outpost: installed, not paired (run: $PROG pair --code <code from your own portal>)"
+    fi
+}
+
+cmd_pair() {
+    code=$1; server=$2; host=$3
+    [ -n "$code" ] || usage
+    set -- register --code "$code"
+    [ -n "$server" ] && set -- "$@" --server "$server"
+    [ -n "$host" ] && set -- "$@" --name "$host"
+    "$(outpost_bin)" "$@" || fail "pairing failed" 1
+    echo "$PROG: paired with your own account; check with: $PROG check"
+}
+
+cmd_harden() {
+    "$(outpost_bin)" builtins set --service podman=off --service ollama=off --service ollama-pool=off \
+        --service files=off --service meet=off --shell off --desktop off --clipboard off ||
+        fail "could not turn built-in services off" 1
+    echo "$PROG: built-in services off (podman, ollama, ollama-pool, files, meet, shell, desktop, clipboard)"
+}
+
+cmd_publish() {
+    app=$1; port=$2
+    case "$app" in
+        ""|-*|*[!A-Za-z0-9._-]*) fail "invalid app name: $app" 2 ;;
+    esac
+    case "$port" in
+        ""|*[!0-9]*) fail "invalid port: $port" 2 ;;
+    esac
+    "$(outpost_bin)" apps add "$app" --url "http://127.0.0.1:$port" --require-login --trust-cloud-identity ||
+        fail "could not publish $app" 1
+    echo "$PROG: published $app (sign-in required, identity passed to the app); share it with chosen members from your Hosts page"
+}
+
+cmd_diag() {
+    "$(outpost_bin)" status
+}
+
+if [ $# -lt 1 ]; then
+    usage
+fi
+case "$1" in
+    --skill)
+        sed -n '/^~~~skill/,/^~~~$/p' "$0" | sed '1d;$d'
+        exit 0
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+esac
+
+sub=$1; shift
+case "$sub" in
+    check)
+        [ $# -eq 0 ] || usage
+        cmd_check
+        ;;
+    pair)
+        code=""; server=""; host=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --code=*) code=${1#--code=} ;;
+                --server=*) server=${1#--server=} ;;
+                --name=*) host=${1#--name=} ;;
+                --code) [ $# -ge 2 ] || usage; code=$2; shift ;;
+                --server) [ $# -ge 2 ] || usage; server=$2; shift ;;
+                --name) [ $# -ge 2 ] || usage; host=$2; shift ;;
+                *) usage ;;
+            esac
+            shift
+        done
+        cmd_pair "$code" "$server" "$host"
+        ;;
+    harden)
+        [ $# -eq 0 ] || usage
+        cmd_harden
+        ;;
+    publish)
+        [ $# -ge 1 ] || usage
+        app=$1; shift; port=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --port=*) port=${1#--port=} ;;
+                --port) [ $# -ge 2 ] || usage; port=$2; shift ;;
+                *) usage ;;
+            esac
+            shift
+        done
+        cmd_publish "$app" "$port"
+        ;;
+    diag)
+        [ $# -eq 0 ] || usage
+        cmd_diag
+        ;;
+    *)
+        usage
+        ;;
+esac

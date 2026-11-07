@@ -51,8 +51,8 @@ adopt the default by hiding yours (`bashy kb forget <slug>`; the default
 then shows through). Keep the user's intent; never copy host, user or
 secret details into a page that may be shared.
 
-Default commands: `outpost-profile` (examples/outpost-profile) and
-`bashy-defaults` itself.
+Default commands: `outpost-profile` (examples/outpost-profile),
+`satellite-member` (examples/satellite-member) and `bashy-defaults` itself.
 
 The default kb pages (`kb/defaults` in the pin) need no setup:
 `bashy kb search|list|show` and `bashy recall` read them as a read-only
@@ -73,6 +73,7 @@ PROG=bashy-defaults
 
 # name|path inside the source tree|effects
 DEFAULT_COMMANDS="outpost-profile|examples/outpost-profile/outpost-profile.bsh|read,write,exec
+satellite-member|examples/satellite-member/satellite-member.bsh|read,write,exec
 bashy-defaults|examples/defaults/bashy-defaults.bsh|read,write,exec"
 
 usage() {
