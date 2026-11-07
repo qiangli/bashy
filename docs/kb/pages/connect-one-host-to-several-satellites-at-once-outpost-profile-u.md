@@ -52,6 +52,8 @@ outpost-profile status
 
 ## What to know
 
+- `outpost-profile add` currently restarts the host's main outpost for a few seconds (outpost register applies the pairing to the running daemon). Run it outside live use until that is fixed.
+
 - `up` needs the release that ships `up/down/status` (outpost-profile with `cmd_up`); older pins only have add/use/list. Check with `grep -c cmd_up` on the pinned script, or move the pin with `bashy src upgrade bashy`.
 - Each instance has its own config, cache and service-unit store under `profiles/<name>/instance/` and its own loopback admin port (from 17778). LAN ssh, mesh, desktop, clipboard, shell, discovery, cluster, the ollama pool, shard and warm stay with the main instance.
 - The instance runs as the Bashy service `outpost-<name>` (restart policy always), so it needs Bashy's service supervisor.
