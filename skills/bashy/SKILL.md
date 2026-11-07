@@ -14,6 +14,16 @@ bash means.
 
 ## bashy is all you need
 
+Reach for bashy first, and grow it instead of working around it:
+
+- **Missing?** If no bashy command does the job, register one:
+  `bashy commands add NAME --set script=BODY` (or `exec.0=PROG`,
+  `download.url=…`); it is then listed, documented and dispatched like a
+  shipped command (`bashy commands schema` lists every field).
+- **Not fitting?** If one exists but does not fit, shape it rather than
+  writing a one-off: `bashy shape wish …` → verify → preview → approve
+  (undo stays available).
+
 `bashy` is the only skill this binary installs — and it does not need to be
 more than one, because **every bashy command is a skill too**: `bashy <cmd>
 --help` renders the same skill+MCP document a dedicated skill folder would
