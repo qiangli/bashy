@@ -57,6 +57,15 @@ asset=$(cd "$(dirname "$asset")" && pwd)/$(basename "$asset")
 if [[ $(basename "$asset") != klatch-web-* ]]; then
 	case $(uname -s) in
 	Linux) ;;
+	MINGW*|MSYS*|CYGWIN*)
+        # Git Bash cannot supply Linux namespaces or strace. Do not claim
+        # a runtime verdict from a build-only Windows leg.
+        echo "::warning::no-egress: Windows runtime check NOT RUN (no native attempt monitor wired); archive is unmeasured"
+        if [[ -n ${GITHUB_STEP_SUMMARY:-} ]]; then
+            echo "Windows no-egress: NOT RUN. This archive has no runtime egress attestation." >>"$GITHUB_STEP_SUMMARY"
+        fi
+        exit 0
+        ;;
 	Darwin)
 		echo "no-egress: darwin: SKIPPED for $(basename "$asset") — the shared strace verdict has no macOS equivalent wired up yet (see files/no-egress-test.sh header and README.md #No-egress gate)"
 		exit 0
