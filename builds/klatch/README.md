@@ -10,11 +10,18 @@ workflow checks out the pinned commit fresh on every run.
 |---|---|
 | Upstream | `https://github.com/qiangli/klatch` (bashy's own fork; see #Credit) |
 | License at the commit | **Apache-2.0** (`LICENSE`, verified at the pinned commit) |
-| Pinned commit | `474bebae3b06fdd765491b6f2f6c33e0dc010563` (annotated tag `v1.2.6` — see #Pin provenance) |
+| Pinned commit | `febff05b262dda48f681c31b46c38cd3a672ff06` (planned annotated tag `v1.2.7` — see #Pin provenance) |
 | Toolchain | Go `1.26.9` (EOL-minor security override; the commit's `go.mod` names `go1.23.0`/`toolchain go1.24.5`, see #Build configuration) + Node `22` / Yarn `1.22.22` |
-| Trigger | push of tag `bashy-v1.2.6-N` on `bashy-build` (first: `bashy-v1.2.6-1`) |
-| Signing identity | `https://github.com/qiangli/klatch/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.2.6-1` |
+| Trigger | push of tag `bashy-v1.2.7-N` on `bashy-build` (first: `bashy-v1.2.7-1`) |
+| Signing identity | `https://github.com/qiangli/klatch/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.2.7-1` |
 | Issuer | `https://token.actions.githubusercontent.com` |
+
+The v1.2.7 candidate replaces mattn/go-sqlite3 with glebarez/sqlite over
+modernc, preserving the busy timeout via pragma. All server legs now use
+`CGO_ENABLED=0`, with no C compiler prerequisite. The new native
+Windows amd64 leg ships `klatch.exe` and uses the same separate web bundle.
+The manager cuts `v1.2.7` and `bashy-v1.2.7-1` after review; this change
+does not publish either release.
 
 `v1.2.6` is `v1.2.5` plus single sign-on through the outpost proxy (a new
 `POST /account/sso` route links an outpost-signed email to a Klatch account,
@@ -80,8 +87,8 @@ bashy's own fork. The **one** field that pins this build is
 field and cutting a matching `UPSTREAM_TAG` release to go with it (same two
 edits any tool.env bump needs — see `../README.md` "Adding a tool").
 
-The fork is tagged through `v1.2.6` at the pinned commit, with a
-**non-draft, non-prerelease** GitHub Release cut for it — that is the
+The manager must tag the pinned commit as `v1.2.7` and cut a
+**non-draft, non-prerelease** GitHub Release after review — that is the
 "upstream release" the `pin` job's `official-release` admission queries,
 satisfied here because bashy controls the fork, not because a third party
 published it. `qiangli/klatch` also carries `v0.1.0`, an **unrelated 2022
@@ -100,7 +107,7 @@ checked by `../check.sh` — see `../README.md`):
 tool.env                     the declaration: pinned commit, Go/Node toolchains,
                              matrix, release assets (shipped as PIN)
 build.yml                    klatch's own setup+build (KIND=custom: one matrix
-                             builds both the cgo Go server and the Node web bundle)
+                             builds both the pure-Go server and the Node web bundle)
 audit.yml                    govulncheck + yarn audit, both report-only (see #Audit)
 files/otel.env               OpenTelemetry environment (disabled; local collector only)
 files/no-tracking.env        proxy clearing; klatch has no tracking code of its own
@@ -113,15 +120,11 @@ Shared (`../_shared`): the workflow skeleton and `verify-pin.sh`. There is no
 
 ## MVP scope
 
-The MVP deploy host is **macOS arm64**, so the server builds natively for
-linux `amd64`+`arm64` AND darwin `arm64`+`amd64`, plus the one
-architecture-independent web bundle. Windows is deferred — the commit's
-`net/server` has no OS-specific code (`cgo` needs only a C compiler, and
-GitHub ships native `ubuntu-24.04-arm`, `macos-15` and `macos-15-intel`
-runners, so this build cross-compiles nothing on any platform it targets),
-but a Windows leg needs its own no-egress gate shape and has not been
-written. The darwin legs ship WITHOUT the runtime no-egress check — see
-#No-egress gate.
+The server builds natively for Linux `amd64`+`arm64`, Darwin
+`arm64`+`amd64`, and Windows `amd64` (`windows-2025`), plus one
+architecture-independent web bundle. Windows workflow steps use Git Bash
+(`WINDOWS_SHELL=bash`). No server leg needs a C compiler. Darwin and Windows
+ship without a runtime no-egress verdict; see #No-egress gate.
 
 ## Build configuration
 
@@ -146,10 +149,10 @@ run build` (`tsc && vite build`) succeeds unchanged.
 
 | | upstream (`Dockerfile`) | bashy build |
 |---|---|---|
-| `CGO_ENABLED` | `1` (gorm's sqlite driver, `mattn/go-sqlite3`, needs a C compiler) | **same** on every arch, incl. darwin (native Xcode Command Line Tools `clang`, preinstalled on `macos-15`/`macos-15-intel`) |
-| build command | `go build -o databag .` | `go build -trimpath -ldflags "-s -w -buildid=" -o klatch .` — same package, `-trimpath`/`-buildid=` dropped for a reproducible build, output renamed `klatch` |
+| `CGO_ENABLED` | historical Dockerfile used cgo | **0 on every platform**, using glebarez/sqlite over modernc; no C compiler required |
+| build command | `go build -o databag .` | `go build -trimpath -ldflags "-s -w -buildid=" -o klatch .` — same package, `-trimpath`/`-buildid=` dropped for a reproducible build, output renamed `klatch` (`klatch.exe` on Windows) |
 | Go toolchain | `go.mod`: `go 1.23.0` / `toolchain go1.24.5`, both EOL minors (Go ships fixes for only its two newest) | **`1.26.9`**, an EOL-minor security override — see `../README.md` "Recorded security overrides" |
-| platforms | whatever `DATABAG_GOOS`/`DATABAG_GOARCH` build args name | linux `amd64`+`arm64` (`ubuntu-24.04`/`ubuntu-24.04-arm`) and darwin `arm64`+`amd64` (`macos-15`/`macos-15-intel`) — the MVP deploy host is macOS arm64 (#MVP scope); `build.yml` is a single step for every one of these legs, gated only on `matrix.asset` being the web leg or not |
+| platforms | whatever `DATABAG_GOOS`/`DATABAG_GOARCH` build args name | linux `amd64`+`arm64` (`ubuntu-24.04`/`ubuntu-24.04-arm`) and darwin `arm64`+`amd64` (`macos-15`/`macos-15-intel`) plus windows `amd64` (`windows-2025`); `build.yml` is a single step for every one of these legs, gated only on `matrix.asset` being the web leg or not |
 
 **Web** (`app/client/web`, upstream `Dockerfile`'s `node` stage):
 
@@ -163,13 +166,14 @@ run build` (`tsc && vite build`) succeeds unchanged.
 ## Release assets: two shapes
 
 ```
-klatch-v1.2.6-linux-amd64.tar.gz    klatch binary + net/transform/*.sh
-klatch-v1.2.6-linux-arm64.tar.gz    klatch binary + net/transform/*.sh
-klatch-v1.2.6-darwin-arm64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
-klatch-v1.2.6-darwin-amd64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
-klatch-web-v1.2.6.tar.gz            the vite dist/ output (static, same for every arch)
-klatch-v1.2.6.govulncheck.json      klatch-sdk-v1.2.6.yarn-audit.json
-klatch-web-v1.2.6.yarn-audit.json   klatch-pin.txt
+klatch-v1.2.7-linux-amd64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v1.2.7-linux-arm64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v1.2.7-darwin-arm64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-v1.2.7-darwin-amd64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-v1.2.7-windows-amd64.tar.gz  klatch.exe + net/transform/*.sh (no runtime no-egress check)
+klatch-web-v1.2.7.tar.gz            the vite dist/ output (static, same for every arch)
+klatch-v1.2.7.govulncheck.json      klatch-sdk-v1.2.7.yarn-audit.json
+klatch-web-v1.2.7.yarn-audit.json   klatch-pin.txt
 klatch-otel.env                     klatch-no-tracking.env
 SHA256SUMS
 ```
@@ -178,7 +182,7 @@ The server tarball's binary is already executable when tarred, so
 `RELEASE_EXECUTABLES` is empty — there is no raw executable asset to
 `chmod +x` after the fact. Each asset gets a sibling `<asset>.sigstore.json`
 bundle. URL shape:
-`https://github.com/qiangli/klatch/releases/download/bashy-v1.2.6-1/<asset>`.
+`https://github.com/qiangli/klatch/releases/download/bashy-v1.2.7-1/<asset>`.
 
 ## No tracking
 
@@ -236,6 +240,23 @@ ever links an SDK, it can only reach bashy's own collector.
   runtime check. Tightening this (porting zot's `sandbox-exec` approach) is
   follow-up work, same shape as the audit-policy note below.
 
+- **Server leg, Windows** (`klatch-$UPSTREAM_TAG-windows-amd64.tar.gz`):
+  **NOT RUN**, not a no-egress pass. The script recognizes Git Bash's
+  `MINGW*`/`MSYS*`/`CYGWIN*` host identifiers, emits a workflow warning
+  and writes the gap to the job summary. Linux namespaces and the shared
+  strace parser cannot monitor a native Windows process. A native attempt
+  monitor (including blocked attempts and DNS) is not wired into this
+  workflow; a firewall block alone would not prove that no attempt occurred.
+  The leg may build, package and sign, but has **no runtime egress
+  attestation**. A native Windows monitor and negative-control validation
+  remain follow-up work. Release notes explicitly disclose this gap.
+
+The Windows server tarball retains the other server archives' shape, with
+`klatch.exe` replacing `klatch` and the same transform scripts. Install it
+together with `klatch-web-v1.2.7.tar.gz`; the shared web bundle is not
+duplicated inside any server archive. Shell transform scripts are retained
+for parity; the fork's Go-native image transforms do not require Bash.
+
 ## Audit
 
 `govulncheck` (`v1.9.0`, source mode over `net/server`'s `./...`) and
@@ -252,8 +273,8 @@ follow-up work once the first reports are read.
 ## Operator steps (not in bashy CI)
 
 Once, before the first build (#Pin provenance): tag
-`474bebae3b06fdd765491b6f2f6c33e0dc010563` as `v1.2.6` on `qiangli/klatch`
-(done) and cut a non-draft, non-prerelease GitHub Release for it. Do not
+`febff05b262dda48f681c31b46c38cd3a672ff06` as `v1.2.7` on `qiangli/klatch`
+(pending manager review) and cut a non-draft, non-prerelease GitHub Release for it. Do not
 reuse the fork's unrelated 2022 `v0.1.0` tag.
 
 ```sh
@@ -261,9 +282,9 @@ reuse the fork's unrelated 2022 `v0.1.0` tag.
 git switch --orphan bashy-build
 cp -R <bashy>/builds/klatch/fork/. .
 git add .github/workflows/bashy-build.yml bashy-build
-git commit -m "bashy-build: klatch v1.2.6 verified build"
+git commit -m "bashy-build: klatch v1.2.7 verified build"
 git push -u origin bashy-build
-git tag bashy-v1.2.6-1 && git push origin bashy-v1.2.6-1
+git tag bashy-v1.2.7-1 && git push origin bashy-v1.2.7-1
 ```
 
 Then wire the fleet to the signed fork release (outside this repo's

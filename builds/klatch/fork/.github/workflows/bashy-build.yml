@@ -4,7 +4,7 @@
 # shared skeleton builds/_shared/bashy-build.yml — edit those, not this file.
 # Installed on the `bashy-build` branch of github.com/qiangli/klatch from
 # bashy's builds/klatch/fork/. Triggered ONLY by pushing a tag
-# bashy-<upstream tag>-N (e.g. bashy-v1.2.6-1) at that branch.
+# bashy-<upstream tag>-N (e.g. bashy-v1.2.7-1) at that branch.
 # Upstream tags this release vX.Y.Z, so the trigger is
 # bashy-v* and the pin job holds the tag to exactly that shape.
 #
@@ -26,6 +26,14 @@ on:
       - "bashy-v*"
 
 permissions: {}
+
+# Windows' default is PowerShell; the native build and gate scripts need Git Bash.
+# (TOOL ollama keeps its own block above; this one serves tools that declare
+# WINDOWS_SHELL=bash instead. A tool matching both would render duplicate keys,
+# so declare at most one of the two.)
+defaults:
+  run:
+    shell: bash
 
 concurrency:
   group: bashy-build-${{ github.ref }}
@@ -97,15 +105,17 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - asset: klatch-v1.2.6-linux-amd64.tar.gz
+          - asset: klatch-v1.2.7-linux-amd64.tar.gz
             runner: ubuntu-24.04
-          - asset: klatch-v1.2.6-linux-arm64.tar.gz
+          - asset: klatch-v1.2.7-linux-arm64.tar.gz
             runner: ubuntu-24.04-arm
-          - asset: klatch-v1.2.6-darwin-arm64.tar.gz
+          - asset: klatch-v1.2.7-darwin-arm64.tar.gz
             runner: macos-15
-          - asset: klatch-v1.2.6-darwin-amd64.tar.gz
+          - asset: klatch-v1.2.7-darwin-amd64.tar.gz
             runner: macos-15-intel
-          - asset: klatch-web-v1.2.6.tar.gz
+          - asset: klatch-v1.2.7-windows-amd64.tar.gz
+            runner: windows-2025
+          - asset: klatch-web-v1.2.7.tar.gz
             runner: ubuntu-24.04
     steps:
       # Windows runners check out with core.autocrlf=true by default, which
@@ -140,7 +150,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y --no-install-recommends build-essential strace util-linux iproute2 curl
+          sudo apt-get install -y --no-install-recommends strace util-linux iproute2 curl
       - name: pre-build gates (PRE_BUILD_GATES)
         run: |
           set -euo pipefail
@@ -148,8 +158,8 @@ jobs:
           for gate in $PRE_BUILD_GATES; do "fork/bashy-build/$gate" src; done
       # One MATRIX, two unrelated artifact shapes: the klatch-web-* leg builds
       # the Node/yarn web bundle (architecture-independent, built once on the
-      # amd64 runner); every other leg builds the cgo Go server for its own
-      # linux arch. Each half is gated by matrix.asset so the other half's
+      # amd64 runner); every other leg builds the pure-Go server for its own
+      # platform. Each half is gated by matrix.asset so the other half's
       # toolchain steps are skipped rather than run uselessly.
       - name: set up Node (NODE_VERSION, upstream Dockerfile node:22-alpine)
         if: startsWith(matrix.asset, 'klatch-web-')
@@ -211,7 +221,7 @@ jobs:
           go-version: "1.26.9"
           check-latest: false
           cache: false
-      - name: go build (CGO_ENABLED=1, gorm sqlite driver needs cgo)
+      - name: go build (CGO_ENABLED=0, pure-Go sqlite)
         if: ${{ !startsWith(matrix.asset, 'klatch-web-') }}
         working-directory: src/net/server
         env:
@@ -219,14 +229,16 @@ jobs:
           # `toolchain go1.24.5` directive (an EOL minor, see tool.env), the
           # same mechanism builds/_shared/kinds/go/setup.yml uses.
           GOTOOLCHAIN: go1.26.9
+          GOWORK: "off"
         run: |
           set -euo pipefail
           . ../../../fork/bashy-build/PIN
           mkdir -p ../../../out
-          # Upstream Dockerfile: CGO_ENABLED=1 go build -o databag . (no
-          # ldflags, no tags). -trimpath and -buildid= drop the build path
-          # and the action id, so the same bashy tag rebuilds the same bytes.
-          env CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -buildid=" -o ../../../out/klatch .
+          # glebarez/sqlite uses modernc: no C compiler on any platform.
+          # windows/amd64 uses the same server archive plus the shared web asset.
+          binary=klatch
+          [[ "${RUNNER_OS}" != Windows ]] || binary=klatch.exe
+          env CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -buildid=" -o "../../../out/$binary" .
       - name: package the server asset (binary + net/transform scripts)
         if: ${{ !startsWith(matrix.asset, 'klatch-web-') }}
         env:
@@ -234,11 +246,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out/payload/transform
-          cp out/klatch out/payload/klatch
+          binary=klatch
+          [[ "${RUNNER_OS}" != Windows ]] || binary=klatch.exe
+          cp "out/$binary" "out/payload/$binary"
           cp src/net/transform/*.sh out/payload/transform/
-          chmod +x out/payload/klatch out/payload/transform/*.sh
+          chmod +x "out/payload/$binary" out/payload/transform/*.sh
           tar -C out/payload -czf "out/$ASSET" .
-          rm -rf out/payload out/klatch
+          rm -rf out/payload "out/$binary"
       - name: no-egress gate (before signing)
         run: fork/bashy-build/no-egress-test.sh "out/${{ matrix.asset }}"
 

@@ -1,7 +1,7 @@
       # One MATRIX, two unrelated artifact shapes: the klatch-web-* leg builds
       # the Node/yarn web bundle (architecture-independent, built once on the
-      # amd64 runner); every other leg builds the cgo Go server for its own
-      # linux arch. Each half is gated by matrix.asset so the other half's
+      # amd64 runner); every other leg builds the pure-Go server for its own
+      # platform. Each half is gated by matrix.asset so the other half's
       # toolchain steps are skipped rather than run uselessly.
       - name: set up Node (NODE_VERSION, upstream Dockerfile node:22-alpine)
         if: startsWith(matrix.asset, 'klatch-web-')
@@ -63,7 +63,7 @@
           go-version: "@@GO_TOOLCHAIN@@"
           check-latest: false
           cache: false
-      - name: go build (CGO_ENABLED=1, gorm sqlite driver needs cgo)
+      - name: go build (CGO_ENABLED=0, pure-Go sqlite)
         if: ${{ !startsWith(matrix.asset, 'klatch-web-') }}
         working-directory: src/net/server
         env:
@@ -71,14 +71,16 @@
           # `toolchain go1.24.5` directive (an EOL minor, see tool.env), the
           # same mechanism builds/_shared/kinds/go/setup.yml uses.
           GOTOOLCHAIN: go@@GO_TOOLCHAIN@@
+          GOWORK: "off"
         run: |
           set -euo pipefail
           . ../../../fork/bashy-build/PIN
           mkdir -p ../../../out
-          # Upstream Dockerfile: CGO_ENABLED=1 go build -o databag . (no
-          # ldflags, no tags). -trimpath and -buildid= drop the build path
-          # and the action id, so the same bashy tag rebuilds the same bytes.
-          env CGO_ENABLED=1 go build -trimpath -ldflags "-s -w -buildid=" -o ../../../out/klatch .
+          # glebarez/sqlite uses modernc: no C compiler on any platform.
+          # windows/amd64 uses the same server archive plus the shared web asset.
+          binary=klatch
+          [[ "${RUNNER_OS}" != Windows ]] || binary=klatch.exe
+          env CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -buildid=" -o "../../../out/$binary" .
       - name: package the server asset (binary + net/transform scripts)
         if: ${{ !startsWith(matrix.asset, 'klatch-web-') }}
         env:
@@ -86,8 +88,10 @@
         run: |
           set -euo pipefail
           mkdir -p out/payload/transform
-          cp out/klatch out/payload/klatch
+          binary=klatch
+          [[ "${RUNNER_OS}" != Windows ]] || binary=klatch.exe
+          cp "out/$binary" "out/payload/$binary"
           cp src/net/transform/*.sh out/payload/transform/
-          chmod +x out/payload/klatch out/payload/transform/*.sh
+          chmod +x "out/payload/$binary" out/payload/transform/*.sh
           tar -C out/payload -czf "out/$ASSET" .
-          rm -rf out/payload out/klatch
+          rm -rf out/payload "out/$binary"
