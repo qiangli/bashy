@@ -154,10 +154,14 @@ func bashyShapeCmd() *cobra.Command {
 					return outErr
 				}
 			}
+			if err == nil && spec.verb == "status" && !o.JSON && o.Remote == "" {
+				fmt.Fprintln(c.OutOrStdout(), shapePromotionStatusLine(c.Context(), r.App))
+			}
 			return err
 		}
 		cmd.AddCommand(sub)
 	}
+	addShapePromotionCmds(cmd, &o)
 	return cmd
 }
 
@@ -175,6 +179,9 @@ func runShape(args []string) int {
 	cmd := bashyShapeCmd()
 	setCobraArgs(cmd, args)
 	if err := cmd.Execute(); err != nil {
+		if errors.Is(err, errShapePending) {
+			return 3
+		}
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
