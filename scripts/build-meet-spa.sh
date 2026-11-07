@@ -136,6 +136,9 @@ fi
 #   bashy    `bashy pnpm` — binmgr provisions a pinned Node tree and runs corepack
 #            out of it, so no system Node is required at all. This is the
 #            self-hosting tier: bashy provisioning the toolchain that builds bashy.
+# On macOS, Linux, and Windows, a system pnpm/corepack takes the first two
+# tiers when present; otherwise the repo's bin/bashy (bin/bashy.exe on Windows)
+# supplies the third tier. BASHY_BIN can select a different built binary.
 pnpm_kind=
 if command -v node >/dev/null 2>&1; then
 	if command -v pnpm >/dev/null 2>&1; then
@@ -153,6 +156,13 @@ fi
 # and failed from $HOME.)
 bashy_bin=${BASHY_BIN:-}
 if [ -z "$pnpm_kind" ]; then
+	if [ -z "$bashy_bin" ]; then
+		case "$(go env GOOS 2>/dev/null || true)" in
+		windows) candidate=bin/bashy.exe ;;
+		*) candidate=bin/bashy ;;
+		esac
+		[ ! -x "$candidate" ] || bashy_bin=$(pwd)/$candidate
+	fi
 	if [ -z "$bashy_bin" ] && command -v bashy >/dev/null 2>&1; then
 		bashy_bin=$(command -v bashy)
 	fi

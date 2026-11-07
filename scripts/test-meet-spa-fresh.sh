@@ -13,7 +13,8 @@
 #   3. missing toolchain fails closed — `check` with no node/pnpm/corepack/bashy
 #                               exits non-zero instead of green-lighting an
 #                               unverifiable bundle.
-#   4. standalone checkout — with no ../yoke, `check` resolves the yoke module
+#   4. bashy tier — an explicit bashy binary supplies pnpm without system Node.
+#   5. standalone checkout — with no ../yoke, `check` resolves the yoke module
 #                               pinned by go.mod and compares its artifact.
 set -eu
 
@@ -52,7 +53,7 @@ if ! sh "$script" compare "$dist" "$art" >"$tmp/1.out" 2>&1; then
 	cat "$tmp/1.out" >&2
 	fail "a fresh, matching artifact was rejected"
 fi
-echo "test-meet-spa-fresh: [1/4] fresh matching artifact accepted"
+echo "test-meet-spa-fresh: [1/6] fresh matching artifact accepted"
 
 # ---- 2a. stale rejected (byte mismatch) + artifact unchanged ----
 printf 'console.log("STALE — old build");\n' >"$art/assets/app-DEADBEEF.js"
@@ -65,7 +66,7 @@ grep -q 'STALE' "$tmp/2a.out" || fail "stale rejection lacked an actionable STAL
 after=$(fingerprint "$art")
 [ -n "$after" ] || fail "artifact fingerprint was empty after the byte-mismatch check"
 [ "$before" = "$after" ] || fail "the non-mutating check changed the artifact tree"
-echo "test-meet-spa-fresh: [2/4] stale (byte) artifact rejected and left unchanged"
+echo "test-meet-spa-fresh: [2/6] stale (byte) artifact rejected and left unchanged"
 
 # restore parity, then diverge the FILE SET
 cp -R "$dist/." "$art/"
@@ -78,7 +79,7 @@ fi
 after=$(fingerprint "$art")
 [ -n "$after" ] || fail "artifact fingerprint was empty after the file-set check"
 [ "$before" = "$after" ] || fail "the non-mutating check changed the artifact tree (file-set case)"
-echo "test-meet-spa-fresh: [3/4] stale (file-set) artifact rejected and left unchanged"
+echo "test-meet-spa-fresh: [3/6] stale (file-set) artifact rejected and left unchanged"
 
 # ---- 3. missing toolchain fails closed ----
 # A fake web_dir with a lockfile so the script reaches its toolchain probe, and a
@@ -105,7 +106,32 @@ grep -q 'requires node and pnpm' "$tmp/3.out" || {
 	cat "$tmp/3.out" >&2
 	fail "toolchain-missing check did not fail on the toolchain (env not scrubbed?)"
 }
-echo "test-meet-spa-fresh: [4/4] check with no toolchain failed closed"
+echo "test-meet-spa-fresh: [4/6] check with no toolchain failed closed"
+
+# A fake bashy implements only pnpm. With no node, pnpm or corepack on PATH,
+# check must select the provisioned tier and still reject a stale artifact.
+cat >"$tmp/fake-bashy" <<EOF
+#!/bin/sh
+[ "\$1" = pnpm ] || exit 2
+shift
+case "\$1" in
+--version) echo 11.17.0 ;;
+install) exit 0 ;;
+build) mkdir -p dist; cp -R '$dist/.' dist/ ;;
+*) exit 2 ;;
+esac
+EOF
+chmod +x "$tmp/fake-bashy"
+rm -rf "$art"
+mkdir -p "$art"
+cp -R "$dist/." "$fakeweb/../artifact/"
+if ! PATH="/bin:/usr/bin" BASHY_BIN="$tmp/fake-bashy" MEET_SPA_WEB_DIR="$fakeweb" \
+	/bin/sh "$script" check >"$tmp/bashy.out" 2>&1; then
+	cat "$tmp/bashy.out" >&2
+	fail "bashy-provisioned tier did not pass"
+fi
+grep -q 'using bashy-provisioned pnpm' "$tmp/bashy.out" || fail "bashy tier was not selected"
+echo "test-meet-spa-fresh: [5/6] bashy-provisioned pnpm selected without system Node"
 
 # ---- 4. a standalone clone resolves the yoke module pin, not ../yoke ----
 # A tiny fake Go tool returns a fixture module directory. Fake node/pnpm build a
@@ -141,6 +167,6 @@ if ! (cd "$tmp/standalone/bashy" && PATH="$tmp/bin:/bin:/usr/bin" BASHY_BIN= /bi
 	fail "standalone check did not resolve yoke from the go.mod pin"
 fi
 grep -q 'using pinned yoke module' "$tmp/4.out" || fail "standalone check did not report its pinned-yoke fallback"
-echo "test-meet-spa-fresh: [5/5] standalone check resolves the pinned yoke module"
+echo "test-meet-spa-fresh: [6/6] standalone check resolves the pinned yoke module"
 
 echo "test-meet-spa-fresh: PASS"
