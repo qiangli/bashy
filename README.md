@@ -55,20 +55,41 @@ locale gate. See [build evidence](docs/public-claims-evidence.md).
 
 ## Software Shaping: make your tools fit you
 
-Describe a change to an app you use, review and verify the candidate, then
-keep your own version—with a way back. Web shaping is an **opt-in trial**:
-personal versions affect the selected user, with history and undo.
+Describe a change to an app you use — in plain words — and get a candidate you
+can review, verify and approve for yourself, with history and undo: your
+version of the tool, and a way back. Web shaping is an **opt-in trial**:
+personal versions affect the selected user only. bashy itself is shapeable
+this way. **[Start with Hello World →](examples/shaping/hello-world/README.md)**
 
-**[Start with Hello World →](examples/shaping/hello-world/README.md)**
+### The promotion path
 
-The example follows one small change, **Hello, World! → Hello, Shaping!**,
-through preview, explicit approval and rollback. It includes web and CLI
-walkthroughs and an agent E2E task for Sprint 564.
+A shaped change moves local host -> team/org -> upstream bashy, and new
+features flow back the other way:
 
-**Status:** the web trial requires a shaping-capable build and configured
-agent. The `bashy shape` CLI, CLI/service app support and the full agent E2E
-matrix are Sprint 564 work; the example documents those acceptance recipes,
-not completed tests. See the [web trial guide](docs/shaping-trial.md).
+```bash
+bashy shape wish bashy "make lexicon accept JSON lines"  # candidate
+bashy shape verify bashy <id>                            # trusted verifier
+bashy shape approve bashy <id>                           # activate for me
+bashy shape undo bashy                                   # way back
+
+bashy shape remote set org <url>     # name the team/org remote
+bashy shape outgoing --to org        # exit 3: something is worth promoting
+bashy shape push --to org            # approved change -> team/org
+bashy shape push --to upstream --pr  # propose it upstream (prints compare URL)
+bashy shape incoming --from upstream # exit 3: upstream has new work
+bashy shape pull --from org <id>     # gated wish -> verify -> approve; undoable
+```
+
+Every verb takes `--json` and uses agent-friendly exit codes — 0 nothing
+pending, 3 pending, 1 error — so an agent can drive the whole path without
+parsing prose. See the [web trial guide](docs/shaping-trial.md).
+
+**Status:** the `bashy shape` CLI lifecycle
+(wish/verify/preview/approve/undo/restore/submit) and the promotion rod
+(remote/outgoing/push/incoming/pull) ship in v1.0.0-rc.27. Cross-platform
+shaping validation is still in progress (Sprint 579), as is the team
+adoption policy; open items are tracked in the
+[known-issues ledger](docs/releases/v1.0.0-rc.27-known-issues.md).
 
 ## Ten minutes
 
@@ -307,8 +328,11 @@ Starting with v1.0, Linux releases also publish `.deb`, `.rpm`, and `.apk`
 packages alongside the tarballs. macOS and Windows archive names are `bashy-darwin-{amd64,arm64}.tar.gz`
 and `bashy-windows-{amd64,arm64}.zip`.
 
-A prerelease (a `-rc.N-dev` tag) is not `latest`: download it from its tag,
-`https://github.com/qiangli/bashy/releases/download/<tag>/<asset>`.
+A prerelease (a `-rc.N-dev` tag, currently `v1.0.0-rc.27-dev`) is not
+`latest`: download it from its tag,
+`https://github.com/qiangli/bashy/releases/download/<tag>/<asset>`. Current
+release notes: [v1.0.0-rc.27](docs/releases/v1.0.0-rc.27.md);
+[CHANGELOG](CHANGELOG.md).
 
 ### With Go
 
