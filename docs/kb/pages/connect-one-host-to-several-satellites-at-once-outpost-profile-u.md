@@ -11,10 +11,11 @@ tags:
     - klatch
     - multi-satellite
 status: candidate
-evidence: 'S565 2026-11-07: dev box and native Windows live runs; private two-satellite sandbox e2e PASS 16/16 twice; registration from the bashy src pin verified on rc.27'
+evidence: 'S565 2026-11-07: dev box and native Windows live runs; private two-satellite sandbox e2e PASS 16/16 twice; registration from the bashy src pin verified on rc.27; add no longer restarts the main outpost from outpost 80ad40f (bashy pin 789393c9)'
 source:
     tool: claude
 created: "2026-11-07T20:47:23Z"
+updated: "2026-11-07T22:03:13Z"
 ---
 
 ## Goal
@@ -52,11 +53,11 @@ outpost-profile status
 
 ## What to know
 
-- `outpost-profile add` currently restarts the host's main outpost for a few seconds (outpost register applies the pairing to the running daemon). Run it outside live use until that is fixed.
-
+- On releases up to rc.27, `outpost-profile add` briefly restarts the host's main outpost (outpost register applied the pairing to the running daemon); run it outside live use there. From the next release it no longer does.
 - `up` needs the release that ships `up/down/status` (outpost-profile with `cmd_up`); older pins only have add/use/list. Check with `grep -c cmd_up` on the pinned script, or move the pin with `bashy src upgrade bashy`.
 - Each instance has its own config, cache and service-unit store under `profiles/<name>/instance/` and its own loopback admin port (from 17778). LAN ssh, mesh, desktop, clipboard, shell, discovery, cluster, the ollama pool, shard and warm stay with the main instance.
 - The instance runs as the Bashy service `outpost-<name>` (restart policy always), so it needs Bashy's service supervisor.
 - The same email arriving from two satellites is one app account (Klatch SSO keys accounts by email).
 - If the main app entry changes later (for example an SSO secret rotation), run `up <name> --app <app>` again; the instance keeps its copy until then.
 - To adapt the command, shape it like any Bashy source: `bashy src branch bashy <topic>`, edit, run `go test ./examples/outpost-profile/`, and register that path.
+- Basic outpost setup (install, pair, apps, built-ins) and the sharing model have their own pages: `set-up-outpost-install-pair-publish-apps-and-keep-a-host-private`, `satellite-sharing-model-one-owner-mutual-membership-pair-with-your-own-account`.

@@ -6,3 +6,14 @@
 {"op":"add","slug":"mingw-clang-windows-builds-need-wno-error-downgrades-for-socket","id":"01a13724-c923-76b6-a74e-48660200d59f","tool":"muse-spark1.3-i","episode":"weave-issue-113","at":"2026-10-13T21:22:00.099846Z"}
 {"op":"add","slug":"oci-release-tags-must-follow-byte-promotion","id":"01a18a4e-2cda-76f5-8d24-2ae3ca0a2602","tool":"codex-gpt5.6-sol-i","episode":"ep-fe4d7757a500d605","parent_episode":"ep-76eca2b24645f668","at":"2026-10-30T00:55:41.530869Z"}
 {"op":"add","slug":"connect-one-host-to-several-satellites-at-once-outpost-profile-u","id":"01a1b7c4-155c-75b8-8b16-8bb62ccfcffd","tool":"claude","at":"2026-11-07T20:47:23.484811Z"}
+{"op":"add","slug":"access-digitalocean-and-aws-with-vault-held-credentials","id":"01a1b809-095b-737a-83b6-489296912de7","tool":"claude","at":"2026-11-07T22:02:42.395735Z"}
+{"op":"add","slug":"provision-a-satellite-on-aws-lightsail","id":"01a1b809-631b-7bb8-a651-27e1f1900eaa","tool":"claude","at":"2026-11-07T22:03:05.372632Z"}
+{"op":"add","slug":"provision-a-satellite-on-digitalocean-unverified","id":"01a1b809-635a-725d-ab54-8b6cbd048f0d","tool":"claude","at":"2026-11-07T22:03:05.434774Z"}
+{"op":"add","slug":"set-up-outpost-install-pair-publish-apps-and-keep-a-host-private","id":"01a1b809-6399-729b-8f2a-4e1f077c6b3a","tool":"claude","at":"2026-11-07T22:03:05.49775Z"}
+{"op":"add","slug":"satellite-sharing-model-one-owner-mutual-membership-pair-with-your-own-account","id":"01a1b809-63d4-7860-987d-6115c19a4736","tool":"claude","at":"2026-11-07T22:03:05.557135Z"}
+{"op":"add","slug":"register-a-bash-example-command-from-the-release-source-pin","id":"01a1b809-6411-749b-8b3e-d1a0e0df3082","tool":"claude","at":"2026-11-07T22:03:05.617942Z"}
+{"op":"add","slug":"windows-remote-ops-over-outpost-ssh","id":"01a1b809-644d-74ba-a46a-27a89863f47d","tool":"claude","at":"2026-11-07T22:03:05.678184Z"}
+{"op":"add","slug":"one-podman-machine-per-host-isolate-workloads-with-container-limits","id":"01a1b809-648a-742e-a644-afb68f50a43a","tool":"claude","at":"2026-11-07T22:03:05.738923Z"}
+{"op":"update","slug":"connect-one-host-to-several-satellites-at-once-outpost-profile-u","id":"01a1b7c4-155c-75b8-8b16-8bb62ccfcffd","tool":"claude","at":"2026-11-07T22:03:13.342577Z"}
+{"op":"update","slug":"access-digitalocean-and-aws-with-vault-held-credentials","id":"01a1b809-095b-737a-83b6-489296912de7","tool":"claude","at":"2026-11-07T22:03:51.323801Z"}
+{"op":"update","slug":"provision-a-satellite-on-aws-lightsail","id":"01a1b809-631b-7bb8-a651-27e1f1900eaa","tool":"claude","at":"2026-11-07T22:03:51.384417Z"}
