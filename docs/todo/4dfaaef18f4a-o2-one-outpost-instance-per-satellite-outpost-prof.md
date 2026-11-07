@@ -3,14 +3,17 @@ id: 4dfaaef18f4a
 kind: feature
 title: 'O2 One outpost instance per satellite: outpost-profile up/down/status'
 seq: 3059
-status: todo
+status: done
 priority: p0
 labels:
     - outpost
 created: 2026-11-04T06:51:50.122392Z
+assignee: claude-opus5.5-s565
 sprint: 565
 sprint_id: 45140e29-11a7-5dac-b634-da49c692c9f6
 sprint_title: Satellite-less single-node outpost by default; join and switch between satellites
+closed: 2026-11-07T09:35:12.545742Z
+closed_by: claude-opus5.5-s565
 ---
 
 Simultaneous multi-satellite support, KISS: one outpost process per extra satellite instead of a multi-satellite daemon. Extend bashy/examples/outpost-profile/outpost-profile.bsh (no outpost change expected):
