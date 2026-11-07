@@ -69,9 +69,11 @@ trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
     go build -o bin/bashy-spa-check ./cmd/bashy
     # Provision bashy'"'"'s own Go SDK into the mounted cache so the offline
     # transpile/go-source tests find it without fetching the release index.
-    # PATH is stripped of every go so the resolver downloads into BASHY_BIN_CACHE.
-    nogo_path=$(printf %s "$PATH" | tr ":" "\n" | while read -r d; do [ -x "$d/go" ] || printf "%s:" "$d"; done)
-    PATH=${nogo_path%:} /work/bashy/bin/bashy-spa-check go version
+    # Invoke the front door directly: PATH manipulation does not prevent Go
+    # GOTOOLCHAIN switching from downloading into the module cache.
+    GOTOOLCHAIN=local /work/bashy/bin/bashy-spa-check go version
+    test -x /cache/bashy/go/1.27.2/go/bin/go
+    test -f /cache/bashy/go/1.27.2/.binmgr-tree-complete
     yoke_dir=$(go list -m -f "{{.Dir}}" github.com/qiangli/yoke)
     cp -a "$yoke_dir/pkg/meet/web" /work/web
     chmod -R u+w /work/web

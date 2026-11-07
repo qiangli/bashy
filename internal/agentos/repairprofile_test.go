@@ -660,6 +660,10 @@ func repairHermeticEnv(t *testing.T) []string {
 		"TMPDIR=" + os.TempDir(),
 		"PATH=",
 	}
+	// Preserve only the provisioned SDK cache for the offline container lane.
+	if cache := os.Getenv("BASHY_BIN_CACHE"); cache != "" {
+		env = append(env, "BASHY_BIN_CACHE="+cache)
+	}
 	if runtime.GOOS == "windows" {
 		for _, k := range []string{"SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "USERPROFILE", "LOCALAPPDATA"} {
 			if v, ok := os.LookupEnv(k); ok {
