@@ -198,7 +198,7 @@ Default Bash# commands and kb pages ship in Bashy's source, not its
 binary. A first `bashy self install` (what the installers run) sets them
 up; to do it by hand:
 `bashy src fetch bashy && bashy --bashsharp "${BASHY_HOME:-$HOME/.bashy}/src/bashy/examples/defaults/bashy-defaults.bsh" apply`
-(`status` to check, `apply --upgrade` after a release). The default kb
+(`status` to check, `merge --upgrade` after an upgrade: it adds new defaults and lists your pages that shadow changed ones for you to reconcile). The default kb
 pages are then read automatically by `bashy kb search` and `bashy recall`;
 your own page with the same slug wins.
 

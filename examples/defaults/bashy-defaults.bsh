@@ -4,6 +4,7 @@
 # One editable Bash# body for the bashy-defaults command and skill.
 #
 #   bashy-defaults apply [--upgrade] [--force]
+#   bashy-defaults merge [--upgrade]
 #   bashy-defaults status
 
 ~~~skill as guide
@@ -34,6 +35,21 @@ bashy --bashsharp "${BASHY_HOME:-$HOME/.bashy}/src/bashy/examples/defaults/bashy
   again is safe.
 - `status` prints the pin, each default command (default, own, missing),
   and how many default kb pages are present.
+- `merge` is for a host that already has a setup (after an upgrade): it
+  registers default commands the host is missing, keeps the ones you
+  registered yourself, and lists every kb page of yours that SHADOWS a
+  default page with the same slug but different content, with both paths.
+  It changes no page. `--upgrade` first moves the pin to the installed
+  release.
+
+## Merging shadowed pages (for agents)
+
+`merge` does the mechanical half; the content half is judgment. For each
+shadowed pair it prints, read both files, then either keep yours and fold
+in what the new default adds (`bashy kb update <slug>` on your page), or
+adopt the default by hiding yours (`bashy kb forget <slug>`; the default
+then shows through). Keep the user's intent; never copy host, user or
+secret details into a page that may be shared.
 
 Default commands: `outpost-profile` (examples/outpost-profile) and
 `bashy-defaults` itself.
@@ -61,6 +77,7 @@ bashy-defaults|examples/defaults/bashy-defaults.bsh|read,write,exec"
 
 usage() {
     echo "Usage: $PROG apply [--upgrade] [--force]" >&2
+    echo "       $PROG merge [--upgrade]" >&2
     echo "       $PROG status" >&2
     exit 2
 }
@@ -131,6 +148,31 @@ cmd_apply() {
     echo "$PROG: kb defaults: $(kb_pages) page(s) in $src/kb/defaults (read automatically)"
 }
 
+# Pages of the host kb that shadow a default page with different content.
+cmd_merge() {
+    cmd_apply "$1" 0
+    defs="$(src_dir)/kb/defaults/pages"
+    host="${BASHY_KB_DIR:-$HOME/.bashy/kb}/pages"
+    n=0
+    for d in "$defs"/*.md; do
+        [ -f "$d" ] || continue
+        slug=${d##*/}
+        slug=${slug%.md}
+        mine="$host/$slug.md"
+        if [ -f "$mine" ] && ! cmp -s -- "$mine" "$d"; then
+            echo "shadowed: $slug"
+            echo "  yours:   $mine"
+            echo "  default: $d"
+            n=$((n + 1))
+        fi
+    done
+    if [ "$n" = 0 ]; then
+        echo "$PROG: merge: no kb page of yours shadows a changed default"
+    else
+        echo "$PROG: merge: $n shadowed page(s); reconcile each (see: $PROG --skill)"
+    fi
+}
+
 cmd_status() {
     src=$(src_dir)
     if [ -d "$src/examples" ]; then
@@ -179,6 +221,17 @@ case "$sub" in
             shift
         done
         cmd_apply "$upgrade" "$force"
+        ;;
+    merge)
+        upgrade=0
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --upgrade) upgrade=1 ;;
+                *) usage ;;
+            esac
+            shift
+        done
+        cmd_merge "$upgrade"
         ;;
     status)
         [ $# -eq 0 ] || usage

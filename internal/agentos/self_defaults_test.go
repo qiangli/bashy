@@ -78,7 +78,7 @@ func TestSelfInstallDefaultsSkipsWhenAlreadySetUp(t *testing.T) {
 	if called {
 		t.Fatal("an existing setup was fetched or applied again")
 	}
-	if !strings.Contains(out.String(), "already set up") || !strings.Contains(out.String(), "apply --upgrade") {
+	if !strings.Contains(out.String(), "already set up") || !strings.Contains(out.String(), "merge --upgrade") {
 		t.Fatalf("out = %q", out.String())
 	}
 }

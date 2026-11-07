@@ -116,6 +116,7 @@ type fixture struct {
 	t                           *testing.T
 	bin, script, home, reg, log string
 	fake                        string
+	extraEnv                    []string
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -149,6 +150,7 @@ func (f *fixture) run(args ...string) (string, int) {
 	cmd.Env = append(os.Environ(),
 		"BASHY_HOME="+f.home, "HOME="+filepath.Dir(f.home), "BASHY_HINTS=off",
 		"BASHY_DEFAULTS_BASHY_BIN="+f.fake, "FAKE_LOG="+f.log, "FAKE_REG="+f.reg)
+	cmd.Env = append(cmd.Env, f.extraEnv...)
 	cmd.Dir = filepath.Dir(f.home)
 	out, err := cmd.CombinedOutput()
 	code := 0
@@ -255,9 +257,52 @@ func TestSkillFence(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(b)
-	for _, want := range []string{"~~~skill as guide", "name: bashy-defaults", "bashy src fetch bashy", "apply", "status", "--force", "--upgrade", "kb/defaults"} {
+	for _, want := range []string{"~~~skill as guide", "name: bashy-defaults", "bashy src fetch bashy", "apply", "status", "merge", "--force", "--upgrade", "kb/defaults", "bashy kb update", "bashy kb forget"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("skill fence missing %q", want)
 		}
+	}
+}
+
+// merge registers missing defaults, keeps the user's own command, and lists
+// only host pages that shadow a CHANGED default page, changing nothing.
+func TestMergeReportsShadowedPages(t *testing.T) {
+	f := newFixture(t)
+	if _, code := f.run("apply"); code != 0 {
+		t.Fatal("apply failed")
+	}
+	// The fake pin's default pages a.md and b.md are empty files.
+	hostKB := filepath.Join(filepath.Dir(f.home), "hostkb")
+	pages := filepath.Join(hostKB, "pages")
+	if err := os.MkdirAll(pages, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pages, "a.md"), []byte("my own notes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pages, "b.md"), nil, 0o644); err != nil { // identical: not reported
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(f.reg, "outpost-profile"), []byte("/mine.bsh"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f.extraEnv = []string{"BASHY_KB_DIR=" + hostKB}
+	out, code := f.run("merge")
+	if code != 0 {
+		t.Fatalf("merge: exit %d\n%s", code, out)
+	}
+	for _, want := range []string{"shadowed: a", "yours:   ", "a.md", "default: ", "1 shadowed page(s)", "kept your own registration (/mine.bsh)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("merge output missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "shadowed: b") {
+		t.Errorf("identical page reported as shadowed:\n%s", out)
+	}
+	if b, _ := os.ReadFile(filepath.Join(pages, "a.md")); string(b) != "my own notes" {
+		t.Error("merge changed a page")
+	}
+	if got := f.registered("outpost-profile"); got != "/mine.bsh" {
+		t.Errorf("merge overwrote the user's command: %q", got)
 	}
 }

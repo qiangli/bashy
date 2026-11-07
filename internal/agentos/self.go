@@ -284,9 +284,9 @@ func selfInstallDefaults(bashy string, out io.Writer, run func(name string, arg 
 	later := fmt.Sprintf("bashy src fetch bashy && bashy --bashsharp %q apply", script)
 	// Only a first install sets defaults up. When the source pin is already
 	// there (an upgrade, a reinstall), leave the host's setup alone; refreshing
-	// is a deliberate `bashy-defaults apply --upgrade`.
+	// is a deliberate `bashy-defaults merge --upgrade`.
 	if _, err := os.Stat(pin); err == nil {
-		fmt.Fprintf(out, "defaults: already set up (source pin present); skipped. Refresh with: bashy --bashsharp %q apply --upgrade\n", script)
+		fmt.Fprintf(out, "defaults: already set up (source pin present); skipped. To take this release's defaults: bashy --bashsharp %q merge --upgrade\n", script)
 		return
 	}
 	if err := run(bashy, "src", "fetch", "bashy"); err != nil {
