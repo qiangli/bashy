@@ -33,3 +33,10 @@ Open items, to re-measure on the gate:
 - `internal/cli`/`internal/agentos` `TestRemoteInstallFake_*`: the test binary
   now also looks for `../../bin/bashy` (the lane builds `bin/bashy`); not run
   locally because no bin/bashy exists in this workspace.
+
+## Status at wrap-up (2026-11-07)
+- Every make test pre-step passes on the rootful Linux gate (bashy e7532b84): meet SPA fresh via bashy-provisioned pnpm offline, build-tag matrix, isolated lanes, release-qa lane, container-mode, verify-bashy-scratch (FROM-scratch smoke skipped: no runtime inside the container), startup.
+- Targeted go tests with network all PASS: desk fork/rollback, remote install, cygpath, Go-source and repair (offline SDK fixed).
+- Tests now run with network, as in CI (e7532b84); the desk checks declare @effects(net) by design.
+- REMAINING: the full `go test ./...` in the lane hit Go's default 10m per-package timeout in examples/desk at the lane's 2 CPUs (about 7.8 min alone at 4 CPUs). Fix: give make test's go test `-timeout 30m`, or run the lane at 4 CPUs. Then run one full rerun plus the strict 86/86 (the cygpath dispatch change touches command lookup). The operator skipped the full rerun at wrap-up.
+- Gate host note: the Windows test host's outpost sshd is now tunnel-only (no LAN listener on 2222). Reach it with `bashy outpost ssh exec elephant -- <cmd>`.
