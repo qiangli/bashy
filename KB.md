@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [repo/page] transpile --standalone: go mod tidy required before go build — When hello_standalone.bsh is transpiled with --standalone, the generated go.mod uses a replace directive to github.com/qiangli/sh. 'go build' fails with missing go.sum entries unless 'GOPROXY=direct GONOSUMDB="*" go mod tidy' is run first in the output dir  (kb:transpile-standalone-go-mod-tidy-required-before-go-build)
+- [repo/page] Derive no-egress allowlists from the pinned test's full port set — When a sandbox profile or strace verdict allowlists loopback ports for a pinned test binary, enumerate every bind/connect in that test's source at the pinned commit, not the subset remembered from its description. Prima's ring test was allowed 5  (kb:derive-no-egress-allowlists-from-the-pinned-test-s-full-port-set)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 
