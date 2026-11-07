@@ -3,7 +3,7 @@ id: 15907111b30a
 kind: task
 title: Dev-host install, smoke and release notes for rc.25; promotion needs operator approval
 seq: 3131
-status: todo
+status: assigned
 priority: p1
 labels:
     - release
