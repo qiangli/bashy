@@ -3,7 +3,7 @@ id: a130d972faf3
 kind: feature
 title: 'P1 Promotion rod: shape outgoing/push and incoming/pull between local, team/org and upstream'
 seq: 3147
-status: assigned
+status: done
 priority: p0
 labels:
     - release
@@ -13,6 +13,8 @@ assignee: codex-gpt6-sol
 sprint: 580
 sprint_id: 0cae3983-9725-5e31-b45d-3585e97e00de
 sprint_title: Bashy checkpoint and release candidate v1.0.0-rc.25
+closed: 2026-11-07T06:51:45.341405Z
+closed_by: claude-opus5.5-s580
 ---
 
 Problem: rc.25 ships as a shapeable minimum; post-release features and fixes move between three tiers: the local host, the team/org, and the upstream bashy repo. Humans and agents (agents first) need a "rod": one easy query for what is worth promoting or pulling, and one command each way, like git diff/push/pull. Today Service.Submit (yoke/pkg/shape/submit.go) opens only a LOCAL src PR plus a weave; nothing pushes, nothing reports incoming changes, and src offer/adopt refuses CLI/service kinds.

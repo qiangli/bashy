@@ -3,14 +3,17 @@ id: 7f785ad19fc2
 kind: task
 title: Freeze and gate the v1.0.0-rc.25-dev candidate
 seq: 3130
-status: todo
+status: done
 priority: p0
 labels:
     - release
 created: 2026-11-06T20:10:28.002012Z
+assignee: claude-opus5.5-s580
 sprint: 580
 sprint_id: 0cae3983-9725-5e31-b45d-3585e97e00de
 sprint_title: Bashy checkpoint and release candidate v1.0.0-rc.25
+closed: 2026-11-07T06:51:54.494475Z
+closed_by: claude-opus5.5-s580
 ---
 
 After the pin reconciliation story lands: freeze one candidate commit and build it once from the v1.0.0-rc.25-dev tag (release workflow; promotion reuses the tested bytes, never rebuilds). Required evidence, each tied to the exact candidate SHA:

@@ -10,9 +10,6 @@ labels:
     - e2e
 created: 2026-11-06T21:50:00.164534Z
 assignee: muse-spark1.3
-sprint: 580
-sprint_id: 0cae3983-9725-5e31-b45d-3585e97e00de
-sprint_title: Bashy checkpoint and release candidate v1.0.0-rc.25
 ---
 
 Klatch is already shipped; it is the test app for a full happy-path suite. Extend tests/klatch-e2e/run.py with --topology none|outpost|satellite|both.
@@ -24,3 +21,5 @@ Keep the exit contract 0 pass / 1 fail / 2 BLOCKED (never a pass) and write one 
 Fix in passing: DEFAULT_URL hard-codes a satellite address and a host name, which breaks the public-repo rule; make the URL required input and add the pattern to the scrub gate.
 Deferred to Sprint 582: upgrade/rollback, credential-rotation and offline/reconnect legs; native macOS/Windows runs of the outpost topologies.
 Verification: tests/klatch-e2e/test_run.py offline checks extended for topology selection and BLOCKED reporting; recorded runs of all four topologies on the frozen candidate.
+
+Carried over from Sprint 580 at close (2026-11-07). Status: NOT DONE. v1.0.0-rc.27 is released and promoted, so run this against the released v1.0.0-rc.27 build. The harness is delivered (tests/klatch-e2e, merged 4fc38d32; offline tests pass). Still to do: recorded runs of the four topologies against the release. Native Klatch on Windows hosts waits for Klatch v1.2.7 (signed bashy-v1.2.7-1, yoke pin 1b05a5ad) to reach a bashy release.

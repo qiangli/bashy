@@ -10,9 +10,6 @@ labels:
 created: 2026-11-06T20:10:28.175207Z
 weave: 33
 assignee: opencode-glm-5.3
-sprint: 580
-sprint_id: 0cae3983-9725-5e31-b45d-3585e97e00de
-sprint_title: Bashy checkpoint and release candidate v1.0.0-rc.25
 resolution: fixed
 closed_by: opencode-glm-5.3-i
 ---
@@ -22,3 +19,5 @@ After the candidate is gated: on the dev host run make install (canonical ~/.loc
 Added (sprint 580 plan, 2026-11-06): run the S1 shaping dogfood smoke (0a10de8d) on the installed binary; cut CHANGELOG [Unreleased] into an rc.25 section summarising the commits since v1.0.0-rc.24-dev by theme; write docs/releases/v1.0.0-rc.25.md that names software shaping and the local -> team/org -> upstream promotion path as the post-release extension route and links the K1 known-issues ledger (8d885a41). Promotion itself is R1 (0642298c).
 
 Reopened (manager, 2026-11-06): the notes run (bashy#33, merged 258edbca) closed this story automatically, but only the CHANGELOG and release-notes draft is delivered. The dev-host make install, the smoke of the installed PATH binary, and the S1 dogfood remain, and they run on the frozen candidate.
+
+Carried over from Sprint 580 at close (2026-11-07). Status: NOT DONE. v1.0.0-rc.27 is released and promoted, so run this against the released v1.0.0-rc.27 build. Done: the CHANGELOG, release notes, README Software Shaping section and install-channel docs (af7a2629). Still to do: dev-host install of the released rc.27 and the smoke of the installed PATH binary.
