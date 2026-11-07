@@ -2408,7 +2408,10 @@ func fleetNoun(n string) string {
 // in-process (pure-Go-first) before PATH lookup. It is wired into the shell
 // core via cli.AgentOSWireExec. Shell builtins (echo, pwd, test, …) are handled
 // by the interpreter before the ExecHandler runs, so they are never shadowed —
-// only external-command names (ls, cat, grep, ast, …) are intercepted.
+// only external-command names (ls, cat, grep, ast, …) are intercepted. The one
+// exception is the host path-spelling converters (hostConvertersHandler): a
+// cygpath/wslpath on PATH outranks bashy's own, which is what `type` already
+// reported for them.
 func WireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Reader, stdout, stderr io.Writer) []interp.RunnerOption {
 	return wireExec(opts, posix, env, stdin, stdout, stderr, dryRunRequested())
 }
@@ -2489,7 +2492,7 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 		// 2026-09-14: POSIX and agentic at the same time) — resolution is
 		// shared, the agentic chrome above is not. registeredHandler itself
 		// stands down under VSC_PROFILE=cert.
-		return append(opts, interp.ExecHandlers(outputMW, coreutilsshell.Handler(), registeredHandler()))
+		return append(opts, interp.ExecHandlers(outputMW, hostConvertersHandler(), coreutilsshell.Handler(), registeredHandler()))
 	}
 	// R0-pre: file a presence card for the agent this shell runs under, so an
 	// agent launched outside `bashy chat` stops being invisible to the address
@@ -2605,7 +2608,7 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// is re-executed isolated and inside @limit under `bashy limit`, which
 	// wraps the contained command so its guard watches that whole tree. In
 	// agent mode the host floors (limit.go) judge the command first.
-	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), gnuMakeHandler(), coreutilsshell.Handler(), registeredHandler())
+	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), gnuMakeHandler(), hostConvertersHandler(), coreutilsshell.Handler(), registeredHandler())
 	if agentModeForEnv(env) {
 		mws = append(mws, hostFloorHandler())
 	}
