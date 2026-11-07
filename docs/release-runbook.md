@@ -55,15 +55,23 @@ completed check. It builds the pinned
 with `GOWORK=off` so the scan sees the versions a release links.
 
 The release step is temporarily **report-only**: its
-`continue-on-error: true` setting lets the release proceed while the 66 known
-reachable third-party findings are removed by dependency bumps (bashy 18,
-outpost 22, yoke 26). To make the check blocking, change that one value in
-`.github/workflows/release.yml` to `false`. The checker itself always returns
-nonzero for reachable findings, so this switch does not hide or reinterpret
-the result. Package- and module-level findings are printed and retained too;
-nothing is waived. Zero reachable standard-library findings are expected. Any
-future reachable standard-library finding is fixed by raising the `toolchain`
-line across the umbrella, never by an exception. Run the check locally from an
+`continue-on-error: true` setting lets the release proceed while the known
+reachable findings are removed by dependency bumps. To make the check
+blocking, change that one value in `.github/workflows/release.yml` to
+`false`. The checker itself always returns nonzero for reachable findings, so
+this switch does not hide or reinterpret the result. Package- and
+module-level findings are printed and retained too; nothing is waived.
+
+As measured on the **v1.0.0-rc.27** candidate
+(`9187e1f0b5d8294fd83d97d24437bc05eb840a8d`) there are **4** reachable
+findings — GO-2026-6860 and GO-2026-6866 in `golang.org/x/net` (fixed in
+0.62.0), GO-2026-6865 in `klauspost/compress` (fixed in 1.20.2), and
+GO-2026-6809 in the standard library's `crypto/x509` (fixed in **go1.27.3**).
+All four are report-only for that release and are fixed on `main` by the
+dependency bumps plus a toolchain bump; see
+`docs/releases/v1.0.0-rc.27-known-issues.md` row G14. A reachable
+standard-library finding is always fixed by raising the `toolchain` line
+across the umbrella, never by an exception. Run the check locally from an
 umbrella checkout before proposing a candidate tag.
 
 ## License gate
@@ -78,23 +86,37 @@ the `license-gate` job in `.github/workflows/release.yml`. It runs
 report artifact. `scripts/license-review.json` has zero exceptions; a new
 non-permissive or unknown code license fails the release before builds begin.
 
-## Install-channel manifests
+## Install-channel manifests (NOT SUPPORTED — future work, skipped)
 
-After promotion, download all `bashy-<os>-<arch>` archives plus
-`checksums.txt`, then generate the Homebrew, Scoop and Winget manifests:
+**Operator decision (2026-11-06, v1.0.0-rc.27): the Homebrew, Scoop and winget
+install channels are not yet supported.** The whole of this section is
+**future work**: post-promotion channel generation and publication are
+**skipped**, and no step below is part of the promotion sequence today. The
+supported install paths are the `install.sh` / `install.ps1` scripts and the
+release archives (plus the Linux `.deb`/`.rpm`/`.apk` packages, which ship as
+ordinary GitHub release assets and are not a channel).
+
+`scripts/generate-install-channels.py` is **retained but unused** — it is kept
+for the future signed track and must not be deleted. Do not publish a tap,
+bucket or winget package from its output until an operator reverses this
+decision, and do not advertise a package-manager install in the release notes,
+README or `docs/setup.md` while it stands.
+
+The rest of this section records the procedure for when the channels are
+enabled. For reference, the generator would be invoked after promotion against
+all `bashy-<os>-<arch>` archives plus `checksums.txt`:
 
 ```sh
-python3 scripts/generate-install-channels.py vX.Y.Z dist channels
+python3 scripts/generate-install-channels.py vX.Y.Z dist channels   # future work; not run today
 ```
 
 The generator verifies every archive against `checksums.txt`. Do not publish a
 manifest generated from candidate (`-dev`) bytes under a stable version; manifests
-must only be published from promoted release bytes (e.g. current stable `v0.32.0`,
-and regenerated from promoted bytes at `v1.0.0`).
+must only be published from promoted release bytes.
 
 Channel manifests identify publisher as **DHNT Inc.** and use homepage **`https://dhnt.io`**.
 
-### Homebrew tap publication
+### Homebrew tap publication (future work — not supported, skipped)
 
 Homebrew formulae set no quarantine flag, allowing installation of macOS binaries
 without Gatekeeper prompts. Formulae are hosted in the company GitHub org repo
@@ -107,7 +129,7 @@ without Gatekeeper prompts. Formulae are hosted in the company GitHub org repo
    brew install dhnt/tap/bashy
    ```
 
-### Scoop bucket publication
+### Scoop bucket publication (future work — not supported, skipped)
 
 Scoop sets no Mark-of-the-Web on downloaded files, allowing installation of Windows
 binaries without SmartScreen unknown-publisher prompts. Manifests are hosted in the
@@ -121,12 +143,8 @@ company GitHub org repo `github.com/dhnt/scoop-bucket`:
    scoop install dhnt/bashy
    ```
 
-### Linux packages
 
-Linux releases ship `.deb`, `.rpm`, and `.apk` packages alongside tarballs directly
-in the GitHub release assets.
-
-### Winget validation and submission (v1.0.x signed track)
+### Winget validation and submission (future work — not supported, skipped; v1.0.x signed track)
 
 The generator creates `DHNT.bashy` manifests (`PackageIdentifier: DHNT.bashy`,
 `Publisher: DHNT Inc.`). Per the 2026-10-25 decision, Winget submission requires
@@ -148,13 +166,23 @@ directory, commit and push one package-version change, and open a pull request
 to `microsoft/winget-pkgs`. Never create or submit that public pull request
 without explicit operator approval.
 
+## Linux packages (supported)
+
+Linux releases ship `.deb`, `.rpm`, and `.apk` packages alongside the tarballs
+directly in the GitHub release assets. These are **not** an install channel and
+are **not** affected by the channel decision above — they need no tap, bucket or
+manifest publication step.
+
 ## Promoting a release candidate (`vX.Y.Z-rc.N`)
 
 `promote.yml` accepts `vX.Y.Z` and `vX.Y.Z-rc.N` (a `-dev` suffix is stripped:
 the candidate `vX.Y.Z-rc.N-dev` promotes to `vX.Y.Z-rc.N`). Bare-tag pushes still
 match only `vX.Y.Z`; an rc is promoted by `workflow_dispatch` with
-`version=vX.Y.Z-rc.N`. Channel manifests carry the rc version string verbatim
-(Homebrew, Scoop and Winget accept prerelease strings); no channel is skipped.
+`version=vX.Y.Z-rc.N`. **Install channels are not yet supported, so every
+channel is skipped**: a promotion publishes the release assets and
+`checksums.txt` only, and the post-promotion channel steps above are not run.
+The tooling still accepts an rc version string verbatim for when the channels
+are enabled.
 
 **`tier_verdict` must be an https URL pinned to a commit** (for example a
 `raw.githubusercontent.com/<org>/<repo>/<commit-sha>/...` URL). `promote.yml`

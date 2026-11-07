@@ -285,22 +285,12 @@ curl -fsSL https://dhnt.io/install.sh | sh
 irm https://dhnt.io/install.ps1 | iex
 ```
 
-**macOS (Homebrew):**
+Both install scripts show no operating-system prompt.
 
-```sh
-brew install dhnt/tap/bashy
-```
-
-**Windows (Scoop):**
-
-```powershell
-scoop bucket add dhnt https://github.com/dhnt/scoop-bucket
-scoop install dhnt/bashy
-```
-
-These script, Homebrew, and Scoop installs show no operating-system prompt.
-If PowerShell blocks Scoop's shim, allow current-user scripts once with
-`Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser -Force`.
+**Package managers are not yet available.** Homebrew, Scoop and winget
+channels are **not supported** as of v1.0.0-rc.27: there is no `dhnt/tap`
+formula, no `dhnt` Scoop bucket and no winget package to install from. Use an
+install script above or a release archive below.
 
 The v1.0 macOS and Windows binaries are not yet code-signed. A browser-downloaded
 archive prompts at launch: on macOS, right-click the executable and choose
@@ -328,8 +318,8 @@ Starting with v1.0, Linux releases also publish `.deb`, `.rpm`, and `.apk`
 packages alongside the tarballs. macOS and Windows archive names are `bashy-darwin-{amd64,arm64}.tar.gz`
 and `bashy-windows-{amd64,arm64}.zip`.
 
-A prerelease (a `-rc.N-dev` tag, currently `v1.0.0-rc.27-dev`) is not
-`latest`: download it from its tag,
+`latest` is **v1.0.0-rc.27** (promoted 2026-11-07). A candidate prerelease (a
+`-rc.N-dev` tag) is never `latest`: download one from its tag,
 `https://github.com/qiangli/bashy/releases/download/<tag>/<asset>`. Current
 release notes: [v1.0.0-rc.27](docs/releases/v1.0.0-rc.27.md);
 [CHANGELOG](CHANGELOG.md).

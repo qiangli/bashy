@@ -31,7 +31,7 @@ frozen release candidate before the tag.
 
 ## [Unreleased]
 
-## [1.0.0-rc.27] — UNRELEASED (candidate; date set at promotion)
+## [1.0.0-rc.27] — 2026-11-07 (promoted)
 
 Cut from the unreleased pool that accumulated since [0.32.0]; the earlier
 rc-series candidates were never cut here. The changes new since
