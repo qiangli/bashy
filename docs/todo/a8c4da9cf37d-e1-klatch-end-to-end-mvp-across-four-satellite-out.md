@@ -3,7 +3,7 @@ id: a8c4da9cf37d
 kind: test
 title: E1 Klatch end-to-end MVP across four satellite/outpost topologies under bashy oci
 seq: 3148
-status: assigned
+status: todo
 priority: p0
 labels:
     - release
