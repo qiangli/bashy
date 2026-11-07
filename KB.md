@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [host/page] Playbook: run a multi-agent planning meeting with bashy meet — How to run a design review / decision / cross-agent planning session with 'bashy meet' instead of separate one-off agent sessions: the start -> round -> /decision + /action -> close loop, a dedicated notes-only secretary, and minutes filed to docs/meetin  (kb:playbook-run-a-multi-agent-planning-meeting-with-bashy-meet)
+- [repo/page] Derive no-egress allowlists from the pinned test's full port set — When a sandbox profile or strace verdict allowlists loopback ports for a pinned test binary, enumerate every bind/connect in that test's source at the pinned commit, not the subset remembered from its description. Prima's ring test was allowed 5  (kb:derive-no-egress-allowlists-from-the-pinned-test-s-full-port-set)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 
