@@ -43,7 +43,9 @@ trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
 # container has network access. The same cache is mounted into the offline run.
 "${oci[@]}" run --rm --name "$container-warm" \
   -e GOWORK=off -e GOMODCACHE=/cache/gomod -e XDG_CACHE_HOME=/cache -e COREPACK_HOME=/cache/corepack \
-  -e BASHY_BIN_CACHE=/cache/bashy -e npm_config_store_dir=/cache/pnpm-store \
+  -e BASHY_BIN_CACHE=/cache/bashy \
+  -e npm_config_store_dir=/cache/pnpm-store -e pnpm_config_store_dir=/cache/pnpm-store \
+  -e npm_config_offline=false -e pnpm_config_offline=false \
   -v "$cache_volume:/cache" -v "$dhnt/bashy:/source/bashy:ro" \
   "$image" bash -lc '
     cp -a /source/bashy/. /work/bashy/
@@ -62,7 +64,8 @@ trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
   --cpus "${BASHY_TEST_CPUS:-2}" --memory "${BASHY_TEST_MEMORY:-4g}" --pids-limit 4096 \
   -e GOTOOLCHAIN=auto -e GOWORK=off -e GOMODCACHE=/cache/gomod -e XDG_CACHE_HOME=/cache \
   -e COREPACK_HOME=/cache/corepack -e BASHY_BIN_CACHE=/cache/bashy \
-  -e npm_config_store_dir=/cache/pnpm-store -e npm_config_offline=true \
+  -e npm_config_store_dir=/cache/pnpm-store -e pnpm_config_store_dir=/cache/pnpm-store \
+  -e npm_config_offline=true -e pnpm_config_offline=true \
   -e "BASHY_TEST_TARGET=$target" \
   -v "$cache_volume:/cache" \
   -v "$dhnt/bashy:/source/bashy:ro" -v "$dhnt/sh:/source/sh:ro" \

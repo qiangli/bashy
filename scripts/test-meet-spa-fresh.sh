@@ -20,6 +20,7 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P)
 script=$root/scripts/build-meet-spa.sh
+self_container=$root/scripts/test-self-container.sh
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/bashy-meet-spa-fresh.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
@@ -28,6 +29,17 @@ fail() {
 	echo "test-meet-spa-fresh: FAIL: $*" >&2
 	exit 1
 }
+
+# The warm run must use a shared store online; the test run must consume it
+# offline. pnpm 11 reads pnpm_config_* while older releases read npm_config_*.
+for config in pnpm npm; do
+	[ "$(grep -c -- "-e ${config}_config_store_dir=/cache/pnpm-store" "$self_container")" -eq 2 ] ||
+		fail "both container runs must export ${config}_config_store_dir"
+	grep -q -- "-e ${config}_config_offline=false" "$self_container" ||
+		fail "warm run must export ${config}_config_offline=false"
+	grep -q -- "-e ${config}_config_offline=true" "$self_container" ||
+		fail "test run must export ${config}_config_offline=true"
+done
 
 # cksum of every file in a tree, path-qualified and stable-sorted — a fingerprint
 # that changes if any byte, any file name, or the file set changes. Avoids
