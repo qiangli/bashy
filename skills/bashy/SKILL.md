@@ -192,6 +192,15 @@ one only when the task needs the latitude.
   `bashy skill promote NAME` (human-reviewed bundle — never
   auto-published).
 
+## Defaults: commands and kb pages from the source pin
+
+Default Bash# commands and kb pages ship in Bashy's source, not its
+binary. Set them up once per host:
+`bashy src fetch bashy && bashy --bashsharp "${BASHY_HOME:-$HOME/.bashy}/src/bashy/examples/defaults/bashy-defaults.bsh" apply`
+(`status` to check, `apply --upgrade` after a release). The default kb
+pages are then read automatically by `bashy kb search` and `bashy recall`;
+your own page with the same slug wins.
+
 ## Edit the catalog through verbs, never by hand
 
 Never edit files under `~/.config/bashy/` (or any `BASHY_*_DIR`) directly:

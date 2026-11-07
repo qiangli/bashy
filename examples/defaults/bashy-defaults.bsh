@@ -1,0 +1,190 @@
+#!/usr/bin/env -S bashy --bashsharp
+# bashy-defaults: set up the default Bash# commands and kb pages that ship
+# in Bashy's source tree (not its binary).
+# One editable Bash# body for the bashy-defaults command and skill.
+#
+#   bashy-defaults apply [--upgrade] [--force]
+#   bashy-defaults status
+
+~~~skill as guide
+---
+name: bashy-defaults
+description: Set up the default Bash# commands and kb pages every Bashy install can use, from Bashy's own release-pinned source. The executable body is this Bash# file; run it with bashy --bashsharp.
+metadata:
+  requires: "has=bashy"
+---
+# bashy-defaults — default commands and kb pages from the source pin
+
+Scripts, skills and kb pages live outside the bashy binary, in Bashy's
+source tree. Every install can fetch that tree pinned at its release, and
+this command turns it into working defaults.
+
+## Run
+
+```sh
+bashy src fetch bashy
+bashy --bashsharp "${BASHY_HOME:-$HOME/.bashy}/src/bashy/examples/defaults/bashy-defaults.bsh" apply
+```
+
+- `apply` fetches the source pin when it is missing (`--upgrade` moves it
+  to the installed release with `bashy src upgrade bashy`), registers each
+  default command from the pin with `bashy commands add`, and reports the
+  default kb pages. A command you registered yourself under the same name
+  (pointing elsewhere) is kept; `--force` replaces it. Running `apply`
+  again is safe.
+- `status` prints the pin, each default command (default, own, missing),
+  and how many default kb pages are present.
+
+Default commands: `outpost-profile` (examples/outpost-profile) and
+`bashy-defaults` itself.
+
+The default kb pages (`kb/defaults` in the pin) need no setup:
+`bashy kb search|list|show` and `bashy recall` read them as a read-only
+ring after your own pages, and a page of yours with the same slug wins.
+
+`BASHY_DEFAULTS_BASHY_BIN` overrides the `bashy` used for the src and
+commands calls.
+
+## Verification
+
+`go test ./examples/defaults/` drives the command with a fake `bashy`
+and a temp `BASHY_HOME`; it never touches a real registry.
+~~~
+
+set -e
+
+PROG=bashy-defaults
+
+# name|path inside the source tree|effects
+DEFAULT_COMMANDS="outpost-profile|examples/outpost-profile/outpost-profile.bsh|read,write,exec
+bashy-defaults|examples/defaults/bashy-defaults.bsh|read,write,exec"
+
+usage() {
+    echo "Usage: $PROG apply [--upgrade] [--force]" >&2
+    echo "       $PROG status" >&2
+    exit 2
+}
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+bashy_bin() {
+    if [ -n "${BASHY_DEFAULTS_BASHY_BIN:-}" ]; then
+        printf '%s\n' "$BASHY_DEFAULTS_BASHY_BIN"
+    else
+        printf 'bashy\n'
+    fi
+}
+
+src_dir() {
+    printf '%s/src/bashy\n' "${BASHY_HOME:-$HOME/.bashy}"
+}
+
+# The exec path a registered command runs, or nothing when unregistered.
+registered_path() {
+    out=$("$(bashy_bin)" commands show "$1" --json 2>/dev/null) || return 0
+    printf '%s\n' "$out" | jq -r '.exec[2] // empty' 2>/dev/null || true
+}
+
+kb_pages() {
+    n=0
+    for f in "$(src_dir)"/kb/defaults/pages/*.md; do
+        [ -f "$f" ] && n=$((n + 1))
+    done
+    printf '%s\n' "$n"
+}
+
+cmd_apply() {
+    upgrade=$1; force=$2
+    src=$(src_dir)
+    if [ ! -d "$src/examples" ]; then
+        "$(bashy_bin)" src fetch bashy >/dev/null || fail "cannot fetch the bashy source pin" 1
+        echo "$PROG: fetched the bashy source pin into $src"
+    elif [ "$upgrade" = 1 ]; then
+        "$(bashy_bin)" src upgrade bashy >/dev/null || fail "cannot upgrade the bashy source pin" 1
+        echo "$PROG: upgraded the bashy source pin"
+    fi
+    [ -d "$src/examples" ] || fail "no source pin at $src" 1
+    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects; do
+        [ -n "$name" ] || continue
+        path="$src/$rel"
+        if [ ! -f "$path" ]; then
+            echo "$PROG: $name: not in this release's source ($rel), skipped"
+            continue
+        fi
+        current=$(registered_path "$name")
+        if [ -n "$current" ] && [ "$current" != "$path" ] && [ "$force" != 1 ]; then
+            echo "$PROG: $name: kept your own registration ($current); --force replaces it"
+            continue
+        fi
+        set -- --set exec.0=bashy --set exec.1=--bashsharp --set "exec.2=$path"
+        i=0
+        for e in ${effects//,/ }; do
+            set -- "$@" --set "effects.$i=$e"
+            i=$((i + 1))
+        done
+        "$(bashy_bin)" commands add "$name" "$@" >/dev/null || fail "cannot register $name" 1
+        echo "$PROG: $name: registered from the source pin"
+    done
+    echo "$PROG: kb defaults: $(kb_pages) page(s) in $src/kb/defaults (read automatically)"
+}
+
+cmd_status() {
+    src=$(src_dir)
+    if [ -d "$src/examples" ]; then
+        echo "source pin: $src"
+    else
+        echo "source pin: missing (run: $PROG apply)"
+    fi
+    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects; do
+        [ -n "$name" ] || continue
+        current=$(registered_path "$name")
+        if [ -z "$current" ]; then
+            state=missing
+        elif [ "$current" = "$src/$rel" ]; then
+            state=default
+        else
+            state="own ($current)"
+        fi
+        printf '%-16s %s\n' "$name" "$state"
+    done
+    echo "kb defaults: $(kb_pages) page(s)"
+}
+
+if [ $# -lt 1 ]; then
+    usage
+fi
+case "$1" in
+    --skill)
+        sed -n '/^~~~skill/,/^~~~$/p' "$0" | sed '1d;$d'
+        exit 0
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+esac
+
+sub=$1; shift
+case "$sub" in
+    apply)
+        upgrade=0; force=0
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --upgrade) upgrade=1 ;;
+                --force) force=1 ;;
+                *) usage ;;
+            esac
+            shift
+        done
+        cmd_apply "$upgrade" "$force"
+        ;;
+    status)
+        [ $# -eq 0 ] || usage
+        cmd_status
+        ;;
+    *)
+        usage
+        ;;
+esac
