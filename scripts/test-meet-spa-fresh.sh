@@ -108,9 +108,11 @@ nobin=$tmp/nobin
 mkdir -p "$nobin"
 # Prefix-assignment (not `env -i`, which the pure-Go coreutils userland refuses
 # to use to run a command): PATH contains only the empty fixture directory, and
-# BASHY_BIN is empty so no explicit pnpm provider is available.
-if PATH="$nobin" BASHY_BIN= MEET_SPA_WEB_DIR="$fakeweb" \
-	/bin/sh "$script" check >"$tmp/3.out" 2>&1; then
+# BASHY_BIN is empty so no explicit pnpm provider is available. Run from the
+# empty fixture directory so the script's repo-relative bin/bashy fallback
+# cannot find a lane-built binary (make test builds bin/bashy first).
+if (cd "$nobin" && PATH="$nobin" BASHY_BIN= MEET_SPA_WEB_DIR="$fakeweb" \
+	/bin/sh "$script" check) >"$tmp/3.out" 2>&1; then
 	cat "$tmp/3.out" >&2
 	fail "check passed with no toolchain available (must fail closed)"
 fi
