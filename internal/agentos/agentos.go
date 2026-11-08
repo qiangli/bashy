@@ -871,6 +871,26 @@ func dispatchWithContext(ctx context.Context) {
 		// rustc's linker on Windows (ziglink.go): never a user-facing verb.
 		dispatchExit(dispatchZigLink(os.Args[2:]))
 	case "transpile":
+		if len(os.Args) > 2 && (os.Args[2] == "-h" || os.Args[2] == "--help") {
+			fmt.Fprint(os.Stdout, `Transpile Bash# or Go source into Go.
+
+Usage:
+  bashy transpile [--bashsharp] [--source sh|go] INPUT -o OUTPUT.go [--map MAPFILE]
+
+Flags:
+  --bashsharp       Enable Bash# input (alias: --bashpp)
+  --source sh|go    Input language (default: sh; .go input selects go)
+  -o OUTPUT.go     Generated Go output path
+  --map MAPFILE    Write a source map
+  --standalone     Generate a standalone program
+  --force          Overwrite existing output
+
+Go source also accepts --go-file, --go-test-file, --go-xtest-file,
+--go-library, --go-package, --go-import-base, --go-import-path,
+--go-test-main, --go-native-unit, and --go-version.
+`)
+			dispatchExit(0)
+		}
 		dispatchExit(transpile.Main(transpilePathArgs(os.Args[2:])))
 	case "explain":
 		dispatchExit(dispatchExplain(os.Args[2:], os.Stdout, os.Stderr))
