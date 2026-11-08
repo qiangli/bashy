@@ -188,10 +188,8 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite, atlas.EffPersist},
 		Stability: atlas.StabilityExperimental,
 	},
-	// Satellite pairing invites (S490 f3ab64ae): invite exchanges the
-	// owner Bearer [REDACTED] a short-lived satellite token and mints a single-use
-	// invite code, writing it to a 0600 file (read+write+persist) or
-	// printing it with explicit --stdout (net+write either way).
+	// Satellite operations (S490, S598): list/show read operations,
+	// owner-scoped host pairing invites, and transfer.
 	"satellite": {
 		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
 		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork, atlas.CapNeedsPairing},

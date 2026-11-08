@@ -625,7 +625,7 @@ var verbSynopsis = map[string]string{
 	"infra":              "register provider access packages (registration only, never provisions)",
 	"token":              "mint and manage scoped coordination tokens (attenuated; the value is never printed by default)",
 	"fleet":              "coordination credentials for satellite migrations (master-token save/mint; never printed)",
-	"satellite":          "mint an owner-scoped host pairing invite on a satellite (satellite invite; short TTL, single use)",
+	"satellite":          "satellite daily operations: list/show, pairing invites, and transfer",
 	"reproduce":          "dry-run what master metadata can recreate (reproduce --plan; read-only, no --apply)",
 	"paired-host":        "paired hosts from the master, hosts joined with peers (paired-host ls; read-only)",
 	"resource":           "host totals and active weave disk, CPU, GPU, and memory usage",

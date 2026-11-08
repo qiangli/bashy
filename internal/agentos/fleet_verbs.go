@@ -61,7 +61,7 @@ func newPairedHostCmd() *cobra.Command {
 	return cmd
 }
 
-// dispatchSatellite runs the `bashy satellite` verb (currently invite only).
+// dispatchSatellite runs the `bashy satellite` verb (list/show/invite/transfer).
 func dispatchSatellite(args []string) int {
 	cmd := fleet.NewSatelliteCmd()
 	setCobraArgs(cmd, args)

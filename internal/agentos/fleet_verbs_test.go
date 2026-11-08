@@ -7,8 +7,14 @@ package agentos
 
 import (
 	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -123,6 +129,30 @@ func TestSatelliteReproducePairedHostVerbsResolve(t *testing.T) {
 		t.Errorf("satellite invite --help hides the required flags:\n%s", out)
 	}
 
+	out, err = runFleetVerb(t, "satellite", "list", "--help")
+	if err != nil {
+		t.Fatalf("satellite list --help: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "--json") {
+		t.Errorf("satellite list --help hides --json:\n%s", out)
+	}
+
+	out, err = runFleetVerb(t, "satellite", "show", "--help")
+	if err != nil {
+		t.Fatalf("satellite show --help: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "--json") {
+		t.Errorf("satellite show --help hides --json:\n%s", out)
+	}
+
+	out, err = runFleetVerb(t, "satellite", "transfer", "--help")
+	if err != nil {
+		t.Fatalf("satellite transfer --help: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "--to") || !strings.Contains(out, "--yes") {
+		t.Errorf("satellite transfer --help hides --to/--yes:\n%s", out)
+	}
+
 	out, err = runFleetVerb(t, "reproduce", "--help")
 	if err != nil {
 		t.Fatalf("reproduce --help: %v\n%s", err, out)
@@ -137,7 +167,7 @@ func TestSatelliteReproducePairedHostVerbsResolve(t *testing.T) {
 	}
 
 	for verb, want := range map[string][]string{
-		"satellite":   {"satellite", "satellite invite"},
+		"satellite":   {"satellite", "satellite list", "satellite show", "satellite invite", "satellite transfer"},
 		"reproduce":   {"reproduce"},
 		"paired-host": {"paired-host", "paired-host ls"},
 	} {
@@ -191,5 +221,202 @@ func TestTokenCreateRefusesWithoutAnOutputSink(t *testing.T) {
 	}
 	if got := out.String(); got != "" {
 		t.Errorf("refusal printed %q (the value must never print)", got)
+	}
+}
+
+// TestComposedSatelliteOperationsWorkflow demonstrates the full composed workflow
+// (S598 Story 44d88adca4a5) against synthetic fixtures:
+// 1. Existing account discovery (discovering endpoints / accounts)
+// 2. Satellite discovery and show (list --json, show <name> --json)
+// 3. Paired-host inspection (paired-host ls --json; verify host-to-satellite gap refusal)
+// 4. Explicit invite and transfer mutations:
+//   - satellite invite --json includes pairing code even when written to file
+//   - satellite transfer with explicit confirmation
+//
+// Verifies reads issue zero mutations, mutations occur only on explicit operations,
+// and live service verification remains separate and unverified.
+func TestComposedSatelliteOperationsWorkflow(t *testing.T) {
+	ringDir(t)
+
+	var (
+		masterMutations atomic.Int32
+		satMutations    atomic.Int32
+	)
+
+	var satSrv *httptest.Server
+	satSrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/tokens/exchange":
+			satMutations.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"token":      "synth-invite-token",
+				"expires_at": "2026-11-09T00:00:00Z",
+			})
+		case r.Method == http.MethodPost && r.URL.Path == "/api/v1/hosts/invites":
+			satMutations.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code":       "inv-synth-pair-9876",
+				"expires_at": "2026-11-08T19:00:00Z",
+			})
+		default:
+			http.Error(w, "unexpected satellite path "+r.URL.Path, http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(satSrv.Close)
+
+	masterSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/satellites":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"satellites": []map[string]any{
+					{
+						"id":       "sat-synth-1",
+						"name":     "sat-alpha",
+						"endpoint": satSrv.URL,
+						"state":    "active",
+					},
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/hosts":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"hosts": []map[string]any{
+					{
+						"host":   "host-synth-alpha",
+						"online": true,
+					},
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/peers":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"peers": []map[string]any{
+					{
+						"host":   "host-synth-alpha",
+						"owned":  true,
+						"online": true,
+					},
+				},
+			})
+		case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/v1/satellites/sat-synth-1/transfer"):
+			masterMutations.Add(1)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"satellite_id":   "sat-synth-1",
+				"from":           "owner@example.internal",
+				"to":             "new-owner@example.internal",
+				"transferred_at": "2026-11-08T18:00:00Z",
+				"note":           "transferred successfully",
+			})
+		default:
+			http.Error(w, "unexpected master path "+r.URL.Path, http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(masterSrv.Close)
+
+	// Step 1: Account discovery
+	acctOut, err := runFleetVerb(t, "account", "list", "--json")
+	if err != nil {
+		t.Fatalf("account list: %v\n%s", err, acctOut)
+	}
+
+	// Step 2: Satellite list and show
+	listOut, err := runFleetVerb(t, "satellite", "list", "--json", "--master", masterSrv.URL, "--token", "fake-token")
+	if err != nil {
+		t.Fatalf("satellite list: %v\n%s", err, listOut)
+	}
+	var listEnvelope struct {
+		Satellites []struct {
+			ID       string `json:"id"`
+			Name     string `json:"name"`
+			Endpoint string `json:"endpoint"`
+			State    string `json:"state"`
+		} `json:"satellites"`
+	}
+	if err := json.Unmarshal([]byte(listOut), &listEnvelope); err != nil {
+		t.Fatalf("unmarshal satellite list JSON: %v\n%s", err, listOut)
+	}
+	if len(listEnvelope.Satellites) != 1 || listEnvelope.Satellites[0].ID != "sat-synth-1" {
+		t.Fatalf("unexpected satellites list: %+v", listEnvelope.Satellites)
+	}
+
+	showOut, err := runFleetVerb(t, "satellite", "show", "sat-alpha", "--json", "--master", masterSrv.URL, "--token", "fake-token")
+	if err != nil {
+		t.Fatalf("satellite show: %v\n%s", err, showOut)
+	}
+	var showEnvelope struct {
+		Satellite struct {
+			ID       string `json:"id"`
+			Name     string `json:"name"`
+			Endpoint string `json:"endpoint"`
+			State    string `json:"state"`
+		} `json:"satellite"`
+	}
+	if err := json.Unmarshal([]byte(showOut), &showEnvelope); err != nil {
+		t.Fatalf("unmarshal satellite show JSON: %v\n%s", err, showOut)
+	}
+	if showEnvelope.Satellite.ID != "sat-synth-1" || showEnvelope.Satellite.Name != "sat-alpha" {
+		t.Fatalf("unexpected satellite show: %+v", showEnvelope.Satellite)
+	}
+
+	// Step 3: Paired-host inspection
+	hostOut, err := runFleetVerb(t, "paired-host", "ls", "--json", "--master", masterSrv.URL, "--token", "fake-token")
+	if err != nil {
+		t.Fatalf("paired-host ls: %v\n%s", err, hostOut)
+	}
+	if !strings.Contains(hostOut, "host-synth-alpha") {
+		t.Fatalf("paired-host ls output missing host-synth-alpha: %s", hostOut)
+	}
+
+	// Verify genuine architectural gap: --satellite filter is explicitly refused
+	_, err = runFleetVerb(t, "paired-host", "ls", "--satellite", "sat-synth-1", "--master", masterSrv.URL, "--token", "fake-token")
+	if err == nil || !strings.Contains(err.Error(), "GET /api/v1/satellites/assignment") {
+		t.Fatalf("expected missing mapping refusal on paired-host ls --satellite, got: %v", err)
+	}
+
+	// Ensure zero mutations have been issued during discovery/reads
+	if m := masterMutations.Load(); m != 0 {
+		t.Fatalf("expected 0 master mutations during reads, got %d", m)
+	}
+	if s := satMutations.Load(); s != 0 {
+		t.Fatalf("expected 0 satellite mutations during reads, got %d", s)
+	}
+
+	// Step 4: Explicit invite mutation
+	inviteFile := filepath.Join(t.TempDir(), "host.invite")
+	inviteOut, err := runFleetVerb(t, "satellite", "invite", "--satellite", satSrv.URL, "--token", "fake-token", "--name", "host-synth-alpha", "--to-file", inviteFile, "--json")
+	if err != nil {
+		t.Fatalf("satellite invite: %v\n%s", err, inviteOut)
+	}
+	var inviteJSON map[string]any
+	if err := json.Unmarshal([]byte(inviteOut), &inviteJSON); err != nil {
+		t.Fatalf("unmarshal invite JSON: %v\n%s", err, inviteOut)
+	}
+	// Verify output compatibility: JSON output contains "code" even when --to-file is written
+	if code, _ := inviteJSON["code"].(string); code != "inv-synth-pair-9876" {
+		t.Fatalf("invite JSON missing pairing code: %v", inviteJSON)
+	}
+	if file, _ := inviteJSON["file"].(string); file != inviteFile {
+		t.Fatalf("invite JSON missing target file: %v", inviteJSON)
+	}
+	fileBytes, err := os.ReadFile(inviteFile)
+	if err != nil || strings.TrimSpace(string(fileBytes)) != "inv-synth-pair-9876" {
+		t.Fatalf("written invite file mismatch: %s, err: %v", string(fileBytes), err)
+	}
+
+	// Explicit transfer mutation
+	transferOut, err := runFleetVerb(t, "satellite", "transfer", "sat-alpha", "--to", "new-owner@example.internal", "--yes", "--master", masterSrv.URL, "--token", "fake-token")
+	if err != nil {
+		t.Fatalf("satellite transfer: %v\n%s", err, transferOut)
+	}
+	if !strings.Contains(transferOut, "satellite: sat-synth-1") || !strings.Contains(transferOut, "to: new-owner@example.internal") {
+		t.Fatalf("unexpected transfer output: %s", transferOut)
+	}
+
+	// Assert mutations occurred exactly as planned
+	if m := masterMutations.Load(); m != 1 {
+		t.Fatalf("expected exactly 1 master transfer mutation, got %d", m)
+	}
+	if s := satMutations.Load(); s != 2 { // exchange + mint
+		t.Fatalf("expected exactly 2 satellite mutations (exchange+mint), got %d", s)
 	}
 }

@@ -971,9 +971,8 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// save/mint writes the 0600 master-token file, never printing it.
 		dispatchExit(dispatchFleet(os.Args[2:]))
 	case "satellite":
-		// Satellite pairing invites (S490 f3ab64ae): invite mints an
-		// owner-scoped host pairing invite on a satellite (short TTL,
-		// single use), writing the code to a 0600 file or stdout.
+		// Satellite daily operations (S490, S598): list/show read operations,
+		// owner-scoped host pairing invites, and transfer.
 		dispatchExit(dispatchSatellite(os.Args[2:]))
 	case "reproduce":
 		// Plan-only recreation dry-run (S490): reproduce --plan lists the
