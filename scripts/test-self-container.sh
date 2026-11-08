@@ -14,8 +14,19 @@ containerfile=${BASHY_TEST_CONTAINERFILE:-$repo/tools/dev-test-container/Contain
 image=${BASHY_TEST_IMAGE:-localhost/bashy-self-test:$lane}
 container=bashy-self-$lane
 cache_volume=bashy-self-cache-$lane
+# BASHY_TEST_KEEP_CACHE=1 keeps a named module/build/test cache volume across
+# runs, keyed by lane + go.sum, so unchanged packages reuse Go's content-keyed
+# test results. Default: a disposable volume removed on exit.
+keep_cache=${BASHY_TEST_KEEP_CACHE:-0}
+if [ "$keep_cache" = 1 ]; then
+  cache_volume=$cache_volume-$(cksum <"$repo/go.sum" | awk '{ print $1 }')
+fi
 target=${BASHY_TEST_TARGET:-test}
 case "$target" in ''|*[!A-Za-z0-9_.-]*) echo "test-self-container: unsafe BASHY_TEST_TARGET: $target" >&2; exit 2 ;; esac
+# BASHY_TEST_GROUPS="agentos frontend" runs those scripts/test-groups.sh groups
+# instead of `make $BASHY_TEST_TARGET`.
+groups=${BASHY_TEST_GROUPS:-}
+case "$groups" in *[!a-z\ ]*) echo "test-self-container: unsafe BASHY_TEST_GROUPS: $groups" >&2; exit 2 ;; esac
 
 # Bashy's private Podman machine must not depend on unrelated entries in the
 # operator's SSH known_hosts file. Use its API socket directly on macOS.
@@ -37,8 +48,12 @@ done
 
 "${oci[@]}" build --pull=missing --build-arg "BASE_IMAGE=$base" -t "$image" -f "$containerfile" \
   "$repo/tools/dev-test-container"
-"${oci[@]}" volume create "$cache_volume" >/dev/null
-trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
+if [ "$keep_cache" = 1 ]; then
+  "${oci[@]}" volume exists "$cache_volume" || "${oci[@]}" volume create "$cache_volume" >/dev/null
+else
+  "${oci[@]}" volume create "$cache_volume" >/dev/null
+  trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
+fi
 # Resolve the pinned Go module and provision Node/corepack/pnpm while the
 # container has network access. The same cache is mounted into the offline run.
 "${oci[@]}" run --rm --name "$container-warm" \
@@ -90,7 +105,8 @@ trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
   -e COREPACK_HOME=/cache/corepack -e BASHY_BIN_CACHE=/cache/bashy \
   -e npm_config_store_dir=/cache/pnpm-store -e pnpm_config_store_dir=/cache/pnpm-store \
   -e npm_config_offline=true -e pnpm_config_offline=true \
-  -e "BASHY_TEST_TARGET=$target" \
+  -e "BASHY_TEST_TARGET=$target" -e "BASHY_TEST_GROUPS=$groups" \
+  -e "BASHY_TEST_GROUP_TIMEOUT=${BASHY_TEST_GROUP_TIMEOUT:-45m}" \
   -v "$cache_volume:/cache" \
   -v "$dhnt/bashy:/source/bashy:ro" -v "$dhnt/sh:/source/sh:ro" \
   -v "$dhnt/coreutils:/source/coreutils:ro" -v "$dhnt/readline:/source/readline:ro" \
@@ -106,5 +122,11 @@ trap '"${oci[@]}" volume rm "$cache_volume" >/dev/null 2>&1 || true' EXIT
     cd /work/bashy
     mkdir -p bin
     go build -o bin/bashy ./cmd/bashy
+    if [ -n "$BASHY_TEST_GROUPS" ]; then
+      rc=0
+      scripts/test-groups.sh run $BASHY_TEST_GROUPS || rc=$?
+      cat bin/test-groups/*.tsv
+      exit "$rc"
+    fi
     make "$BASHY_TEST_TARGET"
   '

@@ -1,0 +1,75 @@
+# Test groups: every package of `go list ./...` (union over linux, darwin and
+# windows) belongs to exactly ONE group. `scripts/test-groups.sh --check`
+# enforces it fail-closed. Spec: docs/todo/45786df1114b-*.md "Test groups".
+#
+# Format: <group> <package> [<Test>|<Test>...]
+#   Without a test list the line is the package's home: the whole package runs
+#   in that group. A package must have exactly one home line.
+#   With a test list (e2e only) those top-level tests run in e2e with -run and
+#   the home group runs the package with the matching -skip.
+#
+# core/agentos/frontend/tooling/examples reuse Go's content-keyed test cache;
+# e2e always runs fresh (-count=1).
+
+# 1 core: shipped libraries (`go list -deps ./cmd/bashy ./cmd/bash ./cmd/sh`)
+# plus the small internal/pkg libraries the table places with them.
+core ./dhnt
+core ./skills
+core ./internal/tmpl
+core ./internal/httpproxy
+core ./internal/installpair
+core ./internal/transcribecontract
+core ./internal/interactiveprobe
+core ./internal/core
+core ./internal/transcribeseed
+core ./internal/agentos/activity
+core ./internal/agentos/session
+core ./pkg/ladder
+core ./pkg/harnessrunner
+core ./pkg/runner
+
+# 2 agentos (shipped): its own shard.
+agentos ./internal/agentos
+
+# 3 front end (shipped).
+frontend ./internal/cli
+frontend ./cmd/bashy
+frontend ./cmd/bash
+frontend ./cmd/sh
+
+# 4 release tooling: tools/* except elfaudit/productgo, scripts, native.
+tooling ./internal/corpuslocales
+tooling ./native
+tooling ./scripts
+tooling ./tools/agentic-example
+tooling ./tools/bash53aggregate
+tooling ./tools/bash53fixtures
+tooling ./tools/bash53locales
+tooling ./tools/bash53suite
+tooling ./tools/bashysignalprobe
+tooling ./tools/installbashy
+tooling ./tools/interactive-depth
+tooling ./tools/licensegate
+tooling ./tools/posix-pty-windows
+tooling ./tools/releaseeligibility
+tooling ./tools/repairprofile
+tooling ./tools/verifyhost
+tooling ./tools/windowswslocale
+tooling ./tools/yashsuite
+tooling ./tools/ztst
+
+# 5 example apps.
+examples ./examples/defaults
+examples ./examples/desk
+examples ./examples/local-knowledge/kb-ui
+examples ./examples/outpost-profile
+examples ./examples/satellite-member
+examples ./examples/transcribe/adapters
+
+# 6 binary e2e: always fresh. The bash53 86-fixture gate stays `make test-bash`
+# / `make test-bash-container`.
+e2e ./tools/elfaudit
+e2e ./tools/productgo
+# cmd/bashy tests that build the product binary (startup, inherited-ignore,
+# one-binary routes); the rest of cmd/bashy stays in frontend.
+e2e ./cmd/bashy TestAgentExternalCommandLatency|TestCoreRouteOneFileAndCommandCRUD|TestSingleBinaryInheritedIgnoredSignals|TestPureGoSingleBinaryInheritedIgnoredSignals|TestInheritedIgnoreDuringStartup|TestOneBinaryShellAndUtilityRoutes|TestSourceRoute

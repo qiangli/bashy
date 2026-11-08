@@ -98,6 +98,76 @@ base with `BASHY_TEST_CONTAINERFILE`; its packages, shell, locales, accounts,
 and service model must satisfy the same tests. The checked-in default is the
 digest-pinned Ubuntu 24.04 substrate used by the development POSIX lanes.
 
+## Test groups
+
+`go test ./...` is split into six named groups so lanes can run in parallel and
+skip unchanged work. `scripts/test-groups.txt` is the manifest; the spec is the
+"Test groups" table of story `45786df1114b`.
+
+| Group | Contents | Cache |
+|---|---|---|
+| `core` | shipped libraries (`go list -deps ./cmd/bashy ./cmd/bash ./cmd/sh`) and small internal/pkg libraries | reuse |
+| `agentos` | `internal/agentos` | reuse |
+| `frontend` | `internal/cli`, `cmd/bashy`, `cmd/bash`, `cmd/sh` | reuse |
+| `tooling` | `tools/*` except elfaudit/productgo, `scripts`, `native` | reuse |
+| `examples` | `examples/*` in the root module | reuse |
+| `e2e` | `tools/elfaudit`, `tools/productgo`, `cmd/bashy` binary-building tests | always fresh (`-count=1`) |
+
+```sh
+make test-groups-check                 # union == go list ./... (linux+darwin+windows), one group each
+scripts/test-groups.sh --list          # group -> packages
+make test-group G="core agentos"       # parallel local lanes
+scripts/test-groups.sh --dry-run run e2e
+```
+
+`--check` fails closed on a package with no group, a package in two groups, an
+unknown package or group, or a split-out test name that does not exist. A
+package that mixes unit tests with binary-building tests keeps its home group;
+the manifest names those tests on an `e2e` line, which runs them with `-run`
+while the home group runs the package with the matching `-skip`. A manifest
+entry whose directory has its own `go.mod` is a nested module and runs as
+`go -C <dir> test ./...`, so packages can move out of the root module without
+breaking the check.
+
+Each run writes `bin/test-groups/<group>.log` and `<group>.tsv` (package,
+`ok`/`FAIL`/`notests`, seconds, label). The label is `reuse` when `go test`
+printed `(cached)`: the result was replayed from Go's content-keyed test cache
+because the package, its dependencies, flags, environment and opened files are
+unchanged. `fresh` means the test binary actually ran. Evidence for a candidate
+should report both counts; `e2e` rows are always `fresh`.
+`BASHY_TEST_GROUP_TIMEOUT` (default `45m`) is the `go test -timeout`.
+
+Reuse needs a persistent cache. In the container lane:
+
+```sh
+BASHY_TEST_KEEP_CACHE=1 BASHY_TEST_GROUPS="agentos frontend" make test-self-container
+```
+
+`BASHY_TEST_KEEP_CACHE=1` keeps the volume `bashy-self-cache-<lane>-<go.sum
+cksum>` (modules, build and test cache) instead of deleting it on exit; a
+`go.sum` change starts a new volume, and stale ones are removed by their owner.
+`BASHY_TEST_GROUPS` runs the named groups instead of `make $BASHY_TEST_TARGET`
+and prints the per-group TSV. Without either variable the lane behaves as
+before.
+
+Sharding across the test hosts: give each host a fixed set of groups and a
+stable lane per shard so its kept cache stays warm, for example
+
+```sh
+# the second (heavy) test host
+BASHY_TEST_LANE=g-agentos  BASHY_TEST_KEEP_CACHE=1 BASHY_TEST_GROUPS=agentos BASHY_TEST_CPUS=4 make test-self-container
+# the Linux gate VM on the Windows test host
+BASHY_TEST_LANE=g-examples BASHY_TEST_KEEP_CACHE=1 BASHY_TEST_GROUPS=examples make test-self-container
+BASHY_TEST_LANE=g-rest     BASHY_TEST_KEEP_CACHE=1 BASHY_TEST_GROUPS="core frontend tooling" make test-self-container
+BASHY_TEST_LANE=g-e2e      BASHY_TEST_GROUPS=e2e make test-self-container
+```
+
+Keep `agentos` and `examples` (the two longest groups) on different hosts, and
+run `make test-bash-container` (the 86-fixture gate, outside these groups)
+beside `e2e`. Each host claims itself with `bashy claim host:<role>` first.
+The union of all shards must be all six groups; `make test-groups-check` proves
+the groups cover `go list ./...`.
+
 ## POSIX A/B/C/D examples
 
 In the sibling `vsc-pcts-harness-kit` checkout:

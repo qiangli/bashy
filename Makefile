@@ -635,6 +635,19 @@ test-bash-container-mode:
 test-self-container:
 	@BASHY_TEST_OCI="$${BASHY_TEST_OCI:-bashy podman}" scripts/test-self-container.sh
 
+## test-groups-check: Fail closed unless every package of `go list ./...` has
+## exactly one test group in scripts/test-groups.txt.
+.PHONY: test-groups-check test-group
+test-groups-check:
+	GOWORK=off scripts/test-groups.sh --check
+
+## test-group: Run named test groups as parallel local lanes, e.g.
+## make test-group G="core agentos". e2e always runs fresh (-count=1); the
+## other groups reuse Go's content-keyed test cache.
+test-group:
+	@test -n "$(G)" || { echo 'test-group: set G="core agentos frontend tooling examples e2e"' >&2; exit 2; }
+	GOWORK=off scripts/test-groups.sh run $(G)
+
 ## test-bash-list: List all available bash 5.3 tests
 test-bash-list: test-bash-fixtures $(BIN_DIR)/bash53suite
 	@$(BIN_DIR)/bash53suite -tests-dir $(BASH_TESTS_DIR) -list
