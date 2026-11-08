@@ -17,6 +17,10 @@ var shapeAppLookup = func(name string) (shape.App, error) {
 	if name == "console" {
 		return webconsole.ConsoleShapeApp(src.Home()), nil
 	}
+	// bashy itself is a reserved record-only target, never a registered app.
+	if shape.IsBashyTarget(name) {
+		return shape.BashyApp(), nil
+	}
 	a, ok := fleet.New().App(name)
 	if !ok {
 		return shape.App{}, fmt.Errorf("shape: app %q is not registered", name)
@@ -117,7 +121,7 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 			return svc.PreviewProgram(ctx, caller, r.ID)
 		}
 	}
-	wish := shape.Wish{Request: r.Request, Page: r.Page, Element: r.Element, Story: r.Story, Todo: r.Todo}
+	wish := shape.Wish{Request: r.Request, Page: r.Page, Element: r.Element, Story: r.Story, Todo: r.Todo, Reproduction: r.Reproduction, Expected: r.Expected, Evidence: r.Evidence}
 	if r.Verb == "wish" {
 		root, err := shapeTrackingRoot(r.Actor)
 		if err != nil {
@@ -145,7 +149,7 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 		if r.From != "" {
 			return svc.Import(ctx, caller, wish, r.From)
 		}
-		if hostKind {
+		if hostKind || shape.IsBashyTarget(app.Name) {
 			return svc.Wish(ctx, caller, wish)
 		}
 		return webconsole.LocalShapeWish(ctx, app, caller, opts, wish)

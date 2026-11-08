@@ -112,6 +112,7 @@ import (
 	"github.com/qiangli/yoke/pkg/pair"
 	"github.com/qiangli/yoke/pkg/policy/coord"
 	"github.com/qiangli/yoke/pkg/principal"
+	"github.com/qiangli/yoke/pkg/recommend"
 	"github.com/qiangli/yoke/pkg/resources"
 	"github.com/qiangli/yoke/pkg/role/meetroom"
 	"github.com/qiangli/yoke/pkg/room"
@@ -2628,7 +2629,7 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// is re-executed isolated and inside @limit under `bashy limit`, which
 	// wraps the contained command so its guard watches that whole tree. In
 	// agent mode the host floors (limit.go) judge the command first.
-	mws = append(mws, outputMW, autofix.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), gnuMakeHandler(), hostConvertersHandler(), coreutilsshell.Handler(), registeredHandler())
+	mws = append(mws, outputMW, autofix.Handler(), recommend.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), gnuMakeHandler(), hostConvertersHandler(), coreutilsshell.Handler(), registeredHandler())
 	if agentModeForEnv(env) {
 		mws = append(mws, hostFloorHandler())
 	}

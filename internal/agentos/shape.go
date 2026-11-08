@@ -18,6 +18,7 @@ type shapeCLIRequest struct {
 	IncidentKind, IncidentPath                                                   string
 	Verb, App, ID, Request, From, User, Actor, Agent, Story, Todo, Page, Element string
 	Remote, CookieFile, Console                                                  string
+	Reproduction, Expected, Evidence                                             string
 	To                                                                           []string
 	All, Preview, Repair                                                         bool
 	Contract                                                                     []string
@@ -66,6 +67,7 @@ func bashyShapeCmd() *cobra.Command {
 	} {
 		spec := spec
 		var from, story, todo, page, element, incidentKind, incidentPath, incidentID string
+		var reproduction, expected, evidence string
 		var to, contract []string
 		var all, preview, repair bool
 		checkArgs := cobra.RangeArgs(spec.min, spec.max)
@@ -79,6 +81,9 @@ func bashyShapeCmd() *cobra.Command {
 			sub.Flags().StringVar(&todo, "todo", "", "link an existing todo")
 			sub.Flags().StringVar(&page, "page", "", "request's app page context")
 			sub.Flags().StringVar(&element, "element", "", "request's element context")
+			sub.Flags().StringVar(&reproduction, "reproduction", "", "defect report: how to reproduce")
+			sub.Flags().StringVar(&expected, "expected", "", "defect report: expected behavior")
+			sub.Flags().StringVar(&evidence, "evidence", "", "defect report: observed evidence")
 		}
 		if spec.verb == "submit" {
 			sub.Flags().StringVar(&story, "story", "", "link submission to an existing story")
@@ -103,7 +108,7 @@ func bashyShapeCmd() *cobra.Command {
 			sub.Flags().StringSliceVar(&contract, "contract", nil, "explicitly approved contract removals")
 		}
 		sub.RunE = func(c *cobra.Command, args []string) error {
-			r := shapeCLIRequest{Verb: spec.verb, App: args[0], From: from, Agent: o.Agent, Story: story, Todo: todo, Page: page, Element: element, Remote: o.Remote, CookieFile: o.CookieFile, Console: o.Console, To: to, All: all, Preview: preview, Repair: repair, Contract: contract}
+			r := shapeCLIRequest{Verb: spec.verb, App: args[0], From: from, Agent: o.Agent, Story: story, Todo: todo, Page: page, Element: element, Reproduction: reproduction, Expected: expected, Evidence: evidence, Remote: o.Remote, CookieFile: o.CookieFile, Console: o.Console, To: to, All: all, Preview: preview, Repair: repair, Contract: contract}
 			r.IncidentKind, r.IncidentPath = incidentKind, incidentPath
 			if spec.verb == "preview" && len(args) > 2 {
 				r.PreviewArgs = append([]string(nil), args[2:]...)
