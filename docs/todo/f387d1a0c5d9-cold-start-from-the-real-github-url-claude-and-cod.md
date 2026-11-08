@@ -11,3 +11,5 @@ sprint_title: 'README as agent bootstrap: human hook + agent skill, one consent 
 ---
 
 Fresh container, non-root, no bashy: agent told 'Set up bashy from https://github.com/qiangli/bashy'. Pass = one consent ask, install exit 0, skill+MCP+shell wired, new login session reports skill loaded, MCP connected, shell bashy. Draft-mounted run on 2026-11-07 passed for claude.
+
+2026-11-08 progress: claude PASSED from the real URL after 60b38856 (R1 one consent ask; R2 install, path, skill, MCP, install-agent exit 0; R3 MCP connected, shell bashy). codex BLOCKED: both vault OpenAI keys (dragon-openai, openai) return "Quota exceeded"; needs a funded key or the operator's codex subscription login in the sandbox.
