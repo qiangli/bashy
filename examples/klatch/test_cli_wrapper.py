@@ -91,6 +91,15 @@ class Wrapper(unittest.TestCase):
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(json.loads(r.stdout)["result"]["in"]["codeBlock"], True)
 
+    def test_sealed_flag_is_not_secret(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = run(["conversations-create", "name=x", "sealed:=false"], {"KLATCH_HELPER": str(self.fake(d))})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertIs(json.loads(r.stdout)["result"]["in"]["sealed"], False)
+        r = run(["conversations-create", 'o:={"sealed":false,"sealPassword":"x"}'], {"KLATCH_HELPER": "/bin/true"})
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(json.loads(r.stderr)["error"]["code"], "SECRET_VIA_ARGV")
+
     def test_post_file_workflow(self):
         with tempfile.TemporaryDirectory() as d:
             r = run(["post-file", "channelId=c1", "text=t", "assistant=Bot", "path=/x"], {"KLATCH_HELPER": str(self.fake(d))})

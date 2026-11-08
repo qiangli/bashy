@@ -66,6 +66,7 @@ fail() { # fail CODE STATUS
 
 secret_key() { # credential-like field name (case-insensitive, any depth)
   local lk=${1,,}
+  [[ $lk == sealed ]] && return 1   # nonsecret boolean flag, not the seal password
   [[ $lk == @(code|mfa|otp|totp|pin) || $lk == *code || $lk == *@(mfa|totp|passw|passphrase|token|secret|privatekey|private_key|authorization|credential|apikey|api_key|cookie|bearer|recovery|seal|verification)* ]]
 }
 
