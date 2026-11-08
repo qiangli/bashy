@@ -30,6 +30,10 @@ func dispatchEngine(arg string) {
 	}
 	switch name {
 	case "ollama":
+		if isOllamaStubHelp(os.Args[2:]) {
+			fmt.Fprint(os.Stdout, ollamaStubHelp())
+			dispatchExit(0)
+		}
 		dispatchOllamaEngine()
 	case "podman":
 		bin := resolveEngineBinary(name)
@@ -180,6 +184,42 @@ func exeSuffix() string {
 		return ".exe"
 	}
 	return ""
+}
+
+// isOllamaStubHelp reports whether a default-build `bashy ollama`
+// invocation asks for help. Any -h/--help flag selects help regardless of
+// position, so `bashy ollama --help --format classic` is help too.
+func isOllamaStubHelp(args []string) bool {
+	for _, a := range args {
+		if a == "-h" || a == "--help" {
+			return true
+		}
+	}
+	return false
+}
+
+// ollamaStubHelpPrefix sketches the engines build's ollama surface so
+// `--help` stays useful where no engine is linked.
+const ollamaStubHelpPrefix = `usage: bashy ollama <command> [flags]
+
+Managed local LLM runtime — isolated daemon, own port/models.
+
+Commands:
+  serve                  bind the ollama HTTP server (foreground)
+  pull MODEL             download a model
+  list                   list local models
+  ps                     list running models
+  show MODEL             show model metadata
+  run MODEL [PROMPT...]  run a model — interactive REPL when no PROMPT, one-shot otherwise
+  status [--json]        read-only: how this build reaches ollama
+  version                show version information
+
+`
+
+// ollamaStubHelp is the default-build `bashy ollama --help` text: usage
+// plus the note that local inference needs the engines build.
+func ollamaStubHelp() string {
+	return ollamaStubHelpPrefix + engineNotFoundMessage("ollama")
 }
 
 func sameFile(a, b string) bool {
