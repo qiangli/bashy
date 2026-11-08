@@ -7,7 +7,7 @@ Fields:
   KIND      authentication path: subscription, api, or local; not billing mode
   PROVIDER  backend/provider family used for authentication and routing
   TARGET    default provider-side id passed to a tool; a tool-specific id may
-            override it, which `agents show NAME` displays
+            override it, which `agent show NAME` displays
   ALIASES   alternate accepted names, including a derived family alias
   RING      source of the selected definition (explained below)
 
