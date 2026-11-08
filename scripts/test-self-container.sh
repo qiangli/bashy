@@ -26,7 +26,7 @@ case "$target" in ''|*[!A-Za-z0-9_.-]*) echo "test-self-container: unsafe BASHY_
 # BASHY_TEST_GROUPS="agentos frontend" runs those scripts/test-groups.sh groups
 # instead of `make $BASHY_TEST_TARGET`.
 groups=${BASHY_TEST_GROUPS:-}
-case "$groups" in *[!a-z\ ]*) echo "test-self-container: unsafe BASHY_TEST_GROUPS: $groups" >&2; exit 2 ;; esac
+case "$groups" in *[!a-z0-9\ ]*) echo "test-self-container: unsafe BASHY_TEST_GROUPS: $groups" >&2; exit 2 ;; esac
 
 # Bashy's private Podman machine must not depend on unrelated entries in the
 # operator's SSH known_hosts file. Use its API socket directly on macOS.
