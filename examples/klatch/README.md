@@ -41,5 +41,25 @@ matched by subject), so they never duplicate.
 Tests (fake HTTP server, no real server needed):
 `python3 -m unittest examples/klatch/test_provision.py`
 
+## Participant CLI verbs
+
+Beyond `setup|provision|status`, `bashy klatch VERB` forwards to the Klatch
+`klatch` executable (app/client/cli) and requires **Node >= 22**. Set
+`KLATCH_CLI` to its `dist/main.js` (run with `node`) or to an executable;
+otherwise `klatch` on PATH is used. Missing CLI or Node reports
+`{"ok":false,"error":{"code":"CLI_NOT_FOUND"|"NODE_REQUIRED"}}` on stderr.
+
+Verbs: `auth-login auth-status auth-logout seal-unlock contacts-list
+contacts-invite contacts-accept conversations-list conversations-show
+conversations-create conversations-rename conversations-leave members-list
+members-add members-remove messages-list messages-show messages-send
+messages-edit messages-delete attachments-upload attachments-download watch`.
+
+JSON input comes from stdin (default) or `--input FILE|-`; `--session FILE`
+and `--json` are accepted. Success prints `{"ok":true,"result":...}`; failure
+prints `{"ok":false,"error":{"code":...}}` on stderr. `watch` emits one JSON
+object per line. Outgoing assistant text is prefixed `[Assistant: NAME]` by the
+CLI. Wrapper tests: `python3 -m unittest examples/klatch/test_cli_wrapper.py`.
+
 Klatch is based on Databag by Roland Osborne
 (github.com/balzack/databag), Apache-2.0.

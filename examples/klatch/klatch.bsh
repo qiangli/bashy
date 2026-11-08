@@ -3,7 +3,7 @@
 ~~~skill as guide
 ---
 name: klatch
-description: Bootstrap and provision a running Klatch chat server, idempotently, with admin, accounts, mutual contacts and groups.
+description: Bootstrap and provision a running Klatch chat server, and drive it as a participant (auth, contacts, conversations, members, messages, attachments, watch) through the Klatch CLI.
 metadata:
   requires: "has=bashy"
 ---
@@ -16,7 +16,19 @@ contacts between group owner and members and groups. `provision` skips the admin
 steps; `status` reports reachability, account count and groups. Output is JSON
 handles to guids and group keys to ids. Reruns create no duplicates.
 Passwords are vault references via `bashy secret show REF`; never put one in
-the config or on a command line. See `examples/klatch/README.md`.
+the config or on a command line.
+
+Every other verb is the participant CLI contract of the Klatch `klatch`
+executable, run on Node (>=22, required): auth-login|auth-status|auth-logout,
+seal-unlock, contacts-list|invite|accept, conversations-list|show|create|rename|leave,
+members-list|add|remove, messages-list|show|send|edit|delete,
+attachments-upload|download, and watch. JSON input arrives on stdin (default) or
+`--input FILE|-`; `--session FILE` and `--json` are accepted. Output is
+`{"ok":true,"result":...}` or `{"ok":false,"error":{"code":...}}` on stderr;
+`watch` emits JSONL. Outgoing assistant text is prefixed `[Assistant: NAME]` by
+the CLI. Locate the CLI with `KLATCH_CLI` (a `dist/main.js`, run with `node`, or
+an executable); otherwise `klatch` on PATH is used.
+See `examples/klatch/README.md`.
 ~~~
 
 set -euo pipefail
@@ -35,8 +47,34 @@ if [[ ${1:-} == --contract ]]; then
   echo 'sokilili meitorikusu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini'
   exit
 fi
-if (( $# != 2 )); then
-  echo 'Usage: klatch setup|provision|status CONFIG.json' >&2
-  exit 2
-fi
-exec python3 "$here/provision.py" "$1" "$2"
+case ${1:-} in
+  setup|provision|status)
+    if (( $# != 2 )); then
+      echo 'Usage: klatch setup|provision|status CONFIG.json' >&2
+      exit 2
+    fi
+    exec python3 "$here/provision.py" "$1" "$2" ;;
+  auth-login|auth-status|auth-logout|seal-unlock|contacts-list|contacts-invite|contacts-accept|\
+  conversations-list|conversations-show|conversations-create|conversations-rename|conversations-leave|\
+  members-list|members-add|members-remove|messages-list|messages-show|messages-send|messages-edit|messages-delete|\
+  attachments-upload|attachments-download|watch|--help|help)
+    cli=${KLATCH_CLI:-}
+    if [[ -z $cli ]]; then
+      if ! cli=$(command -v klatch 2>/dev/null) || [[ $cli == "${BASH_SOURCE[0]}" ]]; then
+        echo '{"ok":false,"error":{"code":"CLI_NOT_FOUND"}}' >&2
+        exit 1
+      fi
+    fi
+    case $cli in
+      *.js|*.mjs|*.cjs)
+        if ! command -v node >/dev/null 2>&1; then
+          echo '{"ok":false,"error":{"code":"NODE_REQUIRED"}}' >&2
+          exit 1
+        fi
+        exec node "$cli" "$@" ;;
+      *) exec "$cli" "$@" ;;
+    esac ;;
+  *)
+    echo 'Usage: klatch setup|provision|status CONFIG.json | VERB [--input FILE|-] [--session FILE] [--json]' >&2
+    exit 2 ;;
+esac
