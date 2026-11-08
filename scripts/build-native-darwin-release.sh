@@ -28,7 +28,7 @@ build_yoke_dir=$(GOWORK=off go list -m -f '{{.Dir}}' github.com/qiangli/yoke)
  || { echo "missing verified runner: run scripts/fetch-signed-runner.sh darwin $arch first" >&2; exit 1; }
 CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -tags embed_runner -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag' -X 'github.com/qiangli/bashy/internal/cli.buildID=$source_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
 ./scripts/verify-bashy-signal-artifact.sh "$stage/bashy"
-go run ./tools/bashysignalprobe "$stage/bashy"
+scripts/go-tool.sh bashysignalprobe "$stage/bashy"
 ./scripts/verify-meet-spa-release.sh "$stage/bashy" "darwin_$arch"
 ./scripts/generate-release-sbom.sh "$stage/bashy" darwin "$arch" "${RUNNER_TEMP:-/tmp}/darwin-sbom"
 # ../outpost is the go.mod-pinned outpost module (scripts/resolve-pinned-siblings.sh).

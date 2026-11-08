@@ -49,7 +49,7 @@ wsl.exe -d Ubuntu -u root -- sh -c '
 
 mkdir -p bin
 wrapper_posix="$(pwd)/bin/windows-wsl-locale.exe"
-CGO_ENABLED=0 go build -o "$wrapper_posix" ./tools/windowswslocale
+CGO_ENABLED=0 GOWORK=off go -C tools/windowswslocale build -o "$wrapper_posix" .
 wrapper_windows=$(cygpath -aw "$wrapper_posix")
 export BASHY_WSL_DISTRO=Ubuntu
 export BASHY_WSL_EXE="$wsl_windows"

@@ -48,7 +48,7 @@ go build -o bin/bash ./cmd/bash || exit 2
 # shellcheck disable=SC2086
 run_arm() { # $1=label $2=shell-cmd
   echo "running $1 arm…" >&2
-  go run ./tools/ztst -shell "$2" -zsh "$ZSH_BIN" -testdir "$ZT/Test" $CLASSES \
+  scripts/go-tool.sh ztst -shell "$2" -zsh "$ZSH_BIN" -testdir "$ZT/Test" $CLASSES \
     > "$OUT/$1.tsv" 2> "$OUT/$1.log" || { echo "$1 arm runner failed" >&2; exit 2; }
 }
 run_arm zsh "$ZSH_BIN -f"

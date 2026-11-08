@@ -9,9 +9,9 @@
 set -eu
 OUT=${1:-dist/sbom-matrix}
 mkdir -p "$OUT"
-go run ./tools/licensegate
+scripts/go-tool.sh licensegate
 ENGINE_TAGS=${ENGINE_TAGS:-bashy_engines,bashy_host,fb_archives}
-go run ./tools/licensegate -tags "$ENGINE_TAGS" ./cmd/bashy
+scripts/go-tool.sh licensegate -tags "$ENGINE_TAGS" ./cmd/bashy
 go build -o "$OUT/bashy" ./cmd/bashy
 if [ -z "${SKIP_ENGINES:-}" ]; then
 	go build -tags "$ENGINE_TAGS" -o "$OUT/bashy-engines" ./cmd/bashy

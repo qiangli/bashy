@@ -125,7 +125,9 @@ jobs:
         run: |
           set -euo pipefail
           out="$RUNNER_TEMP/host"
-          go run ./tools/verifyhost \
+          # source_sha may predate tools/verifyhost/go.mod.
+          verifyhost() { if [ -f tools/verifyhost/go.mod ]; then scripts/go-tool.sh verifyhost "$@"; else go run ./tools/verifyhost "$@"; fi; }
+          verifyhost \
             "$out/bashy-host-linux-$ARCH" \
             "$out/bashy-host-linux-$ARCH.sigstore.json" \
             "$out/host-asset-manifest-linux-$ARCH.json" \

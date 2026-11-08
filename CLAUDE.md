@@ -187,6 +187,15 @@ dhnt umbrella the root go.work builds the live sibling submodules instead.
 The shell runtime stamp (`transpile.ShellRuntimeCommit`) is the sh fork
 version on the go.mod replace line.
 
+Release tooling and example apps that nothing shipped imports are their own
+modules, so the root `go test ./...` covers only the product: `tools/{bash53aggregate,bashysignalprobe,licensegate,releaseeligibility,verifyhost,windowswslocale,yashsuite,ztst}`
+and `examples/{defaults,desk,local-knowledge/kb-ui,outpost-profile,satellite-member}`
+each have a `go.mod` (module path = import path, so no code moved). Run a tool
+with `scripts/go-tool.sh NAME ARGS` (keeps the caller's cwd); test one with
+`GOWORK=off go -C tools/NAME test ./...`. Tools importing bashy `internal/`
+packages, plus `tools/{elfaudit,productgo}` (binary e2e, product build path),
+stay in the root module. A nested module restates only the replaces it needs.
+
 **A local umbrella build cannot catch code that needs a newer sibling than
 go.mod pins** — the go.work hides it, and CI (no workspace) fails with
 `no required module provides package` for code that plainly exists. So

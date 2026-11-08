@@ -39,17 +39,19 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// moduleRoot is the bashy repository root (the directory holding cmd/bashy);
+// this example is its own Go module, so the nearest go.mod is not it.
 func moduleRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, _ := runtime.Caller(0)
 	dir := filepath.Dir(file)
 	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+		if _, err := os.Stat(filepath.Join(dir, "cmd", "bashy")); err == nil {
 			return dir
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			t.Fatal("go.mod not found")
+			t.Fatal("bashy repository root (cmd/bashy) not found above test file")
 		}
 		dir = parent
 	}

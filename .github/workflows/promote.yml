@@ -153,8 +153,10 @@ jobs:
             https://*) curl -fsSL --retry 3 -o /tmp/tier-verdict.json "$TIER_VERDICT" ;;
             *) cp "$TIER_VERDICT" /tmp/tier-verdict.json ;;
           esac
-          go run ./tools/releaseeligibility --signed-assets
-          go run ./tools/releaseeligibility --tier-verdict /tmp/tier-verdict.json --commit "$COMMIT"
+          # The candidate checkout may predate tools/releaseeligibility/go.mod.
+          re() { if [ -f tools/releaseeligibility/go.mod ]; then scripts/go-tool.sh releaseeligibility "$@"; else go run ./tools/releaseeligibility "$@"; fi; }
+          re --signed-assets
+          re --tier-verdict /tmp/tier-verdict.json --commit "$COMMIT"
       - name: download the tested pre-release assets
         env:
           GH_TOKEN: ${{ github.token }}

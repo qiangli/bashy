@@ -38,10 +38,10 @@ if [[ -n "$out" ]]; then
   mkdir -p "$out"
   # Save JSON report if not already requested as JSON
   if (( ! has_json )); then
-    go run ./tools/licensegate -json ${args[@]+"${args[@]}"} > "$out/licensegate.json" 2>/dev/null || true
+    scripts/go-tool.sh licensegate -json ${args[@]+"${args[@]}"} > "$out/licensegate.json" 2>/dev/null || true
   fi
   # Run gate, save findings, and stream to stdout
-  go run ./tools/licensegate ${args[@]+"${args[@]}"} | tee "$out/findings.txt"
+  scripts/go-tool.sh licensegate ${args[@]+"${args[@]}"} | tee "$out/findings.txt"
 else
-  exec go run ./tools/licensegate ${args[@]+"${args[@]}"}
+  exec scripts/go-tool.sh licensegate ${args[@]+"${args[@]}"}
 fi

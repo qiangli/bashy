@@ -20,7 +20,7 @@ if (
 	cd "$root"
 	unset GOOS GOARCH CGO_ENABLED
 	go run ./tools/elfaudit --bashy-signal "$artifact" &&
-		go run ./tools/releaseeligibility "$artifact"
+		scripts/go-tool.sh releaseeligibility "$artifact"
 ); then
 	exit 0
 fi

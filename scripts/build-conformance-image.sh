@@ -74,7 +74,7 @@ yash)
   log "building linux/$ARCH testee + yashsuite runner…"
   mkdir -p "$CTX/bin/bash-linux-$ARCH"
   GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 "${go_cmd[@]}" build -trimpath -o "$CTX/bin/bash-linux-$ARCH/bash" ./cmd/bash
-  GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 "${go_cmd[@]}" build -trimpath -o "$CTX/bin/yashsuite-linux-$ARCH" ./tools/yashsuite
+  GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 GOWORK=off "${go_cmd[@]}" -C tools/yashsuite build -trimpath -o "$CTX/bin/yashsuite-linux-$ARCH" .
   log "staging yash tests/ and pruning to the manifest's shell-only -p fixtures…"
   cp -R "$YT/tests" "$CTX/yashtests"
   # Keep exactly the -p fixtures the manifest lists; drop the rest so
@@ -86,7 +86,7 @@ yash)
       printf '%s\n' "$keep" | grep -qxF "$b" || rm -f "$t"
     done )
   kept=$(ls "$CTX/yashtests"/*-p.tst | wc -l | tr -d ' ')
-  log "baked $kept shell-only -p fixtures (manifest chunk_count=$("${go_cmd[@]}" run ./tools/yashsuite --chunks-manifest yash-chunks.json --chunk-count))"
+  log "baked $kept shell-only -p fixtures (manifest chunk_count=$(GOWORK=off "${go_cmd[@]}" -C tools/yashsuite run . --chunks-manifest "$REPO/yash-chunks.json" --chunk-count))"
   cp yash-chunks.json "$CTX/yash-chunks.json"
   cp tools/bash53-container/Containerfile.k8s.yash "$CTX/Containerfile"
   sed -i.bak "s/^ENV YASH_ARCH=.*/ENV YASH_ARCH=$ARCH/" "$CTX/Containerfile" && rm -f "$CTX/Containerfile.bak"
