@@ -98,16 +98,36 @@ func SkillDescription() string {
 
 // Common-option support statuses in the help footer.
 const (
-	optSupported = "supported" // the command declares the flag itself
-	optMapped    = "mapped"    // handled by the engine or a native spelling
-	optMissing   = "missing"   // unavailable natively; use bashy adapt
+	optSupported   = "supported"   // the command declares the flag itself
+	optMapped      = "mapped"      // handled by the engine or a native spelling
+	optMissing     = "missing"     // unavailable natively; use bashy adapt
+	optUnavailable = "unavailable" // declared but not yet implemented
 )
+
+// unavailableCommonOptions names (command path, option) pairs that are
+// declared but not yet implemented. The adapt/since row exists because the
+// yoke adapt command declares --since while execution still requires the
+// shared S19 cursor binding seam (yoke pkg/adapt Build refuses --since
+// until that seam lands); help must report it as unavailable, never as
+// working.
+var unavailableCommonOptions = map[string]map[string]bool{
+	"adapt": {"since": true},
+}
+
+// isUnavailableOption reports whether the option is declared-but-unavailable
+// for the command path.
+func isUnavailableOption(commandPath, name string) bool {
+	return unavailableCommonOptions[commandPath][strings.TrimPrefix(name, "--")]
+}
 
 // helpOptionStatus classifies one vocabulary option for a command whose
 // declared long flag names are in declared.
-func helpOptionStatus(o CommonOption, declared map[string]bool) string {
+func helpOptionStatus(commandPath string, o CommonOption, declared map[string]bool) string {
 	name := strings.TrimPrefix(o.Option, "--")
 	if declared[name] {
+		if isUnavailableOption(commandPath, name) {
+			return optUnavailable
+		}
 		return optSupported
 	}
 	if o.Option == "--null" && (declared["zero"] || declared["print0"]) {
@@ -125,14 +145,21 @@ func helpOptionStatus(o CommonOption, declared map[string]bool) string {
 func HelpCommonOptionsFooter(commandPath string, declared map[string]bool) string {
 	var parts []string
 	var missing bool
+	var unavail []string
 	for _, o := range CommonOptionsVocabulary {
-		st := helpOptionStatus(o, declared)
+		st := helpOptionStatus(commandPath, o, declared)
 		missing = missing || st == optMissing
+		if st == optUnavailable {
+			unavail = append(unavail, o.Option)
+		}
 		parts = append(parts, o.Option+"="+st)
 	}
 	line := "Common options for " + commandPath + ": " + strings.Join(parts, " ") + "."
 	if missing {
 		line += " Missing options exit 2 here; for a foreign command or a missing option use `bashy adapt --OPTION -- CMD`."
+	}
+	if len(unavail) > 0 {
+		line += " Unavailable options (" + strings.Join(unavail, ", ") + ") are declared but not yet implemented here; do not use them."
 	}
 	return line + " See `bashy help common-options`."
 }
@@ -150,13 +177,22 @@ func declaredFlagSet(schema tool.ArgSchema) map[string]bool {
 // tool descriptions. MCP verbs take an argv array, so the note names argv
 // spellings rather than inventing structured properties the transport would
 // ignore. Server discovery and `help --format=mcp` share it.
-func MCPCommonOptionsNote(schema tool.ArgSchema) string {
+func MCPCommonOptionsNote(commandPath string, schema tool.ArgSchema) string {
 	declared := declaredFlagSet(schema)
 	var parts []string
+	var unavail []string
 	for _, o := range CommonOptionsVocabulary {
-		parts = append(parts, o.Option+"="+helpOptionStatus(o, declared))
+		st := helpOptionStatus(commandPath, o, declared)
+		if st == optUnavailable {
+			unavail = append(unavail, o.Option)
+		}
+		parts = append(parts, o.Option+"="+st)
 	}
-	return "Common options (argv; missing: bashy adapt --OPTION -- CMD): " + strings.Join(parts, " ") + "."
+	note := "Common options (argv; missing: bashy adapt --OPTION -- CMD): " + strings.Join(parts, " ") + "."
+	if len(unavail) > 0 {
+		note += " Unavailable (" + strings.Join(unavail, ", ") + "): declared but not yet implemented; do not use."
+	}
+	return note
 }
 
 // LexiconTerms returns the adoption terms for the lexicon (18-term cap): lens,
