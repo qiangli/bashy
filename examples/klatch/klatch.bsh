@@ -32,8 +32,8 @@ the CLI. Shaping: fields may be given as `key=value` (string) or `key:=JSON` arg
 instead of stdin (secrets are refused in argv); `KLATCH_ASSISTANT` supplies the
 default `assistant`. Workflow `post-file`: messages-send then attachments-upload
 of `path` onto the new topic, one result. Locate the helper with `KLATCH_HELPER`
-(alias `KLATCH_CLI`; a `dist/main.js` run with `node`, or an executable);
-otherwise `klatch-helper` on PATH is used.
+(a `dist/main.js` run with `node`, or an executable); otherwise `klatch-helper`
+on PATH is used. `KLATCH_ASSISTANT` also defaults `assistant` in stdin/`--input` JSON.
 See `examples/klatch/README.md`.
 ~~~
 
@@ -54,13 +54,19 @@ if [[ ${1:-} == --contract ]]; then
   exit
 fi
 
+usage_text='Usage: klatch setup|provision|status CONFIG.json | VERB [key=value|key:=JSON ...] [--input FILE|-] [--session FILE] [--json] | post-file ...'
 usage() {
-  echo 'Usage: klatch setup|provision|status CONFIG.json | VERB [key=value|key:=JSON ...] [--input FILE|-] [--session FILE] [--json] | post-file ...' >&2
+  printf '{"ok":false,"error":{"code":"USAGE","message":"%s"}}\n' "$usage_text" >&2
   exit 2
 }
 fail() { # fail CODE STATUS
   printf '{"ok":false,"error":{"code":"%s"}}\n' "$1" >&2
   exit "$2"
+}
+
+secret_key() { # credential-like field name (case-insensitive, any depth)
+  local lk=${1,,}
+  [[ $lk == @(code|mfa|otp|totp|pin) || $lk == *code || $lk == *@(mfa|totp|passw|passphrase|token|secret|privatekey|private_key|authorization|credential|apikey|api_key|cookie|bearer|recovery|seal|verification)* ]]
 }
 
 jstr() { # raw string -> JSON string literal (bashy jq has no --arg / -R)
@@ -72,7 +78,7 @@ jstr() { # raw string -> JSON string literal (bashy jq has no --arg / -R)
 }
 
 helper_cmd() { # sets helper=(...) or fails
-  local cli=${KLATCH_HELPER:-${KLATCH_CLI:-}}
+  local cli=${KLATCH_HELPER:-}
   if [[ -z $cli ]]; then
     cli=$(command -v klatch-helper 2>/dev/null) || fail CLI_NOT_FOUND 1
   fi
@@ -94,8 +100,14 @@ case $verb in
     fi
     exec python3 "$here/provision.py" "$1" "$2" ;;
   --help|help)
-    helper_cmd
-    exec "${helper[@]}" --help ;;
+    if [[ -n ${KLATCH_HELPER:-} ]] || command -v klatch-helper >/dev/null 2>&1; then
+      helper_cmd
+      exec "${helper[@]}" --help
+    fi
+    echo "$usage_text"
+    echo "Verbs:$verbs"
+    echo 'Participant verbs need the Klatch Node helper (KLATCH_HELPER or klatch-helper on PATH).'
+    exit 0 ;;
   post-file) ;;
   '') usage ;;
   *) [[ $verbs == *" $verb "* ]] || usage ;;
@@ -103,25 +115,27 @@ esac
 shift
 
 # Parse the shaping surface: key=value / key:=JSON fields plus helper flags.
-json='{}'; shaped=false; session=(); passthru=(); have_input=false
+json='{}'; shaped=false; session=(); passthru=(); have_input=false; input_path=-
 re='^([A-Za-z][A-Za-z0-9_]*)(:?=)(.*)$'
 while (( $# )); do
   case $1 in
     --input|--session)
       (( $# >= 2 )) || usage
-      [[ $1 == --input ]] && have_input=true
+      if [[ $1 == --input ]]; then have_input=true; input_path=$2; fi
       [[ $1 == --session ]] && session=(--session "$2")
       passthru+=("$1" "$2"); shift 2 ;;
     --json) passthru+=(--json); shift ;;
     *)
       [[ $1 =~ $re ]] || usage
       k=${BASH_REMATCH[1]} op=${BASH_REMATCH[2]} v=${BASH_REMATCH[3]}
-      lk=${k,,}   # credential-like names, case-insensitive: refuse before they reach process args
-      if [[ $lk == @(code|mfa|otp|pin) || $lk == *@(passw|passphrase|token|secret|privatekey|private_key|authorization|credential|apikey|api_key|cookie|bearer)* ]]; then
-        fail SECRET_VIA_ARGV 2   # secrets only via private JSON input
-      fi
+      # credential-like names (also nested in :=JSON): refuse before they reach process args
+      if secret_key "$k"; then fail SECRET_VIA_ARGV 2; fi   # secrets only via private JSON input
       if [[ $op == ':=' ]]; then
         vj=$(jq -c 'if length == 1 then .[0] else error("one value") end' <<<"[$v]" 2>/dev/null) || fail INVALID_INPUT 2
+        nested=$(jq -r '.. | objects | keys[]' <<<"$vj" 2>/dev/null) || nested=
+        while IFS= read -r nk; do
+          if [[ -n $nk ]] && secret_key "$nk"; then fail SECRET_VIA_ARGV 2; fi
+        done <<<"$nested"
       else
         vj=$(jstr "$v")
       fi
@@ -130,11 +144,20 @@ while (( $# )); do
   esac
 done
 if [[ $shaped == true && $have_input == true ]]; then fail INVALID_INPUT 2; fi
-if [[ $shaped == true && -n ${KLATCH_ASSISTANT:-} ]]; then
-  case $verb in
-    messages-send|messages-edit|attachments-upload|post-file)
-      json=$(jq -c ".assistant //= $(jstr "$KLATCH_ASSISTANT")" <<<"$json") ;;
-  esac
+assistant_verb=false
+case $verb in messages-send|messages-edit|attachments-upload|post-file) assistant_verb=true ;; esac
+if [[ $assistant_verb == true && -n ${KLATCH_ASSISTANT:-} ]]; then
+  if [[ $shaped == false ]]; then
+    # Default the assistant inside stdin / --input JSON too.
+    [[ $verb != post-file && $input_path == - && -t 0 ]] && fail JSON_INPUT_REQUIRED 2
+    if [[ $input_path == - ]]; then json=$(head -c 1048577) || true
+    else json=$(head -c 1048577 -- "$input_path" 2>/dev/null) || fail INVALID_INPUT 2; fi
+    jq -e 'type == "object"' <<<"$json" >/dev/null 2>&1 || fail INVALID_JSON 2
+    shaped=true; passthru=(); have_input=false
+    [[ ${#session[@]} -gt 0 ]] && passthru+=("${session[@]}")
+    passthru+=(--json)
+  fi
+  json=$(jq -c ".assistant //= $(jstr "$KLATCH_ASSISTANT")" <<<"$json")
 fi
 
 helper_cmd
@@ -158,11 +181,22 @@ fi
 jq -e '(.path|type=="string") and (.channelId!=null) and (.text|type=="string") and (.assistant|type=="string")' \
   <<<"$json" >/dev/null || fail INVALID_INPUT 2
 sent=$(jq -c 'del(.path)' <<<"$json" | "${helper[@]}" messages-send "${sflags[@]}") || exit $?
-topic=$(jq -r '.result | (.id // .topicId // empty)' <<<"$sent") || true
-if [[ -z $topic ]]; then fail INVALID_RESPONSE 1; fi
-if ! up=$(jq -c ".topicId = $(jstr "$topic")" <<<"$json" | "${helper[@]}" attachments-upload "${sflags[@]}"); then
-  # The text was already posted; report the topic so the caller can recover (no retry).
-  printf '{"ok":false,"error":{"code":"UPLOAD_FAILED","topicId":"%s"}}\n' "$topic" >&2
+jq -e '.ok == true' <<<"$sent" >/dev/null 2>&1 || fail INVALID_RESPONSE 1
+topic=$(jq -r '.result | (.id // .topicId // empty)' <<<"$sent" 2>/dev/null) || true
+if [[ -z $topic ]]; then
+  # The text was posted but its id is unknown: the outcome is partial and not recoverable here.
+  printf '{"ok":false,"error":{"code":"SEND_ID_MISSING","partial":true,"message":"message sent; no topic id returned, attachment not uploaded"}}\n' >&2
   exit 1
 fi
-jq -c "{ok:true,result:{topicId:$(jstr "$topic"),upload:.result}}" <<<"$up"
+errf=$(mktemp); trap 'rm -f "$errf"' EXIT
+if up=$(jq -c ".topicId = $(jstr "$topic")" <<<"$json" | "${helper[@]}" attachments-upload "${sflags[@]}" 2>"$errf") \
+   && jq -e '.ok == true' <<<"$up" >/dev/null 2>&1; then
+  jq -c "{ok:true,result:{topicId:$(jstr "$topic"),upload:.result}}" <<<"$up"
+  exit
+fi
+# The text was already posted; report the topic so the caller can recover (no retry).
+cause=$(jq -c '.error // empty' <<<"$up" 2>/dev/null || true)
+[[ -n $cause ]] || cause=$(jq -c '.error // empty' "$errf" 2>/dev/null || true)
+[[ -n $cause ]] || cause=null
+printf '{"ok":false,"error":{"code":"UPLOAD_FAILED","topicId":%s,"partial":true,"cause":%s}}\n' "$(jstr "$topic")" "$cause" >&2
+exit 1

@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import stat
 import subprocess
 import tempfile
@@ -7,7 +8,7 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-BASHY = os.environ.get("BASHY_BIN", "bashy")
+BASHY = os.environ.get("BASHY_BIN") or shutil.which("bashy") or "bashy"
 
 
 def run(args, env=None, stdin=""):
@@ -51,6 +52,38 @@ class Wrapper(unittest.TestCase):
                 self.assertEqual(r.returncode, 2)
                 self.assertEqual(json.loads(r.stderr)["error"]["code"], "SECRET_VIA_ARGV")
 
+    def test_more_credential_keys_and_nested_json_refused(self):
+        for a in ("mfaCode=1", "otpCode=1", "totp=1", "verificationCode=1", "sealCode=1",
+                  "recoveryKey=x", 'opts:={"auth":{"accessToken":"x"}}', 'l:=[{"clientSecret":"y"}]'):
+            with self.subTest(arg=a):
+                r = run(["messages-send", a], {"KLATCH_HELPER": "/bin/true"})
+                self.assertEqual(r.returncode, 2)
+                self.assertEqual(json.loads(r.stderr)["error"]["code"], "SECRET_VIA_ARGV")
+
+    def test_assistant_default_in_stdin(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = run(["messages-send", "--json"], {"KLATCH_HELPER": str(self.fake(d)), "KLATCH_ASSISTANT": "Bot"}, '{"text":"x"}')
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(json.loads(r.stdout)["result"]["in"], {"text": "x", "assistant": "Bot"})
+
+    def test_usage_is_envelope_and_help_without_helper(self):
+        r = run(["messages-send", "notkv"], {"KLATCH_HELPER": "/bin/true"})
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(json.loads(r.stderr)["error"]["code"], "USAGE")
+        r = run(["--help"], {"KLATCH_HELPER": "", "PATH": "/usr/bin:/bin"})
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("Usage: klatch", r.stdout)
+
+    def test_post_file_upload_failure_keeps_topic(self):
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "klatch-helper"
+            p.write_text('#!/bin/sh\ncat >/dev/null\ncase "$1" in messages-send) echo \'{"ok":true,"result":{"id":"T\\"1"}}\' ;; *) echo \'{"ok":false,"error":{"code":"DISK"}}\' >&2; exit 1 ;; esac\n')
+            p.chmod(p.stat().st_mode | stat.S_IXUSR)
+            r = run(["post-file", "channelId=c1", "text=t", "assistant=Bot", "path=/x"], {"KLATCH_HELPER": str(p)})
+            self.assertEqual(r.returncode, 1)
+            e = json.loads(r.stderr)["error"]
+            self.assertEqual((e["code"], e["topicId"], e["cause"]["code"]), ("UPLOAD_FAILED", 'T"1', "DISK"))
+
     def test_non_secret_fields_still_shape(self):
         with tempfile.TemporaryDirectory() as d:
             r = run(["messages-send", "channelId=c1", "text=hello token world", "codeBlock:=true"],
@@ -68,7 +101,7 @@ class Wrapper(unittest.TestCase):
             self.assertIn("attachments-upload", res["upload"]["argv"])
 
     def test_missing_cli(self):
-        r = run(["watch"], {"KLATCH_HELPER": "", "KLATCH_CLI": "", "PATH": "/usr/bin:/bin"})
+        r = run(["watch"], {"KLATCH_HELPER": "", "PATH": "/usr/bin:/bin"})
         self.assertEqual(r.returncode, 1)
         self.assertEqual(json.loads(r.stderr)["error"]["code"], "CLI_NOT_FOUND")
 

@@ -1,12 +1,13 @@
 # Plan: `bashy klatch` participant CLI wrapper (S597 / Story 3197)
 
 - `examples/klatch/klatch.bsh` keeps `setup|provision|status CONFIG.json`
-  (provision.py) and forwards every participant verb of the Klatch `klatch`
-  executable (app/client/cli) unchanged: stdin/`--input`, `--session`, `--json`,
+  (provision.py) and routes every participant verb to the Klatch Node helper
+  (`klatch-helper`, app/client/cli; Bash# owns routing, shaping, workflows): stdin/`--input`, `--session`, `--json`,
   `{ok,result}` / `{ok:false,error:{code}}`, `watch` JSONL, and the
   `[Assistant: NAME]` prefix (applied by the CLI, not re-implemented).
-- CLI located via `KLATCH_CLI` (`*.js` run with `node`, else executed) or
-  `klatch` on PATH. Node >= 22 is an explicit runtime dependency for the CLI
+- Helper located via `KLATCH_HELPER` (`*.js` run with `node`, else executed) or
+  `klatch-helper` on PATH (distinct from the server's `klatch` executable; no
+  `KLATCH_CLI` alias). Node >= 22 is an explicit runtime dependency for the CLI
   verbs only; provisioning stays Python.
 - Help, `register.sh` synopsis, embedded skill and README updated.
 - Tests: `test_cli_wrapper.py` (fake CLI) plus existing `test_provision.py`

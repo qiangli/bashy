@@ -46,8 +46,7 @@ Tests (fake HTTP server, no real server needed):
 `klatch.bsh` is the primary participant command and shaping entrypoint: it
 routes verbs, shapes input and composes workflows. The Node helper
 (`app/client/cli`, `dist/main.js`, **Node >= 22 required**) only supplies the
-protocol, seal crypto, session and file mechanism. Set `KLATCH_HELPER` (alias
-`KLATCH_CLI`) to the helper's `dist/main.js` (run with `node`) or an executable;
+protocol, seal crypto, session and file mechanism. Set `KLATCH_HELPER` to the helper's `dist/main.js` (run with `node`) or an executable;
 otherwise `klatch-helper` on PATH is used. Missing helper or Node reports
 `{"ok":false,"error":{"code":"CLI_NOT_FOUND"|"NODE_REQUIRED"}}` on stderr.
 
@@ -62,7 +61,7 @@ JSON input comes from stdin (default) or `--input FILE|-`; `--session FILE`
 and `--json` are accepted. As shaping sugar, fields may instead be given as
 `key=value` (string) or `key:=JSON` arguments, e.g.
 `klatch messages-send channelId=C1 text=hi count:=3`; `KLATCH_ASSISTANT` supplies
-the default `assistant`. Passwords, seal passwords, MFA codes and any token/secret/privateKey/authorization/credential-named field are refused in
+the default `assistant` (also inside stdin / `--input` JSON). Passwords, seal passwords, MFA/OTP/verification/recovery codes and any token/secret/privateKey/authorization/credential-named field (also nested inside `key:=JSON`) are refused in
 argv (`SECRET_VIA_ARGV`) — use private JSON input. Success prints
 `{"ok":true,"result":...}`; failure prints `{"ok":false,"error":{"code":...}}`
 on stderr. `watch` emits JSONL. Outgoing assistant text is prefixed
@@ -71,7 +70,7 @@ on stderr. `watch` emits JSONL. Outgoing assistant text is prefixed
 `post-file channelId=C text=T assistant=NAME path=FILE` runs messages-send then
 attachments-upload onto the new topic and prints
 `{"ok":true,"result":{"topicId":...,"upload":...}}`. Nothing is retried; if the
-upload fails after the send, `UPLOAD_FAILED` carries the `topicId`.
+upload fails after the send, `UPLOAD_FAILED` carries the `topicId` and the helper's error as `cause`; a send reply without an id reports `SEND_ID_MISSING` (partial, uncertain). Malformed arguments report `USAGE`; `help` works without the helper.
 
 Wrapper tests (fake helper): `python3 -m unittest examples/klatch/test_cli_wrapper.py`.
 Run builds and tests on the shared test host only, via `bashy outpost ssh exec`.
