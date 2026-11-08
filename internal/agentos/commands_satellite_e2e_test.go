@@ -127,11 +127,11 @@ func TestE2ESatelliteAccountAndTransferContract(t *testing.T) {
 		t.Fatalf("account/endpoint conflict: exit %d: %s %s", code, out, errout)
 	}
 	out, errout, code = run("satellite", "transfer", "alpha", "--to", "next@example.invalid", "--account", "fixture-a", "--no-input", "--json")
-	if code == 0 || strings.Contains(errout, "unknown flag") || strings.Contains(errout, "invalid command flags") || ownerAPosts.Load() != before {
+	if code == 0 || !strings.Contains(errout, "requires --yes") || ownerAPosts.Load() != before {
 		t.Fatalf("noninteractive refusal: exit %d: %s %s", code, out, errout)
 	}
 	out, errout, code = run("satellite", "transfer", "alpha", "--to", "next@example.invalid", "--account", "fixture-a")
-	if code == 0 || ownerAPosts.Load() != before {
+	if code == 0 || !strings.Contains(errout, "requires --yes") || ownerAPosts.Load() != before {
 		t.Fatalf("piped stdin refusal: exit %d: %s %s", code, out, errout)
 	}
 	out, errout, code = run("satellite", "transfer", "alpha", "--to", "next@example.invalid", "--account", "fixture-a", "--yes", "--json")
