@@ -141,6 +141,21 @@ class Recipe(unittest.TestCase):
         self.assertNotIn("ln -s", build)
         self.assertIn("source-guard.sh", pin)
 
+    def test_amd64_isa_floor(self):
+        # ggml's CPU kernels compile through cgo with -O3 only; without a
+        # recipe-owned -march the amd64 runner is baseline SSE2 (~10x slower,
+        # 2026-11-07: 2.6 vs 24.4 tok/s). arm64/Metal keep their baseline.
+        build = (self.helpers / "build-runner.sh").read_text()
+        self.assertIn('if [[ $arch == amd64 ]]; then', build)
+        self.assertIn('isa_cflags="-march=x86-64-v3"', build)
+        self.assertIn("export GOAMD64=v3", build)
+        # The floor is set after the caller flags are cleared, so no ambient
+        # CGO_* survives, and Windows appends its required include to it.
+        self.assertLess(build.index("unset CGO_CFLAGS"), build.index('export CGO_CFLAGS="-O2 -g $isa_cflags"'))
+        self.assertIn('CGO_CXXFLAGS="${CGO_CXXFLAGS:+$CGO_CXXFLAGS }-include cstdlib"', build)
+        self.assertIn('"cpu_isa": "x86-64-v3" if "-amd64" in target else "baseline"', (self.helpers / "package-runner.py").read_text())
+        self.assertIn("x86-64-v3", (RECIPE / "README.md").read_text())
+
     def test_cuda_manifest_digests_and_audit_hold(self):
         d = self.root / "cuda"
         d.mkdir()

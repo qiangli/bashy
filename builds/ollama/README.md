@@ -20,11 +20,11 @@ refs, trigger hosted jobs, sign bytes or publish a release.
 
 | Target | Hosted runner | Compiler | Baseline |
 |---|---|---|---|
-| Linux amd64 | ubuntu-24.04 | GCC / G++ | CPU, GOAMD64=v1 |
+| Linux amd64 | ubuntu-24.04 | GCC / G++ | CPU, x86-64-v3 (AVX2/FMA), GOAMD64=v3 |
 | Linux arm64 | ubuntu-24.04-arm | GCC / G++ | CPU, GOARM64=v8.0 |
-| Darwin amd64 | macos-15-intel | Xcode Clang | CPU, macOS deployment target 14.0 |
+| Darwin amd64 | macos-15-intel | Xcode Clang | CPU, x86-64-v3 (AVX2/FMA), macOS deployment target 14.0 |
 | Darwin arm64 | macos-15 | Xcode Clang | CPU / built-in Metal, deployment target 14.0 |
-| Windows amd64 | windows-2025 | image MinGW64 GCC / G++ | CPU, native PE `.exe` |
+| Windows amd64 | windows-2025 | image MinGW64 GCC / G++ | CPU, x86-64-v3 (AVX2/FMA), native PE `.exe` |
 
 The workflow uses a full Git **file tree** checkout, including nested vendor
 headers (a shallow history is sufficient). Both HEAD and the peeled tag must
@@ -45,6 +45,14 @@ Only Darwin arm64 runs upstream's Metal `go generate` directive. The build is
 upstream dispatcher engines and their cgo inputs. No CUDA/ROCm/Vulkan/MLX
 shared library is bundled or qualified. Optional library loading and CPU ISA
 portability still require native verification.
+
+Every amd64 target carries a recipe-owned ISA floor, `-march=x86-64-v3`
+(AVX2/FMA/F16C/BMI2; Intel Haswell 2013+, AMD Zen 1+) in `CGO_CFLAGS` /
+`CGO_CXXFLAGS` and `GOAMD64=v3`. ggml's CPU kernels compile through cgo with
+`-O3` only, so without it they target baseline x86-64 (SSE2): measured
+2026-11-07 on the same source and host, 2.6 vs 24.4 tok/s (qwen3:1.7b, four
+Zen 2 cores). arm64 and Metal are unchanged. A pre-AVX2 CPU cannot run the
+amd64 runner.
 
 On Windows only, the recipe exports a required (not caller-selected)
 `CGO_CXXFLAGS=-include cstdlib`: the needed `llama/.../models` package

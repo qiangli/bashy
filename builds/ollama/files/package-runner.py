@@ -68,6 +68,8 @@ def main(args):
             "upstream_tag": "v0.21.2", "upstream_commit": commit,
             "entrypoint": "./cmd/runner", "go_toolchain": toolchain,
             "cgo_enabled": True, "gowork": "off",
+            # build-runner.sh's ISA floor: amd64 kernels need AVX2/FMA.
+            "cpu_isa": "x86-64-v3" if "-amd64" in target else "baseline",
             "executable": Path(binary).name, "gzip": Path(compressed).name,
             "runner_sha256": digest(data), "gzip_sha256": digest(Path(compressed).read_bytes()),
             "release_admission": "PENDING_NATIVE_AND_SECURITY_GATES",

@@ -18,6 +18,17 @@ if [[ $asset == *-cuda ]]; then cuda=1; base=${asset%-cuda}; fi
 os=${base#runner-}; arch=${os##*-}; os=${os%-*}
 export GOWORK=off GOENV=off GOTOOLCHAIN=local CGO_ENABLED=1 GOFLAGS='' GOOS=$os GOARCH=$arch
 export GOAMD64=v1 GOARM64=v8.0
+# REQUIRED amd64 ISA floor (recipe-owned, not caller-selected): ggml's CPU
+# kernels compile through cgo with -O3 only, i.e. baseline x86-64 (SSE2), so
+# the v1 runner decoded ~10x slower than its source allows (2026-11-07, same
+# source, 4 Zen 2 cores, qwen3:1.7b: 2.6 tok/s baseline vs 24.4 tok/s with
+# -march=x86-64-v3; gpt-oss:20b at 1.2 tok/s on a 16-core Zen 5 Windows host).
+# x86-64-v3 = AVX2/FMA/F16C/BMI2: Intel Haswell (2013)+, AMD Zen 1+.
+isa_cflags=
+if [[ $arch == amd64 ]]; then
+  export GOAMD64=v3
+  isa_cflags="-march=x86-64-v3"
+fi
 [[ $(go env GOHOSTOS)/$(go env GOHOSTARCH) == "$os/$arch" ]] || {
   echo "native builder required for $os/$arch" >&2; exit 1;
 }
@@ -31,6 +42,10 @@ bash "$here/source-guard.sh" "$src"
 bash "$here/go-security-overrides.sh" "$src"
 # No caller-selected optimization flags, overlays, alternate compilers or tags.
 unset CGO_CFLAGS CGO_CPPFLAGS CGO_CXXFLAGS CGO_LDFLAGS GOEXPERIMENT
+if [[ -n $isa_cflags ]]; then
+  # Go's own cgo defaults (-O2 -g) plus the ISA floor above.
+  export CGO_CFLAGS="-O2 -g $isa_cflags" CGO_CXXFLAGS="-O2 -g $isa_cflags"
+fi
 # The build compiles exactly ./cmd/runner — never ./... or sibling mains —
 # so only the runner's required package closure compiles.
 if [[ $os == windows ]]; then
@@ -41,7 +56,7 @@ if [[ $os == windows ]]; then
   # Force-include the header through the toolchain flags: editing src/ would
   # trip the pristine-tree pin gate, and the models package is a needed
   # runner input (llamarunner), so no thinner package set avoids it.
-  export CGO_CXXFLAGS="-include cstdlib"
+  export CGO_CXXFLAGS="${CGO_CXXFLAGS:+$CGO_CXXFLAGS }-include cstdlib"
 fi
 if [[ $os == windows ]]; then
   # The verified MinGW clang pair is the ONLY compiler on Windows: resolving
