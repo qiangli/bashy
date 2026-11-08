@@ -30,3 +30,20 @@ Remaining:
 - Then switch the Windows test host to native Klatch, using the 2026-11-07 backup and snapshot counts.
 
 Also required in this release (Sprint 565 O5): build from bashy main that includes outpost-profile up/down/status (examples/outpost-profile, bashy 5ad1d9ce or later), so the release source pin carries it.
+
+## Release gate (operator, 2026-11-07)
+
+No tag or release without the operator's explicit approval. Before asking for it:
+1. Every umbrella submodule is clean, on its main branch and level with origin; the umbrella pins equal those heads (check with git submodule status: no + or -).
+2. Work from every other agent and sprint is merged to the main branches or explicitly excluded with a reason (at wrap-up on 2026-11-07, Sprints 586, 589 and 591 were still open; the umbrella had an uncommitted AGENTS.md change from Sprint 591).
+3. The candidate carries: outpost-profile up/down/status, satellite-member, bashy-defaults (apply/status/merge) with the first-install bootstrap step, kb reading kb/defaults from the source pin, the outpost register restart fix, and the Klatch v1.2.7 pin.
+4. Then the gates (make test, test-bash 86/86 serial on a remote test host, GOWORK=off), QA, and the operator's go-ahead to tag.
+
+
+## Release gate (operator, 2026-11-07)
+
+No tag or release without the operator's explicit approval. Before asking for it:
+1. Every umbrella submodule is clean, on its main branch and level with origin; the umbrella pins equal those heads (check with git submodule status: no + or -).
+2. Work from every other agent and sprint is merged to the main branches or explicitly excluded with a reason (at wrap-up on 2026-11-07, Sprints 586, 589 and 591 were still open; the umbrella had an uncommitted AGENTS.md change from Sprint 591).
+3. The candidate carries: outpost-profile up/down/status, satellite-member, bashy-defaults (apply/status/merge) with the first-install bootstrap step, kb reading kb/defaults from the source pin, the outpost register restart fix, and the Klatch v1.2.7 pin.
+4. Then the gates (make test, test-bash 86/86 serial on a remote test host, GOWORK=off), QA, and the operator's go-ahead to tag.
