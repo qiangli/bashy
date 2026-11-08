@@ -18,9 +18,9 @@ require (
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261106222935-97e83ec7afdf
-	github.com/qiangli/ycode v0.3.1-dev.0.20261029230636-9392338234d3
+	github.com/qiangli/ycode v0.3.1-dev.0.20261103194741-5e1538ce6281
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261108173955-b547caaa8483
+	github.com/qiangli/yoke v0.0.0-20261108192754-3544f295a6a7
 	github.com/qiangli/yoke/external/otel v0.0.0-20261107011851-c7ab755b6bc9
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -568,7 +568,7 @@ replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.
 
 replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261011021240-aa0d91dd60d2
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261103194741-5e1538ce6281
 
 tool github.com/qiangli/outpost/cmd/outpost
 
@@ -581,7 +581,7 @@ replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go v1.2.14
 
 // S488: cross-module replacements are not inherited from yoke or Outpost.
 // Keep the shipped engine, file manager, and mesh on their permissive forks.
-replace github.com/go-git/go-billy/v5 => github.com/qiangli/yoke/external/go-billy v0.0.0-20261021004834-b008dcc14dfa
+replace github.com/go-git/go-billy/v5 => github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f
 
 replace github.com/hashicorp/go-multierror => github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9
 

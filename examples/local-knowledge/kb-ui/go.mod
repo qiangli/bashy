@@ -4,7 +4,7 @@ go 1.27
 
 toolchain go1.27.2
 
-require github.com/qiangli/yoke v0.0.0-20261108031949-758c6859898d
+require github.com/qiangli/yoke v0.0.0-20261108192754-3544f295a6a7
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2 // indirect

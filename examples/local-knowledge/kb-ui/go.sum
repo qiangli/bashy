@@ -472,8 +472,8 @@ github.com/qiangli/sh/v3 v3.0.0-20261106222844-d2913001421b h1:SVdjkngrjxDZ6YWtF
 github.com/qiangli/sh/v3 v3.0.0-20261106222844-d2913001421b/go.mod h1:tyFtJgC2PikzHoF5joV+bRq5JdGSisHLNPZNsh9nxgI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb h1:LLfdQXY/uXHpJm9eYP0sdcFg4IHQHzIOUwslX9TpqxI=
 github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb/go.mod h1:tcNzv5p84E0skkmJn038y+hWJbLQXQqEnQfeh5r2JLM=
-github.com/qiangli/yoke v0.0.0-20261108031949-758c6859898d h1:MG14qfNK9EOl5CCTp06Kec/7m8WU2c25g0qHBHNMI68=
-github.com/qiangli/yoke v0.0.0-20261108031949-758c6859898d/go.mod h1:dy4y+4zq/gr/AWxIwn/IPmQ/2oiTZIMExcSocX1QyfA=
+github.com/qiangli/yoke v0.0.0-20261108192754-3544f295a6a7 h1:cMjkbRXrYnwcwoTU5uJqOpJeUye/S27Wu9Cin44Nip4=
+github.com/qiangli/yoke v0.0.0-20261108192754-3544f295a6a7/go.mod h1:dy4y+4zq/gr/AWxIwn/IPmQ/2oiTZIMExcSocX1QyfA=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261021004834-b008dcc14dfa h1:tvU9VJSqqtYJ/uc/IOLNMPQ5n4uZiC5nJp+x7lOI7xs=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261021004834-b008dcc14dfa/go.mod h1:Q0Q5T6VFoIzC2QCjcH2DnKhvD6lvneoJKxG0TYasq8E=
 github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402 h1:GaFTBFLiK9HEK4DBrKzVmc61k4MhJE8q9sQws9r1h3o=

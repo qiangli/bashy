@@ -136,6 +136,8 @@ jobs:
         shell: bash
         env:
           ARCH: ${{ matrix.arch }}
+          # Authenticates the release-asset API fallback in fetch-signed-runner.sh.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           # Verifies the Sigstore bundle + yoke pin before any build; a
           # missing or unverified runner fails the job here, never ships.
@@ -225,6 +227,9 @@ jobs:
           run_install: false
       - name: Prefetch signed Ollama runners
         shell: bash
+        env:
+          # Authenticates the release-asset API fallback in fetch-signed-runner.sh.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           # Early fail-closed gate for every GoReleaser target: pins, network
           # and verifier must work before the long build starts. Each target
