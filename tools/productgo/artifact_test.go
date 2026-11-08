@@ -56,6 +56,9 @@ while [ "$1" != -o ]; do shift; done
 printf artifact > "$2"
 `)
 			write("go", "#!/bin/sh\nexit 0\n")
+			// The artifact script runs release tooling through go-tool.sh;
+			// like the go stub above, it is not under test here.
+			write("scripts/go-tool.sh", "#!/bin/sh\nexit 0\n")
 			write("bin/product", "previous")
 			value := "no"
 			if fail {
