@@ -302,6 +302,12 @@ func TestBashySandboxE2EHappyPathWithFakeEmails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// A shaped-app fork clones only this module, so the launcher that sits
+	// beside it in the repository is not there; the check then has nothing
+	// to drive end to end.
+	if _, err := os.Stat(bshPath); err != nil {
+		t.Skipf("brainstorm.bsh is not beside this module: %v", err)
+	}
 	runSandboxBsh := func(key string, args ...string) string {
 		t.Helper()
 		argv := append([]string{"--bashsharp", bshPath}, args...)
