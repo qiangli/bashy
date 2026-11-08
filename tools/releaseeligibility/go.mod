@@ -73,3 +73,11 @@ require (
 replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261106222844-d2913001421b
 
 replace github.com/go-git/go-billy/v5 => github.com/qiangli/yoke/external/go-billy v0.0.0-20261021004834-b008dcc14dfa
+
+replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab
+
+replace github.com/qiangli/yoke/pkg/llmgw => github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261107011851-c7ab755b6bc9
+
+replace github.com/qiangli/yoke/pkg/oci => github.com/qiangli/yoke/pkg/oci v0.0.0-20261107011851-c7ab755b6bc9
+
+replace github.com/qiangli/yoke/pkg/provider => github.com/qiangli/yoke/pkg/provider v0.0.0-20261107011851-c7ab755b6bc9
