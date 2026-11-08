@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/qiangli/yoke/pkg/accounts"
 )
 
 // TestE2ESatelliteAccountAndTransferContract exercises the installed CLI with
@@ -100,16 +103,24 @@ func TestE2ESatelliteAccountAndTransferContract(t *testing.T) {
 		}
 		return out, errout, code
 	}
-	add := func(alias, kind, endpoint, credential string) {
+	store := accounts.Open(filepath.Join(strings.TrimPrefix(env[0], "BASHY_HOME="), "accounts", "accounts.json"))
+	add := func(alias string, kind accounts.Category, endpoint, credential string) {
 		t.Helper()
-		out, errout, code := run("account", "add", alias, "--kind", kind, "--endpoint", endpoint, "--credential", "env:"+credential, "--json")
-		if code != 0 {
-			t.Fatalf("account add %s: exit %d: %s %s", alias, code, out, errout)
+		err := store.Observe("cloudbox", []accounts.Observation{{Account: accounts.Account{
+			Alias: alias, Category: kind, Provider: "cloudbox", ProviderAccountID: alias,
+			Connections: []accounts.Connection{{ID: "primary", Endpoint: endpoint, CredentialRef: "env:" + credential}},
+		}}})
+		if err != nil {
+			t.Fatalf("observe fixture account %s: %v", alias, err)
 		}
 	}
-	add("fixture-a", "cloudbox", a.URL, "S598_OWNER_A")
-	add("fixture-b", "cloudbox", b.URL, "S598_OWNER_B")
-	add("fixture-invite", "satellite", invite.URL, "S598_INVITE_OWNER")
+	add("fixture-a", accounts.Cloudbox, a.URL, "S598_OWNER_A")
+	add("fixture-b", accounts.Cloudbox, b.URL, "S598_OWNER_B")
+	add("fixture-invite", accounts.Satellite, invite.URL, "S598_INVITE_OWNER")
+	out, errout, code := run("account", "list", "--json")
+	if code != 0 || !strings.Contains(out, "fixture-a") || !strings.Contains(out, "fixture-b") || !strings.Contains(out, "fixture-invite") {
+		t.Fatalf("account discovery: exit %d: %s %s", code, out, errout)
+	}
 
 	for _, tc := range []struct{ alias, want, reject string }{{"fixture-a", "sat-fixture-a", "sat-fixture-b"}, {"fixture-b", "sat-fixture-b", "sat-fixture-a"}} {
 		out, errout, code := run("satellite", "list", "--account", tc.alias, "--json")
@@ -117,7 +128,7 @@ func TestE2ESatelliteAccountAndTransferContract(t *testing.T) {
 			t.Fatalf("isolated list %s: exit %d: %s %s", tc.alias, code, out, errout)
 		}
 	}
-	out, errout, code := run("satellite", "show", "alpha", "--account", "fixture-a", "--json")
+	out, errout, code = run("satellite", "show", "alpha", "--account", "fixture-a", "--json")
 	if code != 0 || !strings.Contains(out, "sat-fixture-a") {
 		t.Fatalf("account show: exit %d: %s %s", code, out, errout)
 	}
