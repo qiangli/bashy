@@ -18,19 +18,42 @@ def run(args, env=None, stdin=""):
 
 class Wrapper(unittest.TestCase):
     def fake(self, d):
-        p = Path(d) / "klatch"
-        p.write_text('#!/bin/sh\ncat >/dev/null\nprintf \'{"ok":true,"result":{"argv":"%s"}}\\n\' "$*"\n')
+        p = Path(d) / "klatch-helper"
+        p.write_text('#!/bin/sh\nin=$(cat)\nprintf \'{"ok":true,"result":{"id":"T1","argv":"%s","in":%s}}\\n\' "$*" "${in:-null}"\n')
         p.chmod(p.stat().st_mode | stat.S_IXUSR)
         return p
 
     def test_forwards_verbs_and_stdin(self):
         with tempfile.TemporaryDirectory() as d:
-            r = run(["messages-send", "--json"], {"KLATCH_CLI": str(self.fake(d))}, '{"text":"x"}')
+            r = run(["messages-send", "--json"], {"KLATCH_HELPER": str(self.fake(d))}, '{"text":"x"}')
             self.assertEqual(r.returncode, 0, r.stderr)
             self.assertEqual(json.loads(r.stdout)["result"]["argv"], "messages-send --json")
 
+    def test_shapes_fields_into_json(self):
+        with tempfile.TemporaryDirectory() as d:
+            env = {"KLATCH_HELPER": str(self.fake(d)), "KLATCH_ASSISTANT": "Bot"}
+            r = run(["messages-send", "channelId=c1", "text=say \"hi\" \\ ok", "count:=3"], env)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            res = json.loads(r.stdout)["result"]
+            self.assertEqual(res["in"], {"channelId": "c1", "text": "say \"hi\" \\ ok", "count": 3, "assistant": "Bot"})
+            self.assertIn("messages-send --json", res["argv"])
+
+    def test_secret_refused_in_argv(self):
+        r = run(["auth-login", "password=x"], {"KLATCH_HELPER": "/bin/true"})
+        self.assertEqual(r.returncode, 2)
+        self.assertEqual(json.loads(r.stderr)["error"]["code"], "SECRET_VIA_ARGV")
+
+    def test_post_file_workflow(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = run(["post-file", "channelId=c1", "text=t", "assistant=Bot", "path=/x"], {"KLATCH_HELPER": str(self.fake(d))})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            res = json.loads(r.stdout)["result"]
+            self.assertEqual(res["topicId"], "T1")
+            self.assertEqual(res["upload"]["in"]["topicId"], "T1")
+            self.assertIn("attachments-upload", res["upload"]["argv"])
+
     def test_missing_cli(self):
-        r = run(["watch"], {"KLATCH_CLI": "", "PATH": "/usr/bin:/bin"})
+        r = run(["watch"], {"KLATCH_HELPER": "", "KLATCH_CLI": "", "PATH": "/usr/bin:/bin"})
         self.assertEqual(r.returncode, 1)
         self.assertEqual(json.loads(r.stderr)["error"]["code"], "CLI_NOT_FOUND")
 
