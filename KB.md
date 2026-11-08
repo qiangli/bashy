@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [repo/page] Derive no-egress allowlists from the pinned test's full port set — When a sandbox profile or strace verdict allowlists loopback ports for a pinned test binary, enumerate every bind/connect in that test's source at the pinned commit, not the subset remembered from its description. Prima's ring test was allowed 5  (kb:derive-no-egress-allowlists-from-the-pinned-test-s-full-port-set)
+- [repo/page] Connect one host to several satellites at once (outpost-profile up) — Publish a host's apps (e.g. Klatch) through more than one satellite simultaneously by running one outpost instance per extra satellite — WHEN a host must stay on its satellite and also serve members of another satellite (keywords: multi-sat  (kb:connect-one-host-to-several-satellites-at-once-outpost-profile-u)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 

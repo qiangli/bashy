@@ -62,7 +62,7 @@ JSON input comes from stdin (default) or `--input FILE|-`; `--session FILE`
 and `--json` are accepted. As shaping sugar, fields may instead be given as
 `key=value` (string) or `key:=JSON` arguments, e.g.
 `klatch messages-send channelId=C1 text=hi count:=3`; `KLATCH_ASSISTANT` supplies
-the default `assistant`. Passwords, seal passwords and MFA codes are refused in
+the default `assistant`. Passwords, seal passwords, MFA codes and any token/secret/privateKey/authorization/credential-named field are refused in
 argv (`SECRET_VIA_ARGV`) — use private JSON input. Success prints
 `{"ok":true,"result":...}`; failure prints `{"ok":false,"error":{"code":...}}`
 on stderr. `watch` emits JSONL. Outgoing assistant text is prefixed

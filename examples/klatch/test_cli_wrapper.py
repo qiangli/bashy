@@ -43,6 +43,21 @@ class Wrapper(unittest.TestCase):
         self.assertEqual(r.returncode, 2)
         self.assertEqual(json.loads(r.stderr)["error"]["code"], "SECRET_VIA_ARGV")
 
+    def test_credential_like_keys_refused_case_insensitively(self):
+        for k in ("token", "Token", "accessToken", "clientSecret", "PRIVATEKEY", "private_key",
+                  "Authorization", "credentials", "sealPassword", "MFA", "apiKey"):
+            with self.subTest(key=k):
+                r = run(["messages-send", k + "=x"], {"KLATCH_HELPER": "/bin/true"})
+                self.assertEqual(r.returncode, 2)
+                self.assertEqual(json.loads(r.stderr)["error"]["code"], "SECRET_VIA_ARGV")
+
+    def test_non_secret_fields_still_shape(self):
+        with tempfile.TemporaryDirectory() as d:
+            r = run(["messages-send", "channelId=c1", "text=hello token world", "codeBlock:=true"],
+                    {"KLATCH_HELPER": str(self.fake(d))})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(json.loads(r.stdout)["result"]["in"]["codeBlock"], True)
+
     def test_post_file_workflow(self):
         with tempfile.TemporaryDirectory() as d:
             r = run(["post-file", "channelId=c1", "text=t", "assistant=Bot", "path=/x"], {"KLATCH_HELPER": str(self.fake(d))})

@@ -116,7 +116,8 @@ while (( $# )); do
     *)
       [[ $1 =~ $re ]] || usage
       k=${BASH_REMATCH[1]} op=${BASH_REMATCH[2]} v=${BASH_REMATCH[3]}
-      if [[ $k =~ ^([Pp]assword|sealPassword|code|mfa)$ ]]; then
+      lk=${k,,}   # credential-like names, case-insensitive: refuse before they reach process args
+      if [[ $lk == @(code|mfa|otp|pin) || $lk == *@(passw|passphrase|token|secret|privatekey|private_key|authorization|credential|apikey|api_key|cookie|bearer)* ]]; then
         fail SECRET_VIA_ARGV 2   # secrets only via private JSON input
       fi
       if [[ $op == ':=' ]]; then
