@@ -22,3 +22,9 @@ Depends on O2. Main outpost paired with zoo and a second instance with zoo-aws o
 - Remaining: a member (non-owner) account on zoo-aws signing in and messaging the team; a Linux host; the Windows reboot check, deferred while the UAT cohort uses elephant. No test message was posted to the cohort's topic.
 - Notes: app URLs are /matrix/h/<host>/app/<name>/. The Klatch web client shows the login view briefly before its SSO redirect lands on #/session. Remote PowerShell over outpost ssh loses all output when a statement errors (F22/F23 family); run native executables directly with forward-slash paths.
 - Member journey on zoo-aws (operator-observed, 2026-11-07): a second (member) account signed in to zoo-aws in a separate browser profile. Before the owner shared elephant's Klatch with it, the satellite refused the app; after sharing, the member reached Klatch through the zoo-aws instance. Observed by the operator; not independently confirmed by the manager (the member's Klatch view was not captured).
+
+## Evidence complete (2026-11-08); ready for acceptance
+
+- macOS dev box and native Windows: live runs above (Klatch through both satellites, owner and member, down leaves the main instance working).
+- Linux: the Sprint 565 O4 sandbox e2e (two satellites, one host, Klatch, fake example.test accounts; self-hosted, exit 0) on the Linux test host.
+- Not run: the Windows test host reboot check. Moved to todo 92fbe9c4; not claimed here. Acceptance (sprint accept) waits for the next manager of Sprint 585.

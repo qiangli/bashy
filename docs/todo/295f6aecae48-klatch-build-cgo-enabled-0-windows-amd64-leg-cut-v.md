@@ -47,3 +47,9 @@ No tag or release without the operator's explicit approval. Before asking for it
 2. Work from every other agent and sprint is merged to the main branches or explicitly excluded with a reason (at wrap-up on 2026-11-07, Sprints 586, 589 and 591 were still open; the umbrella had an uncommitted AGENTS.md change from Sprint 591).
 3. The candidate carries: outpost-profile up/down/status, satellite-member, bashy-defaults (apply/status/merge) with the first-install bootstrap step, kb reading kb/defaults from the source pin, the outpost register restart fix, and the Klatch v1.2.7 pin.
 4. Then the gates (make test, test-bash 86/86 serial on a remote test host, GOWORK=off), QA, and the operator's go-ahead to tag.
+
+## Progress (2026-11-08)
+
+- Build part done. Klatch v1.2.7 (signed bashy-v1.2.7-1) is pinned by yoke 1b05a5ad; bashy main pins yoke f4dcd018, which contains it, so "bashy pins yoke >= 1b05a5ad" is met with no further sync. yoke main is ahead by one todo-only commit (593a238e), not needed for the release.
+- bashy main also carries the build change (2c77ea1a) and outpost-profile up/down/status (5ad1d9ce).
+- Remaining: cut the next rc from bashy main, run the gates and QA, tag and promote only with the operator approval, then switch the Windows test host to native Klatch from the 2026-11-07 backup. The Windows no-egress runtime check still reports NOT RUN.
