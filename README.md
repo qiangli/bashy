@@ -7,6 +7,10 @@ default: help
 
 # bashy
 
+> **AI agent setting this up for a user?** Read the raw file —
+> https://raw.githubusercontent.com/qiangli/bashy/main/README.md — and follow
+> [*For agents*](#for-agents-set-up-and-stay). It starts with one question to your user.
+
 [![release](https://img.shields.io/github/v/release/qiangli/bashy?label=release)](https://github.com/qiangli/bashy/releases/latest)
 [![tour](https://github.com/bashsharp/tour/actions/workflows/tour.yml/badge.svg)](https://github.com/bashsharp/tour/actions/workflows/tour.yml)
 

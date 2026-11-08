@@ -1,5 +1,10 @@
 # Install bashy
 
+> **AI agent setting bashy up for a user?** Follow the README's
+> [*For agents*](../README.md#for-agents-set-up-and-stay) section instead
+> (raw: https://raw.githubusercontent.com/qiangli/bashy/main/README.md): it
+> asks your user once, then installs **and** connects you (skill, MCP, shell).
+
 Every way to install bashy. The short version is on the [README](../README.md); an AI agent can do all of it for you — tell it *"Set up bashy from https://github.com/qiangli/bashy"*.
 
 Setting up a new machine end to end (install, pairing, with or without an AI
