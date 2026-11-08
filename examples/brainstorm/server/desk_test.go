@@ -287,6 +287,7 @@ func TestBashySandboxE2EHappyPathWithFakeEmails(t *testing.T) {
 		"XDG_CACHE_HOME="+filepath.Join(sandbox, "cache"),
 		"BRAINSTORM_ADDR="+addr,
 		"BASHY_SPRINT_ANNOUNCE=0",
+		"BASHY_HINTS=off",
 		"GOMODCACHE="+goenv[0],
 		"GOCACHE="+goenv[1],
 		"GIT_AUTHOR_NAME=Facilitator",
@@ -309,9 +310,13 @@ func TestBashySandboxE2EHappyPathWithFakeEmails(t *testing.T) {
 		if key != "" {
 			cmd.Env = append(cmd.Env, "BRAINSTORM_KEY="+key)
 		}
-		out, err := cmd.CombinedOutput()
+		// Callers parse stdout as JSON; bashy writes agent hints and
+		// diagnostics to stderr, so keep the streams apart.
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		out, err := cmd.Output()
 		if err != nil {
-			t.Fatalf("bashy %v failed: %v\n%s", args, err, out)
+			t.Fatalf("bashy %v failed: %v\n%s%s", args, err, out, stderr.Bytes())
 		}
 		return string(out)
 	}
