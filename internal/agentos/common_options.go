@@ -140,7 +140,15 @@ func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 		}
 		switch norm {
 		case "explain":
-			o.explain = true
+			on := true
+			if hasVal {
+				b, perr := strconv.ParseBool(val)
+				if perr != nil {
+					return nil, fmt.Errorf("--explain: invalid value %q", val)
+				}
+				on = b
+			}
+			o.explain = on
 		case "no-input":
 			on := true
 			if hasVal {
@@ -152,8 +160,20 @@ func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 			}
 			noInput = on
 		case "json":
+			if hasVal {
+				b, perr := strconv.ParseBool(val)
+				if perr != nil {
+					return nil, fmt.Errorf("--json: invalid value %q", val)
+				}
+				if !b {
+					continue
+				}
+			}
 			return nil, fmt.Errorf("--json unsupported for %s", path)
 		case "fields":
+			if hasVal && val == "" {
+				continue
+			}
 			return nil, fmt.Errorf("--fields unsupported for %s (no native --fields or declared lens parser)", path)
 		case "null":
 			for _, n := range []string{"zero", "print0"} {
