@@ -33,6 +33,19 @@ Journeys per topology, run as separate steps:
   sender of each message is asserted.
 - meet_session: one `bashy meet` session including the human and the agent.
 
+Suites (--suite):
+
+- browser (default): the journeys above.
+- participant: the participant CLI journey from participant.py (an imported
+  helper; it never starts a server). Topology none only: this runner starts a
+  disposable Klatch container with `bashy oci run`, waits for health, runs the
+  journey against the container URL (fresh store, two fresh accounts, sealed
+  conversation, messages, attachments, watch, the Bash# wrapper), then removes
+  the container, which drops the store and the accounts. Missing node or helper
+  is BLOCKED before any container starts; any other topology is BLOCKED,
+  because the journey claims the store and may only run against a disposable
+  server. `Containerfile.server` builds a suitable image from a Klatch tree.
+
 Any leg whose product support is missing reports BLOCKED with the owning
 sprint (S565 outpost single-node, S568 human/agent identity and Klatch to
 Meet routing), never a pass. Teardown closes the driven tab, removes the
@@ -49,11 +62,25 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
+import importlib.util
+
+
+def _load_participant():
+    spec = importlib.util.spec_from_file_location(
+        "klatch_e2e_participant", Path(__file__).resolve().with_name("participant.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+participant = _load_participant()
 
 LOCAL_URL = "http://127.0.0.1:7100/"
 SEND_ICON = "//button[.//*[name()='path' and starts-with(@d,'M10 14l11 -11')]]"
 
 TOPOLOGIES = ("none", "outpost", "satellite", "both")
+SUITES = ("browser", "participant")
 STEPS = ("signup_login", "topic_exchange", "meet_session")
 
 OUTPOST_URL_BLOCKED = (
@@ -75,6 +102,10 @@ AGENT_POST_BLOCKED = (
 MEET_BLOCKED = (
     "Klatch to Meet bridging is design only "
     "(owning sprint S568 Klatch to Meet routing)"
+)
+PARTICIPANT_TOPOLOGY_BLOCKED = (
+    "participant suite claims the server store, so it only runs against the "
+    "disposable container of topology none"
 )
 URL_BLOCKED = (
     "satellite topology needs a URL: pass --url or set KLATCH_E2E_URL"
@@ -218,13 +249,27 @@ def _remove_container_best_effort(oci, name):
         pass
 
 
-def default_start_server(topology, url, image):
+def url_answers(url):
+    """True when something already serves url (any HTTP answer counts)."""
+    try:
+        with urllib.request.urlopen(url, timeout=3):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except Exception:  # noqa: BLE001 - nothing listening
+        return False
+
+
+def default_start_server(topology, url, image, container_port=None):
     """Start Klatch locally with `bashy oci run` for the none topology.
 
     Returns {"container": name, "image": image}. Anything the host cannot
-    provide (engine, image) is Blocked, never a pass. When the container was
+    provide (engine, image) is Blocked, never a pass. A URL that already
+    answers before the container exists belongs to another server (possibly a
+    live one), so it is Blocked rather than driven. When the container was
     created but the server never became healthy, the container is removed
     before the error propagates, so a failed start never leaks it.
+    container_port is the port the image listens on (default: the URL port).
     """
     if topology != "none":
         return None
@@ -250,11 +295,15 @@ def default_start_server(topology, url, image):
                       "(builds/klatch); pass --image or set KLATCH_E2E_IMAGE")
     parts = urllib.parse.urlsplit(url)
     port = parts.port or (443 if parts.scheme == "https" else 80)
+    if url_answers(url):
+        raise Blocked(f"{url} already answers before the sandbox container exists; "
+                      "another server owns that port: pass --url with a free port "
+                      "(and --container-port for the image's port)")
     name = f"klatch-e2e-{os.getpid()}-{time.strftime('%Y%m%d-%H%M%S')}"
     try:
         r = subprocess.run(
             oci + ["run", "-d", "--name", name,
-                   "-p", f"127.0.0.1:{port}:{port}", wanted],
+                   "-p", f"127.0.0.1:{port}:{container_port or port}", wanted],
             capture_output=True, text=True, timeout=120)
     except Exception as e:  # noqa: BLE001 - engine answered before; this is a failure
         _remove_container_best_effort(oci, name)
@@ -267,7 +316,7 @@ def default_start_server(topology, url, image):
     except Exception:
         _remove_container_best_effort(oci, name)
         raise
-    return {"container": name, "image": wanted}
+    return {"container": name, "image": wanted, "port": f"127.0.0.1:{port}->{container_port or port}"}
 
 
 def default_stop_server(server):
@@ -462,8 +511,110 @@ def block_all(reason):
     return {name: {"status": "blocked", "reason": reason} for name in STEPS}
 
 
+def _container_port_kw(args):
+    port = getattr(args, "container_port", None)
+    return {"container_port": port} if port else {}
+
+
+def _write_evidence(args, record):
+    evidence_path = getattr(args, "evidence", None)
+    if evidence_path:
+        with open(evidence_path, "w", encoding="utf-8") as f:
+            json.dump(record, f, indent=2, default=str)
+            f.write("\n")
+        record["evidence_path"] = evidence_path
+    return record
+
+
+def run_participant(args, hooks=None):
+    """The participant suite inside this runner's container lifecycle.
+
+    Order: preflight (BLOCKED, no container) -> start_server (bashy oci run +
+    health) -> journey(args, url) -> stop_server (always, once started).
+    """
+    hooks = dict(hooks or {})
+    start_server = hooks.get("start_server", default_start_server)
+    stop_server = hooks.get("stop_server", default_stop_server)
+    describe_candidate = hooks.get("candidate_info", candidate_info)
+    preflight = hooks.get("participant_preflight", participant.preflight)
+    journey = hooks.get("participant_journey", participant.run_journey)
+    names = participant.STEPS
+
+    started_at = datetime.now(timezone.utc).isoformat()
+    topology = getattr(args, "topology", "none") or "none"
+    url = getattr(args, "url", None) or None
+    server = None
+    server_stop = {"status": "skipped", "detail": "no local container started"}
+    outcome = {}
+
+    def every(status, reason):
+        return {name: {"status": status, "reason": reason} for name in names}
+
+    if topology != "none":
+        steps = every("blocked", PARTICIPANT_TOPOLOGY_BLOCKED)
+    else:
+        url = resolve_url(topology, url)
+        reason = preflight(args)
+        if reason:
+            steps = every("blocked", reason)
+        else:
+            try:
+                server = start_server(topology, url, getattr(args, "image", None),
+                                      **_container_port_kw(args))
+            except Blocked as e:
+                steps = every("blocked", str(e))
+            except Exception as e:  # noqa: BLE001 - start crashed: fail, still write evidence
+                steps = every("fail", f"klatch container start failed: {e}")
+            else:
+                try:
+                    outcome = journey(args, url) or {}
+                    steps = outcome.get("steps") or every("fail", "journey returned no steps")
+                except Exception as e:  # noqa: BLE001 - the journey never raises; be safe anyway
+                    steps = every("fail", f"participant journey crashed: {e}")
+                finally:
+                    try:
+                        server_stop = stop_server(server)
+                    except Exception as e:  # noqa: BLE001 - teardown records, never raises
+                        server_stop = {"status": "failed", "detail": str(e)}
+    result = participant.summarize(steps)
+    try:
+        candidate = describe_candidate()
+    except Exception:  # noqa: BLE001 - candidate info is best-effort
+        candidate = {"bashy_version": "unknown", "bashy_sha": "unknown"}
+    try:
+        candidate.update(participant.candidate(args))
+    except Exception:  # noqa: BLE001 - provenance is best-effort
+        pass
+    journey_teardown = outcome.get("journey_teardown",
+                                   {"status": "skipped", "detail": "no journey ran"})
+    torn_down = (server_stop.get("status") in ("done", "skipped")
+                 and journey_teardown.get("status") in ("done", "skipped"))
+    record = {
+        "suite": "participant",
+        "topology": topology,
+        "url": url,
+        "result": result,
+        "steps": steps,
+        "checks_passed": outcome.get("checks_passed", 0),
+        "skipped_checks": outcome.get("skipped_checks", []),
+        "cli_calls": outcome.get("cli_calls", 0),
+        "accounts": {"handles": outcome.get("accounts", []),
+                     "lifetime": "dropped with the sandbox container"},
+        "server": server or {"status": "not-started"},
+        "server_stop": server_stop,
+        "teardown": {"status": "done" if torn_down else "failed",
+                     "detail": f"{journey_teardown.get('detail', '')}; {server_stop.get('detail', '')}"},
+        "candidate": candidate,
+        "started_at": started_at,
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+    }
+    return _write_evidence(args, record)
+
+
 def run(args, hooks=None):
     """Run one topology's journey. Returns the JSON-serializable evidence record."""
+    if getattr(args, "suite", "browser") == "participant":
+        return run_participant(args, hooks)
     hooks = dict(hooks or {})
     outpost_reachable = hooks.get("outpost_reachable", default_outpost_reachable)
     start_server = hooks.get("start_server", default_start_server)
@@ -497,7 +648,7 @@ def run(args, hooks=None):
             try:
                 if topology == "none":
                     try:
-                        server = start_server(topology, url, image)
+                        server = start_server(topology, url, image, **_container_port_kw(args))
                     except Blocked as e:
                         steps = block_all(str(e))
                     except Exception as e:  # noqa: BLE001 - start crashed: fail, still write evidence
@@ -567,13 +718,7 @@ def run(args, hooks=None):
         "started_at": started_at,
         "finished_at": finished_at,
     }
-    evidence_path = getattr(args, "evidence", None)
-    if evidence_path:
-        with open(evidence_path, "w", encoding="utf-8") as f:
-            json.dump(record, f, indent=2, default=str)
-            f.write("\n")
-        record["evidence_path"] = evidence_path
-    return record
+    return _write_evidence(args, record)
 
 
 def build_parser():
@@ -588,11 +733,19 @@ def build_parser():
     ap.add_argument("--expect-topics", nargs="*", default=["Team"], help="topics that must be listed")
     ap.add_argument("--evidence", default=None, metavar="PATH",
                     help="write the JSON evidence record to PATH")
+    ap.add_argument("--container-port", type=int, default=None,
+                    help="port the --topology none image listens on (default: the URL port; "
+                         "Containerfile.server listens on 7100)")
+    ap.add_argument("--suite", choices=SUITES, default="browser",
+                    help="browser journeys (default) or the participant CLI journey")
+    participant.add_arguments(ap)
     return ap
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.suite == "participant":
+        participant.resolve_args(args)
     try:
         record = run(args)
     except Exception as e:  # noqa: BLE001 - any failure is a failed journey

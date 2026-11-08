@@ -332,6 +332,35 @@ class TopologySelection(unittest.TestCase):
 
 
 class LocalServerDefaults(unittest.TestCase):
+    def setUp(self):
+        # never probe a real port: the host port may already be in use
+        patcher = mock.patch.object(runner, "url_answers", return_value=False)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_occupied_url_is_blocked_before_any_container(self):
+        calls = []
+        with mock.patch.object(runner, "url_answers", return_value=True), \
+                mock.patch.object(runner.subprocess, "run", side_effect=self._oci_script(calls, None)):
+            with self.assertRaises(runner.Blocked) as ctx:
+                runner.default_start_server("none", runner.LOCAL_URL, None)
+        self.assertIn("already answers", str(ctx.exception))
+        self.assertFalse([argv for argv in calls if "run" in argv])
+
+    def test_container_port_maps_host_url_port(self):
+        calls = []
+        ok = types.SimpleNamespace(returncode=0, stdout="deadbeef", stderr="")
+        with mock.patch.object(runner.subprocess, "run", side_effect=self._oci_script(calls, ok)), \
+                mock.patch.object(runner, "wait_for_health", return_value=True):
+            server = runner.default_start_server("none", "http://127.0.0.1:17999/", None, container_port=7100)
+        run_argv = next(argv for argv in calls if "run" in argv)
+        self.assertEqual(run_argv[run_argv.index("-p") + 1], "127.0.0.1:17999:7100")
+        self.assertEqual(server["port"], "127.0.0.1:17999->7100")
+
+    def test_url_answers_false_when_nothing_listens(self):
+        with mock.patch.object(runner.urllib.request, "urlopen", side_effect=OSError("refused")):
+            self.assertFalse(runner.url_answers("http://127.0.0.1:1/"))
+
     def test_start_skips_non_none(self):
         self.assertIsNone(runner.default_start_server("satellite", "https://x/", None))
 
@@ -545,6 +574,153 @@ class EvidenceSchema(unittest.TestCase):
         self.assertEqual(seen[0][0], "none")
         self.assertIn("agent_tag", seen[0][1])
         self.assertEqual(rec["teardown"]["status"], "done")
+
+
+def participant_args(topology="none", url=None, evidence=None):
+    args = make_args(topology=topology, url=url, evidence=evidence)
+    args.suite = "participant"
+    return args
+
+
+class ParticipantSuite(unittest.TestCase):
+    """--suite participant runs the journey inside this runner's container lifecycle."""
+
+    def hooks(self, log, journey=None, start=None, preflight=None):
+        def default_start(topology, url, image):
+            log.append(("start", topology, url))
+            return {"container": "klatch-e2e-test", "image": "localhost/klatch-e2e:test"}
+
+        def default_journey(args, url):
+            log.append(("journey", url))
+            return {"steps": {n: {"status": "pass", "checks": [n]} for n in runner.participant.STEPS},
+                    "checks_passed": len(runner.participant.STEPS), "skipped_checks": [],
+                    "cli_calls": 42, "accounts": ["e2eaxx", "e2ebyy"],
+                    "journey_teardown": {"status": "done", "detail": "removed journey tree"}}
+
+        def stop(server):
+            log.append(("stop", server["container"]))
+            return {"status": "done", "detail": f"removed container {server['container']}"}
+
+        return {"start_server": start or default_start, "stop_server": stop,
+                "participant_journey": journey or default_journey,
+                "participant_preflight": preflight or (lambda args: None),
+                "candidate_info": lambda: {"bashy_version": "v", "bashy_sha": "abc1234"}}
+
+    def test_container_starts_before_and_stops_after_the_journey(self):
+        log = []
+        rec = runner.run(participant_args(), self.hooks(log))
+        self.assertEqual([e[0] for e in log], ["start", "journey", "stop"])
+        self.assertEqual(log[0], ("start", "none", runner.LOCAL_URL))
+        self.assertEqual(log[1], ("journey", runner.LOCAL_URL))
+        self.assertEqual(rec["result"], "PASS")
+        self.assertEqual(rec["suite"], "participant")
+        self.assertEqual(rec["server"]["container"], "klatch-e2e-test")
+        self.assertEqual(rec["server_stop"]["status"], "done")
+        self.assertEqual(rec["teardown"]["status"], "done")
+        self.assertEqual(rec["cli_calls"], 42)
+        self.assertEqual(rec["accounts"]["handles"], ["e2eaxx", "e2ebyy"])
+        self.assertEqual(set(rec["steps"]), set(runner.participant.STEPS))
+
+    def test_container_removed_even_when_the_journey_crashes(self):
+        log = []
+
+        def crash(args, url):
+            log.append(("journey", url))
+            raise RuntimeError("helper exploded")
+        rec = runner.run(participant_args(), self.hooks(log, journey=crash))
+        self.assertEqual([e[0] for e in log], ["start", "journey", "stop"])
+        self.assertEqual(rec["result"], "FAIL")
+        self.assertIn("helper exploded", rec["steps"]["login"]["reason"])
+
+    def test_failed_journey_step_fails_run_and_still_stops(self):
+        log = []
+        base = self.hooks(log)["participant_journey"]
+
+        def failing(args, url):
+            out = base(args, url)
+            out["steps"]["attachments"] = {"status": "fail", "reason": "bytes differ"}
+            return out
+        rec = runner.run(participant_args(), self.hooks(log, journey=failing))
+        self.assertEqual(rec["result"], "FAIL")
+        self.assertEqual(runner.exit_code_for(rec["result"]), 1)
+        self.assertEqual(log[-1][0], "stop")
+
+    def test_preflight_block_never_starts_a_container(self):
+        log = []
+        rec = runner.run(participant_args(),
+                         self.hooks(log, preflight=lambda args: "participant helper not built: x"))
+        self.assertEqual(log, [])
+        self.assertEqual(rec["result"], "BLOCKED")
+        self.assertEqual(rec["server"], {"status": "not-started"})
+        self.assertIn("helper not built", rec["steps"]["provision"]["reason"])
+
+    def test_oci_unavailable_is_blocked_without_journey(self):
+        log = []
+
+        def no_oci(topology, url, image):
+            raise runner.Blocked("bashy oci unavailable: engine down")
+        rec = runner.run(participant_args(), self.hooks(log, start=no_oci))
+        self.assertEqual(log, [])
+        self.assertEqual(rec["result"], "BLOCKED")
+        self.assertEqual(rec["server_stop"]["status"], "skipped")
+
+    def test_start_crash_is_fail_without_journey(self):
+        log = []
+
+        def crash(topology, url, image):
+            raise RuntimeError("not healthy")
+        rec = runner.run(participant_args(), self.hooks(log, start=crash))
+        self.assertEqual(log, [])
+        self.assertEqual(rec["result"], "FAIL")
+        self.assertIn("klatch container start failed", rec["steps"]["provision"]["reason"])
+
+    def test_non_none_topology_is_blocked_and_never_touches_a_server(self):
+        for topology in ("outpost", "satellite", "both"):
+            log = []
+            rec = runner.run(participant_args(topology, url="https://live.example/"), self.hooks(log))
+            self.assertEqual(log, [], topology)
+            self.assertEqual(rec["result"], "BLOCKED")
+            self.assertIn("disposable container", rec["steps"]["provision"]["reason"])
+
+    def test_evidence_file_written(self):
+        with tempfile.TemporaryDirectory() as d:
+            ev = Path(d) / "ev.json"
+            rec = runner.run(participant_args(evidence=str(ev)), self.hooks([]))
+            on_disk = json.loads(ev.read_text())
+        self.assertEqual(on_disk["suite"], "participant")
+        self.assertEqual(on_disk["result"], "PASS")
+        self.assertEqual(rec["evidence_path"], str(ev))
+
+    def test_default_journey_is_the_imported_participant_helper(self):
+        captured = {}
+
+        def start(topology, url, image):
+            return {"container": "c", "image": "i"}
+        hooks = self.hooks([], start=start)
+        del hooks["participant_journey"]
+        with mock.patch.object(runner.participant, "run_journey",
+                               side_effect=lambda a, u: captured.setdefault("url", u) and None):
+            runner.run(participant_args(), hooks)
+        self.assertEqual(captured["url"], runner.LOCAL_URL)
+
+    def test_container_port_forwarded_to_start_server(self):
+        seen = {}
+
+        def start(topology, url, image, **kw):
+            seen.update(kw)
+            return {"container": "c", "image": "i"}
+        args = participant_args(url="http://127.0.0.1:17999/")
+        args.container_port = 7100
+        runner.run(args, self.hooks([], start=start))
+        self.assertEqual(seen, {"container_port": 7100})
+
+    def test_parser_suite_and_participant_options(self):
+        args = runner.build_parser().parse_args(
+            ["--suite", "participant", "--helper", "h.js", "--node", "n", "--wrapper", "w.bsh",
+             "--helper-rev", "8a12a2c9", "--image", "localhost/klatch-e2e:x"])
+        self.assertEqual((args.suite, args.helper, args.node, args.wrapper, args.helper_rev),
+                         ("participant", "h.js", "n", "w.bsh", "8a12a2c9"))
+        self.assertEqual(runner.build_parser().parse_args([]).suite, "browser")
 
 
 if __name__ == "__main__":

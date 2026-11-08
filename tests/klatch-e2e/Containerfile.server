@@ -1,0 +1,28 @@
+# Disposable Klatch server image for `run.py --topology none` (both suites).
+#
+# Build context is a Klatch source tree (github.com/qiangli/klatch); only
+# net/server and net/transform are used, so no web bundle is built. The
+# server is pure Go (glebarez/sqlite), CGO_ENABLED=0. Every container starts
+# with an empty, unclaimed store at /var/lib/klatch: the participant journey
+# refuses anything else, and `oci rm -f` drops the store and its accounts.
+#
+#   bashy oci build -f tests/klatch-e2e/Containerfile.server \
+#       -t localhost/klatch-e2e:REV KLATCH_TREE
+#
+# Listens on :7100, the port of run.py's LOCAL_URL.
+FROM docker.io/library/golang:1.27.2-alpine AS build
+WORKDIR /src/net/server
+COPY net/server/ ./
+RUN CGO_ENABLED=0 GOTOOLCHAIN=local go build -trimpath -o /out/klatch .
+
+FROM docker.io/library/alpine:3.20
+COPY --from=build /out/klatch /usr/local/bin/klatch
+COPY net/transform/ /opt/klatch/transform/
+RUN adduser -D -u 10001 klatch \
+ && mkdir -p /var/lib/klatch /opt/klatch/web \
+ && chown klatch /var/lib/klatch
+USER klatch
+EXPOSE 7100
+LABEL org.opencontainers.image.title="klatch-e2e"
+ENTRYPOINT ["/usr/local/bin/klatch", "-s", "/var/lib/klatch", "-w", "/opt/klatch/web", \
+            "-t", "/opt/klatch/transform", "-p", ":7100"]
