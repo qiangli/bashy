@@ -141,7 +141,7 @@ resolve_cosign() {
   if [ ! -f "$bin" ]; then
     name=cosign-${host_os}-${host_arch}
     if [ "$host_os" = "windows" ]; then name="${name}.exe"; fi
-    curl -fsSL --retry 3 -o "$bin" "https://github.com/sigstore/cosign/releases/download/${ver}/${name}" \
+    gh_release_get sigstore/cosign "$ver" "$name" "$bin" \
       || die "cosign download failed"
     chmod +x "$bin" || die "cannot chmod cosign"
     got=$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$bin") \
@@ -152,6 +152,22 @@ resolve_cosign() {
 }
 
 command -v curl >/dev/null 2>&1 || die "curl is required"
+
+# gh_release_get REPO TAG NAME OUT - download one GitHub release asset. The
+# browser download URL is tried first; when GitHub answers it with errors
+# (it has served a 504 for one asset while the API served the same bytes),
+# fall back to the release-asset API. Every caller still verifies the bytes
+# against a committed pin or signature, so the route never changes trust.
+gh_release_get() {
+  curl -fsSL --retry 3 -o "$4" "https://github.com/$1/releases/download/$2/$3" && return 0
+  echo "fetch-signed-runner: download URL failed for $3; trying the release-asset API" >&2
+  _id=$(curl -fsSL --retry 3 ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+      "https://api.github.com/repos/$1/releases/tags/$2" |
+    python3 -c 'import json,sys; n=sys.argv[1]; print(next((str(a["id"]) for a in json.load(sys.stdin).get("assets",[]) if a.get("name")==n),""))' "$3") || return 1
+  [ -n "$_id" ] || return 1
+  curl -fsSL --retry 3 -H 'Accept: application/octet-stream' ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
+    -o "$4" "https://api.github.com/repos/$1/releases/assets/$_id"
+}
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
 
 cosign=$(resolve_cosign)
@@ -172,7 +188,11 @@ fetch() { # $1 = filename
   if [ -f "$cache_dir/${RUNNER_TAG}-$1" ]; then
     cp "$cache_dir/${RUNNER_TAG}-$1" "$stage/$1" || die "cannot stage cached $1"
   else
-    curl -fsSL --retry 3 -o "$stage/$1" "${base_url}/$1" || die "download failed: $1"
+    if [ -n "${RUNNER_BASE_URL:-}" ]; then
+      curl -fsSL --retry 3 -o "$stage/$1" "${base_url}/$1" || die "download failed: $1"
+    else
+      gh_release_get "$RUNNER_REPO" "$RUNNER_TAG" "$1" "$stage/$1" || die "download failed: $1"
+    fi
     cp "$stage/$1" "$cache_dir/${RUNNER_TAG}-$1" || die "cannot cache $1"
   fi
 }
