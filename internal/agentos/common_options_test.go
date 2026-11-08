@@ -15,6 +15,7 @@ import (
 
 	"github.com/qiangli/coreutils/tool"
 	"github.com/qiangli/yoke/pkg/binmgr"
+	"github.com/spf13/cobra"
 )
 
 const (
@@ -569,5 +570,102 @@ func TestCommonOptionFindingRules(t *testing.T) {
 	}
 	if got := newShortOptions([]string{existing}, []string{existing}); len(got) != 0 {
 		t.Fatalf("baseline short letter flagged: %v", got)
+	}
+}
+
+// TestApplyCommonOptions covers the engine-handled common options on a command
+// that does not itself declare --explain, --json, or --fields.
+func TestApplyCommonOptions(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		args        []string
+		wantErr     bool
+		errContains string
+		runCalled   bool
+		wantOutput  string
+	}{
+		{
+			name:       "explain no value",
+			args:       []string{"--explain", "operand"},
+			runCalled:  false,
+			wantOutput: "explain: test (not executed)",
+		},
+		{
+			name:       "explain=true",
+			args:       []string{"--explain=true"},
+			runCalled:  false,
+			wantOutput: "explain: test (not executed)",
+		},
+		{
+			name:      "explain=false",
+			args:      []string{"--explain=false", "operand"},
+			runCalled: true,
+		},
+		{
+			name:        "explain=maybe",
+			args:        []string{"--explain=maybe"},
+			wantErr:     true,
+			errContains: "invalid value",
+		},
+		{
+			name:      "json=false",
+			args:      []string{"--json=false"},
+			runCalled: true,
+		},
+		{
+			name:        "json=true",
+			args:        []string{"--json=true"},
+			wantErr:     true,
+			errContains: "--json unsupported for test",
+		},
+		{
+			name:      "fields=empty",
+			args:      []string{"--fields=", "operand"},
+			runCalled: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var runCalled bool
+			root := &cobra.Command{
+				Use:   "test",
+				Short: "test command",
+				RunE: func(cmd *cobra.Command, args []string) error {
+					runCalled = true
+					return nil
+				},
+			}
+			root.SetArgs(tc.args)
+
+			out, err := applyCommonOptions(root, tc.args)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("applyCommonOptions: expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.errContains) {
+					t.Fatalf("applyCommonOptions error %q does not contain %q", err.Error(), tc.errContains)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("applyCommonOptions: unexpected error: %v", err)
+			}
+
+			var stdout bytes.Buffer
+			root.SetOut(&stdout)
+			root.SetErr(&stdout)
+			root.SetArgs(out)
+			if err := root.Execute(); err != nil {
+				t.Fatalf("Execute: unexpected error: %v", err)
+			}
+			if runCalled != tc.runCalled {
+				t.Errorf("RunE called=%v, want %v", runCalled, tc.runCalled)
+			}
+			if tc.wantOutput != "" && !strings.Contains(stdout.String(), tc.wantOutput) {
+				t.Errorf("output %q does not contain %q", stdout.String(), tc.wantOutput)
+			}
+			if tc.wantOutput == "" && strings.Contains(stdout.String(), "explain:") {
+				t.Errorf("unexpected explain output: %q", stdout.String())
+			}
+		})
 	}
 }
