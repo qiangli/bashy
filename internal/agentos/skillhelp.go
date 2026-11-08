@@ -134,8 +134,10 @@ func classicHelp(args []string) (string, error) {
 	if ctx.Err() != nil {
 		return "", ctx.Err()
 	}
-	if err != nil && len(out) == 0 {
-		return "", err
+	if err != nil {
+		if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 2 || !strings.Contains(strings.ToLower(string(out)), "usage") {
+			return string(out), err
+		}
 	}
 	return string(out), nil
 }
@@ -173,7 +175,7 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 				return 2, true
 			}
 		}
-		if !isHelpVerb(name) {
+		if !isHelpVerb(name) && !(explicit != "" && tool.Lookup(name) != nil) {
 			if explicit != "" {
 				fmt.Fprintf(os.Stderr, "bashy help: unknown front-door verb %q\n", name)
 				return 2, true
@@ -184,18 +186,30 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 	} else {
 		// Root command help only: operands and subcommand help remain owned by
 		// their dispatcher, so a literal --help after -- is never intercepted.
-		if len(args) != 2 || (args[1] != "--help" && args[1] != "-h") || !isHelpVerb(args[0]) {
+		if len(args) < 2 || (args[1] != "--help" && args[1] != "-h") || !isHelpVerb(args[0]) {
 			return 0, false
 		}
+		if len(args) > 2 {
+			if len(args) == 4 && args[2] == "--format" && args[3] != "" {
+				explicit = args[3]
+			} else if len(args) == 3 && strings.HasPrefix(args[2], "--format=") && args[2] != "--format=" {
+				explicit = strings.TrimPrefix(args[2], "--format=")
+			} else if (len(args) == 3 && (args[2] == "--format" || args[2] == "--format=")) || (len(args) == 4 && args[2] == "--format" && args[3] == "") {
+				fmt.Fprintln(os.Stderr, "bashy help: --format needs a value")
+				return 2, true
+			} else {
+				return 0, false
+			}
+		}
 		name = args[0]
-		request = args
+		request = args[:2]
 	}
 	format, err := helpFormat(explicit, os.Getenv("BASHY_HELP_FORMAT"), os.Getenv("BASHY_AGENTIC") == "1", fleet.DetectTool)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy help:", err)
 		return 2, true
 	}
-	if format == "classic" && args[0] != "help" {
+	if format == "classic" && args[0] != "help" && explicit == "" {
 		return 0, false
 	}
 	entry, ok := lookupEntry(name)
@@ -226,6 +240,10 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 		}
 	}
 	if err != nil {
+		if exit, ok := err.(*exec.ExitError); ok {
+			fmt.Fprint(os.Stderr, output)
+			return exit.ExitCode(), true
+		}
 		fmt.Fprintln(os.Stderr, "bashy help:", err)
 		return 1, true
 	}

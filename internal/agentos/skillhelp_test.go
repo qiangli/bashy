@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +26,10 @@ func TestSkillHelpProcess(t *testing.T) {
 			os.Args = append([]string{"bashy"}, os.Args[i+1:]...)
 			break
 		}
+	}
+	if os.Getenv("BASHY_TEST_DB_HELP") == "1" && len(os.Args) == 3 && os.Args[1] == "db" && os.Args[2] == "--help" {
+		fmt.Fprint(os.Stdout, "Usage: db [command]\n")
+		os.Exit(0)
 	}
 	classicHelpCommand = func(ctx context.Context, args []string) *exec.Cmd {
 		return exec.CommandContext(ctx, exe, append([]string{"-test.run=^TestSkillHelpProcess$", "--"}, args...)...)
@@ -233,11 +238,61 @@ func TestSkillHelpLongDocument(t *testing.T) {
 
 func TestSkillHelpLeavesClassicSurfaces(t *testing.T) {
 	t.Setenv("BASHY_HELP_FORMAT", "skill")
-	for _, args := range [][]string{{"echo", "--help"}, {"printf", "--help"}, {"ls", "--help"}, {"cd", "--help"}, {"sprint", "--", "--help"}, {"sprint", "show", "--help"}} {
+	for _, args := range [][]string{{"echo", "--help"}, {"printf", "--help"}, {"ls", "--help"}, {"cd", "--help"}, {"sprint", "--", "--help"}, {"sprint", "show", "--help"}, {"sprint", "--format", "skill", "--help"}, {"sprint", "--help", "--", "--format", "skill"}, {"sprint", "--help", "operand", "--format", "skill"}, {"lens", "--help", "--format", "skill"}, {"lens", "-f", "json", "--help"}} {
 		if _, handled := dispatchFormattedHelp(args); handled {
 			t.Fatalf("intercepted %v", args)
 		}
 	}
+}
+
+func TestSkillHelpTrailingFormat(t *testing.T) {
+	for _, args := range [][]string{{"sprint", "--help", "--format", "mcp"}, {"sprint", "-h", "--format=mcp"}} {
+		out := skillHelpProcess(t, "classic", args...)
+		if !json.Valid(out) {
+			t.Fatalf("%v: expected MCP JSON, got %s", args, out)
+		}
+	}
+}
+
+func TestSkillHelpTranspileAndApplet(t *testing.T) {
+	out := skillHelpProcess(t, "classic", "transpile", "--help")
+	if !bytes.Contains(out, []byte("Usage:")) || !bytes.Contains(out, []byte("--map")) {
+		t.Fatalf("transpile help: %s", out)
+	}
+	t.Setenv("BASHY_TEST_DB_HELP", "1")
+	out = skillHelpProcess(t, "classic", "help", "db", "--format=classic")
+	if !bytes.Contains(out, []byte("Usage: db")) {
+		t.Fatalf("applet help: %s", out)
+	}
+}
+
+func TestSkillHelpInvalidTrailingFormat(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=^TestSkillHelpProcess$", "--", "sprint", "--help", "--format=invalid")
+	cmd.Env = append(os.Environ(), "BASHY_TEST_SKILLHELP=1")
+	if err := cmd.Run(); err == nil || err.(*exec.ExitError).ExitCode() != 2 {
+		t.Fatalf("invalid format exit = %v, want 2", err)
+	}
+}
+
+func TestSkillHelpClassicFailure(t *testing.T) {
+	t.Setenv("BASHY_TEST_CLASSIC_FAILURE", "1")
+	original := classicHelpCommand
+	classicHelpCommand = func(ctx context.Context, args []string) *exec.Cmd {
+		return exec.CommandContext(ctx, os.Args[0], "-test.run=^TestSkillHelpFailureChild$")
+	}
+	t.Cleanup(func() { classicHelpCommand = original })
+	out, err := classicHelp([]string{"transpile", "--help"})
+	if err == nil || err.(*exec.ExitError).ExitCode() != 2 || !strings.Contains(out, "unknown flag") {
+		t.Fatalf("classicHelp = %q, %v", out, err)
+	}
+}
+
+func TestSkillHelpFailureChild(t *testing.T) {
+	if os.Getenv("BASHY_TEST_CLASSIC_FAILURE") != "1" {
+		return
+	}
+	_, _ = os.Stderr.WriteString("transpile: unknown flag: --help\n")
+	os.Exit(2)
 }
 
 func TestSkillHelpMCPMatchesServer(t *testing.T) {
