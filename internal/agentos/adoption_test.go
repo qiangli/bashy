@@ -118,11 +118,48 @@ func TestHelpCommonOptionsFooterReportsPerOptionStatus(t *testing.T) {
 	}
 }
 
+func TestAdaptSinceIsUnavailable(t *testing.T) {
+	declared := declaredLongFlags("adapt")
+	if !declared["since"] {
+		t.Fatal("adapt test premise broken: adapt does not declare --since")
+	}
+	if got := helpOptionStatus("adapt", CommonOption{Option: "--since"}, declared); got != optUnavailable {
+		t.Errorf("adapt --since status = %q, want %q", got, optUnavailable)
+	}
+	f := HelpCommonOptionsFooter("adapt", declared)
+	for _, want := range []string{"--since=unavailable", "Unavailable options (--since)", "not yet implemented"} {
+		if !strings.Contains(f, want) {
+			t.Errorf("adapt footer lacks %q: %s", want, f)
+		}
+	}
+	note := MCPCommonOptionsNote("adapt", cobraSchemas("adapt")["adapt"])
+	for _, want := range []string{"--since=unavailable", "Unavailable (--since)", "not yet implemented"} {
+		if !strings.Contains(note, want) {
+			t.Errorf("adapt MCP note lacks %q: %s", want, note)
+		}
+	}
+	// Other commands are untouched: --since stays missing, with no
+	// unavailable sentence.
+	other := HelpCommonOptionsFooter("sprint show", map[string]bool{"json": true, "zero": true})
+	if !strings.Contains(other, "--since=missing") {
+		t.Errorf("sprint footer lost --since=missing: %s", other)
+	}
+	if strings.Contains(other, "unavailable") || strings.Contains(other, "Unavailable") {
+		t.Errorf("sprint footer gained unavailable text: %s", other)
+	}
+	if otherNote := MCPCommonOptionsNote("sprint", cobraSchemas("sprint")["sprint"]); strings.Contains(otherNote, "unavailable") || strings.Contains(otherNote, "Unavailable") {
+		t.Errorf("sprint MCP note gained unavailable text: %s", otherNote)
+	}
+}
+
 func TestSkillHelpFooterFollowsCommandSchema(t *testing.T) {
 	declared := declaredLongFlags("adapt")
+	if !declared["since"] {
+		t.Fatal("adapt test premise broken: adapt does not declare --since")
+	}
 	got := skillHelpProcess(t, "classic", "help", "--format", "skill", "adapt")
 	for _, o := range CommonOptionsVocabulary {
-		want := o.Option + "=" + helpOptionStatus(o, declared)
+		want := o.Option + "=" + helpOptionStatus("adapt", o, declared)
 		if !strings.Contains(string(got), want) {
 			t.Errorf("adapt skill help lacks %q", want)
 		}
@@ -130,7 +167,7 @@ func TestSkillHelpFooterFollowsCommandSchema(t *testing.T) {
 }
 
 func TestMCPCommonOptionsNoteIsWiredIntoServerAndHelp(t *testing.T) {
-	note := MCPCommonOptionsNote(cobraSchemas("sprint")["sprint"])
+	note := MCPCommonOptionsNote("sprint", cobraSchemas("sprint")["sprint"])
 	for _, o := range CommonOptionsVocabulary {
 		if !strings.Contains(note, o.Option+"=") {
 			t.Errorf("note lacks %s", o.Option)
