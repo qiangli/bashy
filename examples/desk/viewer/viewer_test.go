@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -24,9 +25,10 @@ func startServer(t *testing.T, breakM string) (string, string) {
 	t.Cleanup(func() { breakMode = old })
 	dir := t.TempDir()
 	a := &app{dir: dir}
-	srv := httptest.NewServer(a)
+	srv := httptest.NewUnstartedServer(a)
+	a.baseURL = "http://" + srv.Listener.Addr().String()
+	srv.Start()
 	t.Cleanup(srv.Close)
-	a.baseURL = srv.URL
 	return srv.URL, dir
 }
 
@@ -594,5 +596,235 @@ func TestComparesSameKindOfPage(t *testing.T) {
 	_, p4, _ := get(t, base+"/?id=k1&page=4")
 	if strings.Contains(p4, `data-changed="true"`) || !strings.Contains(p4, "4 of 4 blocks new or changed") {
 		t.Errorf("an all-new page reports the count without in-place highlight")
+	}
+}
+
+func TestChartFenceRendersSVGInExportAndRender(t *testing.T) {
+	base, dir := startServer(t, "")
+	cli := cliFor(base, dir)
+	md := "# Metrics Report\n\n```chart widget=bar title=\"Sprint Velocity\"\nlabel,value\nS1,12\nS2,19\n```\n"
+	if code, out := cli("add", "chart-book", "--body", md); code != 0 {
+		t.Fatalf("add chart-book: %d %s", code, out)
+	}
+
+	// 1. Live viewer page renders <svg>
+	code, pageHTML, _ := get(t, base+"/?id=chart-book")
+	if code != 200 {
+		t.Fatalf("GET /?id=chart-book: %d", code)
+	}
+	if !strings.Contains(pageHTML, "<svg") || strings.Contains(pageHTML, "chart renderer unavailable") {
+		t.Errorf("viewer page did not render chart SVG:\n%s", pageHTML)
+	}
+
+	// 2. POST /api/render renders <svg>
+	renderReq, _ := json.Marshal(map[string]string{"text": md})
+	res, err := http.Post(base+"/api/render", "application/json", bytes.NewReader(renderReq))
+	if err != nil {
+		t.Fatalf("POST /api/render: %v", err)
+	}
+	defer res.Body.Close()
+	rawRender, _ := io.ReadAll(res.Body)
+	var renderResp struct {
+		HTML string `json:"html"`
+	}
+	_ = json.Unmarshal(rawRender, &renderResp)
+	if res.StatusCode != 200 || !strings.Contains(renderResp.HTML, "<svg") || strings.Contains(renderResp.HTML, "chart renderer unavailable") {
+		t.Errorf("/api/render did not render chart SVG: %d %s", res.StatusCode, renderResp.HTML)
+	}
+
+	// 3. HTML export renders <svg>
+	outHTML := filepath.Join(t.TempDir(), "chart-book.html")
+	if code, msg := cli("export", "chart-book", "--to", "html", "-o", outHTML); code != 0 {
+		t.Fatalf("export html: %d %s", code, msg)
+	}
+	exportedBytes, err := os.ReadFile(outHTML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exported := string(exportedBytes)
+	for _, want := range []string{"<svg", `class="desk-chart-title"`, `class="desk-series-1"`} {
+		if !strings.Contains(exported, want) {
+			t.Errorf("exported HTML lacks %q", want)
+		}
+	}
+	if strings.Contains(exported, "chart renderer unavailable") {
+		t.Errorf("exported HTML contains fallback error text")
+	}
+}
+
+func TestFullBookPrintRendersAllPages(t *testing.T) {
+	base, dir := startServer(t, "")
+	cli := cliFor(base, dir)
+	if code, out := cli("add", "print-book", "--title", "Full Book Print", "--body", "# Page One\n\nFirst page unique body."); code != 0 {
+		t.Fatalf("add: %d %s", code, out)
+	}
+	if code, out := cli("append", "print-book", "--body", "# Page Two\n\nSecond page unique body."); code != 0 {
+		t.Fatalf("append p2: %d %s", code, out)
+	}
+	if code, out := cli("append", "print-book", "--body", "# Page Three\n\nThird page unique body."); code != 0 {
+		t.Fatalf("append p3: %d %s", code, out)
+	}
+
+	// 1. Single-page view has #print button and #printAllPages containing all 3 pages for @media print
+	code, p1HTML, _ := get(t, base+"/?id=print-book&page=1")
+	if code != 200 {
+		t.Fatalf("GET page 1: %d", code)
+	}
+	for _, want := range []string{
+		`id="print"`,
+		`id="printAllPages"`,
+		`id="print-p1"`,
+		`id="print-p2"`,
+		`id="print-p3"`,
+		"First page unique body.",
+		"Second page unique body.",
+		"Third page unique body.",
+	} {
+		if !strings.Contains(p1HTML, want) {
+			t.Errorf("single-page view lacks full-book print element %q", want)
+		}
+	}
+	if v := contracttest.StyleViolations(p1HTML, nil); len(v) > 0 {
+		t.Errorf("single-page with print book style violations: %v", v)
+	}
+
+	// 2. Direct print endpoints (/print?id=... and /?id=...&print=1 and /?id=...&page=all) render all pages together
+	for _, path := range []string{"/print?id=print-book", "/?id=print-book&print=1", "/?id=print-book&page=all"} {
+		code, fullHTML, _ := get(t, base+path)
+		if code != 200 {
+			t.Fatalf("GET %s: %d", path, code)
+		}
+		for _, want := range []string{
+			`id="p1"`,
+			`id="p2"`,
+			`id="p3"`,
+			"First page unique body.",
+			"Second page unique body.",
+			"Third page unique body.",
+		} {
+			if !strings.Contains(fullHTML, want) {
+				t.Errorf("%s lacks %q", path, want)
+			}
+		}
+		if v := contracttest.StyleViolations(fullHTML, nil); len(v) > 0 {
+			t.Errorf("%s style violations: %v", path, v)
+		}
+	}
+}
+
+func TestLargePNGAssetInlinedWithoutTruncation(t *testing.T) {
+	base, dir := startServer(t, "")
+	cli := cliFor(base, dir)
+
+	// 300 KiB (>256 KiB) synthetic PNG payload
+	pngData := make([]byte, 300*1024)
+	copy(pngData, []byte("\x89PNG\r\n\x1a\n"))
+	for i := 8; i < len(pngData); i++ {
+		pngData[i] = byte((i*31 + 17) & 0xff)
+	}
+	imgPath := filepath.Join(t.TempDir(), "large.png")
+	if err := os.WriteFile(imgPath, pngData, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, out := cli("add", "large-asset-book", "--body", "# Large Asset\n\n![large](large.png)\n", "--asset", imgPath); code != 0 {
+		t.Fatalf("add with 300 KiB asset: %d %s", code, out)
+	}
+	outHTML := filepath.Join(t.TempDir(), "large-asset-book.html")
+	if code, msg := cli("export", "large-asset-book", "--to", "html", "-o", outHTML); code != 0 {
+		t.Fatalf("export html: %d %s", code, msg)
+	}
+	raw, err := os.ReadFile(outHTML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantURI := "data:image/png;base64," + base64.StdEncoding.EncodeToString(pngData)
+	if !strings.Contains(string(raw), wantURI) {
+		t.Fatalf("exported HTML did not inline full 300 KiB PNG asset without truncation (len(html)=%d, len(wantURI)=%d)", len(raw), len(wantURI))
+	}
+}
+
+func TestViewerSandboxE2E(t *testing.T) {
+	base, dir := startServer(t, "")
+	addr := strings.TrimPrefix(base, "http://")
+
+	sb := t.TempDir()
+	home := filepath.Join(sb, "home")
+	xdgCache := filepath.Join(sb, "cache")
+	xdgConfig := filepath.Join(sb, "config")
+	xdgData := filepath.Join(sb, "data")
+	bashyHome := filepath.Join(sb, "bashy")
+	for _, d := range []string{home, xdgCache, xdgConfig, xdgData, bashyHome} {
+		if err := os.MkdirAll(d, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// Pre-build viewer binary into the sandbox XDG_CACHE_HOME so viewer.bsh runs cleanly without writing to the repo dir.
+	binDir := filepath.Join(xdgCache, "bashy", "desk-viewer")
+	if err := os.MkdirAll(binDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	binPath := filepath.Join(binDir, "viewer")
+	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
+	buildCmd.Env = append(os.Environ(), "GOWORK=off", "CGO_ENABLED=0")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build viewer: %v: %s", err, out)
+	}
+
+	shell := "bash"
+	if p, err := exec.LookPath("bashy"); err == nil {
+		shell = p
+	}
+	runBsh := func(extraEnv []string, args ...string) string {
+		t.Helper()
+		argv := append([]string{"./viewer.bsh"}, args...)
+		cmd := exec.Command(shell, argv...)
+		cmd.Env = append(os.Environ(),
+			"HOME="+home,
+			"BASHY_HOME="+bashyHome,
+			"XDG_CACHE_HOME="+xdgCache,
+			"XDG_CONFIG_HOME="+xdgConfig,
+			"XDG_DATA_HOME="+xdgData,
+			"GIT_AUTHOR_EMAIL=alice@example.test",
+			"GIT_COMMITTER_EMAIL=alice@example.test",
+			"VIEWER_ADDR="+addr,
+			"VIEWER_DATA="+dir,
+		)
+		cmd.Env = append(cmd.Env, extraEnv...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("viewer.bsh %v failed: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+
+	body := "# Sandbox Book\n\nHello from sandbox.\n\n```chart widget=bar\nlabel,value\nA,10\nB,20\n```\n"
+	addOut := runBsh(nil, "add", "sb-book", "--title", "Sandbox Title", "--body", body)
+	if !strings.Contains(addOut, "sb-book") {
+		t.Fatalf("unexpected add output: %s", addOut)
+	}
+	runBsh(nil, "append", "sb-book", "--body", "# Page 2\n\nSecond sandbox page.")
+
+	showOut := runBsh(nil, "show", "sb-book")
+	if !strings.Contains(showOut, "Hello from sandbox.") || !strings.Contains(showOut, "Second sandbox page.") {
+		t.Fatalf("unexpected show output: %s", showOut)
+	}
+
+	htmlOut := filepath.Join(sb, "sb-book.html")
+	runBsh(nil, "export", "sb-book", "--to", "html", "-o", htmlOut)
+	htmlBytes, err := os.ReadFile(htmlOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(htmlBytes), "<svg") || !strings.Contains(string(htmlBytes), "Second sandbox page.") {
+		t.Fatalf("sandbox HTML export missing chart SVG or second page")
+	}
+
+	pdfOut := filepath.Join(sb, "sb-book.pdf")
+	runBsh([]string{"CHROMIUM_PATH=/nonexistent"}, "export", "sb-book", "--to", "pdf", "-o", pdfOut)
+	pdfBytes, err := os.ReadFile(pdfOut)
+	if err != nil || !bytes.HasPrefix(pdfBytes, []byte("%PDF-")) {
+		t.Fatalf("sandbox PDF export invalid: err=%v, len=%d", err, len(pdfBytes))
 	}
 }

@@ -73,6 +73,8 @@ type actionRequest struct {
 	Session  string          `json:"session,omitempty"`
 	Page     string          `json:"page,omitempty"`
 	Invite   string          `json:"invite,omitempty"`
+	To       string          `json:"to,omitempty"`
+	Output   string          `json:"output,omitempty"`
 	Fields   []kit.Field     `json:"fields,omitempty"`
 	Assets   []assetIn       `json:"assets,omitempty"`
 }
@@ -177,7 +179,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
-	case path == "/" && r.Method == "GET":
+	case (path == "/" || path == "/print") && r.Method == "GET":
 		me := kit.ParticipantCookie(w, r, "viewer-participant")
 		code, body := a.page(r, me)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -200,7 +202,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		kit.WriteJSON(w, a.openView(r, b))
 		return
-	case path == "/api/export" && r.Method == "GET":
+	case (path == "/api/export" || path == "/export") && r.Method == "GET":
 		me := kit.ParticipantCookie(w, r, "viewer-participant")
 		a.mu.Lock()
 		defer a.mu.Unlock()
@@ -216,6 +218,27 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		out, name, err := a.exportHTML(r, b, r.URL.Query().Get("page"))
 		if err != nil {
 			fail(w, err)
+			return
+		}
+		if strings.EqualFold(strings.TrimPrefix(r.URL.Query().Get("to"), "."), "pdf") {
+			tmpPDF := filepath.Join(a.dir, "exports", strings.TrimSuffix(name, ".html")+".pdf")
+			if err := os.MkdirAll(filepath.Dir(tmpPDF), 0700); err != nil {
+				fail(w, &httpError{http.StatusInternalServerError, "Could not prepare PDF export"})
+				return
+			}
+			if err := printPDF(out, tmpPDF); err != nil {
+				fail(w, &httpError{http.StatusInternalServerError, err.Error()})
+				return
+			}
+			pdfBytes, err := os.ReadFile(tmpPDF)
+			if err != nil {
+				fail(w, &httpError{http.StatusInternalServerError, "Could not read PDF export"})
+				return
+			}
+			pdfName := strings.TrimSuffix(name, ".html") + ".pdf"
+			w.Header().Set("Content-Type", "application/pdf")
+			w.Header().Set("Content-Disposition", `attachment; filename="`+pdfName+`"`)
+			w.Write(pdfBytes)
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -567,7 +590,7 @@ func (a *app) join(r *http.Request, req actionRequest, me string) (map[string]an
 	return a.openView(r, b), nil
 }
 
-// export writes the self-contained HTML under <data>/exports and returns
+// export writes the self-contained HTML (or PDF) under <data>/exports and returns
 // its path (the CLI's -o fetches the bytes from GET /api/export instead).
 func (a *app) export(r *http.Request, req actionRequest, me string) (map[string]any, error) {
 	b, err := a.load(req.ID)
@@ -581,7 +604,33 @@ func (a *app) export(r *http.Request, req actionRequest, me string) (map[string]
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(a.dir, "exports", name)
+	to := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(req.To), "."))
+	if to == "" || to == "htm" {
+		to = "html"
+	}
+	if to == "pdf" {
+		pdfName := strings.TrimSuffix(name, ".html") + ".pdf"
+		path := req.Output
+		if path == "" {
+			path = filepath.Join(a.dir, "exports", pdfName)
+		}
+		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+			return nil, &httpError{http.StatusInternalServerError, "Could not create export directory"}
+		}
+		if err := printPDF(out, path); err != nil {
+			return nil, &httpError{http.StatusInternalServerError, err.Error()}
+		}
+		st, _ := os.Stat(path)
+		size := 0
+		if st != nil {
+			size = int(st.Size())
+		}
+		return map[string]any{"id": b.ID, "format": "pdf", "path": path, "bytes": size}, nil
+	}
+	path := req.Output
+	if path == "" {
+		path = filepath.Join(a.dir, "exports", name)
+	}
 	if err := kit.AtomicWrite(path, out); err != nil {
 		return nil, &httpError{http.StatusInternalServerError, "Could not write the export"}
 	}

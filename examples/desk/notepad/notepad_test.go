@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -27,9 +28,10 @@ func startServer(t *testing.T, breakM string) (string, string) {
 		dir:   dir,
 		notes: map[string]*note{},
 	}
-	srv := httptest.NewServer(a)
+	srv := httptest.NewUnstartedServer(a)
+	a.baseURL = "http://" + srv.Listener.Addr().String()
+	srv.Start()
 	t.Cleanup(srv.Close)
-	a.baseURL = srv.URL
 	return srv.URL, dir
 }
 
@@ -111,10 +113,12 @@ func TestConvertJSON(t *testing.T) {
 }
 
 func TestConvertPDF(t *testing.T) {
-	pdfSamplePath := "/Users/qiangli/go/pkg/mod/github.com/ledongthuc/pdf@v0.0.0-20250511090121-5959a4027728/examples/read_plain_text/pdf_test.pdf"
-	raw, err := os.ReadFile(pdfSamplePath)
+	if _, err := exec.LookPath("bashy"); err != nil {
+		t.Skip("bashy not on PATH")
+	}
+	raw, err := renderPDFFallback("This is a heading", "Paragraph content inside PDF")
 	if err != nil {
-		t.Skipf("sample pdf not available at %s", pdfSamplePath)
+		t.Fatalf("renderPDFFallback: %v", err)
 	}
 	conv, fmtDetected, err := ConvertContent(raw, "doc.pdf")
 	if err != nil {
@@ -422,5 +426,154 @@ func deskCLICallback(base string) func(...string) (int, string) {
 		argv := append([]string{"--addr", strings.TrimPrefix(base, "http://")}, args...)
 		code := runCLI(argv, &out)
 		return code, out.String()
+	}
+}
+
+func TestChartFenceRendersSVGInExport(t *testing.T) {
+	srvURL, dataDir := startServer(t, "")
+	addr := strings.TrimPrefix(srvURL, "http://")
+
+	var out bytes.Buffer
+	md := "# Chart Note\n\n```chart widget=bar title=\"Note Chart\"\nlabel,value\nAlpha,15\nBeta,30\n```\n"
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "add", "--id", "chart-note", "--title", "Chart Note", "--body", md}, &out); code != 0 {
+		t.Fatalf("add chart-note: exit %d: %s", code, out.String())
+	}
+
+	out.Reset()
+	outHTML := filepath.Join(t.TempDir(), "chart-note.html")
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "export", "chart-note", "--to", "html", "-o", outHTML}, &out); code != 0 {
+		t.Fatalf("export html: exit %d: %s", code, out.String())
+	}
+	htmlBytes, err := os.ReadFile(outHTML)
+	if err != nil {
+		t.Fatal(err)
+	}
+	exported := string(htmlBytes)
+	for _, want := range []string{"<svg", `class="desk-chart-title"`, `class="desk-series-1"`} {
+		if !strings.Contains(exported, want) {
+			t.Errorf("exported HTML lacks %q:\n%s", want, exported)
+		}
+	}
+	if strings.Contains(exported, "chart renderer unavailable") {
+		t.Errorf("exported HTML contains fallback error text")
+	}
+}
+
+func TestExportPDFBrowserAndFallback(t *testing.T) {
+	srvURL, dataDir := startServer(t, "")
+	addr := strings.TrimPrefix(srvURL, "http://")
+
+	var out bytes.Buffer
+	richBody := "# Rich Note — Café 100%\n\n| Item | Score |\n| --- | --- |\n| UTF-8 | 100 |\n\n```chart widget=bar\nname,value\nA,10\nB,25\n```\n"
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "add", "--id", "rich-pdf-note", "--title", "Rich PDF Note", "--body", richBody}, &out); code != 0 {
+		t.Fatalf("add rich-pdf-note: exit %d: %s", code, out.String())
+	}
+
+	// 1. Default/browser PDF export
+	out.Reset()
+	browserPDF := filepath.Join(t.TempDir(), "browser.pdf")
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "export", "rich-pdf-note", "--to", "pdf", "-o", browserPDF}, &out); code != 0 {
+		t.Fatalf("export pdf (default/browser): exit %d: %s", code, out.String())
+	}
+	bData, err := os.ReadFile(browserPDF)
+	if err != nil || !bytes.HasPrefix(bData, []byte("%PDF-")) {
+		t.Fatalf("default/browser PDF output invalid: err=%v, len=%d", err, len(bData))
+	}
+
+	// 2. Pure-Go fallback when CHROMIUM_PATH=/nonexistent
+	t.Setenv("CHROMIUM_PATH", "/nonexistent")
+	out.Reset()
+	fallbackPDF := filepath.Join(t.TempDir(), "fallback.pdf")
+	if code := runCLI([]string{"-addr", addr, "-data", dataDir, "export", "rich-pdf-note", "--to", "pdf", "-o", fallbackPDF}, &out); code != 0 {
+		t.Fatalf("export pdf (fallback): exit %d: %s", code, out.String())
+	}
+	fData, err := os.ReadFile(fallbackPDF)
+	if err != nil || !bytes.HasPrefix(fData, []byte("%PDF-")) {
+		t.Fatalf("fallback PDF output invalid: err=%v, len=%d", err, len(fData))
+	}
+}
+
+func TestNotepadSandboxE2E(t *testing.T) {
+	srvURL, dataDir := startServer(t, "")
+	addr := strings.TrimPrefix(srvURL, "http://")
+
+	sb := t.TempDir()
+	home := filepath.Join(sb, "home")
+	xdgCache := filepath.Join(sb, "cache")
+	xdgConfig := filepath.Join(sb, "config")
+	xdgData := filepath.Join(sb, "data")
+	bashyHome := filepath.Join(sb, "bashy")
+	for _, d := range []string{home, xdgCache, xdgConfig, xdgData, bashyHome} {
+		if err := os.MkdirAll(d, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	binDir := filepath.Join(xdgCache, "bashy", "desk-notepad")
+	if err := os.MkdirAll(binDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	binPath := filepath.Join(binDir, "notepad")
+	buildCmd := exec.Command("go", "build", "-o", binPath, ".")
+	buildCmd.Env = append(os.Environ(), "GOWORK=off", "CGO_ENABLED=0")
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("go build notepad: %v: %s", err, out)
+	}
+
+	shell := "bash"
+	if p, err := exec.LookPath("bashy"); err == nil {
+		shell = p
+	}
+	runBsh := func(extraEnv []string, args ...string) string {
+		t.Helper()
+		argv := append([]string{"./notepad.bsh"}, args...)
+		cmd := exec.Command(shell, argv...)
+		cmd.Env = append(os.Environ(),
+			"HOME="+home,
+			"BASHY_HOME="+bashyHome,
+			"XDG_CACHE_HOME="+xdgCache,
+			"XDG_CONFIG_HOME="+xdgConfig,
+			"XDG_DATA_HOME="+xdgData,
+			"GIT_AUTHOR_EMAIL=alice@example.test",
+			"GIT_COMMITTER_EMAIL=alice@example.test",
+			"NOTEPAD_ADDR="+addr,
+			"NOTEPAD_DATA="+dataDir,
+		)
+		cmd.Env = append(cmd.Env, extraEnv...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("notepad.bsh %v failed: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+
+	addOut := runBsh(nil, "add", "--id", "sb-note", "--title", "Sandbox Note", "--body", "Initial sandbox body")
+	if !strings.Contains(addOut, "sb-note") {
+		t.Fatalf("unexpected add output: %s", addOut)
+	}
+
+	updatedBody := "# Updated Sandbox Note\n\nUpdated body text.\n\n```chart widget=bar\nlabel,value\nX,5\nY,15\n```\n"
+	runBsh(nil, "set", "sb-note", "--title", "Updated Sandbox Note", "--body", updatedBody)
+
+	showOut := runBsh(nil, "show", "sb-note")
+	if !strings.Contains(showOut, "Updated Sandbox Note") || !strings.Contains(showOut, "Updated body text.") {
+		t.Fatalf("unexpected show output: %s", showOut)
+	}
+
+	htmlOut := filepath.Join(sb, "sb-note.html")
+	runBsh(nil, "export", "sb-note", "--to", "html", "-o", htmlOut)
+	htmlBytes, err := os.ReadFile(htmlOut)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(htmlBytes), "<svg") || !strings.Contains(string(htmlBytes), "Updated body text.") {
+		t.Fatalf("sandbox HTML export missing chart SVG or updated body")
+	}
+
+	pdfOut := filepath.Join(sb, "sb-note.pdf")
+	runBsh([]string{"CHROMIUM_PATH=/nonexistent"}, "export", "sb-note", "--to", "pdf", "-o", pdfOut)
+	pdfBytes, err := os.ReadFile(pdfOut)
+	if err != nil || !bytes.HasPrefix(pdfBytes, []byte("%PDF-")) {
+		t.Fatalf("sandbox PDF export invalid: err=%v, len=%d", err, len(pdfBytes))
 	}
 }

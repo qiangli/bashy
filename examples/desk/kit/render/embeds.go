@@ -225,6 +225,12 @@ func (d *deskOverrides) assetURL(rel string) string {
 // readAsset reads one asset file, confined under AssetDir. Oversized
 // files are refused so a giant CSV cannot exhaust the preview.
 func (d *deskOverrides) readAsset(rel string) ([]byte, error) {
+	// 256 KiB is plenty for a preview table.
+	return d.readAssetLimit(rel, 256<<10)
+}
+
+// readAssetLimit reads up to maxBytes from one asset file confined under AssetDir.
+func (d *deskOverrides) readAssetLimit(rel string, maxBytes int64) ([]byte, error) {
 	if d.opt.AssetDir == "" {
 		return nil, fmt.Errorf("no asset dir")
 	}
@@ -245,14 +251,13 @@ func (d *deskOverrides) readAsset(rel string) ([]byte, error) {
 		return nil, err
 	}
 	defer f.Close()
-	// 256 KiB is plenty for a preview table or an inline asset.
-	return io.ReadAll(io.LimitReader(f, 256<<10))
+	return io.ReadAll(io.LimitReader(f, maxBytes))
 }
 
 // inlineURI base64-encodes a small asset as a data: URI for
 // self-contained export. Large assets stay referenced by URL.
 func (d *deskOverrides) inlineURI(rel, mime string) (string, error) {
-	raw, err := d.readAsset(rel)
+	raw, err := d.readAssetLimit(rel, (1<<20)+1)
 	if err != nil {
 		return "", err
 	}

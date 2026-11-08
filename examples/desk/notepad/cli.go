@@ -239,7 +239,7 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 		if opts.key != "" {
 			req.Header.Set("X-Facilitator-Key", opts.key)
 		}
-		client := &http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{Proxy: nil}}
+		client := &http.Client{Timeout: 60 * time.Second, Transport: &http.Transport{Proxy: nil}}
 		r, err := client.Do(req)
 		if err != nil {
 			fmt.Fprintf(stdout, "error: notepad server at %s is not reachable: %v\n", base, err)

@@ -1,7 +1,11 @@
 package render
 
 import (
+	"bytes"
+	"encoding/base64"
 	"errors"
+	"image"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -264,6 +268,60 @@ func TestInlineExport(t *testing.T) {
 	out := render(t, "![](pic.png)", opt)
 	mustContain(t, out, `src="data:image/png;base64,`)
 	mustLack(t, out, "<script")
+}
+
+func TestInlineExportLargeAndOversized(t *testing.T) {
+	dir, opt := fixture(t)
+	opt.Inline = true
+
+	// Build a valid ~350 KiB PNG (exceeding the old 256 KiB readAsset cap,
+	// within the 1 MiB inlineURI cap).
+	img := image.NewNRGBA(image.Rect(0, 0, 300, 300))
+	for i := range img.Pix {
+		img.Pix[i] = byte((i*131 + 17) & 0xff)
+	}
+	var pngBuf bytes.Buffer
+	enc := png.Encoder{CompressionLevel: png.NoCompression}
+	if err := enc.Encode(&pngBuf, img); err != nil {
+		t.Fatalf("encode png: %v", err)
+	}
+	largePNG := pngBuf.Bytes()
+	if len(largePNG) <= 256<<10 || len(largePNG) > 1<<20 {
+		t.Fatalf("expected PNG size in (256 KiB, 1 MiB], got %d", len(largePNG))
+	}
+	if err := os.WriteFile(filepath.Join(dir, "large.png"), largePNG, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	out := render(t, "![](large.png)", opt)
+	const prefix = `src="data:image/png;base64,`
+	idx := strings.Index(out, prefix)
+	if idx < 0 {
+		t.Fatalf("expected base64 data URI in output, got:\n%s", out)
+	}
+	rest := out[idx+len(prefix):]
+	end := strings.IndexByte(rest, '"')
+	if end < 0 {
+		t.Fatalf("unterminated src attribute in output:\n%s", out)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(rest[:end])
+	if err != nil {
+		t.Fatalf("base64 decode: %v", err)
+	}
+	if !bytes.Equal(decoded, largePNG) {
+		t.Fatalf("decoded payload mismatch: got %d bytes, want %d bytes", len(decoded), len(largePNG))
+	}
+
+	// An asset larger than 1 MiB must not be base64-inlined; it degrades
+	// cleanly to the asset URL instead of emitting truncated base64.
+	oversized := make([]byte, (1<<20)+1024)
+	copy(oversized, largePNG)
+	if err := os.WriteFile(filepath.Join(dir, "huge.png"), oversized, 0600); err != nil {
+		t.Fatal(err)
+	}
+	hugeOut := render(t, "![](huge.png)", opt)
+	mustContain(t, hugeOut, `src="/assets/x/huge.png"`)
+	mustLack(t, hugeOut, "data:image/png;base64,")
 }
 
 func TestPage(t *testing.T) {

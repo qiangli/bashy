@@ -25,9 +25,10 @@ a.desk-btn{text-decoration:none;display:inline-block}
 .vw-changes{margin-bottom:var(--desk-space-4)}
 .vw-block[data-changed]{border-left:3px solid var(--desk-accent);background:var(--desk-subtle);padding:var(--desk-space-1) var(--desk-space-3);margin:0 0 .8em calc(-1 * var(--desk-space-3) - 3px);border-radius:0 var(--desk-radius-sm) var(--desk-radius-sm) 0}
 .vw-block[data-changed] > :last-child{margin-bottom:0}
-.vw-page + .vw-page{border-top:1px solid var(--desk-line);margin-top:var(--desk-space-6);padding-top:var(--desk-space-5)}
+.vw-page + .vw-page,.vw-print-page + .vw-print-page{border-top:1px solid var(--desk-line);margin-top:var(--desk-space-6);padding-top:var(--desk-space-5)}
 .vw-index{width:100%}
-@media print{.desk-appbar,.vw-nav,.vw-actions,.desk-footer,.vw-changes{display:none}.desk-main{max-width:none;padding:0}.vw-page{break-before:page}.vw-page:first-of-type{break-before:auto}}
+.vw-print-book{display:none}
+@media print{.desk-appbar,.vw-nav,.vw-actions,.desk-footer,.vw-changes,.vw-page-single{display:none}.desk-main{max-width:none;padding:0}.vw-print-book{display:block}.vw-page,.vw-print-page{break-before:page}.vw-page:first-of-type,.vw-print-page:first-of-type{break-before:auto}}
 </style>`
 
 // renderedPage is one page turned into HTML, with its change summary.
@@ -218,6 +219,14 @@ func (a *app) page(r *http.Request, me string) (int, []byte) {
 	}
 	header := kit.ItemHeader(b.ID, b.Status, a.urlFor(r, b.ID))
 	sel := q.Get("page")
+	isPrint := strings.HasSuffix(r.URL.Path, "/print") || q.Get("print") != ""
+	if (isPrint || strings.EqualFold(sel, "all")) && len(b.Pages) > 0 {
+		out, _, err := a.exportHTMLWithPrint(r, b, "all", isPrint)
+		if err != nil {
+			return fail(http.StatusInternalServerError, "This book could not be rendered", err.Error())
+		}
+		return http.StatusOK, out
+	}
 	if strings.EqualFold(sel, "index") || len(b.Pages) == 0 {
 		return http.StatusOK, a.indexPage(r, b, header)
 	}
@@ -244,17 +253,38 @@ func (a *app) page(r *http.Request, me string) (int, []byte) {
 	if rp.HasPrev {
 		prevHref, prevLabel = a.pageURL(r, b.ID, rp.Prev+1), b.Pages[rp.Prev].id()
 	}
+	pageClass := "vw-page desk-content"
+	printBook := ""
+	if n > 1 {
+		pageClass = "vw-page vw-page-single desk-content"
+		printBook = a.renderPrintBook(r, b)
+	}
 	body := viewerCSS + kit.AppBar(tool, a.base(r)+"/", header, `<span class="vw-pos">`+html.EscapeString(b.Title)+`</span>`) +
 		`<main class="desk-main desk-narrow">` + nav + `<div data-desk-alert class="desk-alert" hidden></div>` +
 		changeSummary(rp, prevLabel, prevHref) +
-		`<article class="vw-page desk-content" id="` + p.id() + `">` + pageMeta(p) + rp.HTML + `</article>` +
+		`<article class="` + pageClass + `" id="` + p.id() + `">` + pageMeta(p) + rp.HTML + `</article>` +
+		printBook +
 		`<div class="desk-row vw-actions">` + kit.CopyButton("Copy page link", a.pageURL(r, b.ID, i+1)) +
 		`<a class="desk-btn secondary" href="` + html.EscapeString(kit.PublicPrefix(r, a.prefix)+"/api/export?id="+b.ID+"&page="+strconv.Itoa(i+1)) + `">Download HTML</a>` +
 		`<a class="desk-btn secondary" href="` + html.EscapeString(kit.PublicPrefix(r, a.prefix)+"/api/export?id="+b.ID) + `">Download book</a>` +
-		`<button type="button" class="desk-btn secondary" data-vw-print title="Print or save as PDF">Print / PDF</button></div>` +
+		`<button type="button" class="desk-btn secondary" id="print" data-vw-print title="Print or save as PDF">Print / PDF</button></div>` +
 		`<p class="desk-footer">View-only · ← → turn pages · re-surface with <code>viewer open ` + html.EscapeString(b.ID) + `</code> · edit text in notepad.</p></main>` +
 		viewerScript
 	return http.StatusOK, kit.Page(tool, p.Title+" · "+b.Title+" · Viewer", body)
+}
+
+func (a *app) renderPrintBook(r *http.Request, b *book) string {
+	var sb strings.Builder
+	sb.WriteString(`<section id="printAllPages" class="vw-print-book" aria-label="Full book for printing">`)
+	for _, pg := range b.Pages {
+		out, err := render.Markdown([]byte(pg.Markdown), a.renderOptions(r, b, pg, false))
+		if err != nil {
+			continue
+		}
+		sb.WriteString(`<article class="vw-print-page" id="print-` + pg.id() + `">` + pageMeta(pg) + unwrap(out) + `</article>`)
+	}
+	sb.WriteString(`</section>`)
+	return sb.String()
 }
 
 func (a *app) indexPage(r *http.Request, b *book, header string) []byte {
@@ -323,6 +353,10 @@ func (a *app) rootPage(r *http.Request) []byte {
 // or "all") the whole book: kit CSS/JS inlined, local image/video/PDF
 // assets inlined as data: URIs, no request back to this server.
 func (a *app) exportHTML(r *http.Request, b *book, sel string) ([]byte, string, error) {
+	return a.exportHTMLWithPrint(r, b, sel, false)
+}
+
+func (a *app) exportHTMLWithPrint(r *http.Request, b *book, sel string, autoPrint bool) ([]byte, string, error) {
 	if len(b.Pages) == 0 {
 		return nil, "", &httpError{http.StatusConflict, "This book has no pages to export yet"}
 	}
@@ -361,5 +395,8 @@ func (a *app) exportHTML(r *http.Request, b *book, sel string) ([]byte, string, 
 		body += `<nav class="vw-nav desk-panel" aria-label="Contents"><ul>` + toc.String() + `</ul></nav>`
 	}
 	body += pages.String() + `<p class="desk-footer">Exported from the bashy desk viewer · ` + html.EscapeString(now()) + `</p></main>`
+	if autoPrint {
+		body += `<script>(function(){if(window.print)window.print();})();</script>`
+	}
 	return kit.Page(tool, b.Title+" · Viewer export", body), name, nil
 }

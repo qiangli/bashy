@@ -38,9 +38,12 @@ call it from anywhere and pass `PROJECT` as an absolute path.
 my-demo/
   storyboard.txt     the order of segments
   cards/title.txt    first line bold, the rest centred under it
+  slides/arch.png    optional: static PNG/JPEG diagram or slide
   steps/run.sh       a recorded terminal step
+  steps/run.m4a      optional: per-step voice-over sidecar (also cards/*.m4a, slides/*.m4a)
   camera/intro.mov   optional: a webcam take (or record it live, below)
-  narration.m4a      optional: your voice over the whole video
+  narration.m4a      optional: voice track mixed over the video (preserving camera speech)
+  captions.srt       optional: SRT/VTT captions burned in and muxed as mov_text
 ```
 
 `storyboard.txt`, one segment per line:
@@ -48,11 +51,14 @@ my-demo/
 ```
 card   title 4          # cards/title.txt for 4 seconds
 camera intro 60         # camera/intro.mov, or record webcam + mic for 60 s
-step   run              # record steps/run.sh
+slide  arch.png 4       # slides/arch.png (or slide NAME IMAGE [SECS]) at 1080p30
+step   run              # record steps/run.sh (attaches steps/run.m4a if present)
 pair   start resume     # two steps side by side: the right one waits
                         # until the left one has finished
 card   close 4
 ```
+
+Pass `--subtitles path/to/file.srt` (or `.vtt`) to `video.sh build` (or drop `captions.srt` / `captions.vtt` in the project directory) to burn captions into the bottom of the frame and mux a `mov_text` subtitle stream.
 
 A step is a script sourced into a bashy session with three helpers:
 

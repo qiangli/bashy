@@ -2,13 +2,22 @@ package main
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"fmt"
+	"html"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/png"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"time"
 
+	kit "desk-kit"
 	"desk-kit/render"
 	"github.com/go-pdf/fpdf"
 	"golang.org/x/image/font"
@@ -17,7 +26,8 @@ import (
 )
 
 // Supported export formats:
-//   - pdf: via github.com/go-pdf/fpdf (MIT License)
+//   - pdf: via headless Chrome/Chromium on rendered HTML (preserving UTF-8,
+//     tables, inline images, and chart SVGs), with fallback to github.com/go-pdf/fpdf (MIT License)
 //   - png: via golang.org/x/image (BSD-3-Clause License)
 //   - html: the shared kit renderer (desk-kit/render, goldmark MIT) with
 //     assets inlined, so export matches the live preview exactly
@@ -70,6 +80,107 @@ func renderHTML(title, body string) ([]byte, error) {
 }
 
 func renderPDF(title, body string) ([]byte, error) {
+	if htmlBytes, err := renderHTML(title, body); err == nil {
+		if pdfBytes, err := printHTMLToPDF(title, htmlBytes); err == nil && bytes.HasPrefix(pdfBytes, []byte("%PDF")) {
+			return pdfBytes, nil
+		}
+	}
+	return renderPDFFallback(title, body)
+}
+
+func printHTMLToPDF(title string, htmlBytes []byte) ([]byte, error) {
+	browser := findBrowser()
+	if browser == "" {
+		return nil, errors.New("no browser found for PDF export")
+	}
+	tmp, err := os.MkdirTemp("", "notepad-pdf-")
+	if err != nil {
+		return nil, err
+	}
+	defer os.RemoveAll(tmp)
+
+	cssRaw := strings.TrimPrefix(strings.TrimSpace(kit.CSS()), "<style>")
+	cssRaw = strings.TrimSuffix(cssRaw, "</style>")
+	_ = os.WriteFile(filepath.Join(tmp, "kit.css"), []byte(cssRaw), 0600)
+	_ = os.WriteFile(filepath.Join(tmp, "kit.js"), []byte(""), 0600)
+
+	printHTML := htmlBytes
+	if title != "" && !strings.Contains(string(htmlBytes), "<h1") {
+		banner := []byte(`<body><main class="desk-main desk-narrow"><h1 class="desk-h1">` + html.EscapeString(title) + `</h1>`)
+		printHTML = bytes.Replace(htmlBytes, []byte("<body>"), banner, 1)
+		printHTML = bytes.Replace(printHTML, []byte("</body>"), []byte("</main></body>"), 1)
+	}
+	src := filepath.Join(tmp, "export.html")
+	if err := os.WriteFile(src, printHTML, 0600); err != nil {
+		return nil, err
+	}
+	out := filepath.Join(tmp, "export.pdf")
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, browser,
+		"--headless=new",
+		"--disable-gpu",
+		"--no-sandbox",
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--user-data-dir="+filepath.Join(tmp, "profile"),
+		"--no-pdf-header-footer",
+		"--print-to-pdf="+out,
+		"file://"+filepath.ToSlash(src),
+	)
+	if msg, err := cmd.CombinedOutput(); err != nil {
+		return nil, fmt.Errorf("browser print-to-pdf: %v: %s", err, msg)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil || len(data) == 0 {
+		return nil, errors.New("browser produced no PDF")
+	}
+	return data, nil
+}
+
+func findBrowser() string {
+	for _, env := range []string{"CHROMIUM_PATH", "CHROME_PATH"} {
+		if p := os.Getenv(env); p != "" {
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+			if lp, err := exec.LookPath(p); err == nil {
+				return lp
+			}
+			return ""
+		}
+	}
+	var candidates []string
+	switch runtime.GOOS {
+	case "darwin":
+		candidates = []string{
+			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+			"/Applications/Chromium.app/Contents/MacOS/Chromium",
+			"/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+		}
+	case "windows":
+		for _, base := range []string{os.Getenv("ProgramFiles"), os.Getenv("ProgramFiles(x86)"), os.Getenv("LocalAppData")} {
+			if base != "" {
+				candidates = append(candidates,
+					filepath.Join(base, "Google", "Chrome", "Application", "chrome.exe"),
+					filepath.Join(base, "Microsoft", "Edge", "Application", "msedge.exe"))
+			}
+		}
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	for _, name := range []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge", "chrome", "msedge"} {
+		if p, err := exec.LookPath(name); err == nil {
+			return p
+		}
+	}
+	return ""
+}
+
+func renderPDFFallback(title, body string) ([]byte, error) {
 	pdf := fpdf.New("P", "mm", "A4", "")
 	pdf.SetTitle(title, false)
 	pdf.AddPage()
