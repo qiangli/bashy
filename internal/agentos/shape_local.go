@@ -17,11 +17,12 @@ var shapeAppLookup = func(name string) (shape.App, error) {
 	if name == "console" {
 		return webconsole.ConsoleShapeApp(src.Home()), nil
 	}
-	// bashy itself is a reserved record-only target, never a registered app.
-	if shape.IsBashyTarget(name) {
+	a, ok := fleet.New().App(name)
+	// Unregistered bashy is the reserved record-only target; a registered
+	// bashy app keeps its source-tier lifecycle.
+	if !ok && shape.IsBashyTarget(name) {
 		return shape.BashyApp(), nil
 	}
-	a, ok := fleet.New().App(name)
 	if !ok {
 		return shape.App{}, fmt.Errorf("shape: app %q is not registered", name)
 	}
