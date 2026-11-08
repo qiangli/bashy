@@ -186,9 +186,6 @@ func dispatchFormattedHelp(args []string) (int, bool) {
 	} else {
 		// Root command help only: operands and subcommand help remain owned by
 		// their dispatcher, so a literal --help after -- is never intercepted.
-		if args[0] == "lens" && len(args) > 2 {
-			return 0, false
-		}
 		if len(args) < 2 || (args[1] != "--help" && args[1] != "-h") || !isHelpVerb(args[0]) {
 			return 0, false
 		}
