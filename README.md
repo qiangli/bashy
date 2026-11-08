@@ -1,496 +1,159 @@
-# bashy — a Go Bash 5.3 that speaks Bash#
+---
+name: bashy
+description: Install bashy, connect the AI agent reading this page to it (skill + MCP), and continue the chat through bashy verbs. Pure-Go Bash 5.3 + coreutils (GNU-compatible, POSIX.1-2016) for Linux, macOS and Windows; Bash# (Go with bash, one file is both script and skill); Yoke, the agentic harness for shaping your own tools.
+type: dag
+default: help
+---
+
+# bashy
 
 [![release](https://img.shields.io/github/v/release/qiangli/bashy?label=release)](https://github.com/qiangli/bashy/releases/latest)
 [![tour](https://github.com/bashsharp/tour/actions/workflows/tour.yml/badge.svg)](https://github.com/bashsharp/tour/actions/workflows/tour.yml)
 
-> **Bash is for humans; bashy is for agents.**
->
-> bashy looks like a shell, and it is one. It was also designed from the
-> ground up as a clean slate for agents: the whole infrastructure an agent
-> needs, shipped as a single tool:
-> - the userland it works in;
-> - the workspaces it shares with other agents;
-> - the sandboxes it runs untrusted code in;
-> - the local models it thinks with;
-> - the peers, clusters and clouds it reaches.
->
-> One download, every machine, every agent. **bashy is all you need.**
+**A pure-Go Bash 5.3 that speaks Bash# — built for AI agents, readable by you.**
 
-**Demo (3.5 min): bashy unifies all systems, Bash# unifies all languages.**
-Every terminal step in it really ran, on our own machines.
+> **Try it:** open any AI coding agent (Claude Code, Codex, OpenCode, …) and say
+> *"Set up bashy from https://github.com/qiangli/bashy"*. It installs bashy,
+> asks you once, connects itself, and keeps working with you through bashy's tools.
+
+**Prefer the terminal?** Paste one line (checksum-verified, into `~/.local/bin`, no sudo).
+Drop `--no-service` / `-NoService` to also run outpost as an unpaired boot service.
+
+```sh
+curl -fsSL https://dhnt.io/install.sh | sh -s -- --no-service                          # macOS / Linux
+& ([scriptblock]::Create((irm https://dhnt.io/install.ps1))) -NoService                # Windows PowerShell
+```
+
+Tarballs, packages, from source, offline image: **[docs/install.md](docs/install.md)**.
 
 [![bashy demo](https://img.youtube.com/vi/2eRX3ZJuYeM/hqdefault.jpg)](https://youtu.be/2eRX3ZJuYeM)
 
-- **bash + coreutils in pure Go**: one executable per platform, no system bash,
-  no GNU-vs-BSD drift.
-- **GNU Bash 5.3 compatible**: Bash's own 5.3 suite, 86/86.
-- **Built to POSIX.1-2016 (IEEE Std 1003.1-2016)**: 493/493 on the licensed
-  shell-isolation arm; the full Shell and Utilities run retains 67 non-passes.
-  [Measured status and certification follow-up](docs/vsc-pcts-run-status.md).
-- **Bash#, "Go with bash"**: the bash you know, typed Go where you need it.
-  Skills and scripts are two sides of the same coin: read it as a skill, run
-  it as a script.
-- **Yoke, bashy's agentic shell harness**: the name is a backronym, *Bashy's
-  Agentic Shell Harness Yoke*.
+## At a glance
 
-`bashy` is one executable per platform, with no system bash dependency — a **drop-in
-Bash 5.3** on Linux, macOS and Windows: same flags, same script semantics,
-Bash-compatible `$BASH_VERSION`, and it passes GNU Bash's own 5.3 test suite (every
-runnable fixture, 86/86). With `--bashsharp` the same binary speaks
-**[Bash#](https://github.com/bashsharp/bashsharp)**: the bash you already know,
-Go where you need types, any fenced language where you need a library, and
-`agentic` where you need a model — with contracts so a model's output is
-judged, never trusted.
+- **One binary, every OS.** Bash 5.3 + `ls sed awk grep find jq git make tar …` in pure Go; the same script means the same thing on Windows.
+- **Bash#, Go with bash.** Typed Go in shell text; fenced Python/TS/Rust/C/C#/PowerShell islands with pinned, checksum-verified toolchains it fetches itself.
+- **Script = skill.** One file an agent *reads* as instructions and *runs* as automation — they never drift apart. This README is one.
+- **Contracts around models.** `agentic` blocks with `@require` / `@ensure`: a model's output is judged by ordinary commands, never trusted.
+- **Agent-native output.** `--json`, `--dry-run`, `--no-input` and exit codes 0/3/1 across bashy verbs; `bashy --dry-run script.sh` previews a whole script as JSON.
+- **Memory and messages.** `kb` (what this host already knows), `inbox` / `mb` / `meet` (agents and humans talking), `todo` / `sprint` (owed work).
+- **Agents managing agents.** `weave` runs claude, codex, opencode, agy, … each in an isolated git workspace, then verifies and merges.
+- **Software shaping.** `shape wish` → verify → approve → undo: describe a change to a tool in plain words, get your own version, promote it to team and upstream.
+- **Grow it, don't work around it.** `commands add` registers a missing verb; every verb's `--help` is a skill plus an MCP tool definition; `mcp serve` exposes them all.
+- **Every tier, one tool.** `dag` (Markdown task graphs) · `oci` sandboxes · ollama local models · `sphere` peer mesh of your own machines · `kubectl` / `helm` · cloud CLIs.
 
-> **Alpha** (0.x). Bash 5.3 compatibility is stable; the Bash# dialect may
-> still change before 1.0 through RFCs. Every number this project states
-> names its corpus: [docs/claims.md](https://github.com/bashsharp/bashsharp/blob/main/docs/claims.md).
 
-Deciding whether to use it, or which part of it is for you: [docs/why-bashy.md](docs/why-bashy.md).
+| Layer | What it is | Evidence |
+|---|---|---|
+| **bash** | Pure-Go GNU Bash 5.3 + coreutils, one binary per platform; `sh` / `--posix` targets POSIX.1-2016 (IEEE 1003.1) | Bash 5.3 suite 86/86 · [POSIX status](docs/vsc-pcts-run-status.md) |
+| **Bash#** | Go with bash: typed Go, fenced Python/TS/Rust/C/C#/PowerShell islands, contracts, `agentic`. One file is a script *and* a skill — like this page | [bashsharp](https://github.com/bashsharp/bashsharp) · [tour](https://github.com/bashsharp/tour) |
+| **Yoke** | The agentic harness: `--json` everywhere, `dag`, `weave`, `sprint`, `inbox`, sandboxes, and **software shaping** — describe a change, verify, approve, undo | [shaping](examples/shaping/hello-world/README.md) |
 
-The shell and userland are Go. Release builds use `CGO_ENABLED=0` on Linux,
-macOS and Windows; inherited ignored signals are preserved by bashy's product
-runtime build, not by C. The Linux `bashy` still loads glibc dynamically for its
-locale gate. See [build evidence](docs/public-claims-evidence.md).
+Alpha (0.x). Every number names its corpus: [claims](https://github.com/bashsharp/bashsharp/blob/main/docs/claims.md).
 
-## Software Shaping: make your tools fit you
+## For agents: set up and stay
 
-Describe a change to an app you use — in plain words — and get a candidate you
-can review, verify and approve for yourself, with history and undo: your
-version of the tool, and a way back. Web shaping is an **opt-in trial**:
-personal versions affect the selected user only. bashy itself is shapeable
-this way. **[Start with Hello World →](examples/shaping/hello-world/README.md)**
+This page is your skill. Ask the user **once**, listing exactly this, then run
+what they approve without further prompts. Every step is idempotent; stop and
+report on the first non-zero exit.
 
-### The promotion path
+> **a) bashy** — download the latest release, verify it against
+> `checksums.txt`, install `bashy`, `bash`, `sh` and a dormant `outpost` into
+> `~/.local/bin` (Windows: `%LOCALAPPDATA%\outpost`); add that directory to
+> `PATH` in the user's shell profile; install the `bashy` skill for every
+> agent tool found; register the bashy MCP server with your tool; route your
+> shell tool through bashy. No sudo, no service.
+>
+> **b) bootstrap** *(optional)* — also register outpost as a boot service
+> (launchd / systemd / Task Scheduler), unpaired: it serves only its local
+> admin UI and joins no satellite. On Linux this masks the sleep/suspend
+> targets (sudo). Pair later with `outpost register`.
+>
+> Reply **a**, **a+b**, or **no**.
 
-A shaped change moves local host -> team/org -> upstream bashy, and new
-features flow back the other way:
+## install
+
+Step 1 (a). Skip if `bashy --version` already works. Windows (PowerShell):
+`& ([scriptblock]::Create((irm https://dhnt.io/install.ps1))) -NoService`.
+Other routes: [docs/install.md](docs/install.md).
 
 ```bash
-bashy shape wish bashy "make lexicon accept JSON lines"  # candidate
-bashy shape verify bashy <id>                            # trusted verifier
-bashy shape approve bashy <id>                           # activate for me
-bashy shape undo bashy                                   # way back
-
-bashy shape remote set org <url>     # name the team/org remote
-bashy shape outgoing --to org        # exit 3: something is worth promoting
-bashy shape push --to org            # approved change -> team/org
-bashy shape push --to upstream --pr  # propose it upstream (prints compare URL)
-bashy shape incoming --from upstream # exit 3: upstream has new work
-bashy shape pull --from org <id>     # gated wish -> verify -> approve; undoable
+command -v bashy >/dev/null || curl -fsSL https://dhnt.io/install.sh | sh -s -- --no-service
 ```
 
-Every verb takes `--json` and uses agent-friendly exit codes — 0 nothing
-pending, 3 pending, 1 error — so an agent can drive the whole path without
-parsing prose. See the [web trial guide](docs/shaping-trial.md).
+## path
 
-**Status:** the `bashy shape` CLI lifecycle
-(wish/verify/preview/approve/undo/restore/submit) and the promotion rod
-(remote/outgoing/push/incoming/pull) ship in v1.0.0-rc.27. Cross-platform
-shaping validation is still in progress (Sprint 579), as is the team
-adoption policy; open items are tracked in the
-[known-issues ledger](docs/releases/v1.0.0-rc.27-known-issues.md).
-
-## Ten minutes
-
-Install bashy using one of the methods in [Install bashy](#install-bashy), then
-check it with `bashy --version`.
-
-Then take the tour — 27 small programs with pinned transcripts and one
-script that runs them all on your machine, also written as a procedure your
-coding agent can drive: **[bashsharp/tour](https://github.com/bashsharp/tour)**.
-The ten-minute version is in this repo: [`examples/quickstart/`](examples/quickstart/).
+Step 2 (a). Put `~/.local/bin` on `PATH` for new shells (MCP servers and the
+next session resolve `bashy` through it), and for this one.
 
 ```bash
-@guard(effects: "read")
-@require('test -n "$1"')
-@ensure('test "$1" != lie')
-agentic function summarize() { ... }
-
-agentic {
-    summarize ok        # exit 0
-    summarize ""        # exit 3 — precondition failed; the body never ran
-    summarize yield     # exit 6 — "I need input": a yield, not a made-up answer
-}
+for f in "$HOME/.profile" "$HOME/.bashrc" "$HOME/.zshrc"; do
+  [ "$f" = "$HOME/.profile" ] || [ -f "$f" ] || continue
+  grep -qs '.local/bin' "$f" || echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$f"
+done
+export PATH="$HOME/.local/bin:$PATH"
+bashy -c 'echo "$BASH_VERSION"' && bashy --posix -c 'echo posix ok' && bashy --bashsharp -c 'echo bashsharp ok'
 ```
 
-The interpreter never calls a model. `agentic` marks the one place a program
-may hand work to one, and the contracts around it are ordinary shell
-commands, run deterministically.
+## connect
 
-## What you get
+Step 3 (a). `NAME` is your tool as `bashy tools list` prints it (claude,
+codex, opencode, agy, kimi-cli, muse, …). Skill, MCP and shell take effect in
+your **next** session; your own CLI's `mcp add` does the registration.
 
-- **A Bash 5.3 you can ship anywhere.** One binary per platform; job control,
-  coprocesses, signal traps, locale-aware globbing — verified against Bash's
-  own suite on Linux and macOS. Invoked as `sh`, or with `--posix`, it is a
-  POSIX shell: 493/493 on the licensed VSC shell arm (milestone evidence).
-  For yash, see [yash-chunks.json](yash-chunks.json) and the
-  [measurement boundaries](docs/public-claims-evidence.md); fixture completion
-  is not an assertion pass percentage.
-- **The pure-Go userland with it.** `ls`, `sed`, `awk`, `grep`, `find`,
-  `sort`, `tar`, `jq`, `git`, `make`, … as applets, so the same script means
-  the same thing on Windows.
-- **Bash#, Go with bash.** With the flag on: typed Go in shell text, fenced Python /
-  TypeScript / Rust / C / C++ / Go / C# / PowerShell islands, decorators, keyword arguments,
-  enums, deep `readonly`, contracts and `agentic`. Off with `--no-bashsharp`
-  or `--posix`, where none of it exists.
-- **Skills and scripts: two sides of the same coin.** In Bash# they are one
-  object with two orientations. A skill is prose with fenced code you can run;
-  a script is code with prose around it. An agent **reads** a Bash# file as a
-  skill (what to do, why, with which tools) and **runs** the same file as a
-  script, so the instructions and the automation never drift apart. (More in
-  the post [A Bash# script is a skill](https://www.linkedin.com/feed/update/urn:li:activity:7516083010736181248/).)
-- **The islands bring their own toolchains.** A fence never resolves its
-  tool from your `PATH`: bashy provisions what it uses — Go 1.27.2, `zig cc`
-  for C/C++, a uv-managed CPython, Node + `typescript`, a rustup toolchain, and one PowerShell 7
-  runtime that serves both the `powershell` and `csharp` fences —
-  downloaded from the vendor once, checksum-verified against a pin in this
-  repo, cached — so the same program means the same thing on every machine.
-  `bashy check --prepare SCRIPT...` pays that download ahead of time;
-  `BASHPP_PYTHON`, `BASHPP_GO`, `BASHPP_CC`, … name a program explicitly.
-- **It rebuilds itself.** `bashy git clone`, `bashy dag build` — on Windows with no git, no Go and no C compiler on the
-  host (see *From source*).
-- **A tool that knows its caller is an agent.** `bashy check` for static
-  checks, `bashy dag` for dependency-ordered tasks in Markdown, `bashy awd`
-  for "run this there", registered commands, and the `agentic` yield status
-  a harness can act on. **Rod, not fish:** every command is small, composable
-  and scriptable (`--json`, `--help` that doubles as a skill), so an agent
-  builds what it needs instead of waiting for a feature.
-- **One tool, every tier.** The same binary drives every tier:
-  - the userland and workplace agents collaborate in (`weave`, `sprint`, `inbox`);
-  - OCI sandboxes (`bashy oci`);
-  - local models through ollama;
-  - the sphere, a peer-to-peer mesh of your own machines (their outposts);
-  - Kubernetes clusters built from those same machines;
-  - the cloud provider of your choice.
-
-  It is more than a bash: it is the agent's whole infrastructure, delivered as
-  a single tool. See *Layers, tiers and the o-zone* below.
-
-## Layers, tiers and the o-zone
-
-Three words locate any bashy feature. A **layer** says *what language or tool
-surface* you are using, a **tier** says *where the work runs*, and the
-**o-zone** names the three runtime services every tier leans on.
-
-**Layers: bash → Bash# → bashy.** Each layer is cumulative, and a higher one
-may never weaken a lower one.
-
-| Layer | What it is | Also called |
-|---|---|---|
-| **bash** | GNU Bash 5.3 compatibility, POSIX.1-2016 conformance, and the pure-Go coreutils userland | Classic |
-| **Bash#** | Go with bash: typed Go, fenced Python / TypeScript / Rust / C / C++ / C# / PowerShell islands, contracts, `agentic` | the language |
-| **bashy** | the agentic shell harness: tools, policy, durable sessions, coordination, workflow, observability | Yoke |
-
-**Tiers: userland → workplace → sandbox → sphere → cluster → cloud.** A
-command has one primary tier; userland tools work in every tier.
-The sphere and the cluster are not someone else's cloud: both are built from
-the hosts you own. Each machine runs an outpost; the outposts form the
-peer-to-peer sphere, and the same outposts join as nodes of a standard
-Kubernetes cluster.
-
-| Tier | Primary purpose | Examples |
-|---|---|---|
-| **userland** | POSIX/coreutils, classic utilities, toolchains | `bashy`, `sed`, `awk`, `jq`, `make` |
-| **workplace** | agent work and collaboration | `weave`, `dag`, `sprint`, `inbox` |
-| **sandbox** | OCI containers | `bashy oci` (`sandbox`) |
-| **sphere** | a peer-to-peer mesh formed by the outposts on the machines you own: they share capabilities with each other directly. For LLMs: **pool** (the machines' GPUs and local models serve as one endpoint) and **shard** (a model too large for any one machine runs split across several) | `bashy sphere` |
-| **cluster** | a standard Kubernetes cluster (DKS) whose nodes are those same outposts, plus a satellite as control plane; run ordinary Kubernetes workloads on your own hardware | `bashy kubectl`, `helm` |
-| **cloud** | external providers | `bashy doctl`, `aws`, `gcloud` |
-
-**The workplace: agents managing agents.** In bashy an **agent** is a
-binding of a tool to a model, written `tool:model` (for example
-`codex:gpt-5`). Supported out of the box:
-
-- **claude**, **codex**, **agy**, **muse** and **opencode**, the agentic
-  coding CLIs you already use;
-- **genie**, bashy's own built-in agent, with `bashy ycode` as its TUI and web chat.
-
-Any of them can manage the others with the same bashy tools:
-
-- `bashy sprint` plans and tracks the work;
-- `bashy weave` runs each worker in its own isolated git workspace, then
-  verifies and merges the result;
-- `bashy foreman` starts, steers and watches a long-running agent;
-- they talk to each other with the same tools:
-  - `bashy mb` (message board) to send;
-  - `bashy inbox` to read;
-  - `bashy meet` for live rooms, humans included;
-  - `bashy kb` for shared knowledge;
-  - `bashy todo` and `bashy sprint` to hand work over with its context.
-
-A conductor on one vendor can staff workers on the others and review what they
-deliver. That spreads load across subscriptions and models while every agent
-uses the same shell and userland.
-
-**The o-zone (O3): otel · ollama · oci.** The extended runtime beyond
-coreutils: **otel** for traces and metrics on every run, **ollama** for local
-models, **oci** (podman) for sandboxes. bashy manages all three for you. The
-separately licensed programs (podman, ollama) are downloaded and checksum-verified
-on first use, never bundled.
-
-## bashy, outpost and cloudbox
-
-bashy is one of three pieces that together let agents operate **easily,
-safely, securely, and with each other**, on the machines you already own:
-
-- **bashy**, the agent's shell and toolbox, on every machine.
-- **[outpost](https://github.com/qiangli/outpost)**, the host agent. It runs
-  on your laptops, desktops and servers, serves the apps you choose to expose,
-  and pairs each machine with a satellite so your fleet can reach it.
-- **cloudbox**, the coordination plane, offered as the hosted service
-  [Tessaro](https://tessaro.sh). It handles identity, scoped short-lived
-  tokens, grants, satellites, and the metadata needed to rebuild everything.
-  It **coordinates; it does not host your work.**
-
-Two rules shape all three:
-
-- **Local first.** Compute, GPUs, storage and connections are yours: your
-  machines, your satellites, your choice of cloud or S3 bucket. The cloud is a
-  thin, replaceable relay.
-- **Rod, not fish.** bashy ships simple, composable tools (`--json`,
-  `--dry-run`, idempotent, credentials from a vault), not one-off answers.
-  Named providers in the docs are examples; an agent can wire any backend the
-  tools reach.
-
-Built on the [`qiangli/sh`](https://github.com/qiangli/sh) fork of
-[`mvdan.cc/sh`](https://github.com/mvdan/sh) by Daniel Martí — the engine is
-his; the Bash 5.3 conformance work and the Bash# dialect are carried in the
-fork. Campaign identity, regression gates and the product sequence:
-[docs/internal/campaign-and-gates.md](docs/internal/campaign-and-gates.md).
-
-Python packages used across the repos, with CPython 3.15 wheel readiness:
-[docs/python-package-inventory.md](docs/python-package-inventory.md). Refresh it with
-`DHNT_ROOT=<umbrella checkout> bashy python scripts/python-package-inventory.py`.
-
-## Install
-
-Setting up a new machine end to end (install, pairing, with or without an AI
-agent, locally or from another machine): see [docs/setup.md](docs/setup.md).
-
-### Install bashy
-
-The installers fetch the current stable release, verify its archive against
-`checksums.txt`, then run `bashy self install`.
-
-**macOS or Linux (curl):**
-
-```sh
-curl -fsSL https://dhnt.io/install.sh | sh
+```bash
+bashy skill export bashy --user --tool "${NAME:?set NAME to your tool}" --mcp
+bashy install-agent "$NAME"
 ```
 
-**Windows (PowerShell):**
+## bootstrap
 
-```powershell
-irm https://dhnt.io/install.ps1 | iex
+Step 4 (b only). Register the unpaired outpost supervisor.
+
+```bash
+outpost service install && outpost status
 ```
 
-Both install scripts show no operating-system prompt.
+## orient
 
-**Package managers are not yet available.** Homebrew, Scoop and winget
-channels are **not supported** as of v1.0.0-rc.27: there is no `dhnt/tap`
-formula, no `dhnt` Scoop bucket and no winget package to install from. Use an
-install script above or a release archive below.
+Step 5. Load the skill now and open the session the way it says. For the rest
+of this session, prefer `bashy <verb> --json` wherever a verb fits.
 
-The v1.0 macOS and Windows binaries are not yet code-signed. A browser-downloaded
-archive prompts at launch: on macOS, right-click the executable and choose
-**Open**, or remove quarantine from it with
-`xattr -d com.apple.quarantine <file>`; on Windows, choose **More info → Run
-anyway**, or unblock the downloaded file with `Unblock-File <file>`. DHNT Inc.
-signed builds arrive in v1.0.x.
-
-**Linux tarball:** download the matching `bashy-linux-amd64.tar.gz` or
-`bashy-linux-arm64.tar.gz` from the
-[latest release](https://github.com/qiangli/bashy/releases/latest), then
-verify and install it (this example selects the host architecture):
-
-```sh
-case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; aarch64|arm64) arch=arm64 ;; *) echo "unsupported architecture" >&2; exit 1 ;; esac
-asset="bashy-linux-$arch.tar.gz"
-curl -fSLO "https://github.com/qiangli/bashy/releases/latest/download/$asset"
-curl -fsSLO https://github.com/qiangli/bashy/releases/latest/download/checksums.txt
-grep "  $asset\$" checksums.txt | sha256sum -c -
-tar -xzf "$asset"
-./bashy self install --dir "$HOME/.local/bin"
+```bash
+bashy skill show bashy
+bashy inspect context --json
+bashy todo list
 ```
 
-Starting with v1.0, Linux releases also publish `.deb`, `.rpm`, and `.apk`
-packages alongside the tarballs. macOS and Windows archive names are `bashy-darwin-{amd64,arm64}.tar.gz`
-and `bashy-windows-{amd64,arm64}.zip`.
+**Step 6. Chat.** Report in three lines: the version, the tools that got the
+skill and MCP, and that a restart loads them natively. Then ask what the user
+wants, and answer with bashy verbs. When the user says…
 
-`latest` is **v1.0.0-rc.27** (promoted 2026-11-07). A candidate prerelease (a
-`-rc.N-dev` tag) is never `latest`: download one from its tag,
-`https://github.com/qiangli/bashy/releases/download/<tag>/<asset>`. Current
-release notes: [v1.0.0-rc.27](docs/releases/v1.0.0-rc.27.md);
-[CHANGELOG](CHANGELOG.md).
+| …the user says | you run |
+|---|---|
+| "what do you know about X" | `bashy kb search "X"` |
+| "read this pdf / docx / page" | `bashy lens -t md FILE` |
+| "run it safely" | `bashy oci` (sandbox), `--dry-run`, `--explain` |
+| (you need a token or password from them) | `bashy ask` — they type it locally; the value never enters the chat |
+| "plan / track this" | `bashy todo add`, `bashy sprint` |
+| "get other agents on it" | `bashy weave`, `bashy mb`, `bashy inbox` (first, with consent: `bashy agent add <nick> --tool <tool> --model <model>`) |
+| "change how this tool works" | `bashy shape wish <tool> "<change>"` → verify → approve (undo) |
+| "automate these steps" | a Bash# file or a `dag.md`: `bashy dag FILE` |
+| "show me what bashy can do" | the tour: [bashsharp/tour](https://github.com/bashsharp/tour) |
+| "add another machine" | [docs/setup.md](docs/setup.md) |
 
-### With Go
+Missing a verb? `bashy commands add`. Ending the session: `bashy kb retro`.
 
-`go install github.com/qiangli/bashy@latest` is **not** supported: the module
-uses `replace` directives for its forks (the `mvdan.cc/sh/v3` engine and a
-few vendored upstreams), which `go install` refuses. Use a release archive above, or build
-from source below.
+## help
 
-### From source
+List the targets in this file (`bashy dag README.md <target>` in a clone).
 
-bashy rebuilds itself using only an installed bashy. Every command below is
-run *through* `bashy`, so the same five lines work on Linux, macOS and
-Windows: `bashy git` fetches the sources, and `bashy dag build` compiles both binaries through `bashy go`, which downloads
-and verifies its own pinned Go toolchain into bashy's cache the first time.
-The sibling modules are go.mod pins, so the go command downloads exactly the
-versions this commit names.
-
-```sh
-bashy git clone https://github.com/qiangli/bashy
-cd bashy
-bashy dag build            # -> bin/bash and bin/bashy (bin/*.exe on Windows)
-bashy dag install          # optional: install into ~/.local/bin ($DHNT_BIN_DIR to change)
+```bash
+bashy dag README.md --list
 ```
 
-What the host must provide, per platform:
+---
 
-| | git | Go | C compiler |
-| --- | --- | --- | --- |
-| Windows | **none** — `bashy git` downloads a pinned, checksum-verified MinGit | **none** — `bashy go` provisions it | not used |
-| macOS | the system `git` (Xcode Command Line Tools: `xcode-select --install`) | **none** — `bashy go` provisions it | optional |
-| Linux | the distribution's `git` | **none** — `bashy go` provisions it | optional |
-
-The C compiler is optional on Linux and macOS: with `cc` on `PATH` the build
-also compiles the native pre-Go signal launcher (`bin/bashy` + `bin/bashy.real`);
-without one it says so and ships the plain Go binaries — the same form the
-release archives ship. `bashy git` on Linux and macOS deliberately uses the
-platform git rather than downloading one.
-
-A checkout that has no installed bashy yet can bootstrap from the repo-local
-launcher instead (Linux/macOS; it needs a host `go`):
-
-```sh
-./bashy dag build
-./bashy dag install
-```
-
-The traditional host-tool path also works when `git`, `go` and `make` are
-already installed:
-
-```sh
-git clone https://github.com/qiangli/bashy
-cd bashy
-make build                         # -> bin/bash and bin/bashy
-```
-
-### Containers — the offline image
-
-Bashy is all you need. With nothing but the release download — no git, go,
-podman or docker on the host — build the image and run your script with no
-network:
-
-```sh
-bashy self image
-bashy podman run --rm --network=none -v "$PWD:/work" -w /work localhost/bashy:<ver>-linux-<arch> --bashsharp ./script.bsh
-```
-
-`bashy self image` fetches the release's static `bashy-scratch-linux-<arch>`
-artifact (checksum-verified) and builds a `FROM scratch` image around it
-through `bashy podman` — the engine bashy provisions for itself from the
-pinned upstream releases (a complete static podman on Linux; the machine
-client plus gvproxy/vfkit on macOS; the client on Windows, where the machine
-runs on WSL2 — every edition). The image is bashy as it is: Bash 5.3, `--posix`,
-Bash#, the builtin coreutils, dag/weave/check/transpile. What is and is not in
-it, per command, is the measured matrix in
-[`docs/airgap-image.md`](docs/airgap-image.md). From a checkout,
-`bashy dag build-image` images the candidate instead of a published artifact.
-
-A minimal Linux container base (Ubuntu/glibc, launcher + payload) is described
-in [`docs/bashy-oci-base.md`](docs/bashy-oci-base.md).
-
-Real-repository examples driven by `bashy dag` — one `dag.md` each for
-GitHub CLI, Hugo, Caddy, curl, git, FFmpeg, tesseract, llama.cpp, CMake, uv,
-Codex, Bun, OpenCode, OpenClaw, Hermes Agent and more, calling their Go,
-Python, TypeScript, Rust and C/C++ code as fenced islands — live under
-[`examples/dag/`](examples/dag/).
-
-## Usage
-
-```sh
-bashy script.sh arg1 arg2      # run a script
-bashy -c 'echo "$BASH_VERSION"'# run a command string
-bashy                          # interactive shell
-echo 'echo hi' | bashy         # read a script from stdin
-```
-
-### Supported flags
-
-`bashy` accepts the common Bash invocation flags:
-
-| Flag | Meaning |
-| --- | --- |
-| `-c <string>` | run `<string>` as a command |
-| `-i` | force interactive mode |
-| `-l`, `--login` | act as a login shell |
-| `--posix` | POSIX mode |
-| `--norc` | do not read `~/.bashyrc` |
-| `--noprofile` | do not read profile files |
-| `--rcfile`, `--init-file <f>` | use `<f>` as the interactive startup file |
-| `-o <opt>` | enable a `set` option (e.g. `errexit`, `xtrace`) |
-| `-O <opt>` | enable a `shopt` option |
-| `--pretty-print` | pretty-print the parsed input |
-| `--version` | print version and exit |
-
-### Shell mode selection
-
-Invoked as `bash` or `bashy`, the shell starts in GNU Bash 5.3-compatible
-mode. Invoked with basename `sh`, it starts in POSIX `sh` mode. POSIX mode can
-also be requested with `--posix`, `-o posix`, `SHELLOPTS=posix`, or by the
-presence of `POSIXLY_CORRECT`/`POSIX_PEDANTIC` (including empty values).
-Command-line `-o/+o posix` is last-wins unless one of the environment or `sh`
-startup conditions forces POSIX mode, matching GNU Bash 5.3.
-
-The complete contract, including strict `sh` semantics and certification
-wiring, is documented in [Shell mode selection](docs/shell-mode-selection.md).
-
-Startup files: interactive shells read `~/.bashyrc` (or `--rcfile`); login
-shells read `/etc/profile` and `~/.bashy_profile`; `$BASH_ENV` is honoured for
-non-interactive shells.
-
-## Compatibility notes
-
-`bashy` is a pure-Go runner: subshells are goroutines rather than `fork()`,
-and process substitutions use real named pipes. Job control
-(`jobs`/`fg`/`bg`/`kill %n`/`suspend` with stopped-state tracking),
-coprocesses, and signal traps are implemented and pass Bash's test suite on
-Unix. Mirroring Bash's own design (`jobs.c` on Unix, `nojobs.c` elsewhere),
-Unix process groups and controlling-terminal handoff are implemented. Windows
-does not provide Unix process-group/TTY job control; its basic job carrier
-provides process identity but no live signal proxy (`os/exec` rejects
-`ExtraFiles`). See [job-carrier.md](docs/job-carrier.md).
-
-Arithmetic currently uses the native int width (64-bit on 64-bit platforms),
-so very large values on 32-bit builds truncate — a tracked int64 migration.
-Unix job control has shipped; the remaining interactive boundaries are listed
-in [the conformance statement](docs/conformance-statement.md#declared-limitations).
-The final Sprint 253 production gate measured the Bash 5.3 fixtures at
-**86/86 on Windows and Linux** (run 35812307698), and the Sprint 257 timezone
-follow-up measured **86/86** on two native Windows builds, native macOS, and
-Ubuntu 24.04 test droplets. These are fixture results, not a claim of full
-Bash compatibility; see the umbrella's `docs/sprint-253-delivery-evidence.md`.
-Everything else — parameter expansion, arrays and associative arrays,
-namerefs, `[[ ]]`, arithmetic, here documents, brace/tilde/glob expansion
-(locale-aware, including non-UTF-8 charsets such as Big5/Shift-JIS), traps,
-`printf`, `read`, prompt escapes — matches Bash 5.3 and is verified against
-Bash's own test suite.
-
-## Development
-
-Builds require `go 1.27` and select `toolchain go1.27.2`, as recorded in
-[`go.mod`](go.mod). Product versions come from the release tag; use
-`bashy --version` to identify the installed build.
-
-See [`CLAUDE.md`](CLAUDE.md) for the development workflow and [`docs/`](docs/)
-for the compliance roadmap and per-fixture analyses. The Bash 5.3 suite is
-driven by `make test-bash` (serial; needs a controlling terminal; `make
-test-bash-fixtures` fetches the pinned fixture tree). The language, its
-roadmap and RFCs live in [bashsharp/bashsharp](https://github.com/bashsharp/bashsharp).
-
-## License
-
-BSD 3-Clause (inherited from `mvdan.cc/sh`). See [`LICENSE`](LICENSE).
+[Overview](docs/overview.md) · [Why bashy](docs/why-bashy.md) · [Usage & flags](docs/usage.md) ·
+[Compatibility](docs/conformance-statement.md) · [Build from source](docs/install.md#from-source) ·
+[Changelog](CHANGELOG.md) · BSD-3-Clause, engine from
+[mvdan.cc/sh](https://github.com/mvdan/sh) via [qiangli/sh](https://github.com/qiangli/sh).

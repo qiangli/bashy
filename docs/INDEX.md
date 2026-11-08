@@ -1,5 +1,10 @@
 # bashy docs index
 
+- [Sprint 591: README as agent bootstrap](plan-s591-readme-agent-bootstrap.md) — the README is a human hook plus an agent skill with one consent gate (a / a+b); cold-start evidence and follow-up bugs.
+- [install.md](install.md) — every install route: one-liners, tarballs, signing, from source, offline container image (moved from the README).
+- [usage.md](usage.md) — invocation, flags, shell-mode selection, Bash 5.3 compatibility notes, development (moved from the README).
+- [overview.md](overview.md) — layers, tiers, o-zone, the workplace, bashy/outpost/cloudbox, shaping promotion path (the long-form README).
+
 - [Software Shaping Flow identity](software-shaping-design/README.md) — Sprint 564 H6: selected B Flow mark, badge/action wording, violet screen and monochrome treatments, preserved PNG/ICO assets and validation limits.
 
 - [Clean-baseline campaign: sprints 561–563](plan-clean-baseline-campaign.md) — KISS/MVP foundation certification readiness, fence corpus repairs and clean-install UAT; current execution direction with legacy work retained as reference.
