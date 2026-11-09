@@ -1,0 +1,1647 @@
+#!/usr/bin/env -S bashy --bashsharp
+~~~skill as guide
+---
+name: google
+description: Google Workspace CLI wrapper for Gmail, Calendar, Tasks, Drive, and self-service BYOP onboarding.
+metadata:
+  requires: "has=bashy"
+---
+# Google Workspace CLI (google.bsh)
+
+Agent-friendly Bash# wrapper around the Tier-6 managed external gws (googleworkspace/cli).
+Provides self-service Bring-Your-Own-Project (BYOP) onboarding, explicit per-account credential
+isolation, secret-in-argv refusal, 25 MiB Drive upload preflight, and composable multi-service
+workflows across Gmail, Google Calendar, Google Tasks, and Google Drive.
+
+## Self-Service BYOP Onboarding (Free $0 Google Cloud Project per User)
+
+Because Gmail and Drive use Google Restricted Scopes (which cap unverified shared OAuth clients
+at 100 users and share project-level quotas), each user or tenant provisions their own $0 Google
+Cloud project:
+
+  bashy google auth-guide account=alice@example.com project=my-bashy-gws
+  bashy google auth-setup account=alice@example.com project=my-bashy-gws
+  bashy google auth-import ~/Downloads/client_secret.json account=alice@example.com
+  bashy google auth-status account=alice@example.com
+
+## Runtime Environment Variables
+
+- GWS_ACCOUNT: Required email address of the active Google account (or pass account=ADDR).
+- GWS_CREDENTIALS_FILE: Explicit path to OAuth authorized_user JSON file (optional if imported via auth-import).
+- GWS_SERVICE_ACCOUNT_KEY_FILE: Explicit path to Service Account JSON key file.
+- GWS_CONFIG_ROOT: Base directory for per-account credentials (default: ~/.config/bashy/google).
+- GWS_BIN: Override path to the gws executable (default: gws on PATH).
+
+Secrets (token, access_token, refresh_token, client_secret, private_key, password,
+api_key, credentials, bearer, authorization) are strictly refused in argv (exit 2,
+SECRET_VIA_ARGV).
+
+## Single-Service Verbs
+
+- Gmail: gmail-list, gmail-get, gmail-send, gmail-draft
+- Calendar: calendar-list, calendar-get, calendar-create, calendar-update, calendar-delete, calendar-freebusy
+- Tasks: tasklists-list, tasks-list, tasks-get, tasks-create, tasks-complete, tasks-update, tasks-delete
+- Drive: drive-list, drive-search, drive-get, drive-upload, drive-mkdir
+- Escape hatch: raw <service> <resource...>
+
+## Composed Multi-Service Workflows
+
+- mail-to-task <message-id> [tasklist=@default] [due=ISO] [notes=TEXT] [title=TEXT] [--dry-run]
+- drive-share-mail <local-path> to=ADDR [subject=SUBJ] [body=TEXT] [parent=FOLDER_ID] [--dry-run]
+- agenda [calendarId=primary] [tasklist=@default] [q=is:unread] [maxResults:=10]
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+
+if [[ "${1:-}" == "--help" || "${1:-}" == "-h" || "${1:-}" == "help" || "${1:-}" == "--skill" ]]; then
+  inside=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then inside=true; continue; fi
+    if [[ $inside == true && $line == '~~~' ]]; then break; fi
+    if [[ $inside == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  exit 0
+fi
+
+~~~python as py
+import base64
+from email.message import EmailMessage
+import json
+import mimetypes
+import os
+import shutil
+import stat
+import subprocess
+import sys
+
+MAX_UPLOAD_BYTES = 26214400
+
+ADMITTED_SERVICES = (
+    "drive",
+    "gmail",
+    "calendar",
+    "tasks",
+    "sheets",
+    "docs",
+    "chat",
+    "slides",
+    "contacts",
+)
+
+ADMITTED_UPLOAD_MIMES = (
+    "text/plain",
+    "text/markdown",
+    "text/csv",
+    "application/json",
+    "application/pdf",
+    "image/png",
+    "image/jpeg",
+    "application/zip",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+)
+
+EXTENSION_MIME_FALLBACK = {
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+    ".csv": "text/csv",
+    ".json": "application/json",
+    ".pdf": "application/pdf",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".zip": "application/zip",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+}
+
+SAFE_TOKEN_KEYS = (
+    "pagetoken",
+    "nextpagetoken",
+    "synctoken",
+    "nextsynctoken",
+)
+
+SECRET_EXACT_KEYS = (
+    "token",
+    "access_token",
+    "accesstoken",
+    "refresh_token",
+    "refreshtoken",
+    "id_token",
+    "idtoken",
+    "auth_token",
+    "authtoken",
+    "client_secret",
+    "clientsecret",
+    "private_key",
+    "privatekey",
+    "private_key_id",
+    "password",
+    "passwd",
+    "pwd",
+    "secret",
+    "api_key",
+    "apikey",
+    "authorization",
+    "bearer",
+    "credentials",
+    "credential",
+    "service_account_key",
+)
+
+SECRET_KEY_SUBSTRINGS = (
+    "password",
+    "passwd",
+    "secret",
+    "apikey",
+    "api_key",
+    "private_key",
+    "privatekey",
+    "credential",
+    "bearer",
+    "access_token",
+    "refresh_token",
+    "auth_token",
+    "id_token",
+)
+
+
+def fail(code, message, exit_code=2, extra=None):
+    payload = {"error": {"code": code, "message": message}}
+    if extra:
+        payload["error"].update(extra)
+    sys.stderr.write(json.dumps(payload) + "\n")
+    sys.exit(exit_code)
+
+
+def emit_json(data):
+    sys.stdout.write(json.dumps(data, indent=2) + "\n")
+
+
+def is_secret_key_name(key):
+    low = str(key).strip().lower().replace("-", "_")
+    if low in SAFE_TOKEN_KEYS:
+        return False
+    if low in SECRET_EXACT_KEYS:
+        return True
+    return any(sub in low for sub in SECRET_KEY_SUBSTRINGS)
+
+
+def contains_secret_key(value):
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if is_secret_key_name(k) or contains_secret_key(v):
+                return True
+    elif isinstance(value, list):
+        return any(contains_secret_key(item) for item in value)
+    return False
+
+
+def arg_looks_secret(arg):
+    if arg.startswith("--"):
+        flag_part = arg[2:].split("=", 1)[0].strip()
+        if is_secret_key_name(flag_part):
+            return True
+    for sep in (":=", "="):
+        if sep in arg and not arg.startswith("--"):
+            key, raw_val = arg.split(sep, 1)
+            if is_secret_key_name(key):
+                return True
+            if sep == ":=":
+                try:
+                    parsed = json.loads(raw_val)
+                except Exception:
+                    parsed = None
+                if contains_secret_key(parsed):
+                    return True
+            break
+    return False
+
+
+def parse_shaped_args(raw_args):
+    """Parse positional args, key=value / key:=JSON shaped args, and common flags."""
+    positionals = []
+    shaped = {}
+    dry_run = False
+    no_login = False
+    input_source = None
+    raw_params_json = None
+    raw_body_json = None
+
+    i = 0
+    while i < len(raw_args):
+        arg = raw_args[i]
+        if arg_looks_secret(arg):
+            fail(
+                "SECRET_VIA_ARGV",
+                "Refusing secret or credential field in command arguments; use GWS_CREDENTIALS_FILE or per-account auth-import.",
+                exit_code=2,
+            )
+        if arg == "--dry-run":
+            dry_run = True
+            i += 1
+            continue
+        if arg == "--no-login":
+            no_login = True
+            i += 1
+            continue
+        if arg == "--input":
+            if i + 1 >= len(raw_args):
+                fail("USAGE", "--input requires a file path or '-'")
+            input_source = raw_args[i + 1]
+            i += 2
+            continue
+        if arg.startswith("--input="):
+            input_source = arg.split("=", 1)[1]
+            i += 1
+            continue
+        if arg == "--params":
+            if i + 1 >= len(raw_args):
+                fail("USAGE", "--params requires a JSON string")
+            raw_params_json = raw_args[i + 1]
+            i += 2
+            continue
+        if arg.startswith("--params="):
+            raw_params_json = arg.split("=", 1)[1]
+            i += 1
+            continue
+        if arg == "--json":
+            if i + 1 >= len(raw_args):
+                fail("USAGE", "--json requires a JSON string")
+            raw_body_json = raw_args[i + 1]
+            i += 2
+            continue
+        if arg.startswith("--json="):
+            raw_body_json = arg.split("=", 1)[1]
+            i += 1
+            continue
+        if ":=" in arg and not arg.startswith("-"):
+            k, v = arg.split(":=", 1)
+            try:
+                parsed = json.loads(v)
+            except Exception as exc:
+                fail("INVALID_JSON_ARG", f"Invalid JSON for {k}: {exc}")
+            if contains_secret_key(parsed):
+                fail(
+                    "SECRET_VIA_ARGV",
+                    "Refusing nested secret field in JSON argument.",
+                    exit_code=2,
+                )
+            shaped[k] = parsed
+            i += 1
+            continue
+        if "=" in arg and not arg.startswith("-"):
+            k, v = arg.split("=", 1)
+            shaped[k] = v
+            i += 1
+            continue
+        positionals.append(arg)
+        i += 1
+
+    input_payload = None
+    if input_source is not None:
+        try:
+            if input_source == "-":
+                raw_text = sys.stdin.read()
+            else:
+                with open(input_source, "r", encoding="utf-8") as fh:
+                    raw_text = fh.read()
+            input_payload = json.loads(raw_text) if raw_text.strip() else {}
+        except Exception as exc:
+            fail("INVALID_INPUT_JSON", f"Failed to read JSON from {input_source}: {exc}")
+        if contains_secret_key(input_payload):
+            fail("SECRET_IN_INPUT", "Refusing secret key in input payload.")
+
+    return {
+        "positionals": positionals,
+        "shaped": shaped,
+        "dry_run": dry_run,
+        "no_login": no_login,
+        "input_payload": input_payload,
+        "raw_params_json": raw_params_json,
+        "raw_body_json": raw_body_json,
+    }
+
+
+def config_root():
+    root = os.environ.get("GWS_CONFIG_ROOT", "").strip()
+    if root:
+        return os.path.expanduser(root)
+    return os.path.expanduser("~/.config/bashy/google")
+
+
+def sanitize_account_dir(account):
+    safe = "".join(c if (c.isalnum() or c in ("@", ".", "_", "-", "+")) else "_" for c in account.strip())
+    return os.path.join(config_root(), safe)
+
+
+def resolve_account(shaped, required=True):
+    acct = shaped.pop("account", None) or os.environ.get("GWS_ACCOUNT", "").strip()
+    if required and not acct:
+        fail(
+            "MISSING_ACCOUNT",
+            "GWS_ACCOUNT (or account=<email>) is required; no ambient account fallback is permitted.",
+            exit_code=2,
+        )
+    return acct
+
+
+def inspect_credentials(account):
+    """Inspect credential configuration without mutating state."""
+    cred_env = os.environ.get("GWS_CREDENTIALS_FILE", "").strip()
+    sa_env = os.environ.get("GWS_SERVICE_ACCOUNT_KEY_FILE", "").strip()
+
+    if cred_env and sa_env:
+        return {
+            "ready": False,
+            "error_code": "AMBIGUOUS_CREDENTIALS",
+            "message": "Set either GWS_CREDENTIALS_FILE or GWS_SERVICE_ACCOUNT_KEY_FILE, not both.",
+            "account": account,
+        }
+
+    chosen_path = None
+    source = "none"
+    cred_type = "none"
+
+    if cred_env:
+        chosen_path = os.path.expanduser(cred_env)
+        source = "env:GWS_CREDENTIALS_FILE"
+        cred_type = "authorized_user"
+    elif sa_env:
+        chosen_path = os.path.expanduser(sa_env)
+        source = "env:GWS_SERVICE_ACCOUNT_KEY_FILE"
+        cred_type = "service_account"
+    elif account:
+        candidate = os.path.join(sanitize_account_dir(account), "credentials.json")
+        if os.path.exists(candidate):
+            chosen_path = candidate
+            source = "per_account_store"
+            cred_type = "authorized_user"
+
+    if not chosen_path:
+        acct_hint = account or "you@example.com"
+        return {
+            "ready": False,
+            "error_code": "MISSING_CREDENTIALS",
+            "message": "No credentials file configured for account. Set GWS_CREDENTIALS_FILE, GWS_SERVICE_ACCOUNT_KEY_FILE, or run auth-import / auth-setup.",
+            "account": account,
+            "source": "none",
+            "remediation": f"bashy google auth-guide account={acct_hint}",
+        }
+
+    if not os.path.exists(chosen_path) or not os.path.isfile(chosen_path):
+        return {
+            "ready": False,
+            "error_code": "INVALID_CREDENTIALS_FILE",
+            "message": f"Credentials file does not exist or is not a regular file: {chosen_path}",
+            "account": account,
+            "source": source,
+            "credentials_file": chosen_path,
+        }
+
+    st = os.stat(chosen_path)
+    mode_bits = stat.S_IMODE(st.st_mode)
+    mode_ok = (mode_bits & 0o077) == 0
+
+    try:
+        with open(chosen_path, "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict) and data.get("type") in ("authorized_user", "service_account"):
+            cred_type = data["type"]
+    except Exception:
+        pass
+
+    return {
+        "ready": True,
+        "account": account,
+        "source": source,
+        "credential_type": cred_type,
+        "credentials_file": chosen_path,
+        "permissions": oct(mode_bits),
+        "mode_ok": mode_ok,
+    }
+
+
+def require_credentials(shaped):
+    account = resolve_account(shaped, required=True)
+    info = inspect_credentials(account)
+    if not info.get("ready"):
+        fail(info.get("error_code", "MISSING_CREDENTIALS"), info.get("message", "Credentials unavailable"), exit_code=2)
+    return info
+
+
+def find_gws_bin():
+    override = os.environ.get("GWS_BIN", "").strip()
+    if override:
+        if os.path.isfile(override) and os.access(override, os.X_OK):
+            return override
+        fail("GWS_NOT_FOUND", f"GWS_BIN is not an executable file: {override}", exit_code=127)
+    found = shutil.which("gws")
+    if found:
+        return found
+    fail(
+        "GWS_NOT_FOUND",
+        "gws (Google Workspace CLI) was not found on PATH. Install gws or set GWS_BIN.",
+        exit_code=127,
+    )
+
+
+def build_gws_env(cred_info):
+    env = dict(os.environ)
+    # Scrub ambient credential variables so gws never silently uses an unintended account
+    for ambient in ("GOOGLE_APPLICATION_CREDENTIALS", "GOOGLE_WORKSPACE_CLI_TOKEN"):
+        env.pop(ambient, None)
+    env["GWS_ACCOUNT"] = cred_info["account"]
+    env["GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE"] = cred_info["credentials_file"]
+    acct_dir = sanitize_account_dir(cred_info["account"])
+    env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = acct_dir
+    return env
+
+
+def run_gws(cred_info, argv, capture=False):
+    gws_bin = find_gws_bin()
+    cmd = [gws_bin] + argv
+    if "--format=json" not in cmd and not any(a.startswith("--format") for a in cmd):
+        cmd.append("--format=json")
+    env = build_gws_env(cred_info)
+    proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    if capture:
+        return proc
+    if proc.stdout:
+        sys.stdout.write(proc.stdout)
+        if not proc.stdout.endswith("\n"):
+            sys.stdout.write("\n")
+    if proc.stderr:
+        sys.stderr.write(proc.stderr)
+        if not proc.stderr.endswith("\n"):
+            sys.stderr.write("\n")
+    sys.exit(proc.returncode)
+
+
+def handle_contract():
+    contract = {
+        "schema": "bashy-command-contract-v1",
+        "name": "google",
+        "summary": "Google Workspace CLI wrapper (Gmail, Calendar, Tasks, Drive, and BYOP onboarding)",
+        "underlying_cli": "gws",
+        "auth": {
+            "required_env": ["GWS_ACCOUNT"],
+            "credential_sources": [
+                "GWS_CREDENTIALS_FILE",
+                "GWS_SERVICE_ACCOUNT_KEY_FILE",
+                "${GWS_CONFIG_ROOT:-~/.config/bashy/google}/<account>/credentials.json",
+            ],
+            "ambient_fallback": False,
+            "secret_via_argv": "refused",
+        },
+        "verbs": {
+            "onboarding": ["auth-guide", "auth-setup", "auth-import", "auth-status"],
+            "gmail": ["gmail-list", "gmail-get", "gmail-send", "gmail-draft"],
+            "calendar": [
+                "calendar-list",
+                "calendar-get",
+                "calendar-create",
+                "calendar-update",
+                "calendar-delete",
+                "calendar-freebusy",
+            ],
+            "tasks": [
+                "tasklists-list",
+                "tasks-list",
+                "tasks-get",
+                "tasks-create",
+                "tasks-complete",
+                "tasks-update",
+                "tasks-delete",
+            ],
+            "drive": ["drive-list", "drive-search", "drive-get", "drive-upload", "drive-mkdir"],
+            "workflows": ["mail-to-task", "drive-share-mail", "agenda"],
+            "escape_hatch": ["raw"],
+        },
+        "limits": {
+            "max_upload_bytes": MAX_UPLOAD_BYTES,
+            "admitted_upload_mimes": sorted(ADMITTED_UPLOAD_MIMES),
+        },
+    }
+    emit_json(contract)
+    sys.exit(0)
+
+
+def handle_auth_guide(parsed):
+    shaped = parsed["shaped"]
+    account = resolve_account(shaped, required=False) or "you@example.com"
+    project = shaped.get("project", "bashy-gws-personal")
+    scopes = shaped.get("scopes", "gmail,calendar,tasks,drive")
+    acct_dir = sanitize_account_dir(account)
+
+    guide_data = {
+        "ok": True,
+        "mode": "byop-onboarding-guide",
+        "account": account,
+        "project": project,
+        "cost": "$0 (Google Workspace APIs are free; no billing account required)",
+        "why_byop": (
+            "Gmail and Drive use Google Restricted Scopes, which cap unverified shared OAuth projects "
+            "at 100 users and share project-level quotas. Using your own Google Cloud project gives "
+            "dedicated quotas, zero CASA audit fees, and full tenant isolation."
+        ),
+        "required_apis": [
+            "gmail.googleapis.com",
+            "calendar-json.googleapis.com",
+            "tasks.googleapis.com",
+            "drive.googleapis.com",
+        ],
+        "console_links": {
+            "1_create_project": "https://console.cloud.google.com/projectcreate",
+            "2_enable_apis": (
+                f"https://console.cloud.google.com/flows/enableapi?"
+                f"apiid=gmail.googleapis.com,calendar-json.googleapis.com,tasks.googleapis.com,drive.googleapis.com"
+                f"&project={project}"
+            ),
+            "3_oauth_consent_screen": f"https://console.cloud.google.com/apis/credentials/consent?project={project}",
+            "4_create_desktop_oauth_client": f"https://console.cloud.google.com/apis/credentials/oauthclient?project={project}",
+        },
+        "token_longevity_tip": (
+            "For personal @gmail.com accounts (External consent screen): add your email under Test Users, "
+            "or click 'Publish App' (no paid verification needed for personal use) so refresh tokens do not expire after 7 days. "
+            "For Google Workspace orgs: select 'Internal' user type."
+        ),
+        "workflows": {
+            "automated_with_gcloud": f"bashy google auth-setup account={account} project={project} scopes={scopes}",
+            "browser_only_import": f"bashy google auth-import ~/Downloads/client_secret.json account={account} scopes={scopes}",
+            "verify_status": f"bashy google auth-status account={account}",
+        },
+        "target_account_dir": acct_dir,
+    }
+    emit_json(guide_data)
+    sys.exit(0)
+
+
+def handle_auth_status(parsed):
+    shaped = parsed["shaped"]
+    account = resolve_account(shaped, required=False)
+    info = inspect_credentials(account)
+    emit_json(info)
+    sys.exit(0 if info.get("ready") else 1)
+
+
+def handle_auth_import(parsed):
+    positionals = parsed["positionals"]
+    shaped = parsed["shaped"]
+    if not positionals:
+        fail("USAGE", "auth-import requires <path-to-client_secret-or-credentials.json>")
+    src_path = os.path.expanduser(positionals[0])
+    account = resolve_account(shaped, required=True)
+    scopes = shaped.get("scopes", "gmail,calendar,tasks,drive")
+
+    if not os.path.exists(src_path) or not os.path.isfile(src_path):
+        fail("FILE_NOT_FOUND", f"Credential file not found: {src_path}")
+
+    try:
+        with open(src_path, "r", encoding="utf-8") as fh:
+            raw_json = json.load(fh)
+    except Exception as exc:
+        fail("INVALID_CREDENTIAL_JSON", f"Failed to parse JSON file: {exc}")
+
+    if not isinstance(raw_json, dict):
+        fail("INVALID_CREDENTIAL_JSON", "Credential JSON must be an object.")
+
+    is_direct_cred = raw_json.get("type") in ("authorized_user", "service_account")
+    is_oauth_client = any(
+        isinstance(raw_json.get(k), dict)
+        and raw_json[k].get("client_id")
+        and raw_json[k].get("client_secret")
+        for k in ("installed", "web")
+    )
+
+    if not is_direct_cred and not is_oauth_client:
+        fail(
+            "INVALID_CREDENTIAL_JSON",
+            "JSON must be a Google OAuth Desktop client_secret.json ('installed'/'web') or an exported 'authorized_user'/'service_account' credential.",
+        )
+
+    acct_dir = sanitize_account_dir(account)
+    target_client_secret = os.path.join(acct_dir, "client_secret.json")
+    target_creds = os.path.join(acct_dir, "credentials.json")
+
+    if parsed["dry_run"]:
+        emit_json({
+            "ok": True,
+            "dry_run": True,
+            "verb": "auth-import",
+            "account": account,
+            "detected_format": raw_json.get("type") if is_direct_cred else "oauth_client_secret",
+            "target_account_dir": acct_dir,
+            "target_credentials_file": target_creds,
+            "will_run_login": (not is_direct_cred) and (not parsed["no_login"]),
+        })
+        sys.exit(0)
+
+    os.makedirs(acct_dir, mode=0o700, exist_ok=True)
+    os.chmod(acct_dir, 0o700)
+
+    if is_direct_cred:
+        shutil.copyfile(src_path, target_creds)
+        os.chmod(target_creds, 0o600)
+        emit_json({
+            "ok": True,
+            "verb": "auth-import",
+            "account": account,
+            "credential_type": raw_json.get("type"),
+            "credentials_file": target_creds,
+            "permissions": "0600",
+            "env_exports": {
+                "GWS_ACCOUNT": account,
+                "GWS_CREDENTIALS_FILE": target_creds,
+            },
+        })
+        sys.exit(0)
+
+    shutil.copyfile(src_path, target_client_secret)
+    os.chmod(target_client_secret, 0o600)
+
+    if parsed["no_login"]:
+        emit_json({
+            "ok": True,
+            "verb": "auth-import",
+            "account": account,
+            "status": "client_secret_staged",
+            "client_secret_file": target_client_secret,
+            "permissions": "0600",
+            "next_step": f"GOOGLE_WORKSPACE_CLI_CONFIG_DIR={acct_dir} bashy gws auth login -s {scopes}",
+        })
+        sys.exit(0)
+
+    gws_bin = find_gws_bin()
+    env = dict(os.environ)
+    env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = acct_dir
+    login_proc = subprocess.run(
+        [gws_bin, "auth", "login", "-s", scopes],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if login_proc.returncode != 0:
+        fail(
+            "AUTH_LOGIN_FAILED",
+            f"gws auth login failed (exit {login_proc.returncode})",
+            exit_code=login_proc.returncode,
+            extra={"stderr": login_proc.stderr.strip()},
+        )
+
+    export_proc = subprocess.run(
+        [gws_bin, "auth", "export", "--unmasked"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if export_proc.returncode != 0 or not export_proc.stdout.strip():
+        fail(
+            "AUTH_EXPORT_FAILED",
+            "gws auth export failed to produce credentials JSON.",
+            exit_code=export_proc.returncode or 1,
+        )
+
+    with open(target_creds, "w", encoding="utf-8") as fh:
+        fh.write(export_proc.stdout)
+    os.chmod(target_creds, 0o600)
+
+    emit_json({
+        "ok": True,
+        "verb": "auth-import",
+        "account": account,
+        "credential_type": "authorized_user",
+        "client_secret_file": target_client_secret,
+        "credentials_file": target_creds,
+        "permissions": "0600",
+        "env_exports": {
+            "GWS_ACCOUNT": account,
+            "GWS_CREDENTIALS_FILE": target_creds,
+        },
+    })
+    sys.exit(0)
+
+
+def handle_auth_setup(parsed):
+    shaped = parsed["shaped"]
+    account = resolve_account(shaped, required=True)
+    project = shaped.get("project", "")
+    scopes = shaped.get("scopes", "gmail,calendar,tasks,drive")
+    acct_dir = sanitize_account_dir(account)
+    target_creds = os.path.join(acct_dir, "credentials.json")
+
+    setup_cmd = ["auth", "setup", "--login"]
+    if project:
+        setup_cmd.extend(["--project", str(project)])
+
+    if parsed["dry_run"]:
+        emit_json({
+            "ok": True,
+            "dry_run": True,
+            "verb": "auth-setup",
+            "account": account,
+            "project": project or "(interactive/default)",
+            "scopes": scopes,
+            "planned_commands": [
+                ["gws"] + setup_cmd,
+                ["gws", "auth", "export", "--unmasked"],
+            ],
+            "target_credentials_file": target_creds,
+        })
+        sys.exit(0)
+
+    os.makedirs(acct_dir, mode=0o700, exist_ok=True)
+    os.chmod(acct_dir, 0o700)
+    gws_bin = find_gws_bin()
+    env = dict(os.environ)
+    env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = acct_dir
+
+    proc = subprocess.run([gws_bin] + setup_cmd, env=env, capture_output=True, text=True)
+    if proc.returncode != 0:
+        fail(
+            "AUTH_SETUP_FAILED",
+            f"gws auth setup failed (exit {proc.returncode})",
+            exit_code=proc.returncode,
+            extra={"stderr": proc.stderr.strip()},
+        )
+
+    export_proc = subprocess.run(
+        [gws_bin, "auth", "export", "--unmasked"],
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    if export_proc.returncode != 0 or not export_proc.stdout.strip():
+        fail(
+            "AUTH_EXPORT_FAILED",
+            "gws auth export failed after setup.",
+            exit_code=export_proc.returncode or 1,
+        )
+
+    with open(target_creds, "w", encoding="utf-8") as fh:
+        fh.write(export_proc.stdout)
+    os.chmod(target_creds, 0o600)
+
+    emit_json({
+        "ok": True,
+        "verb": "auth-setup",
+        "account": account,
+        "project": project,
+        "credentials_file": target_creds,
+        "permissions": "0600",
+        "env_exports": {
+            "GWS_ACCOUNT": account,
+            "GWS_CREDENTIALS_FILE": target_creds,
+        },
+    })
+    sys.exit(0)
+
+
+def build_rfc2822_raw(to_addr, subject, body, cc=None, bcc=None, in_reply_to=None, references=None):
+    msg = EmailMessage()
+    msg["To"] = to_addr
+    msg["Subject"] = subject
+    if cc:
+        msg["Cc"] = cc
+    if bcc:
+        msg["Bcc"] = bcc
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+    if references:
+        msg["References"] = references
+    msg.set_content(body or "")
+    raw_bytes = msg.as_bytes()
+    return base64.urlsafe_b64encode(raw_bytes).decode("ascii").rstrip("=")
+
+
+def normalize_event_time(val):
+    if isinstance(val, dict):
+        return val
+    s = str(val).strip()
+    if "T" in s:
+        return {"dateTime": s}
+    return {"date": s}
+
+
+def normalize_attendees(val):
+    if isinstance(val, list):
+        out = []
+        for item in val:
+            if isinstance(item, dict):
+                out.append(item)
+            else:
+                out.append({"email": str(item)})
+        return out
+    if isinstance(val, str):
+        return [{"email": e.strip()} for e in val.split(",") if e.strip()]
+    return []
+
+
+def validate_drive_upload(local_path, explicit_mime=None):
+    expanded = os.path.expanduser(local_path)
+    if not os.path.exists(expanded):
+        fail("UPLOAD_FILE_NOT_FOUND", f"Upload file does not exist: {local_path}")
+    if os.path.isdir(expanded):
+        fail("UPLOAD_IS_DIRECTORY", f"Upload path is a directory, regular file required: {local_path}")
+    size = os.path.getsize(expanded)
+    if size <= 0:
+        fail("UPLOAD_EMPTY_FILE", f"Upload file is empty (0 bytes): {local_path}")
+    if size > MAX_UPLOAD_BYTES:
+        fail(
+            "UPLOAD_TOO_LARGE",
+            f"Upload file size ({size} bytes) exceeds 25 MiB cap ({MAX_UPLOAD_BYTES} bytes).",
+        )
+
+    mime = explicit_mime
+    if not mime:
+        ext = os.path.splitext(expanded)[1].lower()
+        mime = EXTENSION_MIME_FALLBACK.get(ext)
+        if not mime:
+            guessed, _ = mimetypes.guess_type(expanded)
+            mime = guessed
+    mime_clean = (mime or "").split(";", 1)[0].strip().lower()
+    if mime_clean not in ADMITTED_UPLOAD_MIMES:
+        fail(
+            "UNSUPPORTED_MEDIA_TYPE",
+            f"Unsupported upload media type '{mime_clean or 'unknown'}'. Admitted types: {', '.join(sorted(ADMITTED_UPLOAD_MIMES))}",
+        )
+    return expanded, size, mime_clean
+
+
+def extract_email_headers(msg_obj):
+    headers = {}
+    payload = msg_obj.get("payload") if isinstance(msg_obj, dict) else None
+    if isinstance(payload, dict):
+        for h in payload.get("headers") or []:
+            if isinstance(h, dict) and h.get("name"):
+                headers[h["name"].lower()] = h.get("value", "")
+    return headers
+
+
+def apply_caller_env(env_map):
+    for k, v in env_map.items():
+        if v:
+            os.environ[k] = v
+        else:
+            os.environ.pop(k, None)
+
+
+def main(
+    env_account="",
+    env_cred="",
+    env_sa="",
+    env_root="",
+    env_bin="",
+    env_path="",
+    env_gac="",
+    env_gwt="",
+    env_flog="",
+    env_flogin="",
+    env_fsetup="",
+    env_fsend="",
+    *args,
+):
+    apply_caller_env(
+        {
+            "GWS_ACCOUNT": str(env_account),
+            "GWS_CREDENTIALS_FILE": str(env_cred),
+            "GWS_SERVICE_ACCOUNT_KEY_FILE": str(env_sa),
+            "GWS_CONFIG_ROOT": str(env_root),
+            "GWS_BIN": str(env_bin),
+            "PATH": str(env_path),
+            "GOOGLE_APPLICATION_CREDENTIALS": str(env_gac),
+            "GOOGLE_WORKSPACE_CLI_TOKEN": str(env_gwt),
+            "FAKE_GWS_LOG": str(env_flog),
+            "FAKE_GWS_FAIL_LOGIN": str(env_flogin),
+            "FAKE_GWS_FAIL_SETUP": str(env_fsetup),
+            "FAKE_GWS_FAIL_GMAIL_SEND": str(env_fsend),
+        }
+    )
+    raw_args = [str(a) for a in args]
+    if not raw_args:
+        fail("USAGE", "Missing subcommand. Run with --help for usage.")
+
+    if raw_args[0] == "--contract":
+        handle_contract()
+
+    verb = raw_args[0]
+    parsed = parse_shaped_args(raw_args[1:])
+    positionals = parsed["positionals"]
+    shaped = parsed["shaped"]
+    dry_run = parsed["dry_run"]
+    input_payload = parsed["input_payload"]
+
+    # Onboarding verbs
+    if verb == "auth-guide":
+        handle_auth_guide(parsed)
+    if verb == "auth-status":
+        handle_auth_status(parsed)
+    if verb == "auth-import":
+        handle_auth_import(parsed)
+    if verb == "auth-setup":
+        handle_auth_setup(parsed)
+
+    # All service and workflow verbs require explicit account + credentials preflight
+    cred_info = require_credentials(shaped)
+
+    # --- Gmail verbs ---
+    if verb == "gmail-list":
+        params = {"userId": shaped.pop("userId", "me"), "maxResults": int(shaped.pop("maxResults", 20))}
+        params.update(shaped)
+        run_gws(cred_info, ["gmail", "users", "messages", "list", "--params", json.dumps(params)])
+
+    if verb == "gmail-get":
+        msg_id = positionals[0] if positionals else shaped.pop("id", None)
+        if not msg_id:
+            fail("USAGE", "gmail-get requires <message-id>")
+        params = {
+            "userId": shaped.pop("userId", "me"),
+            "id": str(msg_id),
+            "format": shaped.pop("format", "full"),
+        }
+        params.update(shaped)
+        run_gws(cred_info, ["gmail", "users", "messages", "get", "--params", json.dumps(params)])
+
+    if verb in ("gmail-send", "gmail-draft"):
+        data = dict(input_payload or {})
+        data.update(shaped)
+        user_id = data.pop("userId", "me")
+        thread_id = data.pop("threadId", None)
+
+        if "raw" in data:
+            raw_b64 = data["raw"]
+            to_addr = data.get("to", "")
+            subject = data.get("subject", "")
+        else:
+            to_addr = data.pop("to", "")
+            subject = data.pop("subject", "")
+            body = data.pop("body", "")
+            if not to_addr or not subject:
+                fail("USAGE", f"{verb} requires to=<address> and subject=<text> (or --input with 'raw')")
+            raw_b64 = build_rfc2822_raw(
+                to_addr=to_addr,
+                subject=subject,
+                body=body,
+                cc=data.pop("cc", None),
+                bcc=data.pop("bcc", None),
+                in_reply_to=data.pop("inReplyTo", None),
+                references=data.pop("references", None),
+            )
+
+        msg_obj = {"raw": raw_b64}
+        if thread_id:
+            msg_obj["threadId"] = str(thread_id)
+
+        if verb == "gmail-send":
+            resource = ["gmail", "users", "messages", "send"]
+            body_obj = msg_obj
+        else:
+            resource = ["gmail", "users", "drafts", "create"]
+            body_obj = {"message": msg_obj}
+
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "verb": verb,
+                "account": cred_info["account"],
+                "to": to_addr,
+                "subject": subject,
+                "gws_command": resource,
+                "params": {"userId": user_id},
+            })
+            sys.exit(0)
+
+        run_gws(
+            cred_info,
+            resource + ["--params", json.dumps({"userId": user_id}), "--json", json.dumps(body_obj)],
+        )
+
+    # --- Calendar verbs ---
+    if verb == "calendar-list":
+        cal_id = shaped.pop("calendarId", "primary")
+        single_events = shaped.pop("singleEvents", True)
+        params = {
+            "calendarId": cal_id,
+            "maxResults": int(shaped.pop("maxResults", 20)),
+            "singleEvents": bool(single_events),
+        }
+        if params["singleEvents"] and "orderBy" not in shaped:
+            params["orderBy"] = "startTime"
+        params.update(shaped)
+        run_gws(cred_info, ["calendar", "events", "list", "--params", json.dumps(params)])
+
+    if verb == "calendar-get":
+        event_id = positionals[0] if positionals else shaped.pop("eventId", None)
+        if not event_id:
+            fail("USAGE", "calendar-get requires <event-id>")
+        params = {"calendarId": shaped.pop("calendarId", "primary"), "eventId": str(event_id)}
+        params.update(shaped)
+        run_gws(cred_info, ["calendar", "events", "get", "--params", json.dumps(params)])
+
+    if verb == "calendar-create":
+        body_obj = dict(input_payload or {})
+        body_obj.update(shaped)
+        cal_id = body_obj.pop("calendarId", "primary")
+        if "summary" not in body_obj or "start" not in body_obj or "end" not in body_obj:
+            fail("USAGE", "calendar-create requires summary=..., start=..., and end=...")
+        body_obj["start"] = normalize_event_time(body_obj["start"])
+        body_obj["end"] = normalize_event_time(body_obj["end"])
+        if "attendees" in body_obj:
+            body_obj["attendees"] = normalize_attendees(body_obj["attendees"])
+
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "verb": verb,
+                "account": cred_info["account"],
+                "params": {"calendarId": cal_id},
+                "body": body_obj,
+            })
+            sys.exit(0)
+
+        run_gws(
+            cred_info,
+            [
+                "calendar",
+                "events",
+                "insert",
+                "--params",
+                json.dumps({"calendarId": cal_id}),
+                "--json",
+                json.dumps(body_obj),
+            ],
+        )
+
+    if verb == "calendar-update":
+        event_id = positionals[0] if positionals else shaped.pop("eventId", None)
+        if not event_id:
+            fail("USAGE", "calendar-update requires <event-id>")
+        body_obj = dict(input_payload or {})
+        body_obj.update(shaped)
+        cal_id = body_obj.pop("calendarId", "primary")
+        if "start" in body_obj:
+            body_obj["start"] = normalize_event_time(body_obj["start"])
+        if "end" in body_obj:
+            body_obj["end"] = normalize_event_time(body_obj["end"])
+        if "attendees" in body_obj:
+            body_obj["attendees"] = normalize_attendees(body_obj["attendees"])
+
+        params = {"calendarId": cal_id, "eventId": str(event_id)}
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "verb": verb,
+                "account": cred_info["account"],
+                "params": params,
+                "body": body_obj,
+            })
+            sys.exit(0)
+
+        run_gws(
+            cred_info,
+            ["calendar", "events", "patch", "--params", json.dumps(params), "--json", json.dumps(body_obj)],
+        )
+
+    if verb == "calendar-delete":
+        event_id = positionals[0] if positionals else shaped.pop("eventId", None)
+        if not event_id:
+            fail("USAGE", "calendar-delete requires <event-id>")
+        params = {"calendarId": shaped.pop("calendarId", "primary"), "eventId": str(event_id)}
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "verb": verb,
+                "account": cred_info["account"],
+                "params": params,
+            })
+            sys.exit(0)
+        run_gws(cred_info, ["calendar", "events", "delete", "--params", json.dumps(params)])
+
+    if verb == "calendar-freebusy":
+        body_obj = dict(input_payload or {})
+        body_obj.update(shaped)
+        if "timeMin" not in body_obj or "timeMax" not in body_obj:
+            fail("USAGE", "calendar-freebusy requires timeMin=... and timeMax=...")
+        if "items" not in body_obj:
+            body_obj["items"] = [{"id": "primary"}]
+        run_gws(cred_info, ["calendar", "freebusy", "query", "--json", json.dumps(body_obj)])
+
+    # --- Tasks verbs ---
+    if verb == "tasklists-list":
+        params = {"maxResults": int(shaped.pop("maxResults", 20))}
+        params.update(shaped)
+        run_gws(cred_info, ["tasks", "tasklists", "list", "--params", json.dumps(params)])
+
+    if verb == "tasks-list":
+        params = {
+            "tasklist": shaped.pop("tasklist", "@default"),
+            "maxResults": int(shaped.pop("maxResults", 20)),
+            "showCompleted": bool(shaped.pop("showCompleted", False)),
+        }
+        params.update(shaped)
+        run_gws(cred_info, ["tasks", "tasks", "list", "--params", json.dumps(params)])
+
+    if verb == "tasks-get":
+        task_id = positionals[0] if positionals else shaped.pop("task", None)
+        if not task_id:
+            fail("USAGE", "tasks-get requires <task-id>")
+        params = {"tasklist": shaped.pop("tasklist", "@default"), "task": str(task_id)}
+        params.update(shaped)
+        run_gws(cred_info, ["tasks", "tasks", "get", "--params", json.dumps(params)])
+
+    if verb == "tasks-create":
+        body_obj = dict(input_payload or {})
+        body_obj.update(shaped)
+        tasklist = body_obj.pop("tasklist", "@default")
+        if "title" not in body_obj:
+            fail("USAGE", "tasks-create requires title=...")
+        params = {"tasklist": tasklist}
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "verb": verb,
+                "account": cred_info["account"],
+                "params": params,
+                "body": body_obj,
+            })
+            sys.exit(0)
+        run_gws(
+            cred_info,
+            ["tasks", "tasks", "insert", "--params", json.dumps(params), "--json", json.dumps(body_obj)],
+        )
+
+    if verb == "tasks-complete":
+        task_id = positionals[0] if positionals else shaped.pop("task", None)
+        if not task_id:
+            fail("USAGE", "tasks-complete requires <task-id>")
+        params = {"tasklist": shaped.pop("tasklist", "@default"), "task": str(task_id)}
+        body_obj = {"status": "completed"}
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "verb": verb,
+                "account": cred_info["account"],
+                "params": params,
+                "body": body_obj,
+            })
+            sys.exit(0)
+        run_gws(
+            cred_info,
+            ["tasks", "tasks", "patch", "--params", json.dumps(params), "--json", json.dumps(body_obj)],
+        )
+
+    if verb == "tasks-update":
+        task_id = positionals[0] if positionals else shaped.pop("task", None)
+        if not task_id:
+            fail("USAGE", "tasks-update requires <task-id>")
+        body_obj = dict(input_payload or {})
+        body_obj.update(shaped)
+        tasklist = body_obj.pop("tasklist", "@default")
+        params = {"tasklist": tasklist, "task": str(task_id)}
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "verb": verb,
+                "account": cred_info["account"],
+                "params": params,
+                "body": body_obj,
+            })
+            sys.exit(0)
+        run_gws(
+            cred_info,
+            ["tasks", "tasks", "patch", "--params", json.dumps(params), "--json", json.dumps(body_obj)],
+        )
+
+    if verb == "tasks-delete":
+        task_id = positionals[0] if positionals else shaped.pop("task", None)
+        if not task_id:
+            fail("USAGE", "tasks-delete requires <task-id>")
+        params = {"tasklist": shaped.pop("tasklist", "@default"), "task": str(task_id)}
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "verb": verb,
+                "account": cred_info["account"],
+                "params": params,
+            })
+            sys.exit(0)
+        run_gws(cred_info, ["tasks", "tasks", "delete", "--params", json.dumps(params)])
+
+    # --- Drive verbs ---
+    if verb == "drive-list":
+        params = {
+            "pageSize": int(shaped.pop("pageSize", 20)),
+            "fields": shaped.pop(
+                "fields", "files(id,name,mimeType,modifiedTime,size,webViewLink),nextPageToken"
+            ),
+        }
+        params.update(shaped)
+        run_gws(cred_info, ["drive", "files", "list", "--params", json.dumps(params)])
+
+    if verb == "drive-search":
+        query_term = positionals[0] if positionals else shaped.pop("q", None)
+        if not query_term:
+            fail("USAGE", "drive-search requires <query-string>")
+        escaped = str(query_term).replace("'", "\\'")
+        q_expr = f"name contains '{escaped}' and trashed = false"
+        params = {
+            "q": q_expr,
+            "pageSize": int(shaped.pop("pageSize", 20)),
+            "fields": shaped.pop(
+                "fields", "files(id,name,mimeType,modifiedTime,size,webViewLink),nextPageToken"
+            ),
+        }
+        params.update(shaped)
+        run_gws(cred_info, ["drive", "files", "list", "--params", json.dumps(params)])
+
+    if verb == "drive-get":
+        file_id = positionals[0] if positionals else shaped.pop("fileId", None)
+        if not file_id:
+            fail("USAGE", "drive-get requires <file-id>")
+        params = {
+            "fileId": str(file_id),
+            "fields": shaped.pop("fields", "id,name,mimeType,modifiedTime,size,webViewLink,parents"),
+        }
+        params.update(shaped)
+        run_gws(cred_info, ["drive", "files", "get", "--params", json.dumps(params)])
+
+    if verb == "drive-upload":
+        local_path = positionals[0] if positionals else shaped.pop("file", None)
+        if not local_path:
+            fail("USAGE", "drive-upload requires <local-path>")
+        explicit_mime = shaped.pop("mimeType", None)
+        expanded, size, mime_clean = validate_drive_upload(local_path, explicit_mime)
+        name = shaped.pop("name", os.path.basename(expanded))
+        parent = shaped.pop("parent", None)
+        meta = {"name": name, "mimeType": mime_clean}
+        if parent:
+            meta["parents"] = [str(parent)]
+        meta.update(shaped)
+
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "verb": verb,
+                "account": cred_info["account"],
+                "upload_path": expanded,
+                "size_bytes": size,
+                "mime_type": mime_clean,
+                "metadata": meta,
+            })
+            sys.exit(0)
+
+        run_gws(
+            cred_info,
+            ["drive", "files", "create", "--upload", expanded, "--json", json.dumps(meta)],
+        )
+
+    if verb == "drive-mkdir":
+        folder_name = positionals[0] if positionals else shaped.pop("name", None)
+        if not folder_name:
+            fail("USAGE", "drive-mkdir requires <folder-name>")
+        parent = shaped.pop("parent", None)
+        meta = {
+            "name": str(folder_name),
+            "mimeType": "application/vnd.google-apps.folder",
+        }
+        if parent:
+            meta["parents"] = [str(parent)]
+        meta.update(shaped)
+
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "verb": verb,
+                "account": cred_info["account"],
+                "metadata": meta,
+            })
+            sys.exit(0)
+
+        run_gws(cred_info, ["drive", "files", "create", "--json", json.dumps(meta)])
+
+    # --- Escape hatch ---
+    if verb == "raw":
+        if len(positionals) < 2:
+            fail("USAGE", "raw requires <service> <resource...>")
+        service = positionals[0]
+        if service not in ADMITTED_SERVICES:
+            fail(
+                "UNADMITTED_SERVICE",
+                f"Service '{service}' is not in the admitted Google Workspace registry: {', '.join(sorted(ADMITTED_SERVICES))}",
+            )
+        cmd = list(positionals)
+        if parsed["raw_params_json"]:
+            cmd.extend(["--params", parsed["raw_params_json"]])
+        elif shaped:
+            cmd.extend(["--params", json.dumps(shaped)])
+        if parsed["raw_body_json"]:
+            cmd.extend(["--json", parsed["raw_body_json"]])
+        elif input_payload is not None:
+            cmd.extend(["--json", json.dumps(input_payload)])
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "verb": "raw",
+                "account": cred_info["account"],
+                "gws_argv": cmd,
+            })
+            sys.exit(0)
+        run_gws(cred_info, cmd)
+
+    # --- Composed Multi-Service Workflows ---
+    if verb == "mail-to-task":
+        msg_id = positionals[0] if positionals else shaped.pop("id", None)
+        if not msg_id:
+            fail("USAGE", "mail-to-task requires <message-id>")
+        tasklist = shaped.pop("tasklist", "@default")
+        due = shaped.pop("due", None)
+        extra_notes = shaped.pop("notes", "")
+        custom_title = shaped.pop("title", None)
+
+        get_params = {"userId": "me", "id": str(msg_id), "format": "full"}
+        msg_proc = run_gws(
+            cred_info,
+            ["gmail", "users", "messages", "get", "--params", json.dumps(get_params)],
+            capture=True,
+        )
+        if msg_proc.returncode != 0:
+            fail(
+                "GMAIL_FETCH_FAILED",
+                f"Failed to fetch Gmail message {msg_id}",
+                exit_code=msg_proc.returncode,
+                extra={"stderr": msg_proc.stderr.strip()},
+            )
+
+        try:
+            msg_data = json.loads(msg_proc.stdout)
+        except Exception as exc:
+            fail("INVALID_GWS_RESPONSE", f"Failed to parse Gmail message JSON: {exc}", exit_code=1)
+
+        headers = extract_email_headers(msg_data)
+        subject = headers.get("subject") or f"Message {msg_id}"
+        sender = headers.get("from") or ""
+        snippet = msg_data.get("snippet", "")
+        thread_id = msg_data.get("threadId", "")
+
+        task_title = custom_title or f"[Email] {subject}"
+        note_lines = []
+        if extra_notes:
+            note_lines.append(str(extra_notes))
+        if sender:
+            note_lines.append(f"From: {sender}")
+        if snippet:
+            note_lines.append(f"Snippet: {snippet}")
+        note_lines.append(f"gmail_message_id: {msg_id}")
+        if thread_id:
+            note_lines.append(f"gmail_thread_id: {thread_id}")
+
+        task_body = {"title": task_title, "notes": "\n".join(note_lines)}
+        if due:
+            task_body["due"] = str(due)
+
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "workflow": "mail-to-task",
+                "account": cred_info["account"],
+                "source_message": {
+                    "id": str(msg_id),
+                    "threadId": thread_id,
+                    "subject": subject,
+                    "from": sender,
+                },
+                "planned_task": {
+                    "tasklist": tasklist,
+                    "body": task_body,
+                },
+            })
+            sys.exit(0)
+
+        task_proc = run_gws(
+            cred_info,
+            [
+                "tasks",
+                "tasks",
+                "insert",
+                "--params",
+                json.dumps({"tasklist": tasklist}),
+                "--json",
+                json.dumps(task_body),
+            ],
+            capture=True,
+        )
+        if task_proc.returncode != 0:
+            fail(
+                "TASK_CREATE_FAILED",
+                f"Fetched Gmail message {msg_id} but failed to create Google Task",
+                exit_code=task_proc.returncode,
+                extra={"stderr": task_proc.stderr.strip()},
+            )
+
+        try:
+            task_data = json.loads(task_proc.stdout)
+        except Exception:
+            task_data = {"raw": task_proc.stdout.strip()}
+
+        emit_json({
+            "ok": True,
+            "workflow": "mail-to-task",
+            "account": cred_info["account"],
+            "source_message": {
+                "id": str(msg_id),
+                "threadId": thread_id,
+                "subject": subject,
+                "from": sender,
+            },
+            "task": task_data,
+        })
+        sys.exit(0)
+
+    if verb == "drive-share-mail":
+        local_path = positionals[0] if positionals else shaped.pop("file", None)
+        if not local_path:
+            fail("USAGE", "drive-share-mail requires <local-path> and to=<address>")
+        to_addr = shaped.pop("to", "")
+        if not to_addr:
+            fail("USAGE", "drive-share-mail requires to=<address>")
+
+        explicit_mime = shaped.pop("mimeType", None)
+        expanded, size, mime_clean = validate_drive_upload(local_path, explicit_mime)
+        name = shaped.pop("name", os.path.basename(expanded))
+        parent = shaped.pop("parent", None)
+        subject = shaped.pop("subject", f"Shared file: {name}")
+        body_prefix = shaped.pop("body", f"Sharing uploaded Drive file '{name}'.")
+
+        meta = {"name": name, "mimeType": mime_clean}
+        if parent:
+            meta["parents"] = [str(parent)]
+
+        if dry_run:
+            emit_json({
+                "ok": True,
+                "dry_run": True,
+                "workflow": "drive-share-mail",
+                "account": cred_info["account"],
+                "planned_upload": {
+                    "upload_path": expanded,
+                    "size_bytes": size,
+                    "mime_type": mime_clean,
+                    "metadata": meta,
+                },
+                "planned_email": {
+                    "to": to_addr,
+                    "subject": subject,
+                },
+            })
+            sys.exit(0)
+
+        upload_proc = run_gws(
+            cred_info,
+            ["drive", "files", "create", "--upload", expanded, "--json", json.dumps(meta)],
+            capture=True,
+        )
+        if upload_proc.returncode != 0:
+            fail(
+                "DRIVE_UPLOAD_FAILED",
+                "Drive upload failed before sending email.",
+                exit_code=upload_proc.returncode,
+                extra={"stderr": upload_proc.stderr.strip()},
+            )
+
+        try:
+            drive_file = json.loads(upload_proc.stdout)
+        except Exception:
+            drive_file = {"raw": upload_proc.stdout.strip()}
+
+        file_id = drive_file.get("id", "unknown") if isinstance(drive_file, dict) else "unknown"
+        web_link = (
+            drive_file.get("webViewLink", f"https://drive.google.com/file/d/{file_id}/view")
+            if isinstance(drive_file, dict)
+            else ""
+        )
+        full_body = f"{body_prefix}\n\nDrive File: {name}\nFile ID: {file_id}\nLink: {web_link}\n"
+        raw_b64 = build_rfc2822_raw(to_addr=to_addr, subject=subject, body=full_body)
+
+        send_proc = run_gws(
+            cred_info,
+            [
+                "gmail",
+                "users",
+                "messages",
+                "send",
+                "--params",
+                json.dumps({"userId": "me"}),
+                "--json",
+                json.dumps({"raw": raw_b64}),
+            ],
+            capture=True,
+        )
+        if send_proc.returncode != 0:
+            fail(
+                "PARTIAL_WORKFLOW_FAILURE",
+                "Drive file upload succeeded, but sending the Gmail notification failed. Do not blindly retry the upload.",
+                exit_code=send_proc.returncode,
+                extra={
+                    "completed_step": "drive-upload",
+                    "failed_step": "gmail-send",
+                    "retry_safe": False,
+                    "partial_result": {"drive_file": drive_file},
+                    "cause": send_proc.stderr.strip(),
+                },
+            )
+
+        try:
+            sent_msg = json.loads(send_proc.stdout)
+        except Exception:
+            sent_msg = {"raw": send_proc.stdout.strip()}
+
+        emit_json({
+            "ok": True,
+            "workflow": "drive-share-mail",
+            "account": cred_info["account"],
+            "drive_file": drive_file,
+            "message": sent_msg,
+        })
+        sys.exit(0)
+
+    if verb == "agenda":
+        cal_id = shaped.pop("calendarId", "primary")
+        tasklist = shaped.pop("tasklist", "@default")
+        query = shaped.pop("q", "is:unread")
+        limit = int(shaped.pop("maxResults", 10))
+
+        cal_params = {"calendarId": cal_id, "maxResults": limit, "singleEvents": True, "orderBy": "startTime"}
+        if "timeMin" in shaped:
+            cal_params["timeMin"] = shaped.pop("timeMin")
+        if "timeMax" in shaped:
+            cal_params["timeMax"] = shaped.pop("timeMax")
+
+        task_params = {"tasklist": tasklist, "maxResults": limit, "showCompleted": False}
+        mail_params = {"userId": "me", "q": query, "maxResults": limit}
+
+        cal_proc = run_gws(cred_info, ["calendar", "events", "list", "--params", json.dumps(cal_params)], capture=True)
+        if cal_proc.returncode != 0:
+            fail("AGENDA_CALENDAR_FAILED", "Failed to list calendar events", exit_code=cal_proc.returncode)
+        task_proc = run_gws(cred_info, ["tasks", "tasks", "list", "--params", json.dumps(task_params)], capture=True)
+        if task_proc.returncode != 0:
+            fail("AGENDA_TASKS_FAILED", "Failed to list tasks", exit_code=task_proc.returncode)
+        mail_proc = run_gws(cred_info, ["gmail", "users", "messages", "list", "--params", json.dumps(mail_params)], capture=True)
+        if mail_proc.returncode != 0:
+            fail("AGENDA_GMAIL_FAILED", "Failed to list Gmail messages", exit_code=mail_proc.returncode)
+
+        def parse_or_raw(text):
+            try:
+                return json.loads(text)
+            except Exception:
+                return {"raw": text.strip()}
+
+        cal_json = parse_or_raw(cal_proc.stdout)
+        task_json = parse_or_raw(task_proc.stdout)
+        mail_json = parse_or_raw(mail_proc.stdout)
+
+        emit_json({
+            "ok": True,
+            "workflow": "agenda",
+            "account": cred_info["account"],
+            "calendar_events": cal_json.get("items", []) if isinstance(cal_json, dict) else cal_json,
+            "tasks": task_json.get("items", []) if isinstance(task_json, dict) else task_json,
+            "messages": mail_json.get("messages", []) if isinstance(mail_json, dict) else mail_json,
+        })
+        sys.exit(0)
+
+    fail("UNKNOWN_VERB", f"Unknown google verb: {verb}. Run with --help for usage.", exit_code=2)
+~~~
+py.main \
+  "${GWS_ACCOUNT:-}" \
+  "${GWS_CREDENTIALS_FILE:-}" \
+  "${GWS_SERVICE_ACCOUNT_KEY_FILE:-}" \
+  "${GWS_CONFIG_ROOT:-}" \
+  "${GWS_BIN:-}" \
+  "${PATH:-}" \
+  "${GOOGLE_APPLICATION_CREDENTIALS:-}" \
+  "${GOOGLE_WORKSPACE_CLI_TOKEN:-}" \
+  "${FAKE_GWS_LOG:-}" \
+  "${FAKE_GWS_FAIL_LOGIN:-}" \
+  "${FAKE_GWS_FAIL_SETUP:-}" \
+  "${FAKE_GWS_FAIL_GMAIL_SEND:-}" \
+  "$@"
+
+
+
+
