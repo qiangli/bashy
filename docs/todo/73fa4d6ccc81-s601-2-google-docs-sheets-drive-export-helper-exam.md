@@ -3,12 +3,16 @@ id: 73fa4d6ccc81
 kind: feature
 title: S601.2 Google Docs, Sheets & Drive Export helper (examples/google/docs_sheets.py)
 seq: 3200
-status: todo
+status: done
 priority: p1
 created: 2026-11-09T09:04:53.815429Z
+weave: 59
+assignee: codex-gpt6-sol
 sprint: 601
 sprint_id: 3f93eee1-fb25-5828-a779-966c345ff576
 sprint_title: Google Workspace custom command MVP (examples/google)
+closed: 2026-11-09T09:38:25.255531Z
+closed_by: claude-opus5.5
 ---
 
 Create standalone helper module examples/google/docs_sheets.py and hermetic unit test suite examples/google/test_docs_sheets.py (do not modify google.bsh or other files). Implement CLI/callable functions wrapping gws (via GWS_BIN or gws on PATH with GWS_ACCOUNT and GOOGLE_WORKSPACE_CLI_CREDENTIALS_FILE preflight and SECRET_VIA_ARGV refusal):
