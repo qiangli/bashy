@@ -8,9 +8,9 @@ priority: p1
 labels:
     - clean-baseline
 created: 2026-11-04T02:24:41.105323Z
-sprint: 585
-sprint_id: 73032105-b38f-5cd7-8f47-a732dfee103f
-sprint_title: Klatch v1.2.7 rebuild and end-to-end tests
+sprint: 599
+sprint_id: b38d7a89-cadd-58e2-8748-66b0e9c2f201
+sprint_title: 'S585 follow-ups: native Klatch on the Windows test host, rc.30 end-to-end and UAT, local gates under 30 min'
 ---
 
 Depends on C3 and stable 561/562 candidates. Freeze integrated Bashy, outpost and Klatch release identities and execute every required J1-J10 cell from clean install on W, M and L, natively, with single sign-on and team mode from the Klatch release (no host-scoped shaping); rerun the UAT cohort's journeys on that release and retire the elephant shaping branch and container. Recheck affected journeys after any new fix; keep coverage and failure history visible. Acceptance: complete agreed UAT passes, all in-scope issues closed by evidence, minimal user-facing limitations documented. Candidate acceptance only, not authorization to deploy, publish or replace a shared installation. Deferred: general software shaping (Sprint 564), satellite-less default outpost and multi-satellite switching (Sprint 565).

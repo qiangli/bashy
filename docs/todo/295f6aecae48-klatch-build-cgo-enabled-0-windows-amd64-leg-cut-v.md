@@ -10,9 +10,9 @@ labels:
     - windows
     - build
 created: 2026-11-07T03:16:55.192711Z
-sprint: 585
-sprint_id: 73032105-b38f-5cd7-8f47-a732dfee103f
-sprint_title: Klatch v1.2.7 rebuild and end-to-end tests
+sprint: 599
+sprint_id: b38d7a89-cadd-58e2-8748-66b0e9c2f201
+sprint_title: 'S585 follow-ups: native Klatch on the Windows test host, rc.30 end-to-end and UAT, local gates under 30 min'
 ---
 
 The Klatch fork is pure Go as of commit febff05b (glebarez/sqlite over modernc; busy_timeout pragma verified by test; mattn/go-sqlite3 removed; CGO_ENABLED=0 builds for linux, darwin and windows; SSO team tests pass).
