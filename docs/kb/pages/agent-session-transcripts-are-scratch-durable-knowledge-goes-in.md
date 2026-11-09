@@ -10,11 +10,12 @@ tags:
     - kb
     - retention
     - cleanup
-status: candidate
-evidence: '2026-11-09: operator decision after a dev-box disk cleanup deleted codex sessions; durable state was already in sprint cards, docs/todo and kb'
+status: validated
+evidence: '2026-11-09: operator approved the rule; applied in a dev-box cleanup (codex sessions deleted after confirming durable state was in sprint cards, docs/todo and kb)'
 source:
     tool: claude
 created: "2026-11-09T21:25:49Z"
+updated: "2026-11-09T21:26:33Z"
 ---
 
 Applies to every agentic tool on a host: claude, codex, agy, muse, zcode, ycode/genie, opencode, and any future or custom agent CLI.
