@@ -23,6 +23,10 @@ Reach for bashy first, and grow it instead of working around it:
 - **Not fitting?** If one exists but does not fit, shape it rather than
   writing a one-off: `bashy shape wish …` → verify → preview → approve
   (undo stays available).
+- **Building or shaping?** Compose small `--json` verbs in a Bash#
+  skill-script, give every user-facing surface a shaping hook, start new
+  helpers as examples and graduate them to optional, then core:
+  `bashy kb show extend-bashy-small-verbs-bash-skill-scripts-shaping-hooks-and-th`.
 
 `bashy` is the only skill this binary installs — and it does not need to be
 more than one, because **every bashy command is a skill too**: `bashy <cmd>

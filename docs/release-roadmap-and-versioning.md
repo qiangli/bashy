@@ -202,6 +202,14 @@ relation is `experimental`. **Nothing graduates to `supported` without a
 consumer** — an unused feature has produced no feedback, so its shape is
 untested regardless of how long it has existed.
 
+Where a feature lives follows its tier: `experimental` features start as
+**examples** (`examples/`, any common tech, never in the core binary),
+`preview` features ship as **optional** add-ons on all three OSes, and
+`supported` features are **core** under the foundation rules. Guidelines for
+every agent (small verbs, Bash# skill-scripts, shaping hooks): kb page
+`extend-bashy-small-verbs-bash-skill-scripts-shaping-hooks-and-th`
+(`kb/defaults`).
+
 #### Foundation first, then an MVP — not a full-blast re-architecture
 
 The agentland re-architecture (umbrella
