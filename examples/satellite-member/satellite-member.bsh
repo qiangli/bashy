@@ -10,6 +10,7 @@
 #   satellite-member attach <satellite>
 #   satellite-member harden
 #   satellite-member publish <app> --port <port>
+#   satellite-member share <app> --email <email>
 #   satellite-member diag
 #
 # Thin wrapper over verbs (rod not fish): every step is one verb call —
@@ -63,8 +64,8 @@ an invitation does both). Sharing is a trusted relationship.
 6. By default nothing is shared beyond what identifies the machine for
    troubleshooting (host name, alias, online status, names of shared
    apps). To share an app the user runs, `satellite-member publish <app>
-   --port <port>` and ask the user to share it with chosen members from
-   their Hosts page.
+   --port <port>`, then `satellite-member share <app> --email <member>` for
+   each chosen member (an active mutual member of the user; no web step).
 7. Optional: `satellite-member harden` turns off built-in services the
    user does not use (podman, ollama, ollama-pool, files, meet, shell,
    desktop, clipboard). It applies live and is safe to repeat.
@@ -101,6 +102,7 @@ usage() {
     echo "       $PROG attach <satellite>" >&2
     echo "       $PROG harden" >&2
     echo "       $PROG publish <app> --port <port>" >&2
+    echo "       $PROG share <app> --email <email>" >&2
     echo "       $PROG diag" >&2
     exit 2
 }
@@ -209,7 +211,21 @@ cmd_publish() {
     esac
     "$(outpost_bin)" apps add "$app" --url "http://127.0.0.1:$port" --require-login --trust-cloud-identity ||
         fail "could not publish $app" 1
-    echo "$PROG: published $app (sign-in required, identity passed to the app); share it with chosen members from your Hosts page"
+    echo "$PROG: published $app (sign-in required, identity passed to the app); share it with chosen members: $PROG share $app --email <member>"
+}
+
+cmd_share() {
+    app=$1; email=$2
+    case "$app" in
+        ""|-*|*[!A-Za-z0-9._-]*) fail "invalid app name: $app" 2 ;;
+    esac
+    case "$email" in
+        *@*) ;;
+        *) fail "invalid email: $email" 2 ;;
+    esac
+    "$(bashy_bin)" outpost apps share "$app" --email "$email" ||
+        fail "could not share $app with $email (the member must be an active mutual member of yours)" 1
+    echo "$PROG: shared $app with $email"
 }
 
 cmd_diag() {
@@ -279,6 +295,19 @@ case "$sub" in
             shift
         done
         cmd_publish "$app" "$port"
+        ;;
+    share)
+        [ $# -ge 1 ] || usage
+        app=$1; shift; email=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --email=*) email=${1#--email=} ;;
+                --email) [ $# -ge 2 ] || usage; email=$2; shift ;;
+                *) usage ;;
+            esac
+            shift
+        done
+        cmd_share "$app" "$email"
         ;;
     diag)
         [ $# -eq 0 ] || usage

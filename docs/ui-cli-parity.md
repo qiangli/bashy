@@ -41,7 +41,7 @@ owner and member flows alike.
 | Satellite detail: transfer ownership | `bashy satellite transfer NAME --to EMAIL --yes` |
 | Migration preview | `bashy reproduce --plan` (read-only; no `--apply`) |
 | Master credential for migration | `bashy fleet master-token save\|mint` (0600 file, never printed) |
-| Hosts page: share an app with chosen members (share grant) | **gap** — no verb mints or revokes a per-app member share grant (see below) |
+| Hosts page: share an app with chosen members (share grant) | `bashy outpost apps share APP --email E` / `unshare` / `shares` on the host (S606 S7: the host's own token on its satellite or standalone; target must be an active mutual member); journey: `satellite-member share APP --email E` |
 
 ## Satellite web console
 
@@ -51,7 +51,7 @@ owner and member flows alike.
 | View attached hosts and members | master view: `bashy paired-host ls --json`; this daemon's attachments: `bashy outpost satellite list --json` |
 | Satellite-scoped host list (which hosts are attached to satellite X, from any machine) | `bashy paired-host ls --satellite ID --json` (Bearer `GET /api/v1/satellites/assignment`, S606 S5) |
 | Reach a shared app | `https://<satellite>/matrix/h/<host>/app/<app>/` after attach + member sign-in; 200 for a shared member, 403 for an unshared member, 401 without a credential |
-| Share an app with members | **gap** — same share-grant gap as the Cloudbox Hosts page row above |
+| Share an app with members | `bashy outpost apps share APP --email E` / `unshare` / `shares` on the host (S606 S7: the host's own token on its satellite or standalone; target must be an active mutual member); journey: `satellite-member share APP --email E` |
 
 ## Outpost admin (host-local service surface)
 
@@ -68,7 +68,7 @@ portal (identity only, no tunnel) and takes satellites as attachments.
 | Detach from a satellite | `bashy outpost satellite detach SAT [--json]` |
 | Peers | `bashy outpost peers` |
 | Daemon status | `bashy outpost status [--json]` |
-| Publish a local app | `bashy outpost apps add APP --port PORT` (then the owner/member shares it from the Hosts page — share-grant gap above) |
+| Publish a local app | `bashy outpost apps add APP --port PORT` (then `bashy outpost apps share APP --email E`) |
 | List / remove apps | `bashy outpost apps list`, `bashy outpost apps rm APP` |
 | Built-in services on/off | `bashy outpost builtins set --service NAME=off …` |
 | Remote shell / files | `bashy outpost connect`, `bashy outpost ssh\|scp` |
@@ -89,10 +89,6 @@ credential; legacy peers without an email are unchanged.
 
 ## Gaps (filed `--no-sprint`, label `parity`)
 
-- **parity-share-grant** (`todo:9bbbed028aa2`): no verb mints, lists, or
-  revokes a per-app member share grant (Cloudbox Hosts page and satellite
-  console "share with members" are console-only; `satellite-member
-  publish` stops at `outpost apps add` and hands the grant to the human).
 - **parity-outpost-pin** (`todo:ea48d4aa81eb`): verify `bashy outpost
   satellite attach|detach|list` (plus `register`, `unpair`, `peers`)
   against the shipped outpost pin and record the minimum pin in this doc.

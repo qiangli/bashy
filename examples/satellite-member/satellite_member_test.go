@@ -316,3 +316,16 @@ func TestSkillFenceIsGeneric(t *testing.T) {
 		}
 	}
 }
+
+func TestShareCallsOutpostAppsShare(t *testing.T) {
+	f := newFixture(t)
+	if out, code := f.run(nil, "share", "board", "--email", "bob@example.com"); code != 0 || !strings.Contains(out, "shared board with bob@example.com") {
+		t.Fatalf("share: exit %d %q", code, out)
+	}
+	if got := f.bashyCalls(); !strings.Contains(got, "outpost apps share board --email bob@example.com") {
+		t.Errorf("bashy argv = %q", got)
+	}
+	if _, code := f.run(nil, "share", "board", "--email", "not-an-email"); code == 0 {
+		t.Errorf("invalid email accepted")
+	}
+}
