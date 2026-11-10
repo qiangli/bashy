@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [repo/page] Extend bashy: small verbs, Bash# skill-scripts, shaping hooks, and the example → optional → core levels — How every agent adds or changes bashy features, runbooks and shaped apps: compose small JSON verbs in Bash# skill-scripts, design a shaping hook, start new helpers as examples and graduate them to optio  (kb:extend-bashy-small-verbs-bash-skill-scripts-shaping-hooks-and-th)
+- [repo/page] Join a satellite as a member and share your machine by choice (satellite-member) — Agent steps for a member joining a satellite another account owns, or an owner bringing members in, via the satellite-member Bash# command — WHEN a user asks to join, onboard to, or share on someone else's satellite (keywords:  (kb:join-someone-s-satellite-as-a-member-and-share-your-machine-by-c)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 

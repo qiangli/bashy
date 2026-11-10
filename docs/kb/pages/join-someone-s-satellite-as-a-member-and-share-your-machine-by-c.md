@@ -11,11 +11,11 @@ tags:
     - onboarding
     - member
 status: candidate
-evidence: 'S587 C2 2026-11-07: CLI flags checked with --help; delegated member sign-in and share-then-access verified live on a satellite with a second account; own-account ownership and mutual membership from code and operator rules; full run pending the S587 dry run (C6)'
+evidence: 'S587 C2 2026-11-07: CLI flags checked with --help; delegated member sign-in and share-then-access verified live on a satellite with a second account; own-account ownership and mutual membership from code and operator rules. S606 S4 2026-11-10: reworked to the pair-once + membership + attach flow (yoke docs/cloudbox-members-attach-wire.md); verbs driven against fakes in examples/satellite-member tests, live run pending'
 source:
     tool: claude
 created: "2026-11-07T22:49:28Z"
-updated: "2026-11-07T22:59:15Z"
+updated: "2026-11-10T14:00:00Z"
 ---
 
 ## For agents
@@ -23,21 +23,31 @@ updated: "2026-11-07T22:59:15Z"
 When a user wants to join a satellite that another account owns (as a member), or an owner wants to bring members in, use the `satellite-member` Bash# command. Its skill holds the full steps for both roles:
 
 ```sh
-bashy satellite-member --skill          # read the steps first
-bashy satellite-member check            # installed? paired?
-bashy satellite-member pair --code "$CODE"   # code from the USER'S OWN portal, never the owner's
+bashy satellite-member --skill               # read the steps first
+bashy satellite-member check                 # installed? paired?
+bashy satellite-member code                  # mint a pair-once code for the USER'S OWN account
+bashy satellite-member pair --code "$CODE"   # pair once with the cloudbox portal (identity only)
+bashy satellite-member accept                # list the owner's invitations
+bashy satellite-member accept "$INV"         # accept one (membership is mutual)
+bashy satellite-member attach "$SAT"         # attach this host to the satellite
 bashy satellite-member publish "$APP" --port "$PORT"
-bashy satellite-member harden           # optional: built-ins off
-bashy satellite-member diag             # outpost status for the owner
+bashy satellite-member harden                # optional: built-ins off
+bashy satellite-member diag                  # outpost status for the owner
 ```
 
 It is a default command (registered by a first install, or `bashy-defaults apply`). Without the registration run it from the source pin: `bashy --bashsharp "${BASHY_HOME:-$HOME/.bashy}/src/bashy/examples/satellite-member/satellite-member.bsh" <verb>`.
 
+## The flow (pair once, join by membership, attach)
+
+- The machine pairs ONCE with the cloudbox portal under the member's OWN account (`code` → `pair`): identity record only, no tunnel.
+- Membership is mutual: the owner invites (`bashy member invite EMAIL`), the member accepts (`accept <id>`) — both sides are added.
+- The satellite is an attachment: `attach <satellite>` (candidates: `bashy outpost satellite list --json`). No satellite pairing code is ever used by a member.
+- A legacy satellite code (`pair --server <satellite-url>`) is refused unless `--as-owner-node` is passed explicitly: such a code makes that satellite's owner the owner of this machine.
+
 ## Steps that need the user (UI)
 
-- Generate a pairing code on their own portal's Hosts page.
-- Membership is mutual: accept the owner's invitation, or add each other on the Members page.
-- Sign in to the satellite with their own account.
+- Sign in to bashy with their own account before `code` (or generate the code on their portal's Hosts page).
+- Sign in to the satellite with their own account to reach shared apps.
 - Share a published app with chosen members from the Hosts page (owner and member alike).
 
 ## Rules

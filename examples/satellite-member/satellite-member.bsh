@@ -4,10 +4,18 @@
 # One editable Bash# body for the satellite-member command and skill.
 #
 #   satellite-member check
-#   satellite-member pair --code <code> [--server <url>] [--name <host>]
+#   satellite-member code
+#   satellite-member pair --code <code> [--name <host>]
+#   satellite-member accept [<id> [--circle <c>]]
+#   satellite-member attach <satellite>
 #   satellite-member harden
 #   satellite-member publish <app> --port <port>
 #   satellite-member diag
+#
+# Thin wrapper over verbs (rod not fish): every step is one verb call —
+# `bashy …` acts with the account, `bashy outpost …` with the host's
+# cloudbox pairing, and the local daemon surface (`outpost status`,
+# `builtins`, `apps`) is reached directly.
 
 ~~~skill as guide
 ---
@@ -20,9 +28,11 @@ metadata:
 
 Roles: the OWNER runs (and pays for) the satellite; a MEMBER joins it with
 their own machine. A machine belongs to the account whose pairing code
-paired it, so a member pairs with their OWN account and joins the
-satellite as a member. Membership is mutual: each side lists the other
-(accepting an invitation does both). Sharing is a trusted relationship.
+paired it, so this machine pairs ONCE with the cloudbox portal under the
+member's OWN account; the satellite is then an attachment of that
+account, joined through mutual membership — never through the owner's
+pairing code. Membership is mutual: each side lists the other (accepting
+an invitation does both). Sharing is a trusted relationship.
 
 ## Agent steps for a member
 
@@ -30,43 +40,53 @@ satellite as a member. Membership is mutual: each side lists the other
    machine paired? If Bashy is missing, ask the user to run the installer
    (`curl -fsSL https://dhnt.io/install.sh | sh`, or on Windows
    `irm https://dhnt.io/install.ps1 | iex`).
-2. Not paired: ask the user for a pairing code from THEIR OWN portal
-   account (their Hosts page, "Generate invite code"), then
-   `satellite-member pair --code <code>` (`--server <url>` for a portal
-   other than the default). Refuse a code that came from the satellite
-   owner: it would make the owner the owner of this machine.
-3. Membership: ask the user to accept the owner's member invitation (or
-   add the owner's email to their Members page).
-4. Ask the user to open the satellite address and choose Sign in with
-   their own account. Shared apps appear as tiles; an app is at
+2. Not paired — mint a pair-once code for the user's OWN account:
+   `satellite-member code` (runs `bashy paired-host invite`; the user
+   must be signed in with their own account), or the portal Hosts page,
+   "Generate invite code". The code is single-use, expires in 15
+   minutes, and pairs exactly one host with THAT account.
+3. `satellite-member pair --code <code>` pairs this machine once with
+   the cloudbox portal — identity only, no tunnel. Never pass a
+   satellite address with `--server`: a code minted on that server makes
+   that server's owner the owner of this machine, and `pair` refuses it
+   unless owner node provisioning is acknowledged explicitly with
+   `--as-owner-node`.
+4. Membership: `satellite-member accept` lists the owner's pending
+   invitations; `satellite-member accept <id> [--circle
+   family|friend|team|guest]` accepts one (mutual: both sides are
+   added).
+5. `satellite-member attach <satellite>` attaches to the satellite
+   (list candidates first with `bashy outpost satellite list --json`).
+   Shared apps appear as tiles once the user signs in with their own
+   account; an app is at
    `<satellite-url>/matrix/h/<host>/app/<app>/`.
-5. By default nothing is shared beyond what identifies the machine for
+6. By default nothing is shared beyond what identifies the machine for
    troubleshooting (host name, alias, online status, names of shared
    apps). To share an app the user runs, `satellite-member publish <app>
    --port <port>` and ask the user to share it with chosen members from
    their Hosts page.
-6. Optional: `satellite-member harden` turns off built-in services the
+7. Optional: `satellite-member harden` turns off built-in services the
    user does not use (podman, ollama, ollama-pool, files, meet, shell,
    desktop, clipboard). It applies live and is safe to repeat.
-7. Troubleshooting: `satellite-member diag` prints `outpost status` for
+8. Troubleshooting: `satellite-member diag` prints `outpost status` for
    the user to send to the owner.
 
 ## Agent steps for an owner
 
-- Ask the owner to add each member's email on the satellite's Members
-  page, and to share each app with each member from the Hosts page of the
-  host that runs it.
-- Never give members a pairing code from the owner's satellite or
-  account.
+- Invite members with `bashy member invite EMAIL [--circle C]` — never a
+  pairing code; each member pairs their own machine (steps 2–3).
+- Share each app with each member from the Hosts page of the host that
+  runs it.
 - A member can run apps for a sub-group on their own machine and share
-  them with that sub-group (step 5).
+  them with that sub-group (step 6).
 
-`SATELLITE_MEMBER_OUTPOST_BIN` overrides the `outpost` executable.
+`SATELLITE_MEMBER_OUTPOST_BIN` overrides the `outpost` executable and
+`SATELLITE_MEMBER_BASHY_BIN` the `bashy` executable.
 
 ## Verification
 
 `go test ./examples/satellite-member/` drives each verb against a fake
-`outpost`; it never touches a real host.
+`outpost` and a fake `bashy`; it never touches a real host.
 ~~~
 
 set -e
@@ -75,7 +95,10 @@ PROG=satellite-member
 
 usage() {
     echo "Usage: $PROG check" >&2
-    echo "       $PROG pair --code <code> [--server <url>] [--name <host>]" >&2
+    echo "       $PROG code" >&2
+    echo "       $PROG pair --code <code> [--name <host>] [--as-owner-node --server <url>]" >&2
+    echo "       $PROG accept [<id> [--circle <family|friend|team|guest>]]" >&2
+    echo "       $PROG attach <satellite>" >&2
     echo "       $PROG harden" >&2
     echo "       $PROG publish <app> --port <port>" >&2
     echo "       $PROG diag" >&2
@@ -95,26 +118,78 @@ outpost_bin() {
     fi
 }
 
+bashy_bin() {
+    if [ -n "${SATELLITE_MEMBER_BASHY_BIN:-}" ]; then
+        printf '%s\n' "$SATELLITE_MEMBER_BASHY_BIN"
+    else
+        printf 'bashy\n'
+    fi
+}
+
 cmd_check() {
     command -v "$(outpost_bin)" >/dev/null 2>&1 || {
         echo "outpost: not installed (install Bashy first)"
         return 1
     }
-    if out=$("$(outpost_bin)" status 2>&1) && printf '%s\n' "$out" | grep -qiE 'agent_name +[^ ]'; then
-        echo "outpost: installed and paired"
+    if js=$("$(outpost_bin)" status --json 2>/dev/null) && printf '%s\n' "$js" | grep -q '"cloudbox"'; then
+        echo "outpost: paired with the cloudbox portal (own account, identity only)"
+    elif out=$("$(outpost_bin)" status 2>&1) && printf '%s\n' "$out" | grep -qiE 'agent_name +[^ ]'; then
+        echo "outpost: paired (tunnel)"
     else
-        echo "outpost: installed, not paired (run: $PROG pair --code <code from your own portal>)"
+        echo "outpost: installed, not paired (run: $PROG code, then $PROG pair --code <code from your own account>)"
     fi
 }
 
+cmd_code() {
+    "$(bashy_bin)" paired-host invite ||
+        fail "could not mint a pairing code (is the user signed in with their own cloudbox account?)" 1
+    echo "$PROG: the code above pairs one host with the user's OWN account; redeem it here with: $PROG pair --code <code>"
+}
+
+# cmd_pair CODE HOST SERVER AS_OWNER_NODE
 cmd_pair() {
-    code=$1; server=$2; host=$3
+    code=$1; host=$2; server=$3; as_owner_node=$4
     [ -n "$code" ] || usage
-    set -- register --code "$code"
-    [ -n "$server" ] && set -- "$@" --server "$server"
+    if [ -n "$server" ] && [ "$as_owner_node" != "1" ]; then
+        fail "refusing --server $server: a code minted on that server makes THAT server's owner the owner of this machine. A member pairs with a code from their own account on the cloudbox portal (no --server). To provision an owner node for that server on purpose, pass --as-owner-node." 1
+    fi
+    set -- outpost register --code "$code"
     [ -n "$host" ] && set -- "$@" --name "$host"
-    "$(outpost_bin)" "$@" || fail "pairing failed" 1
-    echo "$PROG: paired with your own account; check with: $PROG check"
+    [ -n "$server" ] && set -- "$@" --server "$server"
+    "$(bashy_bin)" "$@" || fail "pairing failed" 1
+    echo "$PROG: paired once with the cloudbox portal; next: $PROG accept, then $PROG attach <satellite>"
+}
+
+cmd_accept() {
+    id=""; circle=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --circle=*) circle=${1#--circle=} ;;
+            --circle) [ $# -ge 2 ] || usage; circle=$2; shift ;;
+            -*) usage ;;
+            *) [ -z "$id" ] || usage; id=$1 ;;
+        esac
+        shift
+    done
+    if [ -z "$id" ]; then
+        echo "$PROG: pending invitations (accept one with: $PROG accept <id>)"
+        "$(bashy_bin)" member invitations
+    else
+        set -- member accept "$id"
+        [ -n "$circle" ] && set -- "$@" --circle "$circle"
+        "$(bashy_bin)" "$@" || fail "accepting invitation $id failed" 1
+        echo "$PROG: membership is mutual (both sides added); next: $PROG attach <satellite>"
+    fi
+}
+
+cmd_attach() {
+    sat=$1
+    case "$sat" in
+        ""|-*) usage ;;
+    esac
+    "$(bashy_bin)" outpost satellite attach "$sat" ||
+        fail "attach to $sat failed (list candidates: bashy outpost satellite list --json)" 1
+    echo "$PROG: attached; the satellite's shared apps answer to the user's own account — share this machine's apps with: $PROG publish <app> --port <port>"
 }
 
 cmd_harden() {
@@ -160,21 +235,33 @@ case "$sub" in
         [ $# -eq 0 ] || usage
         cmd_check
         ;;
+    code)
+        [ $# -eq 0 ] || usage
+        cmd_code
+        ;;
     pair)
-        code=""; server=""; host=""
+        code=""; host=""; server=""; as_owner_node=0
         while [ $# -gt 0 ]; do
             case "$1" in
                 --code=*) code=${1#--code=} ;;
-                --server=*) server=${1#--server=} ;;
                 --name=*) host=${1#--name=} ;;
+                --server=*) server=${1#--server=} ;;
+                --as-owner-node) as_owner_node=1 ;;
                 --code) [ $# -ge 2 ] || usage; code=$2; shift ;;
-                --server) [ $# -ge 2 ] || usage; server=$2; shift ;;
                 --name) [ $# -ge 2 ] || usage; host=$2; shift ;;
+                --server) [ $# -ge 2 ] || usage; server=$2; shift ;;
                 *) usage ;;
             esac
             shift
         done
-        cmd_pair "$code" "$server" "$host"
+        cmd_pair "$code" "$host" "$server" "$as_owner_node"
+        ;;
+    accept)
+        cmd_accept "$@"
+        ;;
+    attach)
+        [ $# -eq 1 ] || usage
+        cmd_attach "$1"
         ;;
     harden)
         [ $# -eq 0 ] || usage

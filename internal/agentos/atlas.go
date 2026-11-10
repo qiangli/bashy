@@ -212,12 +212,14 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Stability: atlas.StabilityExperimental,
 	},
 	// Paired hosts from the master (S490, yoke NewPairedHostCmd): `ls`
-	// joins the master's hosts and peers by host name. Read-only; the
-	// --satellite filter is refused, never guessed.
+	// joins the master's hosts and peers by host name; `invite` (S606 S4)
+	// mints the pair-once code of the signed-in account — owner node
+	// provisioning for one's OWN hardware, never a member invitation
+	// (docs: yoke docs/cloudbox-members-attach-wire.md §3).
 	"paired-host": {
 		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
 		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork, atlas.CapNeedsPairing},
-		Effects:   []string{atlas.EffNet, atlas.EffRead},
+		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite},
 		Stability: atlas.StabilityExperimental,
 	},
 	"resource": {

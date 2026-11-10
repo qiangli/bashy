@@ -2,8 +2,9 @@
 // See LICENSE for licensing information
 
 // Focused tests for the satellite-member Bash# command. Every verb runs
-// against a fake outpost (SATELLITE_MEMBER_OUTPOST_BIN) that records argv;
-// a real host is never touched.
+// against a fake outpost (SATELLITE_MEMBER_OUTPOST_BIN) and a fake bashy
+// (SATELLITE_MEMBER_BASHY_BIN) that record argv; a real host is never
+// touched.
 package satellitemember
 
 import (
@@ -84,33 +85,59 @@ type buildError struct {
 
 func (e *buildError) Error() string { return e.err.Error() + "\n" + e.out }
 
-// fakeOutpost records argv; `status` reports paired when $FAKE_PAIRED=1.
+// fakeOutpost records argv. `status --json` reports the pair-once cloudbox
+// identity when $FAKE_PAIRED=1; plain `status` reports a legacy tunnel
+// pairing when $FAKE_LEGACY=1.
 const fakeOutpost = `#!/bin/sh
 echo "$*" >> "$FAKE_LOG"
 case "$1" in
   status)
-    if [ "$FAKE_PAIRED" = 1 ]; then echo "  agent_name  member-host"; else echo "  agent_name  "; fi ;;
+    if [ "$2" = "--json" ]; then
+      if [ "$FAKE_PAIRED" = 1 ]; then
+        echo "{\"state\":\"active\",\"config\":{\"cloudbox\":{\"host\":\"member-host\",\"owner_email\":\"member@example.com\",\"has_token\":true}}}"
+      else
+        echo "{\"state\":\"dormant (unpaired)\",\"agent_name\":\"\"}"
+      fi
+    elif [ "$FAKE_LEGACY" = 1 ]; then
+      echo "  agent_name  member-host"
+    fi ;;
 esac
 exit 0
 `
 
+// fakeBashy records argv for the account (`paired-host`, `member`) and the
+// fleet front door (`outpost …`) verbs the script composes.
+const fakeBashy = `#!/bin/sh
+echo "$*" >> "$FAKE_BASHY_LOG"
+exit 0
+`
+
 type fixture struct {
-	t                *testing.T
-	bin, script, log string
-	env              []string
+	t             *testing.T
+	bin, script   string
+	log, bashyLog string
+	env           []string
 }
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	root := t.TempDir()
-	fake := filepath.Join(root, "outpost")
-	if err := os.WriteFile(fake, []byte(fakeOutpost), 0o755); err != nil {
+	fakeOutpostBin := filepath.Join(root, "outpost")
+	if err := os.WriteFile(fakeOutpostBin, []byte(fakeOutpost), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	fakeBashyBin := filepath.Join(root, "bashy")
+	if err := os.WriteFile(fakeBashyBin, []byte(fakeBashy), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	f := &fixture{t: t, bin: bashyBin(t), log: filepath.Join(root, "calls.log"),
-		script: filepath.Join(moduleRoot(t), "examples", "satellite-member", "satellite-member.bsh")}
+		bashyLog: filepath.Join(root, "bashy-calls.log"),
+		script:   filepath.Join(moduleRoot(t), "examples", "satellite-member", "satellite-member.bsh")}
 	f.env = []string{"HOME=" + root, "BASHY_HINTS=off", "FAKE_LOG=" + f.log,
-		"SATELLITE_MEMBER_OUTPOST_BIN=" + fake, "PATH=" + root + string(os.PathListSeparator) + os.Getenv("PATH")}
+		"FAKE_BASHY_LOG=" + f.bashyLog,
+		"SATELLITE_MEMBER_OUTPOST_BIN=" + fakeOutpostBin,
+		"SATELLITE_MEMBER_BASHY_BIN=" + fakeBashyBin,
+		"PATH=" + root + string(os.PathListSeparator) + os.Getenv("PATH")}
 	return f
 }
 
@@ -136,26 +163,103 @@ func (f *fixture) calls() string {
 	return string(b)
 }
 
+// bashyCalls is what the fake bashy received (account + fleet verbs).
+func (f *fixture) bashyCalls() string {
+	b, _ := os.ReadFile(f.bashyLog)
+	return string(b)
+}
+
 func TestCheckReportsPairing(t *testing.T) {
 	f := newFixture(t)
 	if out, _ := f.run(nil, "check"); !strings.Contains(out, "not paired") {
 		t.Errorf("unpaired check: %q", out)
 	}
-	if out, code := f.run([]string{"FAKE_PAIRED=1"}, "check"); code != 0 || !strings.Contains(out, "installed and paired") {
-		t.Errorf("paired check: exit %d %q", code, out)
+	if out, code := f.run([]string{"FAKE_PAIRED=1"}, "check"); code != 0 || !strings.Contains(out, "paired with the cloudbox portal") {
+		t.Errorf("pair-once check: exit %d %q", code, out)
+	}
+	if out, code := f.run([]string{"FAKE_LEGACY=1"}, "check"); code != 0 || !strings.Contains(out, "paired (tunnel)") {
+		t.Errorf("legacy check: exit %d %q", code, out)
 	}
 }
 
-func TestPairForwardsCodeServerName(t *testing.T) {
+func TestCodeMintsOwnAccountInvite(t *testing.T) {
 	f := newFixture(t)
-	if out, code := f.run(nil, "pair", "--code", "C0DE", "--server", "https://portal.example", "--name", "box"); code != 0 {
+	if out, code := f.run(nil, "code"); code != 0 {
+		t.Fatalf("code: exit %d %q", code, out)
+	}
+	if got := f.bashyCalls(); !strings.Contains(got, "paired-host invite") {
+		t.Errorf("paired-host argv = %q", got)
+	}
+	if got := f.calls(); strings.Contains(got, "register") {
+		t.Errorf("code must not pair: outpost argv = %q", got)
+	}
+}
+
+func TestPairRegistersOnceWithOwnCode(t *testing.T) {
+	f := newFixture(t)
+	if out, code := f.run(nil, "pair", "--code", "C0DE", "--name", "box"); code != 0 {
 		t.Fatalf("pair: exit %d %q", code, out)
 	}
-	if got := f.calls(); !strings.Contains(got, "register --code C0DE --server https://portal.example --name box") {
+	if got := f.bashyCalls(); !strings.Contains(got, "outpost register --code C0DE --name box") {
 		t.Errorf("register argv = %q", got)
+	}
+	if strings.Contains(f.bashyCalls(), "--server") {
+		t.Errorf("pair-once never passes --server: %q", f.bashyCalls())
 	}
 	if _, code := f.run(nil, "pair"); code == 0 {
 		t.Error("pair without --code succeeded")
+	}
+}
+
+// A legacy satellite code (any --server) is refused unless the operator
+// acknowledges owner node provisioning with --as-owner-node.
+func TestPairRefusesServerWithoutOwnerNode(t *testing.T) {
+	f := newFixture(t)
+	out, code := f.run(nil, "pair", "--code", "C0DE", "--server", "https://sat.example")
+	if code == 0 {
+		t.Fatalf("pair --server without --as-owner-node succeeded: %q", out)
+	}
+	for _, want := range []string{"refusing", "--as-owner-node", "owner of this machine"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("refusal missing %q: %q", want, out)
+		}
+	}
+	if got := f.bashyCalls(); strings.Contains(got, "register") {
+		t.Errorf("refused pair still called register: %q", got)
+	}
+	if out, code := f.run(nil, "pair", "--code", "C0DE", "--server", "https://sat.example", "--as-owner-node"); code != 0 {
+		t.Fatalf("pair --as-owner-node: exit %d %q", code, out)
+	} else if got := f.bashyCalls(); !strings.Contains(got, "outpost register --code C0DE --server https://sat.example") {
+		t.Errorf("owner-node register argv = %q", got)
+	}
+}
+
+func TestAcceptListsAndAccepts(t *testing.T) {
+	f := newFixture(t)
+	if out, code := f.run(nil, "accept"); code != 0 {
+		t.Fatalf("accept (list): exit %d %q", code, out)
+	}
+	if got := f.bashyCalls(); !strings.Contains(got, "member invitations") {
+		t.Errorf("invitations argv = %q", got)
+	}
+	if out, code := f.run(nil, "accept", "inv_91c2", "--circle", "family"); code != 0 {
+		t.Fatalf("accept id: exit %d %q", code, out)
+	}
+	if got := f.bashyCalls(); !strings.Contains(got, "member accept inv_91c2 --circle family") {
+		t.Errorf("accept argv = %q", got)
+	}
+}
+
+func TestAttachCallsSatelliteAttach(t *testing.T) {
+	f := newFixture(t)
+	if out, code := f.run(nil, "attach", "sat_1"); code != 0 {
+		t.Fatalf("attach: exit %d %q", code, out)
+	}
+	if got := f.bashyCalls(); !strings.Contains(got, "outpost satellite attach sat_1") {
+		t.Errorf("attach argv = %q", got)
+	}
+	if _, code := f.run(nil, "attach"); code == 0 {
+		t.Error("attach without a satellite succeeded")
 	}
 }
 
@@ -189,7 +293,7 @@ func TestPublishRequiresLoginAndIdentity(t *testing.T) {
 
 func TestDiagPrintsStatus(t *testing.T) {
 	f := newFixture(t)
-	if out, code := f.run([]string{"FAKE_PAIRED=1"}, "diag"); code != 0 || !strings.Contains(out, "agent_name") {
+	if out, code := f.run([]string{"FAKE_LEGACY=1"}, "diag"); code != 0 || !strings.Contains(out, "agent_name") {
 		t.Errorf("diag: exit %d %q", code, out)
 	}
 }
@@ -201,7 +305,7 @@ func TestSkillFenceIsGeneric(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := strings.ToLower(string(b))
-	for _, want := range []string{"~~~skill as guide", "name: satellite-member", "owner", "member", "own account"} {
+	for _, want := range []string{"~~~skill as guide", "name: satellite-member", "owner", "member", "own account", "paired once", "--as-owner-node", "mutual"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("skill missing %q", want)
 		}
