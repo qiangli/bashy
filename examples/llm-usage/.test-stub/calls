@@ -1,0 +1,1 @@
+--bashsharp /Users/qiangli/.bashy/weave/bashy-62192521/workspaces/issue-62/examples/llm-usage/usage-alarm.bsh --limits /Users/qiangli/.bashy/weave/bashy-62192521/workspaces/issue-62/examples/llm-usage/thresholds.example.json --usage-file /Users/qiangli/.bashy/weave/bashy-62192521/workspaces/issue-62/examples/llm-usage/fixtures/usage-over.json

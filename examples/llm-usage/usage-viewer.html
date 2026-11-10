@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM usage · Bashy</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 56rem; margin: 2rem auto; padding: 0 1rem; color: #222; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+  th, td { border: 1px solid #ccc; padding: 0.4rem 0.6rem; text-align: right; }
+  th:first-child, td:first-child { text-align: left; }
+  tr.breach td { background: #fdecea; font-weight: bold; }
+  textarea { width: 100%; height: 7rem; font-family: monospace; }
+  label { margin-right: 1rem; }
+  #err { color: #a00; }
+</style>
+<h1>LLM usage</h1>
+<p>Renders one <code>bashy llm usage --json</code> document
+(<code>bashy-llm-usage-v1</code>). Paste it below, pick the file, or serve this
+page next to a <code>usage.json</code> file. Caps mirror
+<code>thresholds.example.json</code>: tokens for unpriced principals, USD where priced.</p>
+<p>
+  <label>Tokens cap <input id="tokens" type="number" value="2000000"></label>
+  <label>USD cap <input id="usd" type="number" step="0.01" value="25.00"></label>
+  <input id="file" type="file" accept=".json,application/json">
+  <button id="draw">Render pasted JSON</button>
+</p>
+<textarea id="src" placeholder='Paste {"schema":"bashy-llm-usage-v1",...} here'></textarea>
+<p id="err"></p>
+<table id="out" hidden>
+  <thead><tr><th>Principal</th><th>Requests</th><th>Prompt</th><th>Completion</th>
+  <th>Cached</th><th>Total tokens</th><th>Cost USD</th><th>Status</th></tr></thead>
+  <tbody></tbody>
+</table>
+<script>
+function render(doc) {
+  var err = document.getElementById('err');
+  var table = document.getElementById('out');
+  var body = table.querySelector('tbody');
+  body.textContent = '';
+  err.textContent = '';
+  if (!doc || doc.schema !== 'bashy-llm-usage-v1') {
+    err.textContent = 'Want schema bashy-llm-usage-v1, got: ' + (doc && doc.schema);
+    table.hidden = true;
+    return;
+  }
+  var tokensCap = Number(document.getElementById('tokens').value);
+  var usdCap = Number(document.getElementById('usd').value);
+  (doc.principals || []).forEach(function (p) {
+    var total = (p.prompt_tokens || 0) + (p.completion_tokens || 0);
+    var cost = Number(p.cost_usd || 0);
+    var breach = p.unpriced ? (total > tokensCap && 'tokens') : (cost > usdCap && 'usd');
+    var tr = document.createElement('tr');
+    if (breach) tr.className = 'breach';
+    [p.principal, p.requests, p.prompt_tokens, p.completion_tokens,
+     p.cached_tokens, total, cost.toFixed(2),
+     breach ? ('OVER ' + breach) : 'ok'].forEach(function (v) {
+      var td = document.createElement('td');
+      td.textContent = v == null ? '' : v;
+      tr.appendChild(td);
+    });
+    body.appendChild(tr);
+  });
+  table.hidden = false;
+}
+document.getElementById('draw').onclick = function () {
+  try { render(JSON.parse(document.getElementById('src').value)); }
+  catch (e) { document.getElementById('err').textContent = 'Invalid JSON: ' + e.message; }
+};
+document.getElementById('file').onchange = function (ev) {
+  var f = ev.target.files[0];
+  if (!f) return;
+  f.text().then(function (t) {
+    document.getElementById('src').value = t;
+    render(JSON.parse(t));
+  }).catch(function (e) {
+    document.getElementById('err').textContent = 'Cannot read file: ' + e.message;
+  });
+};
+fetch('usage.json').then(function (r) {
+  if (r.ok) return r.json();
+}).then(function (doc) {
+  if (doc) { document.getElementById('src').value = JSON.stringify(doc); render(doc); }
+}).catch(function () {});
+</script>
+</html>

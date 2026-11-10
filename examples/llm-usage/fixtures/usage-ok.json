@@ -1,0 +1,24 @@
+{
+  "schema": "bashy-llm-usage-v1",
+  "since": "24h",
+  "principals": [
+    {
+      "principal": "peer:field-laptop",
+      "requests": 120,
+      "prompt_tokens": 500000,
+      "completion_tokens": 200000,
+      "cached_tokens": 100000,
+      "cost_usd": 0,
+      "unpriced": true
+    },
+    {
+      "principal": "owner",
+      "requests": 30,
+      "prompt_tokens": 40000,
+      "completion_tokens": 12000,
+      "cached_tokens": 0,
+      "cost_usd": 3.1,
+      "unpriced": false
+    }
+  ]
+}
