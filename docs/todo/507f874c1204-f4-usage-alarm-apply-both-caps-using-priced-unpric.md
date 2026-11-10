@@ -3,9 +3,11 @@ id: 507f874c1204
 kind: enhancement
 title: 'F4 usage alarm: apply both caps using priced/unpriced token split; live unpriced check'
 seq: 3205
-status: todo
+status: assigned
 priority: p2
 created: 2026-11-10T03:47:56.373807Z
+weave: 70
+assignee: muse-conductor
 sprint: 607
 sprint_id: d3d7f687-3414-576c-ad29-b45dfc879257
 sprint_title: 'Metering follow-ups: one price table, honest cost and alarms, member go-live guards'
