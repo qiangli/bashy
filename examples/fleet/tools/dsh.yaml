@@ -1,0 +1,92 @@
+# DeepSeek Harness (dsh) — custom tool definition (bashy examples/fleet, Sprint 608)
+# source:  https://github.com/deepseek-ai/deepseek-harness.git  (MIT, v0.2.2-rc.1)
+# install: pnpm add -g @deepseek-ai/dsh  (requires Node >= 24.9.0; or build from source with `pnpm install && pnpm build && pnpm --filter @deepseek-ai/dsh link --global`)
+# add:     bashy tool add examples/fleet/tools/dsh.yaml
+# models:  writes $DSH_HOME/cordis.patch.yml in {state_dir}; routes via @deepseek-ai/dsh-llm-pi-ai (openai-completions) when {base_url} is set, or @deepseek-ai/dsh-llm-deepseek-api-key (deepseek-official) when {base_url} is empty
+# status:  verified: 2026-11-10 on dsh 0.2.2-rc.1 — offline registry lifecycle (tool add/show/list/verify/rm) and dsh --dump-config validation for headless and acp profiles (gateway and native routes)
+name: dsh
+kind: cli
+display: DeepSeek Harness
+aliases:
+  - deepseek-harness
+cli:
+  binary: dsh
+  launch:
+    exec: dsh --profile headless {prompt}
+    acp_exec: dsh --profile acp
+    prompt_position: last
+    key_env:
+      - OPENAI_API_KEY
+      - DEEPSEEK_API_KEY
+    env:
+      - DSH_HOME={state_dir}
+      - DSH_PERMISSION_MODE=danger-full-access
+      - DSH_TELEMETRY_DISABLED=1
+      - DSH_TELEMETRY_MODE=DISABLED
+    setup: |
+      # Tokens are substituted already shell-quoted: assign to shell vars first
+      # before expanding inside a heredoc.
+      state_dir={state_dir}; base={base_url}; model={model}
+      mkdir -p "$state_dir"
+      if [ -z "${OPENAI_API_KEY:-}" ]; then
+        printf 'OPENAI_API_KEY=local\n' > "$state_dir/.env"
+      else
+        rm -f "$state_dir/.env"
+      fi
+      if [ -n "$base" ]; then
+        cat > "$state_dir/cordis.patch.yml" <<EOF
+      - id: session-log-deepseek
+        disabled: true
+      - id: llm-pi-ai
+        config:
+          providers:
+            bashy:
+              displayName: Bashy
+              apiKeyEnv: OPENAI_API_KEY
+              api: openai-completions
+              baseURL: "$base"
+              models:
+                - id: "$model"
+                  name: "$model"
+      - id: agent-default-model
+        config:
+          provider: bashy
+          model: "$model"
+      EOF
+      else
+        m="${model:-deepseek-flash}"
+        cat > "$state_dir/cordis.patch.yml" <<EOF
+      - id: session-log-deepseek
+        disabled: true
+      - id: agent-default-model
+        config:
+          provider: deepseek-official
+          model: "$m"
+      EOF
+      fi
+    watchdog:
+      max_runtime: 30m
+      mem_limit: 8g
+    notes: >-
+      Runs one-shot tasks via `dsh --profile headless` and stdio ACP sessions
+      via `dsh --profile acp`. State and generated `cordis.patch.yml` live in
+      `{state_dir}` (`DSH_HOME`) so `~/.dsh` is never modified.
+quirks: >-
+  Headless profile prints only the final assistant answer on stdout and streams
+  reasoning to stderr; ACP profile speaks JSON-RPC 2.0 on stdio over dsh-base.
+integration:
+  detect: ${DSH_HOME:-~/.dsh}
+  skills:
+    user:
+      - ~/.dsh/skills
+      - ~/.agents/skills
+    project:
+      - .dsh/skills
+      - .agents/skills
+  instructions:
+    - file: ~/.dsh/AGENTS.md
+    - file: AGENTS.md
+      scope: project
+    - file: CLAUDE.md
+      scope: project
+  shell_env: SHELL

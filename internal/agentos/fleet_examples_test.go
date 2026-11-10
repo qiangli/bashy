@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -181,6 +182,94 @@ func TestOpenclawDeclarationSendApprove(t *testing.T) {
 	}
 }
 
+// TestDshDeclarationAndSetup verifies the ready-made dsh custom tool recipe
+// in examples/fleet/tools/dsh.yaml (custom example only, not a built-in seed):
+// headless and ACP launch templates, ModelViaLaunch + UsesStateDir invariants,
+// and setup script generation of $DSH_HOME/cordis.patch.yml for both
+// OpenAI-compatible gateways (llm-pi-ai) and native DeepSeek routes.
+func TestDshDeclarationAndSetup(t *testing.T) {
+	fleetDir := mustFleetExamplesDir(t)
+	data, err := os.ReadFile(filepath.Join(fleetDir, "tools", "dsh.yaml"))
+	if err != nil {
+		t.Fatalf("read dsh.yaml: %v", err)
+	}
+	tool, err := fleet.ParseTool("dsh", data, nil)
+	if err != nil {
+		t.Fatalf("ParseTool dsh: %v", err)
+	}
+	if tool.Builtin {
+		t.Fatal("dsh example tool must not set builtin: true")
+	}
+	if got := tool.CLI.Launch.Exec; got != "dsh --profile headless {prompt}" {
+		t.Errorf("dsh exec = %q, want %q", got, "dsh --profile headless {prompt}")
+	}
+	if got := tool.CLI.Launch.ACPExec; got != "dsh --profile acp" {
+		t.Errorf("dsh acp_exec = %q, want %q", got, "dsh --profile acp")
+	}
+	if !tool.ModelViaLaunch() {
+		t.Error("dsh ModelViaLaunch() = false, want true so tool:model bindings work over headless and ACP")
+	}
+	if !tool.UsesStateDir() {
+		t.Error("dsh UsesStateDir() = false, want true")
+	}
+
+	// Verify gateway setup (BaseURL non-empty -> llm-pi-ai route).
+	gwDir := t.TempDir()
+	gwScript := tool.SetupScript(fleet.LaunchVars{
+		StateDir: gwDir,
+		BaseURL:  "http://127.0.0.1:11434/v1",
+		Model:    "qwen3.5:9b",
+	})
+	if strings.TrimSpace(gwScript) == "" {
+		t.Fatal("dsh SetupScript returned empty string")
+	}
+	var parsed []map[string]any
+	// Execute the setup script via sh to verify the generated cordis.patch.yml.
+	runSh(t, gwScript)
+	patchBytes, err := os.ReadFile(filepath.Join(gwDir, "cordis.patch.yml"))
+	if err != nil {
+		t.Fatalf("read generated gateway cordis.patch.yml: %v", err)
+	}
+	if err := yaml.Unmarshal(patchBytes, &parsed); err != nil {
+		t.Fatalf("unmarshal gateway cordis.patch.yml: %v\n%s", err, string(patchBytes))
+	}
+	if !strings.Contains(string(patchBytes), "llm-pi-ai") || !strings.Contains(string(patchBytes), "http://127.0.0.1:11434/v1") || !strings.Contains(string(patchBytes), "qwen3.5:9b") {
+		t.Errorf("gateway cordis.patch.yml missing expected route fields:\n%s", string(patchBytes))
+	}
+
+	// Verify native setup (BaseURL empty -> deepseek-official route).
+	nativeDir := t.TempDir()
+	nativeScript := tool.SetupScript(fleet.LaunchVars{
+		StateDir: nativeDir,
+		BaseURL:  "",
+		Model:    "deepseek-v4-pro",
+	})
+	runSh(t, nativeScript)
+	nativeBytes, err := os.ReadFile(filepath.Join(nativeDir, "cordis.patch.yml"))
+	if err != nil {
+		t.Fatalf("read generated native cordis.patch.yml: %v", err)
+	}
+	var parsedNative []map[string]any
+	if err := yaml.Unmarshal(nativeBytes, &parsedNative); err != nil {
+		t.Fatalf("unmarshal native cordis.patch.yml: %v\n%s", err, string(nativeBytes))
+	}
+	if !strings.Contains(string(nativeBytes), "deepseek-official") || !strings.Contains(string(nativeBytes), "deepseek-v4-pro") {
+		t.Errorf("native cordis.patch.yml missing expected deepseek-official route:\n%s", string(nativeBytes))
+	}
+}
+
+func runSh(t *testing.T, script string) {
+	t.Helper()
+	sh, err := exec.LookPath("sh")
+	if err != nil {
+		t.Skip("no sh")
+	}
+	cmd := exec.Command(sh, "-e", "-c", script)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("setup script failed: %v\n%s\nscript:\n%s", err, string(out), script)
+	}
+}
+
 func mapsEqual(a, b map[string]any) bool {
 	aj, _ := json.Marshal(a)
 	bj, _ := json.Marshal(b)
@@ -215,8 +304,8 @@ func TestFleetExamplesHeadersAndSecretsGuard(t *testing.T) {
 	if err != nil || len(toolFiles) == 0 {
 		t.Fatalf("no tool files found under %s/tools: %v", fleetDir, err)
 	}
-	if len(toolFiles) != 16 {
-		t.Errorf("expected 16 tool files, found %d", len(toolFiles))
+	if len(toolFiles) != 17 {
+		t.Errorf("expected 17 tool files, found %d", len(toolFiles))
 	}
 
 	modelFiles, err := filepath.Glob(filepath.Join(fleetDir, "models", "*.yaml"))

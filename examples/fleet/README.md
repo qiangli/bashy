@@ -84,6 +84,7 @@ must pass). Per-tool results are in each file's header.
 | qwen-code, goose, crush, forge | verified; only `calc` via the door's qwen3:8b fails |
 | hermes | verified on cloud and Ollama; it needs a 64K context window, more than the door's qwen3:8b offers |
 | openclaw, aider | verified for `pong`; partial `calc` (see the file headers) |
+| dsh | verified for registry lifecycle and `dsh --dump-config` profile composition (`headless` and `acp`) |
 | droid, copilot | unverified: they need a vendor account |
 | junie, grok, gemini | unverified: they need a vendor account or a protocol shim |
 
