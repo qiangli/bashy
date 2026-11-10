@@ -3,7 +3,7 @@ id: aafea94af0b8
 kind: feature
 title: 'S583.3 Secrets never leave the owner: handle-only, redact at egress, TTY reveal'
 seq: 3134
-status: assigned
+status: done
 priority: p0
 labels:
     - boundary
@@ -13,6 +13,8 @@ assignee: opencode-glm-5.3
 sprint: 583
 sprint_id: 2035b56b-d719-5d80-8c39-6195df0d1e6a
 sprint_title: 'Boundary control (KISS): owner by default, circles from the member list, checked where data leaves'
+closed: 2026-11-10T06:08:42.525385Z
+closed_by: claude-opus5.5-s606
 ---
 
 Secrets never leave the owner. KISS rescope 2026-11-09. Depends on: S583.1.
