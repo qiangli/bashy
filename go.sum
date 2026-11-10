@@ -1073,6 +1073,8 @@ github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9 h
 github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9/go.mod h1:koKm/FhUX+X74g9NuiShrwvEGksSvh8GWnjonftUyRI=
 github.com/qiangli/yoke/external/otel v0.0.0-20261110130249-bf71a5b52816 h1:3xIJ3QzakvJ6niVR08u0nXx6PEI8zjxPcGCnPx87Jvs=
 github.com/qiangli/yoke/external/otel v0.0.0-20261110130249-bf71a5b52816/go.mod h1:W+8BtxOjeBNx+k6QB1T18VPsyss6FRoKRHublpQWJHk=
+github.com/qiangli/yoke/external/otel v0.0.0-20261110214902-f173567d0924 h1:fnsH9h/lXn4xmBj6KEd9hw5IIAaSFeqLVqA1JIb2E0k=
+github.com/qiangli/yoke/external/otel v0.0.0-20261110214902-f173567d0924/go.mod h1:W+8BtxOjeBNx+k6QB1T18VPsyss6FRoKRHublpQWJHk=
 github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402 h1:GaFTBFLiK9HEK4DBrKzVmc61k4MhJE8q9sQws9r1h3o=
 github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402/go.mod h1:tARgoBZEIZ6C6/dzI4z9VZDCJgeKklZbjfHXG9bGt5o=
 github.com/qiangli/yoke/external/securejoin v0.0.0-20261021020216-636e2fd289e9 h1:+om5Lxc8AVl0O3Djg0iaPb18v9VXXx/UvmIXaFydBHY=
@@ -1081,10 +1083,16 @@ github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261110130249-bf71a5b52816 h1:vYTx1tGU
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261110130249-bf71a5b52816/go.mod h1:UnJ5Aw/zCOdFgHdziuLv9sU0t/KT8dcOrGfmwcm6X4E=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261110212256-76fa400dd4a2 h1:m6yDQ3Q8QwyQLlhm1IxIvzEJyufVIsv7DCLaT57GHR0=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261110212256-76fa400dd4a2/go.mod h1:UnJ5Aw/zCOdFgHdziuLv9sU0t/KT8dcOrGfmwcm6X4E=
+github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261110214902-f173567d0924 h1:POLabOCNN/ahWDRMntXz8UNuJMo2Va1Koq0HKqpYpiM=
+github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261110214902-f173567d0924/go.mod h1:UnJ5Aw/zCOdFgHdziuLv9sU0t/KT8dcOrGfmwcm6X4E=
 github.com/qiangli/yoke/pkg/oci v0.0.0-20261110130249-bf71a5b52816 h1:KoC3rkcmWsD5OzuKuiWEddssSnRu/cm2+inJbHCcDIk=
 github.com/qiangli/yoke/pkg/oci v0.0.0-20261110130249-bf71a5b52816/go.mod h1:WgmQ7NDV8dDN6eY+E934CcxHBPnhohlKr01OgqAx4qY=
+github.com/qiangli/yoke/pkg/oci v0.0.0-20261110214902-f173567d0924 h1:BBf0oVzYU5/jy/m+y5+hpId8nP8wjoAFkHNdfhk9Zqw=
+github.com/qiangli/yoke/pkg/oci v0.0.0-20261110214902-f173567d0924/go.mod h1:WgmQ7NDV8dDN6eY+E934CcxHBPnhohlKr01OgqAx4qY=
 github.com/qiangli/yoke/pkg/provider v0.0.0-20261110130249-bf71a5b52816 h1:m2wpoxc2LKi+g1Ux28tUp0OBlruSkJq0Orp5GAQLd5M=
 github.com/qiangli/yoke/pkg/provider v0.0.0-20261110130249-bf71a5b52816/go.mod h1:AklFvdbEWnpyb9XUNRhiD0P/AuDnEsUDpAYoSzqZb5Y=
+github.com/qiangli/yoke/pkg/provider v0.0.0-20261110214902-f173567d0924 h1:gSBOsecacqdJ0BlgFiS7khTPUY0ntnQdIeaipIiJc0E=
+github.com/qiangli/yoke/pkg/provider v0.0.0-20261110214902-f173567d0924/go.mod h1:AklFvdbEWnpyb9XUNRhiD0P/AuDnEsUDpAYoSzqZb5Y=
 github.com/quic-go/qpack v0.6.0 h1:g7W+BMYynC1LbYLSqRt8PBg5Tgwxn214ZZR34VIOjz8=
 github.com/quic-go/qpack v0.6.0/go.mod h1:lUpLKChi8njB4ty2bFLX2x4gzDqXwUpaO1DP9qMDZII=
 github.com/quic-go/quic-go v0.59.1 h1:0Gmua0HW1Tv7ANR7hUYwRyD0MG5OJfgvYSZasGZzBic=
