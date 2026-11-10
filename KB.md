@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [repo/page] Join a satellite as a member and share your machine by choice (satellite-member) — Agent steps for a member joining a satellite another account owns, or an owner bringing members in, via the satellite-member Bash# command — WHEN a user asks to join, onboard to, or share on someone else's satellite (keywords:  (kb:join-someone-s-satellite-as-a-member-and-share-your-machine-by-c)
+- [repo/page] Derive no-egress allowlists from the pinned test's full port set — When a sandbox profile or strace verdict allowlists loopback ports for a pinned test binary, enumerate every bind/connect in that test's source at the pinned commit, not the subset remembered from its description. Prima's ring test was allowed 5  (kb:derive-no-egress-allowlists-from-the-pinned-test-s-full-port-set)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 
