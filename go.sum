@@ -1063,6 +1063,8 @@ github.com/qiangli/ycode/examples/genie v0.0.0-20261103194741-5e1538ce6281 h1:kc
 github.com/qiangli/ycode/examples/genie v0.0.0-20261103194741-5e1538ce6281/go.mod h1:8zZX1wILuTSAuirL8c8uEHbmZblqHZPKcxe53fCLQMc=
 github.com/qiangli/yoke v0.0.0-20261110184510-b1c5a6ff85ae h1:ZsqNgUqSL29gHCrmy1giofBbBfXa5TRf3INM9GhU92k=
 github.com/qiangli/yoke v0.0.0-20261110184510-b1c5a6ff85ae/go.mod h1:dy4y+4zq/gr/AWxIwn/IPmQ/2oiTZIMExcSocX1QyfA=
+github.com/qiangli/yoke v0.0.0-20261110212256-76fa400dd4a2 h1:+GXTkW/HGsesgdAqUZPJbud+3TXCxS2eR8oMlGiTcDs=
+github.com/qiangli/yoke v0.0.0-20261110212256-76fa400dd4a2/go.mod h1:dy4y+4zq/gr/AWxIwn/IPmQ/2oiTZIMExcSocX1QyfA=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f h1:aOhDxEjodWKHckz8+Bp49lmQXh80hK0ucSTtyJcj2NQ=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f/go.mod h1:Q0Q5T6VFoIzC2QCjcH2DnKhvD6lvneoJKxG0TYasq8E=
 github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9 h1:0pOjHOylgAWaCVmImyqwOBhA8xx5EZ/WxrddpBiVF+E=
@@ -1075,6 +1077,8 @@ github.com/qiangli/yoke/external/securejoin v0.0.0-20261021020216-636e2fd289e9 h
 github.com/qiangli/yoke/external/securejoin v0.0.0-20261021020216-636e2fd289e9/go.mod h1:wz56MWzWglqLR8cYd6rDw6atLTts3Krdq2ZWwzhmjyI=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261110130249-bf71a5b52816 h1:vYTx1tGULPCCv4ot6I5eIqgjZSoG1DV7FF+Ms11xB20=
 github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261110130249-bf71a5b52816/go.mod h1:UnJ5Aw/zCOdFgHdziuLv9sU0t/KT8dcOrGfmwcm6X4E=
+github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261110212256-76fa400dd4a2 h1:m6yDQ3Q8QwyQLlhm1IxIvzEJyufVIsv7DCLaT57GHR0=
+github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261110212256-76fa400dd4a2/go.mod h1:UnJ5Aw/zCOdFgHdziuLv9sU0t/KT8dcOrGfmwcm6X4E=
 github.com/qiangli/yoke/pkg/oci v0.0.0-20261110130249-bf71a5b52816 h1:KoC3rkcmWsD5OzuKuiWEddssSnRu/cm2+inJbHCcDIk=
 github.com/qiangli/yoke/pkg/oci v0.0.0-20261110130249-bf71a5b52816/go.mod h1:WgmQ7NDV8dDN6eY+E934CcxHBPnhohlKr01OgqAx4qY=
 github.com/qiangli/yoke/pkg/provider v0.0.0-20261110130249-bf71a5b52816 h1:m2wpoxc2LKi+g1Ux28tUp0OBlruSkJq0Orp5GAQLd5M=
