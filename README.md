@@ -14,7 +14,18 @@ default: help
 [![release](https://img.shields.io/github/v/release/qiangli/bashy?label=release)](https://github.com/qiangli/bashy/releases/latest)
 [![tour](https://github.com/bashsharp/tour/actions/workflows/tour.yml/badge.svg)](https://github.com/bashsharp/tour/actions/workflows/tour.yml)
 
-**A pure-Go Bash 5.3 that speaks Bash# — built for AI agents, readable by you.**
+**Software shaping: tell an agent how you want a tool to work, and get your own
+verified version, while everyone else keeps theirs. Undo is one click.**
+
+bashy is the shell built for AI agents that makes this safe: a pure-Go Bash 5.3
+(86/86 on GNU Bash's own test suite) that speaks Bash#. Its core never changes, so
+every shaped change is verified, scoped to you, and reversible.
+
+[![Software shaping with bashy: Ada changes her app, Brian keeps his (1:44)](https://img.youtube.com/vi/6HvKPzpCrNA/hqdefault.jpg)](https://youtu.be/6HvKPzpCrNA)
+
+*Ada asks for a change in plain words, an agent writes it, bashy verifies it, and she
+approves it for herself. Brian still sees hello, world.
+Technical tour (3:33): [youtu.be/2eRX3ZJuYeM](https://youtu.be/2eRX3ZJuYeM).*
 
 > **Try it:** open any AI coding agent (Claude Code, Codex, OpenCode, …) and say
 > *"Set up bashy from https://github.com/qiangli/bashy"*. It installs bashy,
@@ -30,9 +41,11 @@ curl -fsSL https://dhnt.io/install.sh | sh -s -- --no-service                   
 
 Tarballs, packages, from source, offline image: **[docs/install.md](docs/install.md)**.
 
-[![bashy demo](https://img.youtube.com/vi/2eRX3ZJuYeM/hqdefault.jpg)](https://youtu.be/2eRX3ZJuYeM)
-
 ## At a glance
+
+- **Software shaping.** `shape wish` → verify → preview → approve → undo, on the web console or the CLI: describe a change to a registered app or tool in plain words, get your own version, then promote it local → team → upstream (`shape push`). A broken change fails verification and can't be approved. [Try the hello-world example](examples/shaping/hello-world/README.md).
+
+What makes shaping safe, and what agents get along the way:
 
 - **One binary, every OS.** Bash 5.3 + `ls sed awk grep find jq git make tar …` in pure Go; the same script means the same thing on Windows.
 - **Bash#, Go with bash.** Typed Go in shell text; fenced Python/TS/Rust/C/C#/PowerShell islands with pinned, checksum-verified toolchains it fetches itself.
@@ -41,7 +54,6 @@ Tarballs, packages, from source, offline image: **[docs/install.md](docs/install
 - **Agent-native output.** `--json`, `--dry-run`, `--no-input` and exit codes 0/3/1 across bashy verbs; `bashy --dry-run script.sh` previews a whole script as JSON.
 - **Memory and messages.** `kb` (what this host already knows), `inbox` / `mb` / `meet` (agents and humans talking), `todo` / `sprint` (owed work).
 - **Agents managing agents.** `weave` runs claude, codex, opencode, agy, … each in an isolated git workspace, then verifies and merges.
-- **Software shaping.** `shape wish` → verify → approve → undo: describe a change to a tool in plain words, get your own version, promote it to team and upstream.
 - **Grow it, don't work around it.** `commands add` registers a missing verb; every verb's `--help` is a skill plus an MCP tool definition; `mcp serve` exposes them all.
 - **Every tier, one tool.** `dag` (Markdown task graphs) · `oci` sandboxes · ollama local models · `sphere` peer mesh of your own machines · `kubectl` / `helm` · cloud CLIs.
 
