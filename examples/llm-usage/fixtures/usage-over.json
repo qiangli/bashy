@@ -21,6 +21,16 @@
       "unpriced": false
     },
     {
+      "principal": "peer:mixed-share",
+      "requests": 50,
+      "prompt_tokens": 400000,
+      "completion_tokens": 100000,
+      "cached_tokens": 0,
+      "unpriced_tokens": 500000,
+      "cost_usd": 31.5,
+      "unpriced": true
+    },
+    {
       "principal": "owner",
       "requests": 30,
       "prompt_tokens": 40000,

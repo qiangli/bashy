@@ -2,9 +2,10 @@
 # usage-alarm — warn when a shared LLM door burns too much.
 #
 # Reads `bashy llm usage --json` (schema bashy-llm-usage-v1), compares each
-# principal against caps from a small JSON limits file (tokens for unpriced
-# principals such as ollama, USD where priced), and calls `bashy notify` once
-# on breach. Meant to be run by `bashy schedule`, or by hand:
+# principal against both caps from a small JSON limits file (tokens against
+# unpriced tokens, USD against cost), independently per cap, and calls
+# `bashy notify` once on breach. Meant to be run by `bashy schedule`, or by
+# hand:
 #
 #   bashy --bashsharp usage-alarm.bsh --limits ./thresholds.json --since 24h
 #   bashy --bashsharp usage-alarm.bsh --usage-file fixtures/usage-over.json --no-notify
@@ -33,7 +34,9 @@ bashy schedule add --every 1h --name llm-usage-alarm -- \
 
 - `--limits FILE` caps for one fetched window (copy `thresholds.example.json`;
   the file is the shaping hook: edit caps or per-principal logic here).
-- Tokens apply to unpriced principals (e.g. ollama), USD to priced ones.
+- Both caps apply to every principal, independently: tokens against
+  `unpriced_tokens` (falls back to prompt+completion when the field is
+  absent and the principal is unpriced, else 0), USD against `cost_usd`.
 - `--usage-file FILE` (`-` = stdin) checks a saved `llm usage --json` document
   instead of the live door — this is how tests run (no model, no door).
 - Exit 0 inside caps, 1 on breach, 2 on bad input. `--json` prints a
@@ -93,37 +96,43 @@ USD_CAP="$(jq -r '.usd // empty' "$LIMITS")"
 # accept plain numbers only; anything else disables that cap.
 case "${TOKENS_CAP:-x}" in ''|*[!0-9.]*|*.*.*|.*|*.) TOKENS_CAP="" ;; esac
 case "${USD_CAP:-x}" in ''|*[!0-9.]*|*.*.*|.*|*.) USD_CAP="" ;; esac
-if [ -n "$TOKENS_CAP" ]; then TOK_COND="\$u and (\$t > $TOKENS_CAP)"; else TOK_COND="false"; fi
-if [ -n "$USD_CAP" ]; then USD_COND="((\$u | not) and (\$c > $USD_CAP))"; else USD_COND="false"; fi
+if [ -n "$TOKENS_CAP" ]; then TOK_COND="(\$t > $TOKENS_CAP)"; else TOK_COND="false"; fi
+if [ -n "$USD_CAP" ]; then USD_COND="(\$c > $USD_CAP)"; else USD_COND="false"; fi
 
-# TSV: principal \t total_tokens \t cost_usd \t unpriced \t breach
+# TSV: principal \t unpriced_tokens \t cost_usd \t unpriced \t tokens_breach \t usd_breach
+# Both caps are checked independently, so one principal can breach both (one
+# ALARM line per breached cap). The token figure is `unpriced_tokens`, falling
+# back to prompt+completion when the field is absent and the principal is
+# unpriced (0 for a priced principal without the field, so it never fires
+# spuriously); the USD figure is `cost_usd` for every principal (0 for a fully
+# unpriced one, so it never fires spuriously there either).
 REPORT="$(printf '%s' "$USAGE_JSON" | jq -r "
   (.principals // [])[] |
     (.principal // \"?\") as \$p |
-    ((.prompt_tokens // 0) + (.completion_tokens // 0)) as \$t |
-    ((.cost_usd // 0) | tonumber) as \$c |
     ((.unpriced // false)) as \$u |
-    (if $TOK_COND
-     then \"tokens \(\$t) > $TOKENS_CAP\"
-     elif $USD_COND
-     then \"usd \(\$c) > $USD_CAP\"
-     else \"\" end) as \$b |
-    \"\(\$p)\t\(\$t)\t\(\$c)\t\(\$u)\t\(\$b)\"")"
+    ((.unpriced_tokens // (if \$u then ((.prompt_tokens // 0) + (.completion_tokens // 0)) else 0 end))) as \$t |
+    ((.cost_usd // 0) | tonumber) as \$c |
+    (if $TOK_COND then \"tokens \(\$t) > $TOKENS_CAP\" else \"\" end) as \$tb |
+    (if $USD_COND then \"usd \(\$c) > $USD_CAP\" else \"\" end) as \$ub |
+    \"\(\$p)\t\(\$t)\t\(\$c)\t\(\$u)\t\(\$tb)\t\(\$ub)\"")"
 
-BREACHES="$(printf '%s\n' "$REPORT" | awk -F'\t' '$5 != ""')"
+BREACHES="$(printf '%s\n' "$REPORT" | awk -F'\t' '$5 != "" || $6 != ""')"
 NAMES="$(printf '%s' "$BREACHES" | cut -f1 | paste -sd' ' -)"
 
 json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
 
 if [ "$JSON_OUT" -eq 1 ]; then
   # Machine-readable summary, built in shell (no jq -R in bashy's subset).
+  # One entry per breached cap, so a principal over both caps appears twice.
   printf '{"schema":"bashy-llm-alarm-v1","breaches":['
   SEP=""
-  while IFS="$(printf '\t')" read -r principal tokens cost _ reason; do
-    [ -n "${reason:-}" ] || continue
-    printf '%s{"principal":"%s","total_tokens":%s,"cost_usd":%s,"reason":"%s"}' \
-      "$SEP" "$(json_escape "$principal")" "${tokens:-0}" "${cost:-0}" "$(json_escape "$reason")"
-    SEP=","
+  while IFS="$(printf '\t')" read -r principal tokens cost _ tok_breach usd_breach; do
+    for reason in "$tok_breach" "$usd_breach"; do
+      [ -n "${reason:-}" ] || continue
+      printf '%s{"principal":"%s","total_tokens":%s,"cost_usd":%s,"reason":"%s"}' \
+        "$SEP" "$(json_escape "$principal")" "${tokens:-0}" "${cost:-0}" "$(json_escape "$reason")"
+      SEP=","
+    done
   done <<< "$REPORT"
   printf ']}\n'
 fi
@@ -134,9 +143,10 @@ if [ -z "$BREACHES" ]; then
   exit 0
 fi
 
-while IFS=$'\t' read -r principal tokens cost _ reason; do
+while IFS=$'\t' read -r principal tokens cost _ tok_breach usd_breach; do
   [ -n "$principal" ] || continue
-  printf 'ALARM %s: %s\n' "$principal" "$reason"
+  if [ -n "${tok_breach:-}" ]; then printf 'ALARM %s: %s\n' "$principal" "$tok_breach"; fi
+  if [ -n "${usd_breach:-}" ]; then printf 'ALARM %s: %s\n' "$principal" "$usd_breach"; fi
 done <<< "$BREACHES"
 
 if [ "$NOTIFY" -eq 1 ]; then

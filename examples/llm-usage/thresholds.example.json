@@ -1,5 +1,5 @@
 {
-  "_comment": "Caps apply to ONE fetched window: schedule the alarm with a --since that matches (e.g. --since 24h for daily caps). Tokens cap unpriced principals (ollama); usd caps priced ones.",
+  "_comment": "Caps apply to ONE fetched window: schedule the alarm with a --since that matches (e.g. --since 24h for daily caps). Both caps apply to every principal, independently: tokens against unpriced tokens (e.g. ollama), usd against cost.",
   "tokens": 2000000,
   "usd": 25.0
 }

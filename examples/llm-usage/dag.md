@@ -27,7 +27,9 @@ stub=$(mktemp -d "${TMPDIR:-/tmp}/llm-usage-test.XXXXXX")
 export STUB_DIR="$stub"
 : > "$stub/calls"
 
-# Over-cap fixture: exit 1, both over-cap principals named, one notify call.
+# Over-cap fixture: exit 1, all over-cap principals named, one notify call.
+# peer:mixed-share is unpriced with unpriced_tokens under the token cap but
+# cost_usd over the USD cap, so only its USD line fires.
 if PATH="$here/fixtures/fakebin:$PATH" "$real_bashy" --bashsharp "$here/usage-alarm.bsh" \
   --limits "$here/thresholds.example.json" \
   --usage-file "$here/fixtures/usage-over.json" > "$stub/over.out" 2>&1; then
@@ -35,7 +37,12 @@ if PATH="$here/fixtures/fakebin:$PATH" "$real_bashy" --bashsharp "$here/usage-al
 fi
 grep -q 'ALARM peer:field-laptop: tokens 2700000 > 2000000' "$stub/over.out"
 grep -q 'ALARM peer:lab-share: usd 41.75 > 25.0' "$stub/over.out"
+grep -q 'ALARM peer:mixed-share: usd 31.5 > 25.0' "$stub/over.out"
+if grep -q 'ALARM peer:mixed-share: tokens' "$stub/over.out"; then
+  echo "mixed principal fired the token cap, want USD only" >&2; exit 1
+fi
 grep -q 'notify.*llm usage alarm: over cap: peer:field-laptop peer:lab-share' "$stub/calls"
+grep -q 'notify.*peer:mixed-share' "$stub/calls"
 
 # Under-cap fixture: exit 0, no notify call.
 : > "$stub/calls"
