@@ -11,7 +11,7 @@ tags:
     - sharing
     - peer
 status: candidate
-evidence: 'S#602 Story #3204: alarm unit-checked on fixtures via bashy dag examples/llm-usage test; live verbs ship with the yoke 6c414c3d bump'
+evidence: 'S#602 Story #3204: alarm unit-checked on fixtures via bashy dag examples/llm-usage test; live verbs ship with the yoke b2048b3d bump'
 source:
     tool: muse-spark1.3-j
     episode: ep-122d82e3ddc8b612
