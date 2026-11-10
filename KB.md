@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [repo/page] Join a satellite as a member and share your machine by choice (satellite-member) — Agent steps for a member joining a satellite another account owns, or an owner bringing members in, via the satellite-member Bash# command — WHEN a user asks to join, onboard to, or share on someone else's satellite (keywords:  (kb:join-someone-s-satellite-as-a-member-and-share-your-machine-by-c)
+- [repo/page] Share an LLM with metering (peer add, limits, usage, alarm) — Agent steps to share the model door with a peer and meter it: peer add/share, peer limits, llm usage, usage-alarm schedule and viewer — WHEN sharing LLM capacity with someone else's machine or watching shared spend (keywords: llm, share, peer, metering, usag  (kb:share-an-llm-with-metering-peer-add-limits-usage-alarm)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 
