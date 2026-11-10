@@ -11,7 +11,7 @@ labels:
 created: 2026-11-06T21:45:55.92881Z
 sprint: 583
 sprint_id: 2035b56b-d719-5d80-8c39-6195df0d1e6a
-sprint_title: 'Boundary control: circles (owner / personal / org / team) across all of bashy'
+sprint_title: 'Boundary control: circles (owner / family / friend / team / guest / public) across all of bashy'
 ---
 
 Knowledge and memory: prevent cross-circle recall into prompts by physical store partitioning via yoke/pkg/scope.Resolve (~/.bashy/kb/ for default circle, ~/.bashy/kb/owner/ at 0700, ~/.bashy/kb/circles/<circle>/ for family/friend/team/guest) so kb/index.md, journal.jsonl, and .git never mix circles on disk. Repo kb (<repo>/docs/kb) inherits the repo's circle (.bashy/circle); kb agent ring keeps its owner-only Source.Tool check and scopes by active circle (yoke/pkg/kb/store.go, search.go). Filter remember/recall, kbrecall/kbmemory in bashy/internal/agentos, graph store, search index, and chat history by active circle before anything reaches an agent prompt. Explicit cross-circle sharing uses `bashy circle share <slug> --to <circle>` (human approve + scrub gate; no query-time tag-share DSL).

@@ -11,7 +11,7 @@ labels:
 created: 2026-11-06T21:45:57.456515Z
 sprint: 583
 sprint_id: 2035b56b-d719-5d80-8c39-6195df0d1e6a
-sprint_title: 'Boundary control: circles (owner / personal / org / team) across all of bashy'
+sprint_title: 'Boundary control: circles (owner / family / friend / team / guest / public) across all of bashy'
 ---
 
 Closure: scenario suite and regression evidence. Scenario tests with temporary circles `family`, `team` (or `team:acme`), `guest`, and `owner`, all under temp BASHY_HOME:

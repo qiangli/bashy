@@ -11,7 +11,7 @@ labels:
 created: 2026-11-06T21:45:56.692567Z
 sprint: 583
 sprint_id: 2035b56b-d719-5d80-8c39-6195df0d1e6a
-sprint_title: 'Boundary control: circles (owner / personal / org / team) across all of bashy'
+sprint_title: 'Boundary control: circles (owner / family / friend / team / guest / public) across all of bashy'
 ---
 
 Credentials and tier-5/6 CLIs. Reuse yoke/pkg/accounts (Account.Connections[].Profile and Account.Links) bound to the circles each account may serve (from S583.3) rather than maintaining a parallel credential inventory in circles.yaml. Registry Entry gains a circle-aware ExecEnv (yoke/external/registry/registry.go): the active circle selects AWS_PROFILE, AZ_PROFILE, GLAB_PROFILE, DKS_PROFILE, kubeconfig context, and gcloud/doctl/gws/tofu/gitea credentials from the circle's bound account; using a profile or `--account` bound to another circle fails closed (consistent with aws/auth.go no-default rule). `secret --account` vault selection is checked against the active circle.
