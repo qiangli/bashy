@@ -64,7 +64,7 @@ What makes shaping safe, and what agents get along the way:
 | **Bash#** | Go with bash: typed Go, fenced Python/TS/Rust/C/C#/PowerShell islands, contracts, `agentic`. One file is a script *and* a skill — like this page | [bashsharp](https://github.com/bashsharp/bashsharp) · [tour](https://github.com/bashsharp/tour) |
 | **Yoke** | The agentic harness: `--json` everywhere, `dag`, `weave`, `sprint`, `inbox`, sandboxes, and **software shaping** — describe a change, verify, approve, undo | [shaping](examples/shaping/hello-world/README.md) |
 
-Alpha (0.x). Every number names its corpus: [claims](https://github.com/bashsharp/bashsharp/blob/main/docs/claims.md).
+Release candidate (v1.0.0-rc; the release badge above shows the latest). Every number names its corpus: [claims](https://github.com/bashsharp/bashsharp/blob/main/docs/claims.md).
 
 ## For agents: set up and stay
 
