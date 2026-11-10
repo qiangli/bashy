@@ -49,7 +49,7 @@ owner and member flows alike.
 |---|---|
 | Sign in as a member | human browser step; the agent path is pair once (`bashy paired-host invite` + `bashy outpost register --code`), accept (`bashy member accept`), attach (`bashy outpost satellite attach`), then open the app URL. Not verb-shaped, not a gap |
 | View attached hosts and members | master view: `bashy paired-host ls --json`; this daemon's attachments: `bashy outpost satellite list --json` |
-| Satellite-scoped host list (which hosts are attached to satellite X, from any machine) | **gap** — `bashy paired-host ls --satellite` is refused (no assignment mapping; see below) |
+| Satellite-scoped host list (which hosts are attached to satellite X, from any machine) | `bashy paired-host ls --satellite ID --json` (Bearer `GET /api/v1/satellites/assignment`, S606 S5) |
 | Reach a shared app | `https://<satellite>/matrix/h/<host>/app/<app>/` after attach + member sign-in; 200 for a shared member, 403 for an unshared member, 401 without a credential |
 | Share an app with members | **gap** — same share-grant gap as the Cloudbox Hosts page row above |
 
@@ -93,11 +93,6 @@ credential; legacy peers without an email are unchanged.
   revokes a per-app member share grant (Cloudbox Hosts page and satellite
   console "share with members" are console-only; `satellite-member
   publish` stops at `outpost apps add` and hands the grant to the human).
-- **parity-satellite-hosts** (`todo:46dbbf801155`): no verb lists which
-  hosts are attached to a given satellite from an arbitrary machine
-  (`paired-host ls --satellite` is refused: no
-  `GET /api/v1/satellites/assignment` mapping on the master; the daemon
-  only lists its own attachments via `outpost satellite list`).
 - **parity-outpost-pin** (`todo:ea48d4aa81eb`): verify `bashy outpost
   satellite attach|detach|list` (plus `register`, `unpair`, `peers`)
   against the shipped outpost pin and record the minimum pin in this doc.
