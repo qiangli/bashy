@@ -13,14 +13,14 @@ master list. Pairing does not create a tunnel.
 ```sh
 bashy member ls --json
 bashy member ls --circle family --json
-bashy member invite friend@example.invalid --circle friend --dry-run --json
-bashy member invite friend@example.invalid --circle friend --json
+bashy member invite EMAIL --circle friend --dry-run --json
+bashy member invite EMAIL --circle friend --json
 bashy member invitations --json
 bashy member accept INVITATION_ID --json
 bashy member of --json
-bashy member set friend@example.invalid --circle family --dry-run --json
-bashy member rm friend@example.invalid --dry-run --json
-bashy member check friend@example.invalid --json
+bashy member set EMAIL --circle family --dry-run --json
+bashy member rm EMAIL --dry-run --json
+bashy member check EMAIL --json
 ```
 
 Circles are `family`, `friend`, `team`, and `guest`. A check allows only an

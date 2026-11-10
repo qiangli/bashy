@@ -394,6 +394,16 @@ func TestComposedSatelliteOperationsWorkflow(t *testing.T) {
 					},
 				},
 			})
+		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/satellites/sat-synth-1":
+			// show reads the detail endpoint after resolving a name via the list.
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"satellite": map[string]any{
+					"id":       "sat-synth-1",
+					"name":     "sat-alpha",
+					"endpoint": satSrv.URL,
+					"state":    "active",
+				},
+			})
 		case r.Method == http.MethodGet && r.URL.Path == "/api/v1/hosts":
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"hosts": []map[string]any{
@@ -502,8 +512,10 @@ func TestComposedSatelliteOperationsWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("satellite invite: %v\n%s", err, inviteOut)
 	}
+	// runFleetVerb merges stderr, which carries the owner-only note; the
+	// JSON document is stdout.
 	var inviteJSON map[string]any
-	if err := json.Unmarshal([]byte(inviteOut), &inviteJSON); err != nil {
+	if err := json.Unmarshal([]byte(inviteOut[strings.Index(inviteOut, "{"):]), &inviteJSON); err != nil {
 		t.Fatalf("unmarshal invite JSON: %v\n%s", err, inviteOut)
 	}
 	// Verify output compatibility: JSON output contains "code" even when --to-file is written
