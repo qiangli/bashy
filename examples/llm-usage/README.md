@@ -2,7 +2,7 @@
 
 One skill-script alarm plus one viewer template over
 `bashy llm usage --json`, and the [runbook](../docs/kb/pages/) for sharing
-the model door with a peer. Requires the yoke A3/A4 verbs
+the model door with a peer. Requires a bashy build with the `llm usage` and `llm peer limit` verbs
 (`bashy llm usage [--peer NAME] [--since 7d|24h|0] --json`,
 `bashy llm peer limit NAME --tokens-day N --usd-month N --rpm N`;
 over-limit answers are HTTP 429 with a reason and reset).

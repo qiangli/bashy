@@ -57,13 +57,13 @@ echo "test: ok"
 ```
 
 ### ping
-Minimal live probe (manual): do the yoke A3/A4 verbs exist on this host?
+Minimal live probe (manual): do a bashy build with the `llm usage` and `llm peer limit` verbs exist on this host?
 Never fails the gate — it reports, so the example stays honest on builds
 without them.
 Effects: read, exec
 
 ```bash
-bashy llm usage --help 2>&1 | head -5 || echo "ping: no 'bashy llm usage' verb on this build (needs yoke A3/A4)"
-bashy llm peer limit --help 2>&1 | head -5 || echo "ping: no 'bashy llm peer limit' verb on this build (needs yoke A3/A4)"
+bashy llm usage --help 2>&1 | head -5 || echo "ping: no 'bashy llm usage' verb on this build (needs a newer bashy build)"
+bashy llm peer limit --help 2>&1 | head -5 || echo "ping: no 'bashy llm peer limit' verb on this build (needs a newer bashy build)"
 echo "ping: done"
 ```

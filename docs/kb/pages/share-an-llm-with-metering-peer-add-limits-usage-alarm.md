@@ -11,7 +11,7 @@ tags:
     - sharing
     - peer
 status: candidate
-evidence: 'S#602 Story #3204: alarm unit-checked on fixtures via bashy dag examples/llm-usage test; live verbs need yoke A3/A4 (not on this build)'
+evidence: 'S#602 Story #3204: alarm unit-checked on fixtures via bashy dag examples/llm-usage test; live verbs ship with the yoke 6c414c3d bump'
 source:
     tool: muse-spark1.3-j
     episode: ep-122d82e3ddc8b612
@@ -51,7 +51,7 @@ Metering lives in `examples/llm-usage/`:
   `deny`, remove with `peer revoke NAME`.
 - Provider budgets (e.g. AWS Budgets) are host configuration, not product
   code: keep them in the host setup, out of the example.
-- Needs the yoke A3/A4 verbs. On builds without `bashy llm usage` /
+- Needs a bashy build with the `llm usage` and `llm peer limit` verbs. On builds without `bashy llm usage` /
   `bashy llm peer limit`, only the alarm's `--usage-file` fixture mode works;
   `bashy dag examples/llm-usage ping` reports what is missing.
 

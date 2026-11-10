@@ -9,7 +9,7 @@
 #   bashy --bashsharp usage-alarm.bsh --limits ./thresholds.json --since 24h
 #   bashy --bashsharp usage-alarm.bsh --usage-file fixtures/usage-over.json --no-notify
 #
-# Needs the yoke A3/A4 verbs (`bashy llm usage ...`, `bashy llm peer limit ...`);
+# Needs a bashy build with the `llm usage` and `llm peer limit` verbs (`bashy llm usage ...`, `bashy llm peer limit ...`);
 # without them only --usage-file mode works. Exits 0 when all principals are
 # inside their caps, 1 on breach, 2 on bad input (unreadable files, wrong
 # schema, missing jq).
@@ -81,7 +81,7 @@ if [ -n "$USAGE_FILE" ]; then
 else
   args=(llm usage --json --since "$SINCE")
   [ -n "$PEER" ] && args+=(--peer "$PEER")
-  USAGE_JSON="$(bashy "${args[@]}")" || { printf 'usage-alarm: `bashy llm usage --json` failed (needs yoke A3/A4 verbs)\n' >&2; exit 2; }
+  USAGE_JSON="$(bashy "${args[@]}")" || { printf 'usage-alarm: `bashy llm usage --json` failed (needs a bashy build with `llm usage`)\n' >&2; exit 2; }
 fi
 
 SCHEMA="$(printf '%s' "$USAGE_JSON" | jq -r '.schema // empty')"
