@@ -248,6 +248,51 @@ unit's policy, and `delegatedInternal` is its provider:
 Wiring outpost and meet as owners is S18. The protocol above is the
 contract they code against.
 
+## Boot and restart on failure
+
+`bashy supervisord` does not register itself with the OS and is not a launchd
+or systemd unit by hand. It is the second child of `outpost supervisord` (the
+init of the split above), and that one is what the OS boot service launches:
+
+    sudo outpost service install      # LaunchDaemon on macOS (boot, no login),
+                                      # systemd on Linux, Task Scheduler on Windows
+    outpost service status            # registered + running?
+    outpost doctor                    # `service:` line must not say "none"
+
+The registration restarts `outpost supervisord` on failure, and that restarts
+`bashy supervisord` with a capped backoff, so a SIGTERM to the monitor alone
+(status 143) comes back by itself. `--user` registers a LaunchAgent instead
+(needs a login). Do not write a plist: install takes over a prior registration
+made by the same binary and `outpost service uninstall` removes it cleanly.
+
+One thing this cannot survive is the registration itself being removed:
+`launchctl bootout` of the outpost job sends TERM to the whole job, and nothing
+is left to restart it. That is what happened on the dev host on 2026-11-10 at
+13:15Z: the execution journal shows an outpost test worker running
+`launchctl bootout gui/501/io.dhnt.outpost` (twice, 13:15:13 and 13:15:37) from
+a `register` test that exercised the real launchd label instead of a sandbox.
+The monitor's `killed by signal (status 143)` and the missing restart are both
+that bootout. Tests must never touch the host's real launchd labels; the
+outpost todo covers that. Recovery is `sudo outpost service install`.
+
+### Orphans that hold a unit's port
+
+A hard-killed or bootout-ed monitor leaves foreground units running as orphans
+(ppid 1). Two mechanisms clear them so the new monitor starts its units rather
+than failing them as "held by a foreign listener":
+
+1. The ownership record (`owner.json`, above) stops exactly the process group
+   a dead monitor recorded, verified by pid and kernel start time.
+2. For an orphan with no record (left by an older monitor, or the record was
+   lost), the monitor, on finding a declared tcp port held, looks up the
+   listener (`lsof`), and replaces it (TERM to the group, `stop.timeout`, then
+   KILL) only if **both** hold: its argv is the unit's own `exec` (same
+   program name, same arguments) and its environment has the same `BASHY_HOME`
+   as the monitor. It logs `UNIT: replaced orphan pid N holding port P`.
+   Anything else on the port stays foreign and fails the unit with a reason.
+   Replaced, not adopted: the unit is started fresh under the new monitor.
+   (Unix only; on Windows a held port stays foreign.)
+
 ## Control socket and status
 
 The socket is at `BASHY_HOME/service/supervisord.sock`, overridable with

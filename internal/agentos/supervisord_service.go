@@ -127,6 +127,9 @@ func newServiceMonitor(r *reaper, logRoot string, log io.Writer) *monitor {
 		fleet.ServiceProviderInternal: newDelegatedInternal(),
 	}
 	m.resolve = resolveUnitRuntime
+	m.replaceOrphans = func(u fleet.Service) []string {
+		return replaceLookalikes(u, bashySelfPath(), os.Getenv("BASHY_HOME"))
+	}
 	m.probe = func(ctx context.Context, u fleet.Service, p unitPolicy) (error, bool) { return runProbe(ctx, u, p, r) }
 	m.events = recordServiceEvent
 	m.notify = notifyServiceFailed

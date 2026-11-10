@@ -111,6 +111,9 @@ type monitor struct {
 	// probe runs the declared probe; checkPorts refuses foreign listeners.
 	probe      func(context.Context, fleet.Service, unitPolicy) (error, bool)
 	checkPorts func(fleet.Service) error
+	// replaceOrphans stops the unit's own look-alike orphans holding its ports
+	// (supervisord_adopt.go); nil = a held port is always foreign.
+	replaceOrphans func(fleet.Service) []string
 	// checkBuild is the supply-chain gate: a unit whose binary is not a
 	// verified bashy-signed build is refused before activation.
 	checkBuild func(fleet.Service) error
@@ -508,7 +511,16 @@ func (m *monitor) activate(u *unitRun, exempt bool) {
 		}
 	}
 	if u.decl.ProviderName() == fleet.ServiceProviderProcess && m.checkPorts != nil {
-		if err := m.checkPorts(u.decl); err != nil {
+		err := m.checkPorts(u.decl)
+		if errors.Is(err, errForeignListener) && m.replaceOrphans != nil {
+			if lines := m.replaceOrphans(u.decl); len(lines) > 0 {
+				for _, l := range lines {
+					m.logf("%s", l)
+				}
+				err = m.checkPorts(u.decl)
+			}
+		}
+		if err != nil {
 			m.fail(u, err.Error())
 			return
 		}

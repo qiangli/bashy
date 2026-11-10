@@ -8,6 +8,7 @@ import (
 	"os"
 	"syscall"
 
+	"github.com/qiangli/yoke/pkg/fleet"
 	"golang.org/x/sys/windows"
 )
 
@@ -34,3 +35,6 @@ func killProcessGroup(p *os.Process) error {
 
 // isAddrInUse recognizes Winsock's spelling of EADDRINUSE.
 func isAddrInUse(err error) bool { return errors.Is(err, windows.WSAEADDRINUSE) }
+
+// replaceLookalikes: no process inspection on Windows; a held port stays foreign.
+func replaceLookalikes(fleet.Service, string, string) []string { return nil }
