@@ -21,7 +21,7 @@ by role.
 3. **A share grant names an email or a circle.** A circle grant resolves to the
    circle's *current* active members at check time. Removing a member, or moving
    them to another circle, revokes their access at once, bounded only by the
-   list's cache TTL. Inactive, pending, unknown and removed emails never match.
+   list's cache TTL. Inactive, pending, non-mutual, unknown and removed emails never match.
 4. **Secrets never leave the owner.** Agents use secrets by handle only
    (`secret://…`, children get a scrubbed env via `secrets.ScrubAgentEnv`).
    Known values are redacted at egress (`secrets.Redactor`). Revealing a
@@ -64,12 +64,15 @@ a member egress.
   the Cloudbox field records. "Group" is already taken by feed groups and
   Cloudbox groups. "Tier", "zone" and "scope" read as properties of data or of
   the host, which is exactly what this model rejects.
-- **Mutuality: accepting an invite adds the reverse row** (recommendation from
-  ticket a99e88ac, accepted). When `member@example.com` accepts the owner's
-  invite, the owner also appears on the member's own list. By default the
-  reverse row carries the same circle, and the member may change it. Each side's
-  circle is that side's own choice. A grant always checks the *granting* owner's
-  list, so mutuality never widens what either side shares.
+- **Mutuality: accepting an invite adds the reverse row** (operator decision,
+  ticket a99e88ac). When `member@example.com` accepts the owner's invite, the
+  owner also appears on the member's own list, filed as `guest` unless the
+  member picks a circle (least privilege: each side's circle is that side's own
+  choice). A person is a member only while BOTH rows are active (`mutual`);
+  deleting either row ends it, so a member leaves by deleting their own row.
+  Grant checks use the granting owner's circle and require mutual, so
+  mutuality never widens what either side shares. The owner's circle label is
+  never shown to the member.
 - **An offline host uses its last known list.** When Cloudbox is unreachable,
   the check uses the last successfully fetched list. An email not on that list is
   not a member. A host that has never fetched a list has no members, so it is
