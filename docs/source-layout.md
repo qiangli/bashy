@@ -129,7 +129,7 @@ The annotated file-by-file map of the repo, moved verbatim from `CLAUDE.md` §So
       found, point to install/a paired host node — so a `bashy commands` verb
       always runs without a rebuild step.
     - `-tags bashy_obs` (`obs_{full,stub}.go`) — the observability stack
-      `bashy otel` (OpenTelemetry Collector + VictoriaMetrics/Logs + Jaeger +
+      `bashy otel` (OpenTelemetry Collector + OTel metrics and log stores + Jaeger +
       Perses + k8s/aws, **193 MB**).
 
     `make build` = lean; `make build-host` (= `BASHY_ENGINES=1 BASHY_OBS=1`,

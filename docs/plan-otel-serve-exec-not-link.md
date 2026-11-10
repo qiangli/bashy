@@ -13,10 +13,10 @@ flag redefined: search.maxQueryLen
 ```
 
 Root cause, confirmed by building store-subset probes: `search.maxQueryLen` is
-registered in an `init()` of a VictoriaMetrics **core library that all three stores
+registered in an `init()` of an upstream metrics-module **core library that all three stores
 import**. Two stores linked into one binary register it twice → panic. I probed the
 pairs: **`vm`+`vl` collides too**, not just `vl`+`vt`. So this is not a two-store
-quirk with a clever split — **any two Victoria stores co-linked collide.**
+quirk with a clever split — **any two of the stores co-linked collide.**
 
 > **Minimum viable topology is three processes, one store each. There is no
 > two-process arrangement that links its way out of this.**
@@ -75,14 +75,14 @@ subprocess**: `--storageDataPath`, `--httpListenAddr=127.0.0.1:<port>`,
   spec+argv+port.
 - The thin re-export packages `external/otel/victoria{logs,metrics,traces}/*` — no
   longer imported by anything.
-- The heavy Victoria `require`s in `external/otel/go.mod`. **This is where the win
-  compounds:** with nothing linking Victoria, the obs binary stops carrying it.
+- The heavy store-module `require`s in `external/otel/go.mod`. **This is where the win
+  compounds:** with nothing linking the store modules, the obs binary stops carrying it.
 
 ### The bonus: the build tag disappears
 
 The lean build (`obs_stub.go`) **already wires the query verbs** — `failed`,
 `guessed`, `bounds`, `cost`, `why-slow` run in the lean worker today. Only `serve`
-is gated behind `bashy_obs`, and only because it linked Victoria.
+is gated behind `bashy_obs`, and only because it linked the store modules.
 
 After exec-not-link, `serve` links **nothing heavy** — just `net/http/httputil` and
 binmgr, both already in the lean build. So:
@@ -92,7 +92,7 @@ binmgr, both already in the lean build. So:
 > orchestrator verb, peer to `bashy loom`/`bashy zot`.
 
 The current obs delta is ~22 MB (110 MB obs vs 88 MB lean — the code comment's
-"193 MB" is stale, from before the Victoria-only trim). That 22 MB goes to zero, and
+"193 MB" is stale, from before the stores-only trim). That 22 MB goes to zero, and
 the *entire* second build profile for observability goes away.
 
 ## The one real decision: download vs embed
@@ -136,14 +136,14 @@ components for `execStore`. Decide restart-on-crash policy (binmgr.Process may n
 supervise — confirm; if not, add a watch loop like `loom`/`zot` do).
 
 **P5 — delete the linking.** Remove the three in-process components, the re-export
-packages, and the Victoria `require`s from `external/otel/go.mod`. Collapse
+packages, and the store-module `require`s from `external/otel/go.mod`. Collapse
 `obs_full.go`/`obs_stub.go` into one path; drop `bashy_obs` and `BASHY_OBS=1`.
 
 **P6 — the acceptance test is already written.** The live verification from the otel
 end-to-end session *is* the gate: `bashy otel serve` starts, three subprocesses come
 up, bashy emits its own spans, and `otel failed`/`guessed`/`bounds` return real rows.
 Add two regressions: (a) `bashy otel serve --version` does not panic (the literal
-bug), (b) a link-level assertion that the binary no longer imports Victoria (e.g.
+bug), (b) a link-level assertion that the binary no longer imports the store modules (e.g.
 `go list -deps` in a test, or a size ceiling).
 
 ## Risks / edges
@@ -158,7 +158,7 @@ bug), (b) a link-level assertion that the binary no longer imports Victoria (e.g
 - **Windows.** Obs was already excluded there; downloads are cross-platform but keep
   the exclusion until validated. Not this scope.
 - **Port contention.** `ports.go` already allocates/checks — unchanged.
-- **VictoriaTraces maturity (v0.9.4).** Early; the pin is exact and the container
+- **Trace store maturity (v0.9.4).** Early; the pin is exact and the container
   image (same artifact) is already proven in the end-to-end test.
 
 ## Effort

@@ -10,7 +10,7 @@ skeleton changed), but no other tool's **declaration** is touched.
 
 ## 1. `GO_SECURITY_OVERRIDES` — the module half of a recorded override
 
-`GO_TOOLCHAIN_SECURITY_OVERRIDE` (added for the Victoria forks) fixes an
+`GO_TOOLCHAIN_SECURITY_OVERRIDE` (added for the OTel store forks) fixes an
 upstream tag whose *toolchain* predates a Go stdlib security fix. The same gap
 exists one level down: a tag can require a **dependency** that predates a fix,
 with no later upstream tag carrying the bump. Reachable vulnerabilities are

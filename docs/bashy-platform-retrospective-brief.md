@@ -96,7 +96,7 @@ The working product model is:
 
 - OCI: `bashy podman` / `bashy docker` as the reproducible execution substrate.
 - Ollama: local managed model serving for agentic and offline workflows.
-- OTEL: OpenTelemetry/Victoria/related observability substrate for traces,
+- OTEL: OpenTelemetry and related observability substrate for traces,
   metrics, logs, dashboards, and run telemetry.
 
 The O3 pillar implication for this incident:
@@ -244,7 +244,7 @@ Recommended layers:
   operational findings.
 - Vector/semantic index: optional retrieval layer for logs, docs, failures, and
   knowledge base content.
-- Metrics/time-series: Victoria/OTEL path for durations, retries, failures,
+- Metrics/time-series: OTEL store path for durations, retries, failures,
   resource usage, and fleet health.
 
 Minimum tables/entities:

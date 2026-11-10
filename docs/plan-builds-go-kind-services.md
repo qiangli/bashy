@@ -120,7 +120,7 @@ because changing the skeleton re-renders `openclaw` and `tuwunel` too:
   not even fire.
 
 **Windows legs are also deferred**, even though gitea ships windows amd64+arm64
-and the Victoria components ship windows/amd64. The blocker is the skeleton:
+and the OTel store components ship windows/amd64. The blocker is the skeleton:
 its own steps are bash (`set -euo pipefail`, `. fork/bashy-build/PIN`,
 `verify-pin.sh`) and would run under PowerShell on a `windows-*` runner, and
 the no-egress harness is built on `unshare`/`strace` and `sandbox-exec` with no

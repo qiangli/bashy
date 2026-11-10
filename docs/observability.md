@@ -1,15 +1,15 @@
 # Observability
 
-*Shipped 2026-07-14. bashy emits, and the stack that receives it is Victoria-only.*
+*Shipped 2026-07-14. bashy emits, and the stack that receives it is the OTel stores only.*
 
 > **2026-07-14, end-to-end verification against a live stack — read this first.**
 > The claims below ("bashy emits", "ycode records", the query verbs) were written
 > before anyone ran the whole path against a real store. Doing so found three bugs,
 > two of which meant the plane did not actually work:
 >
-> 1. **`bashy otel serve` panics at init.** VictoriaLogs and VictoriaTraces both link
+> 1. **`bashy otel serve` panics at init.** the log store and trace store modules (`VictoriaLogs`, `VictoriaTraces`) both link
 >    `app/.../logsql`, which registers the same global flag (`search.maxQueryLen`), so
->    linking two Victoria stores into one process collides *before `main()`*. The
+>    linking two of the store modules into one process collides *before `main()`*. The
 >    in-process stack cannot start today. This is exactly what the build doctrine
 >    (`docs/bashy-build-architecture.md`: *engines never linked; exec'd as separate
 >    processes*) warns against. **Unfixed — needs the exec-not-link redesign.** The
@@ -18,7 +18,7 @@
 > 2. **The query default pointed at a store's own port** (`8428`), not the proxy
 >    (`31415`), so every verb 404'd out of the box. *Fixed* (coreutils `ea0cc46`).
 > 3. **Every trace verb returned a false "0 matches."** The verbs queried a flat
->    attribute schema; the real VictoriaTraces prefixes everything
+>    attribute schema; the real trace store prefixes everything
 >    (`span_attr:`, `resource_attr:`, `event:event_attr:<name>:<idx>`). *Fixed and
 >    now verified live* (coreutils `0c79aca`, ycode `d20df52`).
 >
@@ -34,7 +34,7 @@ Two halves, and until this date only one existed:
 
 | | before | after |
 |---|---|---|
-| **the stack** (`bashy otel`) | collector + Jaeger + Prometheus + Perses + Alertmanager, **286 MB** | VictoriaTraces + VictoriaLogs + VictoriaMetrics, **109 MB** |
+| **the stack** (`bashy otel`) | collector + Jaeger + Prometheus + Perses + Alertmanager, **286 MB** | OTel trace + log + metrics stores, **109 MB** |
 | **the emit side** | **nothing** | bashy + ycode, all three signals |
 
 **bashy could RUN an observability stack and fed it nothing.** A collector with no data.
@@ -146,10 +146,10 @@ Measured **before** cutting. Transitive dependency count per component:
 
 | component | deps | fate |
 |---|---|---|
-| jaeger | **2,240** | → VictoriaTraces |
+| jaeger | **2,240** | → OTel trace store |
 | perses | **1,478** | → vmui (already in the binary) |
 | collector | 833 | → **the proxy, in three map entries** |
-| prometheus | 556 | → VictoriaMetrics |
+| prometheus | 556 | → OTel metrics store |
 | **victorialogs** | **113** | *the thing that actually stores the telemetry* |
 
 **Jaeger cost twenty times the weight of the store it fronted.**
@@ -158,12 +158,12 @@ Measured **before** cutting. Transitive dependency count per component:
 `prometheusexporter`, which Prometheus **scraped**. Delete the collector and you delete the
 only path metrics had. Both fall together.
 
-**And then it has no job left.** Every Victoria component ingests OTLP **natively**:
+**And then it has no job left.** Every OTel store ingests OTLP **natively**:
 
 ```
-/insert/opentelemetry/v1/traces   VictoriaTraces
-/insert/opentelemetry/v1/logs     VictoriaLogs
-/opentelemetry/v1/metrics         VictoriaMetrics
+/insert/opentelemetry/v1/traces   OTel trace store
+/insert/opentelemetry/v1/logs     OTel log store
+/opentelemetry/v1/metrics         OTel metrics store
 ```
 
 OTLP/HTTP is defined as `POST {endpoint}/v1/{traces,logs,metrics}`, and the stack's proxy
@@ -174,13 +174,13 @@ dependencies existed to be one address that forwards three signals to three stor
 
 ### The fork that blocked it had zero commits
 
-VictoriaTraces would not compile against `replace VictoriaLogs => qiangli/VictoriaLogs`.
+The trace store fork would not compile against `replace VictoriaLogs => qiangli/VictoriaLogs`.
 It looked like a real blocker. It was not: **the fork has no commits of its own** —
 `merge-base HEAD upstream/master` equals HEAD, and the diff is empty. A pure mirror, pinned
 three months stale, **patching nothing**.
 
-It existed only because VictoriaLogs' *released tags* (v1.113–v1.121) point at commits whose
-`go.mod` still declared the **VictoriaMetrics** module path — so the tags are unusable as a
+It existed only because the log store's *released tags* (v1.113–v1.121) point at commits whose
+`go.mod` still declared the upstream metrics module path (`VictoriaMetrics`) — so the tags are unusable as a
 Go module and only a pseudo-version resolves. Requiring upstream **by commit** does the same
 job with no fork.
 
@@ -192,9 +192,9 @@ job with no fork.
 
 | signal | what | store |
 |---|---|---|
-| **logs** | `LogConversation` — the full system prompt, messages, response bodies | VictoriaLogs |
-| **metrics** | `LLMCallDuration`, `LLMTokens{Input,Output,CacheRead,CacheWrite}`, `LLMCostDollars` (+ `pricing.known`) | VictoriaMetrics |
-| **traces** | `turn_with_recovery`, `HTTP POST`, `tools.execute`, `exec <cmd>` | VictoriaTraces |
+| **logs** | `LogConversation` — the full system prompt, messages, response bodies | OTel log store |
+| **metrics** | `LLMCallDuration`, `LLMTokens{Input,Output,CacheRead,CacheWrite}`, `LLMCostDollars` (+ `pricing.known`) | OTel metrics store |
+| **traces** | `turn_with_recovery`, `HTTP POST`, `tools.execute`, `exec <cmd>` | OTel trace store |
 
 **Cost carries `pricing.known`.** The pricing fallback is `$3/$15 per million` — Claude
 Sonnet's rate — so a model the table had never heard of was billed like a frontier Anthropic

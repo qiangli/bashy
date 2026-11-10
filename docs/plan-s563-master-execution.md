@@ -134,7 +134,7 @@ every problem they hit recorded as a finding against the product.
    (user environment `OTEL_EXPORTER_OTLP_ENDPOINT=127.0.0.1:31416`, the local
    `bashy otel serve` gRPC port; `OTEL_SERVICE_NAME=outpost`), effective at
    the next outpost restart, so a later config change is searchable in the
-   local VictoriaLogs. Until then, reinstall by hand if the entry is lost.
+   the local OTel log store. Until then, reinstall by hand if the entry is lost.
 3. Team-topic owner: the host owner's choice of account (named-owner setting
    `KLATCH_SSO_TEAM_OWNER`; product setting, prototyped on elephant first).
 4. Load check: several members at once from one network (satellite 429 risk).

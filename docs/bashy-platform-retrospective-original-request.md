@@ -28,7 +28,7 @@ To recap bashy features:
 2. Three pillars: O3 embedded
    - Ollama
    - OCI (Podman)
-   - OTEL (OpenTelemetry/Victoria repos)
+   - OTEL (OpenTelemetry store repos)
 
 3. Extensions
    - Common tools and system integration on different venues/tiers/strata:

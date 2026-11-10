@@ -1,7 +1,7 @@
-# Victoria fork CI: one shared egress verdict, and pins that clear govulncheck
+# OTel store fork CI: one shared egress verdict, and pins that clear govulncheck
 
 Sprint #434, story #1897 (`eb6f5cd6cb46`). The first CI run of all three
-Victoria verified-build forks failed the same two ways:
+The OTel store verified-build forks failed the same two ways:
 
 | run | fork | pin job | `govulncheck` | Linux no-egress |
 |---|---|---|---|---|
@@ -24,7 +24,7 @@ the gate failed on a resolver handshake that went nowhere.
 
 That verdict was already corrected for `tuwunel` in bashy `fb22eaf9` — and
 then existed in **seven** near-identical inline copies (tuwunel, the three
-Victoria components, gitea, kopia, zot), six of them still wrong.
+OTel store components, gitea, kopia, zot), six of them still wrong.
 
 **Fix:** factor the verdict into ONE copy, `builds/_shared/egress-verdict.sh`,
 and ship it into each fork's `bashy-build/` next to the harness:
@@ -69,7 +69,7 @@ All three upstream GitHub releases are non-draft and non-pre-release, as the
 
 **Build-flag / ldflags diff reviewed, and unchanged at the new tags**: the root
 `Makefile`'s `GO_BUILDINFO` is still the single
-`-X …/lib/buildinfo.Version=…` stamp (so `GO_LDFLAGS` stands), the Victoria
+`-X …/lib/buildinfo.Version=…` stamp (so `GO_LDFLAGS` stands), the OTel store
 components still take no extra build tags, `deployment/docker/Makefile` still
 sets `CGO_ENABLED=1` for linux amd64/arm64 and `0` elsewhere (so `GO_CGO`
 stands), `GO_PACKAGE` paths still exist, and `-pushmetrics.url` still defaults
@@ -146,7 +146,7 @@ not a substitute for it.
   a v6 egress all fail. The AF_UNIX case is a reviewed decision a well-meaning
   edit could quietly reverse, so it is now a test rather than a comment.
 - The toolchain gate was driven against synthetic declarations: each of the
-  three Victoria shapes resolves to the right effective toolchain, a PIN with
+  three OTel store shapes resolves to the right effective toolchain, a PIN with
   no override key is inert, and the gate refuses a minor bump, the same patch,
   an earlier patch, a two-component override, junk, and a `GO_TOOLCHAIN` that
   disagrees with `go.mod`.
