@@ -253,3 +253,10 @@ re-imports it).
 5. The userland (ls/grep/sed/…) is in-process and identical on every
    platform — Windows included; do not shell out to platform-specific
    alternatives.
+6. **Root cause before any fix.** When something that worked fails (a
+   green test, an approved shaped version, a verified skill), do not start
+   fixing or working around it. Name what fails and compare it with the
+   last good run; check that the venue is the same; find the change that
+   broke it; record whether the cause is the code, the test or the
+   environment. Then fix it where the cause lives: an environment problem
+   is never fixed in code.

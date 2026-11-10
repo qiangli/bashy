@@ -40,6 +40,12 @@ is not evidence that the page rendered or that a browser assertion passed.
 uses the existing incident and repair policy; local repair waits within its
 bound instead of abandoning background work when the CLI exits.
 
+Repair follows root cause before any fix: an incident is on a version that
+worked, so the repair agent first reproduces it, states whether the cause is
+the app code, a test or the environment, and fixes it where the cause lives.
+An environment cause changes no app code. The same rule applies to anyone
+investigating an incident by hand.
+
 History, undo, restore, release, offer and adopt delegate to the existing source
 operations and their verification gates. `adopt --preview` does not activate.
 
