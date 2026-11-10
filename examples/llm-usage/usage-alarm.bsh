@@ -1,0 +1,147 @@
+#!/usr/bin/env -S bashy --bashsharp
+# usage-alarm — warn when a shared LLM door burns too much.
+#
+# Reads `bashy llm usage --json` (schema bashy-llm-usage-v1), compares each
+# principal against caps from a small JSON limits file (tokens for unpriced
+# principals such as ollama, USD where priced), and calls `bashy notify` once
+# on breach. Meant to be run by `bashy schedule`, or by hand:
+#
+#   bashy --bashsharp usage-alarm.bsh --limits ./thresholds.json --since 24h
+#   bashy --bashsharp usage-alarm.bsh --usage-file fixtures/usage-over.json --no-notify
+#
+# Needs the yoke A3/A4 verbs (`bashy llm usage ...`, `bashy llm peer limit ...`);
+# without them only --usage-file mode works. Exits 0 when all principals are
+# inside their caps, 1 on breach, 2 on bad input (unreadable files, wrong
+# schema, missing jq).
+
+~~~skill as guide
+---
+name: usage-alarm
+description: Watch shared-LLM spend from `bashy llm usage --json` and notify on breach. Use when metering a shared model door, checking alarm state on demand, or testing the alarm against a fixture file (no live door needed).
+metadata:
+  requires: "has=bashy"
+---
+# usage-alarm — LLM metering alarm
+
+Fire it on a schedule, or by hand after sharing the door:
+
+```sh
+bashy --bashsharp usage-alarm.bsh --limits ./thresholds.json --since 24h
+bashy schedule add --every 1h --name llm-usage-alarm -- \
+  bashy --bashsharp /path/to/usage-alarm.bsh --limits /path/to/thresholds.json --since 24h
+```
+
+- `--limits FILE` caps for one fetched window (copy `thresholds.example.json`;
+  the file is the shaping hook: edit caps or per-principal logic here).
+- Tokens apply to unpriced principals (e.g. ollama), USD to priced ones.
+- `--usage-file FILE` (`-` = stdin) checks a saved `llm usage --json` document
+  instead of the live door — this is how tests run (no model, no door).
+- Exit 0 inside caps, 1 on breach, 2 on bad input. `--json` prints a
+  machine-readable summary. `--no-notify` skips the `bashy notify` call.
+~~~
+
+set -euo pipefail
+
+LIMITS="thresholds.json"
+USAGE_FILE=""
+SINCE="7d"
+PEER=""
+NOTIFY_TO=""
+NOTIFY=1
+JSON_OUT=0
+
+usage() {
+  sed -n '2,12p' "${BASH_SOURCE[0]}"
+  printf '%s\n' "Usage: usage-alarm.bsh [--limits FILE] [--usage-file FILE|-] [--since 7d] [--peer NAME] [--notify-to AGENT] [--no-notify] [--json]"
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --limits) LIMITS="$2"; shift 2 ;;
+    --usage-file) USAGE_FILE="$2"; shift 2 ;;
+    --since) SINCE="$2"; shift 2 ;;
+    --peer) PEER="$2"; shift 2 ;;
+    --notify-to) NOTIFY_TO="$2"; shift 2 ;;
+    --no-notify) NOTIFY=0; shift ;;
+    --json) JSON_OUT=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) printf 'unknown flag: %s\n' "$1" >&2; usage >&2; exit 2 ;;
+  esac
+done
+
+command -v jq >/dev/null 2>&1 || { printf 'usage-alarm: jq is required\n' >&2; exit 2; }
+[ -f "$LIMITS" ] || { printf 'usage-alarm: limits file not found: %s (copy thresholds.example.json)\n' "$LIMITS" >&2; exit 2; }
+
+if [ -n "$USAGE_FILE" ]; then
+  if [ "$USAGE_FILE" = "-" ]; then USAGE_JSON="$(cat)"
+  else
+    [ -f "$USAGE_FILE" ] || { printf 'usage-alarm: usage file not found: %s\n' "$USAGE_FILE" >&2; exit 2; }
+    USAGE_JSON="$(cat "$USAGE_FILE")"
+  fi
+else
+  args=(llm usage --json --since "$SINCE")
+  [ -n "$PEER" ] && args+=(--peer "$PEER")
+  USAGE_JSON="$(bashy "${args[@]}")" || { printf 'usage-alarm: `bashy llm usage --json` failed (needs yoke A3/A4 verbs)\n' >&2; exit 2; }
+fi
+
+SCHEMA="$(printf '%s' "$USAGE_JSON" | jq -r '.schema // empty')"
+[ "$SCHEMA" = "bashy-llm-usage-v1" ] || { printf 'usage-alarm: want schema bashy-llm-usage-v1, got: %s\n' "${SCHEMA:-<none>}" >&2; exit 2; }
+
+TOKENS_CAP="$(jq -r '.tokens // empty' "$LIMITS")"
+USD_CAP="$(jq -r '.usd // empty' "$LIMITS")"
+# Caps are interpolated into the filter below (bashy's jq has no --arg), so
+# accept plain numbers only; anything else disables that cap.
+case "${TOKENS_CAP:-x}" in ''|*[!0-9.]*|*.*.*|.*|*.) TOKENS_CAP="" ;; esac
+case "${USD_CAP:-x}" in ''|*[!0-9.]*|*.*.*|.*|*.) USD_CAP="" ;; esac
+if [ -n "$TOKENS_CAP" ]; then TOK_COND="\$u and (\$t > $TOKENS_CAP)"; else TOK_COND="false"; fi
+if [ -n "$USD_CAP" ]; then USD_COND="((\$u | not) and (\$c > $USD_CAP))"; else USD_COND="false"; fi
+
+# TSV: principal \t total_tokens \t cost_usd \t unpriced \t breach
+REPORT="$(printf '%s' "$USAGE_JSON" | jq -r "
+  (.principals // [])[] |
+    (.principal // \"?\") as \$p |
+    ((.prompt_tokens // 0) + (.completion_tokens // 0)) as \$t |
+    ((.cost_usd // 0) | tonumber) as \$c |
+    ((.unpriced // false)) as \$u |
+    (if $TOK_COND
+     then \"tokens \(\$t) > $TOKENS_CAP\"
+     elif $USD_COND
+     then \"usd \(\$c) > $USD_CAP\"
+     else \"\" end) as \$b |
+    \"\(\$p)\t\(\$t)\t\(\$c)\t\(\$u)\t\(\$b)\"")"
+
+BREACHES="$(printf '%s\n' "$REPORT" | awk -F'\t' '$5 != ""')"
+NAMES="$(printf '%s' "$BREACHES" | cut -f1 | paste -sd' ' -)"
+
+json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+if [ "$JSON_OUT" -eq 1 ]; then
+  # Machine-readable summary, built in shell (no jq -R in bashy's subset).
+  printf '{"schema":"bashy-llm-alarm-v1","breaches":['
+  SEP=""
+  while IFS="$(printf '\t')" read -r principal tokens cost _ reason; do
+    [ -n "${reason:-}" ] || continue
+    printf '%s{"principal":"%s","total_tokens":%s,"cost_usd":%s,"reason":"%s"}' \
+      "$SEP" "$(json_escape "$principal")" "${tokens:-0}" "${cost:-0}" "$(json_escape "$reason")"
+    SEP=","
+  done <<< "$REPORT"
+  printf ']}\n'
+fi
+
+if [ -z "$BREACHES" ]; then
+  [ "$JSON_OUT" -eq 0 ] && printf 'usage-alarm: OK — %s principal(s) inside caps\n' \
+    "$(printf '%s\n' "$REPORT" | grep -c . || true)"
+  exit 0
+fi
+
+while IFS=$'\t' read -r principal tokens cost _ reason; do
+  [ -n "$principal" ] || continue
+  printf 'ALARM %s: %s\n' "$principal" "$reason"
+done <<< "$BREACHES"
+
+if [ "$NOTIFY" -eq 1 ]; then
+  SUBJECT="llm usage alarm: over cap: $NAMES"
+  if [ -n "$NOTIFY_TO" ]; then bashy notify --to "$NOTIFY_TO" "$SUBJECT"
+  else bashy notify "$SUBJECT"; fi
+fi
+exit 1
