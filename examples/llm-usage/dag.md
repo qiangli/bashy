@@ -14,7 +14,7 @@ Run from this directory with `bashy dag test`, or from the repo root with
 
 ### test
 Unit-check `usage-alarm.bsh` against the two fixture documents, with the
-committed `fixtures/bin/bashy` double on PATH recording `notify` calls
+committed `fixtures/fakebin/bashy` double on PATH recording `notify` calls
 (the outer `bashy` runs via its absolute path so the double only shadows
 the alarm's child calls). Needs `jq`; needs no model, no door, no network.
 Effects: read, write, exec, destroy
@@ -28,7 +28,7 @@ export STUB_DIR="$stub"
 : > "$stub/calls"
 
 # Over-cap fixture: exit 1, both over-cap principals named, one notify call.
-if PATH="$here/fixtures/bin:$PATH" "$real_bashy" --bashsharp "$here/usage-alarm.bsh" \
+if PATH="$here/fixtures/fakebin:$PATH" "$real_bashy" --bashsharp "$here/usage-alarm.bsh" \
   --limits "$here/thresholds.example.json" \
   --usage-file "$here/fixtures/usage-over.json" > "$stub/over.out" 2>&1; then
   echo "over-cap fixture exited 0, want 1" >&2; exit 1
@@ -39,7 +39,7 @@ grep -q 'notify.*llm usage alarm: over cap: peer:field-laptop peer:lab-share' "$
 
 # Under-cap fixture: exit 0, no notify call.
 : > "$stub/calls"
-PATH="$here/fixtures/bin:$PATH" "$real_bashy" --bashsharp "$here/usage-alarm.bsh" \
+PATH="$here/fixtures/fakebin:$PATH" "$real_bashy" --bashsharp "$here/usage-alarm.bsh" \
   --limits "$here/thresholds.example.json" \
   --usage-file "$here/fixtures/usage-ok.json" > "$stub/ok.out" 2>&1
 grep -q 'OK — 2 principal(s) inside caps' "$stub/ok.out"
@@ -47,7 +47,7 @@ grep -q 'OK — 2 principal(s) inside caps' "$stub/ok.out"
 
 # Bad schema: exit 2.
 echo '{"schema":"nope"}' > "$stub/bad.json"
-if PATH="$here/fixtures/bin:$PATH" "$real_bashy" --bashsharp "$here/usage-alarm.bsh" \
+if PATH="$here/fixtures/fakebin:$PATH" "$real_bashy" --bashsharp "$here/usage-alarm.bsh" \
   --limits "$here/thresholds.example.json" \
   --usage-file "$stub/bad.json" --no-notify >/dev/null 2>&1; then
   echo "bad schema exited 0, want 2" >&2; exit 1

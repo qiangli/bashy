@@ -1,0 +1,6 @@
+#!/bin/sh
+# Test double for `bashy`, used only by dag.md `test`. Records every call's
+# arguments (one line per call) in $STUB_DIR/calls and exits 0, so the alarm
+# can be unit-checked without a live door or real notifications.
+echo "$*" >> "${STUB_DIR:?STUB_DIR is not set}/calls"
+exit 0
