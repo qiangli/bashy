@@ -14,6 +14,6 @@ sprint_id: 2035b56b-d719-5d80-8c39-6195df0d1e6a
 sprint_title: 'Boundary control: circles (owner / personal / org / team) across all of bashy'
 ---
 
-Egress and sharing. git commit/push and gh: remote must belong to the repo's circle (coordGuard, bashy/internal/agentos/coord.go). handoff/resume artifacts and feed posts carry their circle and are refused toward non-members; mirror, rclone, kopia destinations and loom/act-runner registration bound to a circle; browser/fetch uploads checked. bashy circle check --staged runs per-circle deny patterns (e.g. personal names never in an org repo, org names never in public) and is called by the pre-commit hook when present; umbrella script/scrub-gate.sh stays unchanged as the public circle policy.
+Egress and sharing. git commit/push and gh: remote must belong to the repo's circle (coordGuard, bashy/internal/agentos/coord.go). handoff/resume artifacts and feed posts carry their circle and are refused toward non-members; mirror, rclone, kopia destinations and loom/act-runner registration are bound to a circle; browser/fetch uploads checked. `bashy circle check --staged` runs per-circle deny patterns (e.g. personal/family identifiers never in a team repo, team identifiers never in public) and is called by the pre-commit hook when present; umbrella `script/scrub-gate.sh` stays unchanged as the public circle policy.
 Depends on: S583.2, S583.4.
-Acceptance: push to a remote outside the circle refused; handoff to a non-member refused; staged personal pattern in an org repo blocked.
+Acceptance: push to a remote outside the circle refused; handoff to a non-member refused; staged personal pattern in a team repo blocked.

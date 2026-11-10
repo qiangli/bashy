@@ -1,7 +1,7 @@
 ---
 id: 92b67dc42fd0
 kind: doc
-title: 'S583.1 Boundary control design of record: circles (owner/personal/org/team/public)'
+title: 'S583.1 Boundary control design of record: circles (owner/family/friend/team/guest/public)'
 seq: 3132
 status: todo
 priority: p0
@@ -16,25 +16,16 @@ sprint_title: 'Boundary control: circles (owner / personal / org / team) across 
 
 Design of record for Sprint 583 boundary control. Deliver docs/boundary.md (abstract in docs/README.md if present, one line in docs/INDEX.md). Design only, no code.
 
-Problem: a human knows their audience (when in Rome, do as the Romans do): family matters stay out of the office, coworkers do not see private life, account secrets are shown to nobody. bashy has none of this. Principal owner is hard-coded "local" (yoke/pkg/principal/principal.go), scope stops at repo|user|agent (yoke/pkg/scope/scope.go), mb is public by design (one ~/.bashy/mb/posts.jsonl per host; ForReader is a view, not authorization), meet/sprint/chat/kb host ring/memory/handoff/feed are single pools per host, credentials are scoped per tool only, and the only egress privacy check is the regex scrub gate on commits.
+Problem: a human knows their audience (when in Rome, do as the Romans do): family matters stay out of the office, teammates do not see private life, account secrets are shown to nobody. On an outpost or standalone bashy host, everything runs under one OS user (~/.bashy and ~/.config/bashy): principal owner is hard-coded "local" (yoke/pkg/principal/principal.go), scope stops at repo|user|agent (yoke/pkg/scope/scope.go), mb is one host-wide ~/.bashy/mb/posts.jsonl (ForReader is a view, not authorization), and meet/sprint/chat/kb/memory/handoff/feed share single pools per host.
 
-Model to record:
-- Circle = named audience boundary. owner (absolute, innermost), personal circles (home, friends, ...), org:<name>[/team:<name>], public. Circles are siblings, not a trust ladder; the owner human belongs to all, a session acts in exactly one.
-- owner circle is a complete private space, not just a vault: secrets/accounts/tokens/keys AND private todos, kb pages, memory, notes, sprint items, mb notes-to-self, chat/ask history, handoffs. Never in a repo ring, never on any transport. Visible only to the owner human at an interactive TTY - not family, friends, coworkers or agents. Secrets are usable by agents only by handle (secret://...), injected at exec, never revealed; reveal = human-only approve gate, TTY only.
-- Labels: every datum carries circle: (frontmatter via issue.Issue.Extra / kb Page; JSON field elsewhere). Unlabeled legacy data = default circle (config, default home); public repo committed stores = public. No bulk rewrite.
-- Members: humans, agents, fleet entries, peers, hosts, cloudbox sessions carry circle sets (fleet catalog org overlay ring maps to org:). Spawned agents inherit only the session circle via BASHY_CIRCLE.
-- Activation order: --circle / BASHY_CIRCLE (audited override) > committed repo binding .bashy/circle > host-private ~/.config/bashy/circles.yaml (path/remote map, definitions, members, credential + LLM endpoint bindings; never committed) > default.
-- Rule Allows(dataCircle, target, op): same circle allow; owner -> anything deny except use-by-handle in owner's own exec; cross-circle read/list = filtered out (owner-human-only TTY --all-circles escape, never agents); cross-circle write/send/push/share/exec-with-credential = fail closed unless an explicit share rule in circles.yaml; publish to public runs the scrub gate extended with per-circle deny patterns.
-- Coverage table for every bashy surface (see stories S583.2-S583.14). Plain bash builtins and coreutils unchanged (frozen baseline / POSIX scope); enforcement lives in the agentic layer only.
-- Enforcement points: new yoke/pkg/boundary (single source of truth, no import back into bashy), yoke/pkg/scope + principal, in-store filters (todo/issue, kb, bus board, meet session, weave sprint, chat, handoff, feed), bashy ExecHandler boundaryGuard after claimGuard (bashy/internal/agentos/agentos.go middleware chain), coordGuard git remote check, registry ExecEnv.
+Streamlined model to record:
+- Circle = named audience boundary. Built-in default circles unify directly with the Cloudbox account member list: owner (absolute, innermost, 0 members), family, friend, team (or team:<name> when multiple teams/satellites exist), guest, and public. On the Cloudbox account member list, the member enum (guest/family/friend/team) is the member's circle (avoiding collision with coopauth role admin|user and pkg/role steward|conductor). Circles are siblings, not a trust ladder; the owner human belongs to all, a session acts in exactly one.
+- owner circle is a complete private space, not just a vault: secrets/accounts/tokens/keys (yoke/pkg/secrets, yoke/pkg/accounts) AND private todos, kb pages, memory, notes, sprint items, mb notes-to-self, chat/ask history, handoffs (~/.bashy/<tool>/owner/, 0700). Never in a repo ring, never on any transport (not even between two Owned: true outposts). Visible only to the owner human at an interactive TTY. Secrets are usable by agents only by handle (secret://...), scrubbed via secrets.ScrubAgentEnv and masked via secrets.Redactor; plaintext reveal requires the interactive TTY human approve gate (approve_src.go).
+- Physical directory partitioning over per-record filtering: host stores partition via yoke/pkg/scope.Resolve into ~/.bashy/<tool>/ (default circle, legacy in-place with zero migration), ~/.bashy/<tool>/owner/ (0700), and ~/.bashy/<tool>/circles/<circle>/ so kb/index.md, journal.jsonl, and .git never mix circles on disk. Repo stores (<repo>/docs/*) inherit the repo's circle (.bashy/circle or git remote mapping); public repo committed stores = public.
+- Reuse yoke/pkg/accounts + yoke/pkg/fleet (no parallel inventory in circles.yaml): Cloudbox member circles (guest/family/friend/team), paired outposts, accounts, CLI profiles (AWS_PROFILE, DKS_PROFILE), and LLM endpoints resolve through existing accounts.Account (and attached satellites) + fleet.Catalog. ~/.config/bashy/circles.yaml (0600, never committed) stays a minimal local routing/override file (path/remote -> circle map, default circle, owner email).
+- Activation & Ceiling Lock: --circle / BASHY_CIRCLE > committed .bashy/circle > ~/.config/bashy/circles.yaml > default (family). CRITICAL: spawned agents and non-TTY children are ceiling-locked to their inherited BASHY_CIRCLE (anchored to BASHY_EPISODE in coord/identity.go); an agent passing --circle <other> or mutating BASHY_CIRCLE fails closed unless approved at an interactive human TTY.
+- Rule Allows(dataCircle, target, op): same circle allow; owner -> anything deny except use-by-handle in owner's own exec; cross-circle write/send/push/share/exec-with-credential = fail closed; explicit cross-circle sharing uses `bashy circle share <ref> --to <circle>` (human approve + scrub gate, no query-time tag-share DSL); publish to public runs script/scrub-gate.sh + per-circle deny patterns.
+- Prior art to reconcile: story 101f7ec3b611 (human-lane S0 I14/I15 audience intersection); S513 invite-only sharing (d51b4726a0f7, ff5066e6ccc8); kb agent ring owner-only check (yoke/pkg/kb/store.go); meet roster organizer rules; role-mail AuthorizeByHolder; Sprint 606 master/satellite decoupling.
 
-Prior art to reconcile, not supersede: story 101f7ec3b611 (human-lane S0 audience rules I14 declared relations / I15 intersection of present principals); S513 invite-only sharing stories (d51b4726a0f7, ff5066e6ccc8); kb agent ring owner-only check (yoke/pkg/kb/store.go); meet roster organizer rules; role-mail AuthorizeByHolder.
-
-Open decisions the doc must close with the operator before S583.2 starts:
-1. Agents in owner: default = per-session grant via human approve gate (secrets still handle-only, owner-bound local model endpoints only, output stays in owner); strict alternative = human-only, no agent ever reads owner todo/kb.
-2. Activation: location-derived + explicit override (default) vs explicit switch only vs per-command flag only.
-3. Enforcement: hard on egress and owner material, filter on read, owner-only --all-circles (default) vs fail-closed everywhere vs warn-only first stage.
-4. Naming: "circle" (avoid "context" = inspect context, "cluster"/"sphere" = tier names).
-
-Public repo: placeholder org names only (acme), hosts by role.
-Acceptance: doc merged, decisions recorded with operator approval, story list below re-checked against the doc.
+Public repo: placeholder org/team names only (acme), hosts by role.
+Acceptance: doc merged, streamlined decisions recorded, story list aligned.
