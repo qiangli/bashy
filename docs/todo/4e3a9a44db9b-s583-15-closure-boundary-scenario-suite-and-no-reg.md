@@ -3,12 +3,13 @@ id: 4e3a9a44db9b
 kind: test
 title: 'S583.15 Closure: boundary scenario suite and no-regression evidence'
 seq: 3146
-status: todo
+status: assigned
 priority: p1
 labels:
     - boundary
     - closure
 created: 2026-11-06T21:45:57.456515Z
+assignee: claude-opus5.5
 sprint: 583
 sprint_id: 2035b56b-d719-5d80-8c39-6195df0d1e6a
 sprint_title: 'Boundary control (KISS): owner by default, circles from the member list, checked where data leaves'

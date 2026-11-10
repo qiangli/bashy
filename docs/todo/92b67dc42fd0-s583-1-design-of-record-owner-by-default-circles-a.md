@@ -3,12 +3,13 @@ id: 92b67dc42fd0
 kind: doc
 title: 'S583.1 Design of record: owner by default, circles are member attributes, enforce at egress'
 seq: 3132
-status: todo
+status: assigned
 priority: p0
 labels:
     - boundary
     - design
 created: 2026-11-06T21:45:55.324575Z
+assignee: claude-opus5.5
 sprint: 583
 sprint_id: 2035b56b-d719-5d80-8c39-6195df0d1e6a
 sprint_title: 'Boundary control (KISS): owner by default, circles from the member list, checked where data leaves'

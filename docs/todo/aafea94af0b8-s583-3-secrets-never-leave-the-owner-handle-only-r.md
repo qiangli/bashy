@@ -3,12 +3,13 @@ id: aafea94af0b8
 kind: feature
 title: 'S583.3 Secrets never leave the owner: handle-only, redact at egress, TTY reveal'
 seq: 3134
-status: todo
+status: assigned
 priority: p0
 labels:
     - boundary
     - secrets
 created: 2026-11-06T21:45:55.628507Z
+assignee: opencode-glm-5.3
 sprint: 583
 sprint_id: 2035b56b-d719-5d80-8c39-6195df0d1e6a
 sprint_title: 'Boundary control (KISS): owner by default, circles from the member list, checked where data leaves'
