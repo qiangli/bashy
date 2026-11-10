@@ -626,6 +626,7 @@ var verbSynopsis = map[string]string{
 	"token":              "mint and manage scoped coordination tokens (attenuated; the value is never printed by default)",
 	"fleet":              "coordination credentials for satellite migrations (master-token save/mint; never printed)",
 	"satellite":          "satellite daily operations: list/show, pairing invites, and transfer",
+	"member":             "Cloudbox account members: list, invite, accept, set circle, remove, and check",
 	"reproduce":          "dry-run what master metadata can recreate (reproduce --plan; read-only, no --apply)",
 	"paired-host":        "paired hosts from the master, hosts joined with peers (paired-host ls; read-only)",
 	"resource":           "host totals and active weave disk, CPU, GPU, and memory usage",

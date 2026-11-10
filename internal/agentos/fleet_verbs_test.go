@@ -198,6 +198,38 @@ func TestSatelliteReproducePairedHostVerbsResolve(t *testing.T) {
 	}
 }
 
+func TestMemberFrontDoorRegistration(t *testing.T) {
+	ringDir(t)
+	if !slices.Contains(alwaysShimVerbs, "member") {
+		t.Fatal("member has no bare shim")
+	}
+	if synopsisOf("member") == "" {
+		t.Fatal("member has no synopsis")
+	}
+	if _, _, verbs := commandsCatalog(); !slices.Contains(verbs, "member") {
+		t.Fatal("member missing from command catalog")
+	}
+	for _, path := range []string{"member", "member ls", "member invite", "member accept", "member set", "member rm", "member of", "member invitations", "member check"} {
+		if _, ok := cobraSchemas("member")[path]; !ok {
+			t.Errorf("member schema missing %q", path)
+		}
+	}
+	for _, tc := range []struct{ sub, flag string }{{"ls", "--json"}, {"invite", "--dry-run"}, {"accept", "--dry-run"}, {"set", "--dry-run"}, {"rm", "--dry-run"}, {"check", "--json"}} {
+		out, err := runFleetVerb(t, "member", tc.sub, "--help")
+		if err != nil || !strings.Contains(out, tc.flag) {
+			t.Errorf("member %s --help missing %s: %v\n%s", tc.sub, tc.flag, err, out)
+		}
+	}
+	if _, ok := cobraSchemas("member")["member completion"]; ok {
+		t.Error("member unexpectedly exposes cobra completion")
+	}
+	for _, effect := range []string{"net", "read", "write"} {
+		if !slices.Contains(verbAtlasRecord("member", false).Effects, effect) {
+			t.Errorf("member atlas missing %s", effect)
+		}
+	}
+}
+
 // TestTokenCreateRefusesWithoutAnOutputSink proves the minted value is never
 // printed by default: without --to-secret or --stdout, create refuses before
 // any network or mint, so no value can leak to the terminal. Hermetic: the

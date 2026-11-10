@@ -72,6 +72,17 @@ func dispatchSatellite(args []string) int {
 	return 0
 }
 
+// dispatchMember runs the account member tree from yoke.
+func dispatchMember(args []string) int {
+	cmd := fleet.NewMemberCmd()
+	setCobraArgs(cmd, args)
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy member:", err)
+		return fleet.ExitCode(err)
+	}
+	return 0
+}
+
 // dispatchReproduce runs the `bashy reproduce` verb (plan-only in this run).
 func dispatchReproduce(args []string) int {
 	cmd := fleet.NewReproduceCmd()

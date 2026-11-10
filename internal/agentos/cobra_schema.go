@@ -98,6 +98,8 @@ func cobraVerb(name string) *cobra.Command {
 		return newFleetCmd()
 	case "satellite":
 		return fleet.NewSatelliteCmd()
+	case "member":
+		return fleet.NewMemberCmd()
 	case "reproduce":
 		return fleet.NewReproduceCmd()
 	case "paired-host":

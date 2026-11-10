@@ -157,7 +157,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "account", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "shape", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile", "transcribe",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "account", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "member", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "shape", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile", "transcribe",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -974,6 +974,8 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// Satellite daily operations (S490, S598): list/show read operations,
 		// owner-scoped host pairing invites, and transfer.
 		dispatchExit(dispatchSatellite(os.Args[2:]))
+	case "member":
+		dispatchExit(dispatchMember(os.Args[2:]))
 	case "reproduce":
 		// Plan-only recreation dry-run (S490): reproduce --plan lists the
 		// recreate actions master metadata supports, plus the gaps it

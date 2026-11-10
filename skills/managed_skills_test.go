@@ -25,7 +25,7 @@ func TestBashyIsTheOnlyEmbeddedSkill(t *testing.T) {
 // bashy/commands/ is embedded byte-identical to its canonical source, along
 // with its reference.md/skill.dhnt companions where it has them.
 func TestCommandDocsAvailable(t *testing.T) {
-	want := []string{"account", "adapt", "collaborate", "common-options", "conductor", "desk", "dks", "feed", "feed-setup", "force-agent-shell", "inbox", "knowledge-transfer", "lens", "shape", "sprint", "steward", "supervisor", "transcribe"}
+	want := []string{"account", "adapt", "collaborate", "common-options", "conductor", "desk", "dks", "feed", "feed-setup", "force-agent-shell", "inbox", "knowledge-transfer", "lens", "member", "shape", "sprint", "steward", "supervisor", "transcribe"}
 	if got := CommandNames(); !slices.Equal(got, want) {
 		t.Fatalf("CommandNames() = %v, want %v", got, want)
 	}
