@@ -3,9 +3,11 @@ id: 7a2db9cf8cf6
 kind: feature
 title: A5 LLM usage alarm skill-script, usage page, kb runbook 'share an LLM with metering'
 seq: 3204
-status: todo
+status: assigned
 priority: p2
 created: 2026-11-10T01:04:30.743325Z
+weave: 62
+assignee: muse-spark1.3
 sprint: 602
 sprint_id: 945d80da-6344-5fa1-8afb-08d6cac5d7a0
 sprint_title: 'Metered shared LLM access: per-peer usage, cost and limits on the LLM door (provider-agnostic)'
