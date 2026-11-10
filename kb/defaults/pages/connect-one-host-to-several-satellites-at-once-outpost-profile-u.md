@@ -4,19 +4,26 @@ seq: 8
 form: page
 type: runbook
 title: Connect one host to several satellites at once (outpost-profile up)
-description: 'Publish a host''s apps (e.g. Klatch) through more than one satellite simultaneously by running one outpost instance per extra satellite — WHEN a host must stay on its satellite and also serve members of another satellite (keywords: multi-satellite, second satellite, outpost-profile, up, down, instance, Klatch, share)'
+description: 'LEGACY (kept until concurrent attachments ship; prefer `bashy outpost satellite attach`): publish a host''s apps (e.g. Klatch) through more than one satellite simultaneously by running one outpost instance per extra satellite — WHEN a host must stay on its satellite and also serve members of another satellite (keywords: multi-satellite, second satellite, outpost-profile, up, down, instance, Klatch, share)'
 tags:
     - outpost
     - satellite
     - klatch
     - multi-satellite
 status: candidate
-evidence: 'S565 2026-11-07: dev box and native Windows live runs; private two-satellite sandbox e2e PASS 16/16 twice; registration from the bashy src pin verified on rc.27; add no longer restarts the main outpost from outpost 80ad40f (bashy pin 789393c9)'
+evidence: 'S565 2026-11-07: dev box and native Windows live runs; private two-satellite sandbox e2e PASS 16/16 twice; registration from the bashy src pin verified on rc.27; add no longer restarts the main outpost from outpost 80ad40f (bashy pin 789393c9); S606 S6 2026-11-10: single-daemon `outpost satellite attach` replaces the multi-instance workaround, page marked legacy'
 source:
     tool: claude
 created: "2026-11-07T20:47:23Z"
-updated: "2026-11-07T22:03:13Z"
+updated: "2026-11-10T16:00:00Z"
 ---
+
+> **Legacy.** One outpost instance per extra satellite (this page) is the
+> workaround for daemons that cannot attach to several satellites at once.
+> Current daemons attach singly: `bashy outpost satellite attach` (list with
+> `bashy outpost satellite list`) — see
+> [[kb:satellite-sharing-model-one-owner-mutual-membership-pair-with-your-own-account]].
+> Kept until concurrent attachments ship; do not build on it.
 
 ## Goal
 

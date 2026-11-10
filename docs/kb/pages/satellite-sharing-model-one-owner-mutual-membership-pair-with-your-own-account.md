@@ -12,11 +12,11 @@ tags:
     - membership
     - outpost
 status: candidate
-evidence: '2026-11-07: observed live on a cloud satellite (accepted invitation added both sides; a host paired with the owner''s code landed under the owner); sharee elevation per outpost connect --help'
+evidence: '2026-11-07: observed live on a cloud satellite (accepted invitation added both sides; a host paired with the owner''s code landed under the owner); sharee elevation per outpost connect --help; S606 S6 2026-11-10: multi-satellite wording switched to single-daemon `outpost satellite attach`; outpost-profile workaround marked legacy'
 source:
     tool: claude
 created: "2026-11-07T22:03:05Z"
-updated: "2026-11-07T22:59:04Z"
+updated: "2026-11-10T16:00:00Z"
 ---
 
 ## The model
@@ -31,4 +31,4 @@ updated: "2026-11-07T22:59:04Z"
 
 - App URL: `$SATELLITE_URL/matrix/h/$HOST_NAME/app/$APP/`. It needs sign-in on that satellite, then elevation for the host.
 - The satellite's landing page has no sign-in; owners enter through the master's Satellites page, Open console.
-- To serve members of a second satellite without moving the host, run an extra outpost instance (`outpost-profile up`, see that page) rather than re-pairing.
+- To serve members of a second satellite without moving the host, attach the single daemon to both (`bashy outpost satellite attach`, list with `bashy outpost satellite list`) rather than re-pairing. The `outpost-profile` multi-instance workaround is legacy: kept until concurrent attachments ship, do not build on it.

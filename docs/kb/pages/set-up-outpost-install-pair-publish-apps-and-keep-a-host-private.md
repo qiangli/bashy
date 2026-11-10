@@ -14,7 +14,7 @@ tags:
     - elevation
     - privacy
 status: candidate
-evidence: '2026-11-07: every command and flag checked against outpost <cmd> --help and bashy service list on the current release; defaults from outpost/docs/settings.md and docs/pairing.md; install one-liners from the bashy README'
+evidence: '2026-11-07: every command and flag checked against outpost <cmd> --help and bashy service list on the current release; defaults from outpost/docs/settings.md and docs/pairing.md; install one-liners from the bashy README; S606 S6 2026-11-10: multi-satellite row switched to single-daemon `outpost satellite attach`; outpost-profile workaround marked legacy'
 source:
     tool: claude
 created: "2026-11-07T22:03:05Z"
@@ -88,5 +88,5 @@ A host shared with you needs no password: the share grant is the authority. Agen
 
 ## More
 
-- Several satellites at once: `outpost-profile up` (see the outpost-profile page).
+- Several satellites at once: attach the single daemon to each (`bashy outpost satellite attach`, list with `bashy outpost satellite list`). The `outpost-profile` multi-instance workaround is legacy: kept until concurrent attachments ship, do not build on it.
 - Never `pkill`/`killall` outpost by pattern: it is the only remote path to the host. Use `outpost restart` / `outpost disable`.

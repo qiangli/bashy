@@ -34,6 +34,7 @@ func dispatchObs(arg string) {
 func newOtelCmd() *cobra.Command {
 	cmd := otelcli.NewCommand()
 	otelquery.AddCommands(cmd)
+	disableCobraCompletion(cmd)
 	return cmd
 }
 

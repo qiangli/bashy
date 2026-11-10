@@ -26,7 +26,7 @@ func TestE2ELLMFrontDoor(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("bashy llm --help exited %d: %s", code, stderr)
 	}
-	for _, want := range []string{"serve", "pools", "env"} {
+	for _, want := range []string{"serve", "pools", "env", "peer"} {
 		if !strings.Contains(help, want) {
 			t.Errorf("bashy llm --help missing %q:\n%s", want, help)
 		}

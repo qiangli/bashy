@@ -24,6 +24,7 @@ func dispatchEngine(arg string) {
 	switch arg {
 	case "podman":
 		cmd := podmanengine.NewPodmanCmd()
+		disableCobraCompletion(cmd)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
@@ -38,6 +39,7 @@ func dispatchEngine(arg string) {
 		// Dedicated rootful DKS (k3s) machine — Windows uses the WSL/Hyper-V
 		// provider under the hood via the same podman machine API.
 		cmd := podmanengine.NewDKSCmd()
+		disableCobraCompletion(cmd)
 		cmd.Long += "\n\nScope namespaces: 'bashy dks use @scope:<path>' selects one; 'bashy dks list [--json]' lists reachable ones."
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {

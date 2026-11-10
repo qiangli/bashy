@@ -234,6 +234,89 @@ func TestMemberFrontDoorRegistration(t *testing.T) {
 // printed by default: without --to-secret or --stdout, create refuses before
 // any network or mint, so no value can leak to the terminal. Hermetic: the
 // refusal precedes client construction.
+// TestPairedHostInviteAndLLMPeerSurface reconciles the S606 pair/attach
+// surface on the bashy side: `paired-host invite` (the pair-once code for
+// your OWN account), `llm peer add --email/--circle` (the member-bound peer
+// credential), and `member invite --circle`. Help text names the flags, the
+// cobra schemas carry the subcommand paths, and the atlas records carry the
+// effects the MCP descriptors serve.
+func TestPairedHostInviteAndLLMPeerSurface(t *testing.T) {
+	ringDir(t)
+	if syn := synopsisOf("paired-host"); !strings.Contains(syn, "invite") {
+		t.Errorf("paired-host synopsis hides invite: %q", syn)
+	}
+	if syn := synopsisOf("llm"); !strings.Contains(syn, "peer") {
+		t.Errorf("llm synopsis hides peer sharing: %q", syn)
+	}
+
+	out, err := runFleetVerb(t, "paired-host", "invite", "--help")
+	if err != nil {
+		t.Fatalf("paired-host invite --help: %v\n%s", err, out)
+	}
+	for _, want := range []string{"--dry-run", "--json", "own account"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("paired-host invite --help hides %q:\n%s", want, out)
+		}
+	}
+
+	out, err = runFleetVerb(t, "llm", "peer", "--help")
+	if err != nil {
+		t.Fatalf("llm peer --help: %v\n%s", err, out)
+	}
+	for _, want := range []string{"add", "share", "revoke", "limit"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("llm peer --help hides %q:\n%s", want, out)
+		}
+	}
+
+	out, err = runFleetVerb(t, "llm", "peer", "add", "--help")
+	if err != nil {
+		t.Fatalf("llm peer add --help: %v\n%s", err, out)
+	}
+	for _, want := range []string{"--email", "--circle", "--share", "--dry-run", "--json"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("llm peer add --help hides %q:\n%s", want, out)
+		}
+	}
+
+	out, err = runFleetVerb(t, "member", "invite", "--help")
+	if err != nil {
+		t.Fatalf("member invite --help: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "--circle") {
+		t.Errorf("member invite --help hides --circle:\n%s", out)
+	}
+
+	for verb, want := range map[string][]string{
+		"paired-host": {"paired-host", "paired-host ls", "paired-host invite"},
+		"llm":         {"llm peer", "llm peer add", "llm peer set"},
+		"member":      {"member invite", "member accept"},
+	} {
+		schemas := cobraSchemas(verb)
+		for _, path := range want {
+			if _, ok := schemas[path]; !ok {
+				t.Errorf("%s schema missing %q", verb, path)
+			}
+		}
+	}
+
+	// paired-host invite POSTs a mint over the network: the union is
+	// net+read+write.
+	for _, want := range []string{"net", "read", "write"} {
+		if !slices.Contains(verbAtlasRecord("paired-host", false).Effects, want) {
+			t.Errorf("paired-host effects missing %q", want)
+		}
+	}
+	// llm serves metered inference to peers: the shared atlas carries the
+	// spend/net union the MCP descriptors serve.
+	llmEffects := verbAtlasRecord("llm", false).Effects
+	for _, want := range []string{"net", "spend"} {
+		if !slices.Contains(llmEffects, want) {
+			t.Errorf("llm effects = %v, want %q", llmEffects, want)
+		}
+	}
+}
+
 func TestTokenCreateRefusesWithoutAnOutputSink(t *testing.T) {
 	ringDir(t)
 	cmd := cobraVerb("token")

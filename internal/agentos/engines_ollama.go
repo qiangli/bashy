@@ -16,6 +16,7 @@ func dispatchOllamaEngine() {
 	}
 	defaultOllamaNewEngine()
 	cmd := ollama.NewManagedOllamaCmd()
+	disableCobraCompletion(cmd)
 	cmd.SetArgs(os.Args[2:])
 	if err := cmd.Execute(); err != nil {
 		dispatchExit(1)

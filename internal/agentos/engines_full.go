@@ -29,6 +29,7 @@ func dispatchEngine(arg string) {
 		// bashy's own `bashy` machine socket, so images/containers never collide
 		// with a host engine. $BASHY_PODMAN_SYSTEM=1 defers to host podman.
 		cmd := podmanengine.NewPodmanCmd()
+		disableCobraCompletion(cmd)
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
@@ -45,6 +46,7 @@ func dispatchEngine(arg string) {
 		// hit a different podman-machine quirk (rootless → cgroup denial →
 		// pods silently never start). Reuses the engine's EnsureMachine.
 		cmd := podmanengine.NewDKSCmd()
+		disableCobraCompletion(cmd)
 		cmd.Long += "\n\nScope namespaces: 'bashy dks use @scope:<path>' selects one; 'bashy dks list [--json]' lists reachable ones."
 		cmd.SetArgs(os.Args[2:])
 		if err := cmd.Execute(); err != nil {

@@ -77,10 +77,25 @@ func OptionKey(flag string) string {
 	return strings.ReplaceAll(NormalizeOptionKey(flag), "-", "_")
 }
 
+// disableCobraCompletion is the ONE place bashy suppresses cobra's default
+// `completion` subcommand. Generated completion scripts are for
+// old-fashioned shells; bashy does discovery through its own surface
+// (--skill, help --format=mcp, the manifest, hints, and the shell's
+// built-in completion from command metadata), so the default command is
+// noise on every verb. Cobra adds it at Execute time on the root unless
+// told not to, so every in-process root passes through here:
+// setCobraArgs for the mounted verbs, and this helper directly at the few
+// dispatch sites that set argv without the common-options pass
+// (adapt, the engine/obs passthroughs).
+func disableCobraCompletion(cmd *cobra.Command) {
+	cmd.CompletionOptions.DisableDefaultCmd = true
+}
+
 // setCobraArgs is the single chokepoint for bashy-owned cobra verbs: it
 // installs the separator normalizer and the engine common options, then sets
 // argv. Both are off in the cert profile.
 func setCobraArgs(cmd *cobra.Command, args []string) {
+	disableCobraCompletion(cmd)
 	if certProfile() {
 		cmd.SetArgs(args)
 		return

@@ -88,6 +88,7 @@ func execOtel(bin string, args []string) error {
 
 func newOtelCmd() *cobra.Command {
 	cmd := otelquery.NewCommand()
+	disableCobraCompletion(cmd)
 	cmd.AddCommand(&cobra.Command{
 		Use:                "serve",
 		Short:              "Start the OTEL stack (runs the provisioned `otel` binary)",

@@ -938,6 +938,9 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		dispatchExit(runSprintDispatch(os.Args[2:], os.Stdout, os.Stderr))
 	case "adapt":
 		cmd := adapt.NewCmd(adapt.PrepareJSONLens)
+		// adapt carries its own JSON-lens argv handling, so it skips the
+		// common-options pass — but the no-completion policy still applies.
+		disableCobraCompletion(cmd)
 		cmd.SetArgs(os.Args[2:])
 		dispatchExit(adapt.ExitCode(cmd.Execute()))
 	case "adapter":
@@ -1114,6 +1117,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 				fmt.Fprintf(w, "seat: cannot read (%v)\n\n", err)
 			}
 			sc := coreskills.NewSkillsCmd(skillsOptions()...)
+			disableCobraCompletion(sc)
 			sc.SetArgs([]string{"show", "steward"})
 			sc.SetOut(w)
 			return sc.Execute()
@@ -1143,6 +1147,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// conductor operating skill; `conductor dashboard` mounts the board.
 		renderConductorSkill := func(w io.Writer) error {
 			sc := coreskills.NewSkillsCmd(skillsOptions()...)
+			disableCobraCompletion(sc)
 			sc.SetArgs([]string{"show", "conductor"})
 			sc.SetOut(w)
 			return sc.Execute()
@@ -2097,6 +2102,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 	}
 	if isSkillDocName(os.Args[1]) {
 		cmd := coreskills.NewSkillsCmd(skillsOptions()...)
+		disableCobraCompletion(cmd)
 		cmd.SetArgs([]string{"show", os.Args[1]})
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy skill:", err)
