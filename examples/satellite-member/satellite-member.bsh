@@ -158,6 +158,9 @@ cmd_pair() {
     set -- outpost register --code "$code"
     [ -n "$host" ] && set -- "$@" --name "$host"
     [ -n "$server" ] && set -- "$@" --server "$server"
+    # The operator's explicit consent reaches outpost too: its legacy
+    # exchange refuses a non-interactive redeem without it.
+    [ "$as_owner_node" = "1" ] && set -- "$@" --as-owner-node
     "$(bashy_bin)" "$@" || fail "pairing failed" 1
     echo "$PROG: paired once with the cloudbox portal; next: $PROG accept, then $PROG attach <satellite>"
 }

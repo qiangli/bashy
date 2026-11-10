@@ -5,7 +5,7 @@
 # `outpost restart` and `bashy service` around files under the matrix
 # config directory.
 #
-#   outpost-profile add <name> --code <code> --server <url> [--name <host>]
+#   outpost-profile add <name> --code <code> --server <url> [--name <host>] [--as-owner-node]
 #   outpost-profile use <name>
 #   outpost-profile list
 #   outpost-profile up <name> [--app <app>]... [--admin-port <port>]
@@ -64,7 +64,7 @@ reserve the name and refuse the registration above).
 Pair once per satellite into a named profile, then switch:
 
 ```sh
-outpost-profile add <name> --code <code> --server <url> [--name <host>]
+outpost-profile add <name> --code <code> --server <url> [--name <host>] [--as-owner-node]
 outpost-profile use <name>
 outpost-profile list
 ```
@@ -157,7 +157,7 @@ set -e
 PROG=outpost-profile
 
 usage() {
-    echo "Usage: $PROG add <name> --code <code> --server <url> [--name <host>]" >&2
+    echo "Usage: $PROG add <name> --code <code> --server <url> [--name <host>] [--as-owner-node]" >&2
     echo "       $PROG use <name>" >&2
     echo "       $PROG list" >&2
     echo "       $PROG up <name> [--app <app>]... [--admin-port <port>]" >&2
@@ -262,7 +262,7 @@ profile_name_of() {
 }
 
 cmd_add() {
-    name=$1; code=$2; server=$3; host=$4
+    name=$1; code=$2; server=$3; host=$4; as_owner_node=${5:-}
     check_name "$name"
     [ -n "$code" ] || usage
     [ -n "$server" ] || usage
@@ -277,6 +277,12 @@ cmd_add() {
     regname=()
     if [ -n "$host" ]; then
         regname=(--name "$host")
+    fi
+    # A profile pairs through the satellite's legacy exchange, which makes
+    # the account that minted the code this host's owner; outpost requires
+    # that consent explicitly in non-interactive runs.
+    if [ "$as_owner_node" = "1" ]; then
+        regname+=(--as-owner-node)
     fi
     nout=$(native_path "$out")
     if ! reg_out=$("$(outpost_bin)" register --server "$server" --code "$code" "${regname[@]}" --out "$nout" 2>&1); then
@@ -559,9 +565,10 @@ case "$sub" in
     add)
         if [ $# -lt 1 ]; then usage; fi
         name=$1; shift
-        code=""; server=""; host=""
+        code=""; server=""; host=""; as_owner_node=""
         while [ $# -gt 0 ]; do
             case "$1" in
+                --as-owner-node) as_owner_node=1 ;;
                 --code=*) code=${1#--code=} ;;
                 --server=*) server=${1#--server=} ;;
                 --name=*) host=${1#--name=} ;;
@@ -575,7 +582,7 @@ case "$sub" in
             shift
         done
         [ $# -eq 0 ] || usage
-        cmd_add "$name" "$code" "$server" "$host"
+        cmd_add "$name" "$code" "$server" "$host" "$as_owner_node"
         ;;
     use)
         [ $# -eq 1 ] || usage
