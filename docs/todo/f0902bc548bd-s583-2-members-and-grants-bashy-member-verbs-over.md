@@ -3,7 +3,7 @@ id: f0902bc548bd
 kind: feature
 title: 'S583.2 Members and grants: bashy member verbs over the Cloudbox list, circle check, owner = paired email'
 seq: 3133
-status: assigned
+status: done
 priority: p0
 labels:
     - boundary
@@ -13,6 +13,8 @@ assignee: codex-gpt6-sol
 sprint: 583
 sprint_id: 2035b56b-d719-5d80-8c39-6195df0d1e6a
 sprint_title: 'Boundary control (KISS): owner by default, circles from the member list, checked where data leaves'
+closed: 2026-11-10T12:34:15.188622Z
+closed_by: claude-opus5.5-s606
 ---
 
 Members and grants, the small core. KISS rescope 2026-11-09. Depends on: S583.1; client codes against the Cloudbox members wire (ticket a99e88ac) with a fixture until it ships.

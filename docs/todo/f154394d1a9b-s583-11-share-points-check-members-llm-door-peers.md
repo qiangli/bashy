@@ -3,7 +3,7 @@ id: f154394d1a9b
 kind: feature
 title: 'S583.11 Share points check members: LLM door peers bound to member email or circle'
 seq: 3142
-status: assigned
+status: done
 priority: p1
 labels:
     - boundary
@@ -13,6 +13,8 @@ assignee: codex-gpt5.6-sol
 sprint: 583
 sprint_id: 2035b56b-d719-5d80-8c39-6195df0d1e6a
 sprint_title: 'Boundary control (KISS): owner by default, circles from the member list, checked where data leaves'
+closed: 2026-11-10T12:53:05.666095Z
+closed_by: claude-opus5.5-s606
 ---
 
 Share points check members. KISS rescope 2026-11-09. Depends on: S583.2.
