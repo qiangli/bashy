@@ -561,6 +561,13 @@ BASH53_RUN = BASH53_TIMEOUT=$(BASH_TEST_TIMEOUT)s \
 	 $(BIN_DIR)/bash53suite -tests-dir $(BASH_TESTS_DIR) -bash $(BASHY) \
 	   -tests "$(TESTS)" -skip "$(BASH_TEST_SKIP)"
 test-bash-run: test-bash-fixtures $(BIN_DIR)/bash53suite
+	@if [ "$$(id -u 2>/dev/null)" = 0 ] && [ -z "$$BASH53_ALLOW_ROOT" ]; then \
+	  echo "test-bash: refusing to run as root: several Bash 5.3 fixtures (redir, test, ...) fail by design" >&2; \
+	  echo "  under root, so the result would not be the conformance gate. Run the gate as a" >&2; \
+	  echo "  non-root user, or use the sealed one: make test-bash-container (86/86 expected;" >&2; \
+	  echo "  dialect-on: make test-bash-container-bashpp). BASH53_ALLOW_ROOT=1 overrides." >&2; \
+	  exit 2; \
+	fi
 	@if [ -t 0 ]; then $(BASH53_RUN); \
 	 elif script -qefc true /dev/null >/dev/null 2>&1; then script -qefc '$(BASH53_RUN)' /dev/null; \
 	 else script -q /dev/null sh -c '$(BASH53_RUN)'; fi
