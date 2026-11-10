@@ -57,9 +57,19 @@ OCI="$OCI" GO="$GO_CMD" SUITE=bash53 ARCH="$ARCH" IMAGE="$IMAGE" BASE_IMAGE="$BA
   scripts/build-conformance-image.sh
 
 echo ">> running all 86 fixtures in the hermetic image" >&2
+evidence="${BASH53_EVIDENCE:-bin/bash53-evidence-$BASH53_BASHPP.json}"
+mkdir -p "$(dirname "$evidence")"
+suite_json="$(mktemp)"
+trap 'rm -f "$suite_json"' EXIT
+image_id="$($OCI image inspect --format '{{.Id}}' "$IMAGE")"
+commit="$(git rev-parse HEAD)"
+sh_pin="$(awk '$1 == "replace" && $2 == "mvdan.cc/sh/v3" { print $5; exit }' go.mod)"
+[ -n "$sh_pin" ] || { echo 'test-bash-container: missing sh pin' >&2; exit 2; }
+host_os="$(uname -s)"
 # --tty supplies a controlling terminal for read/test/vredir. A fresh tmpfs
 # prevents fixed upstream names such as /tmp/bash from colliding with host or
 # prior-run state. The baked fixture tree and binaries remain immutable.
+set +e
 $OCI run --rm --platform "linux/$ARCH" \
   --name "$CONTAINER" --label "io.dhnt.test.lane=$LANE" \
   --cpus "${BASHY_TEST_CPUS:-2}" --memory "${BASHY_TEST_MEMORY:-6g}" --pids-limit 4096 \
@@ -80,4 +90,14 @@ $OCI run --rm --platform "linux/$ARCH" \
     -tests-dir /bash53/tests \
     -bash "./bin/bash-linux-$ARCH/bash" \
     -bashpp-mode "$BASH53_BASHPP" \
-    -tests "${TESTS:-}"
+    -tests "${TESTS:-}" -json >"$suite_json"
+runner_status=$?
+set -e
+cat "$suite_json"
+evidence_args=(-input "$suite_json" -output "$evidence" -bashy-commit "$commit" \
+  -sh-pin "$sh_pin" -image-id "$image_id" -mode "$BASH53_BASHPP" \
+  -uid 1000 -host-os "$host_os")
+if [ -n "${BASH53_BASELINE:-}" ]; then evidence_args+=(-baseline "$BASH53_BASELINE"); fi
+if [ "${BASH53_GATE:-0}" = 1 ]; then evidence_args+=(-gate); fi
+"${go_cmd[@]}" run ./tools/bash53evidence "${evidence_args[@]}"
+exit "$runner_status"

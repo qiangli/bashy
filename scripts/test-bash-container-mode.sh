@@ -8,6 +8,7 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/bashy-container-mode.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM
 mkdir -p "$scratch/repo/scripts" "$scratch/fakebin"
 cp "$root/Makefile" "$scratch/repo/Makefile"
+printf '%s\n' 'replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v0.0.0-test' >"$scratch/repo/go.mod"
 cp "$root/scripts/test-bash-container.sh" "$root/scripts/test-lane-id.sh" "$scratch/repo/scripts/"
 
 cat >"$scratch/fakebin/bash" <<'EOF'
@@ -18,19 +19,31 @@ exec /bin/bash "$@"
 EOF
 cat >"$scratch/fakebin/go" <<'EOF'
 #!/bin/sh
-[ "$*" = 'env GOARCH' ] || exit 81
-printf '%s\n' amd64
+case "$*" in
+  'env GOARCH') printf '%s\n' amd64 ;;
+  'run ./tools/bash53evidence '*) exit 0 ;;
+  *) exit 81 ;;
+esac
 EOF
 cat >"$scratch/fakebin/oci" <<'EOF'
 #!/bin/sh
 printf '%s\n' "$@" >>"$MODE_OCI_LOG"
-case "$1" in info|run) exit 0 ;; *) exit 82 ;; esac
+case "$1" in
+  info) exit 0 ;;
+  image) printf '%s\n' sha256:fake; exit 0 ;;
+  run) printf '%s\n' '{"schema_version":1,"infrastructure":{"status":"ok"},"verdicts":[],"summary":{"passed":0,"failed":0,"skipped":0,"timed_out":0}}'; exit 0 ;;
+  *) exit 82 ;;
+esac
+EOF
+cat >"$scratch/fakebin/git" <<'EOF'
+#!/bin/sh
+printf '%s\n' fakecommit
 EOF
 cat >"$scratch/repo/scripts/build-conformance-image.sh" <<'EOF'
 #!/bin/sh
 exit 0
 EOF
-chmod +x "$scratch/fakebin/bash" "$scratch/fakebin/go" "$scratch/fakebin/oci" \
+chmod +x "$scratch/fakebin/bash" "$scratch/fakebin/go" "$scratch/fakebin/oci" "$scratch/fakebin/git" \
   "$scratch/repo/scripts/build-conformance-image.sh"
 export MODE_OCI_LOG=$scratch/oci.log MODE_SHELL_LOG=$scratch/shell.log
 export PATH=$scratch/fakebin:/usr/bin:/bin BASHY_TEST_LANE=mode-regression

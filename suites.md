@@ -36,7 +36,12 @@ cd ../sh && PATH=/bin:/usr/bin:$(dirname "$(command -v go)") go test ./interp/ .
 ```
 
 ### test-bash
-Bash 5.3 fixture suite (86 fixtures), parallelized across cores. The 86/86 gate.
+Bash 5.3 fixture suite (86 fixtures), parallelized across cores. Native local
+diagnostic only. **THE release gate** is `make test-bash-gate`: sealed Linux
+container, both Bash# modes (off then on), 86/86 each. It writes
+`bin/bash53-evidence-0.json` and `bin/bash53-evidence-1.json`; use
+`BASH53_EVIDENCE` to override a single run's path and `BASH53_BASELINE` for
+fixture-name NEW/RECOVERED/UNCHANGED comparison against matching mode evidence.
 ```bash
 make test-bash-parallel
 ```
