@@ -4,14 +4,12 @@ kind: feature
 title: 'S583.13 Egress: git remote, handoff, feed, mirror/rclone, circle check --staged'
 seq: 3144
 status: todo
-priority: p1
+priority: p3
 labels:
     - boundary
     - egress
+    - boundary-later
 created: 2026-11-06T21:45:57.152459Z
-sprint: 583
-sprint_id: 2035b56b-d719-5d80-8c39-6195df0d1e6a
-sprint_title: 'Boundary control: circles (owner / family / friend / team / guest / public) across all of bashy'
 ---
 
 Egress and sharing. git commit/push and gh: remote must belong to the repo's circle (coordGuard, bashy/internal/agentos/coord.go). handoff/resume artifacts and feed posts carry their circle and are refused toward non-members; mirror, rclone, kopia destinations and loom/act-runner registration are bound to a circle; browser/fetch uploads checked. `bashy circle check --staged` runs per-circle deny patterns (e.g. personal/family identifiers never in a team repo, team identifiers never in public) and is called by the pre-commit hook when present; umbrella `script/scrub-gate.sh` stays unchanged as the public circle policy.
