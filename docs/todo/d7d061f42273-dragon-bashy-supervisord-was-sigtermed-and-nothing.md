@@ -3,7 +3,7 @@ id: d7d061f42273
 kind: bug
 title: 'dragon: bashy supervisord was SIGTERMed and nothing restarted it; orphaned llm held its port'
 seq: 3211
-status: assigned
+status: todo
 priority: p1
 labels:
     - service
