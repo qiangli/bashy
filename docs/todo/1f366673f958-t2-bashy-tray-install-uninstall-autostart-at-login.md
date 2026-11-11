@@ -3,7 +3,7 @@ id: 1f366673f958
 kind: feature
 title: T2 bashy-tray install/uninstall autostart at login on 3 OSes; onboard tray calls it; kb page
 seq: 3217
-status: todo
+status: assigned
 priority: p2
 labels:
     - tray
@@ -11,6 +11,8 @@ labels:
     - macos
     - linux
 created: 2026-11-11T02:59:23.703527Z
+weave: 92
+assignee: claude-sonnet5.5
 sprint: 605
 sprint_id: 1d5a938b-6b62-5819-8451-d02151cdd908
 sprint_title: 'Tray app (example level): outpost admin and bashy apps in embedded webviews'
