@@ -3,12 +3,13 @@ id: a847aaf17506
 kind: feature
 title: 'M2b examples/cast: cast record as a custom command (Go fence over pty/ConPTY), not core'
 seq: 3218
-status: todo
+status: assigned
 priority: p1
 labels:
     - media
     - windows
 created: 2026-11-11T03:52:26.50563Z
+assignee: claude-fable5.1-w89
 sprint: 603
 sprint_id: c808e55d-6ce2-5525-8829-96499861c90e
 sprint_title: 'Agent-assisted PDF and video: small verbs, a media skill-script and kb pages any agent can follow'
