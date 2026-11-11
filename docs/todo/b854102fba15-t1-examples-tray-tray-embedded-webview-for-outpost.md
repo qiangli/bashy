@@ -3,7 +3,7 @@ id: b854102fba15
 kind: feature
 title: 'T1 examples/tray: tray + embedded webview for outpost admin and bashy apps on Windows, macOS, Linux'
 seq: 3216
-status: todo
+status: assigned
 priority: p1
 labels:
     - tray
@@ -11,6 +11,8 @@ labels:
     - macos
     - linux
 created: 2026-11-11T02:59:23.538476Z
+weave: 80
+assignee: codex-gpt6-sol
 sprint: 605
 sprint_id: 1d5a938b-6b62-5819-8451-d02151cdd908
 sprint_title: 'Tray app (example level): outpost admin and bashy apps in embedded webviews'
