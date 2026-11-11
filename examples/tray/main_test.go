@@ -1,11 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
+	"image/color"
+	"image/png"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -112,6 +116,31 @@ func TestIcon(t *testing.T) {
 				t.Fatalf("ico offset %d", got)
 			}
 		}
+	}
+}
+
+func TestIconColors(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("icon is ICO-wrapped on Windows")
+	}
+	for level, want := range map[string]color.RGBA{
+		"off":     {235, 28, 36, 255},
+		"on":      {39, 172, 94, 255},
+		"partial": {232, 166, 36, 255},
+	} {
+		im, err := png.Decode(bytes.NewReader(icon(level)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := color.RGBAModel.Convert(im.At(16, 16)).(color.RGBA); got != want {
+			t.Fatalf("%s: center %v, want %v", level, got, want)
+		}
+	}
+}
+
+func TestPendingTitle(t *testing.T) {
+	if pendingTitle("start") != "Outpost: starting…" || pendingTitle("stop") != "Outpost: stopping…" {
+		t.Fatal(pendingTitle("start"), pendingTitle("stop"))
 	}
 }
 

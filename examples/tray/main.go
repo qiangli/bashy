@@ -302,8 +302,20 @@ func (t *tray) quit() {
 	t.mu.Unlock()
 	systray.Quit()
 }
+
+// settleSeconds bounds the fast poll after Start/Stop; outpost enable itself
+// waits up to 15 s for the supervisor.
+const settleSeconds = 20
+
+func pendingTitle(verb string) string {
+	if verb == "start" {
+		return "Outpost: starting…"
+	}
+	return "Outpost: stopping…"
+}
+
 func icon(level string) []byte {
-	col := color.RGBA{130, 130, 130, 255}
+	col := color.RGBA{235, 28, 36, 255} // off: bright red, readable on light and dark menu bars
 	if level == "on" {
 		col = color.RGBA{39, 172, 94, 255}
 	}
@@ -357,7 +369,7 @@ func (t *tray) run(items []extraItem, admin string) {
 		t.start = systray.AddMenuItem("Start outpost", "")
 		t.stop = systray.AddMenuItem("Stop outpost", "")
 		quit := systray.AddMenuItem("Quit", "")
-		refresh := func() {
+		refresh := func() status {
 			s := pollStatus(context.Background(), command)
 			systray.SetIcon(icon(s.level()))
 			systray.SetTooltip(s.title())
@@ -371,6 +383,7 @@ func (t *tray) run(items []extraItem, admin string) {
 				t.start.Show()
 				t.admin.Disable()
 			}
+			return s
 		}
 		go func() {
 			refresh()
@@ -403,6 +416,11 @@ func (t *tray) run(items []extraItem, admin string) {
 		action := func(item *systray.MenuItem, verb string) {
 			go func() {
 				for range item.ClickedCh {
+					// outpost stop returns once the daemon is signalled and
+					// enable once it is launched; the daemon changes state a
+					// few seconds later. Say so, then poll until it settles.
+					want := verb == "start"
+					statusItem.SetTitle(pendingTitle(verb))
 					timeout := 30 * time.Second
 					if verb == "start" {
 						timeout = 20 * time.Second
@@ -413,7 +431,12 @@ func (t *tray) run(items []extraItem, admin string) {
 					if err != nil {
 						log.Printf("outpost %s: %v: %s", verb, err, strings.TrimSpace(string(out)))
 					}
-					refresh()
+					for i := 0; i < settleSeconds; i++ {
+						if refresh().Running == want {
+							break
+						}
+						time.Sleep(time.Second)
+					}
 				}
 			}()
 		}
