@@ -8,7 +8,9 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/bashy-media-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 TMP=$(cd "$TMP" && pwd)
-export BASHY_HINTS=off BASHY_TELEMETRY_QUIET=1
+# media doctor registers tools: keep them in a scratch command ring, never the user's.
+export BASHY_COMMANDS_DIR="$TMP/commands" BASHY_HINTS=off BASHY_TELEMETRY_QUIET=1
+mkdir -p "$BASHY_COMMANDS_DIR"
 media() { bashy "$HERE/media.bsh" "$@"; }
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "ok   $*"; }

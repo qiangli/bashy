@@ -48,7 +48,13 @@ demo/
   camera/
 ```
 
-`storyboard.txt` orders `card`, `slide`, `step`, `pair`, and `camera` segments. Put a Bashy scene in `steps/NAME.sh`; the build records it with the registered `cast` command, then agg renders it. Put one spoken line per segment in `narration.txt`.
+`storyboard.txt` orders `card`, `slide`, `step`, `pair`, and `camera` segments. Put a Bashy scene in `steps/NAME.sh`; the build records it with the registered `cast` command, then agg renders it. Put one spoken line per segment in `narration.txt`. One segment per line, paths relative to the project:
+
+```text
+slide slides/01.png 18    # image, seconds (default 3)
+step demo                 # runs steps/demo.sh, recorded by cast
+slide slides/02.png 18
+```
 
 Run `media narrate demo --own` once. It creates `build/script/NN.txt` and prints the missing command for each line. Run those commands from the project folder, for example:
 

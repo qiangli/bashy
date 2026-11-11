@@ -143,9 +143,10 @@ cache_root() {
 }
 
 sha256_of() {
-	if command -v sha256sum >/dev/null; then sha256sum <"$1" | { read -r h _; echo "$h"; }
-	elif command -v shasum >/dev/null; then shasum -a 256 <"$1" | { read -r h _; echo "$h"; }
-	else die "no sha256sum or shasum to verify the download"; fi
+	# sha256sum is a bashy builtin on every OS (no PATH binary needed on Windows).
+	local h=""
+	h=$(sha256sum <"$1" 2>/dev/null) || h=$(shasum -a 256 <"$1" 2>/dev/null) || die "cannot hash $1"
+	echo "${h%% *}"
 }
 
 find_cli() {
