@@ -13,11 +13,13 @@ by role.
    member-facing egress that has no explicit grant. It is not met by fencing
    stores off.
 2. **A circle is an attribute of a member, not of data.** It is the circle the
-   owner gives each email on their Cloudbox member list: `family`, `friend`,
-   `team` or `guest`. `public` means anyone. The Cloudbox list is the only source
-   of truth (ticket a99e88ac: validated `circle` field, `GET /api/v1/members`,
-   and a reverse "who lists me" view). bashy keeps no parallel list: no
-   `circles.yaml` and no `BASHY_CIRCLE`.
+   owner gives each email on their Cloudbox member list, and its name is any
+   owner-chosen lowercase slug of 1-32 characters; `public` (anyone) and
+   `owner` are reserved. `family`, `friend`, `team` and `guest` are only the
+   default circles, and a new member defaults to `guest`. The Cloudbox list is
+   the only source of truth (ticket a99e88ac: validated `circle` field, `GET
+   /api/v1/members`, and a reverse "who lists me" view). bashy keeps no
+   parallel list: no `circles.yaml` and no `BASHY_CIRCLE`.
 3. **A share grant names an email or a circle.** A circle grant resolves to the
    circle's *current* active members at check time. Removing a member, or moving
    them to another circle, revokes their access at once, bounded only by the

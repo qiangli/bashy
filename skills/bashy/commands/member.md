@@ -23,8 +23,10 @@ bashy member rm EMAIL --dry-run --json
 bashy member check EMAIL --json
 ```
 
-Circles are `family`, `friend`, `team`, and `guest`. A check allows only an
-active, mutual member from a fresh list. `ls` can show a cached list while
+A circle is any owner-chosen name: a lowercase slug of up to 32 characters;
+`public` and `owner` are reserved. `family`, `friend`, `team`, and `guest`
+are the defaults, and a new member defaults to `guest`. A check allows only
+an active, mutual member from a fresh list. `ls` can show a cached list while
 offline and marks it stale; that list cannot authorize a write or access.
 Use `--dry-run` to inspect a write request before sending it. `--json` is
 available on every subcommand.
