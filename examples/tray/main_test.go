@@ -114,3 +114,67 @@ func TestIcon(t *testing.T) {
 		}
 	}
 }
+
+func TestAutostartFilesIdempotent(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		home := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", "")
+		exe := "/opt/my apps/bashy-tray"
+		changed, err := autostartInstall(goos, home, exe)
+		if err != nil || !changed {
+			t.Fatalf("%s first install: %v %v", goos, changed, err)
+		}
+		tg, _ := autostartFor(goos, home, exe)
+		b, err := os.ReadFile(tg.Path)
+		if err != nil || !strings.Contains(string(b), "/opt/my apps/bashy-tray") {
+			t.Fatalf("%s entry: %v %q", goos, err, b)
+		}
+		if changed, err = autostartInstall(goos, home, exe); err != nil || changed {
+			t.Fatalf("%s second install changed=%v err=%v", goos, changed, err)
+		}
+		if changed, err = autostartUninstall(goos, home); err != nil || !changed {
+			t.Fatalf("%s uninstall: %v %v", goos, changed, err)
+		}
+		if changed, err = autostartUninstall(goos, home); err != nil || changed {
+			t.Fatalf("%s second uninstall: %v %v", goos, changed, err)
+		}
+	}
+}
+
+func TestAutostartWindowsRegistry(t *testing.T) {
+	var calls []string
+	val := ""
+	old := regRunner
+	defer func() { regRunner = old }()
+	regRunner = func(args ...string) ([]byte, error) {
+		calls = append(calls, args[0])
+		switch args[0] {
+		case "add":
+			val = args[7]
+		case "delete":
+			val = ""
+		case "query":
+			if val == "" {
+				return nil, errors.New("not found")
+			}
+			return []byte("\r\n" + runKey + "\r\n    " + runValueName + "    REG_SZ    " + val + "\r\n"), nil
+		}
+		return nil, nil
+	}
+	exe := `C:\Program Files\bashy\bashy-tray.exe`
+	if c, err := autostartInstall("windows", "", exe); err != nil || !c {
+		t.Fatalf("install %v %v", c, err)
+	}
+	if c, err := autostartInstall("windows", "", exe); err != nil || c {
+		t.Fatalf("reinstall changed=%v err=%v", c, err)
+	}
+	if val != `"`+exe+`"` {
+		t.Fatalf("value %q", val)
+	}
+	if c, err := autostartUninstall("windows", ""); err != nil || !c {
+		t.Fatalf("uninstall %v %v", c, err)
+	}
+	if c, err := autostartUninstall("windows", ""); err != nil || c {
+		t.Fatalf("reuninstall changed=%v err=%v", c, err)
+	}
+}

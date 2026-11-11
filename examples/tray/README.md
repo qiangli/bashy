@@ -59,6 +59,8 @@ runtime, is an error; there is no browser fallback.
 
 ## Verification
 
+`bashy-tray install` / `uninstall` add or remove login autostart (see the kb runbook page on the tray).
+
 Run `go test ./...` and `go build .` in this directory. On each desktop, run
 and capture screenshots showing the three icon states, Admin and Apps windows,
 a `tray.yaml` item, and the tray after login. Check that Quit leaves a
