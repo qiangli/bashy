@@ -106,9 +106,13 @@ func pollStatus(ctx context.Context, run runner) status {
 	return s
 }
 func configPath() (string, error) {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return "", err
+	dir := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME"))
+	if dir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		dir = filepath.Join(home, ".config")
 	}
 	return filepath.Join(dir, "bashy", "tray.yaml"), nil
 }

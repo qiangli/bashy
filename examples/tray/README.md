@@ -17,8 +17,8 @@ seconds. Admin uses `http://127.0.0.1:17777`, or the host:port in
 (if owned), but never stops outpost. The Start and Stop actions call the
 installed `outpost` CLI.
 
-Place an optional `tray.yaml` in your bashy config directory (the OS user
-config directory plus `bashy`; on Linux, `$XDG_CONFIG_HOME/bashy` when set):
+Place an optional `tray.yaml` in your bashy config directory
+(`$XDG_CONFIG_HOME/bashy` when set, otherwise `~/.config/bashy`):
 
 ```yaml
 items:

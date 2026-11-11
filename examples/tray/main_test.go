@@ -83,6 +83,14 @@ func TestAdminURL(t *testing.T) {
 		t.Fatal("accepted scheme in address")
 	}
 }
+func TestConfigPath(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	got, err := configPath()
+	if err != nil || got != filepath.Join(dir, "bashy", "tray.yaml") {
+		t.Fatalf("config path %q: %v", got, err)
+	}
+}
 func TestIcon(t *testing.T) {
 	for _, level := range []string{"on", "partial", "off"} {
 		b := icon(level)
