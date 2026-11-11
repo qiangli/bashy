@@ -1,0 +1,448 @@
+#!/usr/bin/env -S bashy --bashsharp
+# onboard: bring this machine into someone else's satellite as a MEMBER,
+# one resumable sequence: install check, pair once with the user's OWN
+# account, accept the owner's invitation, attach, (tray), status.
+# One editable Bash# body for the onboard command and skill.
+#
+#   onboard [--dry-run]
+#   onboard check
+#   onboard pair [--code <code>] [--name <host>]
+#   onboard accept [<id>] [--circle <c>]
+#   onboard attach [<satellite>]
+#   onboard tray
+#   onboard status
+#
+# Thin wrapper over verbs (rod not fish): every action is one
+# `satellite-member` verb (itself one `bashy …` / `bashy outpost …` call),
+# so the pair-once + membership + attach flow lives in ONE place. This
+# script only orders the steps, inspects state first, skips what is done
+# and stops at the steps a person must do.
+
+~~~skill as guide
+---
+name: onboard
+description: Bring this machine into a satellite as a member, step by step and resumable - install check, pair once with the user's OWN cloudbox account, accept the owner's invitation, attach to the satellite. For agentic tools acting for a member. The executable body is this Bash# file; run it with bashy --bashsharp.
+metadata:
+  requires: "has=bashy"
+---
+# onboard — join a satellite as a member, resumably
+
+Roles: the OWNER runs the satellite; a MEMBER joins it with their own
+machine. The machine pairs ONCE with the cloudbox portal under the
+member's OWN account (never with the owner's code); the satellite is an
+attachment of that account, reached through mutual membership.
+
+`bashy onboard` runs the whole journey and stops at every step only a
+person can do, printing exactly what to do next and ending with
+"rerun `bashy onboard` to continue". Every step inspects the state first
+and skips what is already done, so rerunning is the resume. Each action
+is one `satellite-member` verb (`bashy satellite-member --skill` has the
+details); this command only orders them.
+
+## The sequence
+
+1. `onboard check`: outpost installed? daemon up? machine paired? Not
+   installed: the user runs the installer
+   (`curl -fsSL https://dhnt.io/install.sh | sh`, or on Windows
+   `irm https://dhnt.io/install.ps1 | iex`), then reruns.
+2. `onboard pair [--code <code>]`: skipped when paired. Without a code it
+   stops: the user signs in to the cloudbox portal in a browser with their
+   OWN account, generates an invite code on the Hosts page (or runs
+   `bashy satellite-member code` when signed in here), then runs
+   `bashy onboard pair --code <code>`. Runs `satellite-member pair`.
+3. `onboard accept [<id>]`: one pending invitation is accepted; several
+   are listed to choose from; none and no satellite to attach to stops:
+   the user asks the owner for an invitation (the owner runs
+   `bashy member invite <email>`). Runs `satellite-member accept <id>`.
+4. `onboard attach [<satellite>]`: skipped when attached. One candidate
+   is attached; several are listed to choose from. Runs
+   `satellite-member attach <satellite>`.
+5. `onboard tray`: a stub until the tray example ships (autostart and a
+   menu-bar/tray icon); it prints that and skips.
+6. `onboard status`: the state of every step on one screen.
+
+## Agent rules
+
+- Never pass a satellite address or the owner's pairing code: a member
+  pairs with a code from their own account only.
+- `--dry-run` (anywhere on the line) prints the verb calls and runs none.
+- Exit 0 at a human step is not an error: read the printed instruction,
+  let the person do it, then rerun.
+- `ONBOARD_OUTPOST_BIN` overrides the `outpost` executable,
+  `ONBOARD_BASHY_BIN` the `bashy` executable and
+  `ONBOARD_SATELLITE_MEMBER` the satellite-member script (default: the
+  sibling example in the same source tree, else the registered
+  `bashy satellite-member` command).
+
+## Verification
+
+`go test ./examples/onboard/` drives every verb against a fake `outpost`
+and a fake `bashy`; it never touches a real host.
+~~~
+
+set -e
+
+PROG=onboard
+DRY_RUN=0
+
+usage_lines() {
+    echo "Usage: $PROG [--dry-run]                         run the whole sequence (rerun = resume)"
+    echo "       $PROG check                               installed? daemon up? paired?"
+    echo "       $PROG pair [--code <code>] [--name <host>] pair once with your OWN account"
+    echo "       $PROG accept [<id>] [--circle <family|friend|team|guest>]"
+    echo "       $PROG attach [<satellite>]"
+    echo "       $PROG tray                                (stub) tray autostart"
+    echo "       $PROG status"
+}
+
+usage() {
+    usage_lines >&2
+    exit 2
+}
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+outpost_bin() {
+    if [ -n "${ONBOARD_OUTPOST_BIN:-}" ]; then
+        printf '%s\n' "$ONBOARD_OUTPOST_BIN"
+    else
+        printf 'outpost\n'
+    fi
+}
+
+bashy_bin() {
+    if [ -n "${ONBOARD_BASHY_BIN:-}" ]; then
+        printf '%s\n' "$ONBOARD_BASHY_BIN"
+    else
+        printf 'bashy\n'
+    fi
+}
+
+# The satellite-member script next to this one in the source tree, else the
+# registered command.
+sm_script() {
+    if [ -n "${ONBOARD_SATELLITE_MEMBER:-}" ]; then
+        printf '%s\n' "$ONBOARD_SATELLITE_MEMBER"
+        return 0
+    fi
+    sib="$(dirname "$0")/../satellite-member/satellite-member.bsh"
+    if [ -f "$sib" ]; then
+        printf '%s\n' "$sib"
+    fi
+}
+
+# run CMD ARGS... — the one mutating-call chokepoint; --dry-run prints it.
+run() {
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $*"
+        return 0
+    fi
+    "$@"
+}
+
+# sm VERB ARGS... — one satellite-member verb (the S606 flow lives there).
+sm() {
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: satellite-member $*"
+        return 0
+    fi
+    script=$(sm_script)
+    if [ -n "$script" ]; then
+        "$(bashy_bin)" --bashsharp "$script" "$@"
+    else
+        "$(bashy_bin)" satellite-member "$@"
+    fi
+}
+
+# probe CMD ARGS... — a read-only state inspection; --dry-run names it (on
+# stderr: its stdout is the captured answer) and answers nothing, so every
+# step prints its action.
+probe() {
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would probe: $*" >&2
+        return 1
+    fi
+    "$@" 2>/dev/null
+}
+
+stop_for_human() {
+    echo "rerun \`bashy $PROG\` to continue"
+    exit 0
+}
+
+installed() {
+    command -v "$(outpost_bin)" >/dev/null 2>&1
+}
+
+# daemon_state: running | stopped | unknown (old outpost without the probe)
+daemon_state() {
+    if out=$(probe "$(outpost_bin)" status --local-presence); then
+        case "$out" in
+            *'"running":true'*) echo running ;;
+            *) echo stopped ;;
+        esac
+    else
+        echo unknown
+    fi
+}
+
+# pair_state: once | tunnel | none
+pair_state() {
+    js=$(probe "$(outpost_bin)" status --json) || js=""
+    if printf '%s\n' "$js" | grep -q '"cloudbox"'; then
+        echo once
+    elif printf '%s\n' "$js" | grep -qE '"agent_name": *"[^"]'; then
+        echo tunnel
+    else
+        echo none
+    fi
+}
+
+# first_ids JSON — every "id" value, one per line.
+ids_of() {
+    printf '%s\n' "$1" | grep -oE '"id": *"[^"]*"' | sed -E 's/^"id": *"//; s/"$//'
+}
+
+pending_invitations() {
+    js=$(probe "$(bashy_bin)" member invitations --json) || js=""
+    ids_of "$js"
+}
+
+satellite_list() {
+    probe "$(bashy_bin)" outpost satellite list --json || true
+}
+
+# ---- steps ---------------------------------------------------------------
+
+cmd_check() {
+    if ! installed; then
+        echo "outpost: not installed"
+        echo "$PROG: install Bashy (outpost comes with it), then rerun:"
+        echo "  curl -fsSL https://dhnt.io/install.sh | sh"
+        echo "  Windows: irm https://dhnt.io/install.ps1 | iex"
+        stop_for_human
+    fi
+    echo "outpost: installed"
+    case "$(daemon_state)" in
+        running) echo "daemon: running" ;;
+        stopped) echo "daemon: not running (start it with: bashy outpost enable; pairing and attach work without it)" ;;
+        *) echo "daemon: unknown" ;;
+    esac
+    case "$(pair_state)" in
+        once) echo "paired: yes (once, own account, identity only)" ;;
+        tunnel) echo "paired: yes (tunnel)" ;;
+        *) echo "paired: no (next: $PROG pair)" ;;
+    esac
+}
+
+# cmd_pair CODE HOST
+cmd_pair() {
+    code=$1; host=$2
+    if [ "$(pair_state)" != none ]; then
+        echo "$PROG: pair: already paired, skipped"
+        return 0
+    fi
+    if [ -z "$code" ] && [ "$DRY_RUN" != 1 ]; then
+        echo "$PROG: this machine is not paired yet. Do this once, with YOUR OWN account:"
+        echo "  1. In a browser, sign in to the cloudbox portal with your own account (not the satellite owner's)."
+        echo "  2. Hosts page -> \"Generate invite code\" (or, signed in here: bashy satellite-member code)."
+        echo "  3. Back here: bashy $PROG pair --code <code>"
+        echo "  Never use a code or address from the satellite owner: that would make them the owner of this machine."
+        stop_for_human
+    fi
+    set -- pair --code "${code:-<code>}"
+    [ -n "$host" ] && set -- "$@" --name "$host"
+    sm "$@" || fail "pairing failed" 1
+}
+
+# cmd_accept ID CIRCLE
+cmd_accept() {
+    id=$1; circle=$2
+    if [ -z "$id" ]; then
+        pending=$(pending_invitations)
+        n=$(printf '%s\n' "$pending" | grep -c . || true)
+        if [ "$DRY_RUN" = 1 ]; then
+            id='<invitation-id>'
+        elif [ "$n" -eq 1 ]; then
+            id=$pending
+        elif [ "$n" -gt 1 ]; then
+            echo "$PROG: several pending invitations; accept one with: bashy $PROG accept <id>"
+            sm accept
+            stop_for_human
+        elif [ -n "$(ids_of "$(satellite_list)")" ]; then
+            echo "$PROG: accept: already a member (a satellite is listed), skipped"
+            return 0
+        else
+            echo "$PROG: no pending invitation. Ask the satellite owner to invite you:"
+            echo "  they run: bashy member invite <your-email> [--circle family|friend|team|guest]"
+            echo "  (membership is mutual: accepting adds both sides; no code or address changes hands)"
+            stop_for_human
+        fi
+    fi
+    set -- accept "$id"
+    [ -n "$circle" ] && set -- "$@" --circle "$circle"
+    sm "$@" || fail "accepting invitation $id failed" 1
+}
+
+# cmd_attach SATELLITE
+cmd_attach() {
+    sat=$1
+    list=$(satellite_list)
+    if printf '%s\n' "$list" | grep -q '"attached":true'; then
+        echo "$PROG: attach: already attached, skipped"
+        return 0
+    fi
+    if [ -z "$sat" ]; then
+        ids=$(ids_of "$list")
+        n=$(printf '%s\n' "$ids" | grep -c . || true)
+        if [ "$DRY_RUN" = 1 ]; then
+            sat='<satellite>'
+        elif [ "$n" -eq 1 ]; then
+            sat=$ids
+        elif [ "$n" -gt 1 ]; then
+            echo "$PROG: several satellites; attach to one with: bashy $PROG attach <id>"
+            run "$(bashy_bin)" outpost satellite list
+            stop_for_human
+        else
+            echo "$PROG: no satellite to attach to yet. Ask the satellite owner to invite you (bashy member invite <your-email>), then rerun."
+            stop_for_human
+        fi
+    fi
+    sm attach "$sat" || fail "attach to $sat failed" 1
+}
+
+cmd_tray() {
+    echo "$PROG: tray: autostart and the tray icon arrive with the tray example (Sprint D); skipped"
+}
+
+cmd_status() {
+    cmd_check
+    if [ "$(pair_state)" = none ]; then
+        return 0
+    fi
+    pending=$(pending_invitations)
+    n=$(printf '%s\n' "$pending" | grep -c . || true)
+    echo "invitations: $n pending"
+    list=$(satellite_list)
+    if printf '%s\n' "$list" | grep -q '"attached":true'; then
+        echo "attached: yes ($(printf '%s\n' "$list" | grep -oE '"id": *"[^"]*","name": *"[^"]*","endpoint": *"[^"]*","state": *"[^"]*","attached": *true' | sed -E 's/^"id": *"([^"]*)".*/\1/' | head -1))"
+    else
+        echo "attached: no (candidates: $(ids_of "$list" | grep -c . || true); next: $PROG attach)"
+    fi
+    echo "tray: pending (tray example, Sprint D)"
+}
+
+cmd_all() {
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "$PROG: dry run; the probes decide which steps are skipped, the actions are:"
+    else
+        cmd_check
+    fi
+    cmd_pair "" ""
+    cmd_accept "" ""
+    cmd_attach ""
+    cmd_tray
+    if [ "$DRY_RUN" != 1 ]; then
+        echo "$PROG: done; state:"
+        cmd_status
+    fi
+}
+
+# ---- dispatch ------------------------------------------------------------
+
+# --dry-run anywhere on the line.
+set -- "$@"
+args=""
+for a in "$@"; do
+    if [ "$a" = "--dry-run" ]; then
+        DRY_RUN=1
+    else
+        args="$args
+$a"
+    fi
+done
+set --
+if [ -n "$args" ]; then
+    while IFS= read -r a; do
+        [ -n "$a" ] && set -- "$@" "$a"
+    done <<EOF
+$(printf '%s\n' "$args" | sed '1d')
+EOF
+fi
+
+# The nested satellite-member script sees the same executables.
+[ -n "${ONBOARD_OUTPOST_BIN:-}" ] && export SATELLITE_MEMBER_OUTPOST_BIN="$ONBOARD_OUTPOST_BIN"
+[ -n "${ONBOARD_BASHY_BIN:-}" ] && export SATELLITE_MEMBER_BASHY_BIN="$ONBOARD_BASHY_BIN"
+
+if [ $# -lt 1 ]; then
+    cmd_all
+    exit 0
+fi
+case "$1" in
+    --skill)
+        sed -n '/^~~~skill/,/^~~~$/p' "$0" | sed '1d;$d'
+        exit 0
+        ;;
+    -h|--help|help)
+        sed -n '/^~~~skill/,/^~~~$/p' "$0" | sed '1d;$d'
+        echo
+        usage_lines
+        exit 0
+        ;;
+esac
+
+sub=$1; shift
+case "$sub" in
+    check)
+        [ $# -eq 0 ] || usage
+        cmd_check
+        ;;
+    pair)
+        code=""; host=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --code=*) code=${1#--code=} ;;
+                --name=*) host=${1#--name=} ;;
+                --code) [ $# -ge 2 ] || usage; code=$2; shift ;;
+                --name) [ $# -ge 2 ] || usage; host=$2; shift ;;
+                *) usage ;;
+            esac
+            shift
+        done
+        cmd_pair "$code" "$host"
+        ;;
+    accept)
+        id=""; circle=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --circle=*) circle=${1#--circle=} ;;
+                --circle) [ $# -ge 2 ] || usage; circle=$2; shift ;;
+                -*) usage ;;
+                *) [ -z "$id" ] || usage; id=$1 ;;
+            esac
+            shift
+        done
+        cmd_accept "$id" "$circle"
+        ;;
+    attach)
+        [ $# -le 1 ] || usage
+        case "${1:-}" in
+            -*) usage ;;
+        esac
+        cmd_attach "${1:-}"
+        ;;
+    tray)
+        [ $# -eq 0 ] || usage
+        cmd_tray
+        ;;
+    status)
+        [ $# -eq 0 ] || usage
+        cmd_status
+        ;;
+    *)
+        usage
+        ;;
+esac

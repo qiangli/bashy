@@ -87,7 +87,7 @@ type buildError struct {
 
 func (e *buildError) Error() string { return e.err.Error() + "\n" + e.out }
 
-// fakeBashy: src fetch|upgrade lay out a pin with both default commands and
+// fakeBashy: src fetch|upgrade lay out a pin with every default command and
 // two kb pages; commands show NAME --json prints the stored exec path (exit 1
 // when unregistered); commands add NAME ... records exec.2.
 const fakeBashy = `#!/bin/sh
@@ -95,9 +95,10 @@ echo "$*" >> "$FAKE_LOG"
 src="$BASHY_HOME/src/bashy"
 case "$1 $2" in
   "src fetch"|"src upgrade")
-    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/defaults" "$src/kb/defaults/pages"
+    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/onboard" "$src/examples/defaults" "$src/kb/defaults/pages"
     : > "$src/examples/outpost-profile/outpost-profile.bsh"
     : > "$src/examples/satellite-member/satellite-member.bsh"
+    : > "$src/examples/onboard/onboard.bsh"
     : > "$src/examples/defaults/bashy-defaults.bsh"
     : > "$src/kb/defaults/pages/a.md"; : > "$src/kb/defaults/pages/b.md"
     ;;
@@ -179,7 +180,7 @@ func (f *fixture) pin(rel string) string {
 	return filepath.Join(f.home, "src", "bashy", filepath.FromSlash(rel))
 }
 
-// apply on a fresh install fetches the pin, registers both default commands
+// apply on a fresh install fetches the pin, registers every default command
 // from it and reports the kb defaults; a second apply is a no-op fetch-wise.
 func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	f := newFixture(t)
@@ -187,7 +188,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}
