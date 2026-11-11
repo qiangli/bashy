@@ -7,7 +7,6 @@ import (
 	"os"
 
 	xpty "github.com/aymanbagabas/go-pty"
-	"golang.org/x/sys/windows"
 )
 
 // session is the Windows pseudo-console: ConPTY through aymanbagabas/go-pty,
@@ -40,18 +39,15 @@ func start(argv []string, dir string, env []string, cols, rows uint16) (*session
 		return nil, err
 	}
 	s := &session{pty: p, cmd: c, done: make(chan struct{})}
-	// ConPTY's output pipe does not hang up when the client exits: it stays
-	// open until the pseudo-console is closed. So the waiter releases the
-	// console itself once the child is gone — conhost then flushes what is
-	// left and closes its end, and Read drains to EOF. go-pty's Close would
-	// also close the pipe we are reading, dropping that tail, hence the raw
-	// ClosePseudoConsole here and p.Close only after the drain.
+	// The library's Close releases the pseudo-console and both pipes. Calling
+	// ClosePseudoConsole separately would release the same handle twice and
+	// corrupt the Windows process heap.
 	go func() {
 		s.err = c.Wait()
 		if c.ProcessState != nil {
 			s.code = c.ProcessState.ExitCode()
 		}
-		windows.ClosePseudoConsole(windows.Handle(p.Fd()))
+		_ = p.Close()
 		close(s.done)
 	}()
 	return s, nil
@@ -61,7 +57,6 @@ func (s *session) Read(b []byte) (int, error) { return s.pty.Read(b) }
 
 func (s *session) finish() (int, error) {
 	<-s.done
-	_ = s.pty.Close()
 	if s.code >= 0 {
 		return s.code, nil
 	}
@@ -73,5 +68,5 @@ func (s *session) Close() error {
 		_ = s.cmd.Process.Kill()
 	}
 	<-s.done
-	return s.pty.Close()
+	return nil
 }

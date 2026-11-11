@@ -27,7 +27,7 @@ created: "2026-11-07T22:03:05Z"
 ```sh
 PS_SCRIPT='Get-Service | Select-Object -First 5 | Out-String'
 ENC=$(printf %s "$PS_SCRIPT" | iconv -f UTF-8 -t UTF-16LE | base64 | tr -d '\n')
-outpost ssh "$HOST_NAME" C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -EncodedCommand "$ENC"
+outpost ssh "$HOST_NAME" -- C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe -NoProfile -EncodedCommand "$ENC"
 ```
 
 - A statement that errors can lose ALL of the command's output. Keep each remote command small, and guard statements (`try { } catch { $_ | Out-String }`, `-ErrorAction SilentlyContinue`) so you still see what ran.
@@ -37,5 +37,5 @@ outpost ssh "$HOST_NAME" C:/Windows/System32/WindowsPowerShell/v1.0/powershell.e
 bashy secret exec "$HOST_PW_SECRET=P" -- /bin/sh -c 'printf %s "$P" | outpost connect "$1" --stdin' sh "$HOST_NAME"
 ```
 
-- Copy files with `outpost scp` (`--safe` for binaries). Remote paths use forward slashes; on the Windows side prefer `$env:USERPROFILE` / `%LOCALAPPDATA%` over spelled-out user directories.
+- Copy files with `outpost scp`. `--safe` applies to uploads only; omit it for downloads. Remote paths use forward slashes; on the Windows side prefer `$env:USERPROFILE` / `%LOCALAPPDATA%` over spelled-out user directories.
 - Multi-stage pipes inside the remote Bashy shell can break on Windows; prefer one PowerShell invocation that does the whole job.

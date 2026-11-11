@@ -155,12 +155,30 @@ case $cols in '' | *[!0-9]* | 0*) echo "cast: --cols must be a positive number (
 case $rows in '' | *[!0-9]* | 0*) echo "cast: --rows must be a positive number (got '$rows')" >&2; exit 2 ;; esac
 case $idle in '' | *[!0-9.]* | *.*.* | .) echo "cast: --idle-limit must be a number of seconds (got '$idle')" >&2; exit 2 ;; esac
 # CMD crosses into the Go fence as one unit-separator joined string.
+native_windows_path() {
+	case $1 in
+	/[a-zA-Z]/*) local p=$1 d=${1:1:1}; printf '%s:/%s\n' "${d^^}" "${p:3}" ;;
+	\\[a-zA-Z]\\*) local p=${1//\\//} d=${1:1:1}; printf '%s:/%s\n' "${d^^}" "${p:3}" ;;
+	[a-zA-Z]:\\*) local p=${1//\\//}; printf '%s\n' "$p" ;;
+	*) printf '%s\n' "$1" ;;
+	esac
+}
+dir=$PWD
+if [[ $(uname -s) == *Windows* || $(uname -s) == MINGW* ]]; then
+	dir=$(native_windows_path "$dir")
+	[ "$out" = - ] || out=$(native_windows_path "$out")
+	case ${cmd[0]} in
+	bashy | bashy.exe) cmd[0]=$(native_windows_path "$(command -v bashy)") ;;
+	/* | \\*) cmd[0]=$(native_windows_path "${cmd[0]}") ;;
+	esac
+	[ -f "${cmd[0]}.exe" ] && cmd[0]+=.exe
+fi
 us=$'\x1f' argv=""
 for a in "${cmd[@]}"; do
 	case $a in *"$us"*) echo "cast: an argument contains the unit separator (0x1f)" >&2; exit 2 ;; esac
 	argv+="$a$us"
 done
-code := go.Record(out, cols, rows, idle, title, "$PWD", argv)
+code := go.Record(out, cols, rows, idle, title, dir, argv)
 # The fence reports its own failure on stderr and returns 127; an empty
 # code means the fence itself could not run (no Go toolchain, say).
 [ -n "$code" ] || exit 127

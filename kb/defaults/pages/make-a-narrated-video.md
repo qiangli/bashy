@@ -19,17 +19,21 @@ created: "2026-11-10T20:00:00Z"
 
 ## Install once
 
+Register the examples with `bashy --bashsharp examples/defaults/bashy-defaults.bsh apply` from the source checkout (or `bashy-defaults apply` after installing Bashy's source pin). This registers `media`, `cast`, and `record` with declared effects. `media doctor` registers ffmpeg, ffprobe, agg, and verified PdfCraft.
+
 ```sh
 # macOS
 brew install ffmpeg agg
 # Windows (PowerShell; either agg line works)
-winget install Gyan.FFmpeg
-winget install asciinema.agg    # or: scoop install agg
+winget install Gyan.FFmpeg --accept-source-agreements --accept-package-agreements
+winget install asciinema.agg --accept-source-agreements --accept-package-agreements
 # Debian/Ubuntu Linux
 sudo apt install ffmpeg
 cargo install --locked agg      # or install agg's release binary
 media doctor
 ```
+
+If winget's source fails, download the ZIP from [FFmpeg's Windows essentials builds](https://www.gyan.dev/ffmpeg/builds/) and the Windows `agg.exe` from [asciinema/agg releases](https://github.com/asciinema/agg/releases). Extract them under a folder you own, and set `MEDIA_FFMPEG`, `MEDIA_FFPROBE`, and `MEDIA_AGG` to the full executable paths before `media doctor`. Doctor registers those names. On Windows, doctor also provisions Go for the cast recorder and uses the pinned PowerShell 7 fence for System.Speech.
 
 ## Project and takes
 
@@ -44,7 +48,7 @@ demo/
   camera/
 ```
 
-`storyboard.txt` orders `card`, `slide`, `step`, `pair`, and `camera` segments. Put a Bashy scene in `steps/NAME.sh`; the build records it with `cast record` by default (`bashy cast record` if it is not on PATH), using asciinema only as a fallback, then agg renders it. Put one spoken line per segment in `narration.txt`.
+`storyboard.txt` orders `card`, `slide`, `step`, `pair`, and `camera` segments. Put a Bashy scene in `steps/NAME.sh`; the build records it with the registered `cast` command, then agg renders it. Put one spoken line per segment in `narration.txt`.
 
 Run `media narrate demo --own` once. It creates `build/script/NN.txt` and prints the missing command for each line. Run those commands from the project folder, for example:
 
@@ -67,6 +71,8 @@ The same local page asks for camera and microphone access once; the member press
 media narrate demo --own
 media build demo
 ```
+
+For a quick OS voice draft, run `media narrate demo --voice default` before `media build demo`. Replace the draft with `--own` takes for the final version.
 
 The result is `demo/build/demo.mp4`. If `demo/captions.srt` is present, the build uses agg caption cards with ffmpeg `overlay` to burn captions into the picture and also muxes them as a soft `mov_text` subtitle track. View the MP4 locally and share the file.
 

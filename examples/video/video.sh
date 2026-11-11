@@ -33,13 +33,50 @@
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+native_windows_path() {
+	local p=$1 d
+	case $(uname -s) in
+	MINGW*|MSYS*|CYGWIN*|Windows*)
+		case $p in
+		/[a-zA-Z]/*) d=${p:1:1}; p="${d^^}:/${p:3}" ;;
+		\\[a-zA-Z]\\*) p=${p//\\//}; d=${p:1:1}; p="${d^^}:/${p:3}" ;;
+		[a-zA-Z]:\\*) p=${p//\\//} ;;
+		esac ;;
+	esac
+	printf '%s\n' "$p"
+}
+BASHY_RUNNER=$(native_windows_path "$(command -v bashy)")
+case $(uname -s) in
+	MINGW*|MSYS*|CYGWIN*|Windows*)
+		[ -f "$BASHY_RUNNER.exe" ] && BASHY_RUNNER+=.exe ;;
+esac
+register_video_tool() {
+	local name=$1 path
+	if ! "$BASHY_RUNNER" commands show "$name" --json >/dev/null 2>&1; then
+		path=$(command -v "$name" 2>/dev/null || true)
+		[ -f "$path" ] || return 0
+		"$BASHY_RUNNER" commands add "$name" --set "exec.0=$(native_windows_path "$path")" \
+			--set effects.0=read --set effects.1=write --set effects.2=exec >/dev/null
+	fi
+}
+for video_tool in ffmpeg ffprobe agg; do register_video_tool "$video_tool"; done
+registered_video_tool() {
+	local name=$1 arg
+	shift
+	local args=()
+	for arg in "$@"; do args+=("$(native_windows_path "$arg")"); done
+	"$BASHY_RUNNER" "$name" "${args[@]}"
+}
+ffmpeg() { registered_video_tool ffmpeg "$@"; }
+ffprobe() { registered_video_tool ffprobe "$@"; }
+agg() { registered_video_tool agg "$@"; }
 COLS=${VIDEO_COLS:-100}
 ROWS=${VIDEO_ROWS:-24}
 # Pairs use a narrower terminal so text stays readable at half width.
 PAIR_COLS=${VIDEO_PAIR_COLS:-64}
 PAIR_ROWS=${VIDEO_PAIR_ROWS:-30}
 # Steps run under bashy (dogfood); VIDEO_SHELL=bash to compare.
-SHELL_CMD=${VIDEO_SHELL:-bashy}
+SHELL_CMD=${VIDEO_SHELL:-$BASHY_RUNNER}
 FONT_SIZE=${VIDEO_FONT_SIZE:-28}
 THEME=${VIDEO_THEME:-monokai}
 IDLE=${VIDEO_IDLE:-4}
@@ -62,10 +99,8 @@ AGGFONT=()
 RECORDER=()
 if [ "${VIDEO_RECORDER:-}" = asciinema ]; then
 	RECORDER=(asciinema rec)
-elif command -v cast >/dev/null; then
-	RECORDER=(cast record)
-elif bashy cast --help >/dev/null 2>&1; then
-	RECORDER=(bashy cast record)
+elif "$BASHY_RUNNER" commands show cast --json >/dev/null 2>&1; then
+	RECORDER=("$BASHY_RUNNER" cast record)
 else
 	RECORDER=(asciinema rec)
 fi
@@ -79,7 +114,13 @@ die() { echo "video: $*" >&2; exit 1; }
 doctor() {
 	local ok=0 t
 	for t in "${RECORDER[0]}" agg ffmpeg ffprobe "${VIDEO_SHELL:-bashy}"; do
-		if command -v "$t" >/dev/null; then
+		if [[ $t == agg || $t == ffmpeg || $t == ffprobe ]]; then
+			if "$BASHY_RUNNER" commands show "$t" --json >/dev/null 2>&1; then
+				echo "ok   $t: registered"
+			else
+				echo "MISSING $t"; ok=1
+			fi
+		elif command -v "$t" >/dev/null; then
 			echo "ok   $t: $(command -v "$t")"
 		else
 			echo "MISSING $t"; ok=1
@@ -230,8 +271,15 @@ slide() {
 }
 
 json_string() {
-	# stdin -> JSON string literal (no jq dependency beyond python3 fallback).
-	if command -v jq >/dev/null; then jq -Rs .; else python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))'; fi
+	local s
+	s=$(cat)
+	s=${s//\\/\\\\}
+	s=${s//\"/\\\"}
+	s=${s//$'\e'/\\u001b}
+	s=${s//$'\n'/\\n}
+	s=${s//$'\r'/\\r}
+	s=${s//$'\t'/\\t}
+	printf '"%s"\n' "$s"
 }
 
 # record NAME [COLS ROWS] -> build/NAME.mp4 (the step's own video, before fitting)

@@ -58,12 +58,35 @@ it composes: `media combine "$(media pdf a.png b.png -o a.pdf)" b.pdf -o all.pdf
 - No browser is involved anywhere in media.
 ~~~
 
+~~~powershell as ps
+function Speak {
+    [OutputType([string])]
+    param([string]$voice, [string]$text, [string]$out)
+    Add-Type -AssemblyName System.Speech
+    $s = [System.Speech.Synthesis.SpeechSynthesizer]::new()
+    try {
+        if ($voice -ne 'default') { $s.SelectVoice($voice) }
+        $s.SetOutputToWaveFile($out)
+        $s.Speak($text)
+        return $out
+    } finally { $s.Dispose() }
+}
+
+function ExpandZip {
+    [OutputType([string])]
+    param([string]$archive, [string]$destination)
+    Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force
+    return $destination
+}
+~~~
+
 set -eu
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 PDFCRAFT_VERSION=0.20.0
 PDFCRAFT_URL=https://github.com/storytold/pdfcraft/releases/download/v$PDFCRAFT_VERSION
 video_sh=${MEDIA_VIDEO_SH:-$here/../video/video.sh}
+BASHY_RUNNER=$(command -v bashy)
 
 die() { echo "media: $*" >&2; exit 1; }
 note() { echo "media: $*" >&2; }
@@ -120,8 +143,8 @@ cache_root() {
 }
 
 sha256_of() {
-	if command -v sha256sum >/dev/null; then sha256sum "$1" | { read -r h _; echo "$h"; }
-	elif command -v shasum >/dev/null; then shasum -a 256 "$1" | { read -r h _; echo "$h"; }
+	if command -v sha256sum >/dev/null; then sha256sum <"$1" | { read -r h _; echo "$h"; }
+	elif command -v shasum >/dev/null; then shasum -a 256 <"$1" | { read -r h _; echo "$h"; }
 	else die "no sha256sum or shasum to verify the download"; fi
 }
 
@@ -148,7 +171,14 @@ pdfcraft() {
 	got=$(sha256_of "$tmp/$asset")
 	[ "$got" = "$want" ] || { rm -rf "$tmp"; die "SHA-256 mismatch for $asset: got $got, want $want"; }
 	case $asset in
-	*.zip) if command -v unzip >/dev/null; then unzip -q "$tmp/$asset" -d "$tmp/x"; else tar -xf "$tmp/$asset" -C "$tmp/x"; fi ;;
+	*.zip)
+		if [ "$(os_name)" = windows ]; then
+			local archive destination expanded
+			archive=$(native_path "$tmp/$asset"); destination=$(native_path "$tmp/x")
+			expanded := ps.ExpandZip(archive, destination)
+			[ -n "$expanded" ] || die "cannot extract $asset"
+		elif command -v unzip >/dev/null; then unzip -q "$tmp/$asset" -d "$tmp/x"
+		else die "unzip is required to extract $asset"; fi ;;
 	*) tar -xzf "$tmp/$asset" -C "$tmp/x" ;;
 	esac
 	mkdir -p "$(dirname "$root")"
@@ -165,6 +195,50 @@ abspath() {
 	d=$(dirname "$1"); b=$(basename "$1")
 	[ -d "$d" ] || die "no such folder: $d"
 	echo "$(cd "$d" && pwd)/$b"
+}
+
+# Native Windows programs cannot open Bashy's /c/... names.
+native_path() {
+	local p=$1 drive
+	if [ "$(os_name)" = windows ]; then
+		case $p in
+		/[a-zA-Z]/*) drive=${p:1:1}; p="${drive^^}:/${p:3}" ;;
+		\\[a-zA-Z]\\*) p=${p//\\//}; drive=${p:1:1}; p="${drive^^}:/${p:3}" ;;
+		[a-zA-Z]:\\*) p=${p//\\//} ;;
+		esac
+	fi
+	printf '%s\n' "$p"
+}
+
+registered_media_tool() {
+	local name=$1 arg
+	shift
+	local args=()
+	for arg in "$@"; do args+=("$(native_path "$arg")"); done
+	"$(native_path "$BASHY_RUNNER")" "$name" "${args[@]}"
+}
+ffmpeg() { registered_media_tool ffmpeg "$@"; }
+ffprobe() { registered_media_tool ffprobe "$@"; }
+
+register_tool() {
+	local name=$1 path=$2
+	[ -n "$path" ] && [ -f "$path" ] || return 1
+	"$(native_path "$(command -v bashy)")" commands add "$name" --set "exec.0=$(native_path "$path")" \
+		--set effects.0=read --set effects.1=write --set effects.2=exec >/dev/null
+}
+
+tool_path() {
+	local name=$1 override=$2 path
+	path=${!override:-}
+	[ -n "$path" ] || path=$(type -P "$name" 2>/dev/null || true)
+	printf '%s\n' "$path"
+}
+
+registered_pdfcraft() {
+	local bin
+	bin=$(pdfcraft)
+	register_tool pdfcraft-cli "$bin" || die "cannot register pdfcraft-cli"
+	printf 'pdfcraft-cli\n'
 }
 
 # jstr: JSON string literal of $1.
@@ -195,9 +269,10 @@ norm_project() {
 # ---- doctor -----------------------------------------------------------------
 
 doctor() {
-	local os bad=0 bin
+	local os bad=0 bin tool path
 	os=$(os_name)
 	if bin=$(pdfcraft); then
+		register_tool pdfcraft-cli "$bin" || bad=1
 		echo "ok   pdfcraft-cli $PDFCRAFT_VERSION: $bin"
 	else
 		echo "MISSING pdfcraft-cli (download or checksum failed, see above)"; bad=1
@@ -208,7 +283,23 @@ doctor() {
 	windows) ffm_install="winget install Gyan.FFmpeg"; ffm_agg="winget install asciinema.agg  (or: scoop install agg)"; ffm_voice="(Windows ships System.Speech; install PowerShell 7 if powershell is missing: winget install Microsoft.PowerShell)"; ffm_rec="cast (bashy yoke) - asciinema has no Windows build" ;;
 	*) ffm_install="sudo apt install ffmpeg"; ffm_agg="cargo install --locked agg  (agg is not in apt; or download from github.com/asciinema/agg/releases)"; ffm_voice="sudo apt install espeak-ng"; ffm_rec="sudo apt install asciinema" ;;
 	esac
-	if command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null; then
+	for tool in ffmpeg ffprobe agg; do
+		case $tool in ffmpeg) path=$(tool_path "$tool" MEDIA_FFMPEG) ;; ffprobe) path=$(tool_path "$tool" MEDIA_FFPROBE) ;; agg) path=$(tool_path "$tool" MEDIA_AGG) ;; esac
+		if [ -n "$path" ] && [ -f "$path" ]; then register_tool "$tool" "$path" || bad=1; fi
+	done
+	case $os in
+		darwin) path=$(type -P say 2>/dev/null || true); [ -z "$path" ] || register_tool say "$path" || bad=1 ;;
+		linux) path=$(type -P espeak-ng 2>/dev/null || true); [ -z "$path" ] || register_tool espeak-ng "$path" || bad=1 ;;
+	esac
+	if [ "$os" = windows ]; then
+		"$(native_path "$(command -v bashy)")" go version >/dev/null 2>&1 || { echo "MISSING Go toolchain: bashy go version"; bad=1; }
+		"$(native_path "$(command -v bashy)")" commands add cast \
+			--set "exec.0=$(native_path "$(command -v bashy)")" --set exec.1=--bashsharp \
+			--set "exec.2=$(native_path "$here/../cast/cast.bsh")" \
+			--set effects.0=read --set effects.1=write --set effects.2=exec >/dev/null || bad=1
+	fi
+	if "$(native_path "$BASHY_RUNNER")" commands show ffmpeg --json >/dev/null 2>&1 && \
+		"$(native_path "$BASHY_RUNNER")" commands show ffprobe --json >/dev/null 2>&1; then
 		if ffmpeg -hide_banner -encoders 2>/dev/null | grep -qE ' (libx264|h264_[a-z0-9]+) '; then
 			echo "ok   ffmpeg: H.264 encoder"
 		else
@@ -223,7 +314,7 @@ doctor() {
 	else
 		echo "MISSING ffmpeg/ffprobe: $ffm_install"; bad=1
 	fi
-	if command -v agg >/dev/null; then echo "ok   agg: $(command -v agg)"; else echo "MISSING agg: $ffm_agg"; bad=1; fi
+	if "$(native_path "$BASHY_RUNNER")" commands show agg --json >/dev/null 2>&1; then echo "ok   agg: registered"; else echo "MISSING agg: $ffm_agg"; bad=1; fi
 	if command -v cast >/dev/null || command -v asciinema >/dev/null; then
 		echo "ok   recorder: $(command -v cast || command -v asciinema)"
 	else
@@ -232,8 +323,7 @@ doctor() {
 	case $os in
 	darwin) command -v say >/dev/null && echo "ok   voice: say" || { echo "MISSING voice: say"; bad=1; } ;;
 	windows)
-		if command -v powershell >/dev/null || command -v pwsh >/dev/null; then echo "ok   voice: System.Speech via PowerShell"
-		else echo "MISSING voice: $ffm_voice"; bad=1; fi ;;
+		echo "ok   voice: System.Speech via pinned PowerShell fence" ;;
 	*) command -v espeak-ng >/dev/null && echo "ok   voice: espeak-ng" || { echo "MISSING voice: $ffm_voice"; bad=1; } ;;
 	esac
 	[ -f "$video_sh" ] && echo "ok   video.sh: $video_sh" || { echo "MISSING video.sh: $video_sh"; bad=1; }
@@ -247,8 +337,8 @@ doctor() {
 
 run_steps() { # run_steps STEPS_JSON -> exits on failure
 	local cli
-	cli=$(pdfcraft)
-	"$cli" run --script "$1" >/dev/null || die "pdfcraft-cli run failed ($1)"
+	cli=$(registered_pdfcraft)
+	"$(native_path "$BASHY_RUNNER")" "$cli" run --script "$(native_path "$1")" >/dev/null || die "pdfcraft-cli run failed ($1)"
 }
 
 cmd_pdf() {
@@ -268,19 +358,20 @@ cmd_pdf() {
 	local paths="" tmp cli
 	for i in "${imgs[@]}"; do
 		[ -f "$i" ] || die "pdf: no such image: $i"
-		paths+="${paths:+,}$(jstr "$(abspath "$i")")"
+		paths+="${paths:+,}$(jstr "$(native_path "$(abspath "$i")")")"
 	done
-	tmp=$(mktemp -d "${TMPDIR:-/tmp}/media.XXXXXX")
-	trap "rm -rf '$tmp'" EXIT
-	cli=$(pdfcraft)
+	local tempbase=${MEDIA_TEMP:-${LOCALAPPDATA:-${TMPDIR:-/tmp}}}
+	tmp=$(mktemp -d "$tempbase/media.XXXXXX")
+	if [ -n "${MEDIA_KEEP_TEMP:-}" ]; then note "keeping temporary files in $tmp"; else trap "rm -rf '$tmp'" EXIT; fi
+	cli=$(registered_pdfcraft)
 	printf '[{"tool":"doc_create","args":{"from":"images","paths":[%s]}},{"tool":"doc_save","args":{"doc":1,"path":%s}}]\n' \
-		"$paths" "$(jstr "$tmp/raw.pdf")" >"$tmp/steps.json"
+		"$paths" "$(jstr "$(native_path "$tmp/raw.pdf")")" >"$tmp/steps.json"
 	run_steps "$tmp/steps.json"
 	if [ -n "$title$author" ]; then
 		local eargs=()
 		[ -z "$title" ] || eargs+=(--title "$title")
 		[ -z "$author" ] || eargs+=(--author "$author")
-		"$cli" edit "$tmp/raw.pdf" "${eargs[@]}" --out "$tmp/edited.pdf" >/dev/null || die "pdf: edit failed"
+		"$(native_path "$BASHY_RUNNER")" "$cli" edit "$(native_path "$tmp/raw.pdf")" "${eargs[@]}" --out "$(native_path "$tmp/edited.pdf")" || die "pdf: edit failed"
 		mv "$tmp/edited.pdf" "$out"
 	else
 		mv "$tmp/raw.pdf" "$out"
@@ -302,8 +393,10 @@ cmd_combine() {
 	local f
 	for f in "${ins[@]}"; do [ -f "$f" ] || die "combine: no such file: $f"; done
 	out=$(abspath "$out")
-	cli=$(pdfcraft)
-	"$cli" combine "${ins[@]}" --out "$out" >/dev/null || die "combine failed"
+	cli=$(registered_pdfcraft)
+	local native_ins=()
+	for f in "${ins[@]}"; do native_ins+=("$(native_path "$(abspath "$f")")"); done
+	"$(native_path "$BASHY_RUNNER")" "$cli" combine "${native_ins[@]}" --out "$(native_path "$out")" >/dev/null || die "combine failed"
 	echo "$out"
 }
 
@@ -313,11 +406,11 @@ cmd_slides() {
 	[ -f "$in" ] || die "slides: no such file: $in"
 	mkdir -p "$dir"
 	dir=$(cd "$dir" && pwd)
-	cli=$(pdfcraft)
-	n=$("$cli" info "$in" | sed -n 's/^ *"pages": *\([0-9][0-9]*\).*/\1/p')
+	cli=$(registered_pdfcraft)
+	n=$("$(native_path "$BASHY_RUNNER")" "$cli" info "$(native_path "$(abspath "$in")")" | sed -n 's/^ *"pages": *\([0-9][0-9]*\).*/\1/p')
 	[ -n "$n" ] && [ "$n" -gt 0 ] || die "slides: cannot read the page count of $in"
 	for ((p = 1; p <= n; p++)); do
-		"$cli" render "$in" --page "$p" --dpi "${MEDIA_DPI:-150}" --out "$dir/$(printf '%02d' "$p").png" >/dev/null 2>&1 || die "slides: render of page $p failed"
+		"$(native_path "$BASHY_RUNNER")" "$cli" render "$(native_path "$(abspath "$in")")" --page "$p" --dpi "${MEDIA_DPI:-150}" --out "$(native_path "$dir/$(printf '%02d' "$p").png")" >/dev/null 2>&1 || die "slides: render of page $p failed"
 		echo "$dir/$(printf '%02d' "$p").png"
 	done
 }
@@ -326,16 +419,16 @@ cmd_slides() {
 
 # synth VOICE TEXT OUT: speak TEXT with the OS voice into an audio file OUT.
 synth() {
-	local voice=$1 text=$2 out=$3 ps
+	local voice=$1 text=$2 out=$3 nativeout voice_file
 	case $(os_name) in
 	darwin)
-		if [ "$voice" = default ]; then say --data-format=LEI16@22050 -o "$out" -- "$text"; else say -v "$voice" --data-format=LEI16@22050 -o "$out" -- "$text"; fi ;;
+		if [ "$voice" = default ]; then registered_media_tool say --data-format=LEI16@22050 -o "$out" -- "$text"; else registered_media_tool say -v "$voice" --data-format=LEI16@22050 -o "$out" -- "$text"; fi ;;
 	windows)
-		ps=$(command -v powershell || command -v pwsh) || die "no PowerShell for System.Speech"
-		MEDIA_TEXT=$text MEDIA_OUT=$out MEDIA_VOICE=$voice "$ps" -NoProfile -NonInteractive -Command \
-			'Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; if ($env:MEDIA_VOICE -ne "default") { $s.SelectVoice($env:MEDIA_VOICE) }; $s.SetOutputToWaveFile($env:MEDIA_OUT); $s.Speak($env:MEDIA_TEXT); $s.Dispose()' ;;
+		nativeout=$(native_path "$out")
+		voice_file := ps.Speak(voice, text, nativeout)
+		[ -n "$voice_file" ] ;;
 	*)
-		if [ "$voice" = default ]; then espeak-ng -w "$out" -- "$text"; else espeak-ng -v "$voice" -w "$out" -- "$text"; fi ;;
+		if [ "$voice" = default ]; then registered_media_tool espeak-ng -w "$out" -- "$text"; else registered_media_tool espeak-ng -v "$voice" -w "$out" -- "$text"; fi ;;
 	esac
 }
 
@@ -377,7 +470,7 @@ cmd_narrate() {
 	norm_project "$P"
 	P=$(cd "$P" && pwd)
 	[ -f "$P/narration.txt" ] || die "narrate: missing $P/narration.txt"
-	local B="$P/build" N="$P/build/narration" lines=() i=0 f seg d line take nn missing=0
+	local B="$P/build" N="$P/build/narration" lines=() i=0 f seg d line take nn missing=0 fit
 	mapfile -t lines <"$P/narration.txt"
 	# Own takes first: list what is missing before any slow work.
 	if [ $mode = own ]; then
@@ -393,7 +486,7 @@ cmd_narrate() {
 		done
 		[ $missing -eq 0 ] || die "narrate --own: record the takes above (the person's own voice), then rerun"
 	fi
-	if [ ! -f "$B/segments.txt" ]; then
+	if [ ! -s "$B/segments.txt" ] || [ ! -s "$B/video.mp4" ]; then
 		note "measuring segments (silent build)"
 		rm -f "$P/narration.m4a"
 		cmd_build "$P" >/dev/null
@@ -409,15 +502,18 @@ cmd_narrate() {
 				synth "$voice" "$line" "$N/$i.raw.wav" || die "narrate: the OS voice failed on line $((i + 1))"
 				take=$N/$i.raw.wav
 			fi
-			echo "media: narration line $((i + 1)): $(fit_line "$take" "$N/$i.wav" "$d") of ${d}s" >&2
+			fit=$(fit_line "$take" "$N/$i.wav" "$d") || die "narrate: cannot fit line $((i + 1))"
+			note "narration line $((i + 1)): $fit of ${d}s"
 		else
 			ffmpeg -nostdin -hide_banner -loglevel error -y -f lavfi -i "anullsrc=r=48000:cl=stereo" -t "$d" "$N/$i.wav"
 		fi
+		[ -s "$N/$i.wav" ] || die "narrate: no audio for line $((i + 1))"
 		echo "file '$i.wav'" >>"$N/list.txt"
 		i=$((i + 1))
 	done <"$B/segments.txt"
 	ffmpeg -nostdin -hide_banner -loglevel error -y -f concat -safe 0 -i "$N/list.txt" \
 		-af loudnorm=I=-16:TP=-1.5:LRA=11 -ar 48000 -ac 2 -c:a aac -b:a 160k "$P/narration.m4a" || die "narrate: joining failed"
+	[ -s "$P/narration.m4a" ] || die "narrate: joining produced no audio"
 	echo "$P/narration.m4a"
 }
 
@@ -434,7 +530,7 @@ cmd_build() {
 		export VIDEO_RECORDER=cast
 	fi
 	# Project narration.m4a replaces silence under pictures; segment sidecars stay.
-	bash "$video_sh" build "$proj" >&2 || die "build failed (video.sh)"
+	"$(native_path "$(command -v bashy)")" "$video_sh" build "$proj" >&2 || die "build failed (video.sh)"
 	echo "$proj/build/demo.mp4"
 }
 

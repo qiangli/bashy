@@ -37,7 +37,7 @@ if [ -f "$CAST_BSH" ] && command -v bashy >/dev/null; then
 	bashy commands add cast --set exec.0=bashy --set exec.1=--bashsharp --set "exec.2=$CAST_BSH" \
 		--set effects.0=read --set effects.1=write --set effects.2=exec >/dev/null \
 		|| fail "cannot register examples/cast in the sandbox"
-	bashy cast --help >/dev/null 2>&1 || fail "registered cast does not answer --help"
+	bashy commands show cast --json >/dev/null 2>&1 || fail "registered cast is missing"
 	pass "cast registered in the sandbox from $CAST_BSH"
 fi
 
@@ -160,7 +160,7 @@ pass "subtitle burn-in overlays rendered and applied"
 # 7. cast recorder path: runs whenever cast is registered (the sandbox
 #    registration above, or a `cast` on PATH); skips only without either.
 if command -v cast >/dev/null; then CAST=(cast)
-elif bashy cast --help >/dev/null 2>&1; then CAST=(bashy cast)
+elif bashy commands show cast --json >/dev/null 2>&1; then CAST=(bashy cast)
 else CAST=(); fi
 if [ ${#CAST[@]} -gt 0 ]; then
 	"${CAST[@]}" record "$TMP/cast-check.cast" --cols 40 --rows 8 --idle-limit 1 -- sh -c 'echo cast-ok' </dev/null >/dev/null \

@@ -19,19 +19,21 @@ created: "2026-11-10T20:00:00Z"
 
 ## Install once
 
-Use the line for this computer, then run `media doctor`. Doctor downloads and SHA-256 verifies the pinned `pdfcraft-cli`, so it needs network access the first time.
+Register the examples first with `bashy --bashsharp examples/defaults/bashy-defaults.bsh apply` from the source checkout (or run `bashy-defaults apply` after installing Bashy's source pin). This registers `media`, `cast`, and `record` with their declared effects. Use the install line for this computer, then run `media doctor`. Doctor registers ffmpeg, ffprobe, agg and a SHA-256 verified pinned `pdfcraft-cli`; it needs network access the first time.
 
 ```sh
 # macOS
 brew install ffmpeg agg
 # Windows (PowerShell; either agg line works)
-winget install Gyan.FFmpeg
-winget install asciinema.agg    # or: scoop install agg
+winget install Gyan.FFmpeg --accept-source-agreements --accept-package-agreements
+winget install asciinema.agg --accept-source-agreements --accept-package-agreements
 # Debian/Ubuntu Linux
 sudo apt install ffmpeg
 cargo install --locked agg      # or install agg's release binary
 media doctor
 ```
+
+If winget's source fails, download the ZIP from [FFmpeg's Windows essentials builds](https://www.gyan.dev/ffmpeg/builds/) and the Windows `agg.exe` from [asciinema/agg releases](https://github.com/asciinema/agg/releases). Extract both under a folder you own, and set `MEDIA_FFMPEG`, `MEDIA_FFPROBE`, and `MEDIA_AGG` to their full executable paths before `media doctor`. Doctor registers those paths; subsequent media commands use the registered names. The pinned PdfCraft archive is fetched and verified by doctor itself.
 
 ## Make the PDF
 

@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -88,7 +89,12 @@ func TestRecordRedAndSleep(t *testing.T) {
 		all.WriteString(ev.Data)
 	}
 	out := all.String()
-	for _, want := range []string{"\033[31m", "red", "\033[0m", "done"} {
+	wants := []string{"\033[31m", "red", "\033[0m", "done"}
+	if runtime.GOOS == "windows" {
+		// ConPTY emits its own reset sequence after interpreting the child's.
+		wants = []string{"\033[31m", "red", "done"}
+	}
+	for _, want := range wants {
 		if !strings.Contains(out, want) {
 			t.Errorf("recorded output lacks %q:\n%q", want, out)
 		}
@@ -130,7 +136,14 @@ func TestRecordUTF8SplitAcrossReads(t *testing.T) {
 		}
 		all.WriteString(ev.Data)
 	}
-	if got, want := all.String(), "\033[32mok\033[0m \u2713 \U0001F680\r\n"; got != want {
+	if got, want := all.String(), "\033[32mok\033[0m \u2713 \U0001F680\r\n"; runtime.GOOS == "windows" {
+		// ConPTY redraws and resets the terminal, but must preserve each glyph.
+		for _, part := range []string{"\033[32m", "ok", "\u2713 \U0001F680"} {
+			if !strings.Contains(got, part) {
+				t.Errorf("recorded bytes lack %q: %q", part, got)
+			}
+		}
+	} else if got != want {
 		t.Errorf("recorded bytes = %q, want %q", got, want)
 	}
 }

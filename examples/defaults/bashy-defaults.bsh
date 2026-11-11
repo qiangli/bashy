@@ -103,12 +103,32 @@ bashy_bin() {
     if [ -n "${BASHY_DEFAULTS_BASHY_BIN:-}" ]; then
         printf '%s\n' "$BASHY_DEFAULTS_BASHY_BIN"
     else
-        printf 'bashy\n'
+        runtime_bin
     fi
+}
+
+runtime_bin() {
+    case $(uname -s) in
+        MINGW*|MSYS*|CYGWIN*|Windows*) registry_path "$(command -v bashy)" ;;
+        *) printf 'bashy\n' ;;
+    esac
 }
 
 src_dir() {
     printf '%s/src/bashy\n' "${BASHY_HOME:-$HOME/.bashy}"
+}
+
+# Go fences on Windows resolve their module beside a native script path.
+registry_path() {
+    local path=$1 drive
+    case $(uname -s) in
+        MINGW*|MSYS*|CYGWIN*|Windows*)
+            case $path in
+                /[a-zA-Z]/*) drive=${path:1:1}; path="${drive^^}:/${path:3}" ;;
+                \\[a-zA-Z]\\*) path=${path//\\//}; drive=${path:1:1}; path="${drive^^}:/${path:3}" ;;
+            esac ;;
+    esac
+    printf '%s\n' "$path"
 }
 
 # The exec path a registered command runs, or nothing when unregistered.
@@ -144,11 +164,12 @@ cmd_apply() {
             continue
         fi
         current=$(registered_path "$name")
-        if [ -n "$current" ] && [ "$current" != "$path" ] && [ "$force" != 1 ]; then
+        registry=$(registry_path "$path")
+        if [ -n "$current" ] && [ "$current" != "$registry" ] && [ "$force" != 1 ]; then
             echo "$PROG: $name: kept your own registration ($current); --force replaces it"
             continue
         fi
-        set -- --set exec.0=bashy --set exec.1=--bashsharp --set "exec.2=$path"
+        set -- --set "exec.0=$(runtime_bin)" --set exec.1=--bashsharp --set "exec.2=$registry"
         i=0
         for e in ${effects//,/ }; do
             set -- "$@" --set "effects.$i=$e"
@@ -197,7 +218,7 @@ cmd_status() {
         current=$(registered_path "$name")
         if [ -z "$current" ]; then
             state=missing
-        elif [ "$current" = "$src/$rel" ]; then
+        elif [ "$current" = "$(registry_path "$src/$rel")" ]; then
             state=default
         else
             state="own ($current)"
