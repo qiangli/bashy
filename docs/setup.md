@@ -9,7 +9,7 @@ Windows, macOS and Linux.
 | Stage | What happens | Recommended: an AI agent does it | Manual |
 |---|---|---|---|
 | 1. Account | sign up / log in at ai.dhnt.io and create an owner token for your agents | you sign up in the browser, then hand the token to the agent with `bashy ask` | [stage 1](#stage-1-account) |
-| 2. Satellite | create your own satellite on your cloud account (DigitalOcean today) | the agent provisions it through the portal's provisioning API | [stage 2](#stage-2-satellite) |
+| 2. Satellite | create your own satellite on your cloud account (AWS Lightsail verified; DigitalOcean unverified) | the agent runs `bashy satellite-provision` ([cloud servers](#cloud-servers-digitalocean-aws-azure-google-cloud-)) or the portal's provisioning API | [stage 2](#stage-2-satellite) |
 | 3. This machine | install bashy here and pair it with the satellite | the agent runs [path 2](#2-ai-agent-on-the-new-machine) | [path 1](#1-manual-on-the-new-machine) |
 | 4. More machines | add PCs and cloud VMs to the satellite | [path 3](#3-bootstrap-then-an-ai-agent-from-another-machine) for PCs, [cloud servers](#cloud-servers-digitalocean-aws-azure-google-cloud-) for VMs | [path 1](#1-manual-on-the-new-machine) on each PC; cloud-init for VMs |
 
@@ -37,8 +37,8 @@ irm https://dhnt.io/install.ps1 | iex
 Both install scripts show no operating-system prompt.
 
 **Package managers are not yet available.** Homebrew, Scoop and winget
-channels are **not supported** as of v1.0.0-rc.27 — no tap, bucket or winget
-package is published. Use an install script above or a release archive below.
+channels are **not supported** — no tap, bucket or winget package is
+published. Use an install script above or a release archive below.
 
 The v1.0 macOS and Windows binaries are not yet code-signed. A browser-downloaded
 archive prompts at launch: on macOS, right-click the executable and choose
@@ -223,6 +223,14 @@ piped stdin, so never pass secrets that way. Copy files with `scp -P 2222` /
 `sftp -P 2222`.
 
 ## Cloud servers (DigitalOcean, AWS, Azure, Google Cloud, …)
+
+**Satellite owner, one command (AWS).** The satellite itself, from plan to
+teardown, is one Bash# skill-script acting for the owner:
+`bashy satellite-provision check|register|plan|up|invite|share-llm|down
+--satellite <id>` (`plan` creates nothing; mutating verbs refuse without
+`--yes`). Runbook: `bashy kb show provision-a-satellite-on-aws-lightsail`.
+The DigitalOcean path of the same script is not verified live: trust `plan`
+only there.
 
 A cloud VM joins a satellite as one more outpost, next to your Windows, macOS
 and Linux machines. There is nobody at its console, so it is set up at first

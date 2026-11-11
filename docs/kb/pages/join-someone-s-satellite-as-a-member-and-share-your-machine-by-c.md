@@ -4,19 +4,23 @@ seq: 17
 form: page
 type: runbook
 title: Join a satellite as a member and share your machine by choice (satellite-member)
-description: 'Agent steps for a member joining a satellite another account owns, or an owner bringing members in, via the satellite-member Bash# command — WHEN a user asks to join, onboard to, or share on someone else''s satellite (keywords: satellite, member, owner, join, invite, pair, own account, membership, share, privacy, satellite-member)'
+description: 'Agent steps for a member joining a satellite another account owns (one command: bashy onboard), or an owner bringing members in, via the satellite-member Bash# command — WHEN a user asks to join, onboard to, or share on someone else''s satellite (keywords: satellite, member, owner, join, onboard, invite, pair, own account, membership, share, privacy, satellite-member)'
 tags:
     - satellite
     - outpost
     - onboarding
     - member
 status: candidate
-evidence: 'S587 C2 2026-11-07: CLI flags checked with --help; delegated member sign-in and share-then-access verified live on a satellite with a second account; own-account ownership and mutual membership from code and operator rules. S606 S4 2026-11-10: reworked to the pair-once + membership + attach flow (yoke docs/cloudbox-members-attach-wire.md); verbs driven against fakes in examples/satellite-member tests, live run pending'
+evidence: 'S587 C2 2026-11-07: CLI flags checked with --help; delegated member sign-in and share-then-access verified live on a satellite with a second account; own-account ownership and mutual membership from code and operator rules. S606 S4 2026-11-10: reworked to the pair-once + membership + attach flow (yoke docs/cloudbox-members-attach-wire.md); verbs driven against fakes in examples/satellite-member tests, live run pending. S604 C5 2026-11-10: bashy onboard named as the one-command route (examples/onboard/onboard.bsh, go test ./examples/onboard/)'
 source:
     tool: claude
 created: "2026-11-07T22:49:28Z"
-updated: "2026-11-10T14:00:00Z"
+updated: "2026-11-11T00:32:46Z"
 ---
+
+## One command: `bashy onboard`
+
+For a member bringing their own machine in, `bashy onboard` runs the whole journey below as one resumable sequence (install check, pair once with the user's OWN account, accept the owner's invitation, attach, status). It inspects the state first, skips what is done, and stops at every step only a person can do, printing what to do next; rerun it to continue. Read `bashy onboard --skill` first; `--dry-run` prints the verb calls. Every step is one `satellite-member` verb, detailed below.
 
 ## For agents
 

@@ -41,6 +41,12 @@ curl -fsSL https://dhnt.io/install.sh | sh -s -- --no-service                   
 
 Tarballs, packages, from source, offline image: **[docs/install.md](docs/install.md)**.
 
+**Three ways in**, by who you are:
+
+- **Only a browser or a phone?** Someone with bashy runs `bashy share qr URL`; you scan it and open the app page ([kb](docs/kb/pages/share-an-app-page-with-a-phone-or-browser-user-share-qr.md)).
+- **Joining someone's satellite with your own machine?** `bashy onboard`, one resumable command ([docs/setup.md](docs/setup.md)).
+- **Running a satellite of your own?** `bashy satellite-provision plan|up|invite|share-llm|down` ([kb runbook](docs/kb/pages/provision-a-satellite-on-aws-lightsail.md)).
+
 ## At a glance
 
 - **Software shaping.** `shape wish` → verify → preview → approve → undo, on the web console or the CLI: describe a change to a registered app or tool in plain words, get your own version, then promote it local → team → upstream (`shape push`). A broken change fails verification and can't be approved. [Try the hello-world example](examples/shaping/hello-world/README.md).
