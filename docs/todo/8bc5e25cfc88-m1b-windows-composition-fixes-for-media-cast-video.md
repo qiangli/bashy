@@ -3,15 +3,18 @@ id: 8bc5e25cfc88
 kind: bug
 title: M1b Windows composition fixes for media/cast/video per the Bash# tour (registered tools, ~~~powershell voice, Go-fence registration)
 seq: 3221
-status: todo
+status: done
 priority: p1
 labels:
     - media
     - windows
 created: 2026-11-11T07:41:46.868622Z
+assignee: codex-gpt6-sol
 sprint: 603
 sprint_id: c808e55d-6ce2-5525-8829-96499861c90e
 sprint_title: 'Agent-assisted PDF and video: small verbs, a media skill-script and kb pages any agent can follow'
+closed: 2026-11-11T08:31:49.371459Z
+closed_by: claude-opus5.5-s603
 ---
 
 Windows composition fixes for the S603 examples, found by the M4 Windows UAT (2026-11-10). Root cause (recorded): the core shell works as designed; examples/media, examples/cast and examples/video were composed against the Bash# rules on Windows. Verified with current bashy main on a Windows host: ffmpeg/ffprobe on PATH by /c/ dirs and /c/ arguments work; bare names resolved from native PATH entries (powershell, bash, bashy) do not run; a Go-fence script registered by absolute /c/... path builds its overlay at \c\Users\... and resolves the wrong go.mod.
