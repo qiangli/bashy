@@ -69,16 +69,6 @@ func TestAdminAlive(t *testing.T) {
 	}
 }
 
-func TestOutpostActionVerb(t *testing.T) {
-	for _, tc := range []struct{ action, want string }{
-		{"start", "enable"},
-		{"stop", "stop"},
-	} {
-		if got := outpostActionVerb(tc.action); got != tc.want {
-			t.Fatalf("%s maps to %s, want %s", tc.action, got, tc.want)
-		}
-	}
-}
 func TestConfig(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "tray.yaml")
 	items, err := loadConfig(p)
@@ -151,12 +141,6 @@ func TestIconColors(t *testing.T) {
 		if got := color.RGBAModel.Convert(im.At(16, 16)).(color.RGBA); got != want {
 			t.Fatalf("%s: center %v, want %v", level, got, want)
 		}
-	}
-}
-
-func TestPendingTitle(t *testing.T) {
-	if pendingTitle("start") != "Outpost: starting…" || pendingTitle("stop") != "Outpost: stopping…" {
-		t.Fatal(pendingTitle("start"), pendingTitle("stop"))
 	}
 }
 

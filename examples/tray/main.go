@@ -71,12 +71,6 @@ func command(ctx context.Context, name string, args ...string) ([]byte, error) {
 	configureChildProcess(cmd)
 	return cmd.CombinedOutput()
 }
-func outpostActionVerb(action string) string {
-	if action == "start" {
-		return "enable"
-	}
-	return action
-}
 
 // adminAlive reports whether the outpost daemon is up by dialing its loopback
 // admin listener — the same probe `outpost status --local-presence` makes,
@@ -190,12 +184,12 @@ type windowProcess struct {
 	in  io.WriteCloser
 }
 type tray struct {
-	mu                       sync.Mutex
-	windows                  map[string]*windowProcess
-	app                      *exec.Cmd
-	appOwned                 bool
-	closed                   bool
-	admin, apps, start, stop *systray.MenuItem
+	mu          sync.Mutex
+	windows     map[string]*windowProcess
+	app         *exec.Cmd
+	appOwned    bool
+	closed      bool
+	admin, apps *systray.MenuItem
 }
 
 func (t *tray) open(raw, title string) {
@@ -312,17 +306,6 @@ func (t *tray) quit() {
 	systray.Quit()
 }
 
-// settleSeconds bounds the fast poll after Start/Stop; outpost enable itself
-// waits up to 15 s for the supervisor.
-const settleSeconds = 20
-
-func pendingTitle(verb string) string {
-	if verb == "start" {
-		return "Outpost: starting…"
-	}
-	return "Outpost: stopping…"
-}
-
 func icon(level string) []byte {
 	col := color.RGBA{235, 28, 36, 255} // off: bright red, readable on light and dark menu bars
 	if level == "on" {
@@ -375,25 +358,16 @@ func (t *tray) run(items []extraItem, admin string) {
 			}(it)
 		}
 		systray.AddSeparator()
-		t.start = systray.AddMenuItem("Start outpost", "")
-		t.stop = systray.AddMenuItem("Stop outpost", "")
 		quit := systray.AddMenuItem("Quit", "")
-		// Touch the native menu only when something changed: on Windows,
-		// rewriting menu items from a poller while the user has the menu
-		// open hangs the tray's message loop ("Not responding").
+		// The tray only watches outpost; its lifecycle belongs to the
+		// supervisor (and the admin UI). Touch the native menu only when
+		// something changed: on Windows, rewriting menu items from a poller
+		// while the user has the menu open hangs the tray's message loop.
 		var (
 			uiMu      sync.Mutex
 			shownText string
 			shownRun  = -1 // -1 unknown, 0 off, 1 running
 		)
-		setTitle := func(text string) {
-			uiMu.Lock()
-			defer uiMu.Unlock()
-			if text != shownText {
-				shownText = text
-				statusItem.SetTitle(text)
-			}
-		}
 		adminAddr := admin
 		if u, err := url.Parse(admin); err == nil {
 			adminAddr = u.Host
@@ -442,12 +416,8 @@ func (t *tray) run(items []extraItem, admin string) {
 			if run != shownRun {
 				shownRun = run
 				if s.Running {
-					t.start.Hide()
-					t.stop.Show()
 					t.admin.Enable()
 				} else {
-					t.stop.Hide()
-					t.start.Show()
 					t.admin.Disable()
 				}
 			}
@@ -481,30 +451,6 @@ func (t *tray) run(items []extraItem, admin string) {
 				t.open(appURL, "Bashy Apps")
 			}
 		}()
-		action := func(item *systray.MenuItem, verb string) {
-			go func() {
-				for range item.ClickedCh {
-					// outpost stop returns once the daemon is signalled and
-					// enable once it is launched; the daemon changes state a
-					// few seconds later. Say so, then poll until it settles.
-					want := verb == "start"
-					setTitle(pendingTitle(verb))
-					// The CLI alone can take >10 s to start on Windows.
-					ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-					out, err := command(ctx, "outpost", outpostActionVerb(verb))
-					cancel()
-					if err != nil {
-						log.Printf("outpost %s: %v: %s", verb, err, strings.TrimSpace(string(out)))
-					}
-					for i := 0; i < settleSeconds && adminAlive(adminAddr) != want; i++ {
-						time.Sleep(time.Second)
-					}
-					refresh(true)
-				}
-			}()
-		}
-		action(t.start, "start")
-		action(t.stop, "stop")
 		go func() {
 			for range quit.ClickedCh {
 				t.quit()

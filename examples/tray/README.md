@@ -8,15 +8,17 @@ embedded engine. Clicking an already open item focuses that window. No action
 opens a system browser.
 
 The menu shows a status line and colored icon: green when outpost is running
-and paired, amber when running without a current pairing, gray when off. It
-polls `outpost status --local-presence` and `outpost status --json` every ten
-seconds. Admin uses `http://127.0.0.1:17777`, or the host:port in
-`OUTPOST_ADMIN_ADDR`, and is disabled when outpost is off. Apps uses
-`http://127.0.0.1:22749/`. When that address does not answer, the tray starts
-`bashy app serve` and owns that process. Quit closes its windows and app server
-(if owned), but never stops outpost. Start calls `outpost enable`, which clears
-the stop intent and starts outpost through its supervisor or detached fallback;
-Stop calls `outpost stop`.
+and paired, amber when running without a current pairing, red when off. Every
+ten seconds the tray dials the outpost admin port (running/off) and, while
+outpost runs, reads `outpost status --json` at most once a minute (pairing).
+Admin uses `http://127.0.0.1:17777`, or the host:port in `OUTPOST_ADMIN_ADDR`,
+and is disabled when outpost is off. Apps uses `http://127.0.0.1:22749/`. When
+that address does not answer, the tray starts `bashy app serve` and owns that
+process. Quit closes its windows and app server (if owned).
+
+The tray only watches outpost: it never starts, stops, enables or restarts it.
+Outpost's lifecycle belongs to its supervisor (and the admin UI); a second
+controller in the user session fights the supervisor.
 
 Place an optional `tray.yaml` in your bashy config directory
 (`$XDG_CONFIG_HOME/bashy` when set, otherwise `~/.config/bashy`):
