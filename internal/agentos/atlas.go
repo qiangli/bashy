@@ -202,6 +202,12 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite},
 		Stability: atlas.StabilityExperimental,
 	},
+	"suite": {
+		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
+		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork, atlas.CapNeedsPairing},
+		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite},
+		Stability: atlas.StabilityExperimental,
+	},
 	// Plan-only recreation dry-run (S490): reproduce --plan reads master
 	// provisioning, hosts, peers, and tokens over the network and reports
 	// recreate actions plus gaps. Read-only; there is no --apply.

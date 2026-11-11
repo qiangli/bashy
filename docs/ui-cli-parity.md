@@ -38,6 +38,7 @@ owner and member flows alike.
 | Members page: list members | `bashy member ls [--circle C] --json` |
 | Members page: invite a member (email + circle) | `bashy member invite EMAIL [--circle C] [--dry-run] --json` |
 | Members page: change a member's circle | `bashy member set EMAIL --circle C [--dry-run] --json` |
+| Members page: circle field | `bashy member invite EMAIL --circle NAME` / `bashy member set EMAIL --circle NAME` — any owner-chosen name (lowercase slug, up to 32 characters; `public` and `owner` reserved) |
 | Members page: remove a member | `bashy member rm EMAIL [--dry-run] --json` |
 | Members page: check one address | `bashy member check EMAIL --json` |
 | Reverse view: who lists me | `bashy member of --json` |
@@ -51,6 +52,9 @@ owner and member flows alike.
 | Migration preview | `bashy reproduce --plan` (read-only; no `--apply`) |
 | Master credential for migration | `bashy fleet master-token save\|mint` (0600 file, never printed) |
 | Hosts page: share an app with chosen members (share grant) | `bashy outpost apps share APP --email E` / `unshare` / `shares` on the host (S606 S7: the host's own token on its satellite or standalone; target must be an active mutual member); journey: `satellite-member share APP --email E` |
+| Apps page: share an app with a circle | `bashy outpost apps share APP --circle C` — circle membership is checked live |
+| Suites page: list, create, add, remove, delete | `bashy suite ls` / `set NAME HOST/APP...` / `add NAME HOST/APP` / `remove NAME HOST/APP` / `rm NAME` (`show NAME` reads one suite) |
+| Suites page: share, unshare, list grants | `bashy suite share NAME --circle C` (or `--email E`) / `unshare NAME SHARE_ID` / `shares NAME` — circle membership is checked live |
 
 ## Satellite web console
 
