@@ -1,0 +1,453 @@
+#!/usr/bin/env -S bashy --bashsharp
+# media — images to PDF, PDF to slides, slides and terminal steps to a narrated
+# MP4. The same files and the same result on macOS, Windows and Linux.
+#
+#   media doctor
+#   media pdf IMG... -o OUT.pdf [--title T] [--author A]
+#   media combine A.pdf B.pdf... -o OUT.pdf
+#   media slides IN.pdf DIR
+#   media narrate PROJECT --own | --voice NAME|default
+#   media build PROJECT
+#
+# Every verb works alone on plain files and prints only the paths it wrote.
+# PDF work is done by the pinned pdfcraft-cli (MIT OR Apache-2.0), downloaded
+# and SHA-256 verified into the bashy cache; video work by examples/video.
+# ffmpeg, agg and the OS voice are the person's own installs (never fetched).
+
+~~~skill as guide
+---
+name: media
+description: Make a PDF from images, merge PDFs, turn a PDF into slide PNGs, and build a narrated MP4 from a storyboard, identically on macOS, Windows and Linux. Use when a task asks for a PDF deliverable, a slide deck video, a demo video or a voice-over. Run `media doctor` first; it prints the exact install line for anything missing.
+metadata:
+  requires: "has=bashy"
+---
+# media — PDF and video, same result on every OS
+
+Run it yourself. Each verb takes plain files and prints only output paths, so
+it composes: `media combine "$(media pdf a.png b.png -o a.pdf)" b.pdf -o all.pdf`.
+
+    media doctor                                   # tools present? else the install line
+    media pdf cover.png page2.png -o deck.pdf --title "Plan" --author "Owner"
+    media combine deck.pdf appendix.pdf -o all.pdf
+    media slides all.pdf slides/                   # slides/01.png, 02.png ... for the video
+    media narrate my-demo --own                    # voice track from the member's own takes
+    media build my-demo                            # my-demo/build/demo.mp4
+
+- `doctor` first. It downloads the pinned pdfcraft-cli once, checks ffmpeg
+  (an H.264 encoder and the `overlay` filter), ffprobe, agg, a screen
+  recorder and a voice tool, and exits non-zero printing the install command
+  (brew, winget or apt) for each missing one. Run what it prints, then rerun.
+- A project is a folder: `storyboard.txt` (card / slide / step / camera /
+  pair lines, see examples/video), `narration.txt` (line N is spoken over
+  segment N), `slides/*.png`, `cards/*.txt`, `steps/*.sh`, `camera/*.mp4`.
+  Paths inside are relative. CRLF or LF is accepted; the files are rewritten
+  as LF.
+- Narration: `narrate PROJECT --own` is the real path. Write the lines in
+  `narration.txt`; if `PROJECT/voice/NN.*` takes are missing it prints the
+  `record audio --script ... --out ...` command for each, the person records
+  them, and you rerun. Each take is fitted to its segment (sped up only if
+  it does not fit, padded with silence) and loudness-normalised to -16 LUFS.
+  `--voice NAME` uses the computer's own voice as a DRAFT to check timing
+  (macOS `say`, Windows System.Speech, Linux espeak-ng); never ship it as
+  the final voice.
+- `camera NAME` segments read `camera/NAME.mp4|mov|webm`, as made by
+  `record video`. `step NAME` runs `steps/NAME.sh` under bashy and records it
+  with `cast record` when present, else asciinema.
+- Order: `narrate` first measures the segments (it runs a silent build when
+  none exists), writes `PROJECT/narration.m4a`, then `build` mixes it in.
+- No browser is involved anywhere in media.
+~~~
+
+set -eu
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PDFCRAFT_VERSION=0.20.0
+PDFCRAFT_URL=https://github.com/storytold/pdfcraft/releases/download/v$PDFCRAFT_VERSION
+video_sh=${MEDIA_VIDEO_SH:-$here/../video/video.sh}
+
+die() { echo "media: $*" >&2; exit 1; }
+note() { echo "media: $*" >&2; }
+
+# The command registry passes typed flags as --name=value; accept both forms.
+args=()
+for a in "$@"; do
+	case $a in
+	--*=*) args+=("${a%%=*}" "${a#*=}") ;;
+	*) args+=("$a") ;;
+	esac
+done
+set -- "${args[@]}"
+
+usage() { sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+# ---- platform ---------------------------------------------------------------
+
+os_name() {
+	case $(uname -s) in
+	Darwin) echo darwin ;;
+	Linux) echo linux ;;
+	MINGW* | MSYS* | CYGWIN* | Windows*) echo windows ;;
+	*) echo "$(uname -s)" ;;
+	esac
+}
+
+arch_name() {
+	case $(uname -m) in
+	arm64 | aarch64) echo arm64 ;;
+	x86_64 | amd64 | AMD64) echo amd64 ;;
+	*) uname -m ;;
+	esac
+}
+
+# pin_for: prints "ASSET SHA256" for this OS/arch (SHA-256 of the release asset).
+# macOS ships one universal zip; Windows ships the portable zip, which holds
+# pdfcraft-cli.exe next to the GUI.
+pin_for() {
+	local v=$PDFCRAFT_VERSION
+	case "$(os_name)/$(arch_name)" in
+	darwin/*) echo "pdfcraft-cli-$v-macos-universal.zip dd10f837318c3fce81f893a988de13efd7ba4be95e281f277cd7c23247aaa122" ;;
+	linux/amd64) echo "pdfcraft-cli-$v-linux-x86_64.tar.gz a5b2967d057a12091f8ddaf5e247a608b16628ee0c9752c9c1fac286107dc238" ;;
+	linux/arm64) echo "pdfcraft-cli-$v-linux-aarch64.tar.gz 8ae1196679f8da60c6bec7c61caf92904e6da2fd0a159147dd53f74805993d36" ;;
+	windows/amd64) echo "pdfcraft-$v-windows-x64-portable.zip efb636a8c5c4f8041e6dbe39f56f40992c9a1b199a0b8a27cd0fc4d6037715d2" ;;
+	windows/arm64) echo "pdfcraft-$v-windows-arm64-portable.zip b066d375a16f6cda28c24a99f7b3d90582d9a70f4af0c4473dc0ffaae7170c7f" ;;
+	*) return 1 ;;
+	esac
+}
+
+cache_root() {
+	local base=${MEDIA_CACHE:-${XDG_CACHE_HOME:-${LOCALAPPDATA:-$HOME/.cache}}}
+	echo "$base/bashy/media/pdfcraft-$PDFCRAFT_VERSION"
+}
+
+sha256_of() {
+	if command -v sha256sum >/dev/null; then sha256sum "$1" | { read -r h _; echo "$h"; }
+	elif command -v shasum >/dev/null; then shasum -a 256 "$1" | { read -r h _; echo "$h"; }
+	else die "no sha256sum or shasum to verify the download"; fi
+}
+
+find_cli() {
+	local f
+	for f in "$1"/pdfcraft-cli "$1"/pdfcraft-cli.exe "$1"/*/pdfcraft-cli "$1"/*/pdfcraft-cli.exe; do
+		[ -f "$f" ] && { echo "$f"; return 0; }
+	done
+	return 1
+}
+
+# pdfcraft: print the path of the verified pdfcraft-cli, downloading it once.
+pdfcraft() {
+	if [ -n "${MEDIA_PDFCRAFT:-}" ]; then echo "$MEDIA_PDFCRAFT"; return 0; fi
+	local root bin pin asset want got tmp
+	root=$(cache_root)
+	if bin=$(find_cli "$root"); then echo "$bin"; return 0; fi
+	pin=$(pin_for) || die "no pinned pdfcraft-cli for $(os_name)/$(arch_name)"
+	read -r asset want <<<"$pin"
+	tmp="$root.tmp.$$"
+	rm -rf "$tmp"; mkdir -p "$tmp/x"
+	note "downloading $asset (pinned $PDFCRAFT_VERSION) into $root"
+	curl -fsSL --retry 3 -o "$tmp/$asset" "$PDFCRAFT_URL/$asset" || { rm -rf "$tmp"; die "download failed: $PDFCRAFT_URL/$asset"; }
+	got=$(sha256_of "$tmp/$asset")
+	[ "$got" = "$want" ] || { rm -rf "$tmp"; die "SHA-256 mismatch for $asset: got $got, want $want"; }
+	case $asset in
+	*.zip) if command -v unzip >/dev/null; then unzip -q "$tmp/$asset" -d "$tmp/x"; else tar -xf "$tmp/$asset" -C "$tmp/x"; fi ;;
+	*) tar -xzf "$tmp/$asset" -C "$tmp/x" ;;
+	esac
+	mkdir -p "$(dirname "$root")"
+	rm -rf "$root"; mv "$tmp/x" "$root"; rm -rf "$tmp"
+	bin=$(find_cli "$root") || die "pdfcraft-cli not found in $asset"
+	chmod +x "$bin" 2>/dev/null || true
+	echo "$bin"
+}
+
+# ---- small helpers ----------------------------------------------------------
+
+abspath() {
+	local d b
+	d=$(dirname "$1"); b=$(basename "$1")
+	[ -d "$d" ] || die "no such folder: $d"
+	echo "$(cd "$d" && pwd)/$b"
+}
+
+# jstr: JSON string literal of $1.
+jstr() {
+	local s=$1
+	s=${s//\\/\\\\}; s=${s//\"/\\\"}
+	printf '"%s"' "$s"
+}
+
+dur() { ffprobe -v error -show_entries format=duration -of csv=p=0 "$1"; }
+
+# lf FILE...: rewrite CRLF to LF in place (shared projects come from Windows).
+lf() {
+	local f
+	for f in "$@"; do
+		[ -f "$f" ] || continue
+		if grep -q $'\r' "$f"; then
+			tr -d '\r' <"$f" >"$f.lf.$$" && mv "$f.lf.$$" "$f"
+		fi
+	done
+}
+
+norm_project() {
+	[ -d "$1" ] || die "no such project folder: $1"
+	lf "$1/storyboard.txt" "$1/narration.txt" "$1"/cards/*.txt
+}
+
+# ---- doctor -----------------------------------------------------------------
+
+doctor() {
+	local os bad=0 bin
+	os=$(os_name)
+	if bin=$(pdfcraft); then
+		echo "ok   pdfcraft-cli $PDFCRAFT_VERSION: $bin"
+	else
+		echo "MISSING pdfcraft-cli (download or checksum failed, see above)"; bad=1
+	fi
+	local ffm_install ffm_agg ffm_voice ffm_rec
+	case $os in
+	darwin) ffm_install="brew install ffmpeg"; ffm_agg="brew install agg"; ffm_voice="(macOS ships say)"; ffm_rec="brew install asciinema" ;;
+	windows) ffm_install="winget install Gyan.FFmpeg"; ffm_agg="winget install asciinema.agg  (or: scoop install agg)"; ffm_voice="(Windows ships System.Speech; install PowerShell 7 if powershell is missing: winget install Microsoft.PowerShell)"; ffm_rec="cast (bashy yoke) - asciinema has no Windows build" ;;
+	*) ffm_install="sudo apt install ffmpeg"; ffm_agg="cargo install --locked agg  (agg is not in apt; or download from github.com/asciinema/agg/releases)"; ffm_voice="sudo apt install espeak-ng"; ffm_rec="sudo apt install asciinema" ;;
+	esac
+	if command -v ffmpeg >/dev/null && command -v ffprobe >/dev/null; then
+		if ffmpeg -hide_banner -encoders 2>/dev/null | grep -qE ' (libx264|h264_[a-z0-9]+) '; then
+			echo "ok   ffmpeg: H.264 encoder"
+		else
+			echo "MISSING ffmpeg H.264 encoder (libx264 or h264_*): $ffm_install"; bad=1
+		fi
+		if ffmpeg -hide_banner -filters 2>/dev/null | grep -qE ' overlay '; then
+			echo "ok   ffmpeg: overlay filter"
+		else
+			echo "MISSING ffmpeg overlay filter: $ffm_install"; bad=1
+		fi
+		echo "ok   ffprobe: $(command -v ffprobe)"
+	else
+		echo "MISSING ffmpeg/ffprobe: $ffm_install"; bad=1
+	fi
+	if command -v agg >/dev/null; then echo "ok   agg: $(command -v agg)"; else echo "MISSING agg: $ffm_agg"; bad=1; fi
+	if command -v cast >/dev/null || command -v asciinema >/dev/null; then
+		echo "ok   recorder: $(command -v cast || command -v asciinema)"
+	else
+		echo "MISSING recorder for step segments: $ffm_rec"; bad=1
+	fi
+	case $os in
+	darwin) command -v say >/dev/null && echo "ok   voice: say" || { echo "MISSING voice: say"; bad=1; } ;;
+	windows)
+		if command -v powershell >/dev/null || command -v pwsh >/dev/null; then echo "ok   voice: System.Speech via PowerShell"
+		else echo "MISSING voice: $ffm_voice"; bad=1; fi ;;
+	*) command -v espeak-ng >/dev/null && echo "ok   voice: espeak-ng" || { echo "MISSING voice: $ffm_voice"; bad=1; } ;;
+	esac
+	[ -f "$video_sh" ] && echo "ok   video.sh: $video_sh" || { echo "MISSING video.sh: $video_sh"; bad=1; }
+	if [ $bad -ne 0 ]; then
+		echo "media: doctor failed; install what is marked MISSING (the line is shown), then rerun" >&2
+		return 1
+	fi
+}
+
+# ---- pdf --------------------------------------------------------------------
+
+run_steps() { # run_steps STEPS_JSON -> exits on failure
+	local cli
+	cli=$(pdfcraft)
+	"$cli" run --script "$1" >/dev/null || die "pdfcraft-cli run failed ($1)"
+}
+
+cmd_pdf() {
+	local out="" title="" author="" imgs=() i
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o | --out) out=$2; shift 2 ;;
+		--title) title=$2; shift 2 ;;
+		--author) author=$2; shift 2 ;;
+		-*) die "pdf: unknown option: $1" ;;
+		*) imgs+=("$1"); shift ;;
+		esac
+	done
+	[ ${#imgs[@]} -gt 0 ] || die "usage: media pdf IMG... -o OUT.pdf [--title T] [--author A]"
+	[ -n "$out" ] || die "pdf: -o OUT.pdf is required"
+	out=$(abspath "$out")
+	local paths="" tmp cli
+	for i in "${imgs[@]}"; do
+		[ -f "$i" ] || die "pdf: no such image: $i"
+		paths+="${paths:+,}$(jstr "$(abspath "$i")")"
+	done
+	tmp=$(mktemp -d "${TMPDIR:-/tmp}/media.XXXXXX")
+	trap "rm -rf '$tmp'" EXIT
+	cli=$(pdfcraft)
+	printf '[{"tool":"doc_create","args":{"from":"images","paths":[%s]}},{"tool":"doc_save","args":{"doc":1,"path":%s}}]\n' \
+		"$paths" "$(jstr "$tmp/raw.pdf")" >"$tmp/steps.json"
+	run_steps "$tmp/steps.json"
+	if [ -n "$title$author" ]; then
+		local eargs=()
+		[ -z "$title" ] || eargs+=(--title "$title")
+		[ -z "$author" ] || eargs+=(--author "$author")
+		"$cli" edit "$tmp/raw.pdf" "${eargs[@]}" --out "$tmp/edited.pdf" >/dev/null || die "pdf: edit failed"
+		mv "$tmp/edited.pdf" "$out"
+	else
+		mv "$tmp/raw.pdf" "$out"
+	fi
+	echo "$out"
+}
+
+cmd_combine() {
+	local out="" ins=() cli
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o | --out) out=$2; shift 2 ;;
+		-*) die "combine: unknown option: $1" ;;
+		*) ins+=("$1"); shift ;;
+		esac
+	done
+	[ ${#ins[@]} -ge 2 ] || die "usage: media combine A.pdf B.pdf... -o OUT.pdf"
+	[ -n "$out" ] || die "combine: -o OUT.pdf is required"
+	local f
+	for f in "${ins[@]}"; do [ -f "$f" ] || die "combine: no such file: $f"; done
+	out=$(abspath "$out")
+	cli=$(pdfcraft)
+	"$cli" combine "${ins[@]}" --out "$out" >/dev/null || die "combine failed"
+	echo "$out"
+}
+
+cmd_slides() {
+	[ $# -eq 2 ] || die "usage: media slides IN.pdf DIR"
+	local in=$1 dir=$2 cli n p
+	[ -f "$in" ] || die "slides: no such file: $in"
+	mkdir -p "$dir"
+	dir=$(cd "$dir" && pwd)
+	cli=$(pdfcraft)
+	n=$("$cli" info "$in" | sed -n 's/^ *"pages": *\([0-9][0-9]*\).*/\1/p')
+	[ -n "$n" ] && [ "$n" -gt 0 ] || die "slides: cannot read the page count of $in"
+	for ((p = 1; p <= n; p++)); do
+		"$cli" render "$in" --page "$p" --dpi "${MEDIA_DPI:-150}" --out "$dir/$(printf '%02d' "$p").png" >/dev/null 2>&1 || die "slides: render of page $p failed"
+		echo "$dir/$(printf '%02d' "$p").png"
+	done
+}
+
+# ---- narrate ----------------------------------------------------------------
+
+# synth VOICE TEXT OUT: speak TEXT with the OS voice into an audio file OUT.
+synth() {
+	local voice=$1 text=$2 out=$3 ps
+	case $(os_name) in
+	darwin)
+		if [ "$voice" = default ]; then say --data-format=LEI16@22050 -o "$out" -- "$text"; else say -v "$voice" --data-format=LEI16@22050 -o "$out" -- "$text"; fi ;;
+	windows)
+		ps=$(command -v powershell || command -v pwsh) || die "no PowerShell for System.Speech"
+		MEDIA_TEXT=$text MEDIA_OUT=$out MEDIA_VOICE=$voice "$ps" -NoProfile -NonInteractive -Command \
+			'Add-Type -AssemblyName System.Speech; $s = New-Object System.Speech.Synthesis.SpeechSynthesizer; if ($env:MEDIA_VOICE -ne "default") { $s.SelectVoice($env:MEDIA_VOICE) }; $s.SetOutputToWaveFile($env:MEDIA_OUT); $s.Speak($env:MEDIA_TEXT); $s.Dispose()' ;;
+	*)
+		if [ "$voice" = default ]; then espeak-ng -w "$out" -- "$text"; else espeak-ng -v "$voice" -w "$out" -- "$text"; fi ;;
+	esac
+}
+
+# find_take N: the member's own recording for line N (voice/NN.*), if any.
+find_take() {
+	local nn ext
+	nn=$(printf '%02d' "$1")
+	for ext in m4a wav mp3 webm mp4 ogg aac; do
+		[ -f "$P/voice/$nn.$ext" ] && { echo "$P/voice/$nn.$ext"; return 0; }
+	done
+	return 1
+}
+
+# fit_line IN OUT SECONDS: speed IN up only if it does not fit SECONDS, pad
+# with silence, trim to exactly SECONDS (S523 method, same on every OS).
+fit_line() {
+	local in=$1 out=$2 d=$3 a r af
+	a=$(dur "$in")
+	r=$(awk -v a="$a" -v d="$d" 'BEGIN{b=d-0.75; if(b<=0.5)b=0.5; r=a/b; if(r<1)r=1; printf "%.4f", r}')
+	awk -v r="$r" 'BEGIN{exit !(r>1.4)}' && die "narration line does not fit its segment (${a}s of speech, ${d}s of picture); shorten the line or lengthen the segment"
+	af="adelay=250|250,apad,atrim=0:$d"
+	awk -v r="$r" 'BEGIN{exit !(r>1.0001)}' && af="atempo=$r,$af"
+	ffmpeg -nostdin -hide_banner -loglevel error -y -i "$in" -af "$af" -ar 48000 -ac 2 "$out" || die "ffmpeg could not fit $in"
+	echo "ratio $r"
+}
+
+cmd_narrate() {
+	local mode="" voice=""
+	P=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--own) mode=own; shift ;;
+		--voice) mode=voice; voice=${2:?--voice needs a voice name or default}; shift 2 ;;
+		-*) die "narrate: unknown option: $1" ;;
+		*) [ -z "$P" ] || die "narrate: unexpected argument: $1"; P=$1; shift ;;
+		esac
+	done
+	[ -n "$P" ] && [ -n "$mode" ] || die "usage: media narrate PROJECT --own | --voice NAME"
+	norm_project "$P"
+	P=$(cd "$P" && pwd)
+	[ -f "$P/narration.txt" ] || die "narrate: missing $P/narration.txt"
+	local B="$P/build" N="$P/build/narration" lines=() i=0 f seg d line take nn missing=0
+	mapfile -t lines <"$P/narration.txt"
+	# Own takes first: list what is missing before any slow work.
+	if [ $mode = own ]; then
+		for i in "${!lines[@]}"; do
+			[ -n "${lines[$i]}" ] || continue
+			if ! find_take $((i + 1)) >/dev/null; then
+				nn=$(printf '%02d' $((i + 1)))
+				mkdir -p "$B/script" "$P/voice"
+				printf '%s\n' "${lines[$i]}" >"$B/script/$nn.txt"
+				echo "record audio --script build/script/$nn.txt --out voice/$nn.m4a   # run from $P" >&2
+				missing=1
+			fi
+		done
+		[ $missing -eq 0 ] || die "narrate --own: record the takes above (the person's own voice), then rerun"
+	fi
+	if [ ! -f "$B/segments.txt" ]; then
+		note "measuring segments (silent build)"
+		rm -f "$P/narration.m4a"
+		cmd_build "$P" >/dev/null
+	fi
+	rm -rf "$N"; mkdir -p "$N"; : >"$N/list.txt"
+	i=0
+	while read -r _ f; do
+		f=${f//\'/}; seg=$B/$f; d=$(dur "$seg"); line=${lines[$i]:-}
+		if [ -n "$line" ]; then
+			if [ $mode = own ]; then
+				take=$(find_take $((i + 1)))
+			else
+				synth "$voice" "$line" "$N/$i.raw.wav" || die "narrate: the OS voice failed on line $((i + 1))"
+				take=$N/$i.raw.wav
+			fi
+			echo "media: narration line $((i + 1)): $(fit_line "$take" "$N/$i.wav" "$d") of ${d}s" >&2
+		else
+			ffmpeg -nostdin -hide_banner -loglevel error -y -f lavfi -i "anullsrc=r=48000:cl=stereo" -t "$d" "$N/$i.wav"
+		fi
+		echo "file '$i.wav'" >>"$N/list.txt"
+		i=$((i + 1))
+	done <"$B/segments.txt"
+	ffmpeg -nostdin -hide_banner -loglevel error -y -f concat -safe 0 -i "$N/list.txt" \
+		-af loudnorm=I=-16:TP=-1.5:LRA=11 -ar 48000 -ac 2 -c:a aac -b:a 160k "$P/narration.m4a" || die "narrate: joining failed"
+	echo "$P/narration.m4a"
+}
+
+# ---- build ------------------------------------------------------------------
+
+cmd_build() {
+	[ $# -eq 1 ] || die "usage: media build PROJECT"
+	norm_project "$1"
+	local proj
+	proj=$(cd "$1" && pwd)
+	[ -f "$video_sh" ] || die "build: missing $video_sh"
+	export VIDEO_FONT_DIR="$here/fonts" VIDEO_FONT_FAMILY="IBM Plex Mono"
+	if command -v cast >/dev/null && cast record --help 2>&1 | grep -q headless; then
+		export VIDEO_RECORDER=cast
+	fi
+	# Project narration.m4a replaces silence under pictures; segment sidecars stay.
+	bash "$video_sh" build "$proj" >&2 || die "build failed (video.sh)"
+	echo "$proj/build/demo.mp4"
+}
+
+# ---- dispatch ---------------------------------------------------------------
+
+case ${1:-} in
+--skill) sed -n '/^~~~skill/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d' ;;
+-h | --help | help | "") usage; [ -n "${1:-}" ] || exit 2 ;;
+doctor) doctor ;;
+pdf) shift; cmd_pdf "$@" ;;
+combine) shift; cmd_combine "$@" ;;
+slides) shift; cmd_slides "$@" ;;
+narrate) shift; cmd_narrate "$@" ;;
+build) shift; cmd_build "$@" ;;
+*) die "unknown verb: $1 (doctor, pdf, combine, slides, narrate, build)" ;;
+esac

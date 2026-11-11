@@ -10,7 +10,8 @@ yourself.
 
 | tool | role | license |
 |---|---|---|
-| [asciinema](https://asciinema.org) 3.x | record each step headless | GPL-3.0 (run, not bundled) |
+| `cast record` (bashy builtin; `bashy cast record` when `cast` is not on PATH) | record each step headless, same on every OS | bashy |
+| [asciinema](https://asciinema.org) 3.x | fallback recorder when cast is unavailable, or `VIDEO_RECORDER=asciinema` | GPL-3.0 (run, not bundled) |
 | [agg](https://github.com/asciinema/agg) | render a cast to frames | Apache-2.0 |
 | [ffmpeg](https://ffmpeg.org) | encode, stack, concatenate, mux audio | LGPL/GPL (run, not bundled) |
 | bashy | runs every recorded step | MIT |

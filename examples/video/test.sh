@@ -137,4 +137,22 @@ audio_stays_non_silent "$OUT" 7.2 1.5 "narrated step in final demo.mp4"
 [ -f "$PROJ/build/sub-1.gif" ] && [ -f "$PROJ/build/sub-2.gif" ] || fail "missing burned-in subtitle overlays"
 pass "subtitle burn-in overlays rendered and applied"
 
+# 7. cast recorder path (only where cast / bashy cast exists)
+if command -v cast >/dev/null; then CAST=(cast)
+elif bashy cast --help >/dev/null 2>&1; then CAST=(bashy cast)
+else CAST=(); fi
+if [ ${#CAST[@]} -gt 0 ]; then
+	"${CAST[@]}" record "$TMP/cast-check.cast" --cols 40 --rows 8 --idle-limit 1 -- sh -c 'echo cast-ok' </dev/null >/dev/null \
+		|| fail "cast record failed"
+	grep -q 'cast-ok' "$TMP/cast-check.cast" || fail "cast output missing recorded text"
+	pass "cast record path"
+	# a failing command's status propagates
+	if "${CAST[@]}" record - --cols 40 --rows 8 -- sh -c 'exit 3' </dev/null >/dev/null 2>&1; then
+		fail "cast record did not propagate CMD exit status"
+	fi
+	pass "cast record propagates exit status"
+else
+	echo "skip cast record path (cast / bashy cast unavailable)"
+fi
+
 echo "ALL VIDEO TESTS PASSED"

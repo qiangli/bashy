@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # video.sh — turn a storyboard of title cards and recorded terminal steps
-# into one MP4. Composes three host tools: asciinema (record), agg (render
+# into one MP4. Composes three host tools: cast (record; asciinema as fallback), agg (render
 # a cast to GIF) and ffmpeg (encode, stack, concatenate, add narration).
 #
 # usage: video.sh doctor | cameras | build|render|run [--subtitles FILE] PROJECT_DIR | clean PROJECT_DIR
@@ -12,7 +12,7 @@
 #                                            static PNG/JPEG image or slide (alias: image)
 #                      step NAME             steps/NAME.sh, recorded headless
 #                      camera NAME [SECONDS] [FIT]
-#                                            camera/NAME.mov|.mp4, or record the
+#                                            camera/NAME.mov|.mp4|.webm, or record the
 #                                            webcam + mic now (macOS); FIT speeds
 #                                            a longer take up to FIT seconds;
 #                                            then words: enhance (voice cleanup,
@@ -52,6 +52,23 @@ VENC=(-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -r "$FPS")
 AENC=(-c:a aac -b:a 160k -ar 48000 -ac 2)
 # Intermediate recordings are video only.
 ENC=("${VENC[@]}" -an)
+# VIDEO_FONT_DIR names a folder of fonts for agg (with VIDEO_FONT_FAMILY), so
+# a render looks the same on every OS. Steps are recorded with `cast record`
+# (a bashy builtin: `bashy cast record` when `cast` is not on PATH) so every OS
+# uses one recorder; asciinema only when cast is unavailable or
+# VIDEO_RECORDER=asciinema. A cast failure is never hidden by a fallback.
+AGGFONT=()
+[ -z "${VIDEO_FONT_DIR:-}" ] || AGGFONT=(--font-dir "$VIDEO_FONT_DIR" --font-family "${VIDEO_FONT_FAMILY:-IBM Plex Mono}")
+RECORDER=()
+if [ "${VIDEO_RECORDER:-}" = asciinema ]; then
+	RECORDER=(asciinema rec)
+elif command -v cast >/dev/null; then
+	RECORDER=(cast record)
+elif bashy cast --help >/dev/null 2>&1; then
+	RECORDER=(bashy cast record)
+else
+	RECORDER=(asciinema rec)
+fi
 CAMERA=${VIDEO_CAMERA:-0:0} # avfoundation "video:audio" device indexes (macOS)
 
 # Recordings show only what the step prints: no startup notices or hints.
@@ -61,7 +78,7 @@ die() { echo "video: $*" >&2; exit 1; }
 
 doctor() {
 	local ok=0 t
-	for t in asciinema agg ffmpeg ffprobe "${VIDEO_SHELL:-bashy}"; do
+	for t in "${RECORDER[0]}" agg ffmpeg ffprobe "${VIDEO_SHELL:-bashy}"; do
 		if command -v "$t" >/dev/null; then
 			echo "ok   $t: $(command -v "$t")"
 		else
@@ -120,7 +137,7 @@ fit() {
 # (default 75) after a 3-second count-in, and keep the take as camera/NAME.mov.
 camera() {
 	local name=$1 secs=${2:-75} src=""
-	for src in "$P/camera/$name.mov" "$P/camera/$name.mp4" ""; do [ -f "$src" ] && break; done
+	for src in "$P/camera/$name.mov" "$P/camera/$name.mp4" "$P/camera/$name.webm" ""; do [ -f "$src" ] && break; done
 	if [ -z "$src" ]; then
 		[ "$(uname)" = Darwin ] || die "live camera capture is wired for macOS (avfoundation); put the take at camera/$name.mov"
 		mkdir -p "$P/camera"; src="$P/camera/$name.mov"
@@ -178,7 +195,7 @@ card() {
 		printf '{"version": 2, "width": %d, "height": %d}\n' "$cols" "$rows"
 		printf '[0.0, "o", %s]\n' "$(printf '%s' "$out" | json_string)"
 	} >"$cast"
-	agg --font-size 48 --theme "$THEME" --last-frame-duration "$secs" --no-loop "$cast" "$B/card-$name.gif" >/dev/null
+	agg "${AGGFONT[@]}" --font-size 48 --theme "$THEME" --last-frame-duration "$secs" --no-loop "$cast" "$B/card-$name.gif" >/dev/null
 	sidecar=$(find_sidecar cards "$name" "$audio")
 	fit "$B/card-$name.gif" "$B/seg-$SEQ.mp4" "$sidecar"
 }
@@ -221,10 +238,16 @@ json_string() {
 record() {
 	local name=$1 cols=${2:-$COLS} rows=${3:-$ROWS} script="$P/steps/$1.sh"
 	[ -f "$script" ] || die "missing $script"
-	(cd "$P" && asciinema rec --headless --overwrite --quiet \
-		--window-size "${cols}x${rows}" --idle-time-limit "$IDLE" \
-		--command "$SHELL_CMD -c '. \"$HERE/typed.sh\"; . \"$script\"'" "$B/$name.cast" </dev/null)
-	agg --font-size "$FONT_SIZE" --theme "$THEME" --idle-time-limit "$IDLE" \
+	if [ "${RECORDER[0]}" = asciinema ]; then
+		(cd "$P" && "${RECORDER[@]}" --headless --overwrite --quiet \
+			--window-size "${cols}x${rows}" --idle-time-limit "$IDLE" \
+			--command "$SHELL_CMD -c '. \"$HERE/typed.sh\"; . \"$script\"'" "$B/$name.cast" </dev/null)
+	else
+		(cd "$P" && "${RECORDER[@]}" "$B/$name.cast" --cols "$cols" --rows "$rows" \
+			--idle-limit "$IDLE" -- $SHELL_CMD -c ". \"$HERE/typed.sh\"; . \"$script\"" </dev/null) \
+			|| die "cast record failed for step $name (see its message above)"
+	fi
+	agg "${AGGFONT[@]}" --font-size "$FONT_SIZE" --theme "$THEME" --idle-time-limit "$IDLE" \
 		--last-frame-duration 2 --no-loop "$B/$name.cast" "$B/$name.gif" >/dev/null
 	ffmpeg -nostdin -hide_banner -loglevel error -y -i "$B/$name.gif" -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2" "${ENC[@]}" "$B/$name.mp4"
 }
@@ -304,7 +327,7 @@ apply_subtitles() {
 			printf '{"version": 2, "width": %d, "height": 1}\n' "$cols"
 			printf '[0.0, "o", %s]\n' "$(printf '%s' "$line" | json_string)"
 		} >"$cast"
-		agg --font-size 28 --theme "$THEME" --last-frame-duration 1 --no-loop "$cast" "$gif" >/dev/null
+		agg "${AGGFONT[@]}" --font-size 28 --theme "$THEME" --last-frame-duration 1 --no-loop "$cast" "$gif" >/dev/null
 		inputs+=(-i "$gif")
 		fc+=("${prev}[${idx}:v]overlay=(W-w)/2:H-h-40:enable='between(t,${s},${e})'[v${idx}]")
 		prev="[v${idx}]"
