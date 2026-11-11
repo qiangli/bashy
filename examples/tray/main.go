@@ -207,7 +207,6 @@ func (t *tray) open(raw, title string) {
 		return
 	}
 	cmd := exec.Command(exe, "window", raw, title)
-	configureChildProcess(cmd)
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		log.Printf("window: %v", err)
@@ -406,7 +405,7 @@ func (t *tray) run(items []extraItem, admin string) {
 				for range item.ClickedCh {
 					timeout := 30 * time.Second
 					if verb == "start" {
-						timeout = 15 * time.Second
+						timeout = 20 * time.Second
 					}
 					ctx, cancel := context.WithTimeout(context.Background(), timeout)
 					out, err := command(ctx, "outpost", outpostActionVerb(verb))
