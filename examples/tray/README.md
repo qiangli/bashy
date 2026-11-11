@@ -54,6 +54,12 @@ The Linux build uses a local copy of `webview_go` because the upstream Go
 binding pins WebKitGTK 4.0 in its cgo flags. The copy changes that flag to 4.1
 and returns `nil` when native window construction fails, allowing a clear
 runtime error. Source licenses are retained under `third_party/webview_go`.
+
+The Windows build uses a local copy of `fyne.io/systray` v1.12.2 (Apache-2.0,
+license retained under `third_party/systray`). Its one change: the tray menu
+opens with `TPM_NOANIMATION` and posts `WM_NULL` after `TrackPopupMenu`. On a
+Windows 11 test host the menu fade-in left the items unpainted until the
+pointer moved over them.
 A missing Linux tray host or WebKitGTK package, or a missing Windows WebView2
 runtime, is an error; there is no browser fallback.
 

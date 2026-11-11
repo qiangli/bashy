@@ -12,3 +12,5 @@ require (
 require golang.org/x/sys v0.15.0 // indirect
 
 replace github.com/webview/webview_go => ./third_party/webview_go
+
+replace fyne.io/systray => ./third_party/systray
