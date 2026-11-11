@@ -1,0 +1,114 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Reusable explicit file-to-Git composition. Variable policy lives in collab-save.json.
+set -euo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+CONFIG=${COLLAB_SAVE_CONFIG:-$HERE/collab-save.json}
+DRY=0 JSON=0 REPO= MESSAGE="saved by collab-save" REMOTE=origin
+die() { echo "collab-save: $*" >&2; exit 2; }
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  collab-save save PATH... --repo DIR [--message M] [--dry-run] [--json]
+  collab-save publish --repo DIR [--remote NAME] [--dry-run] [--json]
+Set COLLAB_SAVE_CONFIG to a JSON shaping file (lfs_patterns, refuse_patterns).
+EOF
+  exit 2
+}
+verb=${1:-}; (( $# )) || usage; shift
+paths=()
+while (( $# )); do
+  case $1 in
+    --repo) (( $# >= 2 )) || usage; REPO=$2; shift 2 ;;
+    --message) (( $# >= 2 )) || usage; MESSAGE=$2; shift 2 ;;
+    --remote) (( $# >= 2 )) || usage; REMOTE=$2; shift 2 ;;
+    --dry-run) DRY=1; shift ;;
+    --json) JSON=1; shift ;;
+    --) shift; while (( $# )); do paths+=("$1"); shift; done ;;
+    -*) die "unknown option: $1" ;;
+    *) paths+=("$1"); shift ;;
+  esac
+done
+[[ -n $REPO ]] || die '--repo is required'
+[[ -f $CONFIG ]] || die "shaping config not found: $CONFIG"
+command -v jq >/dev/null || die 'jq is required'
+command -v git >/dev/null || die 'git is required'
+json_quote() {
+  local s=$1 out='' c i
+  for ((i=0; i<${#s}; i++)); do
+    c=${s:i:1}
+    case $c in '"') out+='\\"' ;; '\\') out+='\\\\' ;; $'\n') out+='\\n' ;; $'\r') out+='\\r' ;; $'\t') out+='\\t' ;; *) out+=$c ;; esac
+  done
+  printf '"%s"' "$out"
+}
+json_paths() {
+  local list_name=$1 values i
+  eval 'values=("${'"$list_name"'[@]}")'
+  printf '['
+  for i in "${!values[@]}"; do (( i == 0 )) || printf ','; json_quote "${values[$i]}"; done
+  printf ']'
+}
+if [[ $verb == save ]]; then
+  (( ${#paths[@]} > 0 )) || die 'save requires at least one PATH'
+  [[ -d $REPO ]] || die "repo directory does not exist: $REPO"
+  git -C "$REPO" rev-parse --show-toplevel >/dev/null 2>&1 || die "not a Git repository: $REPO"
+  root=$(cd "$REPO" && pwd -P)
+  declare -a targets=() lfs=()
+  for src in "${paths[@]}"; do
+    [[ -f $src ]] || die "source file does not exist: $src"
+    name=${src##*/}
+    [[ $name != . && -n $name ]] || die "invalid source path: $src"
+    rel=$src
+    if [[ $src == /* ]]; then rel=$name; fi
+    # Refuse sensitive-looking source or target paths before copying anything.
+    for candidate in "$src" "$rel"; do
+      while IFS= read -r pattern; do
+        [[ -n $pattern ]] || continue
+        if [[ ${candidate,,} == ${pattern,,} ]]; then die "refusing sensitive-looking path: $candidate"; fi
+      done < <(jq -r '.refuse_patterns[]' "$CONFIG")
+    done
+    case "/$rel/" in */../*|*/./*) die "target escapes repository: $rel" ;; esac
+    dest="$root/$rel"
+    case "$dest" in "$root"/*) ;; *) die "target escapes repository: $rel" ;; esac
+    for prior in "${targets[@]}"; do [[ $prior != "$rel" ]] || die "multiple sources map to the same repository path: $rel"; done
+    targets+=("$rel")
+    while IFS= read -r pattern; do
+      [[ -n $pattern ]] || continue
+      if [[ $name == $pattern ]]; then lfs+=("$pattern"); fi
+    done < <(jq -r '.lfs_patterns[]' "$CONFIG")
+  done
+  if (( DRY )); then
+    if (( JSON )); then printf '{"verb":"save","repo":%s,"paths":' "$(json_quote "$root")"; json_paths targets; printf ',"dry_run":true}\n'
+    else printf 'Would copy %d file(s) into %s; git add and commit: %s\n' "${#targets[@]}" "$root" "$MESSAGE"; fi
+    exit 0
+  fi
+  if command -v git-lfs >/dev/null 2>&1; then
+    git --external=true -C "$root" lfs install --local >/dev/null
+    for pattern in "${lfs[@]}"; do git --external=true -C "$root" lfs track "$pattern" >/dev/null; done
+  elif (( ${#lfs[@]} )); then
+    echo 'collab-save: git-lfs unavailable; large-media files will use ordinary Git' >&2
+  fi
+  for i in "${!paths[@]}"; do
+    src=${paths[$i]}; rel=${targets[$i]}; mkdir -p "$root/$(dirname "$rel")"; cp -p -- "$src" "$root/$rel"
+  done
+  if [[ -f $root/.gitattributes ]]; then git -C "$root" add -- .gitattributes; fi
+  git -C "$root" add -- "${targets[@]}"
+  if (( JSON )); then git -C "$root" commit -m "$MESSAGE" >/dev/null; else git -C "$root" commit -m "$MESSAGE"; fi
+  if (( JSON )); then printf '{"verb":"save","repo":%s,"message":%s,"paths":' "$(json_quote "$root")" "$(json_quote "$MESSAGE")"; json_paths targets; printf ',"committed":true}\n'
+  else printf 'Saved and committed %d file(s) in %s\n' "${#targets[@]}" "$root"; fi
+elif [[ $verb == publish ]]; then
+  (( ${#paths[@]} == 0 )) || die 'publish takes no PATH arguments'
+  [[ -d $REPO ]] || die "repo directory does not exist: $REPO"
+  git -C "$REPO" rev-parse --show-toplevel >/dev/null 2>&1 || die "not a Git repository: $REPO"
+  root=$(cd "$REPO" && pwd -P)
+  git -C "$root" remote get-url "$REMOTE" >/dev/null 2>&1 || die "remote is not configured: $REMOTE"
+  if (( DRY )); then
+    if (( JSON )); then printf '{"verb":"publish","repo":%s,"remote":%s,"dry_run":true}\n' "$(json_quote "$root")" "$(json_quote "$REMOTE")"
+    else printf 'Would explicitly push %s from %s\n' "$REMOTE" "$root"; fi
+    exit 0
+  fi
+  if (( JSON )); then git -C "$root" push "$REMOTE" >/dev/null; else git -C "$root" push "$REMOTE"; fi
+  if (( JSON )); then printf '{"verb":"publish","repo":%s,"remote":%s,"published":true}\n' "$(json_quote "$root")" "$(json_quote "$REMOTE")"
+  else printf 'Published %s from %s\n' "$REMOTE" "$root"; fi
+else usage
+fi
