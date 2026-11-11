@@ -25,8 +25,8 @@ An icon plus a status line, refreshed every ten seconds (admin port; pairing via
 `outpost status --json`): green = outpost running and paired, amber = running
 but not paired, red = off.
 Menu items: Admin (outpost admin at `http://127.0.0.1:17777`, or `OUTPOST_ADMIN_ADDR`;
-disabled when outpost is off), Apps (`http://127.0.0.1:22749/`; the tray starts
-`bashy app serve` when nothing answers and stops it on Quit),
+disabled when outpost is off), Apps (`http://127.0.0.1:22749/`, served by outpost's `apps` service unit;
+disabled with "service not running" while it does not answer),
 and any `tray.yaml` items. Windows open in embedded webviews, never the system
 browser. The tray only watches outpost: it never starts or stops it (that is the supervisor's job); Quit closes only the tray.
 

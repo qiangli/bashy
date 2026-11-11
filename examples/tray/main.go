@@ -15,7 +15,6 @@ import (
 	"io"
 	"log"
 	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"os/exec"
@@ -29,7 +28,10 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const appURL = "http://127.0.0.1:22749/"
+const (
+	appAddr = "127.0.0.1:22749"
+	appURL  = "http://" + appAddr + "/"
+)
 
 type extraItem struct {
 	Label string `yaml:"label"`
@@ -169,15 +171,6 @@ func adminURL() (string, error) {
 	u := "http://" + a
 	return u, validURL(u)
 }
-func answers(raw string) bool {
-	c := http.Client{Timeout: 750 * time.Millisecond}
-	r, e := c.Get(raw)
-	if e != nil {
-		return false
-	}
-	r.Body.Close()
-	return true
-}
 
 type windowProcess struct {
 	cmd *exec.Cmd
@@ -186,8 +179,6 @@ type windowProcess struct {
 type tray struct {
 	mu          sync.Mutex
 	windows     map[string]*windowProcess
-	app         *exec.Cmd
-	appOwned    bool
 	closed      bool
 	admin, apps *systray.MenuItem
 }
@@ -248,59 +239,12 @@ func (t *tray) open(raw, title string) {
 		}
 	}()
 }
-func (t *tray) ensureApps() error {
-	if answers(appURL) {
-		return nil
-	}
-	t.mu.Lock()
-	if t.appOwned {
-		t.mu.Unlock()
-		return waitForApps()
-	}
-	c := exec.Command("bashy", "app", "serve")
-	configureChildProcess(c)
-	c.Stdout = os.Stderr
-	c.Stderr = os.Stderr
-	if err := c.Start(); err != nil {
-		t.mu.Unlock()
-		return fmt.Errorf("start bashy app serve: %w", err)
-	}
-	t.app = c
-	t.appOwned = true
-	t.mu.Unlock()
-	go func() {
-		err := c.Wait()
-		t.mu.Lock()
-		if t.app == c {
-			t.app = nil
-			t.appOwned = false
-		}
-		t.mu.Unlock()
-		if err != nil {
-			log.Printf("bashy app serve: %v", err)
-		}
-	}()
-	return waitForApps()
-}
-
-func waitForApps() error {
-	for i := 0; i < 20; i++ {
-		if answers(appURL) {
-			return nil
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
-	return errors.New("bashy app serve did not answer at " + appURL)
-}
 func (t *tray) quit() {
 	t.mu.Lock()
 	t.closed = true
 	for _, w := range t.windows {
 		w.in.Close()
 		_ = w.cmd.Process.Kill()
-	}
-	if t.appOwned && t.app != nil {
-		_ = t.app.Process.Kill()
 	}
 	t.mu.Unlock()
 	systray.Quit()
@@ -423,8 +367,32 @@ func (t *tray) run(items []extraItem, admin string) {
 			}
 			uiMu.Unlock()
 		}
+		// The apps console is outpost's `apps` service unit (supervisor-run);
+		// the tray never starts it, it only offers it while it answers.
+		shownApps := -1
+		refreshApps := func() bool {
+			up := adminAlive(appAddr)
+			v := 0
+			if up {
+				v = 1
+			}
+			uiMu.Lock()
+			defer uiMu.Unlock()
+			if v != shownApps {
+				shownApps = v
+				if up {
+					t.apps.SetTitle("Apps")
+					t.apps.Enable()
+				} else {
+					t.apps.SetTitle("Apps (service not running)")
+					t.apps.Disable()
+				}
+			}
+			return up
+		}
 		go func() {
 			refresh(true)
+			refreshApps()
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			for range ticker.C {
@@ -435,6 +403,7 @@ func (t *tray) run(items []extraItem, admin string) {
 					return
 				}
 				refresh(false)
+				refreshApps()
 			}
 		}()
 		go func() {
@@ -444,11 +413,9 @@ func (t *tray) run(items []extraItem, admin string) {
 		}()
 		go func() {
 			for range t.apps.ClickedCh {
-				if err := t.ensureApps(); err != nil {
-					log.Print(err)
-					continue
+				if refreshApps() {
+					t.open(appURL, "Bashy Apps")
 				}
-				t.open(appURL, "Bashy Apps")
 			}
 		}()
 		go func() {

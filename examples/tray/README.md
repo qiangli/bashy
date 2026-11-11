@@ -12,11 +12,13 @@ and paired, amber when running without a current pairing, red when off. Every
 ten seconds the tray dials the outpost admin port (running/off) and, while
 outpost runs, reads `outpost status --json` at most once a minute (pairing).
 Admin uses `http://127.0.0.1:17777`, or the host:port in `OUTPOST_ADMIN_ADDR`,
-and is disabled when outpost is off. Apps uses `http://127.0.0.1:22749/`. When
-that address does not answer, the tray starts `bashy app serve` and owns that
-process. Quit closes its windows and app server (if owned).
+and is disabled when outpost is off. Apps opens `http://127.0.0.1:22749/`, the
+apps console that outpost's `apps` service unit runs; while it does not answer
+the item reads "Apps (service not running)" and is disabled. Quit closes the
+tray and its windows only.
 
-The tray only watches outpost: it never starts, stops, enables or restarts it.
+The tray only watches outpost: it never starts, stops, enables or restarts it,
+nor any of its service units (including the apps console).
 Outpost's lifecycle belongs to its supervisor (and the admin UI); a second
 controller in the user session fights the supervisor.
 
@@ -71,7 +73,6 @@ runtime, is an error; there is no browser fallback.
 
 Run `go test ./...` and `go build .` in this directory. On each desktop, run
 and capture screenshots showing the three icon states, Admin and Apps windows,
-a `tray.yaml` item, and the tray after login. Check that Quit leaves a
-previously running outpost up and stops only an app server launched by the
-tray. The CLI can test a single window with
+a `tray.yaml` item, and the tray after login. Check that Quit leaves outpost
+and its services running. The CLI can test a single window with
 `bashy-tray window http://127.0.0.1:22749/ Apps`.
