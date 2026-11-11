@@ -40,11 +40,21 @@ func runCLI(args []string, stdout io.Writer) int {
 		return 2
 	}
 	if common.HelpMCP {
-		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.MCPHelp("brainstorm")))
+		help := kit.MCPHelp("brainstorm")
+		help["verbs"] = append(kit.ToolVerbs("brainstorm"), "edit", "delete", "vote", "revoke", "download")
+		fmt.Fprintln(stdout, kit.CanonicalJSON(help))
 		return 0
 	}
 	if common.Explain || common.DryRun {
 		verb := kit.FindVerb("brainstorm", args)
+		if verb == "" {
+			for _, a := range args {
+				if strings.Contains(" edit delete vote revoke download ", " "+a+" ") {
+					verb = a
+					break
+				}
+			}
+		}
 		if verb == "" {
 			fmt.Fprintln(stdout, "error: unknown verb")
 			return 2
@@ -62,6 +72,12 @@ func runCLI(args []string, stdout io.Writer) int {
 	body := fs.String("body", "", "idea text (new, put)")
 	idFlag := fs.String("id", "", "session id (new)")
 	key := fs.String("key", "", "facilitator key (BRAINSTORM_KEY also works)")
+	participant := fs.String("participant", "", "stable participant token for member actions")
+	cardID := fs.String("card", "", "card id for edit, delete or vote")
+	target := fs.String("target", "", "member handle or invite code to revoke")
+	name := fs.String("name", "", "idea nickname")
+	format := fs.String("format", "json", "download format: json or markdown")
+	output := fs.String("output", "", "save download to file")
 	column := fs.Int("column", 0, "column index for preset card (0-based)")
 	var presets multiStringFlag
 	fs.Var(&presets, "preset", "preset seed card text (repeatable or newline-separated)")
@@ -86,7 +102,7 @@ func runCLI(args []string, stdout io.Writer) int {
 		return 2
 	}
 	if fs.NArg() == 0 {
-		fmt.Fprintln(stdout, "Usage: brainstorm [serve|add|open|show|set|list|share|close] [--json]")
+		fmt.Fprintln(stdout, "Usage: brainstorm [serve|add|open|show|set|list|share|close|edit|delete|vote|revoke|download] [--json]")
 		return 2
 	}
 	var positional []string
@@ -100,7 +116,7 @@ func runCLI(args []string, stdout io.Writer) int {
 	}
 	verb := positional[0]
 	positional = positional[1:]
-	if !deskActions[verb] {
+	if !deskActions[verb] && !strings.Contains(" edit delete vote revoke download ", " "+verb+" ") {
 		return kit.UsageError(stdout, "brainstorm", *asJSON, fmt.Sprintf("unknown verb %q", verb))
 	}
 	if *key == "" {
@@ -190,6 +206,24 @@ func runCLI(args []string, stdout io.Writer) int {
 			return 2
 		}
 		payload["id"] = positional[0]
+		if strings.Contains(" edit delete vote revoke download ", " "+verb+" ") {
+			payload["session"] = positional[0]
+		}
+		if verb == "edit" || verb == "delete" || verb == "vote" {
+			if *cardID == "" {
+				return kit.UsageError(stdout, "brainstorm", *asJSON, verb+" requires --card ID")
+			}
+			payload["id"] = *cardID
+		}
+		if verb == "edit" {
+			payload["text"], payload["name"], payload["column"] = *body, *name, *column
+		}
+		if verb == "revoke" {
+			if *target == "" {
+				return kit.UsageError(stdout, "brainstorm", *asJSON, "revoke requires --target HANDLE_OR_INVITE")
+			}
+			payload["id"] = *target
+		}
 		if verb == "show" && *roundFlag > 0 {
 			payload["round"] = *roundFlag
 		}
@@ -207,9 +241,57 @@ func runCLI(args []string, stdout io.Writer) int {
 			applySeedAndFilter(payload)
 		}
 	}
+	if verb == "download" {
+		if *format != "json" && *format != "markdown" {
+			return kit.UsageError(stdout, "brainstorm", *asJSON, "format must be json or markdown")
+		}
+		u := base + "/api/export?session=" + url.QueryEscape(positional[0]) + "&format=" + *format
+		if *roundFlag > 0 {
+			u += fmt.Sprintf("&round=%d", *roundFlag)
+		}
+		req, _ := http.NewRequest("GET", u, nil)
+		if *participant != "" {
+			req.AddCookie(&http.Cookie{Name: "brainstorm-participant", Value: *participant})
+		}
+		if *key != "" {
+			req.Header.Set("X-Facilitator-Key", *key)
+		}
+		r, err := (&http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{Proxy: nil}}).Do(req)
+		if err != nil {
+			fmt.Fprintln(stdout, "error:", err)
+			return 1
+		}
+		defer r.Body.Close()
+		buf, _ := io.ReadAll(io.LimitReader(r.Body, 16<<20))
+		if r.StatusCode != 200 {
+			if *asJSON {
+				fmt.Fprintln(stdout, string(buf))
+			} else {
+				fmt.Fprintln(stdout, "error:", kit.ErrorMessage(buf))
+			}
+			return 1
+		}
+		if *output != "" {
+			if err := os.WriteFile(*output, buf, 0600); err != nil {
+				fmt.Fprintln(stdout, "error:", err)
+				return 1
+			}
+			fmt.Fprintln(stdout, kit.CanonicalJSON(kit.Envelope("brainstorm", map[string]any{"id": positional[0], "format": *format, "output": *output})))
+			return 0
+		}
+		if *format == "markdown" && *asJSON {
+			fmt.Fprintln(stdout, kit.CanonicalJSON(kit.Envelope("brainstorm", map[string]any{"id": positional[0], "format": "markdown", "content": string(buf)})))
+		} else {
+			fmt.Fprint(stdout, string(buf))
+		}
+		return 0
+	}
 	raw, _ := json.Marshal(payload)
 	req, _ := http.NewRequest("POST", base+"/api/action"+commonQuery(common.Fields), bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")
+	if *participant != "" {
+		req.AddCookie(&http.Cookie{Name: "brainstorm-participant", Value: *participant})
+	}
 	if *key != "" {
 		req.Header.Set("X-Facilitator-Key", *key)
 	}

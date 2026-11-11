@@ -42,11 +42,21 @@ func runCLI(args []string, stdout io.Writer) int {
 		return 2
 	}
 	if common.HelpMCP {
-		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.MCPHelp("form")))
+		help := kit.MCPHelp("form")
+		help["verbs"] = append(kit.ToolVerbs("form"), "answer")
+		fmt.Fprintln(stdout, kit.CanonicalJSON(help))
 		return 0
 	}
 	if common.Explain || common.DryRun {
 		verb := kit.FindVerb("form", args)
+		if verb == "" {
+			for _, a := range args {
+				if a == "answer" {
+					verb = a
+					break
+				}
+			}
+		}
 		if verb == "" {
 			fmt.Fprintln(stdout, "error: unknown verb")
 			return 2
@@ -60,7 +70,7 @@ func runCLI(args []string, stdout io.Writer) int {
 	// the first non-flag token so flags work on either side.
 	pre, verb, post := splitVerb(args)
 	if verb == "" {
-		fmt.Fprintln(stdout, "Usage: form [serve|add|reply|ask|open|show|set|list|share|close|wait] [--json]")
+		fmt.Fprintln(stdout, "Usage: form [serve|add|reply|ask|open|show|set|list|share|close|wait|answer] [--json]")
 		return 2
 	}
 	gfs := flag.NewFlagSet("form", flag.ContinueOnError)
@@ -90,10 +100,13 @@ func runCLI(args []string, stdout io.Writer) int {
 	poll := fs.String("poll", "", "create a one-question poll")
 	options := fs.String("options", "", "comma-separated poll choices")
 	key := fs.String("key", "", "owner key (FORM_KEY also works)")
+	participant := fs.String("participant", "", "stable respondent token")
 	timeout := fs.Duration("timeout", 5*time.Minute, "wait: give up after this long")
 	interval := fs.Duration("interval", 2*time.Second, "wait: poll interval")
 	answers := answerFlags{}
 	fs.Var(answers, "answer", "prefill answer as key=value (repeatable, with put)")
+	answersPath := fs.String("answers", "", "answer values as JSON file (- for stdin)")
+	complete := fs.Bool("complete", false, "submit complete respondent answer")
 	positional, err := parseVerbArgs(fs, post)
 	if err != nil {
 		fmt.Fprintf(stdout, "error: %v\n", err)
@@ -141,6 +154,9 @@ func runCLI(args []string, stdout io.Writer) int {
 		raw, _ := json.Marshal(payload)
 		req, _ := http.NewRequest("POST", base+"/api/action"+commonQuery(common.Fields), bytes.NewReader(raw))
 		req.Header.Set("Content-Type", "application/json")
+		if *participant != "" {
+			req.AddCookie(&http.Cookie{Name: "form-participant", Value: *participant})
+		}
 		if *key != "" {
 			req.Header.Set("X-Facilitator-Key", *key)
 		}
@@ -254,6 +270,24 @@ func runCLI(args []string, stdout io.Writer) int {
 		}
 	}
 	switch verb {
+	case "answer":
+		id, ok := needID()
+		if !ok {
+			return 2
+		}
+		var values any = map[string]string(answers)
+		if *answersPath != "" {
+			raw, err := readDefinitionBytes(*answersPath)
+			if err != nil || json.Unmarshal(raw, &values) != nil {
+				fmt.Fprintln(stdout, "error: invalid answers JSON input")
+				return 2
+			}
+		}
+		obj, _, code := call("answer", map[string]any{"id": id, "answers": values, "complete": *complete})
+		if code != 0 {
+			return code
+		}
+		return emit(obj, nil)
 	case "reply":
 		if *extractPath == "" {
 			fmt.Fprintln(stdout, "error: reply requires --extract FILE|-")

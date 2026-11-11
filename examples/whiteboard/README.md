@@ -50,6 +50,8 @@ server started for the same data directory. Restart resumes the saved boards.
 
 ## Run a session
 
+CLI page actions: `draw BOARD --points '[{"x":1,"y":1},{"x":2,"y":2}]' [--color #222222 --width 3]`, `clear BOARD`, `lock BOARD [--locked=false]`, `revoke BOARD --target MEMBER_OR_INVITE`, and `download BOARD --format json|png [--output FILE]`. Add `--json` for the action/export envelope and `--dry-run` to preview writes. Use `--key` for facilitator actions and `--participant TOKEN` to reuse a member identity across calls.
+
 1. Keep the host awake and connected to the group's LAN. Open the printed
    facilitator link privately. Share a printed **Participant** LAN URL;
    `127.0.0.1` works only on the host. Use the same LAN URL for the

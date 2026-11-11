@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	kit "desk-kit"
@@ -27,11 +29,21 @@ func runCLI(args []string, stdout io.Writer) int {
 		return 2
 	}
 	if common.HelpMCP {
-		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.MCPHelp("whiteboard")))
+		help := kit.MCPHelp("whiteboard")
+		help["verbs"] = append(kit.ToolVerbs("whiteboard"), "draw", "clear", "lock", "revoke", "download")
+		fmt.Fprintln(stdout, kit.CanonicalJSON(help))
 		return 0
 	}
 	if common.Explain || common.DryRun {
 		verb := kit.FindVerb("whiteboard", args)
+		if verb == "" {
+			for _, a := range args {
+				if strings.Contains(" draw clear lock revoke download ", " "+a+" ") {
+					verb = a
+					break
+				}
+			}
+		}
 		if verb == "" {
 			fmt.Fprintln(stdout, "error: unknown verb")
 			return 2
@@ -49,11 +61,19 @@ func runCLI(args []string, stdout io.Writer) int {
 	body := fs.String("body", "", "note text (new, put)")
 	idFlag := fs.String("id", "", "board id (new)")
 	key := fs.String("key", "", "facilitator key (WHITEBOARD_KEY also works)")
+	participant := fs.String("participant", "", "stable participant token for member actions")
+	points := fs.String("points", "", "draw points as JSON [{x,y},...]")
+	color := fs.String("color", "#222222", "stroke color")
+	width := fs.Float64("width", 3, "stroke width")
+	locked := fs.Bool("locked", true, "lock state; use --locked=false to unlock")
+	target := fs.String("target", "", "member or invite code to revoke")
+	format := fs.String("format", "json", "download format: json or png")
+	output := fs.String("output", "", "save download to file")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
 	if fs.NArg() == 0 {
-		fmt.Fprintln(stdout, "Usage: whiteboard [serve|add|open|show|set|list|share|close] [--json]")
+		fmt.Fprintln(stdout, "Usage: whiteboard [serve|add|open|show|set|list|share|close|draw|clear|lock|revoke|download] [--json]")
 		return 2
 	}
 	var positional []string
@@ -67,7 +87,7 @@ func runCLI(args []string, stdout io.Writer) int {
 	}
 	verb := positional[0]
 	positional = positional[1:]
-	if !deskActions[verb] {
+	if !deskActions[verb] && !strings.Contains(" draw clear lock revoke download ", " "+verb+" ") {
 		return kit.UsageError(stdout, "whiteboard", *asJSON, fmt.Sprintf("unknown verb %q", verb))
 	}
 	if *key == "" {
@@ -84,6 +104,9 @@ func runCLI(args []string, stdout io.Writer) int {
 	base := "http://" + net.JoinHostPort(host, port) + *prefix
 
 	payload := map[string]any{"action": verb}
+	if verb == "draw" {
+		payload["action"] = "stroke"
+	}
 	switch verb {
 	case "list":
 	case "add":
@@ -98,13 +121,77 @@ func runCLI(args []string, stdout io.Writer) int {
 			return 2
 		}
 		payload["id"] = positional[0]
+		if verb == "draw" || verb == "clear" || verb == "lock" || verb == "revoke" {
+			payload["board"] = positional[0]
+		}
+		if verb == "draw" {
+			var pts []Pt
+			if err := json.Unmarshal([]byte(*points), &pts); err != nil || len(pts) == 0 {
+				return kit.UsageError(stdout, "whiteboard", *asJSON, "draw requires --points JSON array")
+			}
+			payload["points"], payload["color"], payload["width"] = pts, *color, *width
+		}
+		if verb == "lock" {
+			payload["locked"] = *locked
+		}
+		if verb == "revoke" {
+			if *target == "" {
+				return kit.UsageError(stdout, "whiteboard", *asJSON, "revoke requires --target MEMBER_OR_INVITE")
+			}
+			payload["id"] = *target
+		}
 		if verb == "set" {
 			payload["body"] = *body
 		}
 	}
+	if verb == "download" {
+		if *format != "json" && *format != "png" {
+			return kit.UsageError(stdout, "whiteboard", *asJSON, "format must be json or png")
+		}
+		u := base + "/api/export?board=" + url.QueryEscape(positional[0]) + "&format=" + *format
+		req, _ := http.NewRequest("GET", u, nil)
+		if *participant != "" {
+			req.AddCookie(&http.Cookie{Name: "whiteboard-participant", Value: *participant})
+		}
+		if *key != "" {
+			req.Header.Set("X-Facilitator-Key", *key)
+		}
+		r, err := (&http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{Proxy: nil}}).Do(req)
+		if err != nil {
+			fmt.Fprintln(stdout, "error:", err)
+			return 1
+		}
+		defer r.Body.Close()
+		buf, _ := io.ReadAll(io.LimitReader(r.Body, 16<<20))
+		if r.StatusCode != 200 {
+			if *asJSON {
+				fmt.Fprintln(stdout, string(buf))
+			} else {
+				fmt.Fprintln(stdout, "error:", kit.ErrorMessage(buf))
+			}
+			return 1
+		}
+		if *output != "" {
+			if err := os.WriteFile(*output, buf, 0600); err != nil {
+				fmt.Fprintln(stdout, "error:", err)
+				return 1
+			}
+			fmt.Fprintln(stdout, kit.CanonicalJSON(kit.Envelope("whiteboard", map[string]any{"id": positional[0], "format": *format, "output": *output})))
+			return 0
+		}
+		if *format == "png" {
+			fmt.Fprintln(stdout, kit.CanonicalJSON(kit.Envelope("whiteboard", map[string]any{"id": positional[0], "format": "png", "data_base64": base64.StdEncoding.EncodeToString(buf)})))
+		} else {
+			fmt.Fprintln(stdout, string(buf))
+		}
+		return 0
+	}
 	raw, _ := json.Marshal(payload)
 	req, _ := http.NewRequest("POST", base+"/api/action"+commonQuery(common.Fields), bytes.NewReader(raw))
 	req.Header.Set("Content-Type", "application/json")
+	if *participant != "" {
+		req.AddCookie(&http.Cookie{Name: "whiteboard-participant", Value: *participant})
+	}
 	if *key != "" {
 		req.Header.Set("X-Facilitator-Key", *key)
 	}

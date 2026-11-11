@@ -188,6 +188,8 @@ Go module `form-server` pulls the kit with
 
 - `form.bsh` — Bash# front (skill face + verb delegation), `form.sh` — compat shim
 - `server/` — pure-Go server + CLI (`schema.go` reusable core, `main.go` doors + page, `cli.go`, `form_test.go`)
+
+The respondent CLI can submit `form answer ID --answer FIELD=VALUE [--complete] --json`, or pass typed values with `--answers FILE|-` (JSON object). `--participant TOKEN` keeps partial answers tied to one respondent. `--dry-run` previews the write.
 - `examples/` — `contact.json` / `contact.yaml` (identical definitions)
 - `register.sh`, `dag.md`, `browser-test.mjs`
 
