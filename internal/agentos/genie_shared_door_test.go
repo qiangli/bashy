@@ -33,7 +33,7 @@ func TestGenieSharedDoorSource(t *testing.T) {
 			if err != nil || !ok {
 				t.Fatalf("%s: ok=%v err=%v", name, ok, err)
 			}
-			if g.ModelID != "codex-gpt6-sol" || g.Key != key || g.BaseURL != grant.CloudboxURL+"/k/"+key+"/v1" || g.Context <= 0 {
+			if g.ModelID != "codex-gpt6-sol" || g.Key != key || g.BaseURL != grant.CloudboxURL+"/v1" || g.Context <= 0 {
 				t.Fatal("wrong endpoint, model, context or stale key")
 			}
 		}
