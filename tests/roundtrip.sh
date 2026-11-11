@@ -36,14 +36,14 @@ bashy --bashsharp "$WRAPPER" save "$TMP/note.md" "$TMP/media.wav" --repo "$TMP/r
 jq -e '.committed == true and (.paths | length == 2)' "$TMP/save.json" >/dev/null
 bashy --bashsharp "$WRAPPER" publish --repo "$TMP/repo" --remote origin --json > "$TMP/publish.json"
 jq -e '.published == true and .remote == "origin"' "$TMP/publish.json" >/dev/null
-if (( LFS )); then git --external=true clone "$TMP/remote.git" "$TMP/clone" >/dev/null 2>&1
+if (( LFS )); then git clone "$TMP/remote.git" "$TMP/clone" >/dev/null 2>&1
 else git clone "$TMP/remote.git" "$TMP/clone" >/dev/null 2>&1; fi
 cmp "$TMP/note.md" "$TMP/clone/note.md"
 if (( LFS )); then
-  git --external=true -C "$TMP/repo" check-attr filter -- media.wav | rg -q 'filter: lfs'
-  rg -q '^version https://git-lfs.github.com/spec/v1$' "$TMP/clone/media.wav"
-  git --external=true -C "$TMP/clone" lfs install --local >/dev/null
-  git --external=true -C "$TMP/clone" lfs pull >/dev/null
+  git -C "$TMP/repo" check-attr filter -- media.wav | grep -qE 'filter: lfs'
+  grep -qE '^version https://git-lfs.github.com/spec/v1$' "$TMP/clone/media.wav"
+  git -C "$TMP/clone" lfs install --local >/dev/null
+  git -C "$TMP/clone" lfs pull >/dev/null
   cmp "$TMP/media.wav" "$TMP/clone/media.wav"
 else
   cmp "$TMP/media.wav" "$TMP/clone/media.wav"
@@ -55,7 +55,7 @@ if bashy --bashsharp "$WRAPPER" save "$TMP/private/api-token.txt" --repo "$TMP/r
   echo 'expected secret-looking path to be refused' >&2
   exit 1
 fi
-rg -q 'refusing sensitive-looking path' "$TMP/refuse.err"
+grep -qE 'refusing sensitive-looking path' "$TMP/refuse.err"
 
 mkdir -p "$TMP/outside"
 printf 'outside\n' > "$TMP/outside/escape.md"
@@ -63,6 +63,6 @@ if (cd "$TMP/repo" && bashy --bashsharp "$WRAPPER" save ../outside/escape.md --r
   echo 'expected ../ target to be refused' >&2
   exit 1
 fi
-rg -q 'target escapes repository' "$TMP/escape.err"
+grep -qE 'target escapes repository' "$TMP/escape.err"
 
 echo 'PASS: save, explicit publish, fresh clone, media, secret-path and ../ escape refusal'
