@@ -171,3 +171,22 @@ the audit does not implement it. Follow the KB guideline
 
 No gap is inferred solely from a locally missing registration: Chart and Google
 have checkout registration scripts, while Video intentionally has only a script.
+
+## Sprint 614 S11: desk page actions
+
+| Page action | CLI verb |
+|---|---|
+| Whiteboard draw | `bashy whiteboard draw BOARD --points JSON --json` |
+| Whiteboard clear | `bashy whiteboard clear BOARD --key KEY --json` |
+| Whiteboard lock/unlock | `bashy whiteboard lock BOARD --key KEY [--locked=false] --json` |
+| Whiteboard revoke member/invite | `bashy whiteboard revoke BOARD --key KEY --target ID --json` |
+| Whiteboard JSON/PNG download | `bashy whiteboard download BOARD --format json\|png [--output FILE] --json` |
+| Brainstorm idea edit | `bashy brainstorm edit SESSION --card ID --body TEXT --participant TOKEN --json` |
+| Brainstorm idea delete | `bashy brainstorm delete SESSION --card ID --participant TOKEN --json` |
+| Brainstorm vote/undo | `bashy brainstorm vote SESSION --card ID --participant TOKEN --json` |
+| Brainstorm revoke member/invite | `bashy brainstorm revoke SESSION --target ID --key KEY --json` |
+| Brainstorm JSON/Markdown download | `bashy brainstorm download SESSION --format json\|markdown --key KEY [--output FILE] --json` |
+| Form respondent answer | `bashy form answer ID --answer FIELD=VALUE [--complete] --json` |
+| Chart join | `bashy chart join ID --invite CODE --participant TOKEN --json` |
+
+All write verbs above accept `--dry-run`. `--participant` carries the same member identity across separate CLI invocations.

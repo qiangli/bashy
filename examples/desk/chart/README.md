@@ -28,7 +28,8 @@ the root server; a direct page link remains the stable loopback URL.
 
 ## Desk operations
 
-`add|open|show|set|list|share|close` all accept `--json`, before or after the verb.
+`add|open|show|set|list|share|close|revoke|join` all accept `--json`, before or after the verb.
+`join ID --invite CODE --participant TOKEN` consumes the page's single-use invite; pass the same participant token to later `show` calls. `--dry-run` previews the join.
 `add` accepts `--id NAME`; otherwise it generates a stable id. `open ID` prints
 exactly id, URL and status, with no data. `show ID` returns the saved data,
 rendered HTML/SVG, and metadata. `set ID --input FILE` replaces the snapshot.

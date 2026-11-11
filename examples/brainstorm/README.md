@@ -141,6 +141,8 @@ then run `node browser-test.mjs`. `CHROMIUM_PATH` can select an existing browser
 
 ## Invite-only sessions
 
+CLI page actions: `edit SESSION --card ID --body TEXT [--name NAME --column N]`, `delete SESSION --card ID`, `vote SESSION --card ID` (repeat to undo), `revoke SESSION --target HANDLE_OR_INVITE`, and `download SESSION --format json|markdown [--round N] [--output FILE]`. Add `--json` for structured output and `--dry-run` to preview writes. Use `--key` for facilitator actions and `--participant TOKEN` to keep one member identity across calls.
+
 Tick **Invite-only** when creating a named session (API: `"private": true`).
 The facilitator then creates single-use invite links
 (`?session=NAME#invite=CODE`); opening one makes that browser a member. Members

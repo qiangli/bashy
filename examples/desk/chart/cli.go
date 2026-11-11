@@ -49,11 +49,21 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 		return 2
 	}
 	if common.HelpMCP {
-		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.MCPHelp("chart")))
+		help := kit.MCPHelp("chart")
+		help["verbs"] = append(kit.ToolVerbs("chart"), "join")
+		fmt.Fprintln(stdout, kit.CanonicalJSON(help))
 		return 0
 	}
 	if common.Explain || common.DryRun {
 		verb := kit.FindVerb("chart", args)
+		if verb == "" {
+			for _, a := range args {
+				if a == "join" {
+					verb = a
+					break
+				}
+			}
+		}
 		if verb == "" {
 			fmt.Fprintln(stdout, "error: unknown verb")
 			return 2
@@ -72,6 +82,8 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 	body := fs.String("body", "", "optional description")
 	idFlag := fs.String("id", "", "new item id")
 	key := fs.String("key", os.Getenv("CHART_KEY"), "owner key (or CHART_KEY)")
+	participant := fs.String("participant", "", "stable participant token for join and show")
+	invite := fs.String("invite", "", "single-use invite code for join")
 	input := fs.String("input", "", "input file, - for stdin, or loopback URL")
 	format := fs.String("format", "auto", "auto, json, csv, ndjson or otlp")
 	widget := fs.String("widget", "auto", "auto, counter, sum, gauge, updowncounter, histogram, exponentialhistogram, line, bar, table, stat")
@@ -99,7 +111,7 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 	}
 	rest := fs.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(stdout, "chart serve|add|open|show|set|list|share|close|revoke [ID] --json; new/put --input FILE|- --widget TYPE")
+		fmt.Fprintln(stdout, "chart serve|add|open|show|set|list|share|close|revoke|join [ID] --json; add/set --input FILE|- --widget TYPE")
 		return 2
 	}
 	verb := rest[0]
@@ -111,11 +123,17 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 	switch verb {
 	case "add":
 		payload["id"] = *idFlag
-	case "open", "show", "set", "share", "close", "revoke":
+	case "open", "show", "set", "share", "close", "revoke", "join":
 		if len(rest) != 2 {
 			return fail(fmt.Errorf("%s requires one id", verb))
 		}
 		payload["id"] = rest[1]
+		if verb == "join" {
+			if *invite == "" {
+				return fail(fmt.Errorf("join requires --invite CODE"))
+			}
+			payload["invite"] = *invite
+		}
 	case "list":
 	default:
 		return kit.UsageError(stdout, "chart", *asJSON, fmt.Sprintf("unknown verb %q", verb))
@@ -181,6 +199,9 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 		return fail(e)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if *participant != "" {
+		req.AddCookie(&http.Cookie{Name: "chart-participant", Value: *participant})
+	}
 	req.Header.Set("X-Facilitator-Key", *key)
 	client := http.Client{Timeout: 10 * time.Second, Transport: &http.Transport{Proxy: nil}, CheckRedirect: func(*http.Request, []*http.Request) error { return fmt.Errorf("redirect refused") }}
 	res, e := client.Do(req)
@@ -194,7 +215,10 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 	}
 	if res.StatusCode != 200 {
 		if *asJSON {
-			return encode(stdout, v)
+			if encode(stdout, v) != 0 {
+				return 1
+			}
+			return 1
 		}
 		return fail(fmt.Errorf("%s", kit.ErrorMessage([]byte(kit.CanonicalJSON(v)))))
 	}
