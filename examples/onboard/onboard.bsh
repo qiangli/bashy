@@ -57,8 +57,8 @@ details); this command only orders them.
 4. `onboard attach [<satellite>]`: skipped when attached. One candidate
    is attached; several are listed to choose from. Runs
    `satellite-member attach <satellite>`.
-5. `onboard tray`: a stub until the tray example ships (autostart and a
-   menu-bar/tray icon); it prints that and skips.
+5. `onboard tray`: runs `bashy-tray install` (login autostart for the tray
+   icon; idempotent). When bashy-tray is not on PATH it says so and skips.
 6. `onboard status`: the state of every step on one screen.
 
 ## Agent rules
@@ -91,7 +91,7 @@ usage_lines() {
     echo "       $PROG pair [--code <code>] [--name <host>] pair once with your OWN account"
     echo "       $PROG accept [<id>] [--circle <family|friend|team|guest>]"
     echo "       $PROG attach [<satellite>]"
-    echo "       $PROG tray                                (stub) tray autostart"
+    echo "       $PROG tray                                tray autostart (bashy-tray install)"
     echo "       $PROG status"
 }
 
@@ -314,8 +314,24 @@ cmd_attach() {
     sm attach "$sat" || fail "attach to $sat failed" 1
 }
 
+tray_bin() {
+    if [ -n "${ONBOARD_TRAY_BIN:-}" ]; then
+        printf '%s\n' "$ONBOARD_TRAY_BIN"
+    else
+        printf 'bashy-tray\n'
+    fi
+}
+
 cmd_tray() {
-    echo "$PROG: tray: autostart and the tray icon arrive with the tray example (Sprint D); skipped"
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $(tray_bin) install"
+        return 0
+    fi
+    if ! command -v "$(tray_bin)" >/dev/null 2>&1; then
+        echo "$PROG: tray: bashy-tray is not installed (optional; build examples/tray); skipped"
+        return 0
+    fi
+    "$(tray_bin)" install || fail "tray: bashy-tray install failed" 1
 }
 
 cmd_status() {
@@ -332,7 +348,11 @@ cmd_status() {
     else
         echo "attached: no (candidates: $(ids_of "$list" | grep -c . || true); next: $PROG attach)"
     fi
-    echo "tray: pending (tray example, Sprint D)"
+    if command -v "$(tray_bin)" >/dev/null 2>&1; then
+        echo "tray: bashy-tray installed (autostart: $(tray_bin) install)"
+    else
+        echo "tray: not installed (optional)"
+    fi
 }
 
 cmd_all() {

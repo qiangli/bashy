@@ -117,6 +117,12 @@ esac
 exit 0
 `
 
+// fakeTray stands in for bashy-tray: it only prints the install line.
+const fakeTray = `#!/bin/sh
+echo "bashy-tray: autostart installed for $0"
+exit 0
+`
+
 type fixture struct {
 	t             *testing.T
 	bin, script   string
@@ -135,6 +141,10 @@ func newFixture(t *testing.T) *fixture {
 	if err := os.WriteFile(fakeBashyBin, []byte(fakeBashy), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	fakeTrayBin := filepath.Join(root, "bashy-tray")
+	if err := os.WriteFile(fakeTrayBin, []byte(fakeTray), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	f := &fixture{t: t, bin: bashyBin(t), log: filepath.Join(root, "calls.log"),
 		bashyLog: filepath.Join(root, "bashy-calls.log"),
 		script:   filepath.Join(moduleRoot(t), "examples", "onboard", "onboard.bsh")}
@@ -142,6 +152,7 @@ func newFixture(t *testing.T) *fixture {
 		"FAKE_BASHY_LOG=" + f.bashyLog,
 		"ONBOARD_OUTPOST_BIN=" + fakeOutpostBin,
 		"ONBOARD_BASHY_BIN=" + fakeBashyBin,
+		"ONBOARD_TRAY_BIN=" + fakeTrayBin,
 		"PATH=" + root + string(os.PathListSeparator) + os.Getenv("PATH")}
 	return f
 }
@@ -206,7 +217,7 @@ func TestDryRunPrintsVerbCallsOnly(t *testing.T) {
 		"would run: satellite-member accept <invitation-id>",
 		"would run: satellite-member attach <satellite>",
 		"would probe: ",
-		"tray:", "skipped")
+		"bashy-tray install")
 	if got := f.bashyCalls(); got != "" {
 		t.Errorf("dry-run called bashy: %q", got)
 	}
@@ -275,7 +286,7 @@ func TestPairDelegatesToSatelliteMember(t *testing.T) {
 }
 
 // Paired, one invitation, one satellite: the sequence accepts, attaches,
-// stubs the tray and ends with the status.
+// installs the tray autostart and ends with the status.
 func TestSequenceAcceptsAndAttaches(t *testing.T) {
 	f := newFixture(t)
 	out, code := f.run([]string{paired, daemonUp, oneInvite, oneSat})
@@ -287,7 +298,7 @@ func TestSequenceAcceptsAndAttaches(t *testing.T) {
 	if strings.Contains(got, "satellite-member.bsh pair") {
 		t.Errorf("paired machine paired again: %q", got)
 	}
-	wantAll(t, "sequence output", out, "tray:", "Sprint D", "onboard: done", "paired: yes")
+	wantAll(t, "sequence output", out, "tray: autostart installed", "onboard: done", "paired: yes")
 }
 
 // Everything done: every step says so and nothing is called twice.
@@ -350,7 +361,7 @@ func TestStatus(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("status: exit %d\n%s", code, out)
 	}
-	wantAll(t, "status", out, "outpost: installed", "daemon: running", "paired: yes", "invitations: 1 pending", "attached: no (candidates: 1", "tray: pending")
+	wantAll(t, "status", out, "outpost: installed", "daemon: running", "paired: yes", "invitations: 1 pending", "attached: no (candidates: 1", "tray: bashy-tray installed")
 }
 
 // --help renders the embedded skill (bashy onboard --help); --skill is the
@@ -376,4 +387,14 @@ func TestHelpRendersGenericSkill(t *testing.T) {
 			t.Errorf("skill uses the audience-specific word %q", bad)
 		}
 	}
+}
+
+// Without bashy-tray the tray step says so and skips, exit 0.
+func TestTraySkipsWhenNotInstalled(t *testing.T) {
+	f := newFixture(t)
+	out, code := f.run([]string{"ONBOARD_TRAY_BIN=bashy-tray-missing-xyz"}, "tray")
+	if code != 0 {
+		t.Fatalf("tray: exit %d\n%s", code, out)
+	}
+	wantAll(t, "tray skip", out, "bashy-tray is not installed", "skipped")
 }

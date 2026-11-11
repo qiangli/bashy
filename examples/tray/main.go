@@ -443,8 +443,11 @@ func mainErr(args []string) error {
 		}
 		return runWindow(args[1], args[2])
 	}
+	if len(args) == 1 && (args[0] == "install" || args[0] == "uninstall") {
+		return autostartCommand(args[0], func(s string) { fmt.Println(s) })
+	}
 	if len(args) > 0 {
-		return errors.New("usage: bashy-tray [window URL TITLE]")
+		return errors.New("usage: bashy-tray [install|uninstall|window URL TITLE]")
 	}
 	if err := checkTrayHost(); err != nil {
 		return err
