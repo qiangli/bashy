@@ -7,6 +7,7 @@ import (
 	"errors"
 	"image/color"
 	"image/png"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -16,36 +17,35 @@ import (
 
 func TestPollStatus(t *testing.T) {
 	tests := []struct {
-		name, presence, detail string
-		detailErr              bool
-		level                  string
+		name      string
+		alive     bool
+		detail    string
+		detailErr bool
+		level     string
 	}{
-		{"off", `{"running":false}`, ``, false, "off"},
-		{"paired", `{"running":true}`, `{"state":"active (paired as alice)","status":{"configured":true}}`, false, "on"},
-		{"identity only", `{"running":true}`, `{"state":"paired once as host (identity only)","status":{"configured":true}}`, false, "partial"},
-		{"unpaired", `{"running":true}`, `{"state":"dormant (unpaired)","status":{"configured":false}}`, false, "partial"},
-		{"status unavailable", `{"running":true}`, ``, true, "partial"},
+		{"off", false, ``, false, "off"},
+		{"paired", true, `{"state":"active (paired as alice)","status":{"configured":true}}`, false, "on"},
+		{"identity only", true, `{"state":"paired once as host (identity only)","status":{"configured":true}}`, false, "partial"},
+		{"unpaired", true, `{"state":"dormant (unpaired)","status":{"configured":false}}`, false, "partial"},
+		{"status unavailable", true, ``, true, "partial"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			calls := 0
 			run := func(_ context.Context, _ string, args ...string) ([]byte, error) {
 				calls++
-				if len(args) == 2 && args[1] == "--local-presence" {
-					return []byte(tc.presence), nil
-				}
 				if tc.detailErr {
 					return nil, errors.New("unavailable")
 				}
 				return []byte(tc.detail), nil
 			}
-			s := pollStatus(context.Background(), run)
+			s := pollStatus(context.Background(), tc.alive, run)
 			if got := s.level(); got != tc.level {
 				t.Fatalf("level %s, want %s", got, tc.level)
 			}
-			want := 2
-			if tc.level == "off" {
-				want = 1
+			want := 1
+			if !tc.alive {
+				want = 0
 			}
 			if calls != want {
 				t.Fatalf("calls %d, want %d", calls, want)
@@ -53,6 +53,22 @@ func TestPollStatus(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminAlive(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	if !adminAlive(addr) {
+		t.Fatal("listener not detected")
+	}
+	ln.Close()
+	if adminAlive(addr) {
+		t.Fatal("closed listener reported alive")
+	}
+}
+
 func TestOutpostActionVerb(t *testing.T) {
 	for _, tc := range []struct{ action, want string }{
 		{"start", "enable"},

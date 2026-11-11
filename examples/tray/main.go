@@ -14,6 +14,7 @@ import (
 	"image/png"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -76,21 +77,29 @@ func outpostActionVerb(action string) string {
 	}
 	return action
 }
-func pollStatus(ctx context.Context, run runner) status {
-	c, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	data, err := run(c, "outpost", "status", "--local-presence")
+
+// adminAlive reports whether the outpost daemon is up by dialing its loopback
+// admin listener — the same probe `outpost status --local-presence` makes,
+// without its CLI startup, which takes over 10 s on some Windows hosts.
+func adminAlive(addr string) bool {
+	c, err := net.DialTimeout("tcp", addr, 750*time.Millisecond)
 	if err != nil {
-		return status{Detail: "presence unavailable"}
+		return false
 	}
-	var p struct {
-		Running bool `json:"running"`
-	}
-	if json.Unmarshal(data, &p) != nil || !p.Running {
+	c.Close()
+	return true
+}
+
+// pollStatus reads the pairing state of a running daemon. It is slow (one
+// outpost CLI run), so callers cache it; running/off comes from adminAlive.
+func pollStatus(ctx context.Context, alive bool, run runner) status {
+	if !alive {
 		return status{}
 	}
+	c, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	s := status{Running: true, Detail: "unpaired"}
-	data, err = run(c, "outpost", "status", "--json")
+	data, err := run(c, "outpost", "status", "--json")
 	if err != nil {
 		s.Detail = "status unavailable"
 		return s
@@ -369,24 +378,83 @@ func (t *tray) run(items []extraItem, admin string) {
 		t.start = systray.AddMenuItem("Start outpost", "")
 		t.stop = systray.AddMenuItem("Stop outpost", "")
 		quit := systray.AddMenuItem("Quit", "")
-		refresh := func() status {
-			s := pollStatus(context.Background(), command)
-			systray.SetIcon(icon(s.level()))
-			systray.SetTooltip(s.title())
-			statusItem.SetTitle(s.title())
-			if s.Running {
-				t.start.Hide()
-				t.stop.Show()
-				t.admin.Enable()
-			} else {
-				t.stop.Hide()
-				t.start.Show()
-				t.admin.Disable()
+		// Touch the native menu only when something changed: on Windows,
+		// rewriting menu items from a poller while the user has the menu
+		// open hangs the tray's message loop ("Not responding").
+		var (
+			uiMu      sync.Mutex
+			shownText string
+			shownRun  = -1 // -1 unknown, 0 off, 1 running
+		)
+		setTitle := func(text string) {
+			uiMu.Lock()
+			defer uiMu.Unlock()
+			if text != shownText {
+				shownText = text
+				statusItem.SetTitle(text)
 			}
+		}
+		adminAddr := admin
+		if u, err := url.Parse(admin); err == nil {
+			adminAddr = u.Host
+		}
+		var (
+			detailMu sync.Mutex
+			detail   status // last pairing read for a running daemon
+			detailAt time.Time
+		)
+		var apply func(s status)
+		// refresh: running/off from the admin port (instant); the pairing
+		// detail from the slow CLI, at most once a minute unless forced.
+		refresh := func(force bool) status {
+			if !adminAlive(adminAddr) {
+				s := status{}
+				apply(s)
+				return s
+			}
+			detailMu.Lock()
+			s, at := detail, detailAt
+			detailMu.Unlock()
+			if force || !s.Running || time.Since(at) > time.Minute {
+				if !s.Running {
+					apply(status{Running: true, Detail: "checking pairing…"})
+				}
+				s = pollStatus(context.Background(), true, command)
+				detailMu.Lock()
+				detail, detailAt = s, time.Now()
+				detailMu.Unlock()
+			}
+			apply(s)
 			return s
 		}
+		apply = func(s status) {
+			run := 0
+			if s.Running {
+				run = 1
+			}
+			uiMu.Lock()
+			if s.title() != shownText {
+				shownText = s.title()
+				systray.SetIcon(icon(s.level()))
+				systray.SetTooltip(shownText)
+				statusItem.SetTitle(shownText)
+			}
+			if run != shownRun {
+				shownRun = run
+				if s.Running {
+					t.start.Hide()
+					t.stop.Show()
+					t.admin.Enable()
+				} else {
+					t.stop.Hide()
+					t.start.Show()
+					t.admin.Disable()
+				}
+			}
+			uiMu.Unlock()
+		}
 		go func() {
-			refresh()
+			refresh(true)
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			for range ticker.C {
@@ -396,7 +464,7 @@ func (t *tray) run(items []extraItem, admin string) {
 				if closed {
 					return
 				}
-				refresh()
+				refresh(false)
 			}
 		}()
 		go func() {
@@ -420,23 +488,18 @@ func (t *tray) run(items []extraItem, admin string) {
 					// enable once it is launched; the daemon changes state a
 					// few seconds later. Say so, then poll until it settles.
 					want := verb == "start"
-					statusItem.SetTitle(pendingTitle(verb))
-					timeout := 30 * time.Second
-					if verb == "start" {
-						timeout = 20 * time.Second
-					}
-					ctx, cancel := context.WithTimeout(context.Background(), timeout)
+					setTitle(pendingTitle(verb))
+					// The CLI alone can take >10 s to start on Windows.
+					ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 					out, err := command(ctx, "outpost", outpostActionVerb(verb))
 					cancel()
 					if err != nil {
 						log.Printf("outpost %s: %v: %s", verb, err, strings.TrimSpace(string(out)))
 					}
-					for i := 0; i < settleSeconds; i++ {
-						if refresh().Running == want {
-							break
-						}
+					for i := 0; i < settleSeconds && adminAlive(adminAddr) != want; i++ {
 						time.Sleep(time.Second)
 					}
+					refresh(true)
 				}
 			}()
 		}
