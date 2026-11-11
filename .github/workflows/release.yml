@@ -302,11 +302,13 @@ jobs:
           COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
+          # Stamp the BASE tag: promote.yml re-tags this manifest to the bare
+          # version without a rebuild (same rule as the .goreleaser.yaml ldflags).
           for arch in amd64 arm64; do
             make --no-print-directory build-bashy-scratch \
               BASHY_SCRATCH_GOARCH="$arch" \
               BASHY_SCRATCH_ARTIFACT="bin/scratch/bashy-linux-$arch" \
-              VERSION="$TAG" BUILD_ID="$COMMIT"
+              VERSION="${TAG%-dev}" BUILD_ID="$COMMIT"
           done
           banner=$(bin/scratch/bashy-linux-amd64 --version)
           reported=$(sed -n 's/.*(\([0-9a-f]\{40\}\)).*/\1/p' <<<"$banner")

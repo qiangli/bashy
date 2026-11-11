@@ -13,6 +13,9 @@ before:
     # means GoReleaser stops before it can produce a success-shaped release.
     - ./scripts/build-meet-spa.sh required
 
+# Version stamp: release.yml builds from the `vX.Y.Z-dev` candidate tag and
+# promote.yml byte-promotes those exact bytes to the bare tag, so the stamp is
+# the BASE tag (`-dev` trimmed) — the promoted binary prints the promoted name.
 builds:
   - id: bashy
     tool: ./scripts/go-product.sh
@@ -43,7 +46,7 @@ builds:
         - cmd: ./scripts/generate-release-sbom.sh "{{ .Path }}" "{{ .Os }}" "{{ .Arch }}" dist/sbom
           output: true
     ldflags:
-      - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Tag }}' -X 'github.com/qiangli/bashy/internal/cli.buildID={{ .FullCommit }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
+      - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Tag "-dev" }}' -X 'github.com/qiangli/bashy/internal/cli.buildID={{ .FullCommit }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
     goos:
       - linux
       - windows
@@ -69,7 +72,7 @@ builds:
         - cmd: ./scripts/verify-bashy-signal-artifact.sh "{{ .Path }}"
           output: true
     ldflags:
-      - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Tag }}' -X 'github.com/qiangli/bashy/internal/cli.buildID={{ .FullCommit }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
+      - -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Tag "-dev" }}' -X 'github.com/qiangli/bashy/internal/cli.buildID={{ .FullCommit }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit={{ .Env.SHELL_RUNTIME_COMMIT }}' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime={{ .Env.SHELL_RUNTIME_COMMIT_TIME }}'
     goos:
       - linux
     goarch:
@@ -84,7 +87,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Tag }}'
+      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Tag "-dev" }}'
     goos:
       - linux
       - windows
@@ -100,7 +103,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ .Tag }}'
+      - -s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-{{ trimsuffix .Tag "-dev" }}'
     goos:
       - linux
       - windows

@@ -7,6 +7,8 @@
 # BYTE-PROMOTES the tested pre-release to the official `--latest` release — no
 # rebuild, so users download exactly what QA ran — and fires the fleet-notify
 # webhook to cloudbox.
+# The bytes already carry the promoted name: .goreleaser.yaml stamps the base
+# tag (`-dev` trimmed) into `--version`, so no re-stamp happens here.
 #
 # bashy ships TWO archive families + a checksum sidecar (archive names are
 # UNVERSIONED — see .goreleaser.yaml `name_template: "bashy-{{ .Os }}-{{ .Arch }}"`):
