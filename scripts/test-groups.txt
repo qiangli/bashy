@@ -64,6 +64,7 @@ examples ./examples/desk
 examples ./examples/local-knowledge/kb-ui
 examples ./examples/outpost-profile
 examples ./examples/satellite-member
+examples ./examples/satellite-provision
 examples ./examples/transcribe/adapters
 
 # 6 binary e2e: always fresh. The bash53 86-fixture gate stays `make test-bash`

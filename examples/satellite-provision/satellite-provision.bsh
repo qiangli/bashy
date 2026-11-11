@@ -1,0 +1,541 @@
+#!/usr/bin/env -S bashy --bashsharp
+# satellite-provision: stand up a satellite host on a cloud provider under
+# the budget guard, bring members in, share the LLM door, tear it down.
+# One editable Bash# body for the satellite-provision command and skill.
+#
+#   satellite-provision check     --satellite <id> [--provider aws|digitalocean]
+#   satellite-provision register  --satellite <id> --yes
+#   satellite-provision plan      --satellite <id> [--region R] [--size S] [--image I]
+#                                 [--budget-cap USD] [--budget-per-instance USD]
+#   satellite-provision up        --satellite <id> ... --yes [--wait SECONDS]
+#   satellite-provision invite    --satellite <id> (--name <host> | --email <member>) --yes
+#   satellite-provision share-llm --satellite <id> --peer <owned host> [--via mesh|cloudbox|both] --yes
+#   satellite-provision down      --satellite <id> --yes
+#
+# Thin wrapper over verbs (rod not fish): every step is one verb call —
+# `bashy infra …` with the provider credential from the vault
+# (`bashy secret exec`), `bashy satellite …` / `bashy member …` with the
+# owner bearer, `bashy llm share` for the door. Each mutating verb refuses
+# without --yes and prints the exact calls instead; --dry-run on any verb
+# prints the calls without running them. Secret VALUES never appear: only
+# the vault names the calls are wrapped in.
+
+~~~skill as guide
+---
+name: satellite-provision
+description: Provision a satellite host on a cloud provider (AWS Lightsail verified; DigitalOcean unverified) under the budget guard, invite members, share the LLM door, and tear it down without billing leftovers. For agentic tools acting for the account that OWNS and pays for the satellite. The executable body is this Bash# file; run it with bashy --bashsharp.
+metadata:
+  requires: "has=bashy"
+---
+# satellite-provision — a satellite of your own, from plan to teardown
+
+Roles: the OWNER is the account that names the satellite at the master,
+pays the provider for its host and brings MEMBERS in. This command acts
+for the owner. It composes verbs; nothing here creates, changes or
+deletes a cloud resource unless the user passes `--yes` to that one verb.
+Credentials stay in the vault: every provider call runs under
+`bashy secret exec`, and only the secret NAMES are ever printed.
+
+## Variables (flags, with the environment as fallback)
+
+| Flag | Env | Meaning |
+|---|---|---|
+| `--satellite ID` | `SATELLITE_ID` | the new satellite's name at the master (required) |
+| `--provider P` | `SATELLITE_PROVIDER` | `aws` (default, verified) or `digitalocean` (unverified) |
+| `--master URL` | `MASTER_URL` | master base URL; the verbs default to `$BASHY_CLOUDBOX_URL`, else the official portal |
+| `--owner-token-secret NAME` | `OWNER_TOKEN_SECRET` | vault name of an owner bearer with the satellites scope; empty = the verbs' own bearer ladder (`BASHY_FLEET_TOKEN`) |
+| `--region R` | `AWS_REGION` / `DO_REGION` | provider region (aws default `us-west-2`) |
+| `--size S` | `SATELLITE_SIZE` | bundle or slug (aws default `small_3_0`, digitalocean `s-1vcpu-1gb`) |
+| `--image I` | `SATELLITE_IMAGE` / `DO_IMAGE` | image (aws default `ubuntu_24_04`; DigitalOcean has NO usable default — always pass one) |
+| `--do-token-secret NAME` | `DO_TOKEN_SECRET` | vault name of the DigitalOcean team token (digitalocean only) |
+| `--satellite-url URL` | `SATELLITE_URL` | the satellite's base URL (invite); looked up from the master when empty |
+| `--budget-cap USD`, `--budget-per-instance USD` | — | the budget guard's monthly cap and per-instance ceiling (aws defaults: the account budget, else $50; $24) |
+| `--sprint N`, `--story N`, `--ttl D` | — | governance tags recorded on created resources |
+
+## Agent steps for an owner
+
+1. `satellite-provision check --satellite ID`: the provider credential is
+   in the vault (names only), the master answers the owner's bearer, and
+   the name is free. The master never deletes satellite rows, so a name
+   may already be taken by an old satellite — pick another rather than
+   reuse.
+2. `satellite-provision register --satellite ID --yes` registers the
+   name at the master (expects `201`). This is the one step with no verb:
+   it is the documented `POST /api/v1/satellites` call under
+   `bashy secret exec`, exactly as the kb runbook shows it.
+3. `satellite-provision plan --satellite ID [--budget-cap USD]` runs
+   `bashy infra provision PROVIDER --dry-run`: it prints the exact request,
+   the size verdict and the budget verdict and creates nothing. The budget
+   guard needs the bundle's monthly price plus month-to-date spend to fit
+   the cap, the bundle alone to fit the per-instance ceiling, and refuses
+   GPU shapes. A refused plan is the answer: do not raise the cap to make
+   it pass without the user's say-so.
+4. `satellite-provision up --satellite ID --yes` is the same request live,
+   with the owner bearer in `BASHY_FLEET_TOKEN`. On AWS it reserves the
+   static address, renders the enrollment bundle for it, creates the
+   instance, applies the satellite firewall (no internet-facing sshd) and
+   attaches the address; re-running with the same name is idempotent. The
+   command then polls the printed endpoint until it answers HTTP 200
+   (`--wait` seconds, default 300; about a minute after boot is normal).
+5. The owner signs in from the master's Satellites page, then "Open
+   console" (the satellite's own landing page has no sign-in).
+6. Bring people and machines in:
+   - `satellite-provision invite --satellite ID --email MEMBER --yes` runs
+     `bashy member invite` — the way a MEMBER joins (they pair their own
+     machine under their own account, accept, then attach; see the
+     `satellite-member` skill).
+   - `satellite-provision invite --satellite ID --name HOST --yes` runs
+     `bashy satellite invite`: an OWNER-SCOPED code for one of the owner's
+     OWN hardware nodes. The host that redeems it becomes the owner's.
+     Never hand this code to a member.
+7. `satellite-provision share-llm --satellite ID --peer HOST --yes` runs
+   `bashy llm share HOST --satellite ID` from the host that serves the
+   LLM door: the peer (an owned host) gets a credential it imports, and
+   the door stays authenticated per request.
+8. `satellite-provision down --satellite ID --yes` inspects, then runs
+   `bashy infra destroy … --yes`, which releases the static address and
+   the staged first-boot script too (safe after a failed create), then
+   lists what the provider still holds in that region. Stopping is not
+   enough: a stopped instance still bills, as does an unattached static
+   address. The satellite row at the master stays (step 1).
+
+## DigitalOcean
+
+`--provider digitalocean` is accepted but NOT verified live: every verb
+prints a warning, and `plan` is the only one worth trusting before a human
+has walked the DigitalOcean runbook. Always pass `--region` and `--image`
+(the built-in defaults are test fixtures). The adapter neither reserves an
+address first nor applies a firewall during create: run
+`bashy infra harden … --dry-run` afterwards, by hand.
+
+`SATELLITE_PROVISION_BASHY_BIN` overrides the `bashy` executable the
+verbs run through.
+
+## Verification
+
+`go test ./examples/satellite-provision/` drives each verb against a
+fake `bashy` that records argv; it never touches a provider or a master.
+~~~
+
+set -e
+
+PROG=satellite-provision
+
+print_usage() {
+    echo "Usage: $PROG check     --satellite <id> [--provider aws|digitalocean] [--master <url>] [--owner-token-secret <name>]" >&2
+    echo "       $PROG register  --satellite <id> --yes" >&2
+    echo "       $PROG plan      --satellite <id> [--region <r>] [--size <s>] [--image <i>] [--budget-cap <usd>] [--budget-per-instance <usd>] [--json]" >&2
+    echo "       $PROG up        --satellite <id> ... --yes [--wait <seconds>]" >&2
+    echo "       $PROG invite    --satellite <id> (--name <host> | --email <member> [--circle <c>]) --yes" >&2
+    echo "       $PROG share-llm --satellite <id> --peer <owned host> [--via mesh|cloudbox|both] --yes" >&2
+    echo "       $PROG down      --satellite <id> --yes" >&2
+    echo "Common: --provider, --master, --owner-token-secret, --region, --size, --image, --do-token-secret," >&2
+    echo "        --sprint, --story, --ttl, --dry-run (print the calls, run nothing), --yes (confirm a mutating verb)" >&2
+}
+
+usage() {
+    print_usage
+    exit 2
+}
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+bashy_bin() {
+    if [ -n "${SATELLITE_PROVISION_BASHY_BIN:-}" ]; then
+        printf '%s\n' "$SATELLITE_PROVISION_BASHY_BIN"
+    else
+        printf 'bashy\n'
+    fi
+}
+
+# Variables: flags first, then the environment names the kb runbooks use.
+SATELLITE_ID=${SATELLITE_ID:-}
+PROVIDER=${SATELLITE_PROVIDER:-aws}
+MASTER_URL=${MASTER_URL:-}
+OWNER_TOKEN_SECRET=${OWNER_TOKEN_SECRET:-}
+REGION=""
+SIZE=${SATELLITE_SIZE:-}
+IMAGE=${SATELLITE_IMAGE:-}
+DO_TOKEN_SECRET=${DO_TOKEN_SECRET:-}
+SATELLITE_URL=${SATELLITE_URL:-}
+BUDGET_CAP=""
+BUDGET_PER_INSTANCE=""
+SPRINT=""; STORY=""; TTL=""
+HOST_NAME=${HOST_NAME:-}; EMAIL=""; CIRCLE=""
+PEER=""; VIA=""
+WAIT=300
+YES=0; DRY_RUN=0; JSON=0; REFUSED=0
+
+# show_call prints one underlying call exactly as it would run (to stderr,
+# like `set -x`, so a captured verb output stays clean).
+show_call() {
+    printf '+' >&2
+    printf ' %s' "$@" >&2
+    printf '\n' >&2
+}
+
+# run prints the call, then runs it unless --dry-run. Secret values never
+# appear: the calls name vault entries, bashy secret exec resolves them.
+run() {
+    show_call "$@"
+    [ "$DRY_RUN" = 1 ] && return 0
+    "$@"
+}
+
+# require_yes: a mutating verb without --yes prints its calls and stops.
+require_yes() {
+    if [ "$YES" != 1 ] && [ "$DRY_RUN" != 1 ]; then
+        echo "$PROG: $1 changes something; refusing without --yes. The calls it would run:" >&2
+        DRY_RUN=1
+        REFUSED=1
+    fi
+}
+
+finish_refused() {
+    [ "$REFUSED" = 1 ] && fail "nothing was run (add --yes to confirm)" 1
+    return 0
+}
+
+validate_id() {
+    case "$SATELLITE_ID" in
+        "") fail "--satellite <id> is required (or SATELLITE_ID)" 2 ;;
+        -*|*[!A-Za-z0-9._-]*) fail "invalid satellite id: $SATELLITE_ID" 2 ;;
+    esac
+}
+
+provider_defaults() {
+    case "$PROVIDER" in
+        aws)
+            [ -n "$REGION" ] || REGION=${AWS_REGION:-us-west-2}
+            [ -n "$SIZE" ] || SIZE=small_3_0
+            [ -n "$IMAGE" ] || IMAGE=ubuntu_24_04
+            ;;
+        digitalocean)
+            echo "$PROG: WARNING: the digitalocean path is NOT verified live; trust plan only, and walk the DigitalOcean runbook by hand before up/down" >&2
+            [ -n "$REGION" ] || REGION=${DO_REGION:-}
+            [ -n "$SIZE" ] || SIZE=s-1vcpu-1gb
+            [ -n "$IMAGE" ] || IMAGE=${DO_IMAGE:-}
+            [ -n "$DO_TOKEN_SECRET" ] || fail "--do-token-secret <vault name> (or DO_TOKEN_SECRET) is required for digitalocean" 2
+            [ -n "$REGION" ] && [ -n "$IMAGE" ] || fail "digitalocean needs --region and --image: the built-in defaults are test fixtures" 2
+            ;;
+        *) fail "unknown provider: $PROVIDER (aws or digitalocean)" 2 ;;
+    esac
+}
+
+# provider_creds: the vault names bashy secret exec resolves for the provider.
+provider_creds() {
+    case "$PROVIDER" in
+        aws) CREDS=(AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY) ;;
+        digitalocean) CREDS=("$DO_TOKEN_SECRET=DIGITALOCEAN_ACCESS_TOKEN") ;;
+    esac
+}
+
+# provider_exec CMD...: CMD under the provider credential from the vault.
+provider_exec() {
+    provider_creds
+    run "$(bashy_bin)" secret exec "${CREDS[@]}" -- "$@"
+}
+
+# owner_exec CMD...: CMD with the owner bearer in BASHY_FLEET_TOKEN when a
+# vault name is given, else as-is (the verbs' own bearer ladder applies).
+owner_exec() {
+    if [ -n "$OWNER_TOKEN_SECRET" ]; then
+        run "$(bashy_bin)" secret exec "$OWNER_TOKEN_SECRET=BASHY_FLEET_TOKEN" -- "$@"
+    else
+        run "$@"
+    fi
+}
+
+# provider_and_owner_exec CMD...: both credentials, for the live create.
+provider_and_owner_exec() {
+    provider_creds
+    [ -n "$OWNER_TOKEN_SECRET" ] && CREDS+=("$OWNER_TOKEN_SECRET=BASHY_FLEET_TOKEN")
+    run "$(bashy_bin)" secret exec "${CREDS[@]}" -- "$@"
+}
+
+# MASTER_ARGS: --master URL when the user named one, else nothing (the
+# verbs default to $BASHY_CLOUDBOX_URL, else the official portal).
+MASTER_ARGS=()
+master_args() {
+    MASTER_ARGS=()
+    [ -n "$MASTER_URL" ] && MASTER_ARGS=(--master "$MASTER_URL")
+    return 0
+}
+
+# PROV: the shared `infra provision` argv (steps 3 and 4).
+PROV=()
+provision_argv() {
+    PROV=("$(bashy_bin)" infra provision "$PROVIDER" --satellite "$SATELLITE_ID" --region "$REGION" --size "$SIZE" --image "$IMAGE")
+    [ -n "$MASTER_URL" ] && PROV+=(--master "$MASTER_URL")
+    [ -n "$BUDGET_CAP" ] && PROV+=(--budget-cap "$BUDGET_CAP")
+    [ -n "$BUDGET_PER_INSTANCE" ] && PROV+=(--budget-per-instance "$BUDGET_PER_INSTANCE")
+    [ -n "$SPRINT" ] && PROV+=(--sprint "$SPRINT")
+    [ -n "$STORY" ] && PROV+=(--story "$STORY")
+    [ -n "$TTL" ] && PROV+=(--ttl "$TTL")
+    [ "$JSON" = 1 ] && PROV+=(--json)
+    return 0
+}
+
+# vault_has NAME: the vault lists that secret name (values are never read).
+vault_has() {
+    "$(bashy_bin)" secret list "$1" 2>/dev/null | grep -qx "$1"
+}
+
+cmd_check() {
+    validate_id
+    provider_defaults
+    rc=0
+    # 1. The provider credential is in the vault: names only, never values.
+    provider_creds
+    for c in "${CREDS[@]}"; do
+        n=${c%%=*}
+        if vault_has "$n"; then
+            echo "vault: $n present"
+        else
+            echo "vault: $n MISSING (bashy secret set $n)"; rc=1
+        fi
+    done
+    if [ -n "$OWNER_TOKEN_SECRET" ]; then
+        if vault_has "$OWNER_TOKEN_SECRET"; then
+            echo "vault: $OWNER_TOKEN_SECRET present (owner bearer)"
+        else
+            echo "vault: $OWNER_TOKEN_SECRET MISSING (owner bearer)"; rc=1
+        fi
+    fi
+    # 2. The master answers the owner, and the name is free. The master
+    #    never deletes satellite rows: a name may belong to an old satellite.
+    master_args
+    if rows=$(owner_exec "$(bashy_bin)" satellite list "${MASTER_ARGS[@]}" --json 2>/dev/null); then
+        [ "$DRY_RUN" = 1 ] && return "$rc"
+        if printf '%s\n' "$rows" | grep -q "\"name\":\"$SATELLITE_ID\""; then
+            echo "master: name $SATELLITE_ID is TAKEN (an old satellite keeps it; pick another name)"; rc=1
+        else
+            echo "master: reachable; name $SATELLITE_ID is free"
+        fi
+    else
+        echo "master: not reachable with the owner bearer (check --master / --owner-token-secret, or sign in)"; rc=1
+    fi
+    [ "$rc" = 0 ] && echo "$PROG: ready; next: $PROG register --satellite $SATELLITE_ID --yes, then $PROG plan"
+    return "$rc"
+}
+
+# Step 2 has no bashy verb (satellite list/show/invite/transfer only), so
+# this is the documented POST from the kb runbook, under bashy secret exec
+# so the bearer never touches this script. Expects 201.
+cmd_register() {
+    validate_id
+    [ -n "$MASTER_URL" ] || MASTER_URL=${BASHY_CLOUDBOX_URL:-https://ai.dhnt.io}
+    require_yes register
+    body='curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "Authorization: Bearer $T" -H "Content-Type: application/json" -d "{\"name\":\"$2\",\"endpoint\":\"\"}" "$1/api/v1/satellites"'
+    if [ -n "$OWNER_TOKEN_SECRET" ]; then
+        code=$(run "$(bashy_bin)" secret exec "$OWNER_TOKEN_SECRET=T" -- /bin/sh -c "$body" sh "$MASTER_URL" "$SATELLITE_ID")
+    else
+        [ -n "${BASHY_FLEET_TOKEN:-}" ] || [ "$DRY_RUN" = 1 ] || fail "register needs --owner-token-secret <vault name> or BASHY_FLEET_TOKEN in the environment" 2
+        # The bearer reaches sh through its environment only; the printed
+        # call shows $T, never the value.
+        code=$(T="${BASHY_FLEET_TOKEN:-}" run /bin/sh -c "$body" sh "$MASTER_URL" "$SATELLITE_ID")
+    fi
+    finish_refused
+    [ "$DRY_RUN" = 1 ] && return 0
+    case "$code" in
+        201) echo "$PROG: registered $SATELLITE_ID at $MASTER_URL (201); next: $PROG plan --satellite $SATELLITE_ID" ;;
+        *) fail "register returned HTTP $code (expected 201)" 1 ;;
+    esac
+}
+
+cmd_plan() {
+    validate_id
+    provider_defaults
+    provision_argv
+    provider_exec "${PROV[@]}" --dry-run
+    [ "$DRY_RUN" = 1 ] || echo "$PROG: plan only; nothing was created. If the size and budget verdicts pass: $PROG up --satellite $SATELLITE_ID --yes"
+}
+
+# wait_for_endpoint URL: poll until the satellite answers HTTP 200.
+wait_for_endpoint() {
+    url=$1
+    deadline=$(( $(date +%s) + WAIT ))
+    while :; do
+        status=$("$(bashy_bin)" fetch -i --timeout 10s "$url" 2>/dev/null | head -n 1 | cut -d' ' -f1)
+        if [ "$status" = 200 ]; then
+            echo "$PROG: $url answers 200"
+            return 0
+        fi
+        if [ "$(date +%s)" -ge "$deadline" ]; then
+            fail "$url did not answer 200 within ${WAIT}s (last: ${status:-no answer}); re-run $PROG up with the same --satellite (idempotent) or inspect with bashy infra inspect" 1
+        fi
+        sleep "${SATELLITE_PROVISION_POLL:-10}"
+    done
+}
+
+cmd_up() {
+    validate_id
+    provider_defaults
+    require_yes up
+    provision_argv
+    out=$(provider_and_owner_exec "${PROV[@]}") || fail "provision failed (re-run with the same --satellite once the cause is fixed; it is idempotent)" 1
+    [ -n "$out" ] && printf '%s\n' "$out"
+    finish_refused
+    [ "$DRY_RUN" = 1 ] && return 0
+    endpoint=$(printf '%s\n' "$out" | sed -n 's/^endpoint: //p; s/.*"endpoint":"\([^"]*\)".*/\1/p' | head -n 1)
+    [ -n "$endpoint" ] || fail "no endpoint in the provision output; inspect with: bashy infra inspect $PROVIDER --name $SATELLITE_ID --region $REGION" 1
+    wait_for_endpoint "$endpoint"
+    echo "$PROG: up; sign in from the master's Satellites page, then Open console. Next: $PROG invite / $PROG share-llm"
+}
+
+satellite_url() {
+    [ -n "$SATELLITE_URL" ] && { printf '%s\n' "$SATELLITE_URL"; return 0; }
+    master_args
+    js=$(owner_exec "$(bashy_bin)" satellite show "$SATELLITE_ID" "${MASTER_ARGS[@]}" --json 2>/dev/null) || return 1
+    printf '%s\n' "$js" | sed -n 's/.*"endpoint":"\([^"]*\)".*/\1/p' | head -n 1
+}
+
+cmd_invite() {
+    validate_id
+    [ -n "$HOST_NAME" ] || [ -n "$EMAIL" ] || usage
+    [ -n "$HOST_NAME" ] && [ -n "$EMAIL" ] && usage
+    require_yes invite
+    master_args
+    if [ -n "$EMAIL" ]; then
+        case "$EMAIL" in *@*) ;; *) fail "invalid email: $EMAIL" 2 ;; esac
+        set -- "$(bashy_bin)" member invite "$EMAIL" "${MASTER_ARGS[@]}"
+        [ -n "$CIRCLE" ] && set -- "$@" --circle "$CIRCLE"
+        owner_exec "$@" || fail "member invite failed" 1
+        finish_refused
+        [ "$DRY_RUN" = 1 ] || echo "$PROG: invited $EMAIL as a member; they pair their own machine, accept, then attach (see: bashy satellite-member --skill)"
+        return 0
+    fi
+    case "$HOST_NAME" in
+        -*|*[!A-Za-z0-9._-]*) fail "invalid host name: $HOST_NAME" 2 ;;
+    esac
+    url=$(satellite_url) || true
+    [ -n "$url" ] || [ "$DRY_RUN" = 1 ] || fail "no satellite URL: pass --satellite-url (or SATELLITE_URL), or register and bring the satellite up first" 1
+    owner_exec "$(bashy_bin)" satellite invite --satellite "${url:-<satellite-url>}" --name "$HOST_NAME" ||
+        fail "satellite invite failed (the bearer must exchange for host:invite-mint; an owner token without it is refused)" 1
+    finish_refused
+    [ "$DRY_RUN" = 1 ] || echo "$PROG: OWNER-SCOPED code written for $HOST_NAME: the host that redeems it becomes the owner's own node. Never hand it to a member (members: $PROG invite --email)."
+}
+
+cmd_share_llm() {
+    validate_id
+    case "$PEER" in
+        ""|-*) usage ;;
+    esac
+    require_yes share-llm
+    set -- "$(bashy_bin)" llm share "$PEER" --satellite "$SATELLITE_ID"
+    [ -n "$VIA" ] && set -- "$@" --via "$VIA"
+    run "$@" || fail "llm share failed (run this on the host that serves the LLM door; the peer must be an owned host)" 1
+    finish_refused
+    [ "$DRY_RUN" = 1 ] || echo "$PROG: door shared with $PEER via satellite $SATELLITE_ID; on $PEER: eval \"\$(bashy llm env --from <this host>)\""
+}
+
+cmd_down() {
+    validate_id
+    provider_defaults
+    require_yes down
+    provider_exec "$(bashy_bin)" infra inspect "$PROVIDER" --name "$SATELLITE_ID" --region "$REGION" || true
+    # destroy releases what the instance holds and would keep billing: the
+    # static address and the staged first-boot script (safe after a failed
+    # create).
+    provider_exec "$(bashy_bin)" infra destroy "$PROVIDER" --name "$SATELLITE_ID" --region "$REGION" --yes ||
+        fail "destroy failed; the instance and its static address may still bill: inspect and retry" 1
+    [ "$DRY_RUN" = 1 ] || echo "$PROG: still held by $PROVIDER in $REGION (anything listed below bills until released):"
+    provider_exec "$(bashy_bin)" infra list --provider "$PROVIDER" --region "$REGION" || true
+    if [ "$PROVIDER" = digitalocean ]; then
+        # The DO adapter attaches a reserved IP after create; an unattached one
+        # bills until released (bashy infra ip detach).
+        provider_exec "$(bashy_bin)" infra ip list --region "$REGION" || true
+    fi
+    finish_refused
+    [ "$DRY_RUN" = 1 ] && return 0
+    echo "$PROG: down; the satellite row $SATELLITE_ID stays at the master (never deleted). A stopped instance or an unattached static address still bills: release anything listed above."
+}
+
+if [ $# -lt 1 ]; then
+    usage
+fi
+case "$1" in
+    --skill)
+        sed -n '/^~~~skill/,/^~~~$/p' "$0" | sed '1d;$d'
+        exit 0
+        ;;
+    -h|--help|help)
+        # Usage, then the skill: an agent's --help is the whole guide.
+        print_usage 2>&1
+        echo
+        sed -n '/^~~~skill/,/^~~~$/p' "$0" | sed '1d;$d'
+        exit 0
+        ;;
+esac
+
+sub=$1; shift
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --satellite=*) SATELLITE_ID=${1#*=} ;;
+        --provider=*) PROVIDER=${1#*=} ;;
+        --master=*) MASTER_URL=${1#*=} ;;
+        --owner-token-secret=*) OWNER_TOKEN_SECRET=${1#*=} ;;
+        --region=*) REGION=${1#*=} ;;
+        --size=*) SIZE=${1#*=} ;;
+        --image=*) IMAGE=${1#*=} ;;
+        --do-token-secret=*) DO_TOKEN_SECRET=${1#*=} ;;
+        --satellite-url=*) SATELLITE_URL=${1#*=} ;;
+        --budget-cap=*) BUDGET_CAP=${1#*=} ;;
+        --budget-per-instance=*) BUDGET_PER_INSTANCE=${1#*=} ;;
+        --sprint=*) SPRINT=${1#*=} ;;
+        --story=*) STORY=${1#*=} ;;
+        --ttl=*) TTL=${1#*=} ;;
+        --name=*) HOST_NAME=${1#*=} ;;
+        --email=*) EMAIL=${1#*=} ;;
+        --circle=*) CIRCLE=${1#*=} ;;
+        --peer=*) PEER=${1#*=} ;;
+        --via=*) VIA=${1#*=} ;;
+        --wait=*) WAIT=${1#*=} ;;
+        --satellite|--provider|--master|--owner-token-secret|--region|--size|--image|--do-token-secret|--satellite-url|--budget-cap|--budget-per-instance|--sprint|--story|--ttl|--name|--email|--circle|--peer|--via|--wait)
+            [ $# -ge 2 ] || usage
+            case "$1" in
+                --satellite) SATELLITE_ID=$2 ;;
+                --provider) PROVIDER=$2 ;;
+                --master) MASTER_URL=$2 ;;
+                --owner-token-secret) OWNER_TOKEN_SECRET=$2 ;;
+                --region) REGION=$2 ;;
+                --size) SIZE=$2 ;;
+                --image) IMAGE=$2 ;;
+                --do-token-secret) DO_TOKEN_SECRET=$2 ;;
+                --satellite-url) SATELLITE_URL=$2 ;;
+                --budget-cap) BUDGET_CAP=$2 ;;
+                --budget-per-instance) BUDGET_PER_INSTANCE=$2 ;;
+                --sprint) SPRINT=$2 ;;
+                --story) STORY=$2 ;;
+                --ttl) TTL=$2 ;;
+                --name) HOST_NAME=$2 ;;
+                --email) EMAIL=$2 ;;
+                --circle) CIRCLE=$2 ;;
+                --peer) PEER=$2 ;;
+                --via) VIA=$2 ;;
+                --wait) WAIT=$2 ;;
+            esac
+            shift
+            ;;
+        --yes) YES=1 ;;
+        --dry-run) DRY_RUN=1 ;;
+        --json) JSON=1 ;;
+        *) usage ;;
+    esac
+    shift
+done
+case "$WAIT" in ""|*[!0-9]*) fail "invalid --wait: $WAIT" 2 ;; esac
+
+case "$sub" in
+    check) cmd_check ;;
+    register) cmd_register ;;
+    plan) cmd_plan ;;
+    up) cmd_up ;;
+    invite) cmd_invite ;;
+    share-llm) cmd_share_llm ;;
+    down) cmd_down ;;
+    *) usage ;;
+esac

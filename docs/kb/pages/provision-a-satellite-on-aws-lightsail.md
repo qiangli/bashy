@@ -89,4 +89,4 @@ Destroy releases the static IP and the staged first-boot script too, and is safe
 
 ## Candidate Bash# script
 
-`satellite-provision.bsh` — `check | register | plan | up | down` over steps 1-4 and 7, with the variables above as flags, waiting for the endpoint's 200 after `up`. Not written yet.
+`satellite-provision.bsh` (examples/satellite-provision; default command `bashy satellite-provision`) — `check | register | plan | up | invite | share-llm | down` over steps 1-4, 6 and 7 plus `bashy llm share`, with the variables above as flags (environment fallback), waiting for the endpoint's 200 after `up`. Mutating verbs refuse without `--yes`; `--dry-run` prints the calls. Read `bashy satellite-provision --skill` first.
