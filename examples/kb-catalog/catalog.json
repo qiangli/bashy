@@ -1,0 +1,13 @@
+{
+  "book": "kb-catalog",
+  "title": "KB catalog",
+  "ring": "",
+  "kind": "",
+  "tags": [],
+  "query": [],
+  "k": 50,
+  "exclude_status": ["superseded"],
+  "template": "templates/entry.md",
+  "index_template": "templates/index.md",
+  "share_text": "KB catalog: {{url}} ({{count}} entries; original records via bashy kb show REF)"
+}
