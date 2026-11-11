@@ -3,15 +3,18 @@ id: eacc92d80c9a
 kind: doc
 title: 'M3 register media + record in bashy-defaults; kb pages: PDF from slides/images, narrated video'
 seq: 3214
-status: todo
+status: done
 priority: p2
 labels:
     - media
     - kb
 created: 2026-11-11T02:40:05.044776Z
+assignee: codex-gpt5.6-sol
 sprint: 603
 sprint_id: c808e55d-6ce2-5525-8829-96499861c90e
 sprint_title: 'Agent-assisted PDF and video: small verbs, a media skill-script and kb pages any agent can follow'
+closed: 2026-11-11T03:47:45.646407Z
+closed_by: claude-opus5.5-s603
 ---
 
 Spec: dhnt-docs docs/sprint-603-master-execution-plan.md (M3). Supersedes dhnt-docs story 04cabb2fa1c4 (B4). Depends on M1's interface.

@@ -3,15 +3,18 @@ id: dc5bd09504a9
 kind: feature
 title: 'M1 examples/media/media.bsh: pdf/combine/slides via pdfcraft-cli, narrate, build — parity on macOS/Windows/Linux'
 seq: 3213
-status: todo
+status: done
 priority: p1
 labels:
     - media
     - examples
 created: 2026-11-11T02:40:04.652565Z
+assignee: codex-gpt5.6-sol
 sprint: 603
 sprint_id: c808e55d-6ce2-5525-8829-96499861c90e
 sprint_title: 'Agent-assisted PDF and video: small verbs, a media skill-script and kb pages any agent can follow'
+closed: 2026-11-11T03:47:37.71744Z
+closed_by: claude-opus5.5-s603
 ---
 
 Spec: dhnt-docs docs/sprint-603-master-execution-plan.md (M1). Supersedes dhnt-docs story 3358d726c018 (B2).
