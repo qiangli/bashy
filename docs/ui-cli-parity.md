@@ -161,7 +161,7 @@ the audit does not implement it. Follow the KB guideline
 
 | Gap and evidence | Feeds |
 |---|---|
-| App-local IDs/URLs for Tutor sessions, Klatch, Desk and media have no `define` resolver or uniform emitted `kind:id`; `internal/agentos/refs.go:42-62` versus `docs/command-atlas.md:480-526`. Keep existing local IDs; add only useful cross-tool adapters. | S2 (media file proof also S4) |
+| **Addressed by S2:** registered apps with `show <id> --json` use the generic `app:<command>/<id>` ref, for example `bashy define app:notepad/<id>`. The app's own access check remains authoritative. Media file proof is tracked separately. | S2 (media file proof also S4) |
 | KB has its own resolver/CLI but no Klatch or Viewer browser catalog bridge: `internal/agentos/refs.go:47`, `examples/desk/viewer/main.go:1-15`, `examples/klatch/register.sh:6-14`. | S3 |
 | Whiteboard page draw/clear/lock/invite revoke and JSON/PNG download exceed CLI desk seven: `examples/whiteboard/server/index.html:115-120`, `examples/whiteboard/server/cli.go:63-106`. | new (CLI parity; S6 must verify) |
 | Brainstorm page idea edit/delete/vote/invite revoke and JSON/Markdown download exceed CLI desk seven: `examples/brainstorm/server/index.html:147-159,182-188`, `examples/brainstorm/server/cli.go:110-130`. | new (CLI parity; S6 must verify) |
