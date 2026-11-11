@@ -82,7 +82,9 @@ function ExpandZip {
 
 set -eu
 
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# A native Windows path (C:\x\y.bsh) has backslashes dirname cannot split.
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
 PDFCRAFT_VERSION=0.20.0
 PDFCRAFT_URL=https://github.com/storytold/pdfcraft/releases/download/v$PDFCRAFT_VERSION
 video_sh=${MEDIA_VIDEO_SH:-$here/../video/video.sh}

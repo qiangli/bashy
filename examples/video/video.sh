@@ -32,7 +32,9 @@
 # Output: PROJECT_DIR/build/demo.mp4 (intermediates in build/).
 set -euo pipefail
 
-HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# A native Windows path (C:\x\y.sh) has backslashes dirname cannot split.
+SRC=${BASH_SOURCE[0]//\\//}
+HERE=$(cd "$(dirname "$SRC")" && pwd)
 native_windows_path() {
 	local p=$1 d
 	case $(uname -s) in

@@ -251,7 +251,9 @@ for a in "$@"; do
 	esac
 done
 set -- "${args[@]}"
-here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# A native Windows path (C:\x\y.bsh) has backslashes dirname cannot split.
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
 kind="" prompt="" script="" max=0 out="" timeout=1200 lang=en-US fit=0
 # The kind is the one positional; the registry passes it after the flags.
 while [ $# -gt 0 ]; do
