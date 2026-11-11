@@ -1,10 +1,19 @@
 # UI–CLI parity: every web-console action has a bashy verb
 
-Sprint 606 (bashy part). The system is for agents; humans use it with
-agentic tools. The only human-facing surfaces are the web consoles, and
-every action a human can do there has a companion bashy verb tailored to
-agents (always `--json`, always `--dry-run` on writes, never a web-UI
-step, never ad-hoc HTTP). This page maps each console action to its verb.
+Sprint 606 (bashy part). Bashy is built for agentic tools to easily discover,
+use and manage its features through the CLI. Humans can run the same CLI;
+human-friendly interaction is provided by the web apps and consoles.
+Every feature and management action available in the web UI must have a
+companion bashy verb tailored to agents (always `--json`, always `--dry-run`
+on writes), with equivalent permissions and approval rules.
+
+Agents may also use `bashy browser --live`, REST APIs or web URLs to inspect,
+test or operate the web UI. These are valid alternative access paths, not
+substitutes for missing CLI functionality: agents must not be forced to use
+browser steps or ad-hoc HTTP because a companion bashy verb is absent.
+CLI parity is mandatory; browser and API access remain allowed.
+
+This page maps each console action to its verb.
 Rows marked **gap** have no verb; each is filed as a standalone todo
 (`--no-sprint`, label `parity`) and linked from the row.
 

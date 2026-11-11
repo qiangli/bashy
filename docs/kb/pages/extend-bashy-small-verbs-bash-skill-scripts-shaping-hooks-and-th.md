@@ -16,6 +16,7 @@ evidence: Operator guideline 2026-11-09 (lern-psic sprint planning); tiers from 
 source:
     tool: claude
 created: "2026-11-09T20:17:35Z"
+updated: "2026-11-11T01:10:44Z"
 ---
 
 ## Rules
@@ -43,3 +44,15 @@ New user-facing helpers start as examples. A feature graduates in a release on e
 - Search first: `bashy commands --agentic`, `bashy kb search "<task>"`, `bashy skill list`.
 - Name the level you are building at and the verbs you compose.
 - Name the shaping hook (which file or verb a user can shape).
+
+## Agent-first CLI parity
+
+Bashy is built for agentic tools to easily discover, use and manage every feature through its CLI. Humans can run the same CLI normally; it is not agent-exclusive. Human-oriented terminal ergonomics and TUI polish are not requirements.
+
+Bashy app/* web interfaces are designed to be human-friendly. Every feature and management action available through a web app must have an equivalent Bashy CLI operation on the same entities, with equivalent identity, permissions and approval rules.
+
+Expose discoverable help, scriptable/composable operations, structured inputs/outputs, stable references and actionable errors. Prefer reusable Bash# command/skill/script wrappers composing existing APIs and verbs.
+
+Agents may also inspect or use web apps through bashy browser --live, REST APIs or web URLs. These are valid alternative paths, but can be more cumbersome or error-prone; they do not replace the requirement for easy agent use through Bashy CLI. Likewise, humans may use the CLI even though the web UI is tailored to them.
+
+Audit each app with a UI-to-CLI action matrix and verify equivalent results/state changes and denied-access behavior. Reuse working commands and repair only demonstrated gaps.
