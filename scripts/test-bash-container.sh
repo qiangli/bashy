@@ -94,7 +94,12 @@ $OCI run --rm --platform "linux/$ARCH" \
 runner_status=$?
 set -e
 cat "$suite_json"
-evidence_args=(-input "$suite_json" -output "$evidence" -bashy-commit "$commit" \
+# --tty merges the runner's stderr log into stdout and turns LF into CRLF, so
+# the capture holds log lines around the one JSON report line; keep only it.
+report_json="$(mktemp)"
+trap 'rm -f "$suite_json" "$report_json"' EXIT
+tr -d '\r' <"$suite_json" | grep '^{' | tail -n 1 >"$report_json" || true
+evidence_args=(-input "$report_json" -output "$evidence" -bashy-commit "$commit" \
   -sh-pin "$sh_pin" -image-id "$image_id" -mode "$BASH53_BASHPP" \
   -uid 1000 -host-os "$host_os")
 if [ -n "${BASH53_BASELINE:-}" ]; then evidence_args+=(-baseline "$BASH53_BASELINE"); fi
