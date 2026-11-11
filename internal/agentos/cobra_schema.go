@@ -55,6 +55,7 @@ import (
 	"github.com/qiangli/yoke/pkg/sdlc"
 	"github.com/qiangli/yoke/pkg/search"
 	"github.com/qiangli/yoke/pkg/secrets"
+	"github.com/qiangli/yoke/pkg/share"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 	"github.com/qiangli/yoke/pkg/sota"
 	"github.com/qiangli/yoke/pkg/stats"
@@ -86,6 +87,8 @@ func cobraVerb(name string) *cobra.Command {
 		return newProxyCmd()
 	case "llm":
 		return broker.NewCmd()
+	case "share":
+		return share.NewCmd()
 	case "adapt":
 		return adapt.NewCmd(adapt.PrepareJSONLens)
 	case "adapter":

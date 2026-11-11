@@ -26,3 +26,4 @@
 {"op":"validate","slug":"agent-session-transcripts-are-scratch-durable-knowledge-goes-in","id":"01a1c233-fcd9-715b-8d58-74b0cd77328f","tool":"claude","at":"2026-11-09T21:26:33.606262Z"}
 {"op":"add","slug":"share-an-llm-with-metering-peer-add-limits-usage-alarm","id":"01a1c348-83cd-77b4-8ef0-353d674124c0","tool":"muse-spark1.3-j","episode":"ep-122d82e3ddc8b612","parent_episode":"ep-c4f0df9c5348dc75","at":"2026-11-10T02:27:51.888172Z"}
 {"op":"add","slug":"live-local-model-check-on-a-disposable-host-engines-build-signed","id":"01a1c781-7582-7b81-abf9-a00d0d666739","tool":"claude","at":"2026-11-10T22:08:32.643668Z"}
+{"op":"add","slug":"share-an-app-page-with-a-phone-or-browser-user-share-qr","id":"01a1c7fd-6f37-7134-83c1-b66bda29e3c1","tool":"claude","at":"2026-11-11T00:23:57.496233Z"}

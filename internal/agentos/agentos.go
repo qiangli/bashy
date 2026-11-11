@@ -119,6 +119,7 @@ import (
 	"github.com/qiangli/yoke/pkg/sdlc"
 	"github.com/qiangli/yoke/pkg/search"
 	"github.com/qiangli/yoke/pkg/secrets"
+	"github.com/qiangli/yoke/pkg/share"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 	"github.com/qiangli/yoke/pkg/sota"
 	"github.com/qiangli/yoke/pkg/stats"
@@ -174,11 +175,13 @@ var (
 	// `llm` likewise belongs to a popular unrelated CLI; the local gateway is
 	// reached only as `bashy llm`.
 	// `limit` is a wrapper verb like awd; bare `limit` is csh's builtin, never ours.
+	// `share` is direct-only too: bare `share` is a common word in scripts
+	// and the verb is reached as `bashy share qr URL`.
 	// `acp` is likewise direct-only: it is the protocol's name, not bashy's, and
 	// the one thing an ACP host puts in its `command:` slot. A bare shim would
 	// put a JSON-RPC server behind a three-letter word in every interactive
 	// shell, which no script should ever reach by accident.
-	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "service", "llm", "limit", "proxy", "outpost", "connect", "linux", "mod", "explain", "approve", "tmpl", "acp"}
+	directFrontDoorVerbs = []string{"ycode", "install-agent", "mb", "ping", "out", "full", "awd", "supervisord", "service", "llm", "limit", "proxy", "outpost", "connect", "linux", "mod", "explain", "approve", "tmpl", "acp", "share"}
 	agentModeShimVerbs   = []string{"go", "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "git-scm", "curl"}
 	// doctor/context/audit folded into `inspect` on 2026-09-12: same bodies,
 	// reachable as `bashy <name>` for existing callers, listed under --all.
@@ -927,6 +930,18 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy llm:", err)
+			dispatchExit(1)
+		}
+		dispatchExit(0)
+	case "share":
+		// Hand a link to another device (S604 C2): `share qr URL` prints the
+		// URL and a terminal QR code for ANY URL, from any bashy user.
+		// Publishes nothing; a bashy app URL opens as the owner's shapeable
+		// app page.
+		cmd := share.NewCmd()
+		setCobraArgs(cmd, os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy share:", err)
 			dispatchExit(1)
 		}
 		dispatchExit(0)

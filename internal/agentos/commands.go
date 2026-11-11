@@ -540,6 +540,7 @@ var verbSynopsis = map[string]string{
 	"ollama":             "the LLM pillar (O3: ollama · oci · otel): managed local LLM runtime — isolated daemon, own port/models",
 	"weave":              "per-repo multi-agent workspace orchestrator",
 	"llm":                "local OpenAI/Anthropic-compatible gateway over pre-spawned agent CLIs: ask for a band (L4, L4+, auto), a model or an agent; serve | pools | env | peer (per-peer credentials, --email/--circle member binding)",
+	"share":              "hand a link to a phone or browser user: `share qr URL` prints the URL and a terminal QR code (any URL; --png FILE, --json)",
 	"sprint":             "cross-repo plan/continuity board (peer to weave)",
 	"handoff":            "pause this session and hand the work to another agent, a scheduler, or tomorrow",
 	"resume":             "pick up a handed-off session — any tool, any machine",
