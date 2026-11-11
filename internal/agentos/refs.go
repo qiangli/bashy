@@ -1,7 +1,13 @@
 package agentos
 
 import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
 	"sync"
+	"time"
 
 	lenscmd "github.com/qiangli/yoke/cmds/lens"
 	"github.com/qiangli/yoke/pkg/bus"
@@ -52,6 +58,7 @@ func wireRefResolvers() {
 		principal.RegisterRefs(g)   // person role
 		execlog.RegisterRefs(g, "") // episode
 		chat.RegisterRefs(g, "")    // chat
+		g.Register(ref.App, appRefResolver(appCommandConfig, registeredCommands, runAppShow))
 		if store, err := shellOutputStore(); err == nil {
 			reduce.RegisterRefs(g, store) // out
 		}
@@ -60,6 +67,60 @@ func wireRefResolvers() {
 		// ErrNoResolver and a wired kind's miss stays ErrNotFound.
 		lenscmd.AgentWorldRefs = g
 	})
+}
+
+// BASHY_REFS_APP_COMMANDS is the refs.app_commands shaping key. An explicit
+// empty value disables app refs; otherwise the built-in set is the default.
+func appCommandConfig() []string {
+	value, set := os.LookupEnv("BASHY_REFS_APP_COMMANDS")
+	if !set {
+		value = "notepad,viewer,form,chart,brainstorm,whiteboard,session,calendar"
+	}
+	return strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == ' ' || r == '\n' })
+}
+
+// Check both the configured allowlist and the live command ring on each call.
+func appRefResolver(configured func() []string, registered func() []fleet.Command, runner ref.AppRunner) ref.Resolver {
+	return ref.ResolverFunc(func(id string) (ref.Node, error) {
+		allowed := make(map[string]bool)
+		for _, name := range configured() {
+			allowed[name] = true
+		}
+		var names []string
+		for _, command := range registered() {
+			if allowed[command.Name] {
+				names = append(names, command.Name)
+			}
+		}
+		return ref.NewAppResolver(names, runner).Resolve(id)
+	})
+}
+
+func runAppShow(command, id string) ([]byte, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, exe, command, "show", id, "--json")
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("app %s show %s: %w", command, id, ctx.Err())
+		}
+		message := strings.TrimSpace(stderr.String())
+		if message == "" {
+			message = strings.TrimSpace(string(output))
+		}
+		if message == "" {
+			message = err.Error()
+		}
+		return nil, fmt.Errorf("app %s show %s: %s", command, id, message)
+	}
+	return output, nil
 }
 
 var refResolversOnce sync.Once

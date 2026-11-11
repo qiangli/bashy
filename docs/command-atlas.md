@@ -485,13 +485,21 @@ An agent has to learn **two things**:
    JSON as `kind:id`: `kb:deploy-runbook`, `todo:a5f5cfc8`, `sprint:168`,
    `run:coreutils-21`, `meet:<id>`, `mb:412`, `bus:77`, `agent:codex`,
    `person:<handle>`, `host:<name>`, `tool:codex`, `model:opus5`,
-   `skill:conductor`, `episode:<id>`, `role:conductor:168`. Fifteen kinds,
-   closed and ratcheted (`coreutils/pkg/ref`); a prefix outside the list is a
+   `skill:conductor`, `episode:<id>`, `role:conductor:168`,
+   `app:notepad/<id>`. App refs use the registered command's own item ID.
+   The kind list is closed and ratcheted (`yoke/pkg/ref`); a prefix outside the list is a
    word, not a ref — `codex:gpt5.6-sol` stays a `tool:model` binding.
 2. **Ask `bashy define kind:id`.** It answers with the record's title, status,
    where it lives and the command that opens it (`--json` for the node).
    Exit 1 only for a real ref that names nothing — and it says which of three
    things happened: no such id, not a kind, or no resolver wired on this build.
+
+`app:<command>/<id>` resolves through the registered command's `show <id>
+--json` action, so that app's access check still applies. The
+`refs.app_commands` shaping key (`BASHY_REFS_APP_COMMANDS`, comma or space
+separated) defaults to `notepad,viewer,form,chart,brainstorm,whiteboard,session,calendar`.
+Only commands also registered on this host can resolve; an empty value disables
+app refs.
 
 `urn:dhnt:kind:id` is the same ref spelled for text that leaves bashy (a URL,
 another tool's store, an OTel attribute); every parser accepts it, nothing

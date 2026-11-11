@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	lenscmd "github.com/qiangli/yoke/cmds/lens"
+	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/lens/provider"
 	"github.com/qiangli/yoke/pkg/lexicon"
 	"github.com/qiangli/yoke/pkg/ref"
@@ -21,6 +22,46 @@ import (
 func TestRefResolversCoverEveryKind(t *testing.T) {
 	if missing := unwiredRefKinds(); len(missing) != 0 {
 		t.Fatalf("kinds with no resolver wired in wireRefResolvers: %v (vocabulary: %v)", missing, ref.KindNames())
+	}
+}
+
+func TestAppRefResolverUsesConfiguredRegisteredCommands(t *testing.T) {
+	registered := []fleet.Command{{Name: "notepad"}, {Name: "viewer"}}
+	called := 0
+	resolver := appRefResolver(
+		func() []string { return []string{"notepad", "form"} },
+		func() []fleet.Command { return registered },
+		func(command, id string) ([]byte, error) {
+			called++
+			if command != "notepad" || id != "item-1" {
+				t.Errorf("runner called for %s/%s", command, id)
+			}
+			return []byte(`{"title":"Draft"}`), nil
+		},
+	)
+	if node, err := resolver.Resolve("notepad/item-1"); err != nil || node.Ref != "app:notepad/item-1" || node.Title != "Draft" {
+		t.Fatalf("allowed app: node=%+v err=%v", node, err)
+	}
+	for _, id := range []string{"viewer/item-1", "form/item-1"} {
+		if _, err := resolver.Resolve(id); !errors.Is(err, ref.ErrNotFound) {
+			t.Errorf("%s: want unallowed/unregistered error, got %v", id, err)
+		}
+	}
+	if called != 1 {
+		t.Fatalf("runner calls = %d, want 1", called)
+	}
+	registered = nil // the ring is read again, so removal takes effect.
+	if _, err := resolver.Resolve("notepad/item-1"); !errors.Is(err, ref.ErrNotFound) {
+		t.Fatalf("removed command: %v", err)
+	}
+	denied := errors.New("access denied by app")
+	resolver = appRefResolver(
+		func() []string { return []string{"notepad"} },
+		func() []fleet.Command { return []fleet.Command{{Name: "notepad"}} },
+		func(_, _ string) ([]byte, error) { return nil, denied },
+	)
+	if _, err := resolver.Resolve("notepad/item-1"); !errors.Is(err, denied) {
+		t.Fatalf("runner error lost: %v", err)
 	}
 }
 
