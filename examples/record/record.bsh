@@ -274,4 +274,23 @@ page=$(<"$here/page.html")
 path := go.Record(kind, prompt, script, max, fit, out, timeout, lang, page)
 # A failed foreign call leaves path empty (its message is already on stderr).
 [ -n "$path" ] || exit 1
+# Browsers write MP4 takes fragmented (often Opus, no duration in the header),
+# which native players such as macOS QuickTime and Finder cannot open. With
+# ffmpeg available, rewrite the take in place as a plain file every player
+# opens (AAC audio, indexed); without it the take stays exactly as recorded.
+case $kind:$path in
+audio:*.m4a | video:*.mp4)
+	if command -v ffmpeg >/dev/null 2>&1; then
+		tmp="${path%.*}.plain.${path##*.}"
+		if [ "$kind" = audio ]; then vopt=(-vn); else vopt=(-c:v copy); fi
+		if (umask 077 && ffmpeg -nostdin -hide_banner -loglevel error -y -i "$path" \
+			"${vopt[@]}" -c:a aac -b:a 160k -movflags +faststart "$tmp"); then
+			mv -f "$tmp" "$path"
+		else
+			rm -f "$tmp"
+			echo "record: kept the take as recorded (ffmpeg could not rewrite it)" >&2
+		fi
+	fi
+	;;
+esac
 echo "$path"
