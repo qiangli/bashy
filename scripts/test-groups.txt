@@ -59,6 +59,7 @@ tooling ./tools/yashsuite
 tooling ./tools/ztst
 
 # 5 example apps.
+examples ./examples/cast
 examples ./examples/defaults
 examples ./examples/desk
 examples ./examples/local-knowledge/kb-ui

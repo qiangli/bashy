@@ -6,6 +6,13 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TMP=$(mktemp -d "${TMPDIR:-/tmp}/bashy-video-test.XXXXXX")
 trap 'rm -rf "$TMP"' EXIT
 
+# The Go caches stay the real ones (read before HOME moves below) so the
+# cast command's Go fence builds from what is already downloaded instead of
+# refetching every module into the sandbox.
+if command -v go >/dev/null; then
+	export GOPATH="${GOPATH:-$(go env GOPATH)}" GOMODCACHE="${GOMODCACHE:-$(go env GOMODCACHE)}" GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
+fi
+
 export HOME="$TMP/home"
 export BASHY_HOME="$TMP/bashy"
 export XDG_CONFIG_HOME="$TMP/xdg/config"
@@ -20,6 +27,19 @@ mkdir -p "$HOME" "$BASHY_HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_STATE_H
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 pass() { echo "ok   $*"; }
+
+# The sandbox has its own command registry, so the `cast` this checkout ships
+# (examples/cast, a Bash# command over a Go fence) is registered into it from
+# the sibling folder; video.sh then records every step with `bashy cast record`
+# instead of asciinema.
+CAST_BSH="$HERE/../cast/cast.bsh"
+if [ -f "$CAST_BSH" ] && command -v bashy >/dev/null; then
+	bashy commands add cast --set exec.0=bashy --set exec.1=--bashsharp --set "exec.2=$CAST_BSH" \
+		--set effects.0=read --set effects.1=write --set effects.2=exec >/dev/null \
+		|| fail "cannot register examples/cast in the sandbox"
+	bashy cast --help >/dev/null 2>&1 || fail "registered cast does not answer --help"
+	pass "cast registered in the sandbox from $CAST_BSH"
+fi
 
 # 1. Doctor check
 "$HERE/video.sh" doctor >/dev/null
@@ -137,7 +157,8 @@ audio_stays_non_silent "$OUT" 7.2 1.5 "narrated step in final demo.mp4"
 [ -f "$PROJ/build/sub-1.gif" ] && [ -f "$PROJ/build/sub-2.gif" ] || fail "missing burned-in subtitle overlays"
 pass "subtitle burn-in overlays rendered and applied"
 
-# 7. cast recorder path (only where cast / bashy cast exists)
+# 7. cast recorder path: runs whenever cast is registered (the sandbox
+#    registration above, or a `cast` on PATH); skips only without either.
 if command -v cast >/dev/null; then CAST=(cast)
 elif bashy cast --help >/dev/null 2>&1; then CAST=(bashy cast)
 else CAST=(); fi
@@ -145,12 +166,16 @@ if [ ${#CAST[@]} -gt 0 ]; then
 	"${CAST[@]}" record "$TMP/cast-check.cast" --cols 40 --rows 8 --idle-limit 1 -- sh -c 'echo cast-ok' </dev/null >/dev/null \
 		|| fail "cast record failed"
 	grep -q 'cast-ok' "$TMP/cast-check.cast" || fail "cast output missing recorded text"
+	head -1 "$TMP/cast-check.cast" | grep -q '"version":2,"width":40,"height":8' || fail "cast header is not 40x8 asciicast v2"
 	pass "cast record path"
 	# a failing command's status propagates
 	if "${CAST[@]}" record - --cols 40 --rows 8 -- sh -c 'exit 3' </dev/null >/dev/null 2>&1; then
 		fail "cast record did not propagate CMD exit status"
 	fi
 	pass "cast record propagates exit status"
+	# the render above used cast, not asciinema, for the step
+	head -1 "$PROJ/build/hello.cast" | grep -q '"env":{"SHELL":' || fail "step hello.cast was not recorded by cast"
+	pass "render recorded steps with cast"
 else
 	echo "skip cast record path (cast / bashy cast unavailable)"
 fi

@@ -1,0 +1,167 @@
+#!/usr/bin/env -S bashy --bashsharp
+# cast — record a command's terminal output as asciicast v2 under a
+# pseudo-terminal (pty on Unix, ConPTY on Windows), the file every player and
+# examples/video already read.
+#
+#   cast record OUT.cast [--cols N] [--rows N] [--idle-limit S] [--title T] -- CMD [ARGS...]
+#
+# OUT may be "-" for stdout. The terminal is 80x24 unless --cols/--rows say
+# otherwise (never the window it was recorded from). --idle-limit S caps a
+# pause between two events at S seconds. Exit status is CMD's; 127 when the
+# recorder itself could not run CMD.
+#
+#   cast record scene.cast -- bashy todo list
+#   cast record scene.cast --cols 100 --rows 30 --idle-limit 2 -- sh -c 'ls; sleep 5; ls -l'
+#   cast record - -- printf '\033[31mred\033[0m\n' | head -3
+#
+# A skill-tier command: a Bash# script whose recorder is a Go fence over the
+# package in ./cast, built against ./go.mod (creack/pty, aymanbagabas/go-pty).
+# Register it once with `bashy commands add` (bashy-defaults apply does); the
+# core is untouched.
+
+~~~skill as guide
+---
+name: cast
+description: Record a command's terminal output as an asciicast v2 file under a real pseudo-terminal, the same on macOS, Linux and Windows. Use for a terminal scene in a demo or narrated video (examples/video reads the cast), or to capture exactly what a command printed, colours included. Run `cast record OUT.cast -- CMD [ARGS...]`.
+metadata:
+  requires: "has=bashy"
+---
+# cast — a terminal scene as asciicast v2
+
+    cast record scene.cast -- bashy todo list
+    cast record scene.cast --cols 100 --rows 30 --idle-limit 2 -- sh -c 'ls; sleep 5; ls -l'
+    cast record - -- printf '\033[31mred\033[0m\n'
+
+- CMD runs under a pseudo-terminal (a pty on Unix, ConPTY on Windows) with
+  `TERM=xterm-256color`, so it prints colours and cursor movement as it
+  would on a screen. Everything after `--` is CMD's; nothing after it is
+  read as an option.
+- OUT.cast is the asciicast v2 header line, then one `[seconds,"o","data"]`
+  event per output chunk. `-` writes it to stdout.
+- `--cols N --rows N` size the terminal (default 80x24; it never follows
+  the window the recording happens to run in, so a scene has one shape).
+- `--idle-limit S` caps a pause between events at S seconds, as asciinema's
+  idle_time_limit does; `--title T` sets the header title.
+- The exit status is CMD's own, so a failing scene is never hidden. The
+  recorder exits 127 when it could not start CMD.
+- Multi-byte characters cut by a read boundary arrive intact: the file is
+  valid UTF-8 whatever CMD printed and whenever it paused.
+- Needs a Go toolchain the first time (the fence is built once and cached).
+
+Uses: a step of a narrated video (`examples/video` calls `cast record` for
+every `steps/*.sh`, then `agg` renders the cast to frames); a README demo
+rendered with any asciicast player; proof of what a command printed. It
+records only; play, convert and upload with the tools that already do that.
+~~~
+
+~~~go as go
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/qiangli/bashy/examples/cast/cast"
+)
+
+// Record runs argv (unit-separator joined, as the shell half builds it) under
+// the platform pseudo-terminal and writes the asciicast to out ("-" is
+// stdout). It returns CMD's exit status, or 127 with the reason on stderr
+// when the recorder itself could not run CMD (the shell half exits with it).
+func Record(out, cols, rows, idle, title, dir, argv string) int {
+	parts := strings.Split(strings.TrimSuffix(argv, "\x1f"), "\x1f")
+	c, _ := strconv.ParseUint(cols, 10, 16)
+	r, _ := strconv.ParseUint(rows, 10, 16)
+	limit, err := strconv.ParseFloat(idle, 64)
+	if len(parts) == 0 || parts[0] == "" || c == 0 || r == 0 || err != nil || limit < 0 {
+		return fail(fmt.Errorf("cast: bad arguments (cols %q rows %q idle %q, %d words)", cols, rows, idle, len(parts)))
+	}
+	w := os.Stdout
+	if out != "-" {
+		f, err := os.Create(out)
+		if err != nil {
+			return fail(fmt.Errorf("cast: %w", err))
+		}
+		defer f.Close()
+		w = f
+	}
+	code, err := cast.Record(w, cast.Options{
+		Command:   parts,
+		Cols:      uint16(c),
+		Rows:      uint16(r),
+		IdleLimit: time.Duration(limit * float64(time.Second)),
+		Dir:       dir,
+		Title:     title,
+	})
+	if err != nil {
+		return fail(err)
+	}
+	if w != os.Stdout {
+		if err := w.Close(); err != nil {
+			return fail(fmt.Errorf("cast: %w", err))
+		}
+	}
+	return code
+}
+
+func fail(err error) int {
+	fmt.Fprintln(os.Stderr, err)
+	return 127
+}
+~~~
+
+usage() { sed -n '2,17p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+# Everything after the first "--" is CMD's and is never parsed here.
+own=() cmd=() seen=0
+for a in "$@"; do
+	if [ $seen = 1 ]; then cmd+=("$a")
+	elif [ "$a" = -- ]; then seen=1
+	else own+=("$a")
+	fi
+done
+# The command registry passes typed flags as --name=value; accept both forms.
+args=()
+for a in "${own[@]}"; do
+	case $a in
+	--*=*) args+=("${a%%=*}" "${a#*=}") ;;
+	*) args+=("$a") ;;
+	esac
+done
+set -- "${args[@]}"
+sub="" out="" cols=80 rows=24 idle=0 title=""
+while [ $# -gt 0 ]; do
+	case $1 in
+	--cols) cols=$2; shift 2 ;;
+	--rows) rows=$2; shift 2 ;;
+	--idle-limit) idle=$2; shift 2 ;;
+	--title) title=$2; shift 2 ;;
+	--skill) sed -n '/^~~~skill/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d'; exit 0 ;;
+	-h | --help) usage; exit 0 ;;
+	-?*) echo "cast: unknown option: $1" >&2; exit 2 ;;
+	*)
+		if [ -z "$sub" ]; then sub=$1
+		elif [ -z "$out" ]; then out=$1
+		else echo "cast: unexpected argument: $1 (put CMD after \"--\")" >&2; exit 2
+		fi
+		shift ;;
+	esac
+done
+[ -n "$sub" ] || { usage >&2; exit 2; }
+[ "$sub" = record ] || { echo "cast: unknown subcommand: $sub (only record)" >&2; exit 2; }
+[ -n "$out" ] || { echo "cast: missing OUT.cast (use - for stdout)" >&2; exit 2; }
+[ ${#cmd[@]} -gt 0 ] || { echo "cast: missing command: put CMD after \"--\"" >&2; exit 2; }
+case $cols in '' | *[!0-9]* | 0*) echo "cast: --cols must be a positive number (got '$cols')" >&2; exit 2 ;; esac
+case $rows in '' | *[!0-9]* | 0*) echo "cast: --rows must be a positive number (got '$rows')" >&2; exit 2 ;; esac
+case $idle in '' | *[!0-9.]* | *.*.* | .) echo "cast: --idle-limit must be a number of seconds (got '$idle')" >&2; exit 2 ;; esac
+# CMD crosses into the Go fence as one unit-separator joined string.
+us=$'\x1f' argv=""
+for a in "${cmd[@]}"; do
+	case $a in *"$us"*) echo "cast: an argument contains the unit separator (0x1f)" >&2; exit 2 ;; esac
+	argv+="$a$us"
+done
+code := go.Record(out, cols, rows, idle, title, "$PWD", argv)
+# The fence reports its own failure on stderr and returns 127; an empty
+# code means the fence itself could not run (no Go toolchain, say).
+[ -n "$code" ] || exit 127
+exit "$code"
