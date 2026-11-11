@@ -1,6 +1,6 @@
 # Memos Integration Assessment and Adapter Architecture
 
-**Status:** Decided (Sprint 614, Story #105 / dfb2cc56bd4f).  
+**Status:** PARKED by operator decision 2026-11-10. The recommendation below is recorded for reference only; no follow-up is filed (Sprint 614, Story #105 / dfb2cc56bd4f).  
 **Context:** Collaboration MVP: assess `usememos/memos` integration, compare against Notepad and KB, and specify the smallest software-shaped adapter with CLI parity under `examples/`.
 
 ---

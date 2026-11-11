@@ -1,7 +1,9 @@
 # bashy docs index
 
 - [Boundary control](boundary.md) — S583.1 design of record: owner by default, circles are member attributes from the Cloudbox list, grants checked only at egress; egress inventory and decisions (circle, mutuality, offline list).
-- [UI–CLI parity](ui-cli-parity.md) — S606: every cloudbox/satellite/outpost web-console action mapped to its bashy verb; missing verbs filed as parity-labelled todos.
+- [UI–CLI parity](ui-cli-parity.md) — S606: every cloudbox/satellite/outpost web-console action mapped to its bashy verb; missing verbs filed as parity-labelled todos; S614 adds the collaboration-app audit (S1) and the desk page-action verbs (S11).
+- [Memos decision](memos-decision.md) — S614 S7 spike: Memos assessed against Notepad + KB; adapter design recorded, PARKED by the operator (no follow-up).
+- [Calendar decision](calendar-decision.md) — S614 S8 spike: self-hosted `examples/calendar` from Desk primitives; ICS and Google import/export; CLI parity matrix and draft follow-up.
 - [Klatch participant sandbox E2E](plan-klatch-participant-sandbox-e2e.md) — S597: run.py owns the bashy oci container lifecycle, participant.py is the imported helper/sealed/attachment/wrapper journey; measured results.
 - [Sprint 591: README as agent bootstrap](plan-s591-readme-agent-bootstrap.md) — the README is a human hook plus an agent skill with one consent gate (a / a+b); cold-start evidence and follow-up bugs.
 - [install.md](install.md) — every install route: one-liners, tarballs, signing, from source, offline container image (moved from the README).
