@@ -6,6 +6,9 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 CONFIG=${COLLAB_SAVE_CONFIG:-$HERE/collab-save.json}
 DRY=0 JSON=0 REPO= MESSAGE="saved by collab-save" REMOTE=origin
 die() { echo "collab-save: $*" >&2; exit 2; }
+# Writes go through system git: Git LFS clean filters and the pre-push
+# upload run there, not in bashy's built-in git.
+xgit() { git --external=true "$@"; }
 usage() {
   cat >&2 <<'EOF'
 Usage:
@@ -91,9 +94,9 @@ if [[ $verb == save ]]; then
   for i in "${!paths[@]}"; do
     src=${paths[$i]}; rel=${targets[$i]}; mkdir -p "$root/$(dirname "$rel")"; cp -p -- "$src" "$root/$rel"
   done
-  if [[ -f $root/.gitattributes ]]; then git -C "$root" add -- .gitattributes; fi
-  git -C "$root" add -- "${targets[@]}"
-  if (( JSON )); then git -C "$root" commit -m "$MESSAGE" >/dev/null; else git -C "$root" commit -m "$MESSAGE"; fi
+  if [[ -f $root/.gitattributes ]]; then xgit -C "$root" add -- .gitattributes; fi
+  xgit -C "$root" add -- "${targets[@]}"
+  if (( JSON )); then xgit -C "$root" commit -m "$MESSAGE" >/dev/null; else xgit -C "$root" commit -m "$MESSAGE"; fi
   if (( JSON )); then printf '{"verb":"save","repo":%s,"message":%s,"paths":' "$(json_quote "$root")" "$(json_quote "$MESSAGE")"; json_paths targets; printf ',"committed":true}\n'
   else printf 'Saved and committed %d file(s) in %s\n' "${#targets[@]}" "$root"; fi
 elif [[ $verb == publish ]]; then
@@ -107,7 +110,7 @@ elif [[ $verb == publish ]]; then
     else printf 'Would explicitly push %s from %s\n' "$REMOTE" "$root"; fi
     exit 0
   fi
-  if (( JSON )); then git -C "$root" push "$REMOTE" >/dev/null; else git -C "$root" push "$REMOTE"; fi
+  if (( JSON )); then xgit -C "$root" push "$REMOTE" HEAD >/dev/null; else xgit -C "$root" push "$REMOTE" HEAD; fi
   if (( JSON )); then printf '{"verb":"publish","repo":%s,"remote":%s,"published":true}\n' "$(json_quote "$root")" "$(json_quote "$REMOTE")"
   else printf 'Published %s from %s\n' "$REMOTE" "$root"; fi
 else usage

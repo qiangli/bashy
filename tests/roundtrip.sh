@@ -36,11 +36,12 @@ bashy --bashsharp "$WRAPPER" save "$TMP/note.md" "$TMP/media.wav" --repo "$TMP/r
 jq -e '.committed == true and (.paths | length == 2)' "$TMP/save.json" >/dev/null
 bashy --bashsharp "$WRAPPER" publish --repo "$TMP/repo" --remote origin --json > "$TMP/publish.json"
 jq -e '.published == true and .remote == "origin"' "$TMP/publish.json" >/dev/null
-if (( LFS )); then git clone "$TMP/remote.git" "$TMP/clone" >/dev/null 2>&1
+if (( LFS )); then GIT_LFS_SKIP_SMUDGE=1 git clone "$TMP/remote.git" "$TMP/clone" >/dev/null 2>&1
 else git clone "$TMP/remote.git" "$TMP/clone" >/dev/null 2>&1; fi
 cmp "$TMP/note.md" "$TMP/clone/note.md"
 if (( LFS )); then
   git -C "$TMP/repo" check-attr filter -- media.wav | grep -qE 'filter: lfs'
+  git -C "$TMP/repo" lfs ls-files | grep -q media.wav
   grep -qE '^version https://git-lfs.github.com/spec/v1$' "$TMP/clone/media.wav"
   git -C "$TMP/clone" lfs install --local >/dev/null
   git -C "$TMP/clone" lfs pull >/dev/null
