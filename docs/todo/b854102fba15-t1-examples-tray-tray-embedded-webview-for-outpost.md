@@ -3,7 +3,7 @@ id: b854102fba15
 kind: feature
 title: 'T1 examples/tray: tray + embedded webview for outpost admin and bashy apps on Windows, macOS, Linux'
 seq: 3216
-status: assigned
+status: done
 priority: p1
 labels:
     - tray
@@ -16,6 +16,8 @@ assignee: codex-gpt6-sol
 sprint: 605
 sprint_id: 1d5a938b-6b62-5819-8451-d02151cdd908
 sprint_title: 'Tray app (example level): outpost admin and bashy apps in embedded webviews'
+closed: 2026-11-11T11:04:09.177889Z
+closed_by: claude-opus5.5-s605
 ---
 
 Example level: own go.mod under examples/tray, never linked into the core binary (cgo allowed). fyne.io/systray + webview/webview_go (WebView2 / WKWebView / WebKitGTK); no system browser. Each window is a child process (`bashy-tray window URL TITLE`); re-selecting an open item focuses it.
