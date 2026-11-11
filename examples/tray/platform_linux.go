@@ -16,13 +16,9 @@ import (
 	"unsafe"
 )
 
-func focusWindow(p unsafe.Pointer) { C.focus_native(p) }
-func checkWebviewRuntime() error {
-	if err := exec.Command("pkg-config", "--exists", "webkit2gtk-4.1").Run(); err != nil {
-		return errors.New("WebKitGTK 4.1 runtime/development package missing (webkit2gtk-4.1)")
-	}
-	return nil
-}
+func focusWindow(p unsafe.Pointer)      { C.focus_native(p) }
+func configureChildProcess(_ *exec.Cmd) {}
+func checkWebviewRuntime() error        { return nil }
 func checkTrayHost() error {
 	if os.Getenv("DISPLAY") == "" && os.Getenv("WAYLAND_DISPLAY") == "" {
 		return errors.New("no graphical desktop session for tray")

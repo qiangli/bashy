@@ -49,6 +49,16 @@ func TestPollStatus(t *testing.T) {
 		})
 	}
 }
+func TestOutpostActionVerb(t *testing.T) {
+	for _, tc := range []struct{ action, want string }{
+		{"start", "enable"},
+		{"stop", "stop"},
+	} {
+		if got := outpostActionVerb(tc.action); got != tc.want {
+			t.Fatalf("%s maps to %s, want %s", tc.action, got, tc.want)
+		}
+	}
+}
 func TestConfig(t *testing.T) {
 	p := filepath.Join(t.TempDir(), "tray.yaml")
 	items, err := loadConfig(p)

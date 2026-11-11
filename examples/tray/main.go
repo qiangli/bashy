@@ -66,7 +66,15 @@ func (s status) title() string {
 type runner func(context.Context, string, ...string) ([]byte, error)
 
 func command(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, name, args...)
+	configureChildProcess(cmd)
+	return cmd.CombinedOutput()
+}
+func outpostActionVerb(action string) string {
+	if action == "start" {
+		return "enable"
+	}
+	return action
 }
 func pollStatus(ctx context.Context, run runner) status {
 	c, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -199,6 +207,7 @@ func (t *tray) open(raw, title string) {
 		return
 	}
 	cmd := exec.Command(exe, "window", raw, title)
+	configureChildProcess(cmd)
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		log.Printf("window: %v", err)
@@ -247,6 +256,7 @@ func (t *tray) ensureApps() error {
 		return waitForApps()
 	}
 	c := exec.Command("bashy", "app", "serve")
+	configureChildProcess(c)
 	c.Stdout = os.Stderr
 	c.Stderr = os.Stderr
 	if err := c.Start(); err != nil {
@@ -394,8 +404,12 @@ func (t *tray) run(items []extraItem, admin string) {
 		action := func(item *systray.MenuItem, verb string) {
 			go func() {
 				for range item.ClickedCh {
-					ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-					out, err := command(ctx, "outpost", verb)
+					timeout := 30 * time.Second
+					if verb == "start" {
+						timeout = 15 * time.Second
+					}
+					ctx, cancel := context.WithTimeout(context.Background(), timeout)
+					out, err := command(ctx, "outpost", outpostActionVerb(verb))
 					cancel()
 					if err != nil {
 						log.Printf("outpost %s: %v: %s", verb, err, strings.TrimSpace(string(out)))

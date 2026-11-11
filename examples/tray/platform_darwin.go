@@ -13,8 +13,12 @@ static void focus_native(void *p) {
 }
 */
 import "C"
-import "unsafe"
+import (
+	"os/exec"
+	"unsafe"
+)
 
-func focusWindow(p unsafe.Pointer) { C.focus_native(p) }
-func checkWebviewRuntime() error   { return nil }
-func checkTrayHost() error         { return nil }
+func focusWindow(p unsafe.Pointer)      { C.focus_native(p) }
+func configureChildProcess(_ *exec.Cmd) {}
+func checkWebviewRuntime() error        { return nil }
+func checkTrayHost() error              { return nil }

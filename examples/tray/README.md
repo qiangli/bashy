@@ -14,8 +14,9 @@ seconds. Admin uses `http://127.0.0.1:17777`, or the host:port in
 `OUTPOST_ADMIN_ADDR`, and is disabled when outpost is off. Apps uses
 `http://127.0.0.1:22749/`. When that address does not answer, the tray starts
 `bashy app serve` and owns that process. Quit closes its windows and app server
-(if owned), but never stops outpost. The Start and Stop actions call the
-installed `outpost` CLI.
+(if owned), but never stops outpost. Start calls `outpost enable`, which clears
+the stop intent and starts outpost through its supervisor or detached fallback;
+Stop calls `outpost stop`.
 
 Place an optional `tray.yaml` in your bashy config directory
 (`$XDG_CONFIG_HOME/bashy` when set, otherwise `~/.config/bashy`):
@@ -38,9 +39,10 @@ All builds use Go with cgo enabled. Build from `examples/tray`:
   `CGO_ENABLED=1 go build -o bashy-tray .` and `./bashy-tray` in a logged-in
   desktop session. WKWebView ships with macOS.
 - **Windows:** Install Go and a C/C++ toolchain suitable for cgo, such as
-  MSYS2 MinGW-w64. In PowerShell run `$env:CGO_ENABLED='1'; go build -o
-  bashy-tray.exe .; .\bashy-tray.exe`. Install Microsoft WebView2 Evergreen
-  Runtime if absent. Build with a console so startup errors remain visible.
+  MSYS2 MinGW-w64. In PowerShell run `$env:CGO_ENABLED='1'; go build -ldflags
+  '-H=windowsgui' -o bashy-tray.exe .; .\bashy-tray.exe`. Install Microsoft
+  WebView2 Evergreen Runtime if absent. The GUI build and its child processes
+  do not open console windows.
 - **Linux:** Install Go, a C/C++ compiler, `pkg-config`, GTK 3 development
   headers, WebKitGTK **4.1** development/runtime packages, and a desktop tray
   host. On Debian or Ubuntu the packages include `libgtk-3-dev` and
