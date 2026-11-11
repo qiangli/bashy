@@ -1,0 +1,4 @@
+{
+  "lfs_patterns": ["*.mp4", "*.mov", "*.m4a", "*.wav", "*.png", "*.pdf"],
+  "refuse_patterns": ["*secret*", "*token*", "*credential*", "*password*", "*database*", "*app.db*", "*.sqlite", "*.sqlite3", "*.db"]
+}
