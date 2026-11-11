@@ -55,7 +55,9 @@ Default commands: `outpost-profile` (examples/outpost-profile),
 `satellite-member` (examples/satellite-member), `onboard`
 (examples/onboard: the member journey as one resumable sequence),
 `satellite-provision` (examples/satellite-provision; an owner's cloud
-satellite from plan to teardown) and `bashy-defaults` itself.
+satellite from plan to teardown), `media` (examples/media: PDFs and narrated
+videos), `record` (examples/record: camera and microphone takes) and
+`bashy-defaults` itself.
 
 The default kb pages (`kb/defaults` in the pin) need no setup:
 `bashy kb search|list|show` and `bashy recall` read them as a read-only
@@ -79,6 +81,8 @@ DEFAULT_COMMANDS="outpost-profile|examples/outpost-profile/outpost-profile.bsh|r
 satellite-member|examples/satellite-member/satellite-member.bsh|read,write,exec
 onboard|examples/onboard/onboard.bsh|read,write,exec
 satellite-provision|examples/satellite-provision/satellite-provision.bsh|read,write,exec,net
+media|examples/media/media.bsh|read,write,exec,net
+record|examples/record/record.bsh|read,write,exec
 bashy-defaults|examples/defaults/bashy-defaults.bsh|read,write,exec"
 
 usage() {

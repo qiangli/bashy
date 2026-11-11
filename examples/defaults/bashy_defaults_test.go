@@ -95,11 +95,13 @@ echo "$*" >> "$FAKE_LOG"
 src="$BASHY_HOME/src/bashy"
 case "$1 $2" in
   "src fetch"|"src upgrade")
-    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/onboard" "$src/examples/satellite-provision" "$src/examples/defaults" "$src/kb/defaults/pages"
+    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/onboard" "$src/examples/satellite-provision" "$src/examples/media" "$src/examples/record" "$src/examples/defaults" "$src/kb/defaults/pages"
     : > "$src/examples/outpost-profile/outpost-profile.bsh"
     : > "$src/examples/satellite-member/satellite-member.bsh"
     : > "$src/examples/onboard/onboard.bsh"
     : > "$src/examples/satellite-provision/satellite-provision.bsh"
+    : > "$src/examples/media/media.bsh"
+    : > "$src/examples/record/record.bsh"
     : > "$src/examples/defaults/bashy-defaults.bsh"
     : > "$src/kb/defaults/pages/a.md"; : > "$src/kb/defaults/pages/b.md"
     ;;
@@ -189,7 +191,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}
@@ -197,11 +199,25 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if got, want := f.registered("outpost-profile"), f.pin("examples/outpost-profile/outpost-profile.bsh"); got != want {
 		t.Errorf("outpost-profile exec = %q, want %q", got, want)
 	}
+	for name, rel := range map[string]string{
+		"media":  "examples/media/media.bsh",
+		"record": "examples/record/record.bsh",
+	} {
+		if got, want := f.registered(name), f.pin(rel); got != want {
+			t.Errorf("%s exec = %q, want %q", name, got, want)
+		}
+	}
 	if !strings.Contains(f.calls(), "--set effects.2=exec") {
 		t.Errorf("effects not forwarded:\n%s", f.calls())
 	}
 	if !strings.Contains(f.calls(), "commands add satellite-provision --set exec.0=bashy --set exec.1=--bashsharp --set exec.2="+f.pin("examples/satellite-provision/satellite-provision.bsh")+" --set effects.0=read --set effects.1=write --set effects.2=exec --set effects.3=net") {
 		t.Errorf("satellite-provision not registered with read,write,exec,net:\n%s", f.calls())
+	}
+	if !strings.Contains(f.calls(), "commands add media --set exec.0=bashy --set exec.1=--bashsharp --set exec.2="+f.pin("examples/media/media.bsh")+" --set effects.0=read --set effects.1=write --set effects.2=exec --set effects.3=net") {
+		t.Errorf("media not registered with read,write,exec,net:\n%s", f.calls())
+	}
+	if !strings.Contains(f.calls(), "commands add record --set exec.0=bashy --set exec.1=--bashsharp --set exec.2="+f.pin("examples/record/record.bsh")+" --set effects.0=read --set effects.1=write --set effects.2=exec") {
+		t.Errorf("record not registered with read,write,exec:\n%s", f.calls())
 	}
 	before := strings.Count(f.calls(), "src fetch")
 	if out, code := f.run("apply"); code != 0 {
