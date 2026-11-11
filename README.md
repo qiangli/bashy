@@ -32,7 +32,7 @@ Technical tour (3:33): [youtu.be/2eRX3ZJuYeM](https://youtu.be/2eRX3ZJuYeM).*
 > asks you once, connects itself, and keeps working with you through bashy's tools.
 
 **Prefer the terminal?** Paste one line (checksum-verified, into `~/.local/bin`, no sudo).
-Drop `--no-service` / `-NoService` to also run outpost as an unpaired boot service.
+Add `--service` / `-Service` to also run outpost as an unpaired boot service (the installer leaves it dormant by default).
 
 ```sh
 curl -fsSL https://dhnt.io/install.sh | sh -s -- --no-service                          # macOS / Linux
