@@ -101,3 +101,73 @@ credential; legacy peers without an email are unchanged.
 - **parity-outpost-pin** (`todo:ea48d4aa81eb`): verify `bashy outpost
   satellite attach|detach|list` (plus `register`, `unpair`, `peers`)
   against the shipped outpost pin and record the minimum pin in this doc.
+
+## Sprint 614 S1: collaboration app and cross-tool audit
+
+This is a **web/app → bashy CLI** audit of the checkout, not a claim that every
+CLI feature needs a page. `bashy commands NAME --features` confirms installed
+entries for klatch, tutor, kb, viewer, notepad, brainstorm, whiteboard, form,
+record and transcribe; it reports `not-found` for chart, video and google on
+this host. The checkout still contains `examples/desk/chart/register.sh` and
+`examples/google/register.sh`; video is a script (`examples/video/video.sh`).
+Registration is local and does not by itself prove a browser action works.
+Evidence below is relative to this repository unless labeled as command output.
+
+The shared grammar (`docs/command-atlas.md:480-526`) recognizes only its closed
+kind list. The actual `define` wiring (`internal/agentos/refs.go:42-62`) covers
+KB and sprint, but no app-specific desk, Klatch or media kind. A desk `id` or
+URL is stable *within that app*; it is not automatically a `kind:id` that
+`bashy define` can open. UUID/UID/slug/scoped sequence rules apply to the
+owning KB and sprint stores, not automatically to the apps in this table.
+`examples/desk/kit/README.md:18-38` defines the common seven verbs, item URL,
+saved JSON and invite checks; each app's actual verbs and guards still decide
+parity. `--json` is the scriptable result path for registered desk commands.
+
+| Tool | Owning entity/store; ref emit/accept | `define` | Browser open/share; audience check | Output/export; Git | CLI parity and evidence |
+|---|---|---|---|---|---|
+| Klatch | Databag chat server; participant IDs/messages, no Bashy app ref (`examples/klatch/README.md:1-19`, `examples/klatch/klatch.bsh:19-32`) | No Klatch kind in `internal/agentos/refs.go:42-62` | External Klatch client; server credentials via `secret show`, argument secrets refused (`examples/klatch/README.md:28,64-67`) | Messages/JSONL `watch`; external server owns history; no app Git contract | Registered Bash# `klatch` (`examples/klatch/register.sh:6-14`); **S2 ref gap**, not evidence of missing participant CLI verbs |
+| Tutor / Session | Sprint card is canonical `sprint:id`; tutor draft/session JSON is separate (`examples/tutor/README.md:111-125,168-170`) | Sprint resolves; tutor session does not (`internal/agentos/refs.go:48`) | `serve`/`join`/`render --edition ROLE|shared`; edition filtering (`examples/tutor/tutor.bsh:44-64`) | Rendered step; draft directory can be kept in Git (`examples/tutor/README.md:116`) | Bash# register lists plan/apply/run/render/serve/join (`examples/tutor/register.sh:6-20`); Session naming/compatibility belongs to S5, **S2 session ref gap** |
+| KB | KB ring owns `kb:<slug>` plus UID and scoped sequence input; canonical slug ref emitted (`docs/command-atlas.md:508-526`) | Yes (`internal/agentos/refs.go:47`) | No KB browser catalog in Klatch/Viewer integration found; KB CLI reads own ring (`internal/agentos/refs.go:26-34`; `examples/desk/viewer/main.go:1-15`) | `kb search/show/context` JSON; repo KB files can be committed via `git` (`docs/command-atlas.md:131-143`) | `bashy commands kb --features`: available, JSON; **S3 browser catalog gap** |
+| Viewer | Book ID in desk JSON (`examples/desk/viewer/main.go:13-15`); app-local ID/URL, no kind ref | No viewer resolver (`internal/agentos/refs.go:42-62`) | Loopback book page and invite; same CLI/API actions (`examples/desk/viewer/cli.go:1,181-242`) | HTML/PDF export (`examples/desk/viewer/viewer.bsh:25-27`); exported files can use `git` | `add/append/open/show/list/share/close/export`; view-only set refusal (`examples/desk/viewer/cli.go:217-242`); **S2 ref gap**, otherwise verified OK |
+| Notepad | Item ID in desk JSON (`examples/desk/notepad/README.md:55`); app-local ID/URL, no kind ref | No notepad resolver (`internal/agentos/refs.go:42-62`) | Loopback edit/share; owner key and invite (`examples/desk/notepad/README.md:7-25`) | PDF/PNG/HTML/TXT export (`examples/desk/notepad/cli.go:431`); files can use `git` | `add/open/show/set/list/share/close/export/join` (`examples/desk/notepad/cli.go:326-471`); **S2 ref gap**, otherwise verified OK |
+| Brainstorm | Named session in saved JSON (`examples/brainstorm/README.md:106-111`); local name/URL, no kind ref | No brainstorm resolver (`internal/agentos/refs.go:42-62`) | Page supports ideas, votes, invites/revoke, phase/round controls (`examples/brainstorm/server/index.html:147-159,182-188`); facilitator guard (`examples/brainstorm/server/desk.go:250-356`) | Browser JSON/Markdown export (`examples/brainstorm/server/index.html:187-188`); backup/restore, files can use `git` | Registered desk verbs and phase/round flags (`examples/brainstorm/server/cli.go:70-105,110-130`); **new CLI action gap** and **S2 ref gap** |
+| Whiteboard | Named board in saved JSON (`examples/whiteboard/README.md:81-86`); local name/URL, no kind ref | No whiteboard resolver (`internal/agentos/refs.go:42-62`) | Page draws, locks, clears, invites/revokes; facilitator and participant checks (`examples/whiteboard/server/index.html:115-120`; `examples/whiteboard/server/desk.go:180-224`) | Browser JSON/PNG export; backup/restore, files can use `git` (`examples/whiteboard/server/index.html:119-120`) | Registered desk seven (`examples/whiteboard/server/cli.go:63-106`); **new CLI action gap** and **S2 ref gap** |
+| Form | Form ID in desk JSON; no KB UUID/sequence (`examples/desk/form/README.md:162-175`) | No form resolver (`internal/agentos/refs.go:42-62`) | Loopback respondent answer/join and owner share; owner key gates show/set/share/close (`examples/desk/form/README.md:175-183`) | JSON answers via `show/wait`; saved files can use `git` | CLI has owner verbs, `reply` and a `join` that prints a URL (`examples/desk/form/server/cli.go:300-438`); **new CLI respondent-action gap**, **S2 ref gap** |
+| Chart | Chart ID in desk JSON (`examples/desk/chart/main.go:227-236`); app-local URL, no kind ref | No chart resolver (`internal/agentos/refs.go:42-62`) | Page create/share/revoke/join with owner guard (`examples/desk/chart/main.go:191-210,360-406`); source polling restricted to loopback (`examples/desk/chart/README.md:94-102`) | SVG chart; source file can use `git` (`examples/desk/chart/README.md:1-4,94-112`) | Checkout register exists (`examples/desk/chart/register.sh:10-24`), host command absent; CLI `add/open/show/set/list/share/close/revoke` but no `join` (`examples/desk/chart/cli.go:112-121`): **new CLI join gap**, **S2 ref gap** |
+| Recording | Single take at caller-selected path, no entity ref (`examples/record/record.bsh:14-30,127`) | No media kind (`internal/agentos/refs.go:42-62`) | Local one-take camera page; remote session refused (`examples/record/record.bsh:46-51`) | Mode-0600 photo/audio/video file; explicit file can use `git` or LFS (`examples/record/README.md:44-47`) | `record` registered on host; page is the necessary human capture step and CLI returns path (`examples/record/README.md:18-22`); **S4 file/Git journey to verify**, otherwise verified OK |
+| Transcription | File/URL input and output path, no entity ref (`internal/agentos/transcribe.go:28-75`) | No transcript kind (`internal/agentos/refs.go:42-62`) | No separate web app established; caller supplies source | Adapter pipeline/export (`examples/transcribe/adapters/register.sh`; `skills/bashy/commands/transcribe.md`); output file can use `git` | Built-in `transcribe` available per `bashy commands transcribe --features`; **S4 file/Git journey to verify**, otherwise verified OK |
+| Video | Project directory/storyboard and `build/demo.mp4`, no entity ref (`examples/video/video.sh:32,385-418`) | No video kind (`internal/agentos/refs.go:42-62`) | No web app; CLI-only workflow | MP4 file; project/output can use `git`/LFS (`examples/video/README.md:18-31`) | `video.sh`/`bashy dag examples/video` exists; no registered `video` command (`bashy commands video --features`: not-found). CLI-only, so **verified OK** for one-way parity; **S4 file/Git journey to verify** |
+
+`examples/google` is an existing **Calendar via `gws`** capability, not a
+shared Bashy Calendar web app. Its Bash# registration is in
+`examples/google/register.sh:5-15`; `google.bsh:1025-1135` implements
+calendar list/get/create/update/delete/freebusy with per-account credential
+preflight (`examples/google/README.md:1-15`). It is not installed on this host
+(`bashy commands google --features`: not-found). S8 should assess the human web
+surface and full user/admin CLI parity; S7 does the same for Memos/Notes.
+
+**Shaping hook:** compose existing `bashy <app> --json`, `bashy kb`, `bashy
+define`, `bashy git` and exporter verbs in a reusable Bash# `.bsh` command or
+skill wrapper; keep each base verb usable alone. Desk apps expose a `*.bsh`
+body, registered command, per-app server and item/template configuration
+(`examples/desk/kit/README.md:12-30`); Tutor formats and Viewer templates are
+concrete variable behavior (`examples/tutor/README.md:89-105`,
+`examples/desk/viewer/templates.go:4-54`). The proposed cross-tool wrapper's
+hook is **ref routing by a configurable kind→existing open/export verb map**;
+the audit does not implement it. Follow the KB guideline
+`extend-bashy-small-verbs-bash-skill-scripts-shaping-hooks-and-th`.
+
+### Proven gaps
+
+| Gap and evidence | Feeds |
+|---|---|
+| App-local IDs/URLs for Tutor sessions, Klatch, Desk and media have no `define` resolver or uniform emitted `kind:id`; `internal/agentos/refs.go:42-62` versus `docs/command-atlas.md:480-526`. Keep existing local IDs; add only useful cross-tool adapters. | S2 (media file proof also S4) |
+| KB has its own resolver/CLI but no Klatch or Viewer browser catalog bridge: `internal/agentos/refs.go:47`, `examples/desk/viewer/main.go:1-15`, `examples/klatch/register.sh:6-14`. | S3 |
+| Whiteboard page draw/clear/lock/invite revoke and JSON/PNG download exceed CLI desk seven: `examples/whiteboard/server/index.html:115-120`, `examples/whiteboard/server/cli.go:63-106`. | new (CLI parity; S6 must verify) |
+| Brainstorm page idea edit/delete/vote/invite revoke and JSON/Markdown download exceed CLI desk seven: `examples/brainstorm/server/index.html:147-159,182-188`, `examples/brainstorm/server/cli.go:110-130`. | new (CLI parity; S6 must verify) |
+| Form respondent `answer` is an HTTP/page action, while CLI `join` only prints a URL and has no `answer` case: `examples/desk/form/server/main.go:345-367`, `examples/desk/form/server/cli.go:432-440`. | new (CLI parity; S6 must verify) |
+| Chart HTTP `join` lacks a CLI case: `examples/desk/chart/main.go:191-210`, `examples/desk/chart/cli.go:112-121`. | new (CLI parity; S6 must verify) |
+| App/media export-to-Git, explicit remote publish and LFS round trips are not covered by these app commands; file export exists, e.g. `examples/desk/notepad/cli.go:431`, `examples/video/video.sh:418`. Verify the existing `git`/LFS composition before adding code. | S4 |
+
+No gap is inferred solely from a locally missing registration: Chart and Google
+have checkout registration scripts, while Video intentionally has only a script.
