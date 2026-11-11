@@ -67,6 +67,7 @@ if [[ $verb == save ]]; then
         if [[ ${candidate,,} == ${pattern,,} ]]; then die "refusing sensitive-looking path: $candidate"; fi
       done < <(jq -r '.refuse_patterns[]' "$CONFIG")
     done
+    case "/$rel/" in */../*|*/./*) die "target escapes repository: $rel" ;; esac
     dest="$root/$rel"
     case "$dest" in "$root"/*) ;; *) die "target escapes repository: $rel" ;; esac
     for prior in "${targets[@]}"; do [[ $prior != "$rel" ]] || die "multiple sources map to the same repository path: $rel"; done

@@ -57,4 +57,12 @@ if bashy --bashsharp "$WRAPPER" save "$TMP/private/api-token.txt" --repo "$TMP/r
 fi
 rg -q 'refusing sensitive-looking path' "$TMP/refuse.err"
 
-echo 'PASS: save, explicit publish, fresh clone, media and secret-path refusal'
+mkdir -p "$TMP/outside"
+printf 'outside\n' > "$TMP/outside/escape.md"
+if (cd "$TMP/repo" && bashy --bashsharp "$WRAPPER" save ../outside/escape.md --repo . >"$TMP/escape.out" 2>"$TMP/escape.err"); then
+  echo 'expected ../ target to be refused' >&2
+  exit 1
+fi
+rg -q 'target escapes repository' "$TMP/escape.err"
+
+echo 'PASS: save, explicit publish, fresh clone, media, secret-path and ../ escape refusal'
