@@ -1,0 +1,248 @@
+#!/usr/bin/env -S bashy --bashsharp
+# api-door — a plain OpenAI-compatible passthrough to any upstream API, served
+# to the people this host's `bashy llm` door already admits. Tool-calling
+# clients (opencode, codex, any OpenAI SDK) send their requests unchanged and
+# get the upstream reply streamed back unchanged. No agent runs here.
+#
+# Who may call: exactly the callers the host's door admits. Each credential
+# (the /k/<credential> path segment or a Bearer key) is checked against the
+# door's own peer gate (GET <door>/k/<credential>/v1/models, cached 60 s), so
+# `llm peer share NAME deny`, member removal and `llm share` rotation apply
+# here too.
+#
+# The upstream key comes from --key-cmd (stdout, trimmed), run on this host and
+# cached for --key-ttl; it never leaves the host. --alias NAME=ID rewrites the
+# request's model (repeatable); GET /v1/models lists the alias names.
+#
+#   api-door --upstream URL --key-cmd CMD [--key-ttl 6h] [--alias NAME=ID]...
+#            [--port 24557] [--door http://127.0.0.1:24556]
+#
+# Recipe, AWS Bedrock (key minted by yoke examples/bedrock-key):
+#   api-door --upstream https://bedrock-runtime.us-east-1.amazonaws.com/openai/v1 \
+#       --key-cmd 'bashy bedrock-key --expires 43200' --alias bedrock-glm-5=zai.glm-5
+#
+# Publish it beside the door (once per host / satellite profile):
+#   outpost apps add llm-api --url http://127.0.0.1:24557
+#   bashy outpost-profile up <satellite> --app llm-api
+# A member then points an OpenAI client at it with the door grant's credential:
+#   OPENAI_BASE_URL=<satellite>/matrix/h/<host>/app/llm-api/k/<credential>/v1
+#   OPENAI_API_KEY=<credential>
+
+~~~go as b
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"strings"
+	"sync"
+	"time"
+)
+
+type gate struct {
+	mu   sync.Mutex
+	seen map[string]gateEntry
+}
+
+type gateEntry struct {
+	status int
+	at     time.Time
+}
+
+// admit asks the host's door whether it serves this credential.
+func (g *gate) admit(door, cred string) int {
+	h := sha256.Sum256([]byte(cred))
+	k := hex.EncodeToString(h[:])
+	g.mu.Lock()
+	if e, ok := g.seen[k]; ok && time.Since(e.at) < 60*time.Second {
+		g.mu.Unlock()
+		return e.status
+	}
+	g.mu.Unlock()
+	status := http.StatusBadGateway
+	resp, err := http.Get(strings.TrimRight(door, "/") + "/k/" + cred + "/v1/models")
+	if err == nil {
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+		status = resp.StatusCode
+	}
+	if status != http.StatusBadGateway {
+		g.mu.Lock()
+		g.seen[k] = gateEntry{status: status, at: time.Now()}
+		g.mu.Unlock()
+	}
+	return status
+}
+
+type minter struct {
+	mu  sync.Mutex
+	cmd []string
+	ttl time.Duration
+	key string
+	at  time.Time
+}
+
+// get returns the cached upstream key, rerunning the key command after ttl.
+func (m *minter) get() (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.key != "" && time.Since(m.at) < m.ttl {
+		return m.key, nil
+	}
+	out, err := exec.Command(m.cmd[0], m.cmd[1:]...).Output()
+	if err != nil {
+		return "", fmt.Errorf("key command %s: %v", m.cmd[0], err)
+	}
+	key := strings.TrimSpace(string(out))
+	if key == "" {
+		return "", fmt.Errorf("key command %s printed no key", m.cmd[0])
+	}
+	m.key, m.at = key, time.Now()
+	return key, nil
+}
+
+func fail(w http.ResponseWriter, status int, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(map[string]any{"error": map[string]any{"message": msg, "type": "api_door"}})
+}
+
+func Serve(port int, door, upstream, keyCmd, keyTTL, aliases string) error {
+	alias := map[string]string{}
+	for _, a := range strings.Fields(aliases) {
+		if k, v, ok := strings.Cut(a, "="); ok {
+			alias[k] = v
+		}
+	}
+	upstream = strings.TrimRight(upstream, "/")
+	ttl, err := time.ParseDuration(keyTTL)
+	if err != nil || ttl <= 0 {
+		return fmt.Errorf("--key-ttl %q: want a duration such as 6h", keyTTL)
+	}
+	cmd := strings.Fields(keyCmd)
+	if upstream == "" || len(cmd) == 0 {
+		return fmt.Errorf("--upstream and --key-cmd are required (see --help)")
+	}
+	g := &gate{seen: map[string]gateEntry{}}
+	keys := &minter{cmd: cmd, ttl: ttl}
+	client := &http.Client{}
+	h := func(w http.ResponseWriter, r *http.Request) {
+		path, cred := r.URL.Path, ""
+		if rest, ok := strings.CutPrefix(path, "/k/"); ok {
+			cred, path, _ = strings.Cut(rest, "/")
+			path = "/" + path
+		}
+		if cred == "" {
+			cred = strings.TrimSpace(strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer "))
+		}
+		if cred == "" {
+			fail(w, http.StatusUnauthorized, "missing credential: use the /k/<credential> URL or a Bearer key from your door grant")
+			return
+		}
+		if st := g.admit(door, cred); st != http.StatusOK {
+			fail(w, st, fmt.Sprintf("the host's door refused this credential (HTTP %d)", st))
+			return
+		}
+		suffix := strings.TrimPrefix(strings.TrimPrefix(path, "/openai"), "/v1")
+		if r.Method == http.MethodGet && suffix == "/models" {
+			var data []map[string]any
+			for name := range alias {
+				data = append(data, map[string]any{"id": name, "object": "model", "owned_by": "api-door"})
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{"object": "list", "data": data})
+			return
+		}
+		switch suffix {
+		case "/chat/completions", "/completions", "/embeddings":
+		default:
+			fail(w, http.StatusNotFound, "only POST /v1/chat/completions, /v1/completions, /v1/embeddings and GET /v1/models")
+			return
+		}
+		if r.Method != http.MethodPost {
+			fail(w, http.StatusMethodNotAllowed, "POST only")
+			return
+		}
+		body, err := io.ReadAll(io.LimitReader(r.Body, 32<<20))
+		if err != nil {
+			fail(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		var payload map[string]json.RawMessage
+		if err := json.Unmarshal(body, &payload); err != nil {
+			fail(w, http.StatusBadRequest, "request body is not a JSON object")
+			return
+		}
+		var model string
+		json.Unmarshal(payload["model"], &model)
+		if id, ok := alias[model]; ok {
+			payload["model"], _ = json.Marshal(id)
+			body, _ = json.Marshal(payload)
+		}
+		key, err := keys.get()
+		if err != nil {
+			fail(w, http.StatusBadGateway, err.Error())
+			return
+		}
+		req, _ := http.NewRequestWithContext(r.Context(), http.MethodPost, upstream+suffix, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+key)
+		if a := r.Header.Get("Accept"); a != "" {
+			req.Header.Set("Accept", a)
+		}
+		start := time.Now()
+		resp, err := client.Do(req)
+		if err != nil {
+			fail(w, http.StatusBadGateway, "upstream: "+err.Error())
+			return
+		}
+		defer resp.Body.Close()
+		for _, k := range []string{"Content-Type", "Cache-Control"} {
+			if v := resp.Header.Get(k); v != "" {
+				w.Header().Set(k, v)
+			}
+		}
+		w.WriteHeader(resp.StatusCode)
+		buf := make([]byte, 32<<10)
+		fl, _ := w.(http.Flusher)
+		for {
+			n, rerr := resp.Body.Read(buf)
+			if n > 0 {
+				w.Write(buf[:n])
+				if fl != nil {
+					fl.Flush()
+				}
+			}
+			if rerr != nil {
+				break
+			}
+		}
+		sum := sha256.Sum256([]byte(cred))
+		log.Printf("peer=%s model=%s status=%d wall=%s", hex.EncodeToString(sum[:4]), model, resp.StatusCode, time.Since(start).Round(time.Millisecond))
+	}
+	addr := fmt.Sprintf("127.0.0.1:%d", port)
+	fmt.Fprintf(os.Stderr, "api-door: serving %s -> %s (gate %s)\n", addr, upstream, door)
+	return http.ListenAndServe(addr, http.HandlerFunc(h))
+}
+~~~
+
+port=24557 door=http://127.0.0.1:24556 upstream="" key_cmd="" key_ttl=6h aliases=""
+while [ $# -gt 0 ]; do
+	case $1 in
+	--port) port=$2; shift 2 ;;
+	--door) door=$2; shift 2 ;;
+	--upstream) upstream=$2; shift 2 ;;
+	--key-cmd) key_cmd=$2; shift 2 ;;
+	--key-ttl) key_ttl=$2; shift 2 ;;
+	--alias) aliases="$aliases $2"; shift 2 ;;
+	-h|--help) sed -n '2,33p' "$0"; exit 0 ;;
+	*) echo "api-door: unknown argument $1" >&2; exit 2 ;;
+	esac
+done
+b.Serve("$port", "$door", "$upstream", "$key_cmd", "$key_ttl", "$aliases")
