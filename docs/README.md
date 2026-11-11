@@ -4,6 +4,12 @@ Start at [INDEX.md](INDEX.md), which has one entry per load-bearing doc.
 
 ## Abstracts
 
+- **[Sprint 614 collaboration evidence](s614-collaboration-evidence.md).**
+  One final journey pass after all Sprint 614 features landed: per-tool
+  results tied to the candidate commits, the Git LFS defect it found and
+  fixed in collab-save, the pre-existing browser E2E failure, and what is
+  absent or deferred (Memos, calendar build, deployed satellite reach).
+
 - **[Memos decision](memos-decision.md).** Sprint 614 S7 assessed
   `usememos/memos` against the existing Notepad and KB for author-owned notes
   and recorded the smallest example-level adapter with full CLI parity. The
