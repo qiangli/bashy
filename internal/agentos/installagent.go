@@ -728,6 +728,24 @@ func mergeJSONFile(path string, mutate func(map[string]any)) error {
 // mcpServerName is the MCP server name registered with agents.
 const mcpServerName = "bashy"
 
+// mcpSelfExecutable is the running binary's path; a seam for tests.
+var mcpSelfExecutable = os.Executable
+
+// mcpServerCommand is the command every writer registers for the server:
+// the absolute path of the running bashy with symlinks resolved, so a
+// session whose PATH lacks the install dir still starts `mcp serve`. The
+// bare name is the fallback only when the path cannot be read.
+func mcpServerCommand() string {
+	exe, err := mcpSelfExecutable()
+	if err != nil || exe == "" {
+		return mcpServerName
+	}
+	if real, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = real
+	}
+	return exe
+}
+
 // mcpWriter registers `bashy mcp serve` with one agent. Agents without a
 // known MCP config surface have no writer: dispatch reports
 // "no MCP config writer for <agent>" instead of guessing a format.
@@ -805,7 +823,7 @@ func claudeMCPWriter() mcpWriter {
 		if prefs, _ := installAgentPrefsProjection(); prefs != "" {
 			args = append(args, "-e", fleet.EnvBashyPrefs+"="+prefs)
 		}
-		return append(args, "--", "bashy", "mcp", "serve")
+		return append(args, "--", mcpServerCommand(), "mcp", "serve")
 	}
 	removeArgv := func(project bool) []string {
 		args := []string{"mcp", "remove"}
@@ -847,9 +865,12 @@ func claudeMCPWriter() mcpWriter {
 }
 
 // codexMCPServerEntry is the exact TOML codex itself writes for
-// `codex mcp add bashy -- bashy mcp serve` (verified against a scratch
+// `codex mcp add bashy -- <bashy> mcp serve` (verified against a scratch
 // CODEX_HOME): appended verbatim so the file stays in a shape codex reads.
-const codexMCPServerEntry = "[mcp_servers.bashy]\ncommand = \"bashy\"\nargs = [\"mcp\", \"serve\"]\n"
+func codexMCPServerEntry() string {
+	q, _ := json.Marshal(mcpServerCommand())
+	return "[mcp_servers.bashy]\ncommand = " + string(q) + "\nargs = [\"mcp\", \"serve\"]\n"
+}
 
 // codexMCPEntry appends the projected BASHY_PREFS as an inline env table in
 // the same section (so uninstall's section scan removes it too); with no
@@ -857,10 +878,10 @@ const codexMCPServerEntry = "[mcp_servers.bashy]\ncommand = \"bashy\"\nargs = [\
 func codexMCPEntry() string {
 	prefs, _ := installAgentPrefsProjection()
 	if prefs == "" {
-		return codexMCPServerEntry
+		return codexMCPServerEntry()
 	}
 	q, _ := json.Marshal(prefs)
-	return codexMCPServerEntry + "env = { " + fleet.EnvBashyPrefs + " = " + string(q) + " }\n"
+	return codexMCPServerEntry() + "env = { " + fleet.EnvBashyPrefs + " = " + string(q) + " }\n"
 }
 
 func codexMCPConfigPath() string {
@@ -978,7 +999,7 @@ func codexMCPWriter() mcpWriter {
 // key (shape verified against the opencode config schema's McpLocalConfig:
 // type/command required, command an argv array).
 func opencodeMCPServer() map[string]any {
-	srv := map[string]any{"type": "local", "command": []string{"bashy", "mcp", "serve"}}
+	srv := map[string]any{"type": "local", "command": []string{mcpServerCommand(), "mcp", "serve"}}
 	if prefs, _ := installAgentPrefsProjection(); prefs != "" {
 		srv["environment"] = map[string]string{fleet.EnvBashyPrefs: prefs}
 	}

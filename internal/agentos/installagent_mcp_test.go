@@ -14,39 +14,76 @@ import (
 // The --dry-run entries are the contract other docs and scripts quote: pin
 // them exactly. All three were verified against the clients themselves
 // (claude/codex --help; codex writing to a scratch CODEX_HOME; the opencode
-// config schema's McpLocalConfig).
+// config schema's McpLocalConfig). The server command is the running
+// binary's absolute path, never the bare name a fresh PATH may not resolve.
+
+// fakeSelfExe stands in for the running bashy in the pinned entries.
+const fakeSelfExe = "/opt/bashy/bin/bashy"
+
+func withFakeSelfExe(t *testing.T) {
+	t.Helper()
+	orig := mcpSelfExecutable
+	mcpSelfExecutable = func() (string, error) { return fakeSelfExe, nil }
+	t.Cleanup(func() { mcpSelfExecutable = orig })
+}
+
+func TestInstallAgentMCPServerCommand(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "bashy-real")
+	if err := os.WriteFile(real, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "bashy")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlink: %v", err)
+	}
+	orig := mcpSelfExecutable
+	t.Cleanup(func() { mcpSelfExecutable = orig })
+	mcpSelfExecutable = func() (string, error) { return link, nil }
+	want, _ := filepath.EvalSymlinks(real)
+	if got := mcpServerCommand(); got != want {
+		t.Fatalf("mcpServerCommand() = %q, want %q (symlinks resolved)", got, want)
+	}
+	mcpSelfExecutable = func() (string, error) { return "", os.ErrNotExist }
+	if got := mcpServerCommand(); got != "bashy" {
+		t.Fatalf("fallback = %q, want bare name", got)
+	}
+}
 
 func TestInstallAgentMCPDryRunClaude(t *testing.T) {
+	withFakeSelfExe(t)
 	w, ok := mcpWriters()["claude"]
 	if !ok {
 		t.Fatal("no MCP config writer for claude")
 	}
-	if got := w.entry(false); got != "claude mcp add bashy -- bashy mcp serve\n" {
+	if got := w.entry(false); got != "claude mcp add bashy -- "+fakeSelfExe+" mcp serve\n" {
 		t.Fatalf("claude entry = %q", got)
 	}
-	if got := w.entry(true); got != "claude mcp add -s project bashy -- bashy mcp serve\n" {
+	if got := w.entry(true); got != "claude mcp add -s project bashy -- "+fakeSelfExe+" mcp serve\n" {
 		t.Fatalf("claude project entry = %q", got)
 	}
 }
 
 func TestInstallAgentMCPDryRunCodex(t *testing.T) {
+	withFakeSelfExe(t)
 	w, ok := mcpWriters()["codex"]
 	if !ok {
 		t.Fatal("no MCP config writer for codex")
 	}
-	want := "[mcp_servers.bashy]\ncommand = \"bashy\"\nargs = [\"mcp\", \"serve\"]\n"
+	want := "[mcp_servers.bashy]\ncommand = \"" + fakeSelfExe + "\"\nargs = [\"mcp\", \"serve\"]\n"
 	if got := w.entry(false); got != want {
 		t.Fatalf("codex entry = %q, want %q", got, want)
 	}
 }
 
 func TestInstallAgentMCPDryRunOpencode(t *testing.T) {
+	withFakeSelfExe(t)
 	w, ok := mcpWriters()["opencode"]
 	if !ok {
 		t.Fatal("no MCP config writer for opencode")
 	}
 	got := w.entry(false)
-	for _, want := range []string{`"mcp"`, `"bashy"`, `"type": "local"`, `"bashy",`, `"mcp",`, `"serve"`} {
+	for _, want := range []string{`"mcp"`, `"bashy"`, `"type": "local"`, `"` + fakeSelfExe + `",`, `"mcp",`, `"serve"`} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("opencode entry = %q, missing %s", got, want)
 		}

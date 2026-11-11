@@ -126,4 +126,6 @@ OpenCode (`opencode.json`):
 
     "mcp": {"bashy": {"type": "local", "command": ["bashy", "mcp", "serve"]}}
 
-To write one of these entries non-interactively, see the install-agent usage.
+To write one of these entries non-interactively, see the install-agent usage;
+it registers the absolute path of the running bashy instead of the bare name,
+so a session whose PATH lacks the install dir still starts the server.

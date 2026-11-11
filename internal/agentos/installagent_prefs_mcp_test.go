@@ -10,11 +10,12 @@ import (
 const prefsMCPFixture = `{"budget_bytes":2048,"view":"json","defaults":{"*":{"api_token":"sk-LEAK","limit":3}}}`
 
 func TestInstallAgentMCPNoPrefsByteIdentical(t *testing.T) {
+	withFakeSelfExe(t)
 	t.Setenv("BASHY_PREFS", "")
-	if codexMCPEntry() != codexMCPServerEntry {
+	if codexMCPEntry() != codexMCPServerEntry() {
 		t.Fatalf("codex entry changed: %q", codexMCPEntry())
 	}
-	if got := claudeMCPWriter().entry(false); got != "claude mcp add bashy -- bashy mcp serve\n" {
+	if got := claudeMCPWriter().entry(false); got != "claude mcp add bashy -- "+fakeSelfExe+" mcp serve\n" {
 		t.Fatalf("claude: %q", got)
 	}
 	if strings.Contains(opencodeMCPEntry(), "environment") {
@@ -36,7 +37,7 @@ func TestInstallAgentMCPProjectsPrefs(t *testing.T) {
 			t.Errorf("%s: secret leaked: %s", name, got)
 		}
 	}
-	if got := claudeMCPWriter().entry(false); !strings.HasPrefix(got, "claude mcp add bashy -e BASHY_PREFS=") || !strings.HasSuffix(got, " -- bashy mcp serve\n") {
+	if got := claudeMCPWriter().entry(false); !strings.HasPrefix(got, "claude mcp add bashy -e BASHY_PREFS=") || !strings.HasSuffix(got, " mcp serve\n") || !strings.Contains(got, " -- ") {
 		t.Errorf("claude argv order: %s", got)
 	}
 }
