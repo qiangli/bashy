@@ -1,0 +1,146 @@
+#!/usr/bin/env -S bashy --bashsharp
+# One body, two orientations: executable Bash# and its embedded agent skill.
+# Verbs dispatch to stdlib Python modules in lib/ (one module per story) and a
+# Go stdlib server in server/. session composes plain bashy commands only.
+
+~~~skill as guide
+---
+name: session
+description: Plan and run an AI-guided, timeboxed session (group sessions, meetings or solo work) on a bashy sprint card - editable format, timed steps owned by people, one-line status for chat, hints that never give answers.
+metadata:
+  requires: "has=bashy"
+  step-porota: 'bashy session status "${SESSION_SPRINT:?set SESSION_SPRINT}" --json'
+  check-tests: 'bashy session status "${SESSION_SPRINT:?set SESSION_SPRINT}" --json'
+---
+# Session
+
+A session is a sprint card; each step is a todo owned by a person, labelled
+`step-NN`, `timebox-Nm` and `role-WORD`. The session clock is
+the sprint's own clock (`bashy sprint start N --owner AGENT --for 90m`, `extend`, `stop`);
+session only reads that clock. The first `session next N` marks step 1 doing; session has no
+start verb of its own.
+
+Start a session like a coding sprint:
+`bashy sprint start N --owner AGENT --for 90m --instruction "run today's session with the session skill"`.
+People never close sprint stories: `session done` records a run-log done event
+and labels the todo `step-done`. At the end the session manager (the owner's
+agent) runs `bashy sprint accept N ID -m EVIDENCE` for each done step.
+Participant progress counts participant steps; owner steps remain in `steps[]`.
+Set `SESSION_SPRINT=N` then `bashy skill run session --json` to attest status
+through the registered command. No default sprint is silently selected.
+
+- `bashy session plan "GOAL" --minutes 90 [--people a,b] [--format F] [--agent A]`
+  prints an editable JSON draft. With no agent it splits the format's
+  template. Edit the draft, then `bashy session apply DRAFT` creates the card,
+  the people and the steps.
+- `bashy session next N`, `done N STEP [-m EVIDENCE]` move people through steps; `status N --json|--line` reports the current step,
+  time left, overdue flags and `paused`. `--line` is one line for a chat header.
+- The format is a starting plan; the owner sets the tempo live: `pause N` / `resume N`
+  freeze and restart the step clock; `time N [STEP] --add 5m|--add -1m` changes a
+  timebox (never below 1m); `goto N STEP` jumps to any step; `skip N` skips the
+  current step; `move N STEP --up|--down|--to K` reorders upcoming steps.
+- `bashy session nudge N [--person P]` asks that person's own agent for a hint or
+  a question about the current step. Hints only: the session never does the work.
+- `bashy session render STEP --edition ROLE|owner|shared` prints one edition of a
+  content item; `~~~private` is owner-only, `~~~private ROLE...` also grants
+  named roles access. The shared edition excludes every private block.
+- `bashy session demo [--port P]` is the one-command look: a throwaway session in a
+  temporary home (removed on Ctrl-C) with the Display page opened and one phone link.
+  `bashy session go "GOAL" --people a,b [--minutes 60] [--format F] [--agent A] [--port P]`
+  runs a real session in your own home in one command (plan, apply, next, serve, open
+  the Display page; prints the owner link, one join link per person and the sprint
+  number for later `bashy session status N`). Both run the `demo`/`go` targets of
+  dag.md. When a user says "start a session for <goal> with alice and bob",
+  run `bashy session go "<goal>" --people alice,bob`; for "show me a demo" run
+  `bashy session demo`.
+- `bashy session serve N` / `join URL` / `stop` run the display and per-participant
+  pages. `bashy session prep DIR [--from PATH]` shapes a content dir before a session.
+
+Compose, don't couple: `status --line` is one plain line any other tool can carry.
+Formats are editable Markdown (`formats/session.md`); copy one to make your own
+session, meeting or solo format. This is Software Shaping: edit phases, pairing,
+timeboxes, tools, tone and owner steps, then plan with `--format PATH`.
+Render the same source with `--edition owner` for preparation and
+`--edition shared` for sharing; owner-only notes stay out of participant output.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+usage='Usage: session plan|apply|next|done|time|goto|skip|move|pause|resume|status|nudge|render|prep|serve|join|stop|demo|go|test [ARGS] [--json]'
+# Registered schemas canonicalize flags before positionals as --name=value.
+# Restore the verb-first argv expected by the shared Python dispatchers.
+bound_flags=()
+while [[ ${1:-} == --*=* ]]; do
+  case $1 in
+    --json=true|--line=true|--help=true) bound_flags+=("${1%=true}") ;;
+    --json=false|--line=false|--help=false) ;;
+    *) bound_flags+=("$1") ;;
+  esac
+  shift
+done
+if (( ${#bound_flags[@]} )); then set -- "$@" "${bound_flags[@]}"; fi
+case ${1:-} in
+--skill)
+  copying=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then copying=true; continue; fi
+    if [[ $copying == true && $line == '~~~' ]]; then break; fi
+    if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  ;;
+--contract) echo 'sokilili sesiono efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
+''|-h|--help) echo "$usage" ;;
+plan|apply)                   exec python3 "$here/lib/plan.py" "$@" ;;
+next|done|time|goto|skip|move|pause|resume|status) exec python3 "$here/lib/run.py" "$@" ;;
+nudge)                        exec python3 "$here/lib/nudge.py" "$@" ;;
+render)                       exec python3 "$here/lib/render.py" "$@" ;;
+prep)                         exec python3 "$here/lib/prep.py" "$@" ;;
+join)
+  # The command registry expands -m to --message; Go join accepts only -m.
+  join_args=()
+  for arg in "$@"; do
+    case $arg in
+      --message=*) join_args+=(-m "${arg#--message=}") ;;
+      --message)   join_args+=(-m) ;;
+      *)           join_args+=("$arg") ;;
+    esac
+  done
+  exec bash "$here/server/run.sh" "${join_args[@]}"
+  ;;
+demo|go)
+  # Thin dispatch: the flows are the `demo` and `go` targets of dag.md.
+  verb=$1; shift
+  params=()
+  goal=
+  while (( $# )); do
+    case $1 in
+      --people=*|--minutes=*|--format=*|--agent=*|--port=*)
+        name=${1%%=*}; params+=("$(printf '%s' "${name#--}" | tr a-z A-Z)=${1#*=}") ;;
+      --people|--minutes|--format|--agent|--port)
+        name=${1#--}; params+=("$(printf '%s' "$name" | tr a-z A-Z)=${2:-}"); shift ;;
+      --json=*|--help=*) ;;
+      -*) echo "session $verb: unknown flag $1" >&2; exit 2 ;;
+      *) goal=${goal:+$goal }$1 ;;
+    esac
+    shift
+  done
+  if [[ $verb == go && ( -z $goal || " ${params[*]} " != *" PEOPLE="* ) ]]; then
+    echo 'usage: session go "GOAL" --people a,b [--minutes 60] [--format F] [--agent A] [--port P]' >&2; exit 2
+  fi
+  [[ -n $goal ]] && params+=("GOAL=$goal")
+  # The shell captures a non-tty stdout until the command ends, which would hold
+  # the links back while the server runs; /dev/fd/N reaches the real fd directly.
+  if [[ -e /dev/fd/1 ]]; then
+    exec "${BASHY:-bashy}" dag --plain "$here/dag.md" "$verb" "SESSION_DIR=$here" "${params[@]}" >/dev/fd/1 2>/dev/fd/2
+  fi
+  exec "${BASHY:-bashy}" dag --plain "$here/dag.md" "$verb" "SESSION_DIR=$here" "${params[@]}"
+  ;;
+serve|stop)                   exec bash "$here/server/run.sh" "$@" ;;
+test)
+  cd "$here"
+  python3 -m unittest discover -s tests -t . -v
+  if [[ -f server/go.mod ]]; then (cd server && GOWORK=off go test -race ./...); fi
+  ;;
+*) echo "$usage" >&2; exit 2 ;;
+esac
