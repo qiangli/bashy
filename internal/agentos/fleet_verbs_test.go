@@ -230,6 +230,36 @@ func TestMemberFrontDoorRegistration(t *testing.T) {
 	}
 }
 
+func TestSuiteFrontDoorRegistration(t *testing.T) {
+	ringDir(t)
+	if !slices.Contains(alwaysShimVerbs, "suite") || synopsisOf("suite") == "" {
+		t.Fatal("suite is missing its bare shim or synopsis")
+	}
+	if _, _, verbs := commandsCatalog(); !slices.Contains(verbs, "suite") {
+		t.Fatal("suite missing from command catalog")
+	}
+	for _, path := range []string{"suite", "suite ls", "suite show", "suite set", "suite add", "suite remove", "suite rm", "suite share", "suite unshare", "suite shares"} {
+		if _, ok := cobraSchemas("suite")[path]; !ok {
+			t.Errorf("suite schema missing %q", path)
+		}
+	}
+	out, err := runFleetVerb(t, "suite", "share", "work", "--circle", "team", "--dry-run", "--json")
+	if err != nil {
+		t.Fatalf("suite share dry run: %v", err)
+	}
+	var request struct {
+		DryRun bool              `json:"dry_run"`
+		Method string            `json:"method"`
+		Body   map[string]string `json:"body"`
+	}
+	if err := json.Unmarshal([]byte(out), &request); err != nil {
+		t.Fatalf("suite share dry run JSON: %v: %s", err, out)
+	}
+	if !request.DryRun || request.Method != http.MethodPost || request.Body["circle"] != "team" {
+		t.Errorf("suite share dry run = %+v", request)
+	}
+}
+
 // TestTokenCreateRefusesWithoutAnOutputSink proves the minted value is never
 // printed by default: without --to-secret or --stdout, create refuses before
 // any network or mint, so no value can leak to the terminal. Hermetic: the

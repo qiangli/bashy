@@ -83,6 +83,17 @@ func dispatchMember(args []string) int {
 	return 0
 }
 
+// dispatchSuite runs the Cloudbox app suite tree from yoke.
+func dispatchSuite(args []string) int {
+	cmd := fleet.NewSuiteCmd()
+	setCobraArgs(cmd, args)
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy suite:", err)
+		return fleet.ExitCode(err)
+	}
+	return 0
+}
+
 // dispatchReproduce runs the `bashy reproduce` verb (plan-only in this run).
 func dispatchReproduce(args []string) int {
 	cmd := fleet.NewReproduceCmd()
