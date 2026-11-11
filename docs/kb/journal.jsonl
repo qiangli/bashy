@@ -34,3 +34,5 @@
 {"op":"update","slug":"extend-bashy-small-verbs-bash-skill-scripts-shaping-hooks-and-th","id":"01a1c1f5-84d7-798d-b54c-bfe4ff42bf28","tool":"qiangli","episode":"ep-c1ddac494e882fa7","at":"2026-11-11T01:10:44.788546Z"}
 {"op":"add","slug":"a-sprint-that-adds-default-commands-or-scripts-cannot-pass-a-fre","id":"01a1c838-6735-7465-b76a-8cc3817cdc5b","tool":"claude-fable5.1-s604","at":"2026-11-11T01:28:22.070245Z"}
 {"op":"add","slug":"desktop-helpers-must-stay-read-only-toward-supervisor-run-units","id":"01a1ca69-1025-76c6-ae8a-2143766039c9","tool":"claude","at":"2026-11-11T11:40:45.479181Z"}
+{"op":"add","slug":"gmail-setup-send-and-verify","id":"01a1cce0-e6e6-796a-b249-60a05af06e42","tool":"codex","episode":"ep-93caeef33a1fed4b","at":"2026-11-11T23:10:53.671628Z"}
+{"op":"update","slug":"gmail-setup-send-and-verify","id":"01a1cce0-e6e6-796a-b249-60a05af06e42","tool":"codex","episode":"ep-54f411ce8b45f0a0","at":"2026-11-11T23:11:01.524704Z"}
