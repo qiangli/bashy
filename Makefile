@@ -1,4 +1,4 @@
-.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-startup-linux test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-isolated-lanes test-release-qa-lane test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-powershell smoke-dag-csharp smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands govulncheck license-gate tidy clean help
+.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-startup-linux test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-isolated-lanes test-release-qa-lane test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-gate test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-powershell smoke-dag-csharp smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands govulncheck license-gate tidy clean help
 
 BIN_DIR := bin
 BIN := $(BIN_DIR)/bashy
@@ -631,6 +631,12 @@ test-bash-container:
 test-bash-container-bashpp:
 	@BASH53_BASHPP=1 BASH53_OCI="$${BASH53_OCI:-bashy podman}" \
 	 scripts/test-bash-container.sh
+
+## test-bash-gate: Release gate, sealed 86/86 in both modes (off then on).
+## Writes bin/bash53-evidence-{0,1}.json; BASH53_BASELINE compares fixture names.
+test-bash-gate:
+	@BASH53_BASHPP=0 BASH53_GATE=1 scripts/test-bash-container.sh
+	@BASH53_BASHPP=1 BASH53_GATE=1 scripts/test-bash-container.sh
 
 ## test-bash-container-mode: Prove requested container modes survive a helper
 ## shell that consumes BASHY_BASHPP (fake OCI/build commands; no container).

@@ -217,9 +217,10 @@ make build-host         # full unix host build (= BASHY_ENGINES=1 BASHY_OBS=1 + 
 make install            # install to $DHNT_BIN_DIR (default ~/.local/bin) — installs the .real pair too
 make build-fips         # both binaries against the Go FIPS 140-3 module (GOFIPS140) — see docs/fips-140.md
 make test               # scripts/test-build-fail-closed.sh, then go test ./...
-make test-bash          # drive bin/bash against bash's own 5.3 test suite (serial)
+make test-bash          # native non-root local diagnostic (serial)
 make test-bash-parallel # native host diagnostic, fanned out across cores
-make test-bash-container # authoritative hermetic 86/86 gate (self-contained Linux image)
+make test-bash-gate     # THE release gate: sealed 86/86 in both Bash# modes
+make test-bash-container # one sealed mode (BASH53_BASHPP=0), writes evidence JSON
 make test-bash-list     # list available fixtures with per-fixture PASS/FAIL/TIME/SKIP
 make test-yash          # yash POSIX (-p) scoreboard — the headline conformance-frontier metric
 make test-yash-list     # print the current bashy-specific yash failure list
@@ -377,7 +378,8 @@ Once `make install` has run, drop the `./` and use the PATH binary.
 `suites.md` and `dag.md` are literate task files: each `###` heading is a
 target with `Requires:`/`Sources:`/`Effects:` metadata, run in topological
 order through the in-process shell. `suites.md` is the conformance matrix
-(only `test-bash` is a hard 0/1 gate; the differentials are INFO probes);
+(`test-bash` is a native diagnostic; the release gate is `make test-bash-gate`;
+the differentials are INFO probes);
 `ci.dag.md` is the shared CI graph for dhnt Go projects — other repos pull it in
 by pinned reference (`include: gh:qiangli/bashy@vX.Y.Z/ci.dag.md`) and override
 only the vars that differ, so a change here is cross-repo.
@@ -538,7 +540,13 @@ this gate failed before — `coproc`, `jobs` and `trap` were skipped *because th
 hung*, so CI stayed green while three fixtures went unmeasured. Nothing is skipped
 today; all 86 run.
 
-The authoritative release result is `make test-bash-container`: it bakes the
+The authoritative release result is `make test-bash-gate`: it runs both
+`BASH53_BASHPP=0` and `=1` through the sealed container, requiring 86/86 in
+each mode. Each mode writes `bin/bash53-evidence-<mode>.json` (override with
+`BASH53_EVIDENCE`). Set `BASH53_BASELINE` to previous evidence for the same
+mode and fixture inventory to record NEW, RECOVERED, and UNCHANGED failures
+by fixture name; any NEW failure fails even if the pass count is unchanged.
+The sealed container bakes the
 testee, this runner, and the pinned fixture corpus into one Linux image, then
 runs non-root with an isolated tmpfs, no network, a read-only root, and a PTY.
 That prevents host `/tmp`, locale, permission, and controlling-terminal state
