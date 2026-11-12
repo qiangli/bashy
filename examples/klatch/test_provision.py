@@ -1,5 +1,7 @@
 import base64
+import contextlib
 import importlib.util
+import io
 import json
 import re
 import threading
@@ -171,7 +173,7 @@ class ProvisionTest(unittest.TestCase):
         self.srv = HTTPServer(("127.0.0.1", 0), make_handler(self.st))
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         self.cfg = {
-            "base_url": "http://127.0.0.1:%d" % self.srv.server_port, "domain": "chat.test",
+            "base_url": "http://127.0.0.1:%d" % self.srv.server_port,
             "admin_password_secret": "klatch/admin",
             "users": [{"handle": h, "password_secret": "klatch/" + h} for h in ("alice", "bob", "carol")],
             "groups": [{"key": "class", "name": "Class", "owner": "alice", "members": ["bob", "carol"]}],
@@ -184,7 +186,7 @@ class ProvisionTest(unittest.TestCase):
 
     def run_setup(self):
         session, _ = module.admin_session(self.client, self.cfg, bootstrap=True)
-        self.client.set_config(session, self.cfg["domain"])
+        self.client.set_config(session)
         return module.provision(self.client, self.cfg, session)
 
     def test_bootstrap_and_provision(self):
@@ -192,7 +194,8 @@ class ProvisionTest(unittest.TestCase):
         self.assertEqual(self.st.admin, ADMIN)
         q, body = self.st.config
         self.assertEqual(q["setOpenAccess"], "true")
-        self.assertEqual(body["domain"], "chat.test")
+        self.assertNotIn("domain", body)
+        self.assertEqual(body, module.CONFIG_BODY)
         self.assertFalse(body["enableOpenAccess"])
         self.assertEqual(out["handles"], {h: "guid-" + h for h in ("alice", "bob", "carol")})
         self.assertEqual(list(out["groups"]), ["class"])
@@ -225,7 +228,7 @@ class ProvisionTest(unittest.TestCase):
 
     def test_reset_passwords(self):
         session, _ = module.admin_session(self.client, self.cfg, bootstrap=True)
-        self.client.set_config(session, self.cfg["domain"])
+        self.client.set_config(session)
         module.provision(self.client, self.cfg, session)
         rotated = []
 
@@ -283,6 +286,21 @@ class ProvisionTest(unittest.TestCase):
     def test_status_unreachable(self):
         dead = module.Client("http://127.0.0.1:1", resolve=SECRETS.__getitem__)
         self.assertFalse(module.status(dead, dict(self.cfg, base_url="http://127.0.0.1:1"))["reachable"])
+
+    def test_setup_main_sets_no_federation_domain(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            p = Path(t) / "c.json"
+            p.write_text(json.dumps(dict(self.cfg, domain="chat.test")))
+            real = module.Client
+            module.Client = lambda base, resolve=None: self.client
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    module.main(["setup", str(p)])
+            finally:
+                module.Client = real
+            _, body = self.st.config
+            self.assertNotIn("domain", body)
 
     def test_config_rejects_unknown_member(self):
         import tempfile

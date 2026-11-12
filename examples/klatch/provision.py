@@ -102,9 +102,10 @@ class Client:
     def setup_admin(self, password):
         self.call("PUT", "/admin/status", {"token": password})
 
-    def set_config(self, session, domain):
-        body = dict(CONFIG_BODY, domain=domain)
-        self.call("PUT", "/admin/config", {"token": session, "setOpenAccess": "true"}, body)
+    def set_config(self, session, domain=None):
+        # no federation domain is set: the server refuses external contacts
+        # (older callers still pass a domain; it is ignored)
+        self.call("PUT", "/admin/config", {"token": session, "setOpenAccess": "true"}, dict(CONFIG_BODY))
 
     def accounts(self, session):
         return self.call("GET", "/admin/accounts", {"token": session}) or []
@@ -347,9 +348,7 @@ def main(argv):
     else:
         session, _ = admin_session(client, cfg, bootstrap=(action == "setup"))
         if action == "setup":
-            if not cfg.get("domain"):
-                fail("setup requires domain")
-            client.set_config(session, cfg["domain"])
+            client.set_config(session)
         result = provision(client, cfg, session)
     print(json.dumps(result, indent=2, sort_keys=True))
 
