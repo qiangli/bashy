@@ -10,17 +10,24 @@ workflow checks out the pinned commit fresh on every run.
 |---|---|
 | Upstream | `https://github.com/qiangli/klatch` (bashy's own fork; see #Credit) |
 | License at the commit | **Apache-2.0** (`LICENSE`, verified at the pinned commit) |
-| Pinned commit | `febff05b262dda48f681c31b46c38cd3a672ff06` (planned annotated tag `v1.2.7` — see #Pin provenance) |
+| Pinned commit | `5334662c94d293bd5e2bc07a0f9f84e7a5fb2dad` (annotated tag `v1.2.8` — see #Pin provenance) |
 | Toolchain | Go `1.26.9` (EOL-minor security override; the commit's `go.mod` names `go1.23.0`/`toolchain go1.24.5`, see #Build configuration) + Node `22` / Yarn `1.22.22` |
-| Trigger | push of tag `bashy-v1.2.7-N` on `bashy-build` (first: `bashy-v1.2.7-1`) |
-| Signing identity | `https://github.com/qiangli/klatch/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.2.7-1` |
+| Trigger | push of tag `bashy-v1.2.8-N` on `bashy-build` (first: `bashy-v1.2.8-1`) |
+| Signing identity | `https://github.com/qiangli/klatch/.github/workflows/bashy-build.yml@refs/tags/bashy-v1.2.8-1` |
 | Issuer | `https://token.actions.githubusercontent.com` |
 
-The v1.2.7 candidate replaces mattn/go-sqlite3 with glebarez/sqlite over
+`v1.2.8` is `v1.2.7` plus the operator roster for single sign-on teams:
+`PUT /admin/sso/roster` (admin session) sets the Team owner and members,
+provisions or re-enables listed accounts, disables removed ones and refuses
+unlisted identities once a roster has arrived; team mode needs no opt-in
+flag. Only `net/server/internal` Go source and tests changed (plus the
+separate `app/client/cli`, not built here), so no build-step changed.
+
+`v1.2.7` replaces mattn/go-sqlite3 with glebarez/sqlite over
 modernc, preserving the busy timeout via pragma. All server legs now use
 `CGO_ENABLED=0`, with no C compiler prerequisite. The new native
 Windows amd64 leg ships `klatch.exe` and uses the same separate web bundle.
-The manager cuts `v1.2.7` and `bashy-v1.2.7-1` after review; this change
+The manager cut `v1.2.7` and `bashy-v1.2.7-1` after review; this change
 does not publish either release.
 
 `v1.2.6` is `v1.2.5` plus single sign-on through the outpost proxy (a new
@@ -87,7 +94,7 @@ bashy's own fork. The **one** field that pins this build is
 field and cutting a matching `UPSTREAM_TAG` release to go with it (same two
 edits any tool.env bump needs — see `../README.md` "Adding a tool").
 
-The manager must tag the pinned commit as `v1.2.7` and cut a
+The manager must tag the pinned commit as `v1.2.8` and cut a
 **non-draft, non-prerelease** GitHub Release after review — that is the
 "upstream release" the `pin` job's `official-release` admission queries,
 satisfied here because bashy controls the fork, not because a third party
@@ -166,14 +173,14 @@ run build` (`tsc && vite build`) succeeds unchanged.
 ## Release assets: two shapes
 
 ```
-klatch-v1.2.7-linux-amd64.tar.gz    klatch binary + net/transform/*.sh
-klatch-v1.2.7-linux-arm64.tar.gz    klatch binary + net/transform/*.sh
-klatch-v1.2.7-darwin-arm64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
-klatch-v1.2.7-darwin-amd64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
-klatch-v1.2.7-windows-amd64.tar.gz  klatch.exe + net/transform/*.sh (no runtime no-egress check)
-klatch-web-v1.2.7.tar.gz            the vite dist/ output (static, same for every arch)
-klatch-v1.2.7.govulncheck.json      klatch-sdk-v1.2.7.yarn-audit.json
-klatch-web-v1.2.7.yarn-audit.json   klatch-pin.txt
+klatch-v1.2.8-linux-amd64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v1.2.8-linux-arm64.tar.gz    klatch binary + net/transform/*.sh
+klatch-v1.2.8-darwin-arm64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-v1.2.8-darwin-amd64.tar.gz   klatch binary + net/transform/*.sh (no no-egress check — see #No-egress gate)
+klatch-v1.2.8-windows-amd64.tar.gz  klatch.exe + net/transform/*.sh (no runtime no-egress check)
+klatch-web-v1.2.8.tar.gz            the vite dist/ output (static, same for every arch)
+klatch-v1.2.8.govulncheck.json      klatch-sdk-v1.2.8.yarn-audit.json
+klatch-web-v1.2.8.yarn-audit.json   klatch-pin.txt
 klatch-otel.env                     klatch-no-tracking.env
 SHA256SUMS
 ```
@@ -182,7 +189,7 @@ The server tarball's binary is already executable when tarred, so
 `RELEASE_EXECUTABLES` is empty — there is no raw executable asset to
 `chmod +x` after the fact. Each asset gets a sibling `<asset>.sigstore.json`
 bundle. URL shape:
-`https://github.com/qiangli/klatch/releases/download/bashy-v1.2.7-1/<asset>`.
+`https://github.com/qiangli/klatch/releases/download/bashy-v1.2.8-1/<asset>`.
 
 ## No tracking
 
@@ -253,7 +260,7 @@ ever links an SDK, it can only reach bashy's own collector.
 
 The Windows server tarball retains the other server archives' shape, with
 `klatch.exe` replacing `klatch` and the same transform scripts. Install it
-together with `klatch-web-v1.2.7.tar.gz`; the shared web bundle is not
+together with `klatch-web-v1.2.8.tar.gz`; the shared web bundle is not
 duplicated inside any server archive. Shell transform scripts are retained
 for parity; the fork's Go-native image transforms do not require Bash.
 
@@ -273,8 +280,8 @@ follow-up work once the first reports are read.
 ## Operator steps (not in bashy CI)
 
 Once, before the first build (#Pin provenance): tag
-`febff05b262dda48f681c31b46c38cd3a672ff06` as `v1.2.7` on `qiangli/klatch`
-(pending manager review) and cut a non-draft, non-prerelease GitHub Release for it. Do not
+`5334662c94d293bd5e2bc07a0f9f84e7a5fb2dad` as `v1.2.8` on `qiangli/klatch`
+(done for v1.2.8) and cut a non-draft, non-prerelease GitHub Release for it. Do not
 reuse the fork's unrelated 2022 `v0.1.0` tag.
 
 ```sh
@@ -282,9 +289,9 @@ reuse the fork's unrelated 2022 `v0.1.0` tag.
 git switch --orphan bashy-build
 cp -R <bashy>/builds/klatch/fork/. .
 git add .github/workflows/bashy-build.yml bashy-build
-git commit -m "bashy-build: klatch v1.2.7 verified build"
+git commit -m "bashy-build: klatch v1.2.8 verified build"
 git push -u origin bashy-build
-git tag bashy-v1.2.7-1 && git push origin bashy-v1.2.7-1
+git tag bashy-v1.2.8-1 && git push origin bashy-v1.2.8-1
 ```
 
 Then wire the fleet to the signed fork release (outside this repo's

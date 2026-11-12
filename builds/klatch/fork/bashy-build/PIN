@@ -30,8 +30,10 @@ UPSTREAM_SLUG=qiangli/klatch
 # v1.2.7 replaces mattn/go-sqlite3 with glebarez/sqlite over modernc.
 # SQLite busy_timeout is preserved via pragma; every server builds without cgo.
 # The manager must cut v1.2.7 and bashy-v1.2.7-1 after review.
-UPSTREAM_TAG=v1.2.7
-UPSTREAM_COMMIT=febff05b262dda48f681c31b46c38cd3a672ff06
+# v1.2.8 (5334662c, S619) = v1.2.7 plus the operator roster for SSO teams
+# (PUT /admin/sso/roster) and Team defaults; no dependency or build-step change.
+UPSTREAM_TAG=v1.2.8
+UPSTREAM_COMMIT=5334662c94d293bd5e2bc07a0f9f84e7a5fb2dad
 # Toolchain kind: the repo builds TWO different artifact shapes from one
 # matrix — a pure-Go server per platform (net/server), and one
 # architecture-independent Node/yarn web bundle (app/client/web) — so
