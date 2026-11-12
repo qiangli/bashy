@@ -3,16 +3,20 @@ id: a8a60fe54d6e
 kind: feature
 title: 'S499.6A examples/vlog: serve via ''bashy app add --type site'' and publish the console path through Outpost; delete the bundled Go server'
 seq: 3227
-status: todo
+status: done
 priority: p1
 labels:
     - app
     - web
     - examples
 created: 2026-11-12T18:20:38.261849Z
+weave: 103
+assignee: opencode-glm-5.3
 sprint: 499
 sprint_id: c3c45f32-63b5-5575-980f-299a44a561f3
 sprint_title: 'Content creation with bashy: YC videos and a local-first author-to-reader showcase'
+closed: 2026-11-12T18:55:04.282577Z
+closed_by: claude-opus5.5
 ---
 
 S499.6 slice A, adoption. bashy now serves a static directory itself: `bashy app add NAME --type site --source DIR` (yoke 40d456db, bashy pin 0918ed7a). examples/vlog drops its own server.
