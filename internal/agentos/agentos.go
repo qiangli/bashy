@@ -119,7 +119,6 @@ import (
 	"github.com/qiangli/yoke/pkg/sdlc"
 	"github.com/qiangli/yoke/pkg/search"
 	"github.com/qiangli/yoke/pkg/secrets"
-	"github.com/qiangli/yoke/pkg/share"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 	"github.com/qiangli/yoke/pkg/sota"
 	"github.com/qiangli/yoke/pkg/stats"
@@ -158,7 +157,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "account", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "member", "suite", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "shape", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile", "transcribe",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "account", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "member", "group", "suite", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "shape", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile", "transcribe",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -938,13 +937,8 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// URL and a terminal QR code for ANY URL, from any bashy user.
 		// Publishes nothing; a bashy app URL opens as the owner's shapeable
 		// app page.
-		cmd := share.NewCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy share:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+		// S619: `share who HOST/APP` lists members admitted to a host app.
+		dispatchExit(dispatchShare(os.Args[2:]))
 	case "sprint":
 		// Plan/handoff layer (cross-repo), peer to `weave` (per-repo
 		// execution). Shares the AgentOS state root; user-global board.
@@ -994,6 +988,8 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		dispatchExit(dispatchSatellite(os.Args[2:]))
 	case "member":
 		dispatchExit(dispatchMember(os.Args[2:]))
+	case "group":
+		dispatchExit(dispatchGroup(os.Args[2:]))
 	case "suite":
 		dispatchExit(dispatchSuite(os.Args[2:]))
 	case "reproduce":
