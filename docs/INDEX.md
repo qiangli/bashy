@@ -19,6 +19,7 @@
 - [Sprint 561 certification evidence identity](s561/evidence-identity.md) — Linked input closure digests, artifact hash rule, and revision comparison.
 - [Sprint 562 master execution plan](plan-s562-master-execution.md) — Fence corpora B: consolidated by-example corpora from Sprints 391–396 made green first, then the fence × platform × provider inventory, baselines, repairs and one frozen-candidate full-matrix verification.
 - [Sprint 570 live handoff plan](plan-live-handoff.md) — offer/accept handoff of sprints, stories, todos, claims and runs between humans and agents; local bashy layer under Sprint 568's routing design.
+- [Software shaping](software-shaping.md) — the canonical definition: one-line promise, the loop, eight rules, the layers that make it safe, shipped vs planned features, and the "Shapeable with Bashy" checklist.
 - [Sprint 564 master plan](plan-s564-master-execution.md) — one Software Shaping model with two front-ends: the existing /shape/ web UI and a bashy shape CLI mirroring /api/shape on the shared yoke/pkg/shape engine; adds CLI (bashy) and service (Klatch) app kinds, per-host activation and submit into the sprint flow.
 - [Agentic blocks and shaping](agentic-block-shaping.md) — Sprint 564 documentation spike: explicit source/CLI composition, existing scope boundary and follow-up gaps.
 - [Sprint 564 validation](s564-validation.md) — exact H2 census baseline comparison; two unchanged failures, not a passing test.

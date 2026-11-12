@@ -41,6 +41,8 @@ can review, verify and approve for yourself, with history and undo: your
 version of the tool, and a way back. Web shaping is an **opt-in trial**:
 personal versions affect the selected user only. bashy itself is shapeable
 this way. **[Start with Hello World →](../examples/shaping/hello-world/README.md)**
+The canonical definition, rules and status are in
+[software-shaping.md](software-shaping.md).
 
 ### The promotion path
 

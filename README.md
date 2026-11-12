@@ -14,8 +14,9 @@ default: help
 [![release](https://img.shields.io/github/v/release/qiangli/bashy?label=release)](https://github.com/qiangli/bashy/releases/latest)
 [![tour](https://github.com/bashsharp/tour/actions/workflows/tour.yml/badge.svg)](https://github.com/bashsharp/tour/actions/workflows/tour.yml)
 
-**Software shaping: tell an agent how you want a tool to work, and get your own
-verified version, while everyone else keeps theirs. Undo is one click.**
+**Software shaping lets anyone tell an agent, in plain words, how a running tool
+should work, and get their own verified, reversible version, while everyone else
+keeps theirs.** Undo is one click. [What shaping is →](docs/software-shaping.md)
 
 bashy is the shell built for AI agents that makes this safe: a pure-Go Bash 5.3
 (86/86 on GNU Bash's own test suite) that speaks Bash#. Its core never changes, so
@@ -51,7 +52,7 @@ Tarballs, packages, from source, offline image: **[docs/install.md](docs/install
 
 - **Software shaping.** `shape wish` → verify → preview → approve → undo, on the web console or the CLI: describe a change to a registered app or tool in plain words, get your own version, then promote it local → team → upstream (`shape push`). A broken change fails verification and can't be approved. [Try the hello-world example](examples/shaping/hello-world/README.md).
 
-What makes shaping safe, and what agents get along the way:
+What makes shaping safe ([the eight rules](docs/software-shaping.md#guidelines)), and what agents get along the way:
 
 - **One binary, every OS.** Bash 5.3 + `ls sed awk grep find jq git make tar …` in pure Go; the same script means the same thing on Windows.
 - **Bash#, Go with bash.** Typed Go in shell text; fenced Python/TS/Rust/C/C#/PowerShell islands with pinned, checksum-verified toolchains it fetches itself.
