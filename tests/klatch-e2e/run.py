@@ -45,6 +45,20 @@ Suites (--suite):
   is BLOCKED before any container starts; any other topology is BLOCKED,
   because the journey claims the store and may only run against a disposable
   server. `Containerfile.server` builds a suitable image from a Klatch tree.
+- roster: the SSO roster journey from roster.py (an imported helper; it never
+  starts a server). Topology none only, same disposable-container lifecycle as
+  participant, but the container is started with
+  `-e KLATCH_SSO_SECRET=<secret>` (from --sso-secret /
+  KLATCH_E2E_SSO_SECRET, generated fresh when unset) so the journey can sign
+  outpost identities. The journey pushes a roster (owner + one member),
+  asserts the reconciliation counts and the idempotent re-push, signs the
+  roster in through POST /account/sso, asserts the Team channel is owned by
+  the roster owner, removes the member (disabled, contacts dropped, sign-in
+  refused) and asserts an external-node contact is refused. The roster
+  endpoint shipped in klatch 5334662c: the released 1.2.7 image predates it,
+  so the journey probes the endpoint first and is BLOCKED with local-build
+  instructions when the image lacks it (pass --image pointing at an image
+  built from a klatch tree that carries the endpoint).
 
 Any leg whose product support is missing reports BLOCKED with the owning
 sprint (S565 outpost single-node, S568 human/agent identity and Klatch to
@@ -74,13 +88,22 @@ def _load_participant():
     return mod
 
 
+def _load_roster():
+    spec = importlib.util.spec_from_file_location(
+        "klatch_e2e_roster", Path(__file__).resolve().with_name("roster.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 participant = _load_participant()
+roster = _load_roster()
 
 LOCAL_URL = "http://127.0.0.1:7100/"
 SEND_ICON = "//button[.//*[name()='path' and starts-with(@d,'M10 14l11 -11')]]"
 
 TOPOLOGIES = ("none", "outpost", "satellite", "both")
-SUITES = ("browser", "participant")
+SUITES = ("browser", "participant", "roster")
 STEPS = ("signup_login", "topic_exchange", "meet_session")
 
 OUTPOST_URL_BLOCKED = (
@@ -105,6 +128,10 @@ MEET_BLOCKED = (
 )
 PARTICIPANT_TOPOLOGY_BLOCKED = (
     "participant suite claims the server store, so it only runs against the "
+    "disposable container of topology none"
+)
+ROSTER_TOPOLOGY_BLOCKED = (
+    "roster suite claims the server store, so it only runs against the "
     "disposable container of topology none"
 )
 URL_BLOCKED = (
@@ -260,7 +287,7 @@ def url_answers(url):
         return False
 
 
-def default_start_server(topology, url, image, container_port=None):
+def default_start_server(topology, url, image, container_port=None, env=None):
     """Start Klatch locally with `bashy oci run` for the none topology.
 
     Returns {"container": name, "image": image}. Anything the host cannot
@@ -270,6 +297,8 @@ def default_start_server(topology, url, image, container_port=None):
     created but the server never became healthy, the container is removed
     before the error propagates, so a failed start never leaks it.
     container_port is the port the image listens on (default: the URL port).
+    env is passed to the container as -e NAME=value pairs (the roster suite
+    uses it for KLATCH_SSO_SECRET).
     """
     if topology != "none":
         return None
@@ -300,11 +329,13 @@ def default_start_server(topology, url, image, container_port=None):
                       "another server owns that port: pass --url with a free port "
                       "(and --container-port for the image's port)")
     name = f"klatch-e2e-{os.getpid()}-{time.strftime('%Y%m%d-%H%M%S')}"
+    argv = oci + ["run", "-d", "--name", name,
+                  "-p", f"127.0.0.1:{port}:{container_port or port}"]
+    for key in sorted(env or {}):
+        argv += ["-e", f"{key}={env[key]}"]
+    argv.append(wanted)
     try:
-        r = subprocess.run(
-            oci + ["run", "-d", "--name", name,
-                   "-p", f"127.0.0.1:{port}:{container_port or port}", wanted],
-            capture_output=True, text=True, timeout=120)
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=120)
     except Exception as e:  # noqa: BLE001 - engine answered before; this is a failure
         _remove_container_best_effort(oci, name)
         raise RuntimeError(f"bashy oci run failed: {e}")
@@ -611,10 +642,98 @@ def run_participant(args, hooks=None):
     return _write_evidence(args, record)
 
 
+def run_roster(args, hooks=None):
+    """The roster suite inside this runner's container lifecycle.
+
+    Order: start_server (bashy oci run -e KLATCH_SSO_SECRET=... + health)
+    -> journey(args, url, secret) -> stop_server (always, once started).
+    The secret is resolved once here so the container and the outpost
+    signatures the journey signs use the same value.
+    """
+    hooks = dict(hooks or {})
+    start_server = hooks.get("start_server", default_start_server)
+    stop_server = hooks.get("stop_server", default_stop_server)
+    describe_candidate = hooks.get("candidate_info", candidate_info)
+    journey = hooks.get("roster_journey", roster.run_journey)
+    names = roster.STEPS
+
+    started_at = datetime.now(timezone.utc).isoformat()
+    topology = getattr(args, "topology", "none") or "none"
+    url = getattr(args, "url", None) or None
+    secret, secret_source = roster.resolve_secret(args)
+    server = None
+    server_stop = {"status": "skipped", "detail": "no local container started"}
+    outcome = {}
+
+    def every(status, reason):
+        return {name: {"status": status, "reason": reason} for name in names}
+
+    if topology != "none":
+        steps = every("blocked", ROSTER_TOPOLOGY_BLOCKED)
+    else:
+        url = resolve_url(topology, url)
+        try:
+            server = start_server(topology, url, getattr(args, "image", None),
+                                  env={"KLATCH_SSO_SECRET": secret},
+                                  **_container_port_kw(args))
+        except Blocked as e:
+            steps = every("blocked", str(e))
+        except Exception as e:  # noqa: BLE001 - start crashed: fail, still write evidence
+            steps = every("fail", f"klatch container start failed: {e}")
+        else:
+            try:
+                outcome = journey(args, url, secret) or {}
+                steps = outcome.get("steps") or every("fail", "journey returned no steps")
+            except Exception as e:  # noqa: BLE001 - the journey never raises; be safe anyway
+                steps = every("fail", f"roster journey crashed: {e}")
+            finally:
+                try:
+                    server_stop = stop_server(server)
+                except Exception as e:  # noqa: BLE001 - teardown records, never raises
+                    server_stop = {"status": "failed", "detail": str(e)}
+    result = roster.summarize(steps)
+    try:
+        candidate = describe_candidate()
+    except Exception:  # noqa: BLE001 - candidate info is best-effort
+        candidate = {"bashy_version": "unknown", "bashy_sha": "unknown"}
+    try:
+        candidate.update(roster.candidate(args))
+    except Exception:  # noqa: BLE001 - provenance is best-effort
+        pass
+    candidate["sso_secret_source"] = secret_source
+    journey_teardown = outcome.get("journey_teardown",
+                                   {"status": "skipped", "detail": "no journey ran"})
+    torn_down = (server_stop.get("status") in ("done", "skipped")
+                 and journey_teardown.get("status") in ("done", "skipped"))
+    record = {
+        "suite": "roster",
+        "topology": topology,
+        "url": url,
+        "result": result,
+        "steps": steps,
+        "checks_passed": outcome.get("checks_passed", 0),
+        "skipped_checks": outcome.get("skipped_checks", []),
+        "http_calls": outcome.get("http_calls", 0),
+        "accounts": {"emails": outcome.get("accounts", []),
+                     "lifetime": "dropped with the sandbox container"},
+        "server": server or {"status": "not-started"},
+        "server_stop": server_stop,
+        "teardown": {"status": "done" if torn_down else "failed",
+                     "detail": f"{journey_teardown.get('detail', '')}; {server_stop.get('detail', '')}"},
+        "candidate": candidate,
+        "started_at": started_at,
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+    }
+    return _write_evidence(args, record)
+
+
 def run(args, hooks=None):
     """Run one topology's journey. Returns the JSON-serializable evidence record."""
-    if getattr(args, "suite", "browser") == "participant":
+    suite = getattr(args, "suite", "browser")
+    if suite == "participant":
         return run_participant(args, hooks)
+    if suite == "roster":
+        return run_roster(args, hooks)
     hooks = dict(hooks or {})
     outpost_reachable = hooks.get("outpost_reachable", default_outpost_reachable)
     start_server = hooks.get("start_server", default_start_server)
@@ -737,8 +856,10 @@ def build_parser():
                     help="port the --topology none image listens on (default: the URL port; "
                          "Containerfile.server listens on 7100)")
     ap.add_argument("--suite", choices=SUITES, default="browser",
-                    help="browser journeys (default) or the participant CLI journey")
+                    help="browser journeys (default), the participant CLI journey, "
+                         "or the SSO roster journey")
     participant.add_arguments(ap)
+    roster.add_arguments(ap)
     return ap
 
 
