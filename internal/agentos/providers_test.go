@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	yokemcp "github.com/qiangli/yoke/mcp"
@@ -54,5 +55,39 @@ func TestProvidersCLIAndMCPDiscovery(t *testing.T) {
 		if !found {
 			t.Fatalf("MCP definitions missing %s: %d tools", name, len(definitions))
 		}
+	}
+}
+
+func TestProvidersListStableRoleOrder(t *testing.T) {
+	ringDir(t)
+	for _, name := range []string{"zeta", "alpha"} {
+		writeRecord(t, fleet.Command{Name: name, Script: "true", Provides: []string{name}, Effects: []string{"read"}})
+	}
+	var first, second, errout bytes.Buffer
+	if code := runProviders([]string{"--json"}, &first, &errout); code != 0 {
+		t.Fatalf("first list: %d %s", code, errout.String())
+	}
+	if code := runProviders([]string{"--json"}, &second, &errout); code != 0 {
+		t.Fatalf("second list: %d %s", code, errout.String())
+	}
+	if first.String() != second.String() || strings.Index(first.String(), `"role":"alpha"`) > strings.Index(first.String(), `"role":"zeta"`) {
+		t.Fatalf("unstable role order: %s / %s", first.String(), second.String())
+	}
+}
+
+func TestProvidersReportsCatalogError(t *testing.T) {
+	ringDir(t)
+	root := t.TempDir()
+	t.Setenv("BASHY_FLEET_DIR", root)
+	toolsDir := filepath.Join(root, "tools")
+	if err := os.MkdirAll(toolsDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(toolsDir, "broken.yaml"), []byte("name: [not valid\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	var out, errout bytes.Buffer
+	if code := runProviders([]string{"plan"}, &out, &errout); code != 2 || !strings.Contains(errout.String(), "broken") {
+		t.Fatalf("catalog error: code=%d stderr=%s", code, errout.String())
 	}
 }

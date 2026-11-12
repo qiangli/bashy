@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/qiangli/yoke/pkg/fleet"
@@ -59,7 +60,13 @@ func runProviders(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 	}
-	tools, _ := fleet.New().Tools(false)
+	tools, toolErrs := fleet.New().Tools(false)
+	if len(toolErrs) > 0 {
+		for _, err := range toolErrs {
+			fmt.Fprintln(stderr, "providers:", err)
+		}
+		return 2
+	}
 	if !selectMode && role == "" {
 		// List every declared role using the same projection path.
 		roles := map[string]bool{}
@@ -74,7 +81,12 @@ func runProviders(args []string, stdout, stderr io.Writer) int {
 			}
 		}
 		var all []providerselector.Candidate
+		orderedRoles := make([]string, 0, len(roles))
 		for r := range roles {
+			orderedRoles = append(orderedRoles, r)
+		}
+		sort.Strings(orderedRoles)
+		for _, r := range orderedRoles {
 			all = append(all, providerselector.Project(registeredCommands(), tools, providerselector.Options{Role: r, Request: request, Yes: *yes})...)
 		}
 		if *asJSON {
