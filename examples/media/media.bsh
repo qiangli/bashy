@@ -6,6 +6,7 @@
 #   media pdf IMG... -o OUT.pdf [--title T] [--author A]
 #   media combine A.pdf B.pdf... -o OUT.pdf
 #   media slides IN.pdf DIR
+#   media voice PROJECT [--energy 0.7] [--reference FILE] [--force]
 #   media narrate PROJECT --own | --voice NAME|default
 #   media build PROJECT
 #
@@ -30,7 +31,8 @@ it composes: `media combine "$(media pdf a.png b.png -o a.pdf)" b.pdf -o all.pdf
     media pdf cover.png page2.png -o deck.pdf --title "Plan" --author "Owner"
     media combine deck.pdf appendix.pdf -o all.pdf
     media slides all.pdf slides/                   # slides/01.png, 02.png ... for the video
-    media narrate my-demo --own                    # voice track from the member's own takes
+    media voice my-demo                            # optional: expressive local neural voice -> voice/NN.wav
+    media narrate my-demo --own                    # voice track from voice/NN.* takes
     media build my-demo                            # my-demo/build/demo.mp4
 
 - `doctor` first. It downloads the pinned pdfcraft-cli once, checks ffmpeg
@@ -50,6 +52,18 @@ it composes: `media combine "$(media pdf a.png b.png -o a.pdf)" b.pdf -o all.pdf
   `--voice NAME` uses the computer's own voice as a DRAFT to check timing
   (macOS `say`, Windows System.Speech, Linux espeak-ng); never ship it as
   the final voice.
+- Expressive voice: `voice PROJECT` writes `voice/NN.wav` with a LOCAL
+  neural model (Chatterbox, MIT), so `narrate --own` uses it like recorded
+  takes. It reads `narration-spoken.txt` when present (same lines, respelled
+  for pronunciation, e.g. a product name or initials), else `narration.txt`.
+  `--energy` 0.3 (calm) to 1.0 (very animated), default 0.7. The default
+  speaker is synthetic (Kokoro `am_fenrir`, Apache-2.0; `--kokoro-voice` picks
+  another); `--reference FILE` conditions on a voice sample instead, which
+  must be the person's own recording or a synthetic voice, never someone
+  else's voice. Existing takes are kept unless `--force`. First run needs
+  `uv` (doctor prints the install line) and downloads pinned packages and
+  model weights (a few GB) into the bashy cache; runs on CUDA, Apple MPS or
+  CPU. Disclose synthetic narration in the video (a caption line).
 - `camera NAME` segments read `camera/NAME.mp4|mov|webm`, as made by
   `record video`. `step NAME` runs `steps/NAME.sh` under bashy and records it
   with `cast record` when present, else asciinema.
@@ -329,6 +343,8 @@ doctor() {
 		echo "ok   voice: System.Speech via pinned PowerShell fence" ;;
 	*) command -v espeak-ng >/dev/null && echo "ok   voice: espeak-ng" || { echo "MISSING voice: $ffm_voice"; bad=1; } ;;
 	esac
+	# Optional: the expressive local neural voice (media voice) needs uv.
+	command -v uv >/dev/null && echo "ok   neural voice (optional): uv" || echo "note neural voice (optional, media voice): $(uv_install_line)"
 	[ -f "$video_sh" ] && echo "ok   video.sh: $video_sh" || { echo "MISSING video.sh: $video_sh"; bad=1; }
 	if [ $bad -ne 0 ]; then
 		echo "media: doctor failed; install what is marked MISSING (the line is shown), then rerun" >&2
@@ -520,6 +536,140 @@ cmd_narrate() {
 	echo "$P/narration.m4a"
 }
 
+# ---- voice (local neural TTS) -----------------------------------------------
+
+# Pinned, permissively licensed: chatterbox-tts (MIT), kokoro (Apache-2.0).
+# en_core_web_sm is pinned because misaki would otherwise fetch it at first use
+# through `uv pip`, which fails outside an activated environment.
+NEURAL_PKGS=(chatterbox-tts==0.1.7 kokoro==0.9.4 "misaki[en]==0.9.4" soundfile==0.14.0 setuptools==80.10.2
+	"en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl")
+
+voice_root() {
+	local base=${MEDIA_CACHE:-${XDG_CACHE_HOME:-${LOCALAPPDATA:-$HOME/.cache}}}
+	echo "$base/bashy/media/neural-voice"
+}
+
+uv_install_line() {
+	case $(os_name) in
+	darwin) echo "brew install uv" ;;
+	windows) echo "winget install astral-sh.uv" ;;
+	*) echo "curl -LsSf https://astral.sh/uv/install.sh | sh" ;;
+	esac
+}
+
+# neural_python: the cached environment's python (created once), or $MEDIA_VOICE_PY.
+neural_python() {
+	if [ -n "${MEDIA_VOICE_PY:-}" ]; then echo "$MEDIA_VOICE_PY"; return 0; fi
+	local root py ready
+	root=$(voice_root)
+	case $(os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
+	# The marker names the package set, so a changed pin reinstalls.
+	ready=$root/.ready-$(printf '%s\n' "${NEURAL_PKGS[@]}" | cksum | cut -d' ' -f1)
+	if [ ! -f "$ready" ]; then
+		command -v uv >/dev/null || die "voice: needs uv; install: $(uv_install_line)"
+		mkdir -p "$root"
+		note "voice: creating the local neural voice environment (one time, a few GB)"
+		[ -x "$py" ] || uv venv --python 3.11 "$root/.venv" >&2 || die "voice: uv venv failed"
+		uv pip install --python "$py" "${NEURAL_PKGS[@]}" >&2 || die "voice: package install failed"
+		: >"$ready"
+	fi
+	echo "$py"
+}
+
+write_generator() {
+	cat >"$1" <<'PY'
+import argparse, os
+from pathlib import Path
+ap = argparse.ArgumentParser()
+ap.add_argument("--text", required=True)
+ap.add_argument("--out", required=True)
+ap.add_argument("--energy", type=float, default=0.7)
+ap.add_argument("--reference", default="")
+ap.add_argument("--kokoro-voice", default="am_fenrir")
+ap.add_argument("--seed", type=int, default=436)
+a = ap.parse_args()
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+import numpy as np, soundfile as sf, torch
+dev = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+out = Path(a.out)
+ref = a.reference
+if not ref:
+    ref = str(out / ".reference.wav")
+    if not Path(ref).exists():
+        from misaki import espeak
+        def _dictionary_only(*_, **__):
+            raise RuntimeError("dictionary G2P only")
+        espeak.EspeakFallback = _dictionary_only
+        from kokoro import KPipeline
+        p = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M", device=dev)
+        s = "This is what I love about building software! We have a real product, a clear vision, and an exciting road ahead."
+        sf.write(ref, np.concatenate([x.cpu().numpy() for _, _, x in p(s, voice=a.kokoro_voice, speed=1.05)]), 24000)
+        del p
+from chatterbox.tts import ChatterboxTTS
+m = ChatterboxTTS.from_pretrained(device=dev)
+m.prepare_conditionals(ref, exaggeration=a.energy)
+for i, line in enumerate(Path(a.text).read_text(encoding="utf-8").splitlines(), 1):
+    if not line.strip():
+        continue
+    torch.manual_seed(a.seed + i)
+    w = m.generate(line.strip(), exaggeration=a.energy, cfg_weight=0.3, temperature=0.8)
+    f = out / f"{i:02d}.raw.wav"
+    sf.write(str(f), w.squeeze().detach().cpu().numpy(), m.sr)
+    print(f, flush=True)
+PY
+}
+
+cmd_voice() {
+	local P="" energy=0.7 ref="" kvoice=am_fenrir force=0
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--energy) energy=${2:?--energy needs a number}; shift 2 ;;
+		--reference) ref=$(abspath "${2:?--reference needs a file}"); shift 2 ;;
+		--kokoro-voice) kvoice=${2:?--kokoro-voice needs a name}; shift 2 ;;
+		--force) force=1; shift ;;
+		-*) die "voice: unknown option: $1" ;;
+		*) [ -z "$P" ] || die "voice: unexpected argument: $1"; P=$1; shift ;;
+		esac
+	done
+	[ -n "$P" ] || die "usage: media voice PROJECT [--energy 0.7] [--reference FILE] [--force]"
+	norm_project "$P"
+	P=$(cd "$P" && pwd)
+	local text=$P/narration.txt
+	[ -f "$P/narration-spoken.txt" ] && text=$P/narration-spoken.txt
+	[ -f "$text" ] || die "voice: missing $P/narration.txt"
+	[ -z "$ref" ] || [ -f "$ref" ] || die "voice: reference not found: $ref"
+	awk -v e="$energy" 'BEGIN{exit !(e>=0.25 && e<=2)}' || die "voice: --energy must be between 0.25 and 2"
+	mkdir -p "$P/voice"
+	local n=0 i
+	n=$(grep -c '' "$text")
+	if [ $force -eq 0 ]; then
+		for ((i = 1; i <= n; i++)); do
+			find_take "$i" >/dev/null 2>&1 && die "voice: $P/voice already has takes; pass --force to replace them"
+		done
+	fi
+	local py gen
+	py=$(neural_python)
+	gen=$(voice_root)/generate.py
+	mkdir -p "$(dirname "$gen")"
+	write_generator "$gen"
+	local args=(--text "$(native_path "$text")" --out "$(native_path "$P/voice")" --energy "$energy" --kokoro-voice "$kvoice")
+	[ -z "$ref" ] || args+=(--reference "$(native_path "$ref")")
+	"$py" "$gen" "${args[@]}" >&2 || die "voice: generation failed"
+	local raw nn
+	for raw in "$P"/voice/*.raw.wav; do
+		[ -f "$raw" ] || continue
+		nn=$(basename "$raw" .raw.wav)
+		rm -f "$P/voice/$nn".{m4a,mp3,webm,mp4,ogg,aac}
+		# Trim leading and trailing silence; narrate fits and normalises later.
+		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$raw" \
+			-af "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse" \
+			"$P/voice/$nn.wav" || die "voice: trimming $nn failed"
+		rm -f "$raw"
+		echo "$P/voice/$nn.wav"
+	done
+}
+
 # ---- build ------------------------------------------------------------------
 
 cmd_build() {
@@ -546,7 +696,8 @@ doctor) doctor ;;
 pdf) shift; cmd_pdf "$@" ;;
 combine) shift; cmd_combine "$@" ;;
 slides) shift; cmd_slides "$@" ;;
+voice) shift; cmd_voice "$@" ;;
 narrate) shift; cmd_narrate "$@" ;;
 build) shift; cmd_build "$@" ;;
-*) die "unknown verb: $1 (doctor, pdf, combine, slides, narrate, build)" ;;
+*) die "unknown verb: $1 (doctor, pdf, combine, slides, voice, narrate, build)" ;;
 esac

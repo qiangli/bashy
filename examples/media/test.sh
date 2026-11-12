@@ -78,4 +78,36 @@ d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$m4a")
 awk -v d="$d" 'BEGIN{exit !(d > 7.5 && d < 8.6)}' || fail "own narration is ${d}s, want about 8s"
 pass "narrate --own: takes fitted to segments (${d}s)"
 
+# 6. voice: a fake generator (MEDIA_VOICE_PY) stands in for the neural model,
+#    so no packages or weights are fetched. It writes NN.raw.wav with padded
+#    silence; voice trims it, keeps existing takes without --force, reads
+#    narration-spoken.txt when present, and narrate --own consumes the result.
+cat >"$TMP/fake-py" <<'FAKE'
+#!/usr/bin/env bash
+shift # the generator script path
+while [ $# -gt 0 ]; do case $1 in --text) text=$2; shift 2 ;; --out) out=$2; shift 2 ;; *) shift ;; esac; done
+cp "$text" "$out/.spoken-seen"
+i=0
+while IFS= read -r line || [ -n "$line" ]; do
+	i=$((i + 1)); [ -n "$line" ] || continue
+	ffmpeg -nostdin -hide_banner -loglevel error -y -f lavfi -i "sine=frequency=400:duration=1.5" \
+		-af "adelay=1000|1000,apad=pad_dur=1" "$out/$(printf %02d $i).raw.wav"
+	echo "$out/$(printf %02d $i).raw.wav"
+done <"$text"
+FAKE
+chmod +x "$TMP/fake-py"
+if MEDIA_VOICE_PY="$TMP/fake-py" media voice "$TMP/proj" >/dev/null 2>"$TMP/voice.err"; then fail "voice replaced takes without --force"; fi
+grep -q -- '--force' "$TMP/voice.err" || fail "voice refusal did not mention --force"
+printf 'Hello from the owner.\nNow the member speaks.\n' >"$TMP/proj/narration-spoken.txt"
+mapfile -t takes < <(MEDIA_VOICE_PY="$TMP/fake-py" media voice "$TMP/proj" --force --energy 0.8)
+[ "${#takes[@]}" = 2 ] && [ "${takes[0]}" = "$TMP/proj/voice/01.wav" ] || fail "voice printed: ${takes[*]}"
+[ ! -e "$TMP/proj/voice/01.m4a" ] || fail "voice left the old 01.m4a take beside 01.wav"
+cmp -s "$TMP/proj/narration-spoken.txt" "$TMP/proj/voice/.spoken-seen" || fail "voice did not read narration-spoken.txt"
+d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "${takes[0]}")
+awk -v d="$d" 'BEGIN{exit !(d > 1.3 && d < 1.8)}' || fail "voice did not trim silence (${d}s, want about 1.5s)"
+rm -f "$TMP/proj/narration.m4a"
+m4a=$(media narrate "$TMP/proj" --own 2>"$TMP/own.err") || fail "--own after voice: $(cat "$TMP/own.err")"
+[ -s "$m4a" ] || fail "no narration from voice takes"
+pass "voice: neural takes (fake model) trimmed, guarded and narrated"
+
 echo "ALL MEDIA TESTS PASSED"

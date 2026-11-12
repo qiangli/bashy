@@ -10,6 +10,7 @@
 | `media pdf IMG... -o OUT.pdf [--title T --author A]` | images to PDF |
 | `media combine A.pdf B.pdf... -o OUT.pdf` | merge PDFs |
 | `media slides IN.pdf DIR` | `DIR/01.png`, `02.png`... for the video |
+| `media voice PROJECT [--energy 0.7] [--reference FILE] [--force]` | `PROJECT/voice/NN.wav`: an expressive local neural voice (Chatterbox, MIT; synthetic speaker or the person's own sample) for `narrate --own`; first run needs `uv` and downloads pinned packages and weights |
 | `media narrate PROJECT --own \| --voice NAME` | `PROJECT/narration.m4a`: line N of `narration.txt` over segment N, fitted, -16 LUFS |
 | `media build PROJECT` | `PROJECT/build/demo.mp4` through `examples/video/video.sh` |
 
@@ -36,6 +37,6 @@ agg are never downloaded or bundled (GPL). The font is OFL (`fonts/OFL.txt`).
 ## Test
 
 ```bash
-bash examples/media/test.sh   # pdf, combine, slides round trip, narrate + build
+bash examples/media/test.sh   # pdf, combine, slides round trip, narrate + build, voice (fake model)
 bash examples/video/test.sh
 ```
