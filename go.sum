@@ -1043,6 +1043,8 @@ github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab h1:OHRJGrZUjF6p04I8
 github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab/go.mod h1:I2nRWPzJSo6Di2rMFEbnKuWFzlQsc8M/GhlYJ8f/PZU=
 github.com/qiangli/outpost v0.14.38-0.20261112135159-9bda173efbf2 h1:yedcfe8ip/nJ/XoQ++gb02gk5y99dHFL88U2ciYnMtE=
 github.com/qiangli/outpost v0.14.38-0.20261112135159-9bda173efbf2/go.mod h1:dQM0pV50TOdBUQ8E7+ChO92gdgquOfjfJEquSFnbYw4=
+github.com/qiangli/outpost v0.14.38-0.20261112210155-2a0736305fb1 h1:MG+o3wENtN9kjB+d2OcPEsQjHxn3vp256Zgp6Fljffo=
+github.com/qiangli/outpost v0.14.38-0.20261112210155-2a0736305fb1/go.mod h1:dQM0pV50TOdBUQ8E7+ChO92gdgquOfjfJEquSFnbYw4=
 github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb h1:sZ0O1FtouYq/ieqiPwCA5s2SQrsTCYTHxJN0PMR7RTw=
 github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb/go.mod h1:G9TZ3lljDx9Cy/MDxevTV4W+VmBelEAF+SJIHLc+zrQ=
 github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4 h1:jFEDhq2xCnc71hq0C/qEYzIuWQSwINigzSrYUGTvYHc=
@@ -1065,6 +1067,8 @@ github.com/qiangli/yoke v0.0.0-20261112134920-116a0c2f91b5 h1:OgS4PxzPzXFEUD7NEb
 github.com/qiangli/yoke v0.0.0-20261112134920-116a0c2f91b5/go.mod h1:dy4y+4zq/gr/AWxIwn/IPmQ/2oiTZIMExcSocX1QyfA=
 github.com/qiangli/yoke v0.0.0-20261112181630-cd638267da58 h1:0XKy+rTO2IQ+G5blUaPspmKe/890LJ3TCXUDYjkV4gU=
 github.com/qiangli/yoke v0.0.0-20261112181630-cd638267da58/go.mod h1:dy4y+4zq/gr/AWxIwn/IPmQ/2oiTZIMExcSocX1QyfA=
+github.com/qiangli/yoke v0.0.0-20261112215151-dc698f7c9799 h1:xhzUK6G+LegbLq+T80pFVR6kXyyaztfdl6flcdCUQdE=
+github.com/qiangli/yoke v0.0.0-20261112215151-dc698f7c9799/go.mod h1:dy4y+4zq/gr/AWxIwn/IPmQ/2oiTZIMExcSocX1QyfA=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f h1:aOhDxEjodWKHckz8+Bp49lmQXh80hK0ucSTtyJcj2NQ=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f/go.mod h1:Q0Q5T6VFoIzC2QCjcH2DnKhvD6lvneoJKxG0TYasq8E=
 github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9 h1:0pOjHOylgAWaCVmImyqwOBhA8xx5EZ/WxrddpBiVF+E=
