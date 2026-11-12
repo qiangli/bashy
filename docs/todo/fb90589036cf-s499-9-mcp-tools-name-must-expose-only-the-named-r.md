@@ -3,14 +3,18 @@ id: fb90589036cf
 kind: bug
 title: 'S499.9 mcp: --tools NAME must expose only the named registered commands, not the whole ring'
 seq: 3226
-status: todo
+status: done
 priority: p2
 labels:
     - mcp
 created: 2026-11-12T17:05:34.659433Z
+weave: 102
+assignee: codex-gpt5.6-sol
 sprint: 499
 sprint_id: c3c45f32-63b5-5575-980f-299a44a561f3
 sprint_title: 'Content creation with bashy: YC videos and a local-first author-to-reader showcase'
+closed: 2026-11-12T18:16:09.948417Z
+closed_by: claude-opus5.5
 ---
 
 S499.9 leftover (code half; tracking story S499.9 124ec3cbaa4e lives in the operator's private store).
