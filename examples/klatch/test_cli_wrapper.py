@@ -13,6 +13,9 @@ BASHY = os.environ.get("BASHY_BIN") or shutil.which("bashy") or "bashy"
 
 def run(args, env=None, stdin=""):
     e = dict(os.environ, **(env or {}))
+    # bashy may print hint JSON on stderr before the script runs; the wrapper's
+    # stderr must stay parseable regardless of the host's hint setting.
+    e["BASHY_HINTS"] = "off"
     return subprocess.run([BASHY, "--bashsharp", str(HERE / "klatch.bsh")] + args,
                           input=stdin, text=True, capture_output=True, env=e)
 
@@ -119,6 +122,26 @@ class Wrapper(unittest.TestCase):
 
     def test_setup_arity_preserved(self):
         self.assertEqual(run(["status"]).returncode, 2)
+
+    def test_sync_arity(self):
+        self.assertEqual(run(["sync"]).returncode, 2)
+        self.assertEqual(json.loads(run(["sync"]).stderr)["error"]["code"], "USAGE")
+        self.assertEqual(run(["sync", "--app"]).returncode, 2)
+        self.assertEqual(run(["sync", "box.example"]).returncode, 2)
+        self.assertEqual(run(["sync", "box.example", "c.json", "extra"]).returncode, 2)
+        self.assertEqual(run(["sync", "box.example", "--bogus", "c.json"]).returncode, 2)
+
+    def test_sync_routes_to_provision_py(self):
+        with tempfile.TemporaryDirectory() as d:
+            py = Path(d) / "python3"
+            rec = Path(d) / "rec"
+            py.write_text('#!/bin/sh\nprintf \'%s\\n\' "$*" > "$FAKE_REC"\n')
+            py.chmod(py.stat().st_mode | stat.S_IXUSR)
+            r = run(["sync", "box.example", "--app", "chat", "c.json", "--dry-run"],
+                    {"PATH": str(py.parent) + ":/usr/bin:/bin", "FAKE_REC": str(rec)})
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(rec.read_text().strip(),
+                             "%s/provision.py sync box.example chat c.json --dry-run" % HERE)
 
 
 if __name__ == "__main__":

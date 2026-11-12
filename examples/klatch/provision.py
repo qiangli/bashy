@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Setup/provision/status adapter for a running Klatch (Databag fork) server.
+"""Setup/provision/status/sync adapter for a running Klatch (Databag fork) server.
 
 Passwords are vault references resolved with `bashy secret show`; they travel
 only in HTTP headers/query parameters the server contract requires, never in
@@ -7,7 +7,9 @@ argv or output.
 """
 import base64
 import json
+import os
 import re
+import shlex
 import subprocess
 import sys
 import urllib.error
@@ -42,6 +44,8 @@ def config(path):
         fail("base_url must be an http(s) URL")
     cfg["base_url"] = base.rstrip("/")
     users = cfg.get("users", [])
+    if not cfg.get("admin_password_secret"):
+        fail("config needs admin_password_secret")
     handles = [u.get("handle", "") for u in users]
     if len(set(handles)) != len(handles):
         fail("user handles must be distinct")
@@ -102,9 +106,13 @@ class Client:
     def setup_admin(self, password):
         self.call("PUT", "/admin/status", {"token": password})
 
-    def set_config(self, session, domain):
-        body = dict(CONFIG_BODY, domain=domain)
-        self.call("PUT", "/admin/config", {"token": session, "setOpenAccess": "true"}, body)
+    def set_config(self, session, domain=None):
+        # no federation domain is set: the server refuses external contacts
+        # (older callers still pass a domain; it is ignored)
+        self.call("PUT", "/admin/config", {"token": session, "setOpenAccess": "true"}, dict(CONFIG_BODY))
+
+    def set_roster(self, session, roster):
+        return self.call("PUT", "/admin/sso/roster", {"token": session}, roster)
 
     def accounts(self, session):
         return self.call("GET", "/admin/accounts", {"token": session}) or []
@@ -329,6 +337,71 @@ def status(client, cfg):
     return out
 
 
+def who(host, app, env=None):
+    """`bashy share who HOST/APP --json` (or $BASHY_KLATCH_WHO_CMD): the host grant roster."""
+    tmpl = (env or os.environ).get("BASHY_KLATCH_WHO_CMD") or "bashy share who {host}/{app} --json"
+    cmd = shlex.split(tmpl.format(host=host, app=app))
+    try:
+        out = subprocess.run(cmd, check=True, text=True,
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except FileNotFoundError:
+        fail("who command not found: %s" % cmd[0])
+    except subprocess.CalledProcessError as err:
+        fail("who command failed: %s" % (err.stderr.strip() or cmd[0]))
+    try:
+        data = json.loads(out.stdout)
+    except ValueError:
+        fail("who command did not return JSON")
+    emails = data.get("emails")
+    if not isinstance(data.get("owner"), str) or not data["owner"] \
+            or not isinstance(emails, list) or not all(isinstance(e, str) and e for e in emails):
+        fail("who JSON needs owner and emails")
+    return data
+
+
+def sync(client, cfg, host, app, dry_run=False, who_fn=who):
+    """Push the host grant roster (owner + admitted member emails) to the SSO roster."""
+    if not re.fullmatch(r"[A-Za-z0-9._-]+", host) or not re.fullmatch(r"[A-Za-z0-9._-]+", app):
+        fail("invalid host or app")
+    data = who_fn(host, app)
+    roster = {"owner": data["owner"], "emails": sorted(set(data["emails"]))}
+    if dry_run:
+        return roster
+    session = client.admin_session(client.resolve(cfg["admin_password_secret"]))
+    return client.set_roster(session, roster)
+
+
+SYNC_USAGE = "usage: sync HOST [--app klatch] CONFIG.json [--dry-run]"
+
+
+def sync_args(argv):
+    host = path = None
+    app = "klatch"
+    dry = False
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--app":
+            i += 1
+            if i >= len(argv):
+                fail("--app needs a value")
+            app = argv[i]
+        elif a == "--dry-run":
+            dry = True
+        elif a.startswith("-"):
+            fail(SYNC_USAGE)
+        elif host is None:
+            host = a
+        elif path is None:
+            path = a
+        else:
+            fail(SYNC_USAGE)
+        i += 1
+    if not host or not path:
+        fail(SYNC_USAGE)
+    return host, app, path, dry
+
+
 def main(argv):
     if len(argv) >= 3 and argv[0] == "reset-passwords":
         cfg = config(argv[1])
@@ -336,8 +409,15 @@ def main(argv):
         session, admin_pw = admin_session(client, cfg, bootstrap=False)
         print(json.dumps(reset_passwords(client, cfg, session, admin_pw, argv[2:]), indent=2))
         return
+    if argv and argv[0] == "sync":
+        host, app, path, dry = sync_args(argv[1:])
+        cfg = config(path)
+        print(json.dumps(sync(Client(cfg["base_url"]), cfg, host, app, dry_run=dry),
+                         indent=2, sort_keys=True))
+        return
     if len(argv) != 2 or argv[0] not in ("setup", "provision", "status"):
         fail("Usage: provision.py setup|provision|status CONFIG.json\n"
+             "       provision.py sync HOST [--app klatch] CONFIG.json [--dry-run]\n"
              "       provision.py reset-passwords CONFIG.json HANDLE...")
     action, path = argv
     cfg = config(path)
@@ -347,9 +427,7 @@ def main(argv):
     else:
         session, _ = admin_session(client, cfg, bootstrap=(action == "setup"))
         if action == "setup":
-            if not cfg.get("domain"):
-                fail("setup requires domain")
-            client.set_config(session, cfg["domain"])
+            client.set_config(session)
         result = provision(client, cfg, session)
     print(json.dumps(result, indent=2, sort_keys=True))
 
