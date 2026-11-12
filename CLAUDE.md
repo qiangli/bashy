@@ -189,7 +189,7 @@ version on the go.mod replace line.
 
 Release tooling and example apps that nothing shipped imports are their own
 modules, so the root `go test ./...` covers only the product: `tools/{bash53aggregate,bashysignalprobe,licensegate,releaseeligibility,verifyhost,windowswslocale,yashsuite,ztst}`
-and `examples/{defaults,desk,local-knowledge/kb-ui,onboard,outpost-profile,satellite-member,satellite-provision}`
+and `examples/{defaults,desk,local-knowledge/kb-ui,onboard,outpost-profile,satellite-member,satellite-provision,vlog}`
 each have a `go.mod` (module path = import path, so no code moved). Run a tool
 with `scripts/go-tool.sh NAME ARGS` (keeps the caller's cwd); test one with
 `GOWORK=off go -C tools/NAME test ./...`. Tools importing bashy `internal/`
