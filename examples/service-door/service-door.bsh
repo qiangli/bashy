@@ -1,0 +1,52 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Generic service command body. The first fixed argument is its open role.
+set -eu
+role=${1:?service role required}; shift
+provider= route= out= request= json=0 dry=0 yes=0 async=0 providers=0
+args=()
+while [ "$#" -gt 0 ]; do
+    case $1 in
+        --provider) provider=${2:?}; shift 2 ;;
+        --provider=*) provider=${1#*=}; shift ;;
+        --route) route=${2:?}; shift 2 ;;
+        --route=*) route=${1#*=}; shift ;;
+        --out) out=${2:?}; shift 2 ;;
+        --out=*) out=${1#*=}; shift ;;
+        --json) json=1; shift ;;
+        --dry-run) dry=1; shift ;;
+        --yes) yes=1; shift ;;
+        --async) async=1; shift ;;
+        --providers) providers=1; shift ;;
+        *) args+=("$1"); shift ;;
+    esac
+done
+if [ "$providers" = 1 ]; then bashy providers "$role" --json; exit $?; fi
+# A JSON request is passed to the selector; other operands go to the provider.
+if [ "${#args[@]}" -gt 0 ] && [[ ${args[0]} == *.json ]] && [ -f "${args[0]}" ]; then
+    request=${args[0]}; args=("${args[@]:1}")
+fi
+select_args=(select "$role" --json)
+[ -z "$provider" ] || select_args+=(--provider "$provider")
+[ -z "$route" ] || select_args+=(--route "$route")
+[ "$yes" = 0 ] || select_args+=(--yes)
+[ -z "$request" ] || select_args+=("$request")
+chosen=$(BASHY_HINTS=off bashy providers "${select_args[@]}") || exit $?
+name=$(printf '%s\n' "$chosen" | jq -r .name)
+selected_route=$(printf '%s\n' "$chosen" | jq -r .route)
+if [ "$dry" = 1 ]; then
+    BASHY_SVC_ROLE="$role" BASHY_SVC_PROVIDER="$name" BASHY_SVC_ROUTE="$selected_route" jq -n '{schema_version:"bashy-svc-v1",role:env.BASHY_SVC_ROLE,provider:env.BASHY_SVC_PROVIDER,route:env.BASHY_SVC_ROUTE,outcome:"dry-run",outputs:[],text:"",cost_class:env.BASHY_SVC_ROUTE,elapsed:0}'
+    exit 0
+fi
+confirm_args=()
+[ "$yes" = 0 ] || confirm_args=(--yes)
+start=$SECONDS
+if [[ $name == *:* ]]; then
+    if [ "$async" = 1 ]; then bashy tool cmd run "$name" "${args[@]}" "${confirm_args[@]}" > /dev/null 2>&1 & else text=$(bashy tool cmd run "$name" "${args[@]}") || status=$?; fi
+else
+    if [ "$async" = 1 ]; then bashy "$name" "${args[@]}" > /dev/null 2>&1 & else text=$(bashy "$name" "${args[@]}") || status=$?; fi
+fi
+if [ "$async" = 1 ]; then outcome=queued; text=; else outcome=success; [ "${status:-0}" = 0 ] || outcome=error; fi
+elapsed=$(($SECONDS - start))
+[ -z "$out" ] || mkdir -p "$out"
+BASHY_SVC_ROLE="$role" BASHY_SVC_PROVIDER="$name" BASHY_SVC_ROUTE="$selected_route" BASHY_SVC_OUTCOME="$outcome" BASHY_SVC_TEXT="${text:-}" BASHY_SVC_ELAPSED="$elapsed" jq -n '{schema_version:"bashy-svc-v1",role:env.BASHY_SVC_ROLE,provider:env.BASHY_SVC_PROVIDER,route:env.BASHY_SVC_ROUTE,outcome:env.BASHY_SVC_OUTCOME,outputs:[],text:env.BASHY_SVC_TEXT,cost_class:env.BASHY_SVC_ROUTE,elapsed:(env.BASHY_SVC_ELAPSED|tonumber)}'
+[ "${status:-0}" = 0 ]

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 
 	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/providerselector"
 	"github.com/qiangli/yoke/pkg/spacetime"
 )
 
@@ -78,13 +78,8 @@ func runTranscribeSelect(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// selectExplicitProvider resolves one effective command record. The local
-// command ring has already applied overrides, so an explicit name avoids
-// automatic ambiguity while retaining the provider's declared requirements.
+// selectExplicitProvider preserves the stage-facing errors while using the shared selector.
 func selectExplicitProvider(role, name string, request any, records []fleet.Command, probes *spacetime.ProbeSet) (string, error) {
-	if probes == nil {
-		probes = spacetime.DefaultProbes(spacetime.NopCache())
-	}
 	for _, rec := range records {
 		if rec.Name != name {
 			continue
@@ -98,47 +93,32 @@ func selectExplicitProvider(role, name string, request any, records []fleet.Comm
 		if ok, reason := rec.AcceptsJSON(request); !ok {
 			return "", fmt.Errorf("provider %q does not support this request: %s", name, reason)
 		}
-		return rec.Name, nil
+		opt := providerselector.Options{Role: role, Provider: name, Request: request, Yes: true, Probes: probes}
+		selected, err := providerselector.Select(providerselector.Project(records, nil, opt), opt)
+		if err != nil {
+			return "", err
+		}
+		return selected.Name, nil
 	}
 	return "", fmt.Errorf("provider %q is not registered; register it with `bashy commands add %s`", name, name)
 }
 
 func selectRegisteredProvider(role string, request any, records []fleet.Command, probes *spacetime.ProbeSet) (string, error) {
-	if probes == nil {
-		probes = spacetime.DefaultProbes(spacetime.NopCache())
+	opt := providerselector.Options{Role: role, Request: request, Yes: true, Probes: probes}
+	selected, err := providerselector.Select(providerselector.Project(records, nil, opt), opt)
+	if err == nil {
+		return selected.Name, nil
 	}
-	var candidates, rejected []string
-	declared := 0
-	for _, rec := range records {
-		if !rec.ProvidesRole(role) {
-			continue
-		}
-		declared++
-		if verdict := rec.Applicability(probes); !verdict.Applicable {
-			rejected = append(rejected, rec.Name+": "+verdict.Failing)
-			continue
-		}
-		if ok, reason := rec.AcceptsJSON(request); !ok {
-			rejected = append(rejected, rec.Name+": "+reason)
-			continue
-		}
-		candidates = append(candidates, rec.Name)
+	stage := strings.TrimPrefix(role, "transcribe.")
+	if strings.HasPrefix(err.Error(), "ambiguous") {
+		names := strings.TrimSuffix(strings.TrimPrefix(err.Error(), "ambiguous "+role+" providers: "), "; pass --provider NAME")
+		return "", fmt.Errorf("ambiguous %s adapters: %s; pass %s NAME to select one explicitly", stage, names, transcribeProviderFlag(stage))
 	}
-	sort.Strings(candidates)
-	sort.Strings(rejected)
-	if len(candidates) == 1 {
-		return candidates[0], nil
-	}
-	if len(candidates) > 1 {
-		stage := strings.TrimPrefix(role, "transcribe.")
-		return "", fmt.Errorf("ambiguous %s adapters: %s; pass %s NAME to select one explicitly",
-			stage, strings.Join(candidates, ", "), transcribeProviderFlag(stage))
-	}
-	if declared == 0 {
+	if strings.HasPrefix(err.Error(), "no provider declares") {
 		return "", fmt.Errorf("no registered command provides %q; register one with `bashy commands add NAME --set provides.0=%s ...`", role, role)
 	}
-	return "", fmt.Errorf("no registered %s adapter supports this request on this host (%s); adjust its accepts/requires/os declaration or select a provider explicitly",
-		strings.TrimPrefix(role, "transcribe."), strings.Join(rejected, "; "))
+	reason := strings.TrimSuffix(strings.TrimPrefix(err.Error(), "no provider supports "+fmt.Sprintf("%q", role)+" ("), ")")
+	return "", fmt.Errorf("no registered %s adapter supports this request on this host (%s); adjust its accepts/requires/os declaration or select a provider explicitly", stage, reason)
 }
 
 func transcribeProviderFlag(stage string) string {

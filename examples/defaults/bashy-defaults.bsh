@@ -85,6 +85,14 @@ satellite-provision|examples/satellite-provision/satellite-provision.bsh|read,wr
 media|examples/media/media.bsh|read,write,exec,net
 record|examples/record/record.bsh|read,write,exec
 cast|examples/cast/cast.bsh|read,write,exec
+plan|examples/service-door/service-door.bsh|read,exec,net|plan
+image|examples/service-door/service-door.bsh|read,write,exec,net|image.generate
+draw|examples/service-door/service-door.bsh|read,write,exec,net|draw
+pdf|examples/service-door/service-door.bsh|read,write,exec,net|pdf.read
+video|examples/service-door/service-door.bsh|read,exec,net|video.understand
+narrate|examples/service-door/service-door.bsh|read,write,exec,net|narrate
+email|examples/service-door/service-door.bsh|read,write,exec,net|email.read
+drive|examples/service-door/service-door.bsh|read,write,exec,net|drive.read
 bashy-defaults|examples/defaults/bashy-defaults.bsh|read,write,exec"
 
 usage() {
@@ -156,7 +164,7 @@ cmd_apply() {
         echo "$PROG: upgraded the bashy source pin"
     fi
     [ -d "$src/examples" ] || fail "no source pin at $src" 1
-    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects; do
+    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects role; do
         [ -n "$name" ] || continue
         path="$src/$rel"
         if [ ! -f "$path" ]; then
@@ -170,6 +178,7 @@ cmd_apply() {
             continue
         fi
         set -- --set "exec.0=$(runtime_bin)" --set exec.1=--bashsharp --set "exec.2=$registry"
+        [ -z "$role" ] || set -- "$@" --set "exec.3=$role"
         i=0
         for e in ${effects//,/ }; do
             set -- "$@" --set "effects.$i=$e"
@@ -213,7 +222,7 @@ cmd_status() {
     else
         echo "source pin: missing (run: $PROG apply)"
     fi
-    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects; do
+    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects role; do
         [ -n "$name" ] || continue
         current=$(registered_path "$name")
         if [ -z "$current" ]; then
