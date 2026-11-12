@@ -6,14 +6,16 @@ description: Manage Cloudbox app suites and share them with members or circles.
 # suite — app suites and circle grants
 
 `bashy suite` manages named collections of hosted apps with the Cloudbox
-account owner credential. Each app is identified as `HOST/APP`. `set` creates
-or replaces a suite's app list; `add` and `remove` change one app at a time.
+account owner credential. An app is a bare `APP` (granted on whichever of your
+hosts serves it, the usual form) or `HOST/APP` (that one host only). `set`
+creates or replaces a suite's app list; `add` and `remove` change one app at a
+time. The same app can belong to any number of suites.
 
 ```sh
 bashy suite ls --json
 bashy suite show work --json
-bashy suite set work host1/calendar host1/notes --dry-run --json
-bashy suite set work host1/calendar host1/notes --json
+bashy suite set work calendar notes --dry-run --json
+bashy suite set work calendar notes --json
 bashy suite add work host2/viewer --dry-run --json
 bashy suite remove work host2/viewer --dry-run --json
 bashy suite share work --circle team --dry-run --json
