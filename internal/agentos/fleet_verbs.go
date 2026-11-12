@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/share"
 )
 
 // newFleetCmd mounts the coordination-credential tree under the `fleet`
@@ -83,12 +84,41 @@ func dispatchMember(args []string) int {
 	return 0
 }
 
+// dispatchGroup runs the account group tree from yoke.
+func dispatchGroup(args []string) int {
+	cmd := fleet.NewGroupCmd()
+	setCobraArgs(cmd, args)
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy group:", err)
+		return fleet.ExitCode(err)
+	}
+	return 0
+}
+
 // dispatchSuite runs the Cloudbox app suite tree from yoke.
 func dispatchSuite(args []string) int {
 	cmd := fleet.NewSuiteCmd()
 	setCobraArgs(cmd, args)
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "bashy suite:", err)
+		return fleet.ExitCode(err)
+	}
+	return 0
+}
+
+// newShareCmd mounts yoke's `who` subcommand under the existing `share` command.
+func newShareCmd() *cobra.Command {
+	cmd := share.NewCmd()
+	cmd.AddCommand(fleet.NewShareWhoCmd())
+	return cmd
+}
+
+// dispatchShare runs the `bashy share` verb (`share qr` and `share who`).
+func dispatchShare(args []string) int {
+	cmd := newShareCmd()
+	setCobraArgs(cmd, args)
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy share:", err)
 		return fleet.ExitCode(err)
 	}
 	return 0

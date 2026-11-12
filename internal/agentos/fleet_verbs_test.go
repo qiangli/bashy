@@ -230,6 +230,56 @@ func TestMemberFrontDoorRegistration(t *testing.T) {
 	}
 }
 
+func TestGroupFrontDoorRegistration(t *testing.T) {
+	ringDir(t)
+	if !slices.Contains(alwaysShimVerbs, "group") {
+		t.Fatal("group has no bare shim")
+	}
+	if synopsisOf("group") == "" {
+		t.Fatal("group has no synopsis")
+	}
+	if _, _, verbs := commandsCatalog(); !slices.Contains(verbs, "group") {
+		t.Fatal("group missing from command catalog")
+	}
+	for _, path := range []string{"group", "group ls", "group add", "group rm", "group delete"} {
+		if _, ok := cobraSchemas("group")[path]; !ok {
+			t.Errorf("group schema missing %q", path)
+		}
+	}
+	for _, tc := range []struct{ sub, flag string }{{"ls", "--json"}, {"add", "--dry-run"}, {"rm", "--dry-run"}, {"delete", "--dry-run"}} {
+		out, err := runFleetVerb(t, "group", tc.sub, "--help")
+		if err != nil || !strings.Contains(out, tc.flag) {
+			t.Errorf("group %s --help missing %s: %v\n%s", tc.sub, tc.flag, err, out)
+		}
+	}
+	if _, ok := cobraSchemas("group")["group completion"]; ok {
+		t.Error("group unexpectedly exposes cobra completion")
+	}
+	for _, effect := range []string{"net", "read", "write"} {
+		if !slices.Contains(verbAtlasRecord("group", false).Effects, effect) {
+			t.Errorf("group atlas missing %s", effect)
+		}
+	}
+}
+
+func TestShareWhoFrontDoorRegistration(t *testing.T) {
+	ringDir(t)
+	schemas := cobraSchemas("share")
+	for _, path := range []string{"share", "share qr", "share who"} {
+		if _, ok := schemas[path]; !ok {
+			t.Errorf("share schema missing %q", path)
+		}
+	}
+	out, err := runFleetVerb(t, "share", "who", "--help")
+	if err != nil || !strings.Contains(out, "--json") {
+		t.Errorf("share who --help missing --json: %v\n%s", err, out)
+	}
+	qrOut, err := runFleetVerb(t, "share", "qr", "--help")
+	if err != nil || !strings.Contains(qrOut, "--png") {
+		t.Errorf("share qr --help missing --png: %v\n%s", err, qrOut)
+	}
+}
+
 func TestSuiteFrontDoorRegistration(t *testing.T) {
 	ringDir(t)
 	if !slices.Contains(alwaysShimVerbs, "suite") || synopsisOf("suite") == "" {
@@ -248,14 +298,18 @@ func TestSuiteFrontDoorRegistration(t *testing.T) {
 		t.Fatalf("suite share dry run: %v", err)
 	}
 	var request struct {
-		DryRun bool              `json:"dry_run"`
-		Method string            `json:"method"`
-		Body   map[string]string `json:"body"`
+		DryRun bool   `json:"dry_run"`
+		Method string `json:"method"`
+		Body   struct {
+			Circles []string `json:"circles"`
+			Groups  []string `json:"groups"`
+			Emails  []string `json:"emails"`
+		} `json:"body"`
 	}
 	if err := json.Unmarshal([]byte(out), &request); err != nil {
 		t.Fatalf("suite share dry run JSON: %v: %s", err, out)
 	}
-	if !request.DryRun || request.Method != http.MethodPost || request.Body["circle"] != "team" {
+	if !request.DryRun || request.Method != http.MethodPost || !slices.Equal(request.Body.Circles, []string{"team"}) {
 		t.Errorf("suite share dry run = %+v", request)
 	}
 }

@@ -20,7 +20,7 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261106222935-97e83ec7afdf
 	github.com/qiangli/ycode v0.3.1-dev.0.20261103194741-5e1538ce6281
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261112074341-34eed3c8501d
+	github.com/qiangli/yoke v0.0.0-20261112134920-116a0c2f91b5
 	github.com/qiangli/yoke/external/otel v0.0.0-20261111210527-fb4cdb36c6d6
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -376,7 +376,7 @@ require (
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261103194740-24dd0f47247e // indirect
 	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261111093751-ee1c33447135 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261112135159-9bda173efbf2 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
 	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261111210527-fb4cdb36c6d6 // indirect
 	github.com/qiangli/yoke/pkg/oci v0.0.0-20261111210527-fb4cdb36c6d6 // indirect
