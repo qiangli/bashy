@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [repo/page] Extend bashy: small verbs, Bash# skill-scripts, shaping hooks, and the example → optional → core levels — How every agent adds or changes bashy features, runbooks and shaped apps: compose small JSON verbs in Bash# skill-scripts, design a shaping hook, start new helpers as examples and graduate them to optio  (kb:extend-bashy-small-verbs-bash-skill-scripts-shaping-hooks-and-th)
+- [repo/page] Connect one host to several satellites at once (outpost-profile up) — LEGACY (kept until concurrent attachments ship; prefer `bashy outpost satellite attach`): publish a host's apps (e.g. Klatch) through more than one satellite simultaneously by running one outpost instance per extra satellite — WHEN a host m  (kb:connect-one-host-to-several-satellites-at-once-outpost-profile-u)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 

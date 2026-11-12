@@ -1,13 +1,12 @@
 ---
 name: vlog
-description: bashy dag front door for examples/vlog — build a static vlog, serve it locally, publish via Outpost or GitHub Pages
+description: bashy dag front door for examples/vlog — build a static vlog, serve it from the bashy console, publish via Outpost or GitHub Pages
 type: dag
 default: build
 vars:
   - SITE ?= sample
-  - ADDR ?= 127.0.0.1:18090
   - NAME ?= vlog
-  - PORT ?= 18090
+  - CONSOLE_PORT ?= 22749
   - REPO ?=
   - BRANCH ?= gh-pages
 ---
@@ -15,8 +14,9 @@ vars:
 # vlog — task graph
 
 A small video blog, authored and hosted on your own machine. `vlog.sh build`
-turns `SITE/posts/*.md` (each with a video) into a static site; `serve` runs a
-loopback-only server; `publish-outpost` lets a paired Outpost share it as a
+turns `SITE/posts/*.md` (each with a video) into a static site; `serve`
+registers it with the bashy console, which serves the directory itself at
+/NAME/; `publish-outpost` lets a paired Outpost share that console path as a
 link anyone can open; `publish-pages` pushes the same site to GitHub Pages.
 Run it from anywhere by naming the folder: `bashy dag examples/vlog build
 SITE=$PWD/my-vlog`.
@@ -32,40 +32,30 @@ Effects: read, write
 ./vlog.sh build "$SITE"
 ```
 
-### server
-Build the loopback web server for this machine (Go, standard library only).
-Effects: read, write, exec, net
-Generates: bin/vlog-server
-
-```bash
-./vlog.sh server
-```
-
-### server-windows
-Cross-build the server for a Windows host (bin/vlog-server-windows-amd64.exe).
-Effects: read, write, exec, net
-
-```bash
-./vlog.sh server windows amd64
-```
-
 ### serve
-Serve SITE/public on ADDR (foreground; Ctrl-C stops).
-Requires: build, server
+Register SITE/public with the bashy console as app NAME (`app add --type
+site`); the console serves it at http://127.0.0.1:CONSOLE_PORT/NAME/.
+Re-running updates the same record. If the console is not running, serve
+says how to start it (`bashy app serve`); it never starts one itself.
+Requires: build
 Env: BASHY_HINTS=off
-Effects: read, net, exec
+Effects: read, write, exec, net
 
 ```bash
-./vlog.sh serve "$SITE" "$ADDR"
+CONSOLE_PORT="$CONSOLE_PORT" ./vlog.sh serve "$SITE" "$NAME"
 ```
 
 ### publish-outpost
-Register the loopback site with this host's Outpost as app NAME: a public
-link anyone can open (add --require-login in vlog.sh to restrict it).
-Effects: net, exec
+Make app NAME public (`bashy app set NAME --auth public`: the Outpost link
+reaches the console with no login), then register this host's Outpost app
+NAME -> http://127.0.0.1:CONSOLE_PORT/NAME/. Anyone with the link can read
+the site; undo with `outpost apps rm NAME` and `bashy app set NAME --auth
+system`.
+Requires: serve
+Effects: exec, net
 
 ```bash
-./vlog.sh publish-outpost "$NAME" "$PORT"
+CONSOLE_PORT="$CONSOLE_PORT" ./vlog.sh publish-outpost "$NAME"
 ```
 
 ### publish-pages

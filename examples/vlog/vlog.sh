@@ -3,9 +3,8 @@
 # a static site out, then publish it two ways.
 #
 #   vlog.sh build   SITE_DIR            -> SITE_DIR/public/
-#   vlog.sh server  [GOOS GOARCH]       -> bin/vlog-server[-GOOS-GOARCH][.exe]
-#   vlog.sh serve   SITE_DIR [ADDR]     serve public/ on loopback (foreground)
-#   vlog.sh publish-outpost NAME PORT   register the loopback site with Outpost as a public link
+#   vlog.sh serve   SITE_DIR [NAME]     register SITE_DIR/public with the bashy console
+#   vlog.sh publish-outpost NAME        share the console site through Outpost as a public link
 #   vlog.sh publish-pages SITE_DIR REPO [BRANCH]
 #                                       push public/ to a GitHub Pages branch (default gh-pages)
 #
@@ -97,26 +96,32 @@ $list" >"$out/index.html"
 	echo "vlog: $n post(s) -> $out"
 }
 
-server() {
-	local os=${1:-} arch=${2:-} name=vlog-server
-	[ -n "$os" ] && name+="-$os-$arch"
-	[ "$os" = windows ] && name+=.exe
-	mkdir -p "$HERE/bin"
-	(cd "$HERE/server" && env GOWORK=off CGO_ENABLED=0 ${os:+GOOS=$os} ${arch:+GOARCH=$arch} go build -trimpath -o "$HERE/bin/$name" .)
-	echo "vlog: $HERE/bin/$name"
-}
-
 serve() {
+	# Register the built site as a console app: bashy serves the directory
+	# itself at http://127.0.0.1:PORT/NAME/. Re-running updates the same
+	# record, so the source path never drifts between runs.
 	local site; site=$(cd "${1:?site dir}" && pwd)
-	[ -x "$HERE/bin/vlog-server" ] || server >/dev/null
-	exec "$HERE/bin/vlog-server" -dir "$site/public" -addr "${2:-127.0.0.1:18090}"
+	local name=${2:-${NAME:-vlog}} port=${CONSOLE_PORT:-22749}
+	[ -f "$site/public/index.html" ] || die "build first: $site/public is empty"
+	if bashy app show "$name" >/dev/null 2>&1; then
+		bashy app set "$name" --type site --source "$site/public"
+	else
+		bashy app add "$name" --type site --source "$site/public"
+	fi
+	echo "vlog: $name -> http://127.0.0.1:$port/$name/"
+	# The console is the operator's foreground program; never start one silently.
+	if ! (exec 3<>/dev/tcp/127.0.0.1/$port) 2>/dev/null; then
+		echo "vlog: the console is not running; start it with: bashy app serve"
+	fi
 }
 
 publish_outpost() {
-	local name=${1:?app name} port=${2:-18090}
-	# No --require-login: anyone with the link can open it. Add
-	# --require-login to limit it to you and the people you share with.
-	outpost apps add "$name" --url "http://127.0.0.1:$port"
+	local name=${1:?app name} port=${CONSOLE_PORT:-22749}
+	# --auth public: the Outpost link reaches the console with no login,
+	# so anyone with the link can read the site. Undo:
+	#   outpost apps rm NAME; bashy app set NAME --auth system
+	bashy app set "$name" --auth public
+	outpost apps add "$name" --url "http://127.0.0.1:$port/$name/"
 }
 
 publish_pages() {
@@ -142,9 +147,8 @@ publish_pages() {
 
 case ${1:-} in
 build) build "${2:-}" ;;
-server) server "${2:-}" "${3:-}" ;;
 serve) serve "${2:-}" "${3:-}" ;;
-publish-outpost) publish_outpost "${2:-}" "${3:-}" ;;
+publish-outpost) publish_outpost "${2:-}" ;;
 publish-pages) publish_pages "${2:-}" "${3:-}" "${4:-}" ;;
-*) sed -n '2,12p' "$0" >&2; exit 2 ;;
+*) sed -n '2,11p' "$0" >&2; exit 2 ;;
 esac
