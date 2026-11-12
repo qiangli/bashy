@@ -2,7 +2,9 @@
 
 `bashy klatch` bootstraps and provisions a running **Klatch** server (our
 rebranded Databag fork). Register with `bash examples/klatch/register.sh`,
-then run `bashy klatch setup|provision|status CONFIG.json`. Registration
+then run `bashy klatch setup|provision|status CONFIG.json`, and
+`bashy klatch sync HOST [--app klatch] CONFIG.json` to push the cloudbox
+host-grant roster. Registration
 installs and starts nothing; the server must already be running at `base_url`
 (for example `http://127.0.0.1:7100`, or a public proxied app URL).
 
@@ -11,7 +13,6 @@ Example config (keep the real file outside the repository):
 ```json
 {
   "base_url": "http://127.0.0.1:7100",
-  "domain": "chat.example.test",
   "admin_password_secret": "klatch/admin",
   "users": [
     {"handle": "alice", "password_secret": "klatch/alice"},
@@ -26,17 +27,32 @@ Example config (keep the real file outside the repository):
 
 Create each secret with `bashy secret gen | bashy secret set REF`. Passwords
 are only vault references; they are resolved with `bashy secret show` and are
-never printed or placed in argv. There is no built-in roster.
+never printed or placed in argv. The member roster is not configured here:
+`sync` pushes it from the cloudbox host grant.
 
 | Action | Effect |
 | --- | --- |
-| `setup` | bootstrap the admin password if the server is fresh, set the federation domain and closed access, then provision |
+| `setup` | bootstrap the admin password if the server is fresh, set closed access (no federation domain, so external contacts are refused), then provision |
 | `provision` | create missing accounts, mutual contacts (owner and members), and groups |
 | `status` | report reachability, bootstrap state, account count, groups found |
+| `sync` | push the cloudbox host-grant roster to the server's SSO accounts; `--dry-run` prints the roster without sending |
 
 `setup` and `provision` print JSON: `{"handles": {handle: guid}, "groups":
 {key: id}}`. Reruns skip existing accounts, contacts and groups (groups are
 matched by subject), so they never duplicate.
+
+## Roster sync (host grant)
+
+`bashy klatch sync HOST [--app klatch] CONFIG.json [--dry-run]` reads
+`bashy share who HOST/APP --json` — the host grant roster: the owner plus
+every member email the grant admits — and PUTs `{"owner": ..., "emails": [...]}`
+to `PUT /admin/sso/roster` with the admin password from `admin_password_secret`
+(resolved from the vault, never printed or in argv). The server creates,
+enables and disables single-sign-on linked accounts to match (password
+accounts are never touched) and its JSON response (`members`, `created`,
+`enabled`, `disabled`) is printed. The PUT is idempotent: reruns converge with
+`created: 0, disabled: 0`. `--dry-run` prints the roster without sending.
+`BASHY_KLATCH_WHO_CMD` overrides the who command (used by the tests).
 
 Tests (fake HTTP server, no real server needed):
 `python3 -m unittest examples/klatch/test_provision.py`
