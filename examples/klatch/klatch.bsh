@@ -12,12 +12,18 @@ metadata:
 
 Run `bashy klatch setup CONFIG.json` against a running Klatch server reachable
 at the `base_url` of the config. It bootstraps the admin password if needed, sets
-the federation domain and closed access, then provisions accounts, mutual
-contacts between group owner and members and groups. `provision` skips the admin
-steps; `status` reports reachability, account count and groups. Output is JSON
-handles to guids and group keys to ids. Reruns create no duplicates.
-Passwords are vault references via `bashy secret show REF`; never put one in
-the config or on a command line.
+closed access with no federation domain (the server refuses external contacts),
+then provisions accounts, mutual contacts between group owner and members and
+groups. `provision` skips the admin steps; `status` reports reachability, account
+count and groups. Output is JSON handles to guids and group keys to ids. Reruns
+create no duplicates. Passwords are vault references via `bashy secret show REF`;
+never put one in the config or on a command line. `sync HOST [--app klatch]
+CONFIG.json [--dry-run]` reads `bashy share who HOST/APP --json` (the cloudbox
+host grant roster: owner plus admitted member emails) and PUTs `{"owner",
+"emails"}` to the server's `/admin/sso/roster` with the admin password; the
+server creates, enables and disables SSO-linked accounts to match. Idempotent;
+`--dry-run` prints the roster without sending; `BASHY_KLATCH_WHO_CMD` overrides
+the who command (tests).
 
 Every other verb is the participant command, routed by this script to the
 Klatch Node helper (Node >=22, required) for protocol, crypto, sessions and
@@ -54,7 +60,7 @@ if [[ ${1:-} == --contract ]]; then
   exit
 fi
 
-usage_text='Usage: klatch setup|provision|status CONFIG.json | VERB [key=value|key:=JSON ...] [--input FILE|-] [--session FILE] [--json] | post-file ...'
+usage_text='Usage: klatch setup|provision|status CONFIG.json | sync HOST [--app klatch] CONFIG.json [--dry-run] | VERB [key=value|key:=JSON ...] [--input FILE|-] [--session FILE] [--json] | post-file ...'
 usage() {
   printf '{"ok":false,"error":{"code":"USAGE","message":"%s"}}\n' "$usage_text" >&2
   exit 2
@@ -100,6 +106,25 @@ case $verb in
       exit 2
     fi
     exec python3 "$here/provision.py" "$1" "$2" ;;
+  sync)
+    host=; app=klatch; cfg=; dry=false
+    shift
+    while (( $# )); do
+      case $1 in
+        --app) (( $# >= 2 )) || usage; app=$2; shift 2 ;;
+        --dry-run) dry=true; shift ;;
+        -*) usage ;;
+        *)
+          if [[ -z $host ]]; then host=$1
+          elif [[ -z $cfg ]]; then cfg=$1
+          else usage; fi
+          shift ;;
+      esac
+    done
+    [[ -n $host && -n $cfg ]] || usage
+    args=(sync "$host" "$app" "$cfg")
+    [[ $dry == true ]] && args+=(--dry-run)
+    exec python3 "$here/provision.py" "${args[@]}" ;;
   --help|help)
     if [[ -n ${KLATCH_HELPER:-} ]] || command -v klatch-helper >/dev/null 2>&1; then
       helper_cmd

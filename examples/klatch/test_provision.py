@@ -3,12 +3,17 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import re
+import shlex
+import subprocess
 import threading
+import types
 import unittest
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location("klatch_provision", Path(__file__).with_name("provision.py"))
 module = importlib.util.module_from_spec(spec)
@@ -16,6 +21,9 @@ spec.loader.exec_module(module)
 
 ADMIN = "adminpw"
 SECRETS = {"klatch/admin": ADMIN, "klatch/alice": "apw", "klatch/bob": "bpw", "klatch/carol": "cpw"}
+WHO = {"host": "box.example", "app": "klatch", "owner": "alice@example.com",
+       "emails": ["carol@example.com", "bob@example.com", "bob@example.com"]}
+ROSTER = {"owner": WHO["owner"], "emails": ["bob@example.com", "carol@example.com"]}
 
 
 class State:
@@ -31,6 +39,8 @@ class State:
         self.resets = {}        # reset token -> handle
         self.next = 0
         self.connected_calls = []
+        self.sso = set()         # sso-linked emails
+        self.rosters = []       # (query, body) per PUT /admin/sso/roster
 
     def nid(self):
         self.next += 1
@@ -72,6 +82,15 @@ def make_handler(st):
             if p == "/admin/config" and method == "PUT":
                 st.config = (q, body)
                 return self.reply(None)
+            if p == "/admin/sso/roster" and method == "PUT":
+                if q.get("token") != "SESSION":
+                    return self.reply(None, 401)
+                st.rosters.append((dict(q), body))
+                emails = set(body["emails"]) - {body["owner"]}
+                res = {"members": len(emails), "created": len(emails - st.sso),
+                       "enabled": 0, "disabled": len(st.sso - emails)}
+                st.sso = emails
+                return self.reply(res)
             if p == "/admin/accounts" and method == "GET":
                 return self.reply([{"username": h, "accountId": i + 1} for i, h in enumerate(st.accounts)])
             if p.startswith("/admin/accounts/") and p.endswith("/reset"):
@@ -310,6 +329,107 @@ class ProvisionTest(unittest.TestCase):
             p.write_text(json.dumps(bad))
             with self.assertRaises(SystemExit):
                 module.config(p)
+
+    # --- sync ---
+
+    def sync_env(self, t):
+        Path(t, "who.json").write_text(json.dumps(WHO))
+        cfgp = Path(t) / "c.json"
+        cfgp.write_text(json.dumps(self.cfg))
+        return {"BASHY_KLATCH_WHO_CMD": "cat %s" % shlex.quote(str(Path(t) / "who.json"))}, str(cfgp)
+
+    def run_sync_main(self, t, extra):
+        env, cfgp = self.sync_env(t)
+        module.admin_session(self.client, self.cfg, bootstrap=True)
+        real = module.Client
+        module.Client = lambda base, resolve=None: self.client
+        out = io.StringIO()
+        try:
+            with mock.patch.dict(os.environ, env):
+                with contextlib.redirect_stdout(out):
+                    module.main(["sync", "box.example"] + extra + [cfgp])
+        finally:
+            module.Client = real
+        return out.getvalue().strip()
+
+    def test_sync_dry_run_prints_roster_without_sending(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            out = self.run_sync_main(t, ["--dry-run"])
+            self.assertEqual(json.loads(out), ROSTER)
+            self.assertEqual(self.st.rosters, [])
+
+    def test_sync_puts_roster_with_admin_session(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            out = self.run_sync_main(t, [])
+            q, body = self.st.rosters[0]
+            self.assertEqual(q["token"], "SESSION")
+            self.assertEqual(body, ROSTER)
+            self.assertEqual(json.loads(out), {"members": 2, "created": 2, "enabled": 0, "disabled": 0})
+
+    def test_sync_idempotent(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            first = self.run_sync_main(t, [])
+            second = self.run_sync_main(t, [])
+            self.assertEqual(json.loads(first)["created"], 2)
+            self.assertEqual(json.loads(second),
+                             {"members": 2, "created": 0, "enabled": 0, "disabled": 0})
+            self.assertEqual(self.st.rosters[0], self.st.rosters[1])
+
+    def test_sync_rejects_bad_who_json(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            env, cfgp = self.sync_env(t)
+            Path(t, "who.json").write_text('{"owner":"o@x","emails":"nope"}')
+            with mock.patch.dict(os.environ, env):
+                with self.assertRaises(SystemExit):
+                    module.main(["sync", "box.example", cfgp])
+            self.assertEqual(self.st.rosters, [])
+
+    def test_who_default_command(self):
+        argvs = []
+        real_run = subprocess.run
+
+        def rec(cmd, **kw):
+            argvs.append(cmd)
+            return types.SimpleNamespace(returncode=0, stdout=json.dumps(WHO), stderr="")
+
+        module.subprocess.run = rec
+        try:
+            self.assertEqual(module.who("box.example", "chat", env={}), WHO)
+        finally:
+            module.subprocess.run = real_run
+        self.assertEqual(argvs, [["bashy", "share", "who", "box.example/chat", "--json"]])
+
+    def test_sync_secret_never_in_argv(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            env, cfgp = self.sync_env(t)
+            module.admin_session(self.client, self.cfg, bootstrap=True)
+            argvs = []
+            real_run = subprocess.run
+
+            def rec(cmd, **kw):
+                argvs.append(cmd)
+                if isinstance(cmd, list) and cmd[:4] == ["bashy", "secret", "show", "klatch/admin"]:
+                    return types.SimpleNamespace(returncode=0, stdout=ADMIN + "\n", stderr="")
+                return real_run(cmd, **kw)
+
+            module.subprocess.run = rec
+            out = io.StringIO()
+            try:
+                with mock.patch.dict(os.environ, env):
+                    with contextlib.redirect_stdout(out):
+                        module.main(["sync", "box.example", cfgp])
+            finally:
+                module.subprocess.run = real_run
+            self.assertEqual(len(self.st.rosters), 1)
+            self.assertEqual(argvs[0][0], "cat")  # who came from the stub, not `share`
+            for cmd in argvs:
+                self.assertNotIn(ADMIN, json.dumps(cmd))
+            self.assertNotIn(ADMIN, out.getvalue())
 
 
 if __name__ == "__main__":
