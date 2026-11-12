@@ -79,6 +79,70 @@ func TestMCPInvalidOptions(t *testing.T) {
 	}
 }
 
+func TestMCPRegisteredCommandProfiles(t *testing.T) {
+	ringDir(t)
+	writeRecord(t, fleet.Command{Name: "one", Synopsis: "one", Script: "true", Effects: []string{"pure"}})
+	writeRecord(t, fleet.Command{Name: "two", Synopsis: "two", Script: "true", Effects: []string{"pure"}})
+
+	registeredNames := func(t *testing.T, profile string) ([]string, yokemcp.Options) {
+		t.Helper()
+		opts, err := mcpOptions("", profile)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, command := range opts.Registered() {
+			if command.Name == "one" || command.Name == "two" {
+				names = append(names, command.Name)
+			}
+		}
+		slices.Sort(names)
+		return names, opts
+	}
+
+	for _, tc := range []struct {
+		profile string
+		want    []string
+	}{
+		{profile: "one", want: []string{"one"}},
+		{profile: "one,two", want: []string{"one", "two"}},
+		{profile: "default", want: []string{"one", "two"}},
+		{profile: "all", want: []string{"one", "two"}},
+	} {
+		t.Run(tc.profile, func(t *testing.T) {
+			got, opts := registeredNames(t, tc.profile)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("registered = %v, want %v", got, tc.want)
+			}
+			if tc.profile == "one" || tc.profile == "one,two" {
+				listing := captureStdout(t, func() {
+					if code := dispatchMCPTools([]string{"--tools", tc.profile}); code != 0 {
+						t.Fatalf("mcp tools exit = %d", code)
+					}
+				})
+				var wantListing strings.Builder
+				for _, name := range tc.want {
+					fmt.Fprintf(&wantListing, "%s\t(registered)\n", name)
+				}
+				if listing != wantListing.String() {
+					t.Fatalf("mcp tools listing = %q, want %q", listing, wantListing.String())
+				}
+				if len(opts.Tools) != 0 {
+					t.Fatalf("core tools = %v, want none", opts.Tools)
+				}
+				if _, err := yokemcp.BuildServer("bashy", "test", opts); err != nil {
+					t.Fatalf("build selected registered tools: %v", err)
+				}
+			}
+		})
+	}
+
+	_, unknown := registeredNames(t, "unknown")
+	if _, err := yokemcp.BuildServer("bashy", "test", unknown); err == nil || !strings.Contains(err.Error(), "unknown command: unknown") {
+		t.Fatalf("unknown registered command error = %v", err)
+	}
+}
+
 func mcpFrontClient(t *testing.T, opts yokemcp.Options) (context.Context, *mcpsdk.ClientSession, *mcpsdk.Server) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

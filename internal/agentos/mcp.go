@@ -261,29 +261,40 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 		}
 	}
 	if profile != "default" {
-		exposeDB := profile == "all" || slices.Contains(opts.Tools, "db_lifecycle") || slices.Contains(opts.Tools, "db")
-		exposeMemory := profile == "all" || slices.Contains(opts.Tools, "kb_memory")
+		selectedNames := slices.Clone(opts.Tools)
+		exposeDB := profile == "all" || slices.Contains(selectedNames, "db_lifecycle") || slices.Contains(selectedNames, "db")
+		exposeMemory := profile == "all" || slices.Contains(selectedNames, "kb_memory")
 		// Retrieval rides the kb_memory family selector (both verbs live in
 		// the `kb memory` tree) and is also selectable by its own tool name.
-		exposeRetrieve := exposeMemory || slices.Contains(opts.Tools, "kb_memory_retrieve")
-		exposeSync := exposeMemory || slices.Contains(opts.Tools, "kb_memory_index_sync")
-		exposeMaintain := exposeMemory || slices.Contains(opts.Tools, "kb_memory_maintain")
+		exposeRetrieve := exposeMemory || slices.Contains(selectedNames, "kb_memory_retrieve")
+		exposeSync := exposeMemory || slices.Contains(selectedNames, "kb_memory_index_sync")
+		exposeMaintain := exposeMemory || slices.Contains(selectedNames, "kb_memory_maintain")
 		// Direct registered tools are selected through Registered, not the
 		// core command list passed to Yoke's registry lookup.
 		opts.Tools = slices.DeleteFunc(opts.Tools, func(name string) bool {
 			return name == "db_lifecycle" || name == "kb_memory" || name == "kb_memory_retrieve" || name == "kb_memory_index_sync" || name == "kb_memory_maintain"
 		})
+		for _, command := range mcpRegisteredCommands() {
+			if slices.Contains(selectedNames, command.Name) {
+				opts.Tools = slices.DeleteFunc(opts.Tools, func(name string) bool { return name == command.Name })
+			}
+		}
 		verbs := mcpVerbCommands()
 		var selected []yokemcp.RegisteredCommand
 		for _, verb := range verbs {
-			if profile == "all" || slices.Contains(opts.Tools, verb.Name) {
+			if profile == "all" || slices.Contains(selectedNames, verb.Name) {
 				selected = append(selected, verb)
 				opts.Tools = slices.DeleteFunc(opts.Tools, func(name string) bool { return name == verb.Name })
 			}
 		}
 		opts.Registered = func() []yokemcp.RegisteredCommand {
 			ring := mcpRegisteredCommands()
-			out := append([]yokemcp.RegisteredCommand(nil), ring...)
+			out := make([]yokemcp.RegisteredCommand, 0, len(ring)+len(selected))
+			for _, command := range ring {
+				if profile == "all" || slices.Contains(selectedNames, command.Name) {
+					out = append(out, command)
+				}
+			}
 			for _, verb := range selected {
 				if !slices.ContainsFunc(ring, func(command yokemcp.RegisteredCommand) bool { return command.Name == verb.Name }) {
 					out = append(out, verb)
