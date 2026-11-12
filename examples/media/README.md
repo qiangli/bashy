@@ -12,6 +12,9 @@
 | `media slides IN.pdf DIR` | `DIR/01.png`, `02.png`... for the video |
 | `media voice PROJECT [--energy 0.7] [--reference FILE] [--force]` | `PROJECT/voice/NN.wav`: an expressive local neural voice (Chatterbox, MIT; synthetic speaker or the person's own sample) for `narrate --own`; first run needs `uv` and downloads pinned packages and weights |
 | `media narrate PROJECT --own \| --voice NAME` | `PROJECT/narration.m4a`: line N of `narration.txt` over segment N, fitted, -16 LUFS |
+| `media cards CARD.txt... -o OUT.mp4 [--secs N] [--size WxH]` | one MP4 from card text files (first line is the bold title), 4 s each by default |
+| `media subs TIMING.srt [LANG2.srt] -o OUT.ass [--video IN.mp4 --burn OUT.mp4]` | bilingual `.ass` (Primary + Secondary styles); with `--video/--burn` also burns the cues in and muxes the `.ass` as a soft track |
+| `media cut CLIP... --beats BEATS.txt -o OUT.mp4 [--size WxH]` | clips laid end to end on a beat grid (first beat anchors output 0); short clips loop, long ones trim |
 | `media build PROJECT` | `PROJECT/build/demo.mp4` through `examples/video/video.sh` |
 
 Each verb prints only the paths it wrote. `--own` uses the member's own
@@ -37,6 +40,6 @@ agg are never downloaded or bundled (GPL). The font is OFL (`fonts/OFL.txt`).
 ## Test
 
 ```bash
-bash examples/media/test.sh   # pdf, combine, slides round trip, narrate + build, voice (fake model)
+bash examples/media/test.sh   # pdf, combine, slides round trip, narrate + build, voice (fake model), cards + subs + cut
 bash examples/video/test.sh
 ```

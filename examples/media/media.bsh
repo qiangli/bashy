@@ -1,6 +1,7 @@
 #!/usr/bin/env -S bashy --bashsharp
 # media — images to PDF, PDF to slides, slides and terminal steps to a narrated
-# MP4. The same files and the same result on macOS, Windows and Linux.
+# MP4, plus assembly: cards, bilingual subtitles and beat cuts for film work.
+# The same files and the same result on macOS, Windows and Linux.
 #
 #   media doctor
 #   media pdf IMG... -o OUT.pdf [--title T] [--author A]
@@ -8,6 +9,9 @@
 #   media slides IN.pdf DIR
 #   media voice PROJECT [--energy 0.7] [--reference FILE] [--force]
 #   media narrate PROJECT --own | --voice NAME|default
+#   media cards CARD.txt... -o OUT.mp4 [--secs N] [--size WxH]
+#   media subs TIMING.srt [LANG2.srt] -o OUT.ass [--video IN.mp4 --burn OUT.mp4]
+#   media cut CLIP... --beats BEATS.txt -o OUT.mp4 [--size WxH]
 #   media build PROJECT
 #
 # Every verb works alone on plain files and prints only the paths it wrote.
@@ -33,6 +37,9 @@ it composes: `media combine "$(media pdf a.png b.png -o a.pdf)" b.pdf -o all.pdf
     media slides all.pdf slides/                   # slides/01.png, 02.png ... for the video
     media voice my-demo                            # optional: expressive local neural voice -> voice/NN.wav
     media narrate my-demo --own                    # voice track from voice/NN.* takes
+    media cards title.txt end.txt -o cards.mp4 --secs 4
+    media subs timing.srt timing.es.srt -o subs.ass --video base.mp4 --burn out.mp4
+    media cut a.mp4 b.mp4 --beats beats.txt -o cut.mp4
     media build my-demo                            # my-demo/build/demo.mp4
 
 - `doctor` first. It downloads the pinned pdfcraft-cli once, checks ffmpeg
@@ -67,6 +74,18 @@ it composes: `media combine "$(media pdf a.png b.png -o a.pdf)" b.pdf -o all.pdf
 - `camera NAME` segments read `camera/NAME.mp4|mov|webm`, as made by
   `record video`. `step NAME` runs `steps/NAME.sh` under bashy and records it
   with `cast record` when present, else asciinema.
+- Assembly for film work: `cards` renders card text files (first line is the
+  bold title, like `cards/NAME.txt`) into one MP4; `subs` pairs a timing track
+  with its translation into one bilingual `.ass` (Primary + Secondary styles)
+  and, with `--video IN --burn OUT`, burns the cues in and muxes the `.ass`
+  as a soft track; `cut` lays clips end to end on a beat grid (`beats.txt`
+  holds one time in seconds per line, `#` comments allowed; the first beat
+  anchors output 0, so cuts land at `beat - first`), looping short clips
+  and trimming long ones. Text is rasterised through agg with the
+  bundled IBM Plex Mono, and cuts/muxes through ffmpeg only, so the pixels
+  match on macOS, Windows and Linux with a stock ffmpeg (no libass or
+  drawtext build needed). Non-Latin scripts fall back to the host's system
+  fonts for the burned pixels; the `.ass` text itself is always exact.
 - Order: `narrate` first measures the segments (it runs a silent build when
   none exists), writes `PROJECT/narration.m4a`, then `build` mixes it in.
 - No browser is involved anywhere in media.
@@ -117,7 +136,7 @@ for a in "$@"; do
 done
 set -- "${args[@]}"
 
-usage() { sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 # ---- platform ---------------------------------------------------------------
 
@@ -236,6 +255,7 @@ registered_media_tool() {
 }
 ffmpeg() { registered_media_tool ffmpeg "$@"; }
 ffprobe() { registered_media_tool ffprobe "$@"; }
+agg() { registered_media_tool agg "$@"; }
 
 register_tool() {
 	local name=$1 path=$2
@@ -264,6 +284,69 @@ jstr() {
 	s=${s//\\/\\\\}; s=${s//\"/\\\"}
 	printf '"%s"' "$s"
 }
+
+# json_string: stdin bytes to one JSON string literal (for .cast banners).
+json_string() {
+	local s
+	s=$(cat)
+	s=${s//\\/\\\\}
+	s=${s//\"/\\\"}
+	s=${s//$'\e'/\\u001b}
+	s=${s//$'\n'/\\n}
+	s=${s//$'\r'/\\r}
+	s=${s//$'\t'/\\t}
+	printf '"%s"\n' "$s"
+}
+
+# ass_time SEC: seconds (float) to an .ass timestamp H:MM:SS.cc.
+ass_time() {
+	awk -v t="$1" 'BEGIN{h=int(t/3600); m=int((t-h*3600)/60); s=t-h*3600-m*60; printf "%d:%02d:%05.2f", h, m, s}'
+}
+
+# ass_escape: strip { and } (they would open override blocks) for .ass text.
+ass_escape() { sed 's/[{}]//g'; }
+
+# parse_cues FILE: emit "start_sec<TAB>end_sec<TAB>text" for SRT or WebVTT cues;
+# multi-line cue text is joined with a literal \N (ass-ready), markup stripped.
+parse_cues() {
+	awk '
+	function ts(s,   a, n) {
+		gsub(/,/, ".", s)
+		n = split(s, a, ":")
+		if (n == 3) return a[1]*3600 + a[2]*60 + a[3]
+		if (n == 2) return a[1]*60 + a[2]
+		return s + 0
+	}
+	function emit() {
+		if (in_cue && txt != "") {
+			gsub(/<[^>]+>/, "", txt)
+			printf "%.3f\t%.3f\t%s\n", s_sec, e_sec, txt
+		}
+		in_cue = 0; txt = ""
+	}
+	{
+		sub(/\r$/, "")
+		if ($0 ~ /^[ \t]*$/) { emit(); next }
+		if ($0 ~ /-->/) {
+			emit()
+			split($0, p, /[ \t]*-->[ \t]*/)
+			split(p[1], s_tok, /[ \t]+/)
+			split(p[2], e_tok, /[ \t]+/)
+			s_sec = ts(s_tok[1]); e_sec = ts(e_tok[1])
+			in_cue = (e_sec > s_sec)
+			next
+		}
+		if (!in_cue) next
+		line = $0
+		gsub(/<[^>]+>/, "", line)
+		txt = (txt == "" ? line : txt "\\N" line)
+	}
+	END { emit() }
+	' "$1"
+}
+
+# cue_count FILE: number of cues parse_cues emits.
+cue_count() { parse_cues "$1" | wc -l | tr -d ' '; }
 
 dur() { ffprobe -v error -show_entries format=duration -of csv=p=0 "$1"; }
 
@@ -346,6 +429,7 @@ doctor() {
 	# Optional: the expressive local neural voice (media voice) needs uv.
 	command -v uv >/dev/null && echo "ok   neural voice (optional): uv" || echo "note neural voice (optional, media voice): $(uv_install_line)"
 	[ -f "$video_sh" ] && echo "ok   video.sh: $video_sh" || { echo "MISSING video.sh: $video_sh"; bad=1; }
+	echo "ok   assembly: cards/subs/cut need only ffmpeg + agg (libass/drawtext not required)"
 	if [ $bad -ne 0 ]; then
 		echo "media: doctor failed; install what is marked MISSING (the line is shown), then rerun" >&2
 		return 1
@@ -670,6 +754,305 @@ cmd_voice() {
 	done
 }
 
+# ---- cards ------------------------------------------------------------------
+
+# One encoding for assembly segments so concatenation can copy streams.
+ASM_VENC=(-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -r 30)
+ASM_AENC=(-c:a aac -b:a 160k -ar 48000 -ac 2)
+ASM_FPS=30
+
+# asm_size SIZE: validate WxH, print "W H".
+asm_size() {
+	case $1 in
+	[0-9]*x[0-9]*) echo "${1%x*} ${1#*x}" ;;
+	*) die "bad --size (want WxH): $1" ;;
+	esac
+}
+
+# card_gif TXT GIF CAST: centred card text (first line bold) rendered by agg.
+card_gif() {
+	local txt=$1 gif=$2 cast=$3
+	local cols=60 rows=14 lines=() i=0 l pad top out=""
+	mapfile -t lines <"$txt"
+	top=$(((rows - ${#lines[@]}) / 2))
+	for ((i = 0; i < top; i++)); do out+=$'\r\n'; done
+	for i in "${!lines[@]}"; do
+		l=${lines[$i]}
+		pad=$(((cols - ${#l}) / 2)); ((pad < 0)) && pad=0
+		out+=$(printf '%*s' "$pad" '')
+		if ((i == 0)); then out+=$'\e[1m'"$l"$'\e[0m'; else out+="$l"; fi
+		out+=$'\r\n'
+	done
+	out+=$'\e[?25l'
+	{
+		printf '{"version": 2, "width": %d, "height": %d}\n' "$cols" "$rows"
+		printf '[0.0, "o", %s]\n' "$(printf '%s' "$out" | json_string)"
+	} >"$cast"
+	agg --font-dir "${MEDIA_FONT_DIR:-$here/fonts}" --font-family "${MEDIA_FONT_FAMILY:-IBM Plex Mono}" \
+		--font-size 48 --theme monokai \
+		--last-frame-duration 1 --no-loop "$cast" "$gif" >/dev/null || die "cards: agg could not render $txt"
+}
+
+cmd_cards() {
+	local out="" secs=4 size="1280x720" txts=()
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o | --out) out=$2; shift 2 ;;
+		--secs) secs=$2; shift 2 ;;
+		--size) size=$2; shift 2 ;;
+		-*) die "cards: unknown option: $1" ;;
+		*) txts+=("$1"); shift ;;
+		esac
+	done
+	[ ${#txts[@]} -gt 0 ] || die "usage: media cards CARD.txt... -o OUT.mp4 [--secs N] [--size WxH]"
+	[ -n "$out" ] || die "cards: -o OUT.mp4 is required"
+	awk -v s="$secs" 'BEGIN{exit !(s > 0)}' || die "cards: --secs must be positive (got $secs)"
+	local w h
+	read -r w h <<<"$(asm_size "$size")"
+	out=$(abspath "$out")
+	local f
+	for f in "${txts[@]}"; do [ -f "$f" ] || die "cards: no such file: $f"; done
+	local tempbase=${MEDIA_TEMP:-${LOCALAPPDATA:-${TMPDIR:-/tmp}}}
+	local tmp
+	tmp=$(mktemp -d "$tempbase/media-cards.XXXXXX")
+	if [ -n "${MEDIA_KEEP_TEMP:-}" ]; then note "keeping temporary files in $tmp"; else trap "rm -rf '$tmp'" EXIT; fi
+	local i=0 seg
+	: >"$tmp/list.txt"
+	for f in "${txts[@]}"; do
+		i=$((i + 1))
+		tr -d '\r' <"$f" >"$tmp/card-$i.txt"
+		[ -s "$tmp/card-$i.txt" ] || die "cards: $f is empty"
+		card_gif "$tmp/card-$i.txt" "$tmp/card-$i.gif" "$tmp/card-$i.cast"
+		seg="$tmp/card-$i.mp4"
+		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$tmp/card-$i.gif" \
+			-f lavfi -i "anullsrc=r=48000:cl=stereo" \
+			-map 0:v:0 -map 1:a:0 -t "$secs" \
+			-vf "scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${ASM_FPS},format=yuv420p" \
+			"${ASM_VENC[@]}" "${ASM_AENC[@]}" "$seg" || die "cards: ffmpeg could not render $f"
+		echo "file 'card-$i.mp4'" >>"$tmp/list.txt"
+	done
+	(cd "$tmp" && ffmpeg -nostdin -hide_banner -loglevel error -y -f concat -safe 0 -i list.txt -c copy "$out") || die "cards: joining failed"
+	[ -s "$out" ] || die "cards: joining produced no output"
+	if [ -z "${MEDIA_KEEP_TEMP:-}" ]; then trap - EXIT; rm -rf "$tmp"; fi
+	echo "$out"
+}
+
+# ---- subs -------------------------------------------------------------------
+
+cmd_subs() {
+	local out="" video="" burn="" files=()
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o | --out) out=$2; shift 2 ;;
+		--video) video=$2; shift 2 ;;
+		--burn) burn=$2; shift 2 ;;
+		-*) die "subs: unknown option: $1" ;;
+		*) files+=("$1"); shift ;;
+		esac
+	done
+	[ ${#files[@]} -ge 1 ] && [ ${#files[@]} -le 2 ] || die "usage: media subs TIMING.srt [LANG2.srt] -o OUT.ass [--video IN.mp4 --burn OUT.mp4]"
+	[ -n "$out" ] || die "subs: -o OUT.ass is required"
+	if [ -n "$burn" ] && [ -z "$video" ]; then die "subs: --burn needs --video IN.mp4"; fi
+	local f
+	for f in "${files[@]}"; do [ -f "$f" ] || die "subs: no such file: $f"; done
+	if [ -n "$video" ]; then [ -f "$video" ] || die "subs: no such video: $video"; fi
+	case $out in *.ass) ;; *) die "subs: -o must end in .ass (got $out)" ;; esac
+	out=$(abspath "$out")
+	local n1 n2=0
+	n1=$(cue_count "${files[0]}")
+	[ "$n1" -gt 0 ] || die "subs: no cues in ${files[0]}"
+	if [ ${#files[@]} -eq 2 ]; then
+		n2=$(cue_count "${files[1]}")
+		[ "$n1" = "$n2" ] || die "subs: cue counts differ (${files[0]}: $n1, ${files[1]}: $n2); align them first"
+	fi
+	local tempbase=${MEDIA_TEMP:-${LOCALAPPDATA:-${TMPDIR:-/tmp}}}
+	local tmp
+	tmp=$(mktemp -d "$tempbase/media-subs.XXXXXX")
+	if [ -n "${MEDIA_KEEP_TEMP:-}" ]; then note "keeping temporary files in $tmp"; else trap "rm -rf '$tmp'" EXIT; fi
+	parse_cues "${files[0]}" >"$tmp/cues1.txt"
+	if [ ${#files[@]} -eq 2 ]; then parse_cues "${files[1]}" >"$tmp/cues2.txt"; else : >"$tmp/cues2.txt"; fi
+	{
+		printf '[Script Info]\nScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n'
+		printf '[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n'
+		printf 'Style: Primary,IBM Plex Mono,56,&H00FFFFFF,&H000000FF,&H80000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,40,40,50,1\n'
+		printf 'Style: Secondary,IBM Plex Mono,48,&H0000FFFF,&H000000FF,&H80000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,40,40,50,1\n\n'
+		printf '[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
+	} >"$out"
+	local i=0 s e t1 t2 text
+	while IFS=$'\t' read -r s e t1; do
+		[ -n "${s:-}" ] || continue
+		i=$((i + 1))
+		t1=$(printf '%s' "$t1" | ass_escape)
+		if [ ${#files[@]} -eq 2 ]; then
+			t2=$(sed -n "${i}p" "$tmp/cues2.txt" | cut -f3- | ass_escape)
+			[ -n "$t2" ] || die "subs: missing cue $i in ${files[1]}"
+			text="$t1{\\rSecondary}\\N$t2"
+		else
+			text=$t1
+		fi
+		printf 'Dialogue: 0,%s,%s,Primary,,0,0,0,,%s\n' "$(ass_time "$s")" "$(ass_time "$e")" "$text" >>"$out"
+	done <"$tmp/cues1.txt"
+	[ "$i" = "$n1" ] || die "subs: wrote $i of $n1 cues"
+	if [ -n "$burn" ]; then
+		burn_cues "$video" "$tmp" "$out" "$burn" "$n1"
+	fi
+	if [ -z "${MEDIA_KEEP_TEMP:-}" ]; then trap - EXIT; rm -rf "$tmp"; fi
+	echo "$out"
+}
+
+# banner_width: stdin cue text (\N-separated) to its longest line in characters.
+banner_width() {
+	local t l max=0
+	t=$(cat)
+	t=${t//\\N/$'\n'}
+	while IFS= read -r l || [ -n "$l" ]; do
+		((${#l} > max)) && max=${#l}
+	done <<<"$t"
+	echo "$max"
+}
+
+# banner_lines TEXT COLS CODE: centred .cast lines for TEXT (\N-separated) in
+# ANSI style CODE (1 bold white, 33 yellow), CRLF-separated, no trailing gap.
+banner_lines() {
+	local text=$1 cols=$2 code=$3 l pad chunk first=1
+	text=${text//\\N/$'\n'}
+	while IFS= read -r l || [ -n "$l" ]; do
+		pad=$(((cols - ${#l}) / 2)); ((pad < 0)) && pad=0
+		chunk=$(printf '%*s\e[%sm%s\e[0m' "$pad" '' "$code" "$l")
+		if [ $first -eq 1 ]; then first=0; else printf '\r\n'; fi
+		printf '%s' "$chunk"
+	done <<<"$text"
+}
+
+# burn_cues VIDEO TMP ASS BURN N: burn the N cues in TMP/cues{1,2}.txt plus the
+# ASS soft track into VIDEO, writing BURN. Banners are agg GIFs overlaid with
+# enable=between(t) (portable: no libass build needed); the .ass itself is
+# muxed as mov_text so players can toggle it.
+burn_cues() {
+	local video=$1 tmp=$2 ass=$3 burn=$4 n=$5
+	local idx=0 i s e t1 t2 cols line1 line2 line cast gif
+	local inputs=() fc=() prev="[0:v]"
+	inputs=(-i "$video")
+	i=0
+	while IFS=$'\t' read -r s e t1; do
+		[ -n "${s:-}" ] || continue
+		i=$((i + 1))
+		if [ -s "$tmp/cues2.txt" ]; then
+			t2=$(sed -n "${i}p" "$tmp/cues2.txt" | cut -f3-)
+		else
+			t2=""
+		fi
+		idx=$((idx + 1))
+		cast="$tmp/sub-$idx.cast"; gif="$tmp/sub-$idx.gif"
+		line1=$(printf '%s' "$t1" | banner_width)
+		line2=$(printf '%s' "$t2" | banner_width)
+		cols=$((line1 + 4)); ((line2 + 4 > cols)) && cols=$((line2 + 4)); ((cols < 36)) && cols=36
+		line=$(banner_lines "$t1" "$cols" 1)
+		if [ -n "$t2" ]; then
+			line+=$'\r\n'
+			line+=$(banner_lines "$t2" "$cols" 33)
+		fi
+		line+=$'\r\n'$'\e[?25l'
+		{
+			printf '{"version": 2, "width": %d, "height": 2}\n' "$cols"
+			printf '[0.0, "o", %s]\n' "$(printf '%s' "$line" | json_string)"
+		} >"$cast"
+		agg --font-dir "${MEDIA_FONT_DIR:-$here/fonts}" --font-family "${MEDIA_FONT_FAMILY:-IBM Plex Mono}" \
+			--font-size 28 --theme monokai \
+			--last-frame-duration 1 --no-loop "$cast" "$gif" >/dev/null || die "subs: agg could not render cue $i"
+		inputs+=(-i "$gif")
+		fc+=("${prev}[${idx}:v]overlay=(W-w)/2:H-h-40:enable='between(t,${s},${e})'[v${idx}]")
+		prev="[v${idx}]"
+	done <"$tmp/cues1.txt"
+	[ "$idx" = "$n" ] || die "subs: rendered $idx of $n banners"
+	burn=$(abspath "$burn")
+	local IFS_SAVE=$IFS filter_str sub_in=$((idx + 1))
+	IFS=';'; filter_str="${fc[*]}"; IFS=$IFS_SAVE
+	inputs+=(-i "$ass")
+	ffmpeg -nostdin -hide_banner -loglevel error -y "${inputs[@]}" \
+		-filter_complex "$filter_str" \
+		-map "$prev" -map 0:a:0 -map "${sub_in}:s:0" \
+		"${ASM_VENC[@]}" -c:a copy -c:s mov_text -metadata:s:s:0 title=Bilingual "$burn" \
+		|| die "subs: burn-in failed"
+	[ -s "$burn" ] || die "subs: burn-in produced no output"
+	echo "$burn" >&2
+}
+
+# ---- cut --------------------------------------------------------------------
+
+# read_beats FILE: print validated strictly-increasing beat times, one per line.
+read_beats() {
+	local line beat n=0 prev=""
+	while IFS= read -r line || [ -n "$line" ]; do
+		line=${line%$'\r'}
+		beat=${line%%[[:space:]]*}
+		[ -z "$beat" ] && continue
+		case $beat in '#'*) continue ;; esac
+		case $beat in
+		'' | *[!0-9.]*) die "cut: bad beat time: $beat" ;;
+		esac
+		awk -v t="$beat" -v p="${prev:-$beat}" -v n="$n" 'BEGIN{ok=(t>0); if(n>0) ok=(t>p); exit !ok}' \
+			|| die "cut: beats must be positive and strictly increasing (got $beat after ${prev:-start})"
+		printf '%s\n' "$beat"
+		prev=$beat; n=$((n + 1))
+	done <"$1"
+	[ "$n" -ge 2 ] || die "cut: need at least 2 beats (got $n)"
+}
+
+cmd_cut() {
+	local out="" beats="" size="1280x720" clips=()
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o | --out) out=$2; shift 2 ;;
+		--beats) beats=$2; shift 2 ;;
+		--size) size=$2; shift 2 ;;
+		-*) die "cut: unknown option: $1" ;;
+		*) clips+=("$1"); shift ;;
+		esac
+	done
+	[ ${#clips[@]} -ge 1 ] || die "usage: media cut CLIP... --beats BEATS.txt -o OUT.mp4 [--size WxH]"
+	[ -n "$beats" ] || die "cut: --beats BEATS.txt is required"
+	[ -n "$out" ] || die "cut: -o OUT.mp4 is required"
+	local c
+	for c in "${clips[@]}" "$beats"; do [ -f "$c" ] || die "cut: no such file: $c"; done
+	local w h
+	read -r w h <<<"$(asm_size "$size")"
+	out=$(abspath "$out")
+	local tempbase=${MEDIA_TEMP:-${LOCALAPPDATA:-${TMPDIR:-/tmp}}}
+	local tmp
+	tmp=$(mktemp -d "$tempbase/media-cut.XXXXXX")
+	if [ -n "${MEDIA_KEEP_TEMP:-}" ]; then note "keeping temporary files in $tmp"; else trap "rm -rf '$tmp'" EXIT; fi
+	read_beats "$beats" >"$tmp/beats.txt"
+	mapfile -t BEATS <"$tmp/beats.txt"
+	local nb=${#BEATS[@]} i=0 b0 b1 dur clip seg
+	: >"$tmp/list.txt"
+	for ((i = 0; i < nb - 1; i++)); do
+		b0=${BEATS[$i]}; b1=${BEATS[$((i + 1))]}
+		dur=$(awk -v a="$b0" -v b="$b1" 'BEGIN{printf "%.3f", b-a}')
+		clip=${clips[$((i % ${#clips[@]}))]}
+		seg="$tmp/seg-$i.mp4"
+		if [ -n "$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$clip")" ]; then
+			ffmpeg -nostdin -hide_banner -loglevel error -y -stream_loop -1 -i "$clip" \
+				-map 0:v:0 -map 0:a:0 -t "$dur" \
+				-vf "scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${ASM_FPS},format=yuv420p" \
+				-af "aformat=sample_rates=48000:channel_layouts=stereo" \
+				"${ASM_VENC[@]}" "${ASM_AENC[@]}" "$seg" || die "cut: ffmpeg failed on interval $((i + 1)) ($clip)"
+		else
+			ffmpeg -nostdin -hide_banner -loglevel error -y -stream_loop -1 -i "$clip" \
+				-f lavfi -i "anullsrc=r=48000:cl=stereo" \
+				-map 0:v:0 -map 1:a:0 -t "$dur" \
+				-vf "scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${ASM_FPS},format=yuv420p" \
+				"${ASM_VENC[@]}" "${ASM_AENC[@]}" "$seg" || die "cut: ffmpeg failed on interval $((i + 1)) ($clip)"
+		fi
+		[ -s "$seg" ] || die "cut: empty segment $((i + 1))"
+		echo "file 'seg-$i.mp4'" >>"$tmp/list.txt"
+	done
+	(cd "$tmp" && ffmpeg -nostdin -hide_banner -loglevel error -y -f concat -safe 0 -i list.txt -c copy "$out") || die "cut: joining failed"
+	[ -s "$out" ] || die "cut: joining produced no output"
+	if [ -z "${MEDIA_KEEP_TEMP:-}" ]; then trap - EXIT; rm -rf "$tmp"; fi
+	echo "$out"
+}
+
 # ---- build ------------------------------------------------------------------
 
 cmd_build() {
@@ -698,6 +1081,9 @@ combine) shift; cmd_combine "$@" ;;
 slides) shift; cmd_slides "$@" ;;
 voice) shift; cmd_voice "$@" ;;
 narrate) shift; cmd_narrate "$@" ;;
+cards) shift; cmd_cards "$@" ;;
+subs) shift; cmd_subs "$@" ;;
+cut) shift; cmd_cut "$@" ;;
 build) shift; cmd_build "$@" ;;
-*) die "unknown verb: $1 (doctor, pdf, combine, slides, voice, narrate, build)" ;;
+*) die "unknown verb: $1 (doctor, pdf, combine, slides, voice, narrate, cards, subs, cut, build)" ;;
 esac
