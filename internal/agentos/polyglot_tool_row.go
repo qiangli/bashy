@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 
@@ -64,7 +65,7 @@ func newToolFenceRuntime(cfg polyglot.RuntimeConfig, catalog *fleet.Catalog, run
 				mu.Unlock()
 				return nil, fmt.Errorf("tool fence: %q changed since analysis", tool.Name)
 			}
-			analyzed[source] = tool
+			analyzed[source] = cloneTool(tool)
 			mu.Unlock()
 			return out, nil
 		},
@@ -211,4 +212,18 @@ func toolFenceBinding(catalog *fleet.Catalog, source string) (fleet.Tool, error)
 		}
 	}
 	return tool, nil
+}
+
+func cloneTool(t fleet.Tool) fleet.Tool {
+	out := t
+	out.Aliases = slices.Clone(t.Aliases)
+	if t.Commands != nil {
+		out.Commands = make([]fleet.ToolCommand, len(t.Commands))
+		for i, c := range t.Commands {
+			out.Commands[i] = c
+			out.Commands[i].Effects = slices.Clone(c.Effects)
+			out.Commands[i].Steps = slices.Clone(c.Steps)
+		}
+	}
+	return out
 }
