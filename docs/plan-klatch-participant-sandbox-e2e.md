@@ -40,7 +40,7 @@ run.py --suite participant --topology none
 
 ## Gate (shared test host only, via `bashy outpost ssh exec`)
 
-1. `bashy python -m unittest test_run test_participant` in `tests/klatch-e2e`.
+1. `bashy python -m unittest test_run test_participant test_roster` in `tests/klatch-e2e`.
 2. Build the image: `bashy oci build -f tests/klatch-e2e/Containerfile.server
    -t localhost/klatch-e2e:REV KLATCH_TREE`.
 3. Build the helper at the staged helper commit: `bashy npm ci && bashy npm run
@@ -49,6 +49,71 @@ run.py --suite participant --topology none
    `--node`, `--wrapper` (the canonical `examples/klatch/klatch.bsh` from the
    wrapper story) and `--evidence`; require `result: PASS`, `server_stop: done`
    and no leftover `klatch-e2e-*` container.
+5. Run `run.py --suite roster` with `--image` (a build from a klatch tree at
+   `5334662c` or later; see #Roster suite) and `--evidence`; require
+   `result: PASS`, `server_stop: done` and no leftover `klatch-e2e-*`
+   container.
+
+## Roster suite (Sprint 619 e2e-c, story 41c78ac63f30)
+
+`run.py --suite roster --topology none` reuses the participant sandbox
+lifecycle (disposable `bashy oci run` container, fresh store, health wait,
+teardown by `oci rm -f`) with two differences: the container is started with
+`-e KLATCH_SSO_SECRET=<secret>` (from `--sso-secret` /
+`KLATCH_E2E_SSO_SECRET`, generated fresh when unset; the same value signs
+the journey's outpost identities), and the journey is `roster.py`, which
+needs neither Node nor the helper — only the server.
+
+Steps (all dependent; any failure or block stops the run):
+
+- `setup` — refuse a claimed store, probe the roster endpoint, bootstrap the
+  admin through `examples/klatch/provision.py` (the same client
+  `bashy klatch sync` uses) and set the empty federation domain.
+- `push` — `PUT /admin/sso/roster` for owner + one member
+  (`{members: 2, created: 2, enabled: 0, disabled: 0}`), then the identical
+  push again (`{members: 2, created: 0, enabled: 0, disabled: 0}`).
+- `signin` — the outpost single sign-on the server implements
+  (`POST /account/sso` with the HMAC-signed identity headers, then the
+  one-time code through `PUT /account/access`): owner and member sign in
+  with distinct guids, an unlisted email is refused (403) and an unsigned
+  request is refused (401).
+- `team` — the Team channel is owned by the roster owner (the owner's own
+  channel listing carries subject `Team`, the member's does not) and the
+  roster meshed the members into mutual connected contacts.
+- `remove` — roster with the owner only
+  (`{members: 1, created: 0, enabled: 0, disabled: 1}`), the member's
+  contacts are dropped, its sign-in is refused, and the disable itself is
+  proven by re-adding the member (`{members: 2, enabled: 1}` — `enabled`
+  only counts accounts that existed disabled), after which it signs in
+  again.
+- `federation` — an external-node contact is refused with the empty domain:
+  a fully signed identity DataMessage carrying a foreign node (built in
+  `roster.py` with the standard library only — RSA PKCS#1 v1.5 over the
+  SHA-256 digest, exactly what the server's `ReadDataMessage` verifies)
+  answers 405, as does a node-less identity whose guid the store has never
+  seen.
+
+**Image selection (the released 1.2.7 image predates the endpoint).**
+`PUT /admin/sso/roster` shipped in klatch `5334662c`; the pinned v1.2.7
+release (`builds/klatch`, commit `febff05b`) does not carry it. The suite
+therefore probes the endpoint first (a PUT with an invalid token answers
+401 when the route exists) and is BLOCKED — never a pass, never a silent
+skip — with the build instructions when the image answers 404. Select a
+local build exactly as the participant suite does: `--image`, else
+`KLATCH_E2E_IMAGE`, else the first local image whose name mentions klatch:
+
+```sh
+bashy oci build -f tests/klatch-e2e/Containerfile.server \
+    -t localhost/klatch-e2e:5334662c /path/to/klatch-tree
+python3 run.py --suite roster \
+    --image localhost/klatch-e2e:5334662c --evidence roster.json
+```
+
+Offline coverage (no container): `test_roster.py` unit-tests the counts,
+header HMAC, refusal classifiers and the DER/RSA builders, and drives the
+real `Journey` and steps against `FakeKlatch`, an in-process server
+faithful to the roster contract (the same pattern as
+`examples/klatch/test_provision.py`).
 
 ## Measured on the shared test host, 2026-11-08
 
