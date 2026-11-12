@@ -13,6 +13,9 @@ BASHY = os.environ.get("BASHY_BIN") or shutil.which("bashy") or "bashy"
 
 def run(args, env=None, stdin=""):
     e = dict(os.environ, **(env or {}))
+    # bashy may print hint JSON on stderr before the script runs; the wrapper's
+    # stderr must stay parseable regardless of the host's hint setting.
+    e["BASHY_HINTS"] = "off"
     return subprocess.run([BASHY, "--bashsharp", str(HERE / "klatch.bsh")] + args,
                           input=stdin, text=True, capture_output=True, env=e)
 
