@@ -37,3 +37,4 @@
 {"op":"add","slug":"gmail-setup-send-and-verify","id":"01a1cce0-e6e6-796a-b249-60a05af06e42","tool":"codex","episode":"ep-93caeef33a1fed4b","at":"2026-11-11T23:10:53.671628Z"}
 {"op":"update","slug":"gmail-setup-send-and-verify","id":"01a1cce0-e6e6-796a-b249-60a05af06e42","tool":"codex","episode":"ep-54f411ce8b45f0a0","at":"2026-11-11T23:11:01.524704Z"}
 {"op":"add","slug":"work-with-cloud-providers-safely-do-aws-gcloud-azure","id":"01a1d2d2-b384-7bbf-81da-153373098347","tool":"claude","at":"2026-11-13T02:53:06.310728Z"}
+{"op":"add","slug":"windows-native-first-wsl-only-with-a-recorded-reason","id":"01a1d304-a339-7363-9165-0262fa2bf057","tool":"claude","at":"2026-11-13T03:47:38.939153Z"}
