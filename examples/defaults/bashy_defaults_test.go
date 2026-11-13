@@ -98,12 +98,13 @@ echo "$*" >> "$FAKE_LOG"
 src="$BASHY_HOME/src/bashy"
 case "$1 $2" in
   "src fetch"|"src upgrade")
-    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/onboard" "$src/examples/satellite-provision" "$src/examples/media" "$src/examples/record" "$src/examples/cast" "$src/examples/chrome" "$src/examples/service-door" "$src/examples/defaults" "$src/examples/oss-rods" "$src/examples/api-rods" "$src/kb/defaults/pages"
+    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/onboard" "$src/examples/satellite-provision" "$src/examples/media" "$src/examples/film" "$src/examples/record" "$src/examples/cast" "$src/examples/chrome" "$src/examples/service-door" "$src/examples/defaults" "$src/examples/oss-rods" "$src/examples/api-rods" "$src/kb/defaults/pages"
     : > "$src/examples/outpost-profile/outpost-profile.bsh"
     : > "$src/examples/satellite-member/satellite-member.bsh"
     : > "$src/examples/onboard/onboard.bsh"
     : > "$src/examples/satellite-provision/satellite-provision.bsh"
     : > "$src/examples/media/media.bsh"
+    : > "$src/examples/film/film.bsh"
     : > "$src/examples/record/record.bsh"
     : > "$src/examples/cast/cast.bsh"
     : > "$src/examples/chrome/chrome.bsh"
@@ -213,7 +214,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-qwen: registered", "narrate-local: registered", "transcribe-whisperx: registered", "song-replicate: registered", "image-replicate: registered", "animate-replicate: registered", "replicate-media: registered"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "film: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-qwen: registered", "narrate-local: registered", "transcribe-whisperx: registered", "song-replicate: registered", "image-replicate: registered", "animate-replicate: registered", "replicate-media: registered"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}
@@ -223,6 +224,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	}
 	for name, rel := range map[string]string{
 		"media":         "examples/media/media.bsh",
+		"film":          "examples/film/film.bsh",
 		"record":        "examples/record/record.bsh",
 		"cast":          "examples/cast/cast.bsh",
 		"chrome":        "examples/chrome/chrome.bsh",

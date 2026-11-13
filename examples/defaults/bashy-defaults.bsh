@@ -56,7 +56,9 @@ Default commands: `outpost-profile` (examples/outpost-profile),
 (examples/onboard: the member journey as one resumable sequence),
 `satellite-provision` (examples/satellite-provision; an owner's cloud
 satellite from plan to teardown), `media` (examples/media: PDFs and narrated
-videos), `record` (examples/record: camera and microphone takes), `cast`
+videos), `film` (examples/film: a music video from a storyboard — oss
+drafts, a lock, a commercial-route final through the service verbs),
+`record` (examples/record: camera and microphone takes), `cast`
 (examples/cast: a command's terminal output as asciicast v2 under a
 pty/ConPTY, the recorder examples/video uses), `chrome` and `chrome-open`
 (examples/chrome: cross-platform Google Chrome detection, installation, and
@@ -93,6 +95,7 @@ satellite-member|examples/satellite-member/satellite-member.bsh|read,write,exec
 onboard|examples/onboard/onboard.bsh|read,write,exec
 satellite-provision|examples/satellite-provision/satellite-provision.bsh|read,write,exec,net
 media|examples/media/media.bsh|read,write,exec,net
+film|examples/film/film.bsh|read,write,exec,net
 record|examples/record/record.bsh|read,write,exec
 cast|examples/cast/cast.bsh|read,write,exec
 chrome|examples/chrome/chrome.bsh|read,write,exec,net

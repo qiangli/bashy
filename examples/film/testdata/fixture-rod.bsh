@@ -1,0 +1,42 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Fixture rod for film tests: one script for every role film calls. It emits
+# small synthetic artifacts with ffmpeg (no model, no network, no spend) and
+# logs each handoff to $FILM_ROD_LOG as one JSON line.
+set -eu
+if [ "${1:-}" = --doctor ]; then
+    echo '{"schema_version":"bashy-svc-doctor-v1","available":true,"missing":[]}'
+    exit 0
+fi
+req=${BASHY_SVC_REQUEST:-}
+out=$BASHY_SVC_OUT
+field() { [ -n "$req" ] && jq -r "$1 // empty" "$req" || true; }
+J_REF=$(field '.reference_images[0]') J_ARGS="$*" jq -cn \
+    '{role:env.BASHY_SVC_ROLE, route:env.BASHY_SVC_ROUTE, yes:env.BASHY_SVC_YES, request:env.BASHY_SVC_REQUEST, reference:env.J_REF, args:env.J_ARGS}' >>"$FILM_ROD_LOG"
+ff() { ffmpeg -nostdin -hide_banner -loglevel error -y "$@"; }
+case $BASHY_SVC_ROLE in
+song)
+    d=$(field .duration_s); [ -n "$d" ] || d=6
+    ff -f lavfi -i "sine=frequency=440:duration=$d:sample_rate=48000" -ac 2 "$out/song.wav"
+    ;;
+transcribe)
+    a=$(field .audio)
+    d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$a")
+    n=${FILM_FIXTURE_CUES:-2}
+    awk -v d="$d" -v n="$n" 'function ts(t, ms,h,m,s){ms=int(t*1000+0.5);h=int(ms/3600000);ms-=h*3600000;m=int(ms/60000);ms-=m*60000;s=int(ms/1000);ms-=s*1000;return sprintf("%02d:%02d:%02d,%03d",h,m,s,ms)}
+        BEGIN{for(i=0;i<n;i++){s=d*i/n+0.2;e=d*(i+1)/n-0.1;printf "%d\n%s --> %s\nsung line %d\n\n", i+1, ts(s), ts(e), i+1}}' >"$out/timing.srt"
+    ;;
+image.generate|image.edit)
+    w=$(field .width); h=$(field .height)
+    ff -f lavfi -i "color=c=0x336699:s=${w:-320}x${h:-180}:d=1" -frames:v 1 "$out/image.png"
+    ;;
+animate)
+    img=$(field .image); a=$(field .audio)
+    ff -loop 1 -i "$img" -i "$a" -shortest -vf "fps=30,format=yuv420p" -c:v libx264 -preset ultrafast -c:a aac "$out/take.mp4"
+    echo '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":"take.mp4","media_type":"video/mp4"}],"text":"fixture take"}'
+    ;;
+video.understand)
+    [ -f "${1:-}" ] || { echo "no video operand" >&2; exit 2; }
+    echo "${FILM_FIXTURE_QA:-Reviewed. {\"pass\": true, \"issues\": []}}"
+    ;;
+*) echo "fixture rod: unexpected role $BASHY_SVC_ROLE" >&2; exit 2 ;;
+esac

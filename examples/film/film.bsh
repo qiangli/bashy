@@ -1,0 +1,613 @@
+#!/usr/bin/env -S bashy --bashsharp
+# film — a music video from one storyboard: oss drafts as often as wanted, a
+# lock, then a final that re-renders only the generative stages on a
+# commercial route (Sprint 627 M7, docs/sprint-627-master-execution-plan.md).
+#
+#   film doctor
+#   film init DIR [--title T]
+#   film draft DIR [--route oss] [--provider-ROLE NAME] [--route-animate R] [--qa-provider P] [--no-qa]
+#   film lock DIR [--draft N] [--timing FILE]
+#   film final DIR --route browser|api [--yes] [--dry-run] [--provider-ROLE NAME] [--qa-provider P] [--no-qa]
+#   film status DIR
+#
+# Every generative stage goes through the service door
+# (examples/service-door/service-door.bsh; contract docs/service-rod-contract.md),
+# so a draft and a final differ only in --route / --provider. A render prints
+# its manifest path (or the manifest with --json).
+
+~~~skill as guide
+---
+name: film
+description: Make a 60–90 s music video from a storyboard (lyrics, characters, shots) by chaining the song, image, animate, transcribe and video.understand service doors and media cut/cards/subs. Drafts run on open-source rods (route oss) as often as wanted; `film lock` freezes the storyboard, timing and portraits; `film final --route browser|api --yes` re-renders only the generative stages on a commercial route.
+metadata:
+  requires: "has=bashy has=ffmpeg has=ffprobe has=jq"
+---
+# film — draft on oss, lock, final on a commercial route
+
+    film init my-video                  # my-video/storyboard.json to edit
+    film draft my-video                 # my-video/drafts/01/film.mp4 (+ manifest.json, qa.json)
+    film draft my-video                 # drafts/02 — as many as wanted, no spend
+    film lock my-video --draft 2        # my-video/lock/: storyboard, timing, portraits, sha256
+    film final my-video --route api --dry-run   # which rods would run; nothing spends
+    film final my-video --route api --yes       # finals/01/film.mp4
+
+- Stages: song -> transcribe (timing; draft only) -> image.generate (one
+  portrait per character) -> animate (one clip per shot, lip sync driven by
+  the shot's slice of the song) -> media cut on the shot beats -> song muxed
+  -> title/end cards -> bilingual subtitles burned in -> agy QA through the
+  video.understand door. Every stage's envelope (provider, route,
+  cost_class, elapsed) lands in the render's manifest.json.
+- A draft without an animate rod renders a still portrait with a slow pan
+  and its manifest says so. A final never degrades: a missing rod fails.
+- `final` refuses route oss, requires a lock, and checks the lock's sha256
+  first. It reuses the locked timing, translation and portraits (as
+  reference images) and re-renders song, portraits and clips only. Rods
+  that spend need `--yes`; without it the door names them and nothing runs.
+- Never pass `--yes` on the operator's behalf; a final is the operator's call.
+~~~
+
+set -eu
+
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+door=${FILM_DOOR:-$here/../service-door/service-door.bsh}
+media=${FILM_MEDIA:-$here/../media/media.bsh}
+# BASHY_SVC_BASHY_BIN overrides the bashy used for the door and media, as in the door.
+bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
+
+die() { echo "film: $*" >&2; exit 1; }
+note() { echo "film: $*" >&2; }
+usage() { sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+# The command registry passes typed flags as --name=value; accept both forms.
+args=()
+for a in "$@"; do
+	case $a in
+	--*=*) args+=("${a%%=*}" "${a#*=}") ;;
+	*) args+=("$a") ;;
+	esac
+done
+set -- "${args[@]}"
+
+STORYBOARD_SCHEMA=bashy-film-storyboard-v1
+GEN_ROLES="song image.generate animate"
+
+sha() { if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+dur() { ffprobe -v error -show_entries format=duration -of csv=p=0 "$1"; }
+media() { "$bashy_bin" --bashsharp "$media" "$@"; }
+
+# srt_ts SEC: seconds to an SRT timestamp.
+srt_ts() { awk -v t="$1" 'BEGIN{if(t<0)t=0; ms=int(t*1000+0.5); h=int(ms/3600000); ms-=h*3600000; m=int(ms/60000); ms-=m*60000; s=int(ms/1000); ms-=s*1000; printf "%02d:%02d:%02d,%03d", h, m, s, ms}'; }
+
+# cues SRT: "start<TAB>end<TAB>text" per cue (multi-line text joined by a space).
+cues() {
+	awk '
+	function ts(s, a, n) { gsub(/,/, ".", s); n = split(s, a, ":"); return n == 3 ? a[1]*3600 + a[2]*60 + a[3] : (n == 2 ? a[1]*60 + a[2] : s + 0) }
+	function emit() { if (on && txt != "") printf "%.3f\t%.3f\t%s\n", st, en, txt; on = 0; txt = "" }
+	{ sub(/\r$/, "") }
+	/^[ \t]*$/ { emit(); next }
+	/-->/ { emit(); split($0, p, /[ \t]*-->[ \t]*/); split(p[1], a, /[ \t]+/); split(p[2], b, /[ \t]+/); st = ts(a[1]); en = ts(b[1]); on = (en > st); next }
+	on { gsub(/<[^>]+>/, ""); txt = (txt == "" ? $0 : txt " " $0) }
+	END { emit() }' "$1"
+}
+
+# write_srt: stdin "start<TAB>end<TAB>text" -> SRT on stdout.
+write_srt() {
+	local i=0 s e t
+	while IFS=$'\t' read -r s e t; do
+		[ -n "$s" ] || continue
+		i=$((i + 1))
+		printf '%d\n%s --> %s\n%s\n\n' "$i" "$(srt_ts "$s")" "$(srt_ts "$e")" "$t"
+	done
+}
+
+# shift_srt IN OFFSET OUT
+shift_srt() { cues "$1" | awk -F'\t' -v o="$2" 'BEGIN{OFS="\t"} {print $1+o, $2+o, $3}' | write_srt >"$3"; }
+
+# ---- storyboard --------------------------------------------------------------
+
+check_storyboard() {
+	local sb=$1 why
+	[ -f "$sb" ] || die "no storyboard: $sb (run: film init DIR)"
+	why=$(J_V="$STORYBOARD_SCHEMA" jq -r 'env.J_V as $v |
+		[.characters[]?.id] as $ids |
+		if .schema_version != $v then "schema_version must be \($v)"
+		elif (.title // "") == "" then "title is required"
+		elif (.song.prompt // "") == "" then "song.prompt is required"
+		elif ((.lyrics // []) | length) == 0 then "lyrics must list at least one line"
+		elif ((.characters // []) | length) == 0 then "characters must list at least one character"
+		elif any(.characters[]; (.id // "") == "" or (.bible // "") == "") then "every character needs id and bible"
+		elif ((.shots // []) | length) == 0 then "shots must list at least one shot"
+		elif any(.shots[]; (.character // "") as $c | ($ids | index($c)) == null) then "every shot.character must name a character id"
+		elif (.translation != null and ((.translation.lines // []) | length) != (.lyrics | length)) then "translation.lines must match lyrics line for line"
+		else "" end' "$sb" 2>&1) || die "storyboard $sb is not valid JSON: $why"
+	[ -z "$why" ] || die "storyboard $sb: $why"
+}
+
+cmd_init() {
+	local dir="" title="Untitled"
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--title) title=$2; shift 2 ;;
+		-*) die "init: unknown option: $1" ;;
+		*) dir=$1; shift ;;
+		esac
+	done
+	[ -n "$dir" ] || die "usage: film init DIR [--title T]"
+	mkdir -p "$dir"
+	[ ! -e "$dir/storyboard.json" ] || die "init: $dir/storyboard.json exists"
+	J_V="$STORYBOARD_SCHEMA" J_T="$title" jq -n 'env.J_V as $v | env.J_T as $t | {
+		schema_version: $v, title: $t, size: "1280x720", seed: 1,
+		song: {prompt: "warm synth-pop ballad, female lead vocal, 96 bpm", duration_s: 75, language: "en"},
+		lyrics: ["First line of the song", "Second line of the song"],
+		translation: {language: "es", lines: ["Primera línea de la canción", "Segunda línea de la canción"]},
+		characters: [{id: "lead", bible: "an original fictional singer, photoreal portrait, same stage set", seed: 7}],
+		shots: [{character: "lead", prompt: "medium close-up, singing to camera", line: 0},
+		        {character: "lead", prompt: "wide shot of the stage, singing", line: 1}],
+		cards: {title: [$t, "an original music video"], end: [$t, "AI-generated: song, images and performance are synthetic"], secs: 3}
+	}' >"$dir/storyboard.json"
+	echo "$(cd "$dir" && pwd)/storyboard.json"
+}
+
+# preflight: assembly tools, checked before any stage runs so a final never
+# spends and then fails at assembly. film calls ffmpeg/ffprobe directly;
+# media reaches ffmpeg, ffprobe and agg through bashy's command registry.
+preflight() {
+	local missing=() t
+	for t in ffmpeg ffprobe jq; do command -v "$t" >/dev/null 2>&1 || missing+=("$t (on PATH)"); done
+	for t in ffmpeg ffprobe agg; do
+		BASHY_HINTS=off "$bashy_bin" "$t" --version >/dev/null 2>&1 || BASHY_HINTS=off "$bashy_bin" "$t" -version >/dev/null 2>&1 ||
+			missing+=("bashy $t (registered)")
+	done
+	[ -f "$door" ] || missing+=("service door $door")
+	[ -f "$media" ] || missing+=("media $media")
+	[ ${#missing[@]} -eq 0 ] && return 0
+	printf 'film: missing: %s\n' "${missing[@]}" >&2
+	echo "film: run: bashy media doctor   (it prints the install line and registers ffmpeg, ffprobe and agg)" >&2
+	return 1
+}
+
+cmd_doctor() { preflight && echo "film: ready (door $door, media $media)"; }
+
+# ---- one door call -------------------------------------------------------------
+
+# door STAGE ROLE OUT [door options...] -- [operands...]: run the service door,
+# keep its envelope in $render/stages.jsonl, print it; returns the door status.
+door() {
+	local stage=$1 role=$2 out=$3 st=0 env
+	shift 3
+	local opts=()
+	while [ $# -gt 0 ] && [ "$1" != -- ]; do opts+=("$1"); shift; done
+	[ $# -eq 0 ] || shift
+	mkdir -p "$out"
+	env=$(BASHY_SVC_BASHY_BIN="$bashy_bin" "$bashy_bin" --bashsharp "$door" "$role" --json --out "$out" "${opts[@]}" "$@") || st=$?
+	if ! printf '%s' "$env" | jq -e '.schema_version == "bashy-svc-v1"' >/dev/null 2>&1; then
+		env=$(J_R="$role" J_T="$env" jq -cn '{schema_version:"bashy-svc-v1",role:env.J_R,provider:"",route:"",outcome:"error",outputs:[],text:env.J_T,cost_class:"",elapsed:0}')
+		[ "$st" != 0 ] || st=1
+	fi
+	printf '%s\n' "$env" | J_S="$stage" jq -c '{stage:env.J_S} + .' >>"$render/stages.jsonl"
+	printf '%s\n' "$env"
+	return "$st"
+}
+
+# first_output ENVELOPE [MEDIA_PREFIX]: the first output path (of that media type).
+first_output() { printf '%s\n' "$1" | J_P="${2:-}" jq -r 'first(.outputs[]? | select(.media_type | startswith(env.J_P)) | .path) // empty'; }
+
+# request FILE JSON-FILTER: write one bashy-svc-request-v1 file. The filter
+# reads the storyboard as . and its parameters from J_* environment variables
+# (the coreutils jq has no --arg).
+request() { jq '{schema_version:"bashy-svc-request-v1"} + ('"$2"')' "$sb" >"$1"; }
+
+# stage_opts ROLE: --route/--provider for a generative role, from the options.
+stage_opts() {
+	local role=$1 key=${1%%.*} p r
+	p=$(eval "printf '%s' \"\${prov_$key:-}\"")
+	r=$(eval "printf '%s' \"\${route_$key:-}\"")
+	[ -n "$r" ] || r=$route
+	printf -- '--route\n%s\n' "$r"
+	[ -z "$p" ] || printf -- '--provider\n%s\n' "$p"
+	[ "$yes" = 0 ] || printf -- '--yes\n'
+	[ "$dry" = 0 ] || printf -- '--dry-run\n'
+}
+
+# ---- render (draft and final) ---------------------------------------------------
+
+next_id() { # next_id DIR -> 01, 02, ...
+	local n=1
+	while [ -e "$1/$(printf '%02d' "$n")" ]; do n=$((n + 1)); done
+	printf '%02d\n' "$n"
+}
+
+parse_render_opts() {
+	route="" yes=0 dry=0 qa=1 qa_provider="" json=0 proj=""
+	prov_song="" prov_image="" prov_animate="" prov_transcribe="" route_song="" route_image="" route_animate="" route_transcribe=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--route) route=$2; shift 2 ;;
+		--provider-song) prov_song=$2; shift 2 ;;
+		--provider-image) prov_image=$2; shift 2 ;;
+		--provider-animate) prov_animate=$2; shift 2 ;;
+		--provider-transcribe) prov_transcribe=$2; shift 2 ;;
+		--route-song) route_song=$2; shift 2 ;;
+		--route-image) route_image=$2; shift 2 ;;
+		--route-animate) route_animate=$2; shift 2 ;;
+		--route-transcribe) route_transcribe=$2; shift 2 ;;
+		--qa-provider) qa_provider=$2; shift 2 ;;
+		--no-qa) qa=0; shift ;;
+		--yes) yes=1; shift ;;
+		--dry-run) dry=1; shift ;;
+		--json) json=1; shift ;;
+		-*) die "$kind: unknown option: $1" ;;
+		*) proj=$1; shift ;;
+		esac
+	done
+	[ -n "$proj" ] || die "usage: film $kind DIR ..."
+	[ -d "$proj" ] || die "$kind: no such project: $proj"
+	proj=$(cd "$proj" && pwd)
+}
+
+cmd_draft() {
+	kind=draft
+	parse_render_opts "$@"
+	[ -n "$route" ] || route=oss
+	sb=$proj/storyboard.json
+	check_storyboard "$sb"
+	render_run "$proj/drafts"
+}
+
+cmd_final() {
+	kind=final
+	parse_render_opts "$@"
+	case $route in
+	"") die "final: --route browser|api is required (a final runs on a commercial route)" ;;
+	oss) die "final: route oss is for drafts; pass --route browser or --route api" ;;
+	esac
+	verify_lock "$proj/lock"
+	sb=$proj/lock/storyboard.json
+	render_run "$proj/finals"
+}
+
+# render_run PARENT: one render under PARENT/NN (PARENT/dry-run for --dry-run).
+render_run() {
+	local parent=$1 id start=$SECONDS size seed
+	[ "$dry" = 1 ] || preflight || exit 1
+	mkdir -p "$parent"
+	# A dry run selects only: it replaces PARENT/dry-run and takes no number.
+	if [ "$dry" = 1 ]; then id=dry-run; rm -rf "${parent:?}/dry-run"; else id=$(next_id "$parent"); fi
+	render=$parent/$id
+	mkdir -p "$render"
+	: >"$render/stages.jsonl"
+	size=$(jq -r '.size // "1280x720"' "$sb")
+	seed=$(jq -r '.seed // 1' "$sb")
+	if [ "$dry" = 1 ]; then note "$kind $id: route $route (dry run)"; else note "$kind $id: route $route"; fi
+
+	# -- song
+	local env status=0 song
+	local sdur
+	sdur=$(if [ "$kind" = final ]; then cat "$proj/lock/duration"; else jq -r '.song.duration_s // 75' "$sb"; fi)
+	J_D=$sdur J_SEED=$seed request "$render/song.request.json" '{title, prompt:.song.prompt, lyrics:(.lyrics | join("\n")), duration_s:(env.J_D|tonumber), language:(.song.language // "en"), seed:(env.J_SEED|tonumber)}'
+	mapfile -t o < <(stage_opts song)
+	env=$(door song song "$render/song" "${o[@]}" -- "$render/song.request.json") || status=$?
+	stage_ok song "$env" "$status" || return $?
+	if [ "$dry" = 0 ]; then
+		song=$(first_output "$env" audio/)
+		[ -n "$song" ] && [ -f "$song" ] || fail_render "song: the rod reported no audio output"
+	fi
+
+	# -- portraits: one per character, a consistent set
+	local cid cseed ref pr img
+	declare -A portrait=()
+	while IFS=$'\t' read -r cid cseed; do
+		pr=$render/portraits/$cid.request.json
+		mkdir -p "$render/portraits"
+		ref=""
+		[ "$kind" != final ] || [ ! -f "$proj/lock/portraits/$cid.png" ] || ref=$proj/lock/portraits/$cid.png
+		J_ID=$cid J_W=${size%x*} J_H=${size#*x} J_SEED=$seed J_REF=$ref request "$pr" '(.characters[] | select(.id == env.J_ID)) as $c
+			| {title, prompt:("Character portrait: " + $c.bible), width:(env.J_W|tonumber), height:(env.J_H|tonumber), count:1, seed:($c.seed // (env.J_SEED|tonumber))}
+			+ (if env.J_REF == "" then {} else {reference_images:[env.J_REF]} end)'
+		status=0
+		mapfile -t o < <(stage_opts image.generate)
+		env=$(door "portrait:$cid" image.generate "$render/portraits/$cid" "${o[@]}" -- "$pr") || status=$?
+		stage_ok "portrait:$cid" "$env" "$status" || return $?
+		if [ "$dry" = 0 ]; then
+			img=$(first_output "$env" image/)
+			[ -n "$img" ] && [ -f "$img" ] || fail_render "portrait $cid: the rod reported no image"
+			cp "$img" "$render/portraits/$cid.png"
+			portrait[$cid]=$render/portraits/$cid.png
+		fi
+	done < <(jq -r '.characters[] | [.id, (.seed // "")] | @tsv' "$sb")
+
+	# -- timing: transcribe the draft song; a final reuses the locked timing
+	if [ "$kind" = final ]; then
+		cp "$proj/lock/timing.srt" "$render/timing.srt"
+	elif [ "$dry" = 0 ]; then
+		J_A=$song request "$render/transcribe.request.json" '{audio:env.J_A, language:(.song.language // "en"), format:"srt"}'
+		status=0
+		local topts=(--route "${route_transcribe:-$route}")
+		[ -z "$prov_transcribe" ] || topts+=(--provider "$prov_transcribe")
+		env=$(door transcribe transcribe "$render/transcribe" "${topts[@]}" -- "$render/transcribe.request.json") || status=$?
+		stage_ok transcribe "$env" "$status" || return $?
+		local srt
+		srt=$(printf '%s\n' "$env" | jq -r 'first(.outputs[]? | select(.path | endswith(".srt")) | .path) // empty')
+		[ -n "$srt" ] && [ -f "$srt" ] || fail_render "transcribe: the rod reported no .srt"
+		cues "$srt" | write_srt >"$render/timing.srt"
+	fi
+
+	if [ "$dry" = 1 ]; then
+		# Which animate rod the shots would use; selection only, no request.
+		status=0
+		mapfile -t o < <(stage_opts animate)
+		env=$(door animate animate "$render/animate" "${o[@]}" --) || status=$?
+		stage_ok animate "$env" "$status" || return $?
+		finish_render "$start" ""
+		return 0
+	fi
+
+	# -- shot bounds from the timing; a final reuses the locked bounds
+	local total
+	if [ "$kind" = final ]; then
+		total=$(cat "$proj/lock/duration")
+		cp "$proj/lock/shots.tsv" "$render/shots.tsv"
+	else
+		total=$(dur "$song")
+		shot_bounds "$total" >"$render/shots.tsv"
+	fi
+	awk -F'\t' 'NR==1{print "# shot start times + 1 s (media cut needs a positive first beat)"} {printf "%.3f\n", $2+1} END{printf "%.3f\n", $3+1}' "$render/shots.tsv" >"$render/beats.txt"
+
+	# -- performance clips: one per shot, lip sync driven by the shot's slice of the song
+	local k s e c sp clip clips=() take
+	mkdir -p "$render/shots"
+	while IFS=$'\t' read -r k s e; do
+		c=$(J_K=$k jq -r '.shots[env.J_K|tonumber].character' "$sb")
+		sp=$(J_K=$k jq -r '.shots[env.J_K|tonumber].prompt // ""' "$sb")
+		take=$render/shots/$(printf '%02d' "$((k + 1))")
+		mkdir -p "$take"
+		ffmpeg -nostdin -hide_banner -loglevel error -y -ss "$s" -t "$(awk -v a="$s" -v b="$e" 'BEGIN{printf "%.3f", b-a}')" -i "$song" -ac 2 -ar 48000 "$take/audio.wav" ||
+			fail_render "shot $((k + 1)): could not slice the song"
+		J_P=$sp J_IMG=${portrait[$c]} J_A=$take/audio.wav J_D=$(awk -v a="$s" -v b="$e" 'BEGIN{printf "%.3f", b-a}') J_W=${size%x*} J_H=${size#*x} J_SEED=$seed \
+			request "$take/request.json" '{prompt:env.J_P, image:env.J_IMG, audio:env.J_A, duration_s:(env.J_D|tonumber), width:(env.J_W|tonumber), height:(env.J_H|tonumber), fps:30, seed:(env.J_SEED|tonumber)}'
+		status=0
+		mapfile -t o < <(stage_opts animate)
+		env=$(door "animate:$((k + 1))" animate "$take/out" "${o[@]}" -- "$take/request.json") || status=$?
+		if [ "$status" = 126 ] && [ "$kind" = draft ]; then
+			# Spec, Venue: no lip-sync host -> a still portrait with a slow pan, and the output says so.
+			clip=$take/pan.mp4
+			still_pan "${portrait[$c]}" "$take/audio.wav" "$size" "$clip"
+			J_S="animate:$((k + 1))" J_P=$clip jq -cn '{stage:env.J_S,schema_version:"bashy-svc-v1",role:"animate",provider:"film-still-pan",route:"local",outcome:"success",outputs:[{path:env.J_P,media_type:"video/mp4",note:"still image with a slow pan"}],text:"no animate rod available; still image with a slow pan",cost_class:"local",elapsed:0}' >>"$render/stages.jsonl"
+			note "shot $((k + 1)): no animate rod; still image with a slow pan"
+		else
+			stage_ok "animate:$((k + 1))" "$env" "$status" || return $?
+			clip=$(first_output "$env" video/)
+			[ -n "$clip" ] && [ -f "$clip" ] || fail_render "shot $((k + 1)): the animate rod reported no video"
+		fi
+		clips+=("$clip")
+	done <"$render/shots.tsv"
+
+	assemble "$total" "$size" "${clips[@]}"
+	if [ "$qa" = 1 ]; then qa_review; fi
+	finish_render "$start" "$render/film.mp4"
+}
+
+# fail_render MSG: record the failed render's manifest (outcome error), then exit 1.
+fail_render() {
+	echo "film: $kind $(basename "$render"): $*" >&2
+	finish_render "$start" "" error
+	exit 1
+}
+
+# stage_ok STAGE ENVELOPE STATUS: success continues; a dry run continues on dry-run.
+stage_ok() {
+	local stage=$1 env=$2 st=$3 outcome
+	outcome=$(printf '%s\n' "$env" | jq -r .outcome)
+	case $st:$outcome in
+	0:success | 0:dry-run) return 0 ;;
+	126:*)
+		echo "film: $kind $(basename "$render"): $stage: no usable provider (see the door's lines above)" >&2
+		printf '%s\n' "$env" | jq -r '.unavailable[]? | "  \(.provider): \(.reason) -> \(.install)"' >&2
+		finish_render "$start" "" unavailable
+		exit 126 ;;
+	*)
+		echo "film: $kind $(basename "$render"): $stage failed ($outcome, exit $st): $(printf '%s\n' "$env" | jq -r '.text' | head -5)" >&2
+		finish_render "$start" "" error
+		exit 1 ;;
+	esac
+}
+
+# shot_bounds TOTAL: "k<TAB>start<TAB>end" per shot. A shot with "line" starts
+# at that lyric line's cue; others split the remaining time evenly.
+shot_bounds() {
+	local total=$1
+	cues "$render/timing.srt" | cut -f1 >"$render/cue-starts.txt"
+	jq -r '.shots | to_entries[] | [.key, (.value.line // "")] | @tsv' "$sb" |
+		awk -F'\t' -v total="$total" -v starts="$render/cue-starts.txt" '
+		BEGIN { n = 0; while ((getline l < starts) > 0) cue[n++] = l }
+		{ k[NR-1] = $1; ln[NR-1] = $2; m = NR }
+		END {
+			for (i = 0; i < m; i++) at[i] = (i == 0) ? 0 : ((ln[i] != "" && ln[i] < n) ? cue[ln[i]] : -1)
+			ok = 1; prev = 0
+			for (i = 1; i < m; i++) { if (at[i] < 0) continue; if (at[i] <= prev || at[i] >= total) ok = 0; prev = at[i] }
+			for (i = 0; i < m; i++) if (!ok || at[i] < 0) at[i] = (i == 0 ? 0 : -1)
+			# fill gaps evenly between known anchors
+			for (i = 1; i < m; i++) if (at[i] < 0) {
+				j = i; while (j < m && at[j] < 0) j++
+				hi = (j < m) ? at[j] : total; lo = at[i-1]
+				for (q = i; q < j; q++) at[q] = lo + (hi - lo) * (q - i + 1) / (j - i + 1)
+			}
+			for (i = 0; i < m; i++) printf "%d\t%.3f\t%.3f\n", k[i], at[i], (i + 1 < m ? at[i+1] : total)
+		}'
+}
+
+# still_pan IMAGE AUDIO SIZE OUT: a slow push-in over the portrait for the audio's length.
+still_pan() {
+	local img=$1 audio=$2 size=$3 out=$4 d frames
+	d=$(dur "$audio")
+	frames=$(awk -v d="$d" 'BEGIN{printf "%d", d*30+1}')
+	ffmpeg -nostdin -hide_banner -loglevel error -y -loop 1 -i "$img" -i "$audio" \
+		-filter_complex "[0:v]scale=${size%x*}*2:-2,zoompan=z='min(zoom+0.0006,1.12)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=${frames}:s=${size}:fps=30,format=yuv420p[v]" \
+		-map '[v]' -map 1:a:0 -t "$d" -c:v libx264 -preset medium -crf 20 -c:a aac -b:a 160k "$out" ||
+		fail_render "still pan failed for $img"
+}
+
+# assemble TOTAL SIZE CLIP...: cut on the beats, mux the song, cards, subtitles.
+assemble() {
+	local total=$1 size=$2 secs a
+	shift 2
+	local asm=$render/assembly
+	mkdir -p "$asm"
+	media cut "$@" --beats "$render/beats.txt" -o "$asm/body.mp4" --size "$size" >/dev/null || fail_render "media cut failed"
+	ffmpeg -nostdin -hide_banner -loglevel error -y -i "$asm/body.mp4" -i "$song" -map 0:v:0 -map 1:a:0 -t "$total" \
+		-c:v copy -c:a aac -b:a 160k -ar 48000 -ac 2 "$asm/scored.mp4" || fail_render "muxing the song failed"
+	secs=$(jq -r '.cards.secs // 3' "$sb")
+	jq -r '(.cards.title // [.title]) | .[]' "$sb" >"$asm/title.txt"
+	jq -r '(.cards.end // [.title, "AI-generated"]) | .[]' "$sb" >"$asm/end.txt"
+	media cards "$asm/title.txt" -o "$asm/title.mp4" --secs "$secs" --size "$size" >/dev/null || fail_render "media cards (title) failed"
+	media cards "$asm/end.txt" -o "$asm/end.mp4" --secs "$secs" --size "$size" >/dev/null || fail_render "media cards (end) failed"
+	printf "file '%s'\n" title.mp4 scored.mp4 end.mp4 >"$asm/list.txt"
+	(cd "$asm" && ffmpeg -nostdin -hide_banner -loglevel error -y -f concat -safe 0 -i list.txt -c copy joined.mp4) || fail_render "joining cards and body failed"
+	# Subtitles: the timing track, plus the translation line for line, shifted past the title card.
+	a=$(dur "$asm/title.mp4")
+	shift_srt "$render/timing.srt" "$a" "$asm/subs.srt"
+	local subs=("$asm/subs.srt")
+	if jq -e '.translation.lines | length > 0' "$sb" >/dev/null 2>&1; then
+		if [ "$(cues "$render/timing.srt" | wc -l | tr -d ' ')" = "$(jq '.translation.lines | length' "$sb")" ]; then
+			cues "$render/timing.srt" | cut -f1,2 | paste - <(jq -r '.translation.lines[]' "$sb") >"$asm/lang2.tsv"
+			write_srt <"$asm/lang2.tsv" >"$render/translation.srt"
+			shift_srt "$render/translation.srt" "$a" "$asm/subs2.srt"
+			subs+=("$asm/subs2.srt")
+		else
+			note "translation has $(jq '.translation.lines | length' "$sb") lines but the timing has $(cues "$render/timing.srt" | wc -l | tr -d ' ') cues; subtitles are single-language (fix the timing and lock it with --timing)"
+		fi
+	fi
+	media subs "${subs[@]}" -o "$render/subs.ass" --video "$asm/joined.mp4" --burn "$render/film.mp4" >/dev/null 2>&1 ||
+		fail_render "media subs failed"
+	[ -s "$render/film.mp4" ] || fail_render "no film.mp4"
+}
+
+QA_QUESTION='You are the quality reviewer for a short AI music video. Check: lip sync in time with the vocals, subtitles in time (within 150 ms) and readable, character consistency across shots, title and end cards present, an AI-generated disclaimer present. Answer with exactly one JSON object: {"pass": true|false, "issues": ["..."]}.'
+
+# qa_review: agy (or --qa-provider) watches the film through the video.understand door.
+qa_review() {
+	local env status=0 qopts=()
+	[ -z "$qa_provider" ] || qopts+=(--provider "$qa_provider")
+	env=$(door qa video.understand "$render/qa" "${qopts[@]}" -- "$render/film.mp4" "$QA_QUESTION") || status=$?
+	printf '%s\n' "$env" | J_ST=$status jq '(env.J_ST|tonumber) as $st |
+		(.text // "") as $t
+		| ($t | [scan("\\{[^{}]*\"pass\"[^{}]*\\}")] | last) as $m
+		| (if $m == null then null else (try ($m | fromjson) catch null) end) as $v
+		| {schema_version:"bashy-film-qa-v1", provider, route, outcome, exit:$st,
+		   verdict:(if .outcome != "success" then "unavailable" elif $v == null then "unparsed" elif $v.pass == true then "pass" else "fail" end),
+		   issues:($v.issues // []), text:$t}' >"$render/qa.json"
+	note "qa: $(jq -r '.verdict' "$render/qa.json") ($(jq -r '.provider' "$render/qa.json"))"
+	jq -r '.issues[]? | "  qa issue: \(.)"' "$render/qa.json" >&2
+}
+
+# finish_render START OUTPUT [OUTCOME]: write manifest.json and print it (or its path).
+finish_render() {
+	local start=$1 output=$2 outcome=${3:-}
+	[ -n "$outcome" ] || { if [ "$dry" = 1 ]; then outcome=dry-run; else outcome=success; fi; }
+	local lock_sha=""
+	[ "$kind" != final ] || lock_sha=$(sha "$proj/lock/lock.json")
+	J_KIND=$kind J_ID=$(basename "$render") J_ROUTE=$route J_OUTCOME=$outcome J_SB=$(sha "$sb") J_LOCK=$lock_sha J_OUT=$output \
+		J_ELAPSED=$((SECONDS - start)) J_STAGES=$(awk 'BEGIN{printf "["} NR>1{printf ","} {printf "%s", $0} END{print "]"}' "$render/stages.jsonl") \
+		J_QA=$(if [ -f "$render/qa.json" ]; then cat "$render/qa.json"; else echo null; fi) jq -n '
+		env.J_KIND as $kind | env.J_ID as $id | env.J_ROUTE as $route | env.J_OUTCOME as $outcome | env.J_SB as $sb_sha
+		| env.J_LOCK as $lock_sha | env.J_OUT as $out | (env.J_ELAPSED|tonumber) as $elapsed | (env.J_STAGES|fromjson) as $stages
+		| [env.J_QA|fromjson] as $qa |
+		{schema_version:"bashy-film-render-v1", kind:$kind, id:$id, route:$route, outcome:$outcome,
+		 storyboard_sha256:$sb_sha, output:(if $out == "" then null else $out end), elapsed:$elapsed,
+		 stages:$stages,
+		 cost_classes:($stages | map(select(.outcome == "success" or .outcome == "dry-run") | .cost_class) | map(select(. != "")) | unique),
+		 degraded:[$stages[] | .outputs[]? | select(.note != null) | {path, note}],
+		 qa:($qa[0] // null)}
+		+ (if $lock_sha == "" then {} else {lock_sha256:$lock_sha} end)' >"$render/manifest.json"
+	if [ "$json" = 1 ]; then cat "$render/manifest.json"; else echo "$render/manifest.json"; fi
+}
+
+# ---- lock -----------------------------------------------------------------------
+
+cmd_lock() {
+	local proj="" draft="" timing=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--draft) draft=$2; shift 2 ;;
+		--timing) timing=$2; shift 2 ;;
+		-*) die "lock: unknown option: $1" ;;
+		*) proj=$1; shift ;;
+		esac
+	done
+	[ -n "$proj" ] && [ -d "$proj" ] || die "usage: film lock DIR [--draft N] [--timing FILE]"
+	proj=$(cd "$proj" && pwd)
+	sb=$proj/storyboard.json
+	check_storyboard "$sb"
+	if [ -z "$draft" ]; then
+		draft=$(ls -1 "$proj/drafts" 2>/dev/null | grep -E '^[0-9]+$' | sort -n | while read -r d; do
+			[ "$(jq -r .outcome "$proj/drafts/$d/manifest.json" 2>/dev/null)" = success ] && echo "$d"; done | tail -1)
+		[ -n "$draft" ] || die "lock: no successful draft in $proj/drafts (run: film draft $proj)"
+	fi
+	draft=$(printf '%02d' "$((10#$draft))")
+	local d=$proj/drafts/$draft
+	[ "$(jq -r .outcome "$d/manifest.json" 2>/dev/null)" = success ] || die "lock: draft $draft did not succeed"
+	[ "$(jq -r .storyboard_sha256 "$d/manifest.json")" = "$(sha "$sb")" ] ||
+		die "lock: storyboard.json changed since draft $draft; draft again before locking"
+	[ -z "$timing" ] || [ -f "$timing" ] || die "lock: no such timing file: $timing"
+	local lock=$proj/lock
+	rm -rf "$lock.new"
+	mkdir -p "$lock.new/portraits"
+	cp "$sb" "$lock.new/storyboard.json"
+	if [ -n "$timing" ]; then
+		[ "$(cues "$timing" | wc -l | tr -d ' ')" -gt 0 ] || die "lock: no cues in $timing"
+		cues "$timing" | write_srt >"$lock.new/timing.srt"
+	else
+		cp "$d/timing.srt" "$lock.new/timing.srt"
+	fi
+	cp "$d/shots.tsv" "$lock.new/shots.tsv"
+	awk -F'\t' 'END{print $3}' "$d/shots.tsv" >"$lock.new/duration"
+	cp "$d"/portraits/*.png "$lock.new/portraits/"
+	local files=() f
+	while IFS= read -r f; do files+=("$f"); done < <(cd "$lock.new" && find . -type f | sed 's|^\./||' | sort)
+	{
+		for f in "${files[@]}"; do printf '%s\t%s\n' "$f" "$(sha "$lock.new/$f")"; done
+	} >"$lock.new/sums.tsv"
+	J_DRAFT=$draft J_SUMS=$(cat "$lock.new/sums.tsv") jq -n '{schema_version:"bashy-film-lock-v1", draft:env.J_DRAFT,
+		files:([env.J_SUMS | split("\n")[] | select(. != "") | split("\t") | {(.[0]):.[1]}] | add)}' >"$lock.new/lock.json"
+	rm "$lock.new/sums.tsv"
+	rm -rf "$lock"
+	mv "$lock.new" "$lock"
+	echo "$lock/lock.json"
+}
+
+# verify_lock DIR: every locked file is present and unchanged.
+verify_lock() {
+	local lock=$1 f want got
+	[ -f "$lock/lock.json" ] || die "final: no lock (run: film lock DIR after a draft you like)"
+	while IFS=$'\t' read -r f want; do
+		[ -f "$lock/$f" ] || die "final: locked file missing: $lock/$f"
+		got=$(sha "$lock/$f")
+		[ "$got" = "$want" ] || die "final: locked file changed: $lock/$f (re-lock with film lock)"
+	done < <(jq -r '.files | to_entries[] | [.key, .value] | @tsv' "$lock/lock.json")
+}
+
+# ---- status ---------------------------------------------------------------------
+
+cmd_status() {
+	[ $# -eq 1 ] && [ -d "$1" ] || die "usage: film status DIR"
+	local proj m
+	proj=$(cd "$1" && pwd)
+	for m in "$proj"/drafts/[0-9]*/manifest.json "$proj"/finals/[0-9]*/manifest.json; do
+		[ -f "$m" ] || continue
+		jq -r '[.kind, .id, .route, .outcome, (.elapsed|tostring) + "s", (.cost_classes|join(",")), (.qa.verdict // "-"), (.output // "-")] | @tsv' "$m"
+	done
+	if [ -f "$proj/lock/lock.json" ]; then echo "lock	draft $(jq -r .draft "$proj/lock/lock.json")	$proj/lock"; fi
+}
+
+case ${1:-} in
+--skill) sed -n '/^~~~skill/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d' ;;
+-h | --help | help | "") usage; [ -n "${1:-}" ] || exit 2 ;;
+doctor) cmd_doctor ;;
+init) shift; cmd_init "$@" ;;
+draft) shift; cmd_draft "$@" ;;
+lock) shift; cmd_lock "$@" ;;
+final) shift; cmd_final "$@" ;;
+status) shift; cmd_status "$@" ;;
+*) die "unknown verb: $1 (doctor, init, draft, lock, final, status)" ;;
+esac

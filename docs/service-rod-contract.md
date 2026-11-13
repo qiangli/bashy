@@ -161,5 +161,9 @@ command ring and covers:
 - spend refused without `--yes`, `--dry-run`, and `--yes`;
 - `--role`.
 
+`GOWORK=off go -C examples/film test ./...` drives `film.bsh` (M7), the
+first caller of the contract: draft (oss), lock and final (commercial route)
+through the door with fixture rods for every role.
+
 `go -C examples/defaults test ./...` checks that `song` and `animate` are
 registered with their roles.
