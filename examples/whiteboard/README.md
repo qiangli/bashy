@@ -30,6 +30,13 @@ frontend bundle, a small collab/storage service with standard owner-only bashy O
 and declared checks. The source is then imported into Bashy's managed checkout.
 No app source is added to Bashy core.
 
+The pin carries no phone-home of its own, so `web-prefix.patch` only relocates
+the app: it points the scene-storage and collaboration endpoints at the local
+`/whiteboard` service and sets the frontend base prefix. The third-party
+telemetry, Firebase backend, analytics, remote fonts and Excalidraw+ paths the
+upstream ships are removed in the fork itself — see
+`../../../docs/whiteboard-fork-no-phone-home.md`.
+
 ## Shape a personal version
 
 Use the paired principal's full `device:` identity with the CLI. A web user
@@ -64,11 +71,14 @@ The candidate's preview is private to that principal.
 The source is the GitHub fork
 [`qiangli/excalidraw-shape`](https://github.com/qiangli/excalidraw-shape) of
 [`excalidraw/excalidraw`](https://github.com/excalidraw/excalidraw), pinned to
-`a2ec2889babf7d2295469c6d90ebe77fae57df84` (tag `v0.18.1`). Its actual
-[`LICENSE`](https://github.com/qiangli/excalidraw-shape/blob/a2ec2889babf7d2295469c6d90ebe77fae57df84/LICENSE)
-is MIT (SPDX `MIT`). The upstream GitHub repository reported 135,622 stars
-and a push on 2026-11-12 when checked through its repository API on 2026-11-13.
-The pinned tree contains no `ee/`, `premium/`, or `enterprise/` directory.
+`1304220cc539d902dfce104bac6cd7c946d9d591` on branch `no-phone-home`, which is
+three commits on top of tag `v0.18.1` (`a2ec2889babf7d2295469c6d90ebe77fae57df84`).
+Its actual
+[`LICENSE`](https://github.com/qiangli/excalidraw-shape/blob/1304220cc539d902dfce104bac6cd7c946d9d591/LICENSE)
+is MIT (SPDX `MIT`), unchanged from upstream. The upstream GitHub repository
+reported 135,622 stars and a push on 2026-11-12 when checked through its
+repository API on 2026-11-13. The pinned tree contains no `ee/`, `premium/`,
+or `enterprise/` directory.
 
 Targeted command checks: `bash whiteboard_test.sh`. Targeted source tests:
 `GOWORK=off CGO_ENABLED=0 go test ./server/...` from the installed source.

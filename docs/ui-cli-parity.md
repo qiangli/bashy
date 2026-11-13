@@ -135,7 +135,7 @@ parity. `--json` is the scriptable result path for registered desk commands.
 | Viewer | Book ID in desk JSON (`examples/desk/viewer/main.go:13-15`); app-local ID/URL, no kind ref | No viewer resolver (`internal/agentos/refs.go:42-62`) | Loopback book page and invite; same CLI/API actions (`examples/desk/viewer/cli.go:1,181-242`) | HTML/PDF export (`examples/desk/viewer/viewer.bsh:25-27`); exported files can use `git` | `add/append/open/show/list/share/close/export`; view-only set refusal (`examples/desk/viewer/cli.go:217-242`); **S2 ref gap**, otherwise verified OK |
 | Notepad | Item ID in desk JSON (`examples/desk/notepad/README.md:55`); app-local ID/URL, no kind ref | No notepad resolver (`internal/agentos/refs.go:42-62`) | Loopback edit/share; owner key and invite (`examples/desk/notepad/README.md:7-25`) | PDF/PNG/HTML/TXT export (`examples/desk/notepad/cli.go:431`); files can use `git` | `add/open/show/set/list/share/close/export/join` (`examples/desk/notepad/cli.go:326-471`); **S2 ref gap**, otherwise verified OK |
 | Brainstorm | Named session in saved JSON (`examples/brainstorm/README.md:106-111`); local name/URL, no kind ref | No brainstorm resolver (`internal/agentos/refs.go:42-62`) | Page supports ideas, votes, invites/revoke, phase/round controls (`examples/brainstorm/server/index.html:147-159,182-188`); facilitator guard (`examples/brainstorm/server/desk.go:250-356`) | Browser JSON/Markdown export (`examples/brainstorm/server/index.html:187-188`); backup/restore, files can use `git` | Registered desk verbs and phase/round flags (`examples/brainstorm/server/cli.go:70-105,110-130`); **new CLI action gap** and **S2 ref gap** |
-| Whiteboard | Named board in saved JSON (`examples/whiteboard/README.md:81-86`); local name/URL, no kind ref | No whiteboard resolver (`internal/agentos/refs.go:42-62`) | Page draws, locks, clears, invites/revokes; facilitator and participant checks (`examples/whiteboard/server/index.html:115-120`; `examples/whiteboard/server/desk.go:180-224`) | Browser JSON/PNG export; backup/restore, files can use `git` (`examples/whiteboard/server/index.html:119-120`) | Registered desk seven (`examples/whiteboard/server/cli.go:63-106`); **new CLI action gap** and **S2 ref gap** |
+| Whiteboard | Board records under the app's own data dir (`examples/whiteboard/server/desk.go:20-27,36-38`); the board id and its `#room=` URL are app-local, no kind ref | No whiteboard resolver (`internal/agentos/refs.go:42-62`) | The page is the pinned MIT fork's canvas, served under `/whiteboard/` (`examples/whiteboard/README.md:71-81`, `examples/whiteboard/server/main.go:110-139`). Board add/open/show/set/close/list/share are HTTP actions on `/whiteboard/api/action` (`server/desk.go:187-299`); scene and room-file storage is `/whiteboard/api/v2/*` and `/whiteboard/files/*` (`server/storage.go:41-53`); live rooms are the socket shim (`server/collab.go:230-249`) | Canvas PNG/SVG/JSON export is a browser download in the fork UI; a shareable link is a stored scene (`server/storage.go:55-73`); exported files can use `git` | `bashy whiteboard` registers install/start/stop/status/source only (`examples/whiteboard/whiteboard.bsh:16-21`) — **no data verb for any board, scene or room action**, see the S5b row under Proven gaps. **S2 ref gap** |
 | Form | Form ID in desk JSON; no KB UUID/sequence (`examples/desk/form/README.md:162-175`) | No form resolver (`internal/agentos/refs.go:42-62`) | Loopback respondent answer/join and owner share; owner key gates show/set/share/close (`examples/desk/form/README.md:175-183`) | JSON answers via `show/wait`; saved files can use `git` | CLI has owner verbs, `reply` and a `join` that prints a URL (`examples/desk/form/server/cli.go:300-438`); **new CLI respondent-action gap**, **S2 ref gap** |
 | Chart | Chart ID in desk JSON (`examples/desk/chart/main.go:227-236`); app-local URL, no kind ref | No chart resolver (`internal/agentos/refs.go:42-62`) | Page create/share/revoke/join with owner guard (`examples/desk/chart/main.go:191-210,360-406`); source polling restricted to loopback (`examples/desk/chart/README.md:94-102`) | SVG chart; source file can use `git` (`examples/desk/chart/README.md:1-4,94-112`) | Checkout register exists (`examples/desk/chart/register.sh:10-24`), host command absent; CLI `add/open/show/set/list/share/close/revoke` but no `join` (`examples/desk/chart/cli.go:112-121`): **new CLI join gap**, **S2 ref gap** |
 | Recording | Single take at caller-selected path, no entity ref (`examples/record/record.bsh:14-30,127`) | No media kind (`internal/agentos/refs.go:42-62`) | Local one-take camera page; remote session refused (`examples/record/record.bsh:46-51`) | Mode-0600 photo/audio/video file; explicit file can use `git` or LFS (`examples/record/README.md:44-47`) | `record` registered on host; page is the necessary human capture step and CLI returns path (`examples/record/README.md:18-22`); **S4 file/Git journey to verify**, otherwise verified OK |
@@ -167,7 +167,7 @@ the audit does not implement it. Follow the KB guideline
 |---|---|
 | **Addressed by S2:** registered apps with `show <id> --json` use the generic `app:<command>/<id>` ref, for example `bashy define app:notepad/<id>`. The app's own access check remains authoritative. Media file proof is tracked separately. | S2 (media file proof also S4) |
 | KB has its own resolver/CLI but no Klatch or Viewer browser catalog bridge: `internal/agentos/refs.go:47`, `examples/desk/viewer/main.go:1-15`, `examples/klatch/register.sh:6-14`. | S3 |
-| Whiteboard page draw/clear/lock/invite revoke and JSON/PNG download exceed CLI desk seven: `examples/whiteboard/server/index.html:115-120`, `examples/whiteboard/server/cli.go:63-106`. | new (CLI parity; S6 must verify) |
+| **Reopened and widened by S5b (2026-11-13):** whiteboard has no CLI path for *any* web action. The page and `/whiteboard/api/*` expose board add/open/show/set/close/list/share (`examples/whiteboard/server/desk.go:187-299`), scene post/get and room file put/get (`server/storage.go:41-53`) and room join/broadcast/follow (`server/collab.go:230-249`), while `examples/whiteboard/whiteboard.bsh:16-21` registers only install/start/stop/status/source. The S614 S11 verbs below (`whiteboard draw\|clear\|lock\|revoke\|download`) were deleted with `server/cli.go` when the fork wrapper landed in bashy `93a5de97`; nothing replaced them. | S632 A5 (`876cd327`, whiteboard data verbs) |
 | Brainstorm page idea edit/delete/vote/invite revoke and JSON/Markdown download exceed CLI desk seven: `examples/brainstorm/server/index.html:147-159,182-188`, `examples/brainstorm/server/cli.go:110-130`. | new (CLI parity; S6 must verify) |
 | Form respondent `answer` is an HTTP/page action, while CLI `join` only prints a URL and has no `answer` case: `examples/desk/form/server/main.go:345-367`, `examples/desk/form/server/cli.go:432-440`. | new (CLI parity; S6 must verify) |
 | Chart HTTP `join` lacks a CLI case: `examples/desk/chart/main.go:191-210`, `examples/desk/chart/cli.go:112-121`. | new (CLI parity; S6 must verify) |
@@ -177,6 +177,12 @@ No gap is inferred solely from a locally missing registration: Chart and Google
 have checkout registration scripts, while Video intentionally has only a script.
 
 ## Sprint 614 S11: desk page actions
+
+> **Stale for whiteboard (S5b, 2026-11-13).** The five `bashy whiteboard …`
+> verbs in this table shipped as cases in `examples/whiteboard/server/cli.go`,
+> which bashy `93a5de97` deleted when the shapeable fork wrapper replaced the
+> desk launcher. They do not exist today. The current whiteboard surface and
+> its gaps are the next section; the rest of this table is unaffected.
 
 | Page action | CLI verb |
 |---|---|
@@ -194,3 +200,38 @@ have checkout registration scripts, while Video intentionally has only a script.
 | Chart join | `bashy chart join ID --invite CODE --participant TOKEN --json` |
 
 All write verbs above accept `--dry-run`. `--participant` carries the same member identity across separate CLI invocations.
+
+## Sprint 632 S5b: whiteboard after the fork wrapper
+
+The whiteboard app is now a pinned MIT Excalidraw fork wrapped as a shapeable
+custom command (`examples/whiteboard/`), not a desk launcher with its own page.
+One row per action the web surface exposes, with the CLI path or the recorded
+reason it has none. The owning app is the local service in
+`examples/whiteboard/server/`; every row's HTTP action is also reachable under
+the bare path, without the `/whiteboard` prefix (`server/main.go:93-108`).
+
+| Web action | HTTP action | CLI verb |
+|---|---|---|
+| Open a board / draw on the canvas | page under `/whiteboard/` (`server/main.go:110-139`) | **gap** — human drawing step; the agent equivalent is a scene write, which is itself a gap (below). S632 A5 |
+| List boards | `GET /whiteboard/api/board` (`server/desk.go:81-119`) | **gap** — S632 A5 (`boards list`) |
+| Read one board's state | `GET /whiteboard/api/state?id=ID` (`server/desk.go:121-154`) | **gap** — S632 A5 |
+| Create a board (returns its owner key) | `POST /whiteboard/api/action` `add` (`server/desk.go:188-216`) | **gap** — S632 A5 (`new`) |
+| Open / show a board | `POST /whiteboard/api/action` `open`\|`show` (`server/desk.go:218-239`) | **gap** — S632 A5 |
+| Append a note, bump the revision | `POST /whiteboard/api/action` `set` (`server/desk.go:241-262`) | **gap** — S632 A5 |
+| Close (lock) a board | `POST /whiteboard/api/action` `close` (`server/desk.go:264-280`) | **gap** — S632 A5 |
+| Share a board (its room URL) | `POST /whiteboard/api/action` `share` (`server/desk.go:285-295`) | **gap** — S632 A5 (`share link`) |
+| Save a scene behind a shareable link | `POST /whiteboard/api/v2/post/` (`server/storage.go:55-73`) | **gap** — S632 A5 (`export`) |
+| Load a scene from a shareable link | `GET /whiteboard/api/v2/ID` (`server/storage.go:75-89`) | **gap** — S632 A5 |
+| Upload / fetch a room image or the room scene blob | `POST`\|`GET /whiteboard/files/…` (`server/storage.go:91-129`) | **gap** — S632 A5 |
+| Join a live room, broadcast, follow a cursor | socket shim `/whiteboard/socket.io/` (`server/collab.go:230-249`) | **no verb, recorded reason:** a live collaboration session is a browser transport, not a request-shaped action. The agent equivalent is reading and writing the board's scene, which the rows above cover. Not a gap |
+| Export the canvas to PNG / SVG / `.excalidraw` | browser download in the fork UI, no server call | **gap** — S632 A5 (`export`) must offer the same formats from the CLI |
+| Import an `.excalidraw` file | browser upload in the fork UI, no server call | **gap** — pairs with `export`; S632 A5 |
+| Browse / publish a shape library | upstream feature, no endpoint configured — `VITE_APP_LIBRARY_URL` and `VITE_APP_LIBRARY_BACKEND` are unset in the fork, so the control leads nowhere | **no verb, recorded reason:** the vendor library service is deliberately not wired up (no phone-home). The control should be hidden rather than given a verb; tracked for S632 S11 |
+| Health check | `GET /whiteboard/healthz` (`server/main.go:87-90`) | `bashy whiteboard status` (`whiteboard.bsh:128-131`) reports the console and pin; the endpoint is the liveness probe. Not a gap |
+| Install / start / stop the app, read its source dir | n/a | `bashy whiteboard install\|start\|stop\|status\|source` (`whiteboard.bsh:16-21`) |
+| Request, verify, preview, approve, undo a personal shape | `/shape/whiteboard/` | `bashy shape wish\|verify\|preview\|approve\|history\|undo` (`examples/whiteboard/README.md:45-52`) |
+
+So: **the only whiteboard verbs today are lifecycle and shaping.** Every data
+action is a gap owned by S632 A5, which must give them `--json`, `--dry-run` on
+writes, and the board owner key as the credential so a non-owner is denied
+exactly as the page denies them (`server/desk.go:25`).

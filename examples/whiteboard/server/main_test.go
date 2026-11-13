@@ -223,3 +223,56 @@ func TestTelemetryEnvGated(t *testing.T) {
 		t.Fatalf("readTraceparent failed: %s, %s", traceID, parentID)
 	}
 }
+
+// The frontend's local store (excalidraw-app/data/localStore.ts, which replaces
+// the upstream Firebase backend) persists an encrypted room scene as a blob
+// under the app's own base prefix, and treats 404 as "no scene yet". Pin that
+// exact path shape, prefix included, so the two sides cannot drift apart.
+func TestRoomSceneStorageUnderWebPrefix(t *testing.T) {
+	dir := t.TempDir()
+	storage, err := NewStorage(dir)
+	if err != nil {
+		t.Fatalf("NewStorage failed: %v", err)
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/whiteboard/files/", storage)
+	handler := ownerTrace(mux, dir)
+
+	const scenePath = "/whiteboard/files/rooms/room1/scene"
+
+	missing := httptest.NewRecorder()
+	handler.ServeHTTP(missing, httptest.NewRequest(http.MethodGet, scenePath, nil))
+	if missing.Code != http.StatusNotFound {
+		t.Fatalf("GET of an unwritten scene = %d, want 404", missing.Code)
+	}
+
+	// iv || ciphertext, as encodeStoredScene frames it; opaque bytes to the server.
+	scene := append(bytes.Repeat([]byte{7}, 12), []byte("ciphertext")...)
+	post := httptest.NewRecorder()
+	handler.ServeHTTP(post, httptest.NewRequest(http.MethodPost, scenePath, bytes.NewReader(scene)))
+	if post.Code != http.StatusOK {
+		t.Fatalf("POST scene = %d", post.Code)
+	}
+
+	get := httptest.NewRecorder()
+	handler.ServeHTTP(get, httptest.NewRequest(http.MethodGet, scenePath, nil))
+	if get.Code != http.StatusOK {
+		t.Fatalf("GET scene = %d", get.Code)
+	}
+	if !bytes.Equal(get.Body.Bytes(), scene) {
+		t.Fatalf("scene round trip mismatch: %q", get.Body.Bytes())
+	}
+
+	// Room files share the prefix and must not collide with the scene blob.
+	filePath := "/whiteboard/files/rooms/room1/abc123"
+	fpost := httptest.NewRecorder()
+	handler.ServeHTTP(fpost, httptest.NewRequest(http.MethodPost, filePath, strings.NewReader("image")))
+	if fpost.Code != http.StatusOK {
+		t.Fatalf("POST room file = %d", fpost.Code)
+	}
+	again := httptest.NewRecorder()
+	handler.ServeHTTP(again, httptest.NewRequest(http.MethodGet, scenePath, nil))
+	if !bytes.Equal(again.Body.Bytes(), scene) {
+		t.Fatalf("room file overwrote the scene blob")
+	}
+}
