@@ -1,0 +1,21 @@
+{{ define "main" }}
+<section class="hero-section">
+  <div class="hero-content">
+    <div class="tagline-badge">{{ .Params.tagline }}</div>
+    <h1 class="hero-title">{{ .Params.hero_heading }}</h1>
+    <p class="hero-subtext">{{ .Params.hero_subheading }}</p>
+    <div class="hero-actions">
+      <a href="/services/" class="btn btn-primary">Our Services</a>
+      <a href="/contact/" class="btn btn-secondary">Get In Touch</a>
+    </div>
+  </div>
+</section>
+
+<section class="home-content">
+  {{ .Content }}
+</section>
+
+{{ if .Site.Params.show_pricing }}
+{{ partial "pricing.html" . }}
+{{ end }}
+{{ end }}

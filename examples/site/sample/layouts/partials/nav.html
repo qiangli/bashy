@@ -1,0 +1,12 @@
+<nav class="site-nav" aria-label="Main Navigation">
+  <ul class="nav-list">
+    <li><a href="/" class="nav-link">Home</a></li>
+    <li><a href="/about/" class="nav-link">About</a></li>
+    <li><a href="/services/" class="nav-link">Services</a></li>
+    {{ if .Site.Params.show_pricing }}
+    <li><a href="/pricing/" class="nav-link">Pricing</a></li>
+    {{ end }}
+    <li><a href="/contact/" class="nav-link">Contact</a></li>
+    <li><a href="/admin/" class="nav-link nav-btn" title="Content Management System">Admin CMS</a></li>
+  </ul>
+</nav>

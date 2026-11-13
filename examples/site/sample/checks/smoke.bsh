@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Build static output if public/ is missing (e.g. fresh clone of shaped app)
+if [[ ! -d public ]]; then
+  if command -v hugo >/dev/null 2>&1; then
+    hugo -d public --quiet
+  elif [[ -f generator/main.go ]]; then
+    if command -v go >/dev/null 2>&1; then
+      go run ./generator/main.go . public
+    elif [[ -n "${BASH:-}" ]]; then
+      "$BASH" go run ./generator/main.go . public
+    fi
+  elif [[ -f ../generator/main.go ]]; then
+    if command -v go >/dev/null 2>&1; then
+      go run ../generator/main.go . public
+    elif [[ -n "${BASH:-}" ]]; then
+      "$BASH" go run ../generator/main.go . public
+    fi
+  fi
+fi
+
+# Verify static build output exists
+test -s public/index.html
+
+# Verify core HTML document elements and navigation
+grep -qi '<title>' public/index.html
+grep -qi '<nav' public/index.html
+grep -qi 'class="site-wrapper"' public/index.html || grep -qi '<header' public/index.html
+
+# Verify admin editor (Sveltia CMS) and configuration
+test -s public/admin/index.html
+test -s public/admin/config.yml
+test -s public/admin/sveltia-cms.min.js
+grep -qi 'collections:' public/admin/config.yml
+
+# Verify visual drag-and-drop editor
+test -s public/admin/editor/index.html

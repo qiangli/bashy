@@ -1,0 +1,4 @@
+# Shaping contract: the base effect cap `bashy src pr verify` runs checks/
+# under. A check builds the site inside the isolated clone (read, write, exec)
+# and checks the static public/ files and loopback console readiness.
+@effects("read,write,exec,net")
