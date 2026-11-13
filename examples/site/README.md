@@ -27,7 +27,7 @@ activation is scoped by the console to the requesting principal.
 - Upstream license read 2026-11-13: MIT
 - Upstream stars read from the GitHub repository API 2026-11-13: 28,907
 - Fork: `qiangli/open-lovable-shape`
-- Exact fork commit: `8544bc18c380e106cf4935c1112461b47e5cbfff`
+- Exact fork commit: `867d93dde5c30139467b6802e4f6ddb6f93d679f`
 - Fork branch: `shape/local-owner-runtime`
 
 Targeted source gates: `npm run test:shape`, `npm run build`, and
