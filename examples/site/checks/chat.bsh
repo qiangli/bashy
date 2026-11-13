@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+test -s tests/shape-contract.test.mjs
+test -s lib/ai/owner-provider.ts
+grep -q "ENABLE_FIRECRAWL !== 'true'" lib/firecrawl-enabled.ts
+grep -q "'oci', ...args" lib/sandbox/providers/bashy-oci-provider.ts
+support_endpoint='widget.'"usepylon.com"
+! grep -Rni --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=.next \
+  --exclude=chat.bsh "$support_endpoint" .

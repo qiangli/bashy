@@ -1,0 +1,175 @@
+#!/usr/bin/env -S bashy --bashsharp
+set -euo pipefail
+export BASHY_HINTS=off
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+runner=${BASHY_BIN:-bashy}
+git_bin=${SITE_GIT_BIN:-/usr/bin/git}
+npm_bin=${SITE_NPM_BIN:-npm}
+pin=8544bc18c380e106cf4935c1112461b47e5cbfff
+fork=https://github.com/qiangli/open-lovable-shape.git
+home=${BASHY_HOME:-$HOME/.bashy}
+state=${SITE_STATE_DIR:-$home/site}
+
+usage() {
+  cat <<'EOF'
+site new --template chat [NAME] [--port PORT]
+site start|stop|status|source [NAME]
+
+  new     Install the exact MIT fork commit and register a shapeable chat site.
+  start   Start its Linux web UI on loopback. Requires an owner gateway URL.
+  stop    Stop the managed web UI.
+  status  Show the pinned revision and process state.
+  source  Print the managed source directory.
+
+Gateway: set OPENAI_COMPATIBLE_BASE_URL (or OPENAI_BASE_URL/LLM_BASE_URL).
+OPENAI_COMPATIBLE_API_KEY is optional. Site cloning is off by default; opt in
+with ENABLE_FIRECRAWL=true and FIRECRAWL_API_KEY. Generated previews use local
+Podman through bashy oci. This example supports Linux and the web UI only.
+EOF
+}
+
+valid_name() { [[ $1 =~ ^[a-z][a-z0-9-]*$ ]]; }
+instance_dir() { printf '%s/instances/%s\n' "$state" "$1"; }
+source_dir() { printf '%s/source\n' "$(instance_dir "$1")"; }
+
+installed() {
+  local source
+  source=$(source_dir "$1")
+  [[ -f $source/.site-source-pin ]] &&
+    [[ $(<"$source/.site-source-pin") == "$pin" ]] &&
+    [[ -x $source/node_modules/.bin/next ]] &&
+    [[ -f $source/.next/BUILD_ID ]] &&
+    [[ -f $source/shaped.json ]]
+}
+
+register_app() {
+  local name=$1 source
+  source=$(source_dir "$name")
+  "$runner" app add "$name" --type shaped --source "$source" --label "Site: $name" \
+    --icon '✨' --tip 'Build and revise a private site through chat on owner infrastructure' --force
+}
+
+new_chat() {
+  local name=$1 port=$2 instance source scratch
+  valid_name "$name" || { echo 'site: NAME must begin with a letter and contain only lowercase letters, digits, or hyphens' >&2; exit 2; }
+  [[ $port =~ ^[0-9]+$ ]] && (( port >= 1024 && port <= 65535 )) || { echo 'site: invalid port' >&2; exit 2; }
+  instance=$(instance_dir "$name")
+  source=$(source_dir "$name")
+  if installed "$name"; then
+    register_app "$name"
+    echo "site: $name already installed at fork commit $pin"
+    return
+  fi
+  [[ ! -e $source ]] || { echo "site: $source exists but does not match the pinned build; inspect it manually" >&2; exit 1; }
+  command -v "$git_bin" >/dev/null
+  command -v "$npm_bin" >/dev/null
+  mkdir -p "$state/instances"
+  scratch=$(mktemp -d "$state/install.XXXXXX")
+  trap '[[ -n ${scratch:-} ]] && rm -rf "$scratch"' EXIT
+  "$git_bin" clone --quiet --filter=blob:none "$fork" "$scratch/source"
+  "$git_bin" -C "$scratch/source" checkout --quiet --detach "$pin"
+  [[ $("$git_bin" -C "$scratch/source" rev-parse HEAD) == "$pin" ]]
+  head -n 1 "$scratch/source/LICENSE" | grep -qx 'MIT License'
+  if find "$scratch/source" -type d \( -name ee -o -name premium -o -name enterprise \) -print | grep -q .; then
+    echo 'site: non-permissive source directory found' >&2
+    exit 1
+  fi
+  (cd "$scratch/source" && "$npm_bin" ci --ignore-scripts --no-audit --no-fund && "$npm_bin" run build)
+  cp "$here/shaped.json" "$scratch/source/shaped.json"
+  cp "$here/contract.bsh" "$scratch/source/contract.bsh"
+  mkdir -p "$scratch/source/checks"
+  cp "$here/checks/chat.bsh" "$scratch/source/checks/chat.bsh"
+  printf '%s\n' "$pin" > "$scratch/source/.site-source-pin"
+  printf '%s\n' "$port" > "$scratch/source/.site-port"
+  "$git_bin" -C "$scratch/source" add shaped.json contract.bsh checks/chat.bsh .site-source-pin .site-port
+  "$git_bin" -C "$scratch/source" -c user.name='Bashy Site' -c user.email='site@example.invalid' \
+    commit -qm 'Add per-principal shaping adapter'
+  mkdir -p "$instance"
+  mv "$scratch/source" "$source"
+  register_app "$name"
+  echo "site: installed $name from $fork@$pin"
+  echo "site: start it with: site start $name"
+}
+
+running_pid() {
+  local name=$1 instance pid cmdline
+  instance=$(instance_dir "$name")
+  [[ -f $instance/site.pid ]] || return 1
+  pid=$(<"$instance/site.pid")
+  [[ $pid =~ ^[0-9]+$ ]] || return 1
+  kill -0 "$pid" 2>/dev/null || return 1
+  cmdline=$(/bin/ps -p "$pid" -o args= 2>/dev/null) || return 1
+  [[ $cmdline == *"next start"* ]] || return 1
+  printf '%s\n' "$pid"
+}
+
+start_site() {
+  local name=$1 instance source port gateway
+  installed "$name" || { echo "site: run site new --template chat $name first" >&2; exit 1; }
+  if running_pid "$name" >/dev/null; then echo "site: $name already running"; return; fi
+  instance=$(instance_dir "$name")
+  source=$(source_dir "$name")
+  port=$(<"$source/.site-port")
+  gateway=${OPENAI_COMPATIBLE_BASE_URL:-${OPENAI_BASE_URL:-${LLM_BASE_URL:-}}}
+  [[ -n $gateway ]] || { echo 'site: set OPENAI_COMPATIBLE_BASE_URL to the owner gateway' >&2; exit 1; }
+  (
+    cd "$source"
+    OPENAI_COMPATIBLE_BASE_URL=$gateway \
+    OPENAI_COMPATIBLE_MODEL=${OPENAI_COMPATIBLE_MODEL:-${OPENAI_MODEL:-gpt-4o-mini}} \
+    SANDBOX_PROVIDER=bashy-oci BASHY_BIN="$runner" \
+      "$npm_bin" start -- --hostname 127.0.0.1 --port "$port" >"$instance/site.log" 2>&1
+  ) &
+  pid=$!
+  printf '%s\n' "$pid" > "$instance/site.pid"
+  echo "site: $name starting at http://127.0.0.1:$port"
+}
+
+stop_site() {
+  local name=$1 instance pid
+  instance=$(instance_dir "$name")
+  if pid=$(running_pid "$name"); then
+    kill "$pid"
+    rm -f "$instance/site.pid"
+    echo "site: stopped $name"
+  else
+    rm -f "$instance/site.pid"
+    echo "site: $name is not running"
+  fi
+}
+
+status_site() {
+  local name=$1 source port
+  source=$(source_dir "$name")
+  if installed "$name"; then
+    port=$(<"$source/.site-port")
+    echo "site: $name source pin $pin"
+  else
+    echo "site: $name not installed"
+    port=''
+  fi
+  if running_pid "$name" >/dev/null; then echo "site: $name running at http://127.0.0.1:$port"; else echo "site: $name stopped"; fi
+}
+
+case ${1:---help} in
+  -h|--help|help) usage ;;
+  new)
+    shift
+    template='' name='chat-site' name_set=false port=${SITE_PORT:-32190}
+    while (($#)); do
+      case $1 in
+        --template) (($# >= 2)) || { echo 'site: --template needs a value' >&2; exit 2; }; template=$2; shift 2 ;;
+        --port) (($# >= 2)) || { echo 'site: --port needs a value' >&2; exit 2; }; port=$2; shift 2 ;;
+        --*) echo "site: unknown option $1" >&2; exit 2 ;;
+        *) [[ $name_set == false ]] || { echo 'site: only one NAME is accepted' >&2; exit 2; }; name=$1; name_set=true; shift ;;
+      esac
+    done
+    [[ $template == chat ]] || { echo 'site: this build supports --template chat' >&2; exit 2; }
+    new_chat "$name" "$port"
+    ;;
+  start) start_site "${2:-chat-site}" ;;
+  stop) stop_site "${2:-chat-site}" ;;
+  status) status_site "${2:-chat-site}" ;;
+  source) installed "${2:-chat-site}" && source_dir "${2:-chat-site}" ;;
+  *) usage >&2; exit 2 ;;
+esac
