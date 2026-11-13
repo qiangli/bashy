@@ -1,6 +1,6 @@
 @effects("read,write,exec,net")
 set -eu
-test "$(cat .site-source-pin)" = '867d93dde5c30139467b6802e4f6ddb6f93d679f'
+test "$(cat .site-source-pin)" = '7ad2c5f1f2c1edfc6e2581cbf5e2361871df2af2'
 head -n 1 LICENSE | grep -qx 'MIT License'
 test -s shaped.json
 test -s lib/sandbox/providers/bashy-oci-provider.ts
