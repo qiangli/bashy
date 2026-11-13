@@ -98,6 +98,10 @@ song|examples/service-door/service-door.bsh|read,write,exec,net|song
 animate|examples/service-door/service-door.bsh|read,write,exec,net|animate
 email|examples/service-door/service-door.bsh|read,write,exec,net|email.read
 drive|examples/service-door/service-door.bsh|read,write,exec,net|drive.read
+tavily|examples/service-door/search-provider.bsh|read,exec,net|tavily|search|api
+brave|examples/service-door/search-provider.bsh|read,exec,net|brave|search|api
+serper|examples/service-door/search-provider.bsh|read,exec,net|serper|search|api
+search-claude|examples/service-door/search-claude.bsh|read,exec,net||search|vendor|claude>=2.1.284
 bashy-defaults|examples/defaults/bashy-defaults.bsh|read,write,exec"
 
 usage() {
@@ -169,7 +173,7 @@ cmd_apply() {
         echo "$PROG: upgraded the bashy source pin"
     fi
     [ -d "$src/examples" ] || fail "no source pin at $src" 1
-    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects role; do
+    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects role provides route requires; do
         [ -n "$name" ] || continue
         path="$src/$rel"
         if [ ! -f "$path" ]; then
@@ -184,6 +188,9 @@ cmd_apply() {
         fi
         set -- --set "exec.0=$(runtime_bin)" --set exec.1=--bashsharp --set "exec.2=$registry"
         [ -z "$role" ] || set -- "$@" --set "exec.3=$role"
+        [ -z "$provides" ] || set -- "$@" --set "provides.0=$provides"
+        [ -z "$route" ] || set -- "$@" --set "route=$route"
+        [ -z "$requires" ] || set -- "$@" --set "requires=$requires"
         i=0
         for e in ${effects//,/ }; do
             set -- "$@" --set "effects.$i=$e"
@@ -227,7 +234,7 @@ cmd_status() {
     else
         echo "source pin: missing (run: $PROG apply)"
     fi
-    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects role; do
+    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects role provides route requires; do
         [ -n "$name" ] || continue
         current=$(registered_path "$name")
         if [ -z "$current" ]; then

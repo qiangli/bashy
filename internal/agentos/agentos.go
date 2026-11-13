@@ -117,7 +117,6 @@ import (
 	"github.com/qiangli/yoke/pkg/role/meetroom"
 	"github.com/qiangli/yoke/pkg/room"
 	"github.com/qiangli/yoke/pkg/sdlc"
-	"github.com/qiangli/yoke/pkg/search"
 	"github.com/qiangli/yoke/pkg/secrets"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 	"github.com/qiangli/yoke/pkg/sota"
@@ -1412,7 +1411,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// Web search (query → cited results) via a provider ladder — the
 		// find-things primitive `bashy sota` builds on. See
 		// dhnt docs/bashy-sota-research-design.md.
-		cmd := search.NewSearchCmd()
+		cmd := newProviderSearchCmd()
 		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)

@@ -1,0 +1,6 @@
+#!/usr/bin/env -S bashy --bashsharp
+# API search adapter. --backend is the native transport escape hatch; normal
+# search requests enter through the shared provider selector.
+set -eu
+backend=${1:?search backend required}; shift
+exec bashy search --backend "$backend" "$@"

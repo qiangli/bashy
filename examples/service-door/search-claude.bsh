@@ -1,0 +1,12 @@
+#!/usr/bin/env -S bashy --bashsharp
+# MEASURED 2026-11-12 with claude 2.1.284: --tools WebSearch together with
+# --allowedTools WebSearch made one server WebSearch call and returned a cited
+# result in 11.3 s. The --tools flag alone was denied.
+set -eu
+if [ "${1:-}" = --json ]; then shift; fi
+max=8
+if [ "${1:-}" = --max ]; then max=${2:?maximum results required}; shift 2; fi
+[ "$#" -gt 0 ] || { echo 'search-claude: query required' >&2; exit 2; }
+query="$*"
+prompt="Call the WebSearch tool with this search query: $query. Wait for its result, then return up to $max source titles and URLs as markdown links. Do not answer from memory."
+exec claude -p --tools WebSearch --allowedTools WebSearch --system-prompt 'You are a web search adapter. For every request, call WebSearch before answering. Never present a URL from memory as a search result.' --output-format json "$prompt"

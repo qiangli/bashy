@@ -107,6 +107,8 @@ case "$1 $2" in
     : > "$src/examples/record/record.bsh"
     : > "$src/examples/cast/cast.bsh"
     : > "$src/examples/service-door/service-door.bsh"
+    : > "$src/examples/service-door/search-provider.bsh"
+    : > "$src/examples/service-door/search-claude.bsh"
     : > "$src/examples/defaults/bashy-defaults.bsh"
     : > "$src/kb/defaults/pages/a.md"; : > "$src/kb/defaults/pages/b.md"
     ;;
@@ -196,7 +198,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}
@@ -205,13 +207,15 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 		t.Errorf("outpost-profile exec = %q, want %q", got, want)
 	}
 	for name, rel := range map[string]string{
-		"media":   "examples/media/media.bsh",
-		"record":  "examples/record/record.bsh",
-		"cast":    "examples/cast/cast.bsh",
-		"plan":    "examples/service-door/service-door.bsh",
-		"image":   "examples/service-door/service-door.bsh",
-		"song":    "examples/service-door/service-door.bsh",
-		"animate": "examples/service-door/service-door.bsh",
+		"media":         "examples/media/media.bsh",
+		"record":        "examples/record/record.bsh",
+		"cast":          "examples/cast/cast.bsh",
+		"plan":          "examples/service-door/service-door.bsh",
+		"image":         "examples/service-door/service-door.bsh",
+		"song":          "examples/service-door/service-door.bsh",
+		"animate":       "examples/service-door/service-door.bsh",
+		"brave":         "examples/service-door/search-provider.bsh",
+		"search-claude": "examples/service-door/search-claude.bsh",
 	} {
 		if got, want := f.registered(name), f.pin(rel); got != want {
 			t.Errorf("%s exec = %q, want %q", name, got, want)
@@ -225,6 +229,12 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	}
 	if !strings.Contains(f.calls(), "--set effects.2=exec") {
 		t.Errorf("effects not forwarded:\n%s", f.calls())
+	}
+	if !strings.Contains(f.calls(), "commands add brave ") || !strings.Contains(f.calls(), "--set provides.0=search --set route=api") {
+		t.Errorf("search API providers not registered with role and route:\n%s", f.calls())
+	}
+	if !strings.Contains(f.calls(), "commands add search-claude ") || !strings.Contains(f.calls(), "--set provides.0=search --set route=vendor --set requires=claude>=2.1.284") {
+		t.Errorf("Claude search provider not registered with role, route, and CLI requirement:\n%s", f.calls())
 	}
 	if !strings.Contains(f.calls(), "commands add satellite-provision --set exec.0=bashy --set exec.1=--bashsharp --set exec.2="+f.pin("examples/satellite-provision/satellite-provision.bsh")+" --set effects.0=read --set effects.1=write --set effects.2=exec --set effects.3=net") {
 		t.Errorf("satellite-provision not registered with read,write,exec,net:\n%s", f.calls())
