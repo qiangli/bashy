@@ -1,8 +1,9 @@
 #!/usr/bin/env -S bashy --bashsharp
 # Generic service command body. The first fixed argument is its open role.
+# Rod contract (request, out dir, rod result, doctor): docs/service-rod-contract.md.
 set -eu
 role=${1:?service role required}; shift
-provider= route= out= request= json=0 dry=0 yes=0 async=0 providers=0
+provider= route= out= request= json=0 dry=0 yes=0 async=0 providers=0 role_override=
 args=()
 while [ "$#" -gt 0 ]; do
     case $1 in
@@ -10,6 +11,8 @@ while [ "$#" -gt 0 ]; do
         --provider=*) provider=${1#*=}; shift ;;
         --route) route=${2:?}; shift 2 ;;
         --route=*) route=${1#*=}; shift ;;
+        --role) role_override=${2:?}; shift 2 ;;
+        --role=*) role_override=${1#*=}; shift ;;
         --out) out=${2:?}; shift 2 ;;
         --out=*) out=${1#*=}; shift ;;
         --json) json=1; shift ;;
@@ -20,33 +23,123 @@ while [ "$#" -gt 0 ]; do
         *) args+=("$1"); shift ;;
     esac
 done
-if [ "$providers" = 1 ]; then bashy providers "$role" --json; exit $?; fi
-# A JSON request is passed to the selector; other operands go to the provider.
-if [ "${#args[@]}" -gt 0 ] && [[ ${args[0]} == *.json ]] && [ -f "${args[0]}" ]; then
-    request=${args[0]}; args=("${args[@]:1}")
+# BASHY_SVC_BASHY_BIN overrides the bashy used for selection and dispatch.
+bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
+# --role picks a sibling role of the same service (image -> image.edit).
+if [ -n "$role_override" ]; then
+    if [ "${role_override%%.*}" != "${role%%.*}" ]; then
+        echo "${role%%.*}: --role $role_override is not a ${role%%.*} role" >&2; exit 2
+    fi
+    role=$role_override
 fi
+if [ "$providers" = 1 ]; then "$bashy_bin" providers "$role" --json; exit $?; fi
+# A JSON request is passed to the selector and, by path, to the rod; other
+# operands go to the provider.
+if [ "${#args[@]}" -gt 0 ] && [[ ${args[0]} == *.json ]] && [ -f "${args[0]}" ]; then
+    request=$(cd "$(dirname "${args[0]}")" && pwd)/$(basename "${args[0]}"); args=("${args[@]:1}")
+fi
+
+envelope() { # outcome text outputs-json [unavailable-json]
+    BASHY_SVC_ROLE="$role" BASHY_SVC_PROVIDER="${name:-}" BASHY_SVC_ROUTE="${selected_route:-}" BASHY_SVC_OUTCOME="$1" BASHY_SVC_TEXT="$2" BASHY_SVC_OUTPUTS="$3" BASHY_SVC_UNAVAILABLE="${4:-}" BASHY_SVC_ELAPSED="${elapsed:-0}" jq -n '{schema_version:"bashy-svc-v1",role:env.BASHY_SVC_ROLE,provider:env.BASHY_SVC_PROVIDER,route:env.BASHY_SVC_ROUTE,outcome:env.BASHY_SVC_OUTCOME,outputs:(env.BASHY_SVC_OUTPUTS|fromjson),text:env.BASHY_SVC_TEXT,cost_class:env.BASHY_SVC_ROUTE,elapsed:(env.BASHY_SVC_ELAPSED|tonumber)} + (if env.BASHY_SVC_UNAVAILABLE == "" then {} else {unavailable:(env.BASHY_SVC_UNAVAILABLE|fromjson)} end)'
+}
+
+# install_hint NAME KIND REASON: one line that makes a rejected candidate usable.
+install_hint() {
+    case $3 in
+        *--yes*) printf 'rerun with --yes to allow its declared spend/send effect\n'; return ;;
+        "route is "*) printf 'pass --route %s or --provider %s\n' "${3#route is }" "$1"; return ;;
+    esac
+    if [ "$2" = tool-command ]; then
+        printf 'install the %s CLI (see: bashy tool show %s)\n' "${1%%:*}" "${1%%:*}"; return
+    fi
+    # A rod answers --doctor --json with its missing deps and install lines.
+    hint=$(BASHY_HINTS=off timeout 30 "$bashy_bin" "$1" --doctor --json 2>/dev/null | jq -r '[.missing[]?.install | select(. != null and . != "")] | join("; ")' 2>/dev/null || true)
+    [ -n "$hint" ] || hint="see: bashy commands show $1 (requires); bashy $1 --doctor"
+    printf '%s\n' "$hint"
+}
+
 select_args=(select "$role" --json)
 [ -z "$provider" ] || select_args+=(--provider "$provider")
 [ -z "$route" ] || select_args+=(--route "$route")
 [ "$yes" = 0 ] || select_args+=(--yes)
 [ -z "$request" ] || select_args+=("$request")
-chosen=$(BASHY_HINTS=off bashy providers "${select_args[@]}") || exit $?
+if ! chosen=$(BASHY_HINTS=off "$bashy_bin" providers "${select_args[@]}" 2>/dev/null); then
+    # Unavailable: report every candidate with its reason and an install hint.
+    list_args=("$role" --json)
+    [ -z "$route" ] || list_args+=(--route "$route")
+    [ "$yes" = 0 ] || list_args+=(--yes)
+    [ -z "$request" ] || list_args+=("$request")
+    candidates=$(BASHY_HINTS=off "$bashy_bin" providers "${list_args[@]}" 2>/dev/null || echo '[]')
+    unavailable='[]'
+    while IFS=$'\x1f' read -r c_name c_kind c_route c_reason; do
+        [ -n "$c_name" ] || continue
+        [ -n "$provider" ] && [ "$c_name" != "$provider" ] && [[ $c_name != "$provider":* ]] && continue
+        [ -n "$c_reason" ] || c_reason="ambiguous: pass --provider $c_name"
+        hint=$(install_hint "$c_name" "$c_kind" "$c_reason")
+        unavailable=$(printf '%s\n' "$unavailable" | J_P="$c_name" J_R="$c_route" J_WHY="$c_reason" J_I="$hint" jq -c '. + [{provider:env.J_P,route:env.J_R,reason:env.J_WHY,install:env.J_I}]')
+    done < <(printf '%s\n' "$candidates" | jq -r '.[]? | [.name, .kind, .route, (.rejected // "")] | join("\u001f")')
+    if [ "$unavailable" = '[]' ]; then
+        unavailable=$(J_ROLE="$role" jq -cn '[{provider:"",route:"",reason:("no provider declares " + env.J_ROLE),install:("register a rod that provides " + env.J_ROLE + " (bashy commands add NAME --set provides.0=" + env.J_ROLE + "; contract: bashy docs/service-rod-contract.md)")}]')
+    fi
+    printf '%s\n' "$unavailable" | J_ROLE="$role" jq -r '.[] | "\(env.J_ROLE): unavailable: \(if .provider == "" then "" else .provider + ": " end)\(.reason)\n  install: \(.install)"' >&2
+    envelope unavailable "" '[]' "$unavailable"
+    exit 126
+fi
 name=$(printf '%s\n' "$chosen" | jq -r .name)
 selected_route=$(printf '%s\n' "$chosen" | jq -r .route)
 if [ "$dry" = 1 ]; then
-    BASHY_SVC_ROLE="$role" BASHY_SVC_PROVIDER="$name" BASHY_SVC_ROUTE="$selected_route" jq -n '{schema_version:"bashy-svc-v1",role:env.BASHY_SVC_ROLE,provider:env.BASHY_SVC_PROVIDER,route:env.BASHY_SVC_ROUTE,outcome:"dry-run",outputs:[],text:"",cost_class:env.BASHY_SVC_ROUTE,elapsed:0}'
+    envelope dry-run "" '[]'
     exit 0
 fi
+
+# The rod's handoff: request path, artifact directory, route and consent.
+own_out=0
+if [ -z "$out" ]; then out=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-$role.XXXXXX"); own_out=1; fi
+mkdir -p "$out"
+out=$(cd "$out" && pwd)
+before=$(cd "$out" && find . -type f | sort)
+export BASHY_SVC_ROLE="$role" BASHY_SVC_ROUTE="$selected_route" BASHY_SVC_REQUEST="$request" BASHY_SVC_OUT="$out" BASHY_SVC_YES="$yes"
 confirm_args=()
 [ "$yes" = 0 ] || confirm_args=(--yes)
 start=$SECONDS
 if [[ $name == *:* ]]; then
-    if [ "$async" = 1 ]; then bashy tool cmd run "$name" "${args[@]}" "${confirm_args[@]}" > /dev/null 2>&1 & else text=$(bashy tool cmd run "$name" "${args[@]}") || status=$?; fi
+    if [ "$async" = 1 ]; then "$bashy_bin" tool cmd run "$name" "${args[@]}" "${confirm_args[@]}" > /dev/null 2>&1 & else text=$("$bashy_bin" tool cmd run "$name" "${args[@]}") || status=$?; fi
 else
-    if [ "$async" = 1 ]; then bashy "$name" "${args[@]}" > /dev/null 2>&1 & else text=$(bashy "$name" "${args[@]}") || status=$?; fi
+    if [ "$async" = 1 ]; then "$bashy_bin" "$name" "${args[@]}" > /dev/null 2>&1 & else text=$("$bashy_bin" "$name" "${args[@]}") || status=$?; fi
 fi
 if [ "$async" = 1 ]; then outcome=queued; text=; else outcome=success; [ "${status:-0}" = 0 ] || outcome=error; fi
 elapsed=$(($SECONDS - start))
-[ -z "$out" ] || mkdir -p "$out"
-BASHY_SVC_ROLE="$role" BASHY_SVC_PROVIDER="$name" BASHY_SVC_ROUTE="$selected_route" BASHY_SVC_OUTCOME="$outcome" BASHY_SVC_TEXT="${text:-}" BASHY_SVC_ELAPSED="$elapsed" jq -n '{schema_version:"bashy-svc-v1",role:env.BASHY_SVC_ROLE,provider:env.BASHY_SVC_PROVIDER,route:env.BASHY_SVC_ROUTE,outcome:env.BASHY_SVC_OUTCOME,outputs:[],text:env.BASHY_SVC_TEXT,cost_class:env.BASHY_SVC_ROUTE,elapsed:(env.BASHY_SVC_ELAPSED|tonumber)}'
+
+# Outputs: a bashy-svc-rod-v1 result names them; otherwise every file the
+# provider added to the out dir is one. Paths are absolute either way.
+media_type() {
+    case ${1,,} in
+        *.wav) echo audio/wav ;; *.mp3) echo audio/mpeg ;; *.m4a) echo audio/mp4 ;; *.flac) echo audio/flac ;; *.ogg) echo audio/ogg ;;
+        *.png) echo image/png ;; *.jpg|*.jpeg) echo image/jpeg ;; *.webp) echo image/webp ;;
+        *.mp4) echo video/mp4 ;; *.webm) echo video/webm ;; *.mov) echo video/quicktime ;;
+        *.json) echo application/json ;; *.srt) echo application/x-subrip ;; *.ass) echo text/x-ssa ;; *.txt) echo text/plain ;;
+        *) echo application/octet-stream ;;
+    esac
+}
+outputs='[]'
+if [ "$async" = 0 ] && printf '%s' "${text:-}" | jq -e 'type == "object" and .schema_version == "bashy-svc-rod-v1"' >/dev/null 2>&1; then
+    rod=$text
+    text=$(printf '%s\n' "$rod" | jq -r '.text // ""')
+    while IFS=$'\x1f' read -r o_path o_type o_note; do
+        [ -n "$o_path" ] || continue
+        [[ $o_path == /* ]] || o_path=$out/$o_path
+        [ -n "$o_type" ] || o_type=$(media_type "$o_path")
+        outputs=$(printf '%s\n' "$outputs" | J_P="$o_path" J_T="$o_type" J_N="$o_note" jq -c '. + [{path:env.J_P,media_type:env.J_T} + (if env.J_N == "" then {} else {note:env.J_N} end)]')
+    done < <(printf '%s\n' "$rod" | jq -r '.outputs[]? | [.path // "", .media_type // "", .note // ""] | join("\u001f")')
+elif [ "$async" = 0 ]; then
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        printf '%s\n' "$before" | grep -Fqx -- "$f" && continue
+        p=$out/${f#./}
+        outputs=$(printf '%s\n' "$outputs" | J_P="$p" J_T="$(media_type "$p")" jq -c '. + [{path:env.J_P,media_type:env.J_T}]')
+    done < <(cd "$out" && find . -type f | sort)
+fi
+# An unused scratch dir is not left behind.
+if [ "$own_out" = 1 ] && [ "$async" = 0 ] && [ -z "$(ls -A "$out")" ]; then rmdir "$out"; fi
+envelope "$outcome" "${text:-}" "$outputs"
 [ "${status:-0}" = 0 ]

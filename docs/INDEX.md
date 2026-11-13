@@ -28,6 +28,7 @@
 - [Sprint 560 and selected 539 master execution plan](plan-s560-s539-master-execution.md) — bounded post-migration repairs, sandbox and guard follow-ups, protected conformance investigation, architecture decisions, and evidence-based acceptance.
 
 - `transcribe-contract.md` — Sprint 503 S503.1: public transcription command, replaceable stage JSON v1 contract, existing infrastructure seams and unfinished adapter prerequisites.
+- `service-rod-contract.md` — Sprint 627 M1: the song/image/animate/narrate rod contract behind the service door: per-role request fields, door→rod handoff env, `bashy-svc-rod-v1` result, `bashy-svc-v1` outputs, effects per route with `--yes`, and `--doctor` install hints for unavailable providers.
 - `transcribe-adapter-authoring.md` — Sprint 503 S503.8: setup, registration, extension walkthrough, offline use and dependency licensing for source and decoder authors.
 - `transcribe-seed-adapters.md` — Sprint 503 S503.4: local acquisition, PCM/media decoding, offline CPU whisper.cpp and transcript export; implementation gates and separate native acceptance requirements.
 - `sprint-503/S503.8-runner-identity.md` — the six-label GitHub Actions runner identity preflight, its JSON artifacts, and the boundary between preflight and native transcription evidence.

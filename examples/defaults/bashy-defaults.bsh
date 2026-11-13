@@ -58,7 +58,10 @@ Default commands: `outpost-profile` (examples/outpost-profile),
 satellite from plan to teardown), `media` (examples/media: PDFs and narrated
 videos), `record` (examples/record: camera and microphone takes), `cast`
 (examples/cast: a command's terminal output as asciicast v2 under a
-pty/ConPTY, the recorder examples/video uses) and `bashy-defaults` itself.
+pty/ConPTY, the recorder examples/video uses), the service verbs `plan`,
+`image`, `draw`, `pdf`, `video`, `narrate`, `song`, `animate`, `email` and
+`drive` (examples/service-door: one door body per role; providers are rods,
+see docs/service-rod-contract.md) and `bashy-defaults` itself.
 
 The default kb pages (`kb/defaults` in the pin) need no setup:
 `bashy kb search|list|show` and `bashy recall` read them as a read-only
@@ -91,6 +94,8 @@ draw|examples/service-door/service-door.bsh|read,write,exec,net|draw
 pdf|examples/service-door/service-door.bsh|read,write,exec,net|pdf.read
 video|examples/service-door/service-door.bsh|read,exec,net|video.understand
 narrate|examples/service-door/service-door.bsh|read,write,exec,net|narrate
+song|examples/service-door/service-door.bsh|read,write,exec,net|song
+animate|examples/service-door/service-door.bsh|read,write,exec,net|animate
 email|examples/service-door/service-door.bsh|read,write,exec,net|email.read
 drive|examples/service-door/service-door.bsh|read,write,exec,net|drive.read
 bashy-defaults|examples/defaults/bashy-defaults.bsh|read,write,exec"

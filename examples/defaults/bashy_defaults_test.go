@@ -117,7 +117,7 @@ case "$1 $2" in
   "commands add")
     name=$3; shift 3; prev=""
     for a in "$@"; do
-      case "$a" in exec.2=*) printf '%s' "${a#exec.2=}" > "$FAKE_REG/$name" ;; esac
+      case "$a" in exec.2=*) printf '%s' "${a#exec.2=}" > "$FAKE_REG/$name" ;; exec.3=*) printf '%s' "${a#exec.3=}" > "$FAKE_REG/$name.role" ;; esac
     done
     ;;
   *) echo "fake bashy: unexpected $*" >&2; exit 1 ;;
@@ -196,7 +196,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "plan: registered", "image: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}
@@ -205,14 +205,22 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 		t.Errorf("outpost-profile exec = %q, want %q", got, want)
 	}
 	for name, rel := range map[string]string{
-		"media":  "examples/media/media.bsh",
-		"record": "examples/record/record.bsh",
-		"cast":   "examples/cast/cast.bsh",
-		"plan":   "examples/service-door/service-door.bsh",
-		"image":  "examples/service-door/service-door.bsh",
+		"media":   "examples/media/media.bsh",
+		"record":  "examples/record/record.bsh",
+		"cast":    "examples/cast/cast.bsh",
+		"plan":    "examples/service-door/service-door.bsh",
+		"image":   "examples/service-door/service-door.bsh",
+		"song":    "examples/service-door/service-door.bsh",
+		"animate": "examples/service-door/service-door.bsh",
 	} {
 		if got, want := f.registered(name), f.pin(rel); got != want {
 			t.Errorf("%s exec = %q, want %q", name, got, want)
+		}
+	}
+	// Service verbs pass their open role as the door's first fixed argument.
+	for name, role := range map[string]string{"plan": "plan", "image": "image.generate", "narrate": "narrate", "song": "song", "animate": "animate"} {
+		if got := f.registered(name + ".role"); got != role {
+			t.Errorf("%s role = %q, want %q", name, got, role)
 		}
 	}
 	if !strings.Contains(f.calls(), "--set effects.2=exec") {
