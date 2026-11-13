@@ -85,3 +85,42 @@ selector, and cover:
 They need the host's ffmpeg, ffprobe and agg, as `examples/media/test.sh`
 does, and skip without them. Real oss drafts run on a claimed test host. The
 commercial final is an operator-approved run.
+
+### Draft the text locally
+
+Start with `film init my-video`, then write `my-video/brief.md`, for example:
+
+```markdown
+Title: Morning by the sea
+Theme: Greeting a new day beside the sea.
+Characters: lead, an original adult singer in a blue coat.
+Mood: Warm and hopeful, quiet sunrise.
+Lyrics: Two short English lines.
+Shots: Describe the two existing shots: medium, then wide.
+Prompts: Sunrise image prompts for both shots and the lead portrait.
+```
+
+Run `film write my-video --route oss --provider-text translate-ollama`.
+The shared Ollama rod uses the already staged `qwen3:8b` tag, thinking off,
+with drafting temperature 0.7 (a direct text request may override it).
+It never pulls a model. The rod's existing doctor and `TRANSLATE_OLLAMA_*`
+settings apply to both translation and drafting.
+
+`--kind lyrics|shots|prompts|all` selects the prose to draft (default `all`).
+The brief is passed intact with the storyboard, language and count/duration
+hints. The provider returns only objects covered by the brief. `write` applies
+lyrics, shot descriptions, shot prompts and character prompts by existing
+index/id; omitted objects and all other storyboard fields are preserved.
+Use `--kind` to enforce a narrow edit independently of the model, for example
+`film write my-video --kind shots` leaves lyrics and prompts untouched.
+Initialize the storyboard's characters, shot layout and production settings
+before writing; this command does not create or renumber them.
+
+Each call saves its brief, requests, provider outputs, before/after storyboards,
+`stages.jsonl` and `manifest.json` under `text/NN/`. Each successful stage lists
+`fields_written` along with provider, route, cost class and elapsed time.
+Invalid output fails before applying that stage; earlier successful stages
+remain recorded. Human edits afterwards are valid: `film draft my-video
+--route oss` copies the latest text manifest into `text_provenance` without
+asserting that the current storyboard is still byte-identical to model output.
+The provenance includes the original storyboard hash for comparison.
