@@ -294,6 +294,22 @@ func (d *DeskHandler) handleAction(w http.ResponseWriter, r *http.Request) {
 			"url": d.prefix + "/#room=" + b.ID,
 		})
 
+	case "remove":
+		if _, err := d.loadBoard(id); err != nil {
+			http.Error(w, "board not found", http.StatusNotFound)
+			return
+		}
+		if err := os.Remove(d.boardFile(id)); err != nil {
+			http.Error(w, "board not found", http.StatusNotFound)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":     id,
+			"status": "removed",
+		})
+
 	default:
 		http.Error(w, "unknown action", http.StatusBadRequest)
 	}
