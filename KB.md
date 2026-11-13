@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [repo/page] Extend bashy: small verbs, Bash# skill-scripts, shaping hooks, and the example → optional → core levels — How every agent adds or changes bashy features, runbooks and shaped apps: compose small JSON verbs in Bash# skill-scripts, design a shaping hook, start new helpers as examples and graduate them to optio  (kb:extend-bashy-small-verbs-bash-skill-scripts-shaping-hooks-and-th)
+- [repo/page] Mock up a video before final production: animatic plus one proof slice — How to make a cheap, fast video draft (a mockup or animatic) that lets the owner approve the plan before paid or slow final production: full-length draft soundtrack, one small still per distinct shot with beat-locked cuts, subtitles and sh  (kb:mock-up-a-video-before-final-production-animatic-and-proof-slice)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 
