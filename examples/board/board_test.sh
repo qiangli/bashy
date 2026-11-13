@@ -29,4 +29,7 @@ if "$runner" --bashsharp "$here/board.bsh" unexpected >"$tmp/usage.out" 2>&1; th
   exit 1
 fi
 grep -q 'board install|start|stop|status|source' "$tmp/usage.out"
+result=$("$runner" --bashsharp "$here/board.bsh" tasks move task-id --column done --url http://127.0.0.1:22751/board/api --dry-run --json)
+printf '%s\n' "$result" | python3 -c 'import json,sys; r=json.load(sys.stdin); assert r["dryRun"] is True and r["method"] == "PUT" and r["body"] == {"status":"done"} and r["url"].endswith("/task/status/task-id")'
+PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s "$here" -p 'test_board_api.py' -v
 echo 'board command unit checks passed'

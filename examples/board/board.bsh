@@ -25,6 +25,33 @@ board install|start|stop|status|source|publish-outpost|unpublish-outpost
            List the app on the paired outpost (login required unless --public).
   unpublish-outpost [--json] [--dry-run]
            Remove it from outpost.
+board projects list --workspace ID [--include-archived true|false]
+board projects add --workspace ID --name TEXT --icon TEXT --slug KEY
+board projects show|rm ID
+board projects set ID --name TEXT --icon TEXT --slug KEY --description TEXT --public true|false [--include-subtasks true|false]
+board tasks list --project ID [--status SLUG] [--priority VALUE] [--assignee ID] [--page N --limit N]
+board tasks add --project ID --title TEXT --description TEXT --priority VALUE --status SLUG [--assignee ID --start-date DATE --due-date DATE]
+board tasks show|rm ID
+board tasks set ID --title TEXT|--description TEXT|--priority VALUE|--assignee ID|--due-date DATE|--status SLUG
+board tasks set ID --title TEXT --priority VALUE --status SLUG --project ID --position N [--description TEXT --assignee ID --start-date DATE --due-date DATE]
+board tasks move ID --column SLUG  (or --status SLUG)
+board columns list --project ID
+board columns add --project ID --name TEXT [--icon TEXT --color TEXT --final true|false]
+board comments list TASK_ID
+board comments add TASK_ID --content TEXT
+board export PROJECT_ID [--format json|csv]
+  Data verbs require Python 3.9+, BOARD_URL (numeric loopback API base with
+  port and /api or /board/api), and BOARD_TOKEN (existing app bearer token).
+  --url overrides BOARD_URL. All data verbs take --json; writes take --dry-run.
+  Dry-run prints {dryRun,method,url,body}, without network or token access.
+  API responses and denials pass through unchanged. --json always returns
+  the API JSON, including for CSV export. No account or token is created.
+  Project set replaces all required fields. Task set edits one narrow field
+  or supplies all required replacement fields in one atomic request.
+  Empty --assignee / --due-date clears that field in single-field task set.
+  list returns the API pagination; --related-page, --sort-by, --sort-order,
+  --due-before and --due-after are also accepted for tasks list.
+  Priorities: no-priority, low, medium, high, urgent. Status is a column slug.
 EOF
 }
 
@@ -128,6 +155,7 @@ running_pid() {
 
 case ${1:---help} in
   -h|--help|help) usage ;;
+  projects|tasks|comments|columns|export) exec python3 "$here/board_api.py" "$@" ;;
   install) install ;;
   start)
     installed || { echo 'board: run board install first' >&2; exit 1; }

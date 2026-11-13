@@ -399,7 +399,7 @@ unit-verified mappings; running-fork authorization proof is still open.
 A1 owns the catalog audit section; these rows provide the A2 implementation
 mapping and explicit remaining scope for reconciliation with that audit.
 
-### Table — A3 data command mappings
+### Table — A4 data command mappings
 
 Source: `examples/table/table.bsh`, `table_api.py`, pinned fork
 `a3c557ac1bc4bd55b9b9d4333842bec255586ff4` (Grist REST API). All data verbs
@@ -431,3 +431,62 @@ still open.
 | Formulas, conditional rules, access rules, sharing and permissions, webhooks | Deferred: administration/ACL scope; the app stays the authority |
 | Import from Excel/Google Sheets/JSON, full document download or restore | Deferred: staged upload API; only CSV rows import is claimed |
 | Shape wish / verify / preview / approve / undo | Existing `bashy shape` lifecycle, as documented in `examples/table/README.md` |
+
+### Board — A1 audit reconciled with A3 data commands
+
+Source: `examples/board/board.bsh`, `board_api.py`; fork pin
+`5069fb56ce309d5572ca3ed60d4d3c322a03a452`,
+`apps/api/src/{project,task,column,comment}/{index,schema}.ts`.
+These rows reconcile all 16 board data actions in the A1 draft. The pinned
+routes use singular `/project`, `/task`, `/column`, `/comment` and `PUT`,
+not the draft's inferred plural routes and `PATCH`. Paths below are relative
+to `BOARD_URL`, the running principal's numeric loopback API base (including
+`/api` or the adapter's `/board/api`). `BOARD_TOKEN` supplies the existing
+principal's bearer session/API token; no account or credential is created.
+
+Every data verb accepts `--json`; every write accepts `--dry-run`. A2's
+response convention applies: app JSON passes through (including lists and
+pagination), local errors are `{code,message}`, and dry-run returns
+`{dryRun,method,url,body}` without reading credentials or doing network I/O.
+API denials pass through unchanged, including plain-text errors; exit 1
+means API/transport failure, exit 2 invalid arguments. Redirects and proxies
+are disabled. No client-side owner bypass or alternate database path exists.
+Unit coverage is green; running-fork authorization and combined S4b runtime
+no-phone-home proof remain open (see `examples/board/docs/s632-a3.md`).
+
+| A1 page action | Verb | Pinned API |
+|---|---|---|
+| Install / start / stop / status / source | Existing `board install\|start\|stop\|status\|source` | Managed lifecycle; no data request |
+| List projects | `board projects list --workspace ID [--include-archived true] --json` | `GET /project/?workspaceId=ID` |
+| Add project | `board projects add --workspace ID --name TEXT --icon TEXT --slug KEY --json` | `POST /project/` |
+| Show project | `board projects show ID --json` | `GET /project/ID` |
+| Edit project | `board projects set ID --name TEXT --icon TEXT --slug KEY --description TEXT --public false --json` | `PUT /project/ID`; all five replacement fields required; optional `--include-subtasks` |
+| Delete project | `board projects rm ID --json` | `DELETE /project/ID`; includes its contents, as on the page |
+| List tasks | `board tasks list --project ID --page N --limit N --json` | `GET /task/tasks/ID`; API pagination/filters preserved |
+| Add task/card | `board tasks add --project ID --title TEXT --description TEXT --priority low --status SLUG --json` | `POST /task/ID`; optional assignee/start/due dates |
+| Show task | `board tasks show ID --json` | `GET /task/ID` |
+| Edit task | `board tasks set ID --title TEXT --json` (also single-field description, priority, assignee, due-date, status) | `PUT /task/{title,description,priority,assignee,due-date,status}/ID` |
+| Edit several task fields / position | `board tasks set ID --title TEXT --priority low --status SLUG --project ID --position N --json` | `PUT /task/ID`; full required replacement fields, optional description/assignee/dates; one atomic request |
+| Move task column/status | `board tasks move ID --column SLUG --json` (`--status` alias) | `PUT /task/status/ID`; uses the column slug, not its display name |
+| Delete task | `board tasks rm ID --json` | `DELETE /task/ID` |
+| List columns | `board columns list --project ID --json` | `GET /column/ID` |
+| Add column | `board columns add --project ID --name TEXT --json` | `POST /column/ID`; optional icon/color/final |
+| List task comments | `board comments list TASK_ID --json` | `GET /comment/TASK_ID` |
+| Add comment | `board comments add TASK_ID --content TEXT --json` | `POST /comment/TASK_ID`; same authenticated author and permission checks as page |
+| Export project tasks JSON/CSV | `board export PROJECT_ID --format json\|csv` | `GET /task/export/PROJECT_ID`; CSV serializes the complete export response's tasks, not a paginated task list; `--json` always returns original API JSON |
+
+CSV contains title, description, status, priority, startDate, dueDate, userId,
+and labels (JSON in one quoted field). It preserves user content, commas,
+quotes and newlines. Export is a project-task snapshot, not a database backup.
+Task list additionally accepts status, priority, assignee, related-page,
+sort-by, sort-order, due-before and due-after. Empty single-field assignee
+and due-date edits clear those fields. The API validates column existence,
+workspace membership and privileges; the CLI never infers authority from IDs.
+
+Beyond A1's board rows, column edit/reorder/delete, comment edit/delete,
+project archive/reorder/cross-workspace moves, task cross-project moves,
+recurrence, labels, relations, attachments/backgrounds, time entries,
+workspace/account administration, integrations and imports remain deferred:
+they use separate API resources outside this story's requested data verbs.
+No parity is claimed for them. Shape actions retain the existing `bashy shape`
+lifecycle. Browser layout/theme preferences are client-local UI state.
