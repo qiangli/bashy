@@ -178,10 +178,11 @@ func (f *fixture) addRod(name string, sets ...string) {
 	f.bashy(args...)
 }
 
-// ossRods: the draft route for song, image, animate (optional) and transcribe.
+// ossRods: the draft route for song, image, animate (optional), transcribe
+// and translate.
 func (f *fixture) ossRods(animate bool) {
 	f.t.Helper()
-	for _, role := range []string{"song", "image.generate", "animate", "transcribe"} {
+	for _, role := range []string{"song", "image.generate", "animate", "transcribe", "translate"} {
 		if role == "animate" && !animate {
 			continue
 		}
@@ -356,7 +357,7 @@ func TestDraftLockFinal(t *testing.T) {
 	for _, s := range d.Stages {
 		stages = append(stages, s.Stage+"="+s.Provider+"/"+s.Route)
 	}
-	want := "song=oss-song/oss portrait:lead=oss-image/oss transcribe=oss-transcribe/oss animate:1=oss-animate/oss animate:2=oss-animate/oss qa=qa-fixture/vendor"
+	want := "song=oss-song/oss portrait:lead=oss-image/oss transcribe=oss-transcribe/oss translate=oss-translate/oss animate:1=oss-animate/oss animate:2=oss-animate/oss qa=qa-fixture/vendor"
 	if got := strings.Join(stages, " "); got != want {
 		t.Fatalf("draft stages:\n got %s\nwant %s", got, want)
 	}
@@ -374,7 +375,7 @@ func TestDraftLockFinal(t *testing.T) {
 		t.Fatalf("shots.tsv:\n%s", shots)
 	}
 	ass, _ := os.ReadFile(filepath.Join(f.proj, "drafts", "01", "subs.ass"))
-	if !strings.Contains(string(ass), `sung line 2{\rSecondary}\NSegunda línea de la canción`) {
+	if !strings.Contains(string(ass), `sung line 2{\rSecondary}\N[es] sung line 2`) {
 		t.Fatalf("subs.ass is not bilingual:\n%s", ass)
 	}
 	for _, c := range f.rods() {
@@ -396,7 +397,7 @@ func TestDraftLockFinal(t *testing.T) {
 	if err := json.Unmarshal(b, &lock); err != nil || lock.Draft != "01" {
 		t.Fatalf("lock.json: %v\n%s", err, b)
 	}
-	for _, name := range []string{"storyboard.json", "timing.srt", "shots.tsv", "duration", "portraits/lead.png"} {
+	for _, name := range []string{"storyboard.json", "timing.srt", "translation.srt", "shots.tsv", "duration", "portraits/lead.png"} {
 		if len(lock.Files[name]) != 64 {
 			t.Fatalf("lock.json has no sha256 for %s: %v", name, lock.Files)
 		}
@@ -426,6 +427,11 @@ func TestDraftLockFinal(t *testing.T) {
 	used, _ := os.ReadFile(filepath.Join(f.proj, "finals", "01", "timing.srt"))
 	if string(locked) != string(used) {
 		t.Fatal("final did not reuse the locked timing")
+	}
+	locked, _ = os.ReadFile(filepath.Join(f.proj, "lock", "translation.srt"))
+	used, _ = os.ReadFile(filepath.Join(f.proj, "finals", "01", "translation.srt"))
+	if len(locked) == 0 || string(locked) != string(used) {
+		t.Fatalf("final did not reuse the locked translation:\n%s", used)
 	}
 	if dur, _ := probe(t, fm.Output); dur < 7.5 || dur > 8.6 {
 		t.Fatalf("final film.mp4 duration %.3f", dur)
@@ -609,7 +615,7 @@ func TestDraftTimesLyricLinesToTranscript(t *testing.T) {
 		t.Fatalf("timing.srt:\n%s", timing)
 	}
 	ass, _ := os.ReadFile(filepath.Join(f.proj, "drafts", d.ID, "subs.ass"))
-	if !strings.Contains(string(ass), `First line of the song{\rSecondary}\NPrimera línea de la canción`) {
+	if !strings.Contains(string(ass), `First line of the song{\rSecondary}\N[es] First line of the song`) {
 		t.Fatalf("subs.ass is not bilingual:\n%s", ass)
 	}
 	if _, types := probe(t, d.Output); strings.Join(types, ",") != "video,audio,subtitle" {
@@ -706,5 +712,124 @@ func TestDraftTimingIntroFoldedIntoCue(t *testing.T) {
 	}
 	if !strings.Contains(string(timing), "00:00:24,275 --> 00:00:27,025\nFirst line of the song") {
 		t.Fatalf("line 1 lost its span:\n%s", timing)
+	}
+}
+
+// The translate stage (Sprint 634): the timing cues go to the translate door
+// as {cues, source_language, target_language}; the stage is recorded with
+// provider/route/cost_class, and the bilingual subtitles come from its output.
+func TestDraftTranslateStageRecorded(t *testing.T) {
+	f := newFixture(t)
+	f.ossRods(false)
+	f.editStoryboard(func(sb map[string]any) { sb["translation"] = map[string]any{"language": "zh"} })
+	d := f.draft("--no-qa")
+	render := filepath.Join(f.proj, "drafts", d.ID)
+	var tr *stage
+	for i, s := range d.Stages {
+		if s.Stage == "translate" {
+			tr = &d.Stages[i]
+		}
+	}
+	if tr == nil || tr.Role != "translate" || tr.Provider != "oss-translate" || tr.Route != "oss" || tr.CostClass != "oss" || tr.Outcome != "success" {
+		t.Fatalf("translate stage: %+v", tr)
+	}
+	stages, _ := os.ReadFile(filepath.Join(render, "stages.jsonl"))
+	if !strings.Contains(string(stages), `"stage":"translate"`) || !strings.Contains(string(stages), `"elapsed":`) {
+		t.Fatalf("stages.jsonl lacks the translate stage:\n%s", stages)
+	}
+	var req map[string]any
+	for _, c := range f.rods() {
+		if c["role"] == "translate" {
+			b, _ := os.ReadFile(c["request"])
+			if err := json.Unmarshal(b, &req); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if req["cues"] != filepath.Join(render, "timing.srt") || req["source_language"] != "en" || req["target_language"] != "zh" {
+		t.Fatalf("translate request: %v", req)
+	}
+	timing, _ := os.ReadFile(filepath.Join(render, "timing.srt"))
+	trans, _ := os.ReadFile(filepath.Join(render, "translation.srt"))
+	stamps := func(b []byte) (out []string) {
+		for _, l := range strings.Split(string(b), "\n") {
+			if strings.Contains(l, " --> ") {
+				out = append(out, l)
+			}
+		}
+		return out
+	}
+	if a, b := stamps(timing), stamps(trans); len(a) != 2 || strings.Join(a, "|") != strings.Join(b, "|") {
+		t.Fatalf("translation timestamps differ from the timing:\n%s\n%s", timing, trans)
+	}
+	ass, _ := os.ReadFile(filepath.Join(render, "subs.ass"))
+	for _, want := range []string{`sung line 1{\rSecondary}\N[zh] sung line 1`, `sung line 2{\rSecondary}\N[zh] sung line 2`} {
+		if !strings.Contains(string(ass), want) {
+			t.Fatalf("subs.ass lacks %q:\n%s", want, ass)
+		}
+	}
+}
+
+// A translation whose line count differs from the cue count fails the
+// render; so does a missing translate rod. Neither falls back to
+// single-language subtitles.
+func TestDraftTranslateMismatchFails(t *testing.T) {
+	f := newFixture(t)
+	f.ossRods(false)
+	out, stderr, code := f.runEnv([]string{"FILM_FIXTURE_TRANSLATE_LINES=1"}, "draft", f.proj, "--no-qa")
+	if code != 1 || !strings.Contains(stderr, "1 translated line(s) for 2 timing cue(s)") {
+		t.Fatalf("short translation: exit %d\n%s", code, stderr)
+	}
+	m := f.manifest(out)
+	if m.Outcome != "error" || fileExists(filepath.Join(f.proj, "drafts", m.ID, "film.mp4")) {
+		t.Fatalf("short translation rendered: %+v", m)
+	}
+
+	f2 := newFixture(t)
+	for _, role := range []string{"song", "image.generate", "transcribe"} {
+		f2.addRod("oss-"+strings.Split(role, ".")[0], "provides.0="+role, "route=oss", "effects.0=read", "effects.1=write", "effects.2=exec")
+	}
+	out, stderr, code = f2.run("draft", f2.proj, "--no-qa")
+	if code != 126 || !strings.Contains(stderr, "translate: no usable provider") {
+		t.Fatalf("no translate rod: exit %d\n%s", code, stderr)
+	}
+	if m := f2.manifest(out); m.Outcome != "unavailable" {
+		t.Fatalf("no translate rod: outcome %s", m.Outcome)
+	}
+}
+
+// storyboard translation.lines is an explicit escape hatch: no translate rod
+// runs, and the stage is recorded as manual so provenance stays honest.
+func TestDraftTranslationLinesManual(t *testing.T) {
+	f := newFixture(t)
+	f.ossRods(false)
+	f.editStoryboard(func(sb map[string]any) {
+		sb["translation"] = map[string]any{"language": "es", "lines": []any{"Primera línea", "Segunda línea"}}
+	})
+	out, stderr, code := f.run("draft", f.proj, "--no-qa")
+	if code != 0 {
+		t.Fatalf("draft: exit %d\n%s", code, stderr)
+	}
+	d := f.manifest(out)
+	var got []string
+	for _, s := range d.Stages {
+		if s.Stage == "translate" {
+			got = append(got, s.Provider+"/"+s.Route+"/"+s.CostClass)
+		}
+	}
+	if strings.Join(got, " ") != "storyboard/manual/manual" || !strings.Contains(strings.Join(d.CostClasses, ","), "manual") {
+		t.Fatalf("manual translate stage: %v cost classes %v", got, d.CostClasses)
+	}
+	for _, c := range f.rods() {
+		if c["role"] == "translate" {
+			t.Fatalf("a translate rod ran for storyboard lines: %v", c)
+		}
+	}
+	if !strings.Contains(stderr, "manual escape hatch") {
+		t.Fatalf("manual translation not noted:\n%s", stderr)
+	}
+	ass, _ := os.ReadFile(filepath.Join(f.proj, "drafts", d.ID, "subs.ass"))
+	if !strings.Contains(string(ass), `sung line 2{\rSecondary}\NSegunda línea`) {
+		t.Fatalf("subs.ass is not bilingual:\n%s", ass)
 	}
 }

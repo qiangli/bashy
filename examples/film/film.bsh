@@ -5,7 +5,7 @@
 #
 #   film doctor
 #   film init DIR [--title T]
-#   film draft DIR [--route oss] [--provider-ROLE NAME] [--route-animate R] [--qa-provider P] [--no-qa] [--no-shot-numbers]
+#   film draft DIR [--route oss] [--provider-ROLE NAME] [--route-ROLE R] [--qa-provider P] [--no-qa] [--no-shot-numbers]
 #   film lock DIR [--draft N] [--timing FILE]
 #   film final DIR --route browser|api [--yes] [--dry-run] [--provider-ROLE NAME] [--qa-provider P] [--no-qa] [--shot-numbers]
 #   film status DIR
@@ -18,7 +18,7 @@
 ~~~skill as guide
 ---
 name: film
-description: Make a 60–90 s music video from a storyboard (lyrics, characters, shots) by chaining the song, image, animate, transcribe and video.understand service doors and media cut/cards/subs. Drafts run on open-source rods (route oss) as often as wanted; `film lock` freezes the storyboard, timing and portraits; `film final --route browser|api --yes` re-renders only the generative stages on a commercial route.
+description: Make a 60–90 s music video from a storyboard (lyrics, characters, shots) by chaining the song, image, animate, transcribe, translate and video.understand service doors and media cut/cards/subs. Drafts run on open-source rods (route oss) as often as wanted; `film lock` freezes the storyboard, timing and portraits; `film final --route browser|api --yes` re-renders only the generative stages on a commercial route.
 metadata:
   requires: "has=bashy has=ffmpeg has=ffprobe has=jq"
 ---
@@ -47,10 +47,16 @@ metadata:
   (a character id or a `stills[]` id: repeated sections reuse one still),
   `shots[].line` (start on that lyric line) or `shots[].beat` (start on that
   beat of `song.bpm`); with `song.bpm` every cut snaps to the beat grid.
-- Subtitles: one cue per lyric line, timed to the transcript's sung words,
-  bilingual with `translation.lines`.
+- Subtitles: one cue per lyric line, timed to the transcript's sung words.
+  With `translation.language` a translate stage (route oss: a local Qwen3
+  through ollama, rod translate-ollama) translates the cues on their own
+  timestamps; the render fails if the line count differs from the cue
+  count, never falling back to single-language subtitles. Options
+  `--route-translate` / `--provider-translate` pick another rod.
+  `translation.lines` is an explicit escape hatch: recorded as a manual
+  stage (provider storyboard, cost_class manual).
 - `final` refuses route oss, requires a lock, and checks the lock's sha256
-  first. It reuses the locked timing, translation and portraits (as
+  first. It reuses the locked timing, translation.srt and portraits (as
   reference images) and re-renders song, portraits and clips only. Rods
   that spend need `--yes`; without it the door names them and nothing runs.
 - Never pass `--yes` on the operator's behalf; a final is the operator's call.
@@ -224,7 +230,8 @@ check_storyboard() {
 		elif any(.shots[]; (.character // "") as $c | ($c == "" and (.still // "") == "") or ($c != "" and ($ids | index($c)) == null)) then "every shot.character must name a character id"
 		elif any(.shots[]; (.still // "") as $s | $s != "" and (($ids + $sids) | index($s)) == null) then "every shot.still must name a character or a still id"
 		elif any(.shots[]; .beat != null) and ((.song.bpm // 0) <= 0) then "shot.beat needs song.bpm"
-		elif (.translation != null and ((.translation.lines // []) | length) != (.lyrics | length)) then "translation.lines must match lyrics line for line"
+		elif (.translation != null and (.translation.language // "") == "") then "translation.language is required"
+		elif (.translation.lines != null and ((.translation.lines // []) | length) != (.lyrics | length)) then "translation.lines must match lyrics line for line"
 		else "" end' "$sb" 2>&1) || die "storyboard $sb is not valid JSON: $why"
 	[ -z "$why" ] || die "storyboard $sb: $why"
 }
@@ -245,7 +252,7 @@ cmd_init() {
 		schema_version: $v, title: $t, size: "1280x720", seed: 1,
 		song: {prompt: "warm synth-pop ballad, female lead vocal, 96 bpm", duration_s: 75, language: "en"},
 		lyrics: ["First line of the song", "Second line of the song"],
-		translation: {language: "es", lines: ["Primera línea de la canción", "Segunda línea de la canción"]},
+		translation: {language: "es"},
 		characters: [{id: "lead", bible: "an original fictional singer, photoreal portrait, same stage set", seed: 7}],
 		shots: [{character: "lead", prompt: "medium close-up, singing to camera", line: 0},
 		        {character: "lead", prompt: "wide shot of the stage, singing", line: 1}],
@@ -272,7 +279,24 @@ preflight() {
 	return 1
 }
 
-cmd_doctor() { preflight && echo "film: ready (door $door, media $media)"; }
+# register_ollama: the translate-ollama rod lists models through a registered
+# `ollama` command, never a bare PATH name. Register the host's ollama (the
+# Windows per-user install, or PATH) unless one already answers; where bashy
+# ships its own `ollama` verb the add is refused and the rod's doctor says how.
+register_ollama() {
+	local p=${FILM_OLLAMA:-}
+	BASHY_HINTS=off "$bashy_bin" ollama --version >/dev/null 2>&1 && return 0
+	[ -n "$p" ] || [ -z "${LOCALAPPDATA:-}" ] || { p=${LOCALAPPDATA//\\//}/Programs/Ollama/ollama.exe; [ -f "$p" ] || p=""; }
+	[ -n "$p" ] || p=$(type -P ollama 2>/dev/null || true)
+	[ -n "$p" ] || { note "translate: no ollama found (route oss translation needs it: winget install Ollama.Ollama)"; return 0; }
+	if BASHY_HINTS=off "$bashy_bin" commands add ollama --set "exec.0=$p" --set effects.0=read --set effects.1=write --set effects.2=exec --set effects.3=net >/dev/null 2>&1; then
+		note "translate: registered ollama ($p)"
+	else
+		note "translate: could not register ollama ($p); see: bashy translate-ollama --doctor --json"
+	fi
+}
+
+cmd_doctor() { preflight && register_ollama && echo "film: ready (door $door, media $media)"; }
 
 # ---- one door call -------------------------------------------------------------
 
@@ -325,7 +349,8 @@ next_id() { # next_id DIR -> 01, 02, ...
 
 parse_render_opts() {
 	route="" yes=0 dry=0 qa=1 qa_provider="" json=0 proj="" numbers=""
-	prov_song="" prov_image="" prov_animate="" prov_transcribe="" route_song="" route_image="" route_animate="" route_transcribe=""
+	prov_song="" prov_image="" prov_animate="" prov_transcribe="" prov_translate=""
+	route_song="" route_image="" route_animate="" route_transcribe="" route_translate=""
 	while [ $# -gt 0 ]; do
 		case $1 in
 		--route) route=$2; shift 2 ;;
@@ -333,10 +358,12 @@ parse_render_opts() {
 		--provider-image) prov_image=$2; shift 2 ;;
 		--provider-animate) prov_animate=$2; shift 2 ;;
 		--provider-transcribe) prov_transcribe=$2; shift 2 ;;
+		--provider-translate) prov_translate=$2; shift 2 ;;
 		--route-song) route_song=$2; shift 2 ;;
 		--route-image) route_image=$2; shift 2 ;;
 		--route-animate) route_animate=$2; shift 2 ;;
 		--route-transcribe) route_transcribe=$2; shift 2 ;;
+		--route-translate) route_translate=$2; shift 2 ;;
 		--qa-provider) qa_provider=$2; shift 2 ;;
 		--no-qa) qa=0; shift ;;
 		--shot-numbers) numbers=1; shift ;;
@@ -373,6 +400,9 @@ cmd_final() {
 	[ -n "$numbers" ] || numbers=0
 	verify_lock "$proj/lock"
 	sb=$proj/lock/storyboard.json
+	if jq -e '.translation != null' "$sb" >/dev/null && [ ! -f "$proj/lock/translation.srt" ]; then
+		die "final: the lock has no translation.srt (locked before the translate stage); draft and lock again"
+	fi
 	render_run "$proj/finals"
 }
 
@@ -454,6 +484,23 @@ render_run() {
 		fi
 	fi
 
+	# -- translate: the timing cues in the storyboard's translation.language;
+	# a final reuses the locked translation.srt
+	if jq -e '.translation != null' "$sb" >/dev/null; then
+		if [ "$kind" = final ]; then
+			cp "$proj/lock/translation.srt" "$render/translation.srt"
+		elif [ "$dry" = 1 ]; then
+			if ! jq -e '.translation.lines != null' "$sb" >/dev/null; then
+				status=0
+				mapfile -t o < <(stage_opts translate)
+				env=$(door translate translate "$render/translate" "${o[@]}" --) || status=$?
+				stage_ok translate "$env" "$status" || return $?
+			fi
+		else
+			translate_stage
+		fi
+	fi
+
 	if [ "$dry" = 1 ]; then
 		# Which animate rod the shots would use; selection only, no request.
 		status=0
@@ -512,6 +559,32 @@ render_run() {
 	review_sheets "${clips[@]}"
 	if [ "$qa" = 1 ]; then qa_review; fi
 	finish_render "$start" "$render/film.mp4"
+}
+
+# translate_stage: $render/translation.srt on the timing's timestamps, one
+# line per timing cue, from the translate door (or, as an explicit escape
+# hatch, from storyboard translation.lines, recorded as a manual stage). A
+# count mismatch fails the render: subtitles are never silently single-language.
+translate_stage() {
+	local ncue nline got status=0 env
+	ncue=$(cues "$render/timing.srt" | wc -l | tr -d ' ')
+	if jq -e '.translation.lines != null' "$sb" >/dev/null; then
+		jq -r '.translation.lines[]' "$sb" >"$render/translation.txt"
+		J_P=$render/translation.srt jq -cn '{stage:"translate",schema_version:"bashy-svc-v1",role:"translate",provider:"storyboard",route:"manual",outcome:"success",outputs:[{path:env.J_P,media_type:"application/x-subrip"}],text:"manual translation: storyboard translation.lines",cost_class:"manual",elapsed:0}' >>"$render/stages.jsonl"
+		note "translate: storyboard translation.lines (manual escape hatch; recorded as provider storyboard, route manual)"
+	else
+		J_C=$render/timing.srt request "$render/translate.request.json" '{title, cues:env.J_C, source_language:(.song.language // "en"), target_language:.translation.language}'
+		mapfile -t o < <(stage_opts translate)
+		env=$(door translate translate "$render/translate" "${o[@]}" -- "$render/translate.request.json") || status=$?
+		stage_ok translate "$env" "$status" || return $?
+		got=$(printf '%s\n' "$env" | jq -r 'first(.outputs[]? | select(.path | endswith(".srt")) | .path) // empty')
+		[ -n "$got" ] && [ -f "$got" ] || fail_render "translate: the rod reported no .srt"
+		cues "$got" | cut -f3 >"$render/translation.txt"
+	fi
+	nline=$(wc -l <"$render/translation.txt" | tr -d ' ')
+	[ "$nline" = "$ncue" ] ||
+		fail_render "translate: $nline translated line(s) for $ncue timing cue(s); refusing single-language or misaligned subtitles"
+	cues "$render/timing.srt" | cut -f1,2 | paste - "$render/translation.txt" | write_srt >"$render/translation.srt"
 }
 
 # fail_render MSG: record the failed render's manifest (outcome error), then exit 1.
@@ -665,15 +738,9 @@ assemble() {
 	a=$(dur "$asm/title.mp4")
 	shift_srt "$render/timing.srt" "$a" "$asm/subs.srt"
 	local subs=("$asm/subs.srt")
-	if jq -e '.translation.lines | length > 0' "$sb" >/dev/null 2>&1; then
-		if [ "$(cues "$render/timing.srt" | wc -l | tr -d ' ')" = "$(jq '.translation.lines | length' "$sb")" ]; then
-			cues "$render/timing.srt" | cut -f1,2 | paste - <(jq -r '.translation.lines[]' "$sb") >"$asm/lang2.tsv"
-			write_srt <"$asm/lang2.tsv" >"$render/translation.srt"
-			shift_srt "$render/translation.srt" "$a" "$asm/subs2.srt"
-			subs+=("$asm/subs2.srt")
-		else
-			note "translation has $(jq '.translation.lines | length' "$sb") lines but the timing has $(cues "$render/timing.srt" | wc -l | tr -d ' ') cues; subtitles are single-language (fix the timing and lock it with --timing)"
-		fi
+	if [ -f "$render/translation.srt" ]; then
+		shift_srt "$render/translation.srt" "$a" "$asm/subs2.srt"
+		subs+=("$asm/subs2.srt")
 	fi
 	media subs "${subs[@]}" -o "$render/subs.ass" --video "$asm/joined.mp4" --burn "$render/film.mp4" >/dev/null 2>&1 ||
 		fail_render "media subs failed"
@@ -756,6 +823,16 @@ cmd_lock() {
 		cues "$timing" | write_srt >"$lock.new/timing.srt"
 	else
 		cp "$d/timing.srt" "$lock.new/timing.srt"
+	fi
+	if [ -f "$d/translation.srt" ]; then
+		# The translation rides on the locked timing: same cue count, its timestamps.
+		local nt nl
+		nt=$(cues "$lock.new/timing.srt" | wc -l | tr -d ' ')
+		nl=$(cues "$d/translation.srt" | wc -l | tr -d ' ')
+		[ "$nt" = "$nl" ] || die "lock: the locked timing has $nt cue(s) but draft $draft translated $nl; draft again with that timing"
+		cues "$lock.new/timing.srt" | cut -f1,2 | paste - <(cues "$d/translation.srt" | cut -f3) | write_srt >"$lock.new/translation.srt"
+	elif jq -e '.translation != null' "$sb" >/dev/null; then
+		die "lock: draft $draft has no translation.srt; draft again"
 	fi
 	cp "$d/shots.tsv" "$lock.new/shots.tsv"
 	awk -F'\t' 'END{print $3}' "$d/shots.tsv" >"$lock.new/duration"

@@ -1,0 +1,149 @@
+#!/usr/bin/env -S bashy --bashsharp
+# translate-ollama — oss rod for the `translate` role (Sprint 634): a cue list
+# (SRT) translated line for line by a local Qwen3 through the ollama HTTP API.
+# Qwen3 is Apache-2.0 (https://huggingface.co/Qwen/Qwen3-8B); ollama is MIT
+# (https://github.com/ollama/ollama/blob/main/LICENSE) and runs as its own
+# process, never linked.
+# A render never pulls a model: a missing tag fails with the staging line.
+# TRANSLATE_OLLAMA_URL replaces the API base (a stub server in tests).
+
+~~~skill as guide
+---
+name: translate-ollama
+description: Open-source translation rod for the translate service role. Translates an SRT cue list line for line with a local Qwen3 (qwen3:8b) through ollama; timestamps unchanged, line count checked.
+metadata:
+  requires: "has=curl has=jq"
+---
+# translate-ollama — local Qwen3 rod (route oss)
+
+See examples/oss-rods/README.md for picks, pins and license evidence.
+Request: --cues SRT --target_language TAG [--source_language TAG] [--title T].
+Output: translation.srt, one cue per input cue on the input's timestamps.
+A reply whose line count differs from the cue count fails (exit 1).
+~~~
+
+set -eu
+
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+# shellcheck source=oss-preflight.bsh
+. "$here/oss-preflight.bsh"
+
+ROD=translate-ollama
+# Pinned model tag; staged once with `ollama pull qwen3:8b`, never by a render.
+MODEL=${TRANSLATE_OLLAMA_MODEL:-qwen3:8b}
+API=${TRANSLATE_OLLAMA_URL:-http://127.0.0.1:11434}
+API=${API%/}
+# The registered command that answers `list` (never a bare PATH name).
+OLLAMA_CMD=${TRANSLATE_OLLAMA_COMMAND:-ollama}
+bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
+OSS_ROD_TEXT=""
+
+die() { echo "$ROD: $*" >&2; exit "${2:-1}"; }
+
+# lang_name TAG: the language name the prompt uses.
+lang_name() {
+	case ${1,,} in
+	zh | zh-cn | zh-hans | cmn) echo "Simplified Chinese" ;;
+	zh-tw | zh-hant) echo "Traditional Chinese" ;;
+	en*) echo English ;; es*) echo Spanish ;; fr*) echo French ;; de*) echo German ;;
+	ja*) echo Japanese ;; ko*) echo Korean ;; it*) echo Italian ;; pt*) echo Portuguese ;;
+	ru*) echo Russian ;; ar*) echo Arabic ;; hi*) echo Hindi ;;
+	*) echo "$1" ;;
+	esac
+}
+
+if [ "${1:-}" = --doctor ]; then
+	[ "${2:-}" = --json ] || die "--doctor needs --json" 2
+	doc=$(oss_doctor "has=curl|curl" "has=jq|jq")
+	# The ollama check: a registered command that lists the pinned tag. No
+	# daemon start, no pull: read-only.
+	need="" install=""
+	if ! listed=$(BASHY_HINTS=off "$bashy_bin" "$OLLAMA_CMD" list 2>/dev/null); then
+		need="registered command $OLLAMA_CMD"
+		case $(oss_os_name) in
+		windows) install="winget install Ollama.Ollama, then: bashy film doctor (registers it) or bashy commands add $OLLAMA_CMD --set exec.0=%LOCALAPPDATA%\\Programs\\Ollama\\ollama.exe" ;;
+		# bashy ships its own `ollama` verb here, so the host binary takes another name.
+		*) install="install ollama, then: bashy commands add ollama-host --set exec.0=PATH-TO-ollama and set TRANSLATE_OLLAMA_COMMAND=ollama-host" ;;
+		esac
+	elif ! printf '%s\n' "$listed" | awk -v m="$MODEL" 'NR > 1 && $1 == m { f = 1 } END { exit !f }'; then
+		need="ollama model $MODEL"
+		install="$OLLAMA_CMD pull $MODEL (once, as a staging step; a render never pulls)"
+	fi
+	if [ -z "$need" ]; then
+		printf '%s\n' "$doc"
+	else
+		printf '%s\n' "$doc" | J_N="$need" J_I="$install" jq -c '.available = false | .missing += [{need:env.J_N, install:env.J_I}]'
+	fi
+	exit 0
+fi
+
+REQ=$(oss_request_file "$@") || exit $?
+oss_check_schema "$REQ" || exit 2
+cues=$(oss_request_get "$REQ" cues "")
+source_language=$(oss_request_get "$REQ" source_language en)
+target_language=$(oss_request_get "$REQ" target_language "")
+seed=$(oss_request_get "$REQ" seed 436)
+[ -n "$cues" ] || die "cues is required (an SRT path)" 2
+[ -f "$cues" ] || die "cues not found: $cues"
+[ -n "$target_language" ] || die "target_language is required" 2
+
+OUT=${BASHY_SVC_OUT:-}
+[ -n "$OUT" ] || OUT=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-translate.XXXXXX")
+mkdir -p "$OUT"
+work=$OUT/.translate
+mkdir -p "$work"
+
+# One record per cue: the timestamp line verbatim, then the text (lines joined).
+awk -v times="$work/times.txt" -v texts="$work/texts.txt" '
+	function emit() { if (tl != "" && txt != "") { print tl > times; print txt > texts } tl = ""; txt = "" }
+	{ sub(/\r$/, "") }
+	/^[ \t]*$/ { emit(); next }
+	/-->/ { emit(); tl = $0; next }
+	tl != "" { gsub(/<[^>]+>/, ""); txt = (txt == "" ? $0 : txt " " $0) }
+	END { emit() }' "$cues"
+n=0
+[ -f "$work/texts.txt" ] && n=$(awk 'END { print NR }' "$work/texts.txt")
+[ "$n" -gt 0 ] || die "no cues in $cues"
+
+# The model must already be staged: check the daemon's tags, never pull.
+tags=$(curl -fsS --max-time 10 "$API/api/tags" 2>/dev/null) ||
+	die "ollama is not answering at $API; start it (ollama serve) or set TRANSLATE_OLLAMA_URL"
+printf '%s\n' "$tags" | J_M="$MODEL" jq -e 'any(.models[]?; .name == env.J_M or .model == env.J_M)' >/dev/null ||
+	die "model $MODEL is not staged on this host; stage it once with 'ollama pull $MODEL' (a render never pulls)"
+
+src_name=$(lang_name "$source_language")
+dst_name=$(lang_name "$target_language")
+numbered=$(awk '{ printf "%d. %s\n", NR, $0 }' "$work/texts.txt")
+system="You translate song lyrics for subtitles. Translate each numbered line from $src_name to $dst_name, keeping the meaning and a singable, natural phrasing. Reply with exactly $n lines, numbered 1 to $n in the same order, each as 'N. translation'. Never merge, split, skip or add lines. No notes, no quotes, no original text."
+J_MODEL=$MODEL J_SYS=$system J_USER=$numbered J_SEED=$seed jq -n '{model:env.J_MODEL, stream:false, think:false,
+	options:{temperature:0, seed:(env.J_SEED|tonumber)},
+	messages:[{role:"system", content:env.J_SYS}, {role:"user", content:env.J_USER}]}' >"$work/chat.request.json"
+curl -fsS --max-time "${TRANSLATE_OLLAMA_TIMEOUT:-600}" -H 'Content-Type: application/json' \
+	--data-binary @"$work/chat.request.json" "$API/api/chat" >"$work/chat.response.json" ||
+	die "ollama chat request failed ($API, model $MODEL)"
+jq -r '.message.content // empty' "$work/chat.response.json" >"$work/reply.txt" || die "ollama reply is not JSON"
+
+# Parse "N. text" lines (thinking blocks dropped); numbers must be 1..n, once each.
+awk -v n="$n" -v out="$work/lines.txt" '
+	{ sub(/\r$/, "") }
+	/<think>/ { skip = 1 } skip { if (/<\/think>/) skip = 0; next }
+	match($0, /^[ \t]*[0-9]+[.):][ \t]*/) {
+		k = substr($0, RSTART, RLENGTH); gsub(/[^0-9]/, "", k); k = k + 0
+		t = substr($0, RLENGTH + 1); sub(/[ \t]+$/, "", t)
+		if (k < 1 || k > n || (k in got) || t == "") bad = 1
+		got[k] = t; m++
+	}
+	END {
+		if (bad || m != n) { printf "%d", m; exit 1 }
+		for (i = 1; i <= n; i++) print got[i] > out
+	}' "$work/reply.txt" >"$work/count.txt" || {
+	got=$(cat "$work/count.txt" 2>/dev/null)
+	die "the model returned ${got:-0} numbered line(s) for $n cue(s); refusing a misaligned translation (reply: $work/reply.txt)"
+}
+
+translation=$OUT/translation.srt
+awk -v lines="$work/lines.txt" '{ if ((getline t < lines) <= 0) exit 1; printf "%d\n%s\n%s\n\n", NR, $0, t }' \
+	"$work/times.txt" >"$translation" || die "wrote a translation with the wrong cue count"
+OSS_ROD_TEXT="oss translation via $MODEL (ollama): $n cue(s) $source_language -> $target_language"
+oss_rod_result "$translation" application/x-subrip

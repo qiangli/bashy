@@ -14,6 +14,7 @@ it needs a 24 GB NVIDIA host the fleet has not confirmed (M3).
 | `image-klein` | `image.generate`, `image.edit` | FLUX.2 klein-4B, pinned local Diffusers snapshot; offline only | prompt/size (+ image for edit) → one PNG |
 | `narrate-local` | `narrate` | Chatterbox default, `kokoro:<voice>` light path; same pins as `media voice` | text/voice → `narration.wav` (silence-trimmed) |
 | `transcribe-whisperx` | `transcribe` | WhisperX `3.8.6` on Whisper large-v3, `--compute_type int8` for Mac/CPU | audio → `transcript.srt`/`.txt` |
+| `translate-ollama` | `translate` | Qwen3 `qwen3:8b` through a local ollama's HTTP API (Sprint 634); think off, temperature 0, one numbered request per cue list | SRT cues + target language → `translation.srt` (same timestamps, line count checked) |
 
 All oss rods render from local snapshots under `BASHY_OSS_CACHE/bashy/oss`.
 They set `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`,
@@ -35,6 +36,15 @@ the staged weights, binds the checkout's `checkpoints` path to the staged
 snapshot, and starts the API with its LM disabled. Set
 `SONG_ACESTEP_LM=1.7B` only when that LM's staged weight is present. The
 render rod refuses a server that was not started by this launcher.
+
+`translate-ollama` talks to `http://127.0.0.1:11434` (`TRANSLATE_OLLAMA_URL`
+overrides). Its `--doctor --json` is read-only: it runs `bashy ollama list`
+through a REGISTERED `ollama` command (`film doctor` registers the host's
+ollama where bashy does not ship its own `ollama` verb; elsewhere register it
+under another name and set `TRANSLATE_OLLAMA_COMMAND`) and checks the pinned
+tag is listed. A render checks `/api/tags` and never pulls: stage the model
+once with `ollama pull qwen3:8b`. A reply whose numbered line count differs
+from the cue count fails (exit 1) instead of misaligning subtitles.
 
 WhisperX defaults to `transcribe-whisperx/models/faster-whisper-large-v3`
 and runs without alignment, which otherwise needs another unstaged model.
@@ -77,6 +87,8 @@ Every rod:
 | Chatterbox (`chatterbox-tts`) | MIT | full MIT text via PyPI |
 | Kokoro-82M | Apache-2.0 | HF API `license:apache-2.0` tag |
 | WhisperX (`whisperx` 3.8.6) | BSD-2-Clause | LICENSE text, `m-bain/whisperX@main` |
+| Qwen3-8B (`qwen3:8b`) | Apache-2.0 | HF model card `Qwen/Qwen3-8B` license tag |
+| ollama (separate process, not linked) | MIT | LICENSE text, `ollama/ollama@main` |
 | mlx-whisper (fallback) | MIT | PyPI metadata |
 | openai-whisper (reference) | MIT | PyPI metadata |
 | diffusers 0.43.0 | Apache-2.0 | PyPI metadata |
@@ -94,6 +106,7 @@ diffusers.
 | image-qwen | 35 | 24 GB-class weights + uv env + workspace |
 | narrate-local | 12 | Chatterbox/Kokoro weights + uv env |
 | transcribe-whisperx | 10 | large-v3 (~3 GB) + torch env |
+| translate-ollama | — | weights live in ollama's own store (staged once); no rod cache |
 
 Override the cache with `BASHY_OSS_CACHE`; the failure message names the
 remedy. `OSS_AVAIL_KB_OVERRIDE` replaces the `df` probe in tests only.
