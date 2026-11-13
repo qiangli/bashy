@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ChatGPT - Image Generation</title>
+</head>
+<body>
+  <div class="chat-container">
+    <div class="conversation" id="conversation">
+      <div class="message assistant">
+        <p>What image would you like to create?</p>
+        <div class="image-result" id="image-result" style="display:none;">
+          <img id="generated-image" src="take.png" alt="Generated image of a character">
+          <a class="download-link" href="take.png" download>Download</a>
+        </div>
+      </div>
+    </div>
+    <div class="input-bar">
+      <input type="file" id="file-upload" name="file" accept="image/*" multiple>
+      <textarea id="prompt-textarea" placeholder="Message ChatGPT..."></textarea>
+      <button id="send-button" data-testid="send-button" aria-label="Send prompt" type="button">Send</button>
+    </div>
+  </div>
+  <script>
+    document.getElementById('send-button').addEventListener('click', function() {
+      document.getElementById('image-result').style.display = 'block';
+    });
+  </script>
+</body>
+</html>

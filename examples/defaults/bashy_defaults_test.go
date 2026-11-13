@@ -107,6 +107,9 @@ case "$1 $2" in
     : > "$src/examples/record/record.bsh"
     : > "$src/examples/cast/cast.bsh"
     : > "$src/examples/service-door/service-door.bsh"
+    : > "$src/examples/service-door/song-suno.bsh"
+    : > "$src/examples/service-door/image-chatgpt.bsh"
+    : > "$src/examples/service-door/animate-kling.bsh"
     : > "$src/examples/service-door/search-provider.bsh"
     : > "$src/examples/service-door/search-claude.bsh"
     : > "$src/examples/service-door/search-codex.bsh"
@@ -251,6 +254,15 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	}
 	if !strings.Contains(f.calls(), "commands add brave ") || !strings.Contains(f.calls(), "--set provides.0=search --set route=api") {
 		t.Errorf("search API providers not registered with role and route:\n%s", f.calls())
+	}
+	if !strings.Contains(f.calls(), "commands add song-suno ") || !strings.Contains(f.calls(), "--set provides.0=song --set route=browser") || !strings.Contains(f.calls(), "--set effects.4=spend") {
+		t.Errorf("song-suno not registered with role, route, and spend effect:\n%s", f.calls())
+	}
+	if !strings.Contains(f.calls(), "commands add image-chatgpt ") || !strings.Contains(f.calls(), "--set provides.0=image.generate --set provides.1=image.edit --set route=browser") || !strings.Contains(f.calls(), "--set effects.4=spend") {
+		t.Errorf("image-chatgpt not registered with roles, route, and spend effect:\n%s", f.calls())
+	}
+	if !strings.Contains(f.calls(), "commands add animate-kling ") || !strings.Contains(f.calls(), "--set provides.0=animate --set route=browser") || !strings.Contains(f.calls(), "--set effects.4=spend") {
+		t.Errorf("animate-kling not registered with role, route, and spend effect:\n%s", f.calls())
 	}
 	if !strings.Contains(f.calls(), "commands add search-claude ") || !strings.Contains(f.calls(), "--set provides.0=search --set route=vendor --set requires=claude>=2.1.284") {
 		t.Errorf("Claude search provider not registered with role, route, and CLI requirement:\n%s", f.calls())

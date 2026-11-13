@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Suno - Create Music</title>
+</head>
+<body>
+  <header><h1>Suno AI Studio</h1></header>
+  <main>
+    <div class="mode-toggle">
+      <button id="custom-toggle" class="mode-btn active" aria-label="Custom">Custom</button>
+    </div>
+    <form id="create-form" onsubmit="return false;">
+      <div class="field">
+        <label for="lyrics">Lyrics</label>
+        <textarea id="lyrics" name="lyrics" placeholder="Enter your lyrics"></textarea>
+      </div>
+      <div class="field">
+        <label for="instrumental">Instrumental</label>
+        <input type="checkbox" id="instrumental" name="instrumental">
+      </div>
+      <div class="field">
+        <label for="style">Style of Music</label>
+        <textarea id="style" name="style" placeholder="Enter style of music"></textarea>
+      </div>
+      <div class="field">
+        <label for="title">Title</label>
+        <input type="text" id="title" name="title" placeholder="Title">
+      </div>
+      <div class="actions">
+        <button id="create-btn" data-testid="create-button" type="button">Create</button>
+      </div>
+    </form>
+    <section id="results" class="song-list" style="display:none;">
+      <div class="song-card">
+        <span class="song-title">Demo Track</span>
+        <audio id="audio-preview" src="take.mp3" controls></audio>
+        <a class="download-link" href="take.mp3" download>Download</a>
+      </div>
+    </section>
+    <script>
+      document.getElementById('create-btn').addEventListener('click', function() {
+        document.getElementById('results').style.display = 'block';
+      });
+    </script>
+  </main>
+</body>
+</html>

@@ -1,0 +1,334 @@
+#!/usr/bin/env -S bashy --bashsharp
+# song-suno: browser rod for song generation via Suno (https://suno.com).
+# Route: browser. Role: song. Contract: docs/service-rod-contract.md.
+#
+# SPEND/VENUE RULE: drives the operator's real logged-in Chrome.
+# Takes 'bashy claim chrome-browser' before ANY live-mode action and releases it after.
+# Supports --dry-run and recorded page fixtures (--fixture).
+# Refuses generation without --yes. Live path with --yes submits, waits for completion,
+# downloads the real artifact into BASHY_SVC_OUT, checks it with ffprobe, and reports it.
+set -eu
+
+PROG=song-suno
+bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
+
+if [ "${1:-}" = "--doctor" ]; then
+    json=0
+    if [ "${2:-}" = "--json" ]; then json=1; fi
+    if [ "$json" = 1 ]; then
+        if "$bashy_bin" browser status >/dev/null 2>&1; then
+            echo '{"schema_version":"bashy-svc-doctor-v1","available":true,"missing":[]}'
+            exit 0
+        else
+            echo '{"schema_version":"bashy-svc-doctor-v1","available":false,"missing":[{"need":"has=bashy","install":"install bashy or configure chrome browser"}]}'
+            exit 0
+        fi
+    else
+        echo "$PROG: ready (browser provider for Suno)"
+        exit 0
+    fi
+fi
+
+role=${BASHY_SVC_ROLE:-song}
+route=${BASHY_SVC_ROUTE:-browser}
+request=${BASHY_SVC_REQUEST:-}
+out=${BASHY_SVC_OUT:-}
+yes=${BASHY_SVC_YES:-0}
+dry=0
+fixture=${BASHY_SVC_FIXTURE:-}
+mode=${BASHY_BROWSER_MODE:-live}
+operands=()
+
+while [ "$#" -gt 0 ]; do
+    case $1 in
+        --dry-run) dry=1; shift ;;
+        --yes) yes=1; shift ;;
+        --out) out=${2:?}; shift 2 ;;
+        --out=*) out=${1#*=}; shift ;;
+        --fixture) fixture=${2:?}; shift 2 ;;
+        --fixture=*) fixture=${1#*=}; shift ;;
+        --mode) mode=${2:?}; shift 2 ;;
+        --mode=*) mode=${1#*=}; shift ;;
+        --role) role=${2:?}; shift 2 ;;
+        --role=*) role=${1#*=}; shift ;;
+        --help|-h)
+            echo "Usage: $PROG [--dry-run] [--yes] [--out DIR] [--fixture PATH] [--mode live|solo] [REQUEST.json]"
+            exit 0
+            ;;
+        *)
+            if [ -z "$request" ] && [[ $1 == *.json ]] && [ -f "$1" ]; then
+                request=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+            else
+                operands+=("$1")
+            fi
+            shift
+            ;;
+    esac
+done
+
+prompt=""
+lyrics=""
+title=""
+instrumental=false
+duration_s=30
+
+if [ -n "$request" ] && [ -f "$request" ]; then
+    schema=$(jq -r '.schema_version // ""' "$request" 2>/dev/null || true)
+    if [ -n "$schema" ] && [[ $schema != bashy-svc-request-v1* ]]; then
+        echo "$PROG: unsupported request schema version: $schema" >&2
+        exit 2
+    fi
+    prompt=$(jq -r '.prompt // empty' "$request" 2>/dev/null || true)
+    lyrics=$(jq -r '.lyrics // empty' "$request" 2>/dev/null || true)
+    lyrics_file=$(jq -r '.lyrics_file // empty' "$request" 2>/dev/null || true)
+    if [ -n "$lyrics_file" ]; then
+        if [[ $lyrics_file != /* ]]; then
+            lyrics_file=$(cd "$(dirname "$request")" && pwd)/$lyrics_file
+        fi
+        if [ -f "$lyrics_file" ]; then
+            lyrics=$(cat "$lyrics_file")
+        fi
+    fi
+    title=$(jq -r '.title // empty' "$request" 2>/dev/null || true)
+    instrumental=$(jq -r 'if .instrumental == true then "true" else "false" end' "$request" 2>/dev/null || echo false)
+    dur=$(jq -r '.duration_s // empty' "$request" 2>/dev/null || true)
+    [ -z "$dur" ] || duration_s=$dur
+elif [ "${#operands[@]}" -gt 0 ]; then
+    prompt="${operands[*]}"
+fi
+
+[ -n "$prompt" ] || [ -n "$lyrics" ] || [ "$instrumental" = true ] || prompt="cinematic ballad"
+[ -n "$title" ] || title="Generated Track"
+
+if [ "$dry" = 1 ]; then
+    printf '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":"song.mp3","media_type":"audio/mpeg"}],"text":"[dry-run] Suno song generation: title=\\"%s\\", prompt=\\"%s\\", instrumental=%s, duration=%ss"}\n' "$title" "$prompt" "$instrumental" "$duration_s"
+    exit 0
+fi
+
+if [ "$yes" != 1 ]; then
+    echo "$PROG: requires --yes to allow spend effect (Suno subscription credits)" >&2
+    exit 2
+fi
+
+if [ -z "$out" ]; then
+    out=$(mktemp -d "${TMPDIR:-/tmp}/$PROG.XXXXXX")
+fi
+mkdir -p "$out"
+out=$(cd "$out" && pwd)
+out_file="$out/song.mp3"
+
+verify_audio() {
+    local file="$1"
+    if [ ! -s "$file" ]; then
+        echo "$PROG: output audio file is missing or empty: $file" >&2
+        return 1
+    fi
+    if command -v ffprobe >/dev/null 2>&1; then
+        if ! ffprobe -v error -select_streams a -show_entries stream=codec_type -of default=noprint_wrappers=1 "$file" >/dev/null 2>&1; then
+            echo "$PROG: ffprobe verification failed for audio: $file" >&2
+            return 1
+        fi
+    fi
+}
+
+download_media() {
+    local url="$1"
+    local dest="$2"
+    if [[ $url == file://* ]]; then
+        local p="${url#file://}"
+        cp "$p" "$dest" || { echo "$PROG: failed to copy $p to $dest" >&2; return 1; }
+    elif [[ $url == http://* ]] || [[ $url == https://* ]]; then
+        if command -v curl >/dev/null 2>&1; then
+            curl -sSfL "$url" -o "$dest" || { echo "$PROG: failed to download $url" >&2; return 1; }
+        elif command -v "$bashy_bin" >/dev/null 2>&1; then
+            "$bashy_bin" fetch "$url" > "$dest" || { echo "$PROG: failed to fetch $url" >&2; return 1; }
+        else
+            echo "$PROG: no download tool available for $url" >&2
+            return 1
+        fi
+    elif [[ $url == data:* ]]; then
+        echo "${url#*,}" | base64 -d > "$dest" || { echo "$PROG: failed to decode data URL" >&2; return 1; }
+    elif [ -f "$url" ]; then
+        cp "$url" "$dest" || { echo "$PROG: failed to copy $url to $dest" >&2; return 1; }
+    elif [ -n "$fixture" ] && [ -f "$(dirname "$fixture")/$url" ]; then
+        cp "$(dirname "$fixture")/$url" "$dest" || { echo "$PROG: failed to copy $(dirname "$fixture")/$url" >&2; return 1; }
+    else
+        echo "$PROG: unknown or unresolvable media url: $url" >&2
+        return 1
+    fi
+}
+
+# Recorded page fixture execution
+if [ -n "$fixture" ]; then
+    if [ ! -f "$fixture" ]; then
+        echo "$PROG: fixture file not found: $fixture" >&2
+        exit 1
+    fi
+    fixture_abs=$(cd "$(dirname "$fixture")" && pwd)/$(basename "$fixture")
+    b_mode=${mode:-probe}
+    if [ "$b_mode" = "live" ]; then b_mode="probe"; fi
+
+    cleanup_fixture_probe() {
+        if [ "$b_mode" = "probe" ]; then
+            "$bashy_bin" browser --mode probe stop >/dev/null 2>&1 || true
+        fi
+    }
+    trap cleanup_fixture_probe EXIT INT TERM
+
+    # Navigate
+    "$bashy_bin" browser --mode "$b_mode" navigate "file://$fixture_abs" >/dev/null || {
+        echo "$PROG: failed step: navigate to fixture $fixture_abs" >&2
+        exit 1
+    }
+
+    # Submit: if custom toggle exists, click it; if form exists, fill; if create button exists, click it
+    if "$bashy_bin" browser --mode "$b_mode" --json extract | jq -e '.data.elements[]? | select(.selector == "#custom-toggle" or .selector == ".mode-toggle button")' >/dev/null 2>&1; then
+        "$bashy_bin" browser --mode "$b_mode" click '#custom-toggle' >/dev/null 2>&1 || true
+    fi
+    if "$bashy_bin" browser --mode "$b_mode" --json extract | jq -e '.data.elements[]? | select(.selector == "#create-btn" or .selector == "button[data-testid=\"create-button\"]")' >/dev/null 2>&1; then
+        "$bashy_bin" browser --mode "$b_mode" click '#create-btn' >/dev/null || {
+            echo "$PROG: failed step: click create button" >&2
+            exit 1
+        }
+    fi
+
+    # Wait: wait for audio element or download link
+    "$bashy_bin" browser --mode "$b_mode" wait-for-selector 'audio[src], a[download]' --timeout-ms 10000 --state visible >/dev/null || {
+        echo "$PROG: failed step: wait for audio completion" >&2
+        exit 1
+    }
+
+    # Extract media URL
+    media_url=$("$bashy_bin" browser --mode "$b_mode" --json eval '(() => {
+        const a = document.querySelector("audio[src]");
+        if (a && a.src) return a.src;
+        const link = document.querySelector("a[download], a[href*=\".mp3\"]");
+        if (link && link.href) return link.href;
+        return "";
+    })()' | jq -r '.data // empty')
+
+    if [ -z "$media_url" ]; then
+        echo "$PROG: failed step: extract audio URL from completed fixture page" >&2
+        exit 1
+    fi
+
+    # Download
+    download_media "$media_url" "$out_file" || {
+        echo "$PROG: failed step: download audio artifact" >&2
+        exit 1
+    }
+
+    # Verify
+    verify_audio "$out_file" || {
+        echo "$PROG: failed step: audio verification failed" >&2
+        exit 1
+    }
+
+    cleanup_fixture_probe
+    trap - EXIT INT TERM
+
+    printf '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":"song.mp3","media_type":"audio/mpeg"}],"text":"Suno song generation via fixture: title=\\"%s\\", prompt=\\"%s\\""}\n' "$title" "$prompt"
+    exit 0
+fi
+
+# Live mode execution
+claim_held=0
+cleanup_claim() {
+    if [ "$claim_held" = 1 ]; then
+        "$bashy_bin" claim release chrome-browser >/dev/null 2>&1 || true
+        claim_held=0
+    fi
+}
+trap cleanup_claim EXIT INT TERM
+
+# Claim chrome-browser before any live-mode action
+"$bashy_bin" claim chrome-browser --intent "$PROG: live Suno browser generation" || {
+    echo "$PROG: failed step: claim chrome-browser" >&2
+    exit 9
+}
+claim_held=1
+
+# Check if a Suno tab is already open
+suno_tab=$("$bashy_bin" browser --mode live --json tabs list 2>/dev/null | jq -r '.data[]? | select(.url | contains("suno.com")) | .id' | head -n 1 || true)
+
+if [ -n "$suno_tab" ]; then
+    tab_arg=(--id "$suno_tab")
+else
+    "$bashy_bin" browser --mode live navigate "https://suno.com/create" || {
+        echo "$PROG: failed step: navigate to suno.com/create" >&2
+        exit 1
+    }
+    tab_arg=(--url "suno.com")
+fi
+
+# Fill form in live browser
+"$bashy_bin" browser --mode live "${tab_arg[@]}" click --text "Custom" || {
+    echo "$PROG: failed step: click Custom" >&2
+    exit 1
+}
+"$bashy_bin" browser --mode live "${tab_arg[@]}" type 'textarea[placeholder*="style" i]' "$prompt" || {
+    echo "$PROG: failed step: type style prompt" >&2
+    exit 1
+}
+
+if [ "$instrumental" = true ]; then
+    "$bashy_bin" browser --mode live "${tab_arg[@]}" click 'input[name="instrumental"]' || {
+        echo "$PROG: failed step: toggle instrumental" >&2
+        exit 1
+    }
+elif [ -n "$lyrics" ]; then
+    "$bashy_bin" browser --mode live "${tab_arg[@]}" type 'textarea[placeholder*="lyrics" i]' "$lyrics" || {
+        echo "$PROG: failed step: type lyrics" >&2
+        exit 1
+    }
+fi
+
+if [ -n "$title" ]; then
+    "$bashy_bin" browser --mode live "${tab_arg[@]}" type 'input[placeholder*="title" i]' "$title" || {
+        echo "$PROG: failed step: type title" >&2
+        exit 1
+    }
+fi
+
+# Submit generation in live browser
+"$bashy_bin" browser --mode live "${tab_arg[@]}" click --text "Create" || {
+    echo "$PROG: failed step: click Create" >&2
+    exit 1
+}
+
+# Wait for generation completion (bounded timeout)
+"$bashy_bin" browser --mode live "${tab_arg[@]}" wait-for-selector 'audio[src], a[download], a[href*=".mp3"]' --timeout-ms 300000 --state visible || {
+    echo "$PROG: failed step: wait for Suno generation completion" >&2
+    exit 1
+}
+
+# Extract generated audio URL
+media_url=$("$bashy_bin" browser --mode live "${tab_arg[@]}" --json eval '(() => {
+    const a = document.querySelector("audio[src]");
+    if (a && a.src) return a.src;
+    const link = document.querySelector("a[download], a[href*=\".mp3\"]");
+    if (link && link.href) return link.href;
+    return "";
+})()' | jq -r '.data // empty')
+
+if [ -z "$media_url" ]; then
+    echo "$PROG: failed step: extract audio URL from Suno page" >&2
+    exit 1
+fi
+
+# Download the real artifact into BASHY_SVC_OUT
+download_media "$media_url" "$out_file" || {
+    echo "$PROG: failed step: download audio artifact from Suno" >&2
+    exit 1
+}
+
+# Check real artifact with ffprobe
+verify_audio "$out_file" || {
+    echo "$PROG: failed step: verify downloaded audio artifact" >&2
+    exit 1
+}
+
+cleanup_claim
+trap - EXIT INT TERM
+
+printf '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":"song.mp3","media_type":"audio/mpeg"}],"text":"Suno song generated: title=\\"%s\\", prompt=\\"%s\\""}\n' "$title" "$prompt"
