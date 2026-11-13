@@ -31,6 +31,7 @@ OUT=${BASHY_SVC_OUT:-}
 [ -n "$OUT" ] || OUT=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-image.XXXXXX")
 mkdir -p "$OUT"
 oss_preflight_gb "$ROD" 35 || exit 1
+oss_offline
 
 if [ -n "${IMAGE_KLEIN_PY:-}" ]; then
     gen=$IMAGE_KLEIN_PY
@@ -45,19 +46,15 @@ else
         text_encoder/model-00002-of-00002.safetensors text_encoder/model.safetensors.index.json \
         tokenizer/tokenizer.json vae/config.json vae/diffusion_pytorch_model.safetensors \
         scheduler/scheduler_config.json; do
-        [ -e "$model/$part" ] || die "offline model incomplete: missing $part under local FLUX.2 klein-4B snapshot"
+        oss_staged_file "$model/$part" || exit 1
     done
     case $(oss_os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
-    if [ ! -x "$py" ]; then
-        command -v uv >/dev/null || die "needs uv; install: $(oss_install_line uv)"
-        uv venv --python 3.11 "$root/.venv" >&2 || die "uv venv failed"
-        uv pip install --python "$py" 'diffusers==0.43.0' transformers accelerate safetensors pillow torch >&2 || die "package install failed"
-    fi
+    [ -x "$py" ] || die "environment missing: $py; stage it with 'uv venv --python 3.11 $root/.venv && uv pip install --python $py diffusers==0.43.0 transformers accelerate safetensors pillow torch' before rendering"
     gen="$here/image-klein.py"
 fi
 
 if [ -n "$py" ]; then
-    made=$(HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 "$py" "$gen" \
+    made=$("$py" "$gen" \
         --role "$ROLE" --model "$model" --prompt "$prompt" --width "$width" \
         --height "$height" --seed "$seed" --image "$image" --outdir "$OUT") || die "offline inference failed"
 else

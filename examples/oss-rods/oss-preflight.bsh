@@ -36,6 +36,25 @@ oss_cache_root() {
 	echo "$base/bashy/oss/$1"
 }
 
+# Render processes must never resolve a missing model through a hub fallback.
+oss_offline() {
+	export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_DATASETS_OFFLINE=1
+	export MODELSCOPE_OFFLINE=1 MS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1
+	export UV_OFFLINE=1 PIP_NO_INDEX=1
+	# ModelScope's fallback path is not governed by HF_HUB_OFFLINE. Block
+	# outbound HTTP even if a backend ignores its offline flag; keep the
+	# ACE-Step API on loopback reachable.
+	export HTTP_PROXY=http://127.0.0.1:9 HTTPS_PROXY=http://127.0.0.1:9
+	export ALL_PROXY=http://127.0.0.1:9 NO_PROXY=localhost,127.0.0.1,::1
+	export http_proxy=$HTTP_PROXY https_proxy=$HTTPS_PROXY all_proxy=$ALL_PROXY no_proxy=$NO_PROXY
+}
+
+oss_staged_file() {
+	[ -s "$1" ] && return 0
+	echo "$ROD: staged weight missing: $1; stage it with 'hf download --revision REV REPO --local-dir DIR' using the pinned revision in docs/sprint-627-m2b-weights-evidence.md" >&2
+	return 1
+}
+
 # oss_avail_kb DIR: free KiB on the volume holding DIR.
 # OSS_AVAIL_KB_OVERRIDE (a test hook) replaces the df probe when set.
 oss_avail_kb() {

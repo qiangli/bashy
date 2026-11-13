@@ -15,6 +15,32 @@ it needs a 24 GB NVIDIA host the fleet has not confirmed (M3).
 | `narrate-local` | `narrate` | Chatterbox default, `kokoro:<voice>` light path; same pins as `media voice` | text/voice → `narration.wav` (silence-trimmed) |
 | `transcribe-whisperx` | `transcribe` | WhisperX `3.8.6` on Whisper large-v3, `--compute_type int8` for Mac/CPU | audio → `transcript.srt`/`.txt` |
 
+All oss rods render from local snapshots under `BASHY_OSS_CACHE/bashy/oss`.
+They set `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`,
+`MODELSCOPE_OFFLINE=1`, `MS_OFFLINE=1`, `UV_OFFLINE=1`, and
+`PIP_NO_INDEX=1` before invoking a model. A missing weight or Python
+environment fails before inference. Stage packages and the pinned model
+snapshots as a separate, deliberate operation; use the immutable revisions
+and SHA-256 list in `docs/sprint-627-m2b-weights-evidence.md` and the
+offline gate in `oss_rods_test.go`. For example:
+
+```sh
+hf download --revision 19671f406d603126926c1b7e2adc169acbcade22 ACE-Step/Ace-Step1.5 \
+  --local-dir "$BASHY_OSS_CACHE/bashy/oss/song-acestep/models/Ace-Step1.5"
+```
+
+For song, stage the pinned ACE-Step checkout and its Python environment,
+then launch `bashy --bashsharp song-acestep.bsh --serve`. The launcher checks
+the staged weights, binds the checkout's `checkpoints` path to the staged
+snapshot, and starts the API with its LM disabled. Set
+`SONG_ACESTEP_LM=1.7B` only when that LM's staged weight is present. The
+render rod refuses a server that was not started by this launcher.
+
+WhisperX defaults to `transcribe-whisperx/models/faster-whisper-large-v3`
+and runs without alignment, which otherwise needs another unstaged model.
+Chatterbox and Kokoro load their local files directly. Optional Qwen image
+models also require local Diffusers snapshots.
+
 `image-klein` is the only image rod registered by defaults. `image-qwen`
 remains available for explicit registration as an optional quality upgrade;
 registering both oss image rods requires `--provider` to resolve the route.
@@ -29,10 +55,9 @@ Every rod:
 
 - answers `ROD --doctor --json` with no side effects, even when its
   `requires:` fails (per-OS install lines);
-- runs the disk-headroom preflight **before** any weight download
-  (`oss_preflight_gb` in `oss-preflight.bsh`; Sprint 382 failed on a
-  97%-full host);
-- provisions pinned packages + weights on first use only, never at install;
+- runs the disk-headroom preflight before inference
+  (`oss_preflight_gb` in `oss-preflight.bsh`);
+- refuses to provision packages or weights during a render;
 - honors its `_PY` hook (`SONG_ACESTEP_PY`, `IMAGE_QWEN_PY`,
   `NARRATE_LOCAL_PY`, `TRANSCRIBE_WHISPERX_PY`) so tests exercise the
   request/preflight/envelope path with a fixture generator, same pattern as

@@ -4,13 +4,13 @@
 # Apache-2.0) as the light path; same pinned packages as `media voice`.
 # Licenses re-verified 2026-11-13 (PyPI chatterbox-tts MIT text; HF metadata
 # license:apache-2.0 for Kokoro-82M).
-# Weights download on first use only, behind the disk-headroom preflight.
+# Weights are loaded directly from the staged cache, offline.
 # NARRATE_LOCAL_PY replaces the generator (fixture stand-ins in tests).
 
 ~~~skill as guide
 ---
 name: narrate-local
-description: Open-source narration rod (Chatterbox MIT, Kokoro-82M Apache-2.0) for the narrate service role. Needs uv and ffmpeg; weights download on first use after a disk-headroom preflight.
+description: Open-source narration rod (Chatterbox MIT, Kokoro-82M Apache-2.0) for the narrate service role. Loads staged weights offline.
 metadata:
   requires: "has=uv has=ffmpeg"
 ---
@@ -70,27 +70,25 @@ case $text in
 esac
 
 oss_preflight_gb "$ROD" "$NEED_GB" || exit 1
+oss_offline
 
 PY=""
 if [ -n "${NARRATE_LOCAL_PY:-}" ]; then
 	gen=$NARRATE_LOCAL_PY
 else
 	root=$(oss_cache_root "$ROD")
-	ready=$root/.ready-$(printf '%s\n' "${NEURAL_PKGS[@]}" | cksum | cut -d' ' -f1)
-	if [ ! -f "$ready" ]; then
-		command -v uv >/dev/null || die "needs uv; install: $(oss_install_line uv)"
-		echo "$ROD: provisioning the neural voice environment (first use; weights follow)" >&2
-		case $(oss_os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
-		mkdir -p "$root"
-		[ -x "$py" ] || uv venv --python 3.11 "$root/.venv" >&2 || die "uv venv failed"
-		uv pip install --python "$py" "${NEURAL_PKGS[@]}" >&2 || die "package install failed"
-		: >"$ready"
-	fi
+	model=$root/models/chatterbox
+	case $voice in
+	chatterbox|'') for part in conds.pt s3gen.pt t3_cfg.pt ve.pt tokenizer.json; do oss_staged_file "$model/$part" || exit 1; done ;;
+	*) model=$root/models/Kokoro-82M
+		for part in config.json kokoro-v1_0.pth; do oss_staged_file "$model/$part" || exit 1; done
+		voice_name=${voice#kokoro:}; [ "$voice_name" != "$voice" ] || voice_name=am_fenrir
+		oss_staged_file "$model/voices/$voice_name.pt" || exit 1 ;;
+	esac
 	case $(oss_os_name) in windows) PY=$root/.venv/Scripts/python.exe ;; *) PY=$root/.venv/bin/python ;; esac
-	[ -x "$PY" ] || die "provisioned environment has no python: $root/.venv"
+	[ -x "$PY" ] || die "environment missing: $PY; stage it with 'uv venv --python 3.11 $root/.venv && uv pip install --python $PY chatterbox-tts==0.1.7 kokoro==0.9.4' before rendering"
 	gen=$root/generate-voice.py
-	if [ ! -f "$gen" ]; then
-		cat >"$gen" <<'PY'
+	cat >"$gen" <<'PY'
 import argparse, os
 # Single-utterance driver for the pinned neural voice environment (same
 # packages as `media voice`): ChatterboxTTS by default, Kokoro KPipeline
@@ -99,6 +97,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--text-file", required=True); ap.add_argument("--voice", default="chatterbox")
 ap.add_argument("--language", default="en"); ap.add_argument("--reference", default="")
 ap.add_argument("--seed", type=int, default=436); ap.add_argument("--out", required=True)
+ap.add_argument("--model-dir", required=True)
 a = ap.parse_args()
 os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
@@ -107,27 +106,28 @@ dev = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_a
 text = open(a.text_file, encoding="utf-8").read().strip()
 if a.voice == "chatterbox" or a.voice == "":
     from chatterbox.tts import ChatterboxTTS
-    m = ChatterboxTTS.from_pretrained(device=dev)
+    m = ChatterboxTTS.from_local(a.model_dir, device=dev)
     if a.reference:
         m.prepare_conditionals(a.reference)
     torch.manual_seed(a.seed)
     w = m.generate(text, exaggeration=0.7, cfg_weight=0.3, temperature=0.8)
     sf.write(a.out, w.squeeze().detach().cpu().numpy(), m.sr)
 else:
-    from kokoro import KPipeline
+    from kokoro import KPipeline, KModel
     name = a.voice.split(":", 1)[1] if ":" in a.voice else "am_fenrir"
     lang = {"en": "a", "es": "e"}.get(a.language[:2], "a")
-    p = KPipeline(lang_code=lang, repo_id="hexgrad/Kokoro-82M", device=dev)
+    m = KModel(repo_id="hexgrad/Kokoro-82M", config=os.path.join(a.model_dir, "config.json"),
+               model=os.path.join(a.model_dir, "kokoro-v1_0.pth")).to(dev).eval()
+    p = KPipeline(lang_code=lang, repo_id="hexgrad/Kokoro-82M", model=m, device=dev)
     torch.manual_seed(a.seed)
-    chunks = [x.cpu().numpy() for _, _, x in p(text, voice=name, speed=1.0)]
+    chunks = [x.cpu().numpy() for _, _, x in p(text, voice=os.path.join(a.model_dir, "voices", name + ".pt"), speed=1.0)]
     sf.write(a.out, np.concatenate(chunks), 24000)
 PY
-	fi
 fi
 
 if [ -n "$PY" ]; then "$PY" "$gen" --text-file "$text_f" --voice "$voice" \
 	--language "$language" --reference "$ref" --seed "$seed" \
-	--out "$wav.raw.wav" >&2 || die "generation failed"
+	--model-dir "$model" --out "$wav.raw.wav" >&2 || die "generation failed"
 else
 	"$gen" --text-file "$text_f" --voice "$voice" \
 		--language "$language" --reference "$ref" --seed "$seed" \

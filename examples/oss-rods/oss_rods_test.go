@@ -102,6 +102,8 @@ func fileExists(path string) bool { _, err := os.Stat(path); return err == nil }
 // CLI and write real-typed fixture bytes: a silent WAV, a 1x1 PNG, an SRT.
 // (Byte strings verified against python-generated fixtures with `file`.)
 const fakeWavGen = `#!/bin/sh
+set -eu
+for key in HF_HUB_OFFLINE TRANSFORMERS_OFFLINE HF_DATASETS_OFFLINE MODELSCOPE_OFFLINE MS_OFFLINE UV_OFFLINE PIP_NO_INDEX; do eval "value=\${$key}"; [ "$value" = 1 ] || exit 91; done
 out=""
 while [ $# -gt 0 ]; do case $1 in --out) out=$2; shift 2 ;; *) shift ;; esac; done
 printf '\122\111\106\106\244\076\000\000\127\101\126\105\146\155\164\040\020\000\000\000\001\000\001\000\100\037\000\000\200\076\000\000\002\000\020\000\144\141\164\141\200\076\000\000' >"$out"
@@ -109,6 +111,8 @@ head -c 16000 /dev/zero >>"$out"
 `
 
 const fakePngGen = `#!/bin/sh
+set -eu
+for key in HF_HUB_OFFLINE TRANSFORMERS_OFFLINE HF_DATASETS_OFFLINE MODELSCOPE_OFFLINE MS_OFFLINE UV_OFFLINE PIP_NO_INDEX; do eval "value=\${$key}"; [ "$value" = 1 ] || exit 91; done
 outdir=""
 while [ $# -gt 0 ]; do case $1 in --outdir) outdir=$2; shift 2 ;; *) shift ;; esac; done
 png="$outdir/image-01.png"
@@ -117,6 +121,8 @@ echo "$png"
 `
 
 const fakeSRTGen = `#!/bin/sh
+set -eu
+for key in HF_HUB_OFFLINE TRANSFORMERS_OFFLINE HF_DATASETS_OFFLINE MODELSCOPE_OFFLINE MS_OFFLINE UV_OFFLINE PIP_NO_INDEX; do eval "value=\${$key}"; [ "$value" = 1 ] || exit 91; done
 out=""
 while [ $# -gt 0 ]; do case $1 in --out) out=$2; shift 2 ;; *) shift ;; esac; done
 printf '1\n00:00:00,500 --> 00:00:02,000\nHello from the opening night\n' >"$out"
@@ -442,6 +448,70 @@ func TestOssRodEnvelopes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A missing staged model must stop before any fetch command can run. The
+// fixture also checks every generator receives the offline environment above.
+func TestOssRodsNeverFetchMissingWeights(t *testing.T) {
+	for _, d := range rodDefs() {
+		d := d
+		t.Run(d.name+"/"+d.role, func(t *testing.T) {
+			f := newFixture(t)
+			marker := filepath.Join(f.root, "network-fetch")
+			for _, name := range []string{"uv", "git", "curl", "wget", "hf", "modelscope"} {
+				body := "#!/bin/sh\nprintf '%s\\n' fetch >>'" + marker + "'\nexit 99\n"
+				if err := os.WriteFile(filepath.Join(f.stubbin, name), []byte(body), 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+			req := f.requestFile(d)
+			cmd := exec.Command(f.bin, "--bashsharp", filepath.Join(f.rodsDir, d.name+".bsh"))
+			cmd.Env = append(append([]string{}, f.env...),
+				"SONG_ACESTEP_PY=", "IMAGE_QWEN_PY=", "IMAGE_KLEIN_PY=",
+				"NARRATE_LOCAL_PY=", "TRANSCRIBE_WHISPERX_PY=",
+				"BASHY_SVC_REQUEST="+req, "BASHY_SVC_ROLE="+d.role, "OSS_AVAIL_KB_OVERRIDE=104857600")
+			out, err := cmd.CombinedOutput()
+			if err == nil || !strings.Contains(string(out), "staged weight missing") {
+				t.Fatalf("missing staged model did not fail closed: %v\n%s", err, out)
+			}
+			if fileExists(marker) {
+				t.Fatal("rod called a network fetch command")
+			}
+		})
+	}
+}
+
+func TestSongOfflineServerUsesStagedCheckpoint(t *testing.T) {
+	f := newFixture(t)
+	root := filepath.Join(f.root, "cache", "bashy", "oss", "song-acestep")
+	stage := filepath.Join(root, "models", "Ace-Step1.5")
+	for _, part := range []string{"Qwen3-Embedding-0.6B/model.safetensors", "acestep-v15-turbo/model.safetensors", "vae/diffusion_pytorch_model.safetensors"} {
+		path := filepath.Join(stage, part)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { t.Fatal(err) }
+		if err := os.WriteFile(path, []byte("staged fixture"), 0o644); err != nil { t.Fatal(err) }
+	}
+	co := filepath.Join(root, "acestep-1.5")
+	api := filepath.Join(co, ".venv", "bin", "acestep-api")
+	if err := os.MkdirAll(filepath.Dir(api), 0o755); err != nil { t.Fatal(err) }
+	ready := filepath.Join(co, ".ready-ca1e85fe9430179831e6bc6be790c332190a3866")
+	if err := os.WriteFile(ready, []byte("ready"), 0o644); err != nil { t.Fatal(err) }
+	proof := filepath.Join(f.root, "server-env")
+	body := "#!/bin/sh\nprintf '%s\\n' \"$ACESTEP_INIT_LLM $ACESTEP_CHECKPOINTS_DIR $HF_HUB_OFFLINE $TRANSFORMERS_OFFLINE $MODELSCOPE_OFFLINE $MS_OFFLINE\" >'"+proof+"'\n"
+	if err := os.WriteFile(api, []byte(body), 0o755); err != nil { t.Fatal(err) }
+	run := func(extra ...string) (string, error) {
+		cmd := exec.Command(f.bin, "--bashsharp", filepath.Join(f.rodsDir, "song-acestep.bsh"), "--serve")
+		cmd.Env = append(append([]string{}, f.env...), extra...)
+		out, err := cmd.CombinedOutput()
+		return string(out), err
+	}
+	if out, err := run(); err != nil { t.Fatalf("offline server failed: %v\n%s", err, out) }
+	link := filepath.Join(co, "checkpoints")
+	if info, err := os.Stat(link); err != nil || !info.IsDir() { t.Fatalf("staged link missing: %v", err) }
+	if target, err := os.Readlink(link); err != nil || target != stage { t.Fatalf("checkpoints = %q, %v", target, err) }
+	raw, err := os.ReadFile(proof)
+	if err != nil { t.Fatal(err) }
+	if got, want := strings.TrimSpace(string(raw)), "false "+stage+" 1 1 1 1"; got != want { t.Fatalf("server env = %q, want %q", got, want) }
+	if out, err := run("SONG_ACESTEP_LM=1.7B"); err == nil || !strings.Contains(out, "staged weight missing") { t.Fatalf("unstaged LM started: %v\n%s", err, out) }
 }
 
 // A rod whose requires fails is unavailable: exit 126 with the rod's own

@@ -5,13 +5,13 @@
 # Upstream: git clone + `uv sync`, driven through the local REST API
 # (`uv run acestep-api`, POST /release_task, POST /query_result,
 # GET /v1/audio; see docs/en/API.md). Pinned to commit ACESTEP_PIN.
-# Weights download on first use only, behind the disk-headroom preflight.
+# Renders use only the staged checkpoint. Start the server with --serve.
 # SONG_ACESTEP_PY replaces the generator (fixture stand-ins in tests).
 
 ~~~skill as guide
 ---
 name: song-acestep
-description: Open-source song rod (ACE-Step 1.5, MIT) for the song service role. Needs uv, ffmpeg and git; weights download on first use after a disk-headroom preflight.
+description: Open-source song rod (ACE-Step 1.5, MIT) for the song service role. Staged checkpoints only; start its offline server with --serve.
 metadata:
   requires: "has=uv has=ffmpeg has=git"
 ---
@@ -39,10 +39,49 @@ OSS_ROD_TEXT=""
 
 die() { echo "$ROD: $*" >&2; exit "${2:-1}"; }
 
+prepare_server() {
+	root=$(oss_cache_root "$ROD")
+	co=$root/acestep-1.5
+	stage=$root/models/Ace-Step1.5
+	for part in Qwen3-Embedding-0.6B/model.safetensors acestep-v15-turbo/model.safetensors vae/diffusion_pytorch_model.safetensors; do
+		oss_staged_file "$stage/$part" || return 1
+	done
+	case ${SONG_ACESTEP_LM:-off} in
+	off) export ACESTEP_INIT_LLM=false ;;
+	1.7B) oss_staged_file "$stage/acestep-5Hz-lm-1.7B/model.safetensors" || return 1
+		export ACESTEP_INIT_LLM=true ACESTEP_LM_MODEL_PATH=acestep-5Hz-lm-1.7B ;;
+	*) die "SONG_ACESTEP_LM must be off or 1.7B" 2 ;;
+	esac
+	[ -f "$co/.ready-$ACESTEP_PIN" ] || die "checkout missing: $co; stage it with 'git clone $ACESTEP_REPO $co && cd $co && git checkout $ACESTEP_PIN && uv sync' before rendering"
+	# The pinned API reads ./checkpoints in the checkout during initialization.
+	# Refuse an unrelated path rather than replacing someone else's directory.
+	if [ -e "$co/checkpoints" ] || [ -L "$co/checkpoints" ]; then
+		[ "$co/checkpoints" -ef "$stage" ] || die "checkout checkpoints does not point to staged $stage"
+	else
+		ln -s "$stage" "$co/checkpoints" || die "cannot link staged checkpoint"
+	fi
+	export ACESTEP_CHECKPOINTS_DIR="$stage"
+	export ACESTEP_CONFIG_PATH=acestep-v15-turbo ACESTEP_LM_BACKEND=pt
+	oss_offline
+}
+
 if [ "${1:-}" = --doctor ]; then
 	[ "${2:-}" = --json ] || die "--doctor needs --json" 2
 	oss_doctor "has=uv|uv" "has=ffmpeg|ffmpeg" "has=git|git"
 	exit 0
+fi
+if [ "${1:-}" = --serve ]; then
+	prepare_server || exit 1
+	case $(oss_os_name) in windows) api=$co/.venv/Scripts/acestep-api.exe ;; *) api=$co/.venv/bin/acestep-api ;; esac
+	api=${SONG_ACESTEP_API_BIN:-$api}
+	[ -x "$api" ] || die "ACE-Step environment missing: $api; stage it with 'cd $co && uv sync' before rendering"
+	# A marker is only written for a launcher that has validated the staged
+	# checkpoint and selected the explicit LM policy.
+	printf '%s\n%s\n' "$stage ${SONG_ACESTEP_LM:-off}" "$$" >"$root/.offline-server"
+	trap 'rm -f "$root/.offline-server"' EXIT INT TERM
+	cd "$co"
+	"$api" --port 18001
+	exit $?
 fi
 
 REQ=$(oss_request_file "$@") || exit $?
@@ -71,27 +110,20 @@ if [ -n "$lyrics_f" ] && [ ! -f "$lyrics_f" ]; then
 fi
 
 oss_preflight_gb "$ROD" "$NEED_GB" || exit 1
+oss_offline
 
 PY=""
 if [ -n "${SONG_ACESTEP_PY:-}" ]; then
 	gen=$SONG_ACESTEP_PY
 else
-	root=$(oss_cache_root "$ROD")
-	co=$root/acestep-1.5
-	if [ ! -f "$co/.ready-$ACESTEP_PIN" ]; then
-		command -v git >/dev/null || die "needs git; install: $(oss_install_line git)"
-		command -v uv >/dev/null || die "needs uv; install: $(oss_install_line uv)"
-		echo "$ROD: provisioning ACE-Step 1.5 (first use; weights follow)" >&2
-		mkdir -p "$root"
-		[ -d "$co/.git" ] || git clone "$ACESTEP_REPO" "$co" >&2 || die "git clone failed"
-		(cd "$co" && git fetch --depth 1 origin "$ACESTEP_PIN" >&2 && git checkout "$ACESTEP_PIN" >&2) || die "checkout $ACESTEP_PIN failed"
-		(cd "$co" && uv sync >&2) || die "uv sync failed"
-		: >"$co/.ready-$ACESTEP_PIN"
-	fi
+	prepare_server || exit 1
+	marker=$root/.offline-server
+	[ -f "$marker" ] && [ "$(head -n 1 "$marker")" = "$stage ${SONG_ACESTEP_LM:-off}" ] &&
+		kill -0 "$(sed -n '2p' "$marker")" 2>/dev/null || die "start the staged offline server first: bashy --bashsharp $here/song-acestep.bsh --serve"
 	# The driver talks to the pinned checkout's server (`uv run acestep-api`,
 	# SONG_ACESTEP_URL, default localhost:18001). The rod never starts it:
 	# one server per session, started on the claimed host like this:
-	#   cd "$(oss_cache_root song-acestep)"/acestep-1.5 && uv run acestep-api --port 18001
+	#   bashy --bashsharp song-acestep.bsh --serve
 	if [ -z "${SONG_ACESTEP_URL:-}" ]; then SONG_ACESTEP_URL=http://localhost:18001; export SONG_ACESTEP_URL; fi
 	case $SONG_ACESTEP_URL in http://localhost:18001)
 		curl -fsS --max-time 5 "$SONG_ACESTEP_URL/v1/models" >/dev/null 2>&1 || die "no ACE-Step server at $SONG_ACESTEP_URL; start one first: cd $co && uv run acestep-api --port 18001"

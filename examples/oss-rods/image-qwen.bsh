@@ -5,13 +5,13 @@
 # Licenses re-verified 2026-11-13 (LICENSE text for Qwen-Image; HF metadata
 # license:apache-2.0 tags for both repos).
 # Driven through diffusers (0.43.0, Apache-2.0); FP8/GGUF footprints need a
-# 24 GB host. Weights download on first use only, behind the preflight.
+# 24 GB host. Renders require staged local snapshots.
 # IMAGE_QWEN_PY replaces the generator (fixture stand-ins in tests).
 
 ~~~skill as guide
 ---
 name: image-qwen
-description: Open-source image rod (Qwen-Image generate + Qwen-Image-Edit, Apache-2.0) for the image.generate and image.edit service roles. Needs uv; weights download on first use after a disk-headroom preflight.
+description: Open-source image rod (Qwen-Image generate + Qwen-Image-Edit, Apache-2.0) for the image.generate and image.edit service roles. Staged local snapshots only.
 metadata:
   requires: "has=uv"
 ---
@@ -78,27 +78,21 @@ OUT=${BASHY_SVC_OUT:-}
 mkdir -p "$OUT"
 
 oss_preflight_gb "$ROD" "$NEED_GB" || exit 1
+oss_offline
 
 PY=""
 if [ -n "${IMAGE_QWEN_PY:-}" ]; then
 	gen=$IMAGE_QWEN_PY
 else
 	root=$(oss_cache_root "$ROD")
-	marker=$root/.ready-$(printf '%s\n' "$DIFFUSERS_PIN" | cksum | cut -d' ' -f1)
-	if [ ! -f "$marker" ]; then
-		command -v uv >/dev/null || die "needs uv; install: $(oss_install_line uv)"
-		echo "$ROD: provisioning the diffusers environment (first use; weights follow)" >&2
-		case $(oss_os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
-		mkdir -p "$root"
-		[ -x "$py" ] || uv venv --python 3.11 "$root/.venv" >&2 || die "uv venv failed"
-		uv pip install --python "$py" "$DIFFUSERS_PIN" torch transformers accelerate safetensors huggingface_hub >&2 || die "package install failed"
-		: >"$marker"
-	fi
+	GEN_MODEL=$root/models/Qwen-Image
+	EDIT_MODEL=$root/models/Qwen-Image-Edit-2511
+	if [ "$ROLE" = image.edit ]; then staged=$EDIT_MODEL; else staged=$GEN_MODEL; fi
+	oss_staged_file "$staged/model_index.json" || exit 1
 	case $(oss_os_name) in windows) PY=$root/.venv/Scripts/python.exe ;; *) PY=$root/.venv/bin/python ;; esac
-	[ -x "$PY" ] || die "provisioned environment has no python: $root/.venv"
+	[ -x "$PY" ] || die "environment missing: $PY; stage it with 'uv venv --python 3.11 $root/.venv && uv pip install --python $PY $DIFFUSERS_PIN torch transformers accelerate safetensors huggingface_hub' before rendering"
 	gen=$root/generate-image.py
-	if [ ! -f "$gen" ]; then
-		cat >"$gen" <<'PY'
+	cat >"$gen" <<'PY'
 import argparse, os
 # Driver for the pinned diffusers environment. Generate uses
 # Qwen/Qwen-Image-2511 (QwenImagePipeline); edit uses
@@ -121,7 +115,7 @@ from diffusers import QwenImagePipeline, QwenImageEditPipeline
 dev = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
 if a.role == "image.edit":
     from PIL import Image
-    pipe = QwenImageEditPipeline.from_pretrained(a.edit_model)
+    pipe = QwenImageEditPipeline.from_pretrained(a.edit_model, local_files_only=True)
     init = Image.open(a.image).convert("RGB")
     kw = {"image": init}
     if a.mask:
@@ -133,7 +127,7 @@ if a.role == "image.edit":
         out.save(os.path.join(a.outdir, f"edit-{i + 1:02d}.png"))
         print(os.path.join(a.outdir, f"edit-{i + 1:02d}.png"), flush=True)
 else:
-    pipe = QwenImagePipeline.from_pretrained(a.gen_model)
+    pipe = QwenImagePipeline.from_pretrained(a.gen_model, local_files_only=True)
     if dev == "cuda":
         pipe.enable_model_cpu_offload()
     for i in range(a.count):
@@ -143,7 +137,6 @@ else:
         out.save(os.path.join(a.outdir, f"image-{i + 1:02d}.png"))
         print(os.path.join(a.outdir, f"image-{i + 1:02d}.png"), flush=True)
 PY
-	fi
 fi
 
 mode=generate

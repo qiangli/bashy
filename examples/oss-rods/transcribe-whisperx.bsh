@@ -3,13 +3,13 @@
 # Whisper large-v3; mlx-whisper is the Mac-noted fallback, see README).
 # License re-verified 2026-11-13: BSD-2-Clause
 # (https://github.com/m-bain/whisperX/blob/main/LICENSE).
-# Weights download on first use only, behind the disk-headroom preflight.
+# Renders use the staged faster-whisper snapshot offline.
 # TRANSCRIBE_WHISPERX_PY replaces the generator (fixture stand-ins in tests).
 
 ~~~skill as guide
 ---
 name: transcribe-whisperx
-description: Open-source transcription rod (WhisperX, BSD-2-Clause) for the transcribe service role. Needs uv and ffmpeg; weights download on first use after a disk-headroom preflight.
+description: Open-source transcription rod (WhisperX, BSD-2-Clause) for the transcribe service role. Renders from staged weights offline.
 metadata:
   requires: "has=uv has=ffmpeg"
 ---
@@ -61,6 +61,7 @@ mkdir -p "$OUT"
 transcript=$OUT/transcript.$format
 
 oss_preflight_gb "$ROD" "$NEED_GB" || exit 1
+oss_offline
 
 if [ -n "${TRANSCRIBE_WHISPERX_PY:-}" ]; then
 	gen=$TRANSCRIBE_WHISPERX_PY
@@ -68,31 +69,18 @@ if [ -n "${TRANSCRIBE_WHISPERX_PY:-}" ]; then
 		--out "$transcript" >&2 || die "transcription failed"
 else
 	root=$(oss_cache_root "$ROD")
+	model=${TRANSCRIBE_WHISPERX_MODEL:-$root/models/faster-whisper-large-v3}
+	for part in model.bin config.json tokenizer.json vocabulary.json; do
+		oss_staged_file "$model/$part" || exit 1
+	done
 	ready=$root/.ready-$(printf '%s\n' "$WHISPERX_PIN" | cksum | cut -d' ' -f1)
-	if [ ! -f "$ready" ]; then
-		command -v uv >/dev/null || die "needs uv; install: $(oss_install_line uv)"
-		echo "$ROD: provisioning the WhisperX environment (first use; weights follow)" >&2
-		case $(oss_os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
-		mkdir -p "$root"
-		[ -x "$py" ] || uv venv --python 3.11 "$root/.venv" >&2 || die "uv venv failed"
-		uv pip install --python "$py" "$WHISPERX_PIN" >&2 || die "package install failed"
-		: >"$ready"
-	fi
 	case $(oss_os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
-	[ -x "$py" ] || die "provisioned environment has no python: $root/.venv"
-	# whisperx ships its own CLI; weights fetch on first run (preflight
-	# passed above). --compute_type int8 keeps Mac/CPU hosts usable.
+	[ -x "$py" ] || die "environment missing: $py; stage it with 'uv venv --python 3.11 $root/.venv && uv pip install --python $py $WHISPERX_PIN' before rendering"
+	# --compute_type int8 keeps Mac/CPU hosts usable.
 	# Empty --language means auto-detect (whisperx default).
 	lang_args=()
 	[ -n "$language" ] && lang_args=(--language "$language")
-	model=${TRANSCRIBE_WHISPERX_MODEL:-$MODEL}
-	cache_args=()
-	if [ -n "${TRANSCRIBE_WHISPERX_MODEL:-}" ]; then
-		[ -f "$model/model.bin" ] || die "local model missing model.bin: $model"
-		cache_args=(--model_cache_only True)
-	fi
-	[ "${TRANSCRIBE_WHISPERX_NO_ALIGN:-0}" = 1 ] && cache_args+=(--no_align)
-	"$py" -m whisperx "$audio" --model "$model" "${cache_args[@]}" --output_format "$format" \
+	"$py" -m whisperx "$audio" --model "$model" --model_cache_only True --no_align --output_format "$format" \
 		--output_dir "$OUT" --compute_type int8 --device cpu \
 		"${lang_args[@]}" >&2 || die "transcription failed"
 	got=$(ls "$OUT"/*."$format" 2>/dev/null | head -1)
