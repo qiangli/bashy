@@ -1,0 +1,259 @@
+#!/usr/bin/env -S bashy --bashsharp
+# site.bsh — simple company website and web presence
+# One body, two orientations: executable Bash# and its embedded agent skill.
+
+~~~skill as guide
+---
+name: site
+description: Author and manage a simple company website or presence, edit via Sveltia CMS and visual editor, serve via the bashy site app type, share via Outpost or GitHub Pages, and shape with isolated rollbacks.
+metadata:
+  requires: "has=bashy"
+  step-porota: 'bashy site new my-site'
+  check-tests: 'bashy site build my-site'
+---
+# Simple company website & presence
+
+This is the prose face of `site.bsh`, the same executable body used by the
+registered `site` command. `bashy commands show site` exposes the
+executable argv and source path; `bashy skill show site` reads this face.
+
+- `bashy site new [DIR] [--title TITLE]` initializes a new Hugo-compatible
+  static company site with pages (Home, About, Services, Contact, Pricing),
+  Sveltia CMS at `/admin`, and a visual page builder at `/admin/editor/`.
+- `bashy site build [DIR]` builds the site into `DIR/public/` using Hugo or the
+  embedded self-contained static site compiler.
+- `bashy site serve [DIR] [NAME]` registers the built static site as an app of
+  `--type site` on the bashy console (`http://127.0.0.1:CONSOLE_PORT/NAME/`).
+- `bashy site edit [NAME]` opens the Sveltia CMS and visual page editor at
+  `http://127.0.0.1:CONSOLE_PORT/NAME/admin/`.
+- `bashy site publish-outpost NAME` shares the site publicly via Outpost with
+  no login required.
+- `bashy site publish-pages [DIR] REPO [BRANCH]` publishes `DIR/public/` to a
+  GitHub Pages branch (default `gh-pages`).
+- `bashy site shape-register [DIR] [NAME]` registers the site source as a
+  shapeable app (`app add NAME --type shaped --source DIR`).
+- `bashy site shape-demo [DIR] [NAME]` runs the complete shaping lifecycle:
+  wish -> candidate -> verify -> preview -> approve -> verify isolation -> undo.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+RUNNER=${BASHY_BIN:-bashy}
+
+die() { echo "site: $*" >&2; exit 1; }
+
+site_new() {
+  local target_dir=""
+  local title="Acme Innovations"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --template)
+        # S9 scope: Hugo company site template
+        shift 2
+        ;;
+      --title)
+        title="$2"
+        shift 2
+        ;;
+      -*)
+        die "unknown option $1"
+        ;;
+      *)
+        if [[ -z "$target_dir" ]]; then
+          target_dir="$1"
+        fi
+        shift
+        ;;
+    esac
+  done
+
+  if [[ -z "$target_dir" ]]; then
+    target_dir="$PWD/my-site"
+  fi
+
+  if [[ -d "$target_dir" && $(ls -A "$target_dir" 2>/dev/null) ]]; then
+    die "target directory $target_dir is not empty"
+  fi
+  mkdir -p "$target_dir"
+  target_dir=$(cd "$target_dir" && pwd)
+
+  echo "site: initializing Hugo company site presence template..."
+  cp -R "$HERE/sample/." "$target_dir/"
+  if [[ "$title" != "Acme Innovations" ]]; then
+    sed -i.bak "s/title = \"Acme Innovations\"/title = \"$title\"/" "$target_dir/hugo.toml" 2>/dev/null || true
+    rm -f "$target_dir/hugo.toml.bak"
+  fi
+  site_build "$target_dir"
+  echo "site: initialized Hugo company site at $target_dir"
+}
+
+site_build() {
+  local site_dir=${1:-$PWD}
+  site_dir=$(cd "$site_dir" && pwd)
+  local out_dir="$site_dir/public"
+
+  if command -v hugo >/dev/null 2>&1 && [[ -f "$site_dir/hugo.toml" ]]; then
+    echo "site: building with Hugo CLI..."
+    hugo -s "$site_dir" -d "$out_dir" --quiet || {
+      echo "site: hugo CLI failed, falling back to pure-Go generator"
+      if [[ -f "$site_dir/generator/main.go" ]]; then
+        (cd "$site_dir" && GOWORK=off go run ./generator/main.go "$site_dir" "$out_dir")
+      else
+        (cd "$HERE" && GOWORK=off go run ./generator/main.go "$site_dir" "$out_dir")
+      fi
+    }
+  else
+    echo "site: building with standard pure-Go generator..."
+    if [[ -f "$site_dir/generator/main.go" ]]; then
+      (cd "$site_dir" && GOWORK=off go run ./generator/main.go "$site_dir" "$out_dir")
+    else
+      (cd "$HERE" && GOWORK=off go run ./generator/main.go "$site_dir" "$out_dir")
+    fi
+  fi
+
+  # Ensure .nojekyll for GitHub Pages
+  touch "$out_dir/.nojekyll"
+  echo "site: build complete -> $out_dir"
+}
+
+site_serve() {
+  local site_dir=${1:-$PWD}
+  local name=${2:-${NAME:-site}}
+  local port=${CONSOLE_PORT:-22749}
+  site_dir=$(cd "$site_dir" && pwd)
+
+  if [[ ! -f "$site_dir/public/index.html" ]]; then
+    echo "site: public directory missing, building first..."
+    site_build "$site_dir"
+  fi
+
+  if "$RUNNER" app show "$name" >/dev/null 2>&1; then
+    "$RUNNER" app set "$name" --type site --source "$site_dir/public"
+  else
+    "$RUNNER" app add "$name" --type site --source "$site_dir/public"
+  fi
+
+  echo "site: $name -> http://127.0.0.1:$port/$name/"
+  if ! (exec 3<>/dev/tcp/127.0.0.1/"$port") 2>/dev/null; then
+    echo "site: the console is not running; start it with: bashy app serve"
+  fi
+}
+
+site_edit() {
+  local name=${1:-${NAME:-site}}
+  local port=${CONSOLE_PORT:-22749}
+  echo "site: Sveltia CMS & visual editor at http://127.0.0.1:$port/$name/admin/"
+}
+
+site_publish_outpost() {
+  local name=${1:?app name}
+  local port=${CONSOLE_PORT:-22749}
+  "$RUNNER" app set "$name" --auth public
+  outpost apps add "$name" --url "http://127.0.0.1:$port/$name/"
+  echo "site: published $name to Outpost as a public link"
+}
+
+site_publish_pages() {
+  local site_dir repo=${2:?owner/repo} branch=${3:-gh-pages} tmp
+  site_dir=$(cd "${1:?site dir}" && pwd)
+  [[ -f "$site_dir/public/index.html" ]] || site_build "$site_dir"
+
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' RETURN
+
+  if git ls-remote --exit-code --heads "https://github.com/$repo.git" "$branch" >/dev/null 2>&1; then
+    git clone -q --depth 1 --branch "$branch" "git@github.com:$repo.git" "$tmp/site"
+  else
+    git init -q "$tmp/site"
+    git -C "$tmp/site" checkout -q --orphan "$branch"
+    git -C "$tmp/site" remote add origin "git@github.com:$repo.git"
+  fi
+
+  find "$tmp/site" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+  cp -R "$site_dir/public/." "$tmp/site/"
+  git -C "$tmp/site" add -A
+  if git -C "$tmp/site" diff --cached --quiet; then
+    echo "site: pages already up to date"
+    return 0
+  fi
+  git -C "$tmp/site" commit -q -m "site: publish $(date -u +%Y-%m-%dT%H:%MZ)"
+  git -C "$tmp/site" push -q origin "$branch"
+  echo "site: pushed to $repo ($branch)"
+}
+
+site_shape_register() {
+  local site_dir=${1:-$PWD}
+  local name=${2:-${NAME:-site}}
+  site_dir=$(cd "$site_dir" && pwd)
+  "$RUNNER" app add "$name" --type shaped --source "$site_dir" --label "Site" \
+    --tip "Company website & presence" --force
+  echo "site: registered shaped app $name from $site_dir"
+}
+
+case "${1:-}" in
+  --skill)
+    copying=false
+    while IFS= read -r line; do
+      if [[ "$line" == '~~~skill as guide' ]]; then copying=true; continue; fi
+      if [[ "$copying" == true && "$line" == '~~~' ]]; then break; fi
+      if [[ "$copying" == true ]]; then printf '%s\n' "$line"; fi
+    done < "${BASH_SOURCE[0]}"
+    ;;
+  --contract)
+    echo 'sokilili site efefecato reada wurite exec neto fini sotepo porota porota fini enisure gereeni fini fini'
+    ;;
+  -h|--help)
+    echo "Usage: site [new|build|serve|edit|publish-outpost|publish-pages|shape-register] [args...]"
+    echo "  site new [DIR] [--title TITLE]          Initialize a new company site (Hugo template)"
+    echo "  site build [DIR]                        Generate static HTML output into public/"
+    echo "  site serve [DIR] [NAME]                 Register and serve via bashy site app type"
+    echo "  site edit [NAME]                        Open Sveltia CMS & visual page editor URL"
+    echo "  site publish-outpost NAME               Share publicly via local Outpost bridge"
+    echo "  site publish-pages DIR REPO [BRANCH]    Publish static public/ to GitHub Pages"
+    echo "  site shape-register DIR [NAME]          Register source as a shapeable app"
+    echo "  --skill                                 Print embedded agent skill guidance"
+    echo "  --contract                              Print skill contract"
+    ;;
+  new|init)
+    shift
+    site_new "$@"
+    ;;
+  build)
+    shift
+    site_build "${1:-$PWD}"
+    ;;
+  serve)
+    shift
+    site_serve "${1:-$PWD}" "${2:-site}"
+    ;;
+  edit)
+    shift
+    site_edit "${1:-site}"
+    ;;
+  publish-outpost)
+    shift
+    site_publish_outpost "${1:?app name}"
+    ;;
+  publish-pages)
+    shift
+    site_publish_pages "${1:?site dir}" "${2:?owner/repo}" "${3:-gh-pages}"
+    ;;
+  shape-register)
+    shift
+    site_shape_register "${1:-$PWD}" "${2:-site}"
+    ;;
+  test)
+    cd "$HERE"
+    GOWORK=off go test -v ./...
+    ;;
+  *)
+    if [[ -z "${1:-}" ]]; then
+      site_serve "$PWD" "site"
+    else
+      echo "site: unknown command $1 (see site --help)" >&2
+      exit 2
+    fi
+    ;;
+esac

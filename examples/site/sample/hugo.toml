@@ -1,0 +1,36 @@
+baseURL = "/"
+languageCode = "en-us"
+title = "Acme Innovations"
+
+[params]
+tagline = "Engineering tomorrow's reliable software systems"
+company_name = "Acme Innovations"
+contact_email = "hello@acme.example.invalid"
+contact_phone = "+1 (555) 019-2834"
+address = "100 Innovation Way, Suite 400"
+show_pricing = false
+
+[menu]
+[[menu.main]]
+identifier = "home"
+name = "Home"
+url = "/"
+weight = 1
+
+[[menu.main]]
+identifier = "about"
+name = "About"
+url = "/about/"
+weight = 2
+
+[[menu.main]]
+identifier = "services"
+name = "Services"
+url = "/services/"
+weight = 3
+
+[[menu.main]]
+identifier = "contact"
+name = "Contact"
+url = "/contact/"
+weight = 4

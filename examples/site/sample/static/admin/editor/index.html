@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Visual Page Editor — puck (MIT) / GrapesJS (BSD-3)</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .editor-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      height: 100vh;
+      overflow: hidden;
+    }
+    .editor-sidebar {
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+    .editor-canvas-container {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background: #e5e7eb;
+    }
+    .editor-toolbar {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0.75rem 1.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .editor-canvas {
+      flex: 1;
+      overflow-y: auto;
+      padding: 2rem;
+      display: flex;
+      justify-content: center;
+    }
+    .canvas-frame {
+      width: 100%;
+      max-width: 1000px;
+      min-height: 800px;
+      background: #ffffff;
+      box-shadow: 0 4px 25px rgba(0,0,0,0.08);
+      border-radius: 8px;
+      padding: 2rem;
+    }
+    .block-card {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.85rem;
+      margin-bottom: 0.75rem;
+      cursor: grab;
+      user-select: none;
+      transition: all 0.15s ease;
+    }
+    .block-card:hover {
+      border-color: var(--primary);
+      transform: translateY(-1px);
+    }
+    .block-title {
+      font-weight: 600;
+      font-size: 0.9rem;
+      margin-bottom: 0.25rem;
+    }
+    .block-desc {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+    .canvas-block {
+      border: 2px dashed transparent;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+      border-radius: 6px;
+      position: relative;
+    }
+    .canvas-block:hover {
+      border-color: var(--primary);
+    }
+    .block-actions {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      display: none;
+      gap: 0.5rem;
+    }
+    .canvas-block:hover .block-actions {
+      display: flex;
+    }
+    .action-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.2rem 0.5rem;
+      font-size: 0.75rem;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div class="editor-layout">
+    <div class="editor-sidebar">
+      <div style="margin-bottom:1.5rem;">
+        <h2 style="font-size:1.1rem;font-weight:700;">Component Library</h2>
+        <p style="font-size:0.8rem;color:var(--muted);">Drag or click to insert page sections</p>
+      </div>
+
+      <div class="block-card" onclick="addBlock('hero')">
+        <div class="block-title">⚡ Hero Section</div>
+        <div class="block-desc">Headline, tagline, subtext, and call to action buttons</div>
+      </div>
+
+      <div class="block-card" onclick="addBlock('features')">
+        <div class="block-title">📋 Services / Capabilities</div>
+        <div class="block-desc">3-column grid highlighting key offerings</div>
+      </div>
+
+      <div class="block-card" onclick="addBlock('pricing')">
+        <div class="block-title">💳 Pricing Cards</div>
+        <div class="block-desc">Starter, Pro, and Enterprise subscription tiers</div>
+      </div>
+
+      <div class="block-card" onclick="addBlock('testimonials')">
+        <div class="block-title">💬 Testimonials</div>
+        <div class="block-desc">Customer reviews and quotes</div>
+      </div>
+
+      <div class="block-card" onclick="addBlock('contact')">
+        <div class="block-title">📬 Contact Form</div>
+        <div class="block-desc">Lead capture form and office location details</div>
+      </div>
+
+      <div style="margin-top:auto;padding-top:1rem;border-top:1px solid var(--border);">
+        <span style="font-size:0.75rem;color:var(--muted);display:block;">Visual Engine: puck (MIT) &amp; GrapesJS (BSD-3)</span>
+      </div>
+    </div>
+
+    <div class="editor-canvas-container">
+      <div class="editor-toolbar">
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <strong>Visual Page Builder</strong>
+          <span style="font-size:0.85rem;color:var(--muted);">Editing: Home Page (<code>_index.md</code>)</span>
+        </div>
+        <div style="display:flex;gap:0.75rem;">
+          <a href="/admin/" class="btn btn-secondary" style="font-size:0.85rem;">Back to CMS</a>
+          <button class="btn btn-primary" style="font-size:0.85rem;" onclick="saveCanvas()">Export &amp; Apply</button>
+        </div>
+      </div>
+
+      <div class="editor-canvas">
+        <div class="canvas-frame" id="canvas-content">
+          <!-- Initial Canvas Blocks -->
+          <div class="canvas-block" id="block-hero">
+            <div class="block-actions">
+              <button class="action-btn" onclick="removeBlock('block-hero')">✕ Delete</button>
+            </div>
+            <div style="text-align:center;padding:2rem 0;">
+              <span class="tagline-badge">Engineering tomorrow's reliable software systems</span>
+              <h1 class="hero-title" style="font-size:2.2rem;">Build Reliable Software for the Open Cloud</h1>
+              <p class="hero-subtext">We help forward-thinking teams transform their infrastructure into self-hostable, agent-operable systems.</p>
+              <div class="hero-actions">
+                <a href="#services" class="btn btn-primary">Our Services</a>
+                <a href="#contact" class="btn btn-secondary">Get In Touch</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="canvas-block" id="block-services">
+            <div class="block-actions">
+              <button class="action-btn" onclick="removeBlock('block-services')">✕ Delete</button>
+            </div>
+            <h2 style="margin-bottom:1rem;text-align:center;">Core Capabilities</h2>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:1rem;">
+              <div style="padding:1rem;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
+                <h4 style="margin-bottom:0.5rem;">Mesh Architecture</h4>
+                <p style="font-size:0.85rem;color:#6b7280;">Peer-to-peer distribution and resilient coordination.</p>
+              </div>
+              <div style="padding:1rem;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
+                <h4 style="margin-bottom:0.5rem;">Static Web Presence</h4>
+                <p style="font-size:0.85rem;color:#6b7280;">High-performance static frontends backed by git.</p>
+              </div>
+              <div style="padding:1rem;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
+                <h4 style="margin-bottom:0.5rem;">Embedded CMS</h4>
+                <p style="font-size:0.85rem;color:#6b7280;">Zero-friction browser editing with Sveltia CMS.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function addBlock(type) {
+      const canvas = document.getElementById('canvas-content');
+      const id = 'block-' + Date.now();
+      const div = document.createElement('div');
+      div.className = 'canvas-block';
+      div.id = id;
+
+      let inner = '<div class="block-actions"><button class="action-btn" onclick="removeBlock(\'' + id + '\')">✕ Delete</button></div>';
+
+      if (type === 'pricing') {
+        inner += `<div style="padding:2rem 0;border-top:1px solid #e5e7eb;">
+          <h2 style="text-align:center;margin-bottom:0.5rem;">Pricing &amp; Plans</h2>
+          <p style="text-align:center;color:#6b7280;margin-bottom:1.5rem;font-size:0.9rem;">Predictable monthly engagements with zero lock-in.</p>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;">
+            <div style="border:1px solid #e5e7eb;border-radius:8px;padding:1.25rem;text-align:center;">
+              <h3>Starter</h3><div style="font-size:1.5rem;font-weight:700;margin:0.5rem 0;">$1,500/mo</div><p style="font-size:0.8rem;color:#6b7280;">Up to 3 services</p>
+            </div>
+            <div style="border:2px solid #2563eb;border-radius:8px;padding:1.25rem;text-align:center;box-shadow:0 4px 12px rgba(37,99,235,0.1);">
+              <h3>Professional</h3><div style="font-size:1.5rem;font-weight:700;margin:0.5rem 0;color:#2563eb;">$4,500/mo</div><p style="font-size:0.8rem;color:#6b7280;">Up to 10 services</p>
+            </div>
+            <div style="border:1px solid #e5e7eb;border-radius:8px;padding:1.25rem;text-align:center;">
+              <h3>Enterprise</h3><div style="font-size:1.5rem;font-weight:700;margin:0.5rem 0;">Custom</div><p style="font-size:0.8rem;color:#6b7280;">Custom mesh &amp; sharding</p>
+            </div>
+          </div>
+        </div>`;
+      } else if (type === 'testimonials') {
+        inner += `<div style="padding:2rem 0;background:#f9fafb;border-radius:8px;margin:1rem 0;text-align:center;">
+          <blockquote style="font-style:italic;font-size:1.1rem;margin-bottom:0.5rem;">"Acme transformed our software architecture into a clean, autonomous, and self-hosted system."</blockquote>
+          <cite style="color:#6b7280;font-size:0.85rem;">— Lead Infrastructure Architect</cite>
+        </div>`;
+      } else if (type === 'contact') {
+        inner += `<div style="padding:2rem 0;border-top:1px solid #e5e7eb;text-align:center;">
+          <h2>Get In Touch</h2>
+          <p style="color:#6b7280;margin:0.5rem 0 1rem;">hello@acme.example.invalid &middot; +1 (555) 019-2834</p>
+          <a href="/contact/" class="btn btn-primary">Open Contact Form</a>
+        </div>`;
+      } else {
+        inner += `<div style="padding:1.5rem;background:#f3f4f6;border-radius:6px;text-align:center;">
+          <h3>New Content Section</h3>
+          <p style="color:#6b7280;">Configure content details in Sveltia CMS</p>
+        </div>`;
+      }
+
+      div.innerHTML = inner;
+      canvas.appendChild(div);
+    }
+
+    function removeBlock(id) {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    }
+
+    function saveCanvas() {
+      alert("Layout saved! Changes are recorded in candidate draft.");
+    }
+  </script>
+</body>
+</html>
