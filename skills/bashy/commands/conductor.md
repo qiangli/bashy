@@ -143,6 +143,17 @@ assignment needs, which tool/model runs each story, how they are isolated,
 steered, interrupted, reassigned, gated, and merged back. The steward does not
 size, select, or steer your workers; you do not size or select conductor seats.
 
+**The steward sweeps for drift across sprints.** Drift also happens between
+sprints and from ad-hoc work that no conductor owns: pins lagging pushed fixes,
+checkouts behind their pins, delivered commits never pinned, story files and
+todos never committed. The steward sweeps proactively and periodically — at
+session start and every few hours while sprints are active — with the read-only
+drift check. For delivered, pushed work that nobody pinned, it bumps the pins
+forward (ancestor-checked) and records the bump. For anything still in flight,
+or owned by a live conductor, it tells the owner rather than committing
+another agent's work. A finding the steward cannot resolve goes on a todo. It is
+never silently skipped.
+
 **One agent must not hold a steward seat and a conductor seat at the same time.**
 The steward's job is to judge conductor outcomes by independent evidence; an
 agent that appoints, drives, and reviews itself has no independent layer left and
@@ -241,6 +252,25 @@ while actionable work remains.**
 - **Integrate sequentially.** Serialize reviews and merges; push subproject commits
   and bump parent **pins** according to repository policy — one gated step at a
   time, re-measuring on the merged tree.
+- **Leave nothing delivered behind.** Integration is not done until every accepted
+  change is pushed AND pinned where the build reads it. On every checkpoint, and
+  before `sprint stop`/`end`, run the repository's drift check (in the dhnt
+  umbrella: `script/sync.sh --check`, read-only) and clear what this sprint owns:
+  - worker commits left unpushed or unmerged, and submitted weave runs left unpulled;
+  - pins lagging pushed work; bump them in the same step as the merge;
+  - story files and todos left uncommitted;
+  - local commits left unpushed.
+
+  A build, gate or bug investigation that runs on unpinned or stale trees chases
+  phantom issues: work that was fixed but never made it into the build. Record the
+  pin SHAs a build used in its evidence.
+- **Pins move forward only.** Before committing a gitlink, confirm the old pin is
+  an ancestor of the new commit (`git merge-base --is-ancestor OLD NEW`). A
+  checkout that sits *behind* its pin must be fast-forwarded first; committing it
+  rolls the pin back and silently undoes integrated work.
+- **Never probe a mutating script with a guessed flag.** Read the script or its
+  usage first. A sync or deploy script that ignores unknown arguments will just
+  run.
 - **Preserve and clean within bounds.** Leave unrelated work untouched. Clean the
   workspaces, branches, temp state, and disposable resources YOU integrated — only
   when authorized. Cleanup and deletion authority is **bounded by the assignment
@@ -346,8 +376,10 @@ after it, which is why it is an order and not a checklist.
    what changed since last tick; step in, unblock, or reassign. A run that has
    produced nothing across two ticks is a decision, not a wait.
 5. **INTEGRATE.** Run the gate YOURSELF and read the verdict from bashy, never
-   from the worker's prose. Then review, merge, and clean up only what this
-   sprint owns — its branches, worktrees and weave workspaces.
+   from the worker's prose. Then review, merge, push, bump pins forward, and
+   clean up only what this sprint owns — its branches, worktrees and weave
+   workspaces. Finish with the drift check; a tick that merged without pinning
+   has not integrated.
 6. **CHECKPOINT.** `bashy sprint checkpoint <id> -m '<where it stands>'`. Your
    context does not survive; the brief is the only thing that reaches the next
    manager, and it may be a different tool entirely.

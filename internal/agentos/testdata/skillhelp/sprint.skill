@@ -272,6 +272,10 @@ Delegation transfers execution, never accountability. While you hold it you must
     worker's prose or exit status ("submitted" and exit 0 are not "done").
   - INTEGRATE sequentially: serialize reviews and merges; push subproject commits
     and bump parent pins per repository policy, one gated step at a time.
+  - LEAVE NOTHING DELIVERED BEHIND: on every checkpoint and before stop/end, run the
+    repository's read-only drift check and clear what this sprint owns (unpushed or
+    unmerged commits, unpulled submitted runs, lagging pins, uncommitted story files).
+    Pins move FORWARD only: never commit a checkout that is behind its pin.
   - For workplace coordination, follow `bashy skill show collaborate`.
   - COORDINATE OWNERSHIP: before touching work held by another sprint manager,
     contact that owner through mb/Meet/chat/ping and request sequencing or merge.
