@@ -61,9 +61,10 @@ videos), `record` (examples/record: camera and microphone takes), `cast`
 pty/ConPTY, the recorder examples/video uses), `chrome` and `chrome-open`
 (examples/chrome: cross-platform Google Chrome detection, installation, and
 tab opening), the service verbs `plan`,
-`image`, `draw`, `pdf`, `video`, `narrate`, `song`, `animate`, `transcribe`,
+`image`, `draw`, `pdf`, `video`, `narrate`, `song`, `animate`,
 `email` and `drive` (examples/service-door: one door body per role; providers
-are rods, see docs/service-rod-contract.md), the M2 oss rods `song-acestep`,
+are rods, see docs/service-rod-contract.md); `transcribe` has an embedded
+pipeline front door. The M2 oss rods `song-acestep`,
 `image-qwen`, `narrate-local` and `transcribe-whisperx` (examples/oss-rods:
 provides/route/requires records) and `bashy-defaults` itself.
 
@@ -102,7 +103,6 @@ video|examples/service-door/service-door.bsh|read,exec,net|video.understand
 narrate|examples/service-door/service-door.bsh|read,write,exec,net|narrate
 song|examples/service-door/service-door.bsh|read,write,exec,net|song
 animate|examples/service-door/service-door.bsh|read,write,exec,net|animate
-transcribe|examples/service-door/service-door.bsh|read,write,exec,net|transcribe
 email|examples/service-door/service-door.bsh|read,write,exec,net|email.read
 drive|examples/service-door/service-door.bsh|read,write,exec,net|drive.read
 song-suno|examples/service-door/song-suno.bsh|read,write,exec,net,spend||song|browser|has=bashy
