@@ -25,7 +25,7 @@ func (f *fixture) registerBrowserRods() {
 			name:   "song-suno",
 			script: "song-suno.bsh",
 			sets: []string{
-				"provides.0=song", "route=browser", "requires=has=bashy",
+				"provides.0=song", "route=browser", "requires=has=bashy has=jq has=curl has=ffprobe",
 				"effects.0=read", "effects.1=write", "effects.2=exec", "effects.3=net", "effects.4=spend",
 			},
 		},
@@ -33,7 +33,7 @@ func (f *fixture) registerBrowserRods() {
 			name:   "image-chatgpt",
 			script: "image-chatgpt.bsh",
 			sets: []string{
-				"provides.0=image.generate", "provides.1=image.edit", "route=browser", "requires=has=bashy",
+				"provides.0=image.generate", "provides.1=image.edit", "route=browser", "requires=has=bashy has=jq has=curl has=ffprobe",
 				"effects.0=read", "effects.1=write", "effects.2=exec", "effects.3=net", "effects.4=spend",
 			},
 		},
@@ -41,7 +41,7 @@ func (f *fixture) registerBrowserRods() {
 			name:   "animate-kling",
 			script: "animate-kling.bsh",
 			sets: []string{
-				"provides.0=animate", "route=browser", "requires=has=bashy",
+				"provides.0=animate", "route=browser", "requires=has=bashy has=jq has=curl has=ffprobe",
 				"effects.0=read", "effects.1=write", "effects.2=exec", "effects.3=net", "effects.4=spend",
 			},
 		},

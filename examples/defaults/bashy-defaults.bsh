@@ -107,9 +107,9 @@ song|examples/service-door/service-door.bsh|read,write,exec,net|song
 animate|examples/service-door/service-door.bsh|read,write,exec,net|animate
 email|examples/service-door/service-door.bsh|read,write,exec,net|email.read
 drive|examples/service-door/service-door.bsh|read,write,exec,net|drive.read
-song-suno|examples/service-door/song-suno.bsh|read,write,exec,net,spend||song|browser|has=bashy
-image-chatgpt|examples/service-door/image-chatgpt.bsh|read,write,exec,net,spend||image.generate,image.edit|browser|has=bashy
-animate-kling|examples/service-door/animate-kling.bsh|read,write,exec,net,spend||animate|browser|has=bashy
+song-suno|examples/service-door/song-suno.bsh|read,write,exec,net,spend||song|browser|has=bashy has=jq has=curl has=ffprobe
+image-chatgpt|examples/service-door/image-chatgpt.bsh|read,write,exec,net,spend||image.generate,image.edit|browser|has=bashy has=jq has=curl has=ffprobe
+animate-kling|examples/service-door/animate-kling.bsh|read,write,exec,net,spend||animate|browser|has=bashy has=jq has=curl has=ffprobe
 tavily|examples/service-door/search-provider.bsh|read,exec,net|tavily|search|api
 brave|examples/service-door/search-provider.bsh|read,exec,net|brave|search|api
 serper|examples/service-door/search-provider.bsh|read,exec,net|serper|search|api

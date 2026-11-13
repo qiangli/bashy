@@ -16,13 +16,30 @@ if [ "${1:-}" = "--doctor" ]; then
     json=0
     if [ "${2:-}" = "--json" ]; then json=1; fi
     if [ "$json" = 1 ]; then
-        if "$bashy_bin" browser status >/dev/null 2>&1; then
-            echo '{"schema_version":"bashy-svc-doctor-v1","available":true,"missing":[]}'
-            exit 0
-        else
-            echo '{"schema_version":"bashy-svc-doctor-v1","available":false,"missing":[{"need":"has=bashy","install":"install bashy or configure chrome browser"}]}'
-            exit 0
+        missing=""; available=true
+        for c in jq curl ffprobe; do
+            if ! command -v "$c" >/dev/null 2>&1; then
+                case $(uname -s) in
+                    Darwin)
+                        case $c in ffprobe) install="brew install ffmpeg" ;; *) install="brew install $c" ;; esac ;;
+                    MINGW*|MSYS*|CYGWIN*|Windows*)
+                        case $c in jq) install="winget install jqlang.jq" ;; curl) install="winget install curl.curl" ;; ffprobe) install="winget install Gyan.FFmpeg" ;; *) install="install $c" ;; esac ;;
+                    Linux)
+                        case $c in ffprobe) install="sudo apt install ffmpeg" ;; *) install="sudo apt install $c" ;; esac ;;
+                    *) install="install $c" ;;
+                esac
+                [ -z "$missing" ] || missing="$missing,"
+                missing="$missing{\"need\":\"has=$c\",\"install\":\"$install\"}"
+                available=false
+            fi
+        done
+        if ! "$bashy_bin" browser status >/dev/null 2>&1; then
+            [ -z "$missing" ] || missing="$missing,"
+            missing="$missing{\"need\":\"has=bashy\",\"install\":\"install bashy or configure chrome browser\"}"
+            available=false
         fi
+        printf '{"schema_version":"bashy-svc-doctor-v1","available":%s,"missing":[%s]}\n' "$available" "$missing"
+        exit 0
     else
         echo "$PROG: ready (browser provider for Kling)"
         exit 0
@@ -122,11 +139,13 @@ verify_video() {
         echo "$PROG: output video file is missing or empty: $file" >&2
         return 1
     fi
-    if command -v ffprobe >/dev/null 2>&1; then
-        if ! ffprobe -v error -select_streams v -show_entries stream=codec_type -of default=noprint_wrappers=1 "$file" >/dev/null 2>&1; then
-            echo "$PROG: ffprobe verification failed for video: $file" >&2
-            return 1
-        fi
+    if ! command -v ffprobe >/dev/null 2>&1; then
+        echo "$PROG: ffprobe is required to verify video (missing has=ffprobe): $file" >&2
+        return 1
+    fi
+    if ! ffprobe -v error -select_streams v -show_entries stream=codec_type -of default=noprint_wrappers=1 "$file" >/dev/null 2>&1; then
+        echo "$PROG: ffprobe verification failed for video: $file" >&2
+        return 1
     fi
 }
 

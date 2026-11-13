@@ -264,6 +264,17 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if !strings.Contains(f.calls(), "commands add song-suno ") || !strings.Contains(f.calls(), "--set provides.0=song --set route=browser") || !strings.Contains(f.calls(), "--set effects.4=spend") {
 		t.Errorf("song-suno not registered with role, route, and spend effect:\n%s", f.calls())
 	}
+	// Browser rods declare their jq/curl/ffprobe dependencies (M4 acceptance:
+	// a missing dep reports unavailable with an install hint).
+	for _, want := range []string{
+		"commands add song-suno --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/service-door/song-suno.bsh") + " --set provides.0=song --set route=browser --set requires=has=bashy has=jq has=curl has=ffprobe",
+		"commands add image-chatgpt --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/service-door/image-chatgpt.bsh") + " --set provides.0=image.generate --set provides.1=image.edit --set route=browser --set requires=has=bashy has=jq has=curl has=ffprobe",
+		"commands add animate-kling --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/service-door/animate-kling.bsh") + " --set provides.0=animate --set route=browser --set requires=has=bashy has=jq has=curl has=ffprobe",
+	} {
+		if !strings.Contains(f.calls(), want) {
+			t.Errorf("registration missing %q:\n%s", want, f.calls())
+		}
+	}
 	if !strings.Contains(f.calls(), "commands add image-chatgpt ") || !strings.Contains(f.calls(), "--set provides.0=image.generate --set provides.1=image.edit --set route=browser") || !strings.Contains(f.calls(), "--set effects.4=spend") {
 		t.Errorf("image-chatgpt not registered with roles, route, and spend effect:\n%s", f.calls())
 	}
