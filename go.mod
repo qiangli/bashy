@@ -553,7 +553,7 @@ replace go.podman.io/podman/v6 => github.com/qiangli/podman/v6 v6.0.0-2026101300
 
 // The AgentOS file-management surface uses the maintained qiangli/filebrowser
 // fork. Keep it as an exact flat sibling in umbrella and standalone builds.
-replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/v2 v2.0.0-20261113114342-c7e10f7adc61
+replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/v2 v2.0.0-20261113181544-c796ddbc1a08
 
 // yoke's files panel moved to the maintained File Browser (module
 // github.com/gtsteffaniak/filebrowser/backend) via the qiangli/filebrowser-quantum
