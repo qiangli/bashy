@@ -1,5 +1,5 @@
 set -eu
-test "$(cat .whiteboard-source-pin)" = 'a2ec2889babf7d2295469c6d90ebe77fae57df84'
+test "$(cat .whiteboard-source-pin)" = '1304220cc539d902dfce104bac6cd7c946d9d591'
 head -n 1 LICENSE | grep -qx 'MIT License'
 test ! -d ee
 test ! -d premium
@@ -11,6 +11,18 @@ test -s server/main.go
 test -s server/collab.go
 test -s server/storage.go
 test -s server/telemetry.go
-! grep -rn "sentry\.io" excalidraw-app/
-! grep -rn "simpleanalyticscdn" excalidraw-app/
-! grep -rn "fonts\.googleapis\.com" excalidraw-app/
+# The pin carries no third-party telemetry, crash reporter, remote font or
+# Excalidraw+ path of its own: these hold on the source, not just the build.
+! grep -rln "sentry" excalidraw-app/ packages/excalidraw/
+! grep -rln "firebase" excalidraw-app/ packages/excalidraw/
+! grep -rln "trackEvent" excalidraw-app/ packages/excalidraw/
+! grep -rln "simpleanalyticscdn" excalidraw-app/
+! grep -rln "fonts\.googleapis\.com" excalidraw-app/ packages/excalidraw/
+! grep -rln "fonts\.gstatic\.com" excalidraw-app/ packages/excalidraw/
+! grep -rln "digitaloceanspaces\.com" excalidraw-app/ packages/excalidraw/ scripts/
+# The built bundle is the artifact that actually runs in the browser.
+! grep -rl "sentry\.io" excalidraw-app/build/
+! grep -rl "firebasestorage\.googleapis\.com" excalidraw-app/build/
+! grep -rl "simpleanalyticscdn" excalidraw-app/build/
+! grep -rl "fonts\.googleapis\.com" excalidraw-app/build/
+! grep -rl "digitaloceanspaces\.com" excalidraw-app/build/

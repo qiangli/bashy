@@ -4,7 +4,7 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 runner=${BASHY_BIN:-bashy}
 git_bin=${WHITEBOARD_GIT_BIN:-/usr/bin/git}
-pin=a2ec2889babf7d2295469c6d90ebe77fae57df84
+pin=1304220cc539d902dfce104bac6cd7c946d9d591
 fork=https://github.com/qiangli/excalidraw-shape.git
 home=${BASHY_HOME:-$HOME/.bashy}
 state=$home/whiteboard
@@ -111,9 +111,7 @@ install() {
   "$git_bin" -C "$scratch/source" add -f excalidraw-app/build
   "$git_bin" -C "$scratch/source" add .gitignore .yarnrc excalidraw-app/.yarnrc shaped.json contract.bsh \
     checks/whiteboard.bsh server/ .whiteboard-source-pin \
-    .env.production excalidraw-app/bug-issue-template.js excalidraw-app/components/TopErrorBoundary.tsx \
-    excalidraw-app/index.html excalidraw-app/index.tsx excalidraw-app/package.json excalidraw-app/vite.config.mts
-  "$git_bin" -C "$scratch/source" rm -f --ignore-unmatch .github/workflows/sentry-production.yml excalidraw-app/sentry.ts
+    .env.production excalidraw-app/vite.config.mts
   "$git_bin" -C "$scratch/source" -c user.name='Bashy Whiteboard' -c user.email='whiteboard@example.invalid' \
     commit -qm 'Add per-principal shaping adapter' \
     -m 'Sprint: #631' -m 'Story: #211' -m 'Story-ID: 9bc0dd7f28a1' -m 'Agent: agy-gemini3.8-flash'
