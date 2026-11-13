@@ -39,6 +39,9 @@ executable argv and source path; `bashy skill show clip` reads this face.
   it never renders — the console runs app pages with read/write only, so
   rendering stays with `clips work`.
 - `clips doctor` checks for ffmpeg and agg.
+- `clips publish-outpost [--public] [--icon URL] [--json] [--dry-run]` lists
+  the console's `/clips/` on the paired outpost, login required unless
+  `--public`; `clips unpublish-outpost` removes it.
 - `CLIP_DATA` selects the data directory; default is `$BASHY_APP_DATA`
   when set (the shaped app's private directory), else a `clip` directory
   under the Bashy home. The page shows its path.
@@ -56,6 +59,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/clip
 exe=$(go env GOEXE)
 bin=$cache/clip$exe
+# The shared publish-outpost / unpublish-outpost verbs.
+source "$here/../desk/kit/outpost.bsh"
 build() {
 	stale=false
 	[[ -f "$bin" ]] || stale=true
@@ -76,7 +81,8 @@ case ${1:-list} in
 		if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
 	done < "${BASH_SOURCE[0]}"
 	;;
--h|--help) sed -n '2,4p' "${BASH_SOURCE[0]}"; echo "clips [queue|status|work|take|serve|doctor] — async screen and video clips; --skill prints its embedded skill" ;;
+-h|--help) sed -n '2,4p' "${BASH_SOURCE[0]}"; echo "clips [queue|status|work|take|serve|doctor|publish-outpost|unpublish-outpost] — async screen and video clips; --skill prints its embedded skill" ;;
+publish-outpost|unpublish-outpost) kit_outpost "$1" clips clips "${CONSOLE_PORT:-22749}" false "${@:2}" ;;
 list|queue|status|work|take|doctor)
 	build
 	exec "$bin" "$@"

@@ -49,8 +49,10 @@ Paragraphs separated by blank lines. [Links](https://example.com) work.
   app's auth to public (anyone with the link opens the console path with
   no login) and registers that path with this host's paired Outpost, so
   the link works from anywhere while the bytes come from your machine.
-  To undo it: `outpost apps rm NAME`, then
-  `bashy app set NAME --auth system`.
+  `--private` registers it login-required instead. To undo it:
+  `vlog.sh unpublish-outpost NAME` (outpost apps rm, then
+  `bashy app set NAME --auth system`). Both verbs come from the shared
+  `examples/desk/kit/outpost.bsh`.
 - **GitHub Pages.** `publish-pages` pushes `public/` to a branch (default
   `gh-pages`); turn on Pages for that branch once in the repository settings.
 

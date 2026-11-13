@@ -4,7 +4,9 @@
 #
 #   vlog.sh build   SITE_DIR            -> SITE_DIR/public/
 #   vlog.sh serve   SITE_DIR [NAME]     register SITE_DIR/public with the bashy console
-#   vlog.sh publish-outpost NAME        share the console site through Outpost as a public link
+#   vlog.sh publish-outpost [NAME] [--private] [--json] [--dry-run]
+#                                       share the console site through Outpost as a public link
+#   vlog.sh unpublish-outpost [NAME]    remove it from Outpost (console auth back to system)
 #   vlog.sh publish-pages SITE_DIR REPO [BRANCH]
 #                                       push public/ to a GitHub Pages branch (default gh-pages)
 #
@@ -21,6 +23,8 @@ set -euo pipefail
 export BASHY_HINTS=off
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 die() { echo "vlog: $*" >&2; exit 1; }
+# The shared publish-outpost / unpublish-outpost verbs.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../desk/kit/outpost.bsh"
 
 esc() { local s=$1; s=${s//&/&amp;}; s=${s//</&lt;}; s=${s//>/&gt;}; s=${s//\"/&quot;}; printf '%s' "$s"; }
 
@@ -115,15 +119,6 @@ serve() {
 	fi
 }
 
-publish_outpost() {
-	local name=${1:?app name} port=${CONSOLE_PORT:-22749}
-	# --auth public: the Outpost link reaches the console with no login,
-	# so anyone with the link can read the site. Undo:
-	#   outpost apps rm NAME; bashy app set NAME --auth system
-	bashy app set "$name" --auth public
-	outpost apps add "$name" --url "http://127.0.0.1:$port/$name/"
-}
-
 publish_pages() {
 	local site repo=${2:?owner/repo} branch=${3:-gh-pages} tmp
 	site=$(cd "${1:?site dir}" && pwd)
@@ -148,7 +143,7 @@ publish_pages() {
 case ${1:-} in
 build) build "${2:-}" ;;
 serve) serve "${2:-}" "${3:-}" ;;
-publish-outpost) publish_outpost "${2:-}" ;;
+publish-outpost|unpublish-outpost) kit_outpost "$1" vlog vlog "${CONSOLE_PORT:-22749}" true "${@:2}" ;;
 publish-pages) publish_pages "${2:-}" "${3:-}" "${4:-}" ;;
-*) sed -n '2,11p' "$0" >&2; exit 2 ;;
+*) sed -n '2,13p' "$0" >&2; exit 2 ;;
 esac

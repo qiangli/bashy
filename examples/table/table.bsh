@@ -11,15 +11,21 @@ state=$home/table
 source=$state/source
 runtime=$state/runtime
 port=${TABLE_CONSOLE_PORT:-22750}
+# The shared publish-outpost / unpublish-outpost verbs.
+source "$here/../desk/kit/outpost.bsh"
 
 usage() {
   cat <<'EOF'
-table install|start|stop|status|source
+table install|start|stop|status|source|publish-outpost|unpublish-outpost
   install  Fetch the pinned Apache-2.0 source, build the community web UI, and register a shaped app (Linux; downloads source and build dependencies).
   start    Run the paired app console in the foreground.
   stop     Stop the console started by this command.
   status   Show the managed console and source revision.
   source   Print the managed source directory.
+  publish-outpost [--public] [--icon URL] [--json] [--dry-run]
+           List the app on the paired outpost (login required unless --public).
+  unpublish-outpost [--json] [--dry-run]
+           Remove it from outpost.
 
 The records grid is local. Install needs the network. To enable owner-owned
 observability, set OTEL_EXPORTER_OTLP_ENDPOINT for the console's bashy OTel.
@@ -145,5 +151,6 @@ case ${1:---help} in
     if running_pid >/dev/null; then echo "table: console running on port $port"; else echo 'table: console stopped'; fi
     ;;
   source) installed && printf '%s\n' "$source" ;;
+  publish-outpost|unpublish-outpost) kit_outpost "$1" table table "$port" false "${@:2}" ;;
   *) usage >&2; exit 2 ;;
 esac

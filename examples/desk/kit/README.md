@@ -122,6 +122,29 @@ every tool's contract test proves it green.
 **Evidence.** `examples/desk/gallery/capture.mjs` screenshots every tool in
 light and dark into `gallery/index.html` (one side-by-side page).
 
+## Outpost publishing (`outpost.bsh`)
+
+The one `publish-outpost` / `unpublish-outpost` verb pair every catalog app
+(notes, form, clips, site, board, whiteboard, table; vlog too) sources:
+
+```bash
+source "$here/../desk/kit/outpost.bsh"
+publish-outpost|unpublish-outpost) kit_outpost "$1" notes notes "$port" false "${@:2}" ;;
+```
+
+`bashy <app> publish-outpost [NAME] [--public|--private] [--icon URL] [--json]
+[--dry-run]` upserts `outpost apps add NAME --url
+http://127.0.0.1:PORT/NAME/ --require-login`, idempotent on re-run; the
+icon defaults to the app's fleet icon (emoji or SVG path) as a data URL.
+Apps are "just for me": login required by default; `--public` opts in and
+also sets `bashy app set NAME --auth public` (site and vlog default to
+public, `--private` opts out). It prints the outpost URL the owner opens
+(`<cloudbox>/matrix/h/<host>/app/NAME/`). `unpublish-outpost` runs `outpost
+apps rm NAME` and returns a public console record to `--auth system`.
+`--dry-run` writes nothing and prints the commands; `--json` prints one
+object (errors `{code,message}`, exit 2 usage, 1 otherwise). Test:
+`bash examples/desk/kit/outpost_test.sh` (stubbed outpost and bashy).
+
 ## Use in a tool
 
 ```bash

@@ -10,15 +10,21 @@ home=${BASHY_HOME:-$HOME/.bashy}
 state=$home/notes
 source=$state/source
 port=${NOTES_CONSOLE_PORT:-22749}
+# The shared publish-outpost / unpublish-outpost verbs.
+source "$here/../desk/kit/outpost.bsh"
 
 usage() {
   cat <<'EOF'
-notes install|start|stop|status|source
+notes install|start|stop|status|source|publish-outpost|unpublish-outpost
   install  Fetch the pinned MIT source, build the web UI, and register a shaped app.
   start    Run the local app console in the foreground; the notes server starts on first request.
   stop     Stop the console started by this command.
   status   Show the managed console and source revision.
   source   Print the managed source directory.
+  publish-outpost [--public] [--icon URL] [--json] [--dry-run]
+           List the app on the paired outpost (login required unless --public).
+  unpublish-outpost [--json] [--dry-run]
+           Remove it from outpost.
 
 notes list [--filter CEL] [--state normal|archived] [--page-size N] [--page-token TOKEN]
 notes show ID
@@ -138,5 +144,6 @@ case ${1:---help} in
     if running_pid >/dev/null; then echo "notes: console running on port $port"; else echo 'notes: console stopped'; fi
     ;;
   source) installed && printf '%s\n' "$source" ;;
+  publish-outpost|unpublish-outpost) kit_outpost "$1" notes notes "$port" false "${@:2}" ;;
   *) usage >&2; exit 2 ;;
 esac

@@ -26,8 +26,10 @@ executable argv and source path; `bashy skill show site` reads this face.
   `--type site` on the bashy console (`http://127.0.0.1:CONSOLE_PORT/NAME/`).
 - `bashy site edit [NAME]` opens the Sveltia CMS and visual page editor at
   `http://127.0.0.1:CONSOLE_PORT/NAME/admin/`.
-- `bashy site publish-outpost NAME` shares the site publicly via Outpost with
-  no login required.
+- `bashy site publish-outpost [NAME] [--private] [--icon URL] [--json] [--dry-run]`
+  shares the site via Outpost; a site is public by default (no login),
+  `--private` requires an Outpost login. `bashy site unpublish-outpost [NAME]`
+  removes it and returns the console app to `--auth system`.
 - `bashy site publish-pages [DIR] REPO [BRANCH]` publishes `DIR/public/` to a
   GitHub Pages branch (default `gh-pages`).
 - `bashy site shape-register [DIR] [NAME]` registers the site source as a
@@ -40,6 +42,8 @@ set -euo pipefail
 export BASHY_HINTS=off
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 RUNNER=${BASHY_BIN:-bashy}
+# The shared publish-outpost / unpublish-outpost verbs.
+source "$HERE/../desk/kit/outpost.bsh"
 
 die() { echo "site: $*" >&2; exit 1; }
 
@@ -147,14 +151,6 @@ site_edit() {
   echo "site: Sveltia CMS & visual editor at http://127.0.0.1:$port/$name/admin/"
 }
 
-site_publish_outpost() {
-  local name=${1:?app name}
-  local port=${CONSOLE_PORT:-22749}
-  "$RUNNER" app set "$name" --auth public
-  outpost apps add "$name" --url "http://127.0.0.1:$port/$name/"
-  echo "site: published $name to Outpost as a public link"
-}
-
 site_publish_pages() {
   local site_dir repo=${2:?owner/repo} branch=${3:-gh-pages} tmp
   site_dir=$(cd "${1:?site dir}" && pwd)
@@ -215,12 +211,13 @@ case "${1:-}" in
     echo 'sokilili site efefecato reada wurite exec neto fini sotepo porota porota fini enisure gereeni fini fini'
     ;;
   -h|--help)
-    echo "Usage: site [new|build|serve|edit|publish-outpost|publish-pages|shape-register] [args...]"
+    echo "Usage: site [new|build|serve|edit|publish-outpost|unpublish-outpost|publish-pages|shape-register] [args...]"
     echo "  site new [DIR] [--title TITLE]          Initialize a new company site (Hugo template)"
     echo "  site build [DIR]                        Generate static HTML output into public/"
     echo "  site serve [DIR] [NAME]                 Register and serve via bashy site app type"
     echo "  site edit [NAME]                        Open Sveltia CMS & visual page editor URL"
-    echo "  site publish-outpost NAME               Share publicly via local Outpost bridge"
+    echo "  site publish-outpost [NAME] [--private] Share via the local Outpost bridge (public unless --private)"
+    echo "  site unpublish-outpost [NAME]           Remove the site from Outpost"
     echo "  site publish-pages DIR REPO [BRANCH]    Publish static public/ to GitHub Pages"
     echo "  site shape-register DIR [NAME]          Register source as a shapeable app"
     echo "  --skill                                 Print embedded agent skill guidance"
@@ -242,9 +239,8 @@ case "${1:-}" in
     shift
     site_edit "${1:-site}"
     ;;
-  publish-outpost)
-    shift
-    site_publish_outpost "${1:?app name}"
+  publish-outpost|unpublish-outpost)
+    kit_outpost "$1" site site "${CONSOLE_PORT:-22749}" true "${@:2}"
     ;;
   publish-pages)
     shift

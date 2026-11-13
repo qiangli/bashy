@@ -10,15 +10,21 @@ home=${BASHY_HOME:-$HOME/.bashy}
 state=$home/whiteboard
 source=$state/source
 port=${WHITEBOARD_CONSOLE_PORT:-22752}
+# The shared publish-outpost / unpublish-outpost verbs.
+source "$here/../desk/kit/outpost.bsh"
 
 usage() {
   cat <<'EOF'
-whiteboard install|start|stop|status|source
+whiteboard install|start|stop|status|source|publish-outpost|unpublish-outpost
   install  Fetch the pinned MIT source, build the web UI, and register a shaped app.
   start    Run the local app console in the foreground; the whiteboard server starts on first request.
   stop     Stop the console started by this command.
   status   Show the managed console and source revision.
   source   Print the managed source directory.
+  publish-outpost [--public] [--icon URL] [--json] [--dry-run]
+           List the app on the paired outpost (login required unless --public).
+  unpublish-outpost [--json] [--dry-run]
+           Remove it from outpost.
 
 The shared whiteboard is local. Install needs the network. To enable owner-owned
 observability, set OTEL_EXPORTER_OTLP_ENDPOINT for the console's bashy OTel.
@@ -135,5 +141,6 @@ case ${1:---help} in
     if ! installed; then echo 'whiteboard: run whiteboard install first' >&2; exit 1; fi
     printf '%s\n' "$source"
     ;;
+  publish-outpost|unpublish-outpost) kit_outpost "$1" whiteboard whiteboard "$port" false "${@:2}" ;;
   *) usage >&2; exit 2 ;;
 esac

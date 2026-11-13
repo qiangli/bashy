@@ -63,7 +63,10 @@ Preconfigured with pages, responsive styles, vendored Sveltia CMS at `/admin`, a
   serves the directory at `http://127.0.0.1:22749/NAME/`.
 - **Outpost**: `publish-outpost` sets the app auth to public and registers the
   path with the host's Outpost bridge, providing a link anyone can access while
-  content is served directly from your machine.
+  content is served directly from your machine. `--private` registers it
+  login-required instead; `unpublish-outpost` removes it and returns the app
+  to `--auth system`. Both verbs come from the shared
+  `examples/desk/kit/outpost.bsh` every catalog app uses.
 - **GitHub Pages**: `publish-pages` pushes `public/` to the repository's
   `gh-pages` branch.
 

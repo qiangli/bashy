@@ -10,15 +10,21 @@ home=${BASHY_HOME:-$HOME/.bashy}
 state=$home/board
 source=$state/source
 port=${BOARD_CONSOLE_PORT:-22751}
+# The shared publish-outpost / unpublish-outpost verbs.
+source "$here/../desk/kit/outpost.bsh"
 
 usage() {
   cat <<'EOF'
-board install|start|stop|status|source
+board install|start|stop|status|source|publish-outpost|unpublish-outpost
   install  Fetch the pinned MIT source, build the web UI and API bundle, and register a shaped app.
   start    Run the local app console in the foreground; the board server starts on first request.
   stop     Stop the console started by this command.
   status   Show the managed console and source revision.
   source   Print the managed source directory.
+  publish-outpost [--public] [--icon URL] [--json] [--dry-run]
+           List the app on the paired outpost (login required unless --public).
+  unpublish-outpost [--json] [--dry-run]
+           Remove it from outpost.
 EOF
 }
 
@@ -148,5 +154,6 @@ case ${1:---help} in
     if running_pid >/dev/null; then echo "board: console running on port $port"; else echo 'board: console stopped'; fi
     ;;
   source) installed && printf '%s\n' "$source" ;;
+  publish-outpost|unpublish-outpost) kit_outpost "$1" board board "$port" false "${@:2}" ;;
   *) usage >&2; exit 2 ;;
 esac

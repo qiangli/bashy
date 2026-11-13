@@ -48,6 +48,9 @@ executable argv and source path; `bashy skill show form` reads this face.
   `$BASHY_HOME/desk/form`. `FORM_ADDR` selects the listener; default
   `127.0.0.1:18107`. `FORM_PREFIX` selects a URL sub-path when served
   behind one; default empty. Never publish an owner key.
+- `bashy form publish-outpost [--public] [--icon URL] [--json] [--dry-run]`
+  lists the console's `/form/` on the paired outpost, login required unless
+  `--public`; `unpublish-outpost` removes it.
 
 No containers, accounts, external database, web assets, or AI service. The
 native Go server is a supporting implementation; the orchestration and this
@@ -61,6 +64,8 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/form
 exe=$(go env GOEXE)
 bin=$cache/form$exe
+# The shared publish-outpost / unpublish-outpost verbs.
+source "$here/../kit/outpost.bsh"
 build() {
   stale=false
   [[ -f "$bin" ]] || stale=true
@@ -82,7 +87,8 @@ case ${1:-serve} in
   done < "${BASH_SOURCE[0]}"
   ;;
 --contract) echo 'sokilili foromu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
--h|--help) echo 'form [serve|add|reply|ask|open|show|set|list|share|close|append|wait] [--json] — ad-hoc forms and questionnaires; --skill prints its embedded skill' ;;
+-h|--help) echo 'form [serve|add|reply|ask|open|show|set|list|share|close|append|wait|publish-outpost|unpublish-outpost] [--json] — ad-hoc forms and questionnaires; --skill prints its embedded skill' ;;
+publish-outpost|unpublish-outpost) kit_outpost "$1" form form "${CONSOLE_PORT:-22749}" false "${@:2}" ;;
 serve)
   shift || true
   data=${FORM_DATA:-}
