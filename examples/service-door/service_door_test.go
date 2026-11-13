@@ -273,18 +273,18 @@ func TestNoProviderReportsRegistrationHint(t *testing.T) {
 func TestSpendNeedsYes(t *testing.T) {
 	f := newFixture(t)
 	f.addRod("image-paid", "provides.0=image.generate", "route=api", "effects.0=net", "effects.1=spend")
-	env, _, code := f.runDoor(nil, "image.generate")
+	env, _, code := f.runDoor(nil, "image.generate", "--provider", "image-paid")
 	if code != 126 || env.Outcome != "unavailable" || len(env.Unavailable) != 1 || !strings.Contains(env.Unavailable[0]["install"], "--yes") {
 		t.Fatalf("without --yes: exit %d %+v", code, env)
 	}
 	if f.handoff() != "" {
 		t.Fatal("refused rod ran")
 	}
-	env, _, code = f.runDoor(nil, "image.generate", "--yes", "--dry-run")
+	env, _, code = f.runDoor(nil, "image.generate", "--provider", "image-paid", "--yes", "--dry-run")
 	if code != 0 || env.Outcome != "dry-run" || env.Route != "api" || env.CostClass != "api" || f.handoff() != "" {
 		t.Fatalf("dry-run: exit %d %+v", code, env)
 	}
-	env, _, code = f.runDoor(nil, "image.generate", "--yes")
+	env, _, code = f.runDoor(nil, "image.generate", "--provider", "image-paid", "--yes")
 	if code != 0 || env.Outcome != "success" || !strings.Contains(f.handoff(), "yes=1") {
 		t.Fatalf("with --yes: exit %d %+v handoff %q", code, env, f.handoff())
 	}

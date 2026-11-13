@@ -103,7 +103,8 @@ confirm_args=()
 [ "$yes" = 0 ] || confirm_args=(--yes)
 start=$SECONDS
 if [[ $name == *:* ]]; then
-    if [ "$async" = 1 ]; then "$bashy_bin" tool cmd run "$name" "${args[@]}" "${confirm_args[@]}" > /dev/null 2>&1 & else text=$("$bashy_bin" tool cmd run "$name" "${args[@]}") || status=$?; fi
+    tool_args=(tool cmd run "$name" --dir "$out" --json "${confirm_args[@]}" -- "${args[@]}")
+    if [ "$async" = 1 ]; then "$bashy_bin" "${tool_args[@]}" > /dev/null 2>&1 & else text=$("$bashy_bin" "${tool_args[@]}") || status=$?; fi
 else
     if [ "$async" = 1 ]; then "$bashy_bin" "$name" "${args[@]}" > /dev/null 2>&1 & else text=$("$bashy_bin" "$name" "${args[@]}") || status=$?; fi
 fi
@@ -115,14 +116,22 @@ elapsed=$(($SECONDS - start))
 media_type() {
     case ${1,,} in
         *.wav) echo audio/wav ;; *.mp3) echo audio/mpeg ;; *.m4a) echo audio/mp4 ;; *.flac) echo audio/flac ;; *.ogg) echo audio/ogg ;;
-        *.png) echo image/png ;; *.jpg|*.jpeg) echo image/jpeg ;; *.webp) echo image/webp ;;
+        *.png) echo image/png ;; *.jpg|*.jpeg) echo image/jpeg ;; *.webp) echo image/webp ;; *.svg) echo image/svg+xml ;;
         *.mp4) echo video/mp4 ;; *.webm) echo video/webm ;; *.mov) echo video/quicktime ;;
         *.json) echo application/json ;; *.srt) echo application/x-subrip ;; *.ass) echo text/x-ssa ;; *.txt) echo text/plain ;;
         *) echo application/octet-stream ;;
     esac
 }
 outputs='[]'
-if [ "$async" = 0 ] && printf '%s' "${text:-}" | jq -e 'type == "object" and .schema_version == "bashy-svc-rod-v1"' >/dev/null 2>&1; then
+if [ "$async" = 0 ] && [[ $name == *:* ]] && printf '%s' "${text:-}" | jq -e 'type == "object" and .tool != null and .command != null' >/dev/null 2>&1; then
+    tool_result=$text
+    text=$(printf '%s\n' "$tool_result" | jq -r '.text // .error // ""')
+    while IFS= read -r o_path; do
+        [ -n "$o_path" ] || continue
+        [ -f "$o_path" ] || continue
+        outputs=$(printf '%s\n' "$outputs" | J_P="$o_path" J_T="$(media_type "$o_path")" jq -c '. + [{path:env.J_P,media_type:env.J_T}]')
+    done < <(printf '%s\n' "$tool_result" | jq -r '.artifacts[]?')
+elif [ "$async" = 0 ] && printf '%s' "${text:-}" | jq -e 'type == "object" and .schema_version == "bashy-svc-rod-v1"' >/dev/null 2>&1; then
     rod=$text
     text=$(printf '%s\n' "$rod" | jq -r '.text // ""')
     while IFS=$'\x1f' read -r o_path o_type o_note; do
