@@ -20,6 +20,8 @@ created: "2026-11-07T22:02:42Z"
 updated: "2026-11-07T22:03:51Z"
 ---
 
+Cross-cloud policy (identity, quota, budgets that exclude credits, GPU, gcloud/Azure): [[kb:work-with-cloud-providers-safely-do-aws-gcloud-azure]].
+
 ## Variables used below
 
 ```sh
