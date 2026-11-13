@@ -46,3 +46,30 @@ Safe order (one GPU job at a time; watch for Event 141):
 5. TDR 60/60 only after 3-4 pass (it hides, not fixes; freezes the display;
    never TdrLevel=0).
 WSL: a separate track (HSA_ENABLE_INTERRUPT=0 + tiled).
+
+## Upgrade applied and verified (2026-11-13, operator-approved)
+
+- Restore point #1 created first; old driver package (u0196552.inf,
+  32.0.22040.7) kept in the driver store for rollback.
+- Driver: AMD's Ryzen AI Max+ 395 page listed 26.11.1 (optional) and
+  26.10.1 WHQL; installed **26.10.1 WHQL** (1,026,657,048 bytes,
+  Authenticode valid, AMD signer, SHA-256 54C208A9...) via extracted
+  `Setup.exe -INSTALL` (exit 0, 104 s), then a controlled reboot at
+  12:06Z. Active driver now 32.0.32015.7029 (2026-10-17), status OK,
+  amdhip64_7.dll present. Klatch restored afterwards (podman-machine-default
+  started; local 200, satellite route 401).
+- ROCm: native Windows venv C:\rocm10\venv (Python 3.12, uv 0.13.8):
+  torch 2.13.0+rocm10.0.0, torchvision 0.28.0+rocm10.0.0,
+  rocm-sdk-device-gfx1151 10.0.0 (HIP 7.15). uv gotcha: --extra-index-url
+  outranks --index-url, so use `--index <amd pytorch> --index <amd rocm>
+  --default-index pypi`. Chose 10.0 over 10.1 because 10.1 needs a ROCm-only
+  driver that does not list Ryzen.
+- Kernel-level verification with random-weight decoder-shaped convs
+  (bf16), one GPU job at a time, LiveKernelReports checked after each:
+  sanity OK; conv2d at 512x512 output OK (13.2 s incl. 12.7 s first-call
+  MIOpen setup); conv3d 128ch 5x256x256 OK (9.4 s); **conv2d at 1280x720
+  output OK (7.9 s; last layers 0.24-0.48 s)**, the size that hung the
+  GPU before the upgrade. 0 watchdog dumps since boot.
+- Remaining: rerun the real FLUX.2 klein decode at 1280x720 and the Wan2.2
+  TI2V-5B decode in this venv (S627 M8 / follow-up); the WSL path is still a
+  separate track.
