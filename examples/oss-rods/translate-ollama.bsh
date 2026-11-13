@@ -12,7 +12,7 @@
 name: translate-ollama
 description: Open-source translation rod for the translate service role. Translates an SRT cue list line for line with a local Qwen3 (qwen3:8b) through ollama; timestamps unchanged, line count checked.
 metadata:
-  requires: "has=curl has=jq"
+  requires: "has=curl"
 ---
 # translate-ollama — local Qwen3 rod (route oss)
 
@@ -56,7 +56,7 @@ lang_name() {
 
 if [ "${1:-}" = --doctor ]; then
 	[ "${2:-}" = --json ] || die "--doctor needs --json" 2
-	doc=$(oss_doctor "has=curl|curl" "has=jq|jq")
+	doc=$(oss_doctor "has=curl|curl")
 	# The ollama check: a registered command that lists the pinned tag. No
 	# daemon start, no pull: read-only.
 	need="" install=""

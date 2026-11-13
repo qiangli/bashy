@@ -14,7 +14,7 @@ it needs a 24 GB NVIDIA host the fleet has not confirmed (M3).
 | `image-klein` | `image.generate`, `image.edit` | FLUX.2 klein-4B, pinned local Diffusers snapshot; offline only | prompt/size (+ image for edit) → one PNG |
 | `narrate-local` | `narrate` | Chatterbox default, `kokoro:<voice>` light path; same pins as `media voice` | text/voice → `narration.wav` (silence-trimmed) |
 | `transcribe-whisperx` | `transcribe` | WhisperX `3.8.6` on Whisper large-v3, `--compute_type int8` for Mac/CPU | audio → `transcript.srt`/`.txt` |
-| `translate-ollama` | `translate` | Qwen3 `qwen3:8b` through a local ollama's HTTP API (Sprint 634); think off, temperature 0, one numbered request per cue list | SRT cues + target language → `translation.srt` (same timestamps, line count checked) |
+| `translate-ollama` | `translate` | Qwen3 `qwen3:8b` through a local ollama's HTTP API (Sprint 634); think off, temperature 0, one numbered request per cue list; needs only curl (jq is bashy's own applet, which `command -v` cannot see, so no rod declares `has=jq`) | SRT cues + target language → `translation.srt` (same timestamps, line count checked) |
 
 All oss rods render from local snapshots under `BASHY_OSS_CACHE/bashy/oss`.
 They set `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`,

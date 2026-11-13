@@ -3,13 +3,15 @@ id: 759ea0f92839
 kind: feature
 title: 'film: optional local text-drafting stage (lyrics / storyboard prose) with recorded provider'
 seq: 3232
-status: todo
+status: assigned
 priority: p2
 labels:
     - media
     - film
     - provenance
 created: 2026-11-13T19:24:27.092262Z
+weave: 105
+assignee: codex-gpt6-astra
 sprint: 634
 sprint_id: f57b15f7-34b1-5edb-80df-fa3588507b7c
 sprint_title: 'Film pipeline follow-ups: local, recorded translation (and text) stages; subtitle font fix'

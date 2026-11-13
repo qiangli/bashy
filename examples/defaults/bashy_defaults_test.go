@@ -257,7 +257,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 		"commands add image-klein --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/image-klein.bsh") + " --set provides.0=image.generate --set provides.1=image.edit --set route=oss --set requires=has=uv",
 		"commands add narrate-local --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/narrate-local.bsh") + " --set provides.0=narrate --set route=oss --set requires=has=uv has=ffmpeg",
 		"commands add transcribe-whisperx --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/transcribe-whisperx.bsh") + " --set provides.0=transcribe --set route=oss --set requires=has=uv has=ffmpeg",
-		"commands add translate-ollama --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/translate-ollama.bsh") + " --set provides.0=translate --set route=oss --set requires=has=curl has=jq",
+		"commands add translate-ollama --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/translate-ollama.bsh") + " --set provides.0=translate --set route=oss --set requires=has=curl",
 	} {
 		if !strings.Contains(f.calls(), want) {
 			t.Errorf("registration missing %q:\n%s", want, f.calls())

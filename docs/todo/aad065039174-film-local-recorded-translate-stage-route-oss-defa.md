@@ -3,14 +3,13 @@ id: aad065039174
 kind: feature
 title: 'film: local, recorded translate stage (route=oss default) for bilingual subtitles'
 seq: 3231
-status: assigned
+status: todo
 priority: p1
 labels:
     - media
     - film
     - provenance
 created: 2026-11-13T19:24:26.933245Z
-weave: 104
 assignee: claude-opus5.5
 sprint: 634
 sprint_id: f57b15f7-34b1-5edb-80df-fa3588507b7c
