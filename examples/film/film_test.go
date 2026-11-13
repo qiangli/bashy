@@ -615,3 +615,71 @@ func TestDraftTimesLyricLinesToTranscript(t *testing.T) {
 		t.Fatalf("film.mp4 streams %v", types)
 	}
 }
+
+// A draft is an animatic: a varied shot list (kinds, a reused set still,
+// beat-anchored cuts on the song.bpm grid), small draft stills, burned-in
+// shot numbers, and the review set (storyboard.md, contact.png,
+// looksheet.png) beside film.mp4.
+func TestDraftAnimatic(t *testing.T) {
+	f := newFixture(t)
+	f.ossRods(false)
+	f.editStoryboard(func(sb map[string]any) {
+		sb["song"].(map[string]any)["bpm"] = 120
+		sb["draft"] = map[string]any{"still_size": "160x90"}
+		sb["stills"] = []any{map[string]any{"id": "harbor", "prompt": "empty harbor stage at dusk", "seed": 11}}
+		sb["shots"] = []any{
+			map[string]any{"still": "harbor", "kind": "wide", "prompt": "establishing wide"},
+			map[string]any{"character": "lead", "kind": "close", "prompt": "close-up singing", "line": 1},
+			map[string]any{"still": "harbor", "kind": "insert", "prompt": "lanterns on the water", "beat": 10},
+		}
+	})
+	d := f.draft("--no-qa")
+	if d.Outcome != "success" || len(d.Degraded) != 3 {
+		t.Fatalf("animatic: outcome %s degraded %v", d.Outcome, d.Degraded)
+	}
+	// One image per character and still, each at the draft still size.
+	var imgs []string
+	for _, c := range f.rods() {
+		if c["role"] == "image.generate" {
+			var req map[string]any
+			b, _ := os.ReadFile(c["request"])
+			if err := json.Unmarshal(b, &req); err != nil || req["width"] != float64(160) || req["height"] != float64(90) {
+				t.Fatalf("still request %s: %v %v", c["request"], err, req)
+			}
+			imgs = append(imgs, filepath.Base(c["request"]))
+		}
+	}
+	if strings.Join(imgs, " ") != "lead.request.json harbor.request.json" {
+		t.Fatalf("still requests: %v", imgs)
+	}
+	render := filepath.Join(f.proj, "drafts", d.ID)
+	// Shot 2 on lyric line 2 (3.2 s, snapped to the 0.5 s grid: 3.0), shot 3 on beat 10 (5.0 s).
+	shots, _ := os.ReadFile(filepath.Join(render, "shots.tsv"))
+	if string(shots) != "0\t0.000\t3.000\n1\t3.000\t5.000\n2\t5.000\t6.000\n" {
+		t.Fatalf("shots.tsv:\n%s", shots)
+	}
+	for _, n := range []string{"01", "02", "03"} {
+		if !fileExists(filepath.Join(render, "shots", n, "numbered.mp4")) {
+			t.Fatalf("shot %s has no burned-in number", n)
+		}
+	}
+	table, _ := os.ReadFile(filepath.Join(render, "storyboard.md"))
+	for _, want := range []string{"| 1 | 0 | 3 | wide | harbor |", "| 3 | 5 | 6 | insert | harbor |", "| lanterns on the water | 11 |", "close-up singing"} {
+		if !strings.Contains(string(table), want) {
+			t.Fatalf("storyboard.md lacks %q:\n%s", want, table)
+		}
+	}
+	for _, sheet := range []string{"contact.png", "looksheet.png"} {
+		out, err := exec.Command("ffprobe", "-v", "error", "-show_entries", "stream=width,height", "-of", "csv=p=0", filepath.Join(render, sheet)).Output()
+		if err != nil || strings.TrimSpace(string(out)) == "" {
+			t.Fatalf("%s: %v %s", sheet, err, out)
+		}
+	}
+	// The lock carries every still, so a final reuses the set still too.
+	if _, stderr, code := f.run("lock", f.proj); code != 0 {
+		t.Fatalf("lock: %s", stderr)
+	}
+	if !fileExists(filepath.Join(f.proj, "lock", "portraits", "harbor.png")) {
+		t.Fatal("lock has no set still")
+	}
+}

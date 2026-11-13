@@ -5,9 +5,9 @@
 #
 #   film doctor
 #   film init DIR [--title T]
-#   film draft DIR [--route oss] [--provider-ROLE NAME] [--route-animate R] [--qa-provider P] [--no-qa]
+#   film draft DIR [--route oss] [--provider-ROLE NAME] [--route-animate R] [--qa-provider P] [--no-qa] [--no-shot-numbers]
 #   film lock DIR [--draft N] [--timing FILE]
-#   film final DIR --route browser|api [--yes] [--dry-run] [--provider-ROLE NAME] [--qa-provider P] [--no-qa]
+#   film final DIR --route browser|api [--yes] [--dry-run] [--provider-ROLE NAME] [--qa-provider P] [--no-qa] [--shot-numbers]
 #   film status DIR
 #
 # Every generative stage goes through the service door
@@ -39,6 +39,16 @@ metadata:
   cost_class, elapsed) lands in the render's manifest.json.
 - A draft without an animate rod renders a still portrait with a slow pan
   and its manifest says so. A final never degrades: a missing rod fails.
+- A draft is an animatic for review: every shot carries its burned-in shot
+  number and kind, stills render at `draft.still_size` (e.g. 768x432), and
+  each render writes `storyboard.md` (shot/time/lyric/prompt/seed),
+  `contact.png` (one frame per shot) and `looksheet.png` (every still).
+- Shot list: `shots[].kind` (wide, ensemble, close, insert), `shots[].still`
+  (a character id or a `stills[]` id: repeated sections reuse one still),
+  `shots[].line` (start on that lyric line) or `shots[].beat` (start on that
+  beat of `song.bpm`); with `song.bpm` every cut snaps to the beat grid.
+- Subtitles: one cue per lyric line, timed to the transcript's sung words,
+  bilingual with `translation.lines`.
 - `final` refuses route oss, requires a lock, and checks the lock's sha256
   first. It reuses the locked timing, translation and portraits (as
   reference images) and re-renders song, portraits and clips only. Rods
@@ -193,7 +203,7 @@ check_storyboard() {
 	local sb=$1 why
 	[ -f "$sb" ] || die "no storyboard: $sb (run: film init DIR)"
 	why=$(J_V="$STORYBOARD_SCHEMA" jq -r 'env.J_V as $v |
-		[.characters[]?.id] as $ids |
+		[.characters[]?.id] as $ids | [.stills[]?.id] as $sids |
 		if .schema_version != $v then "schema_version must be \($v)"
 		elif (.title // "") == "" then "title is required"
 		elif (.song.prompt // "") == "" then "song.prompt is required"
@@ -201,7 +211,11 @@ check_storyboard() {
 		elif ((.characters // []) | length) == 0 then "characters must list at least one character"
 		elif any(.characters[]; (.id // "") == "" or (.bible // "") == "") then "every character needs id and bible"
 		elif ((.shots // []) | length) == 0 then "shots must list at least one shot"
-		elif any(.shots[]; (.character // "") as $c | ($ids | index($c)) == null) then "every shot.character must name a character id"
+		elif any(.stills[]?; (.id // "") == "" or (.prompt // "") == "") then "every still needs id and prompt"
+		elif any(.stills[]?; .id as $s | $ids | index($s) != null) then "a still id must differ from every character id"
+		elif any(.shots[]; (.character // "") as $c | ($c == "" and (.still // "") == "") or ($c != "" and ($ids | index($c)) == null)) then "every shot.character must name a character id"
+		elif any(.shots[]; (.still // "") as $s | $s != "" and (($ids + $sids) | index($s)) == null) then "every shot.still must name a character or a still id"
+		elif any(.shots[]; .beat != null) and ((.song.bpm // 0) <= 0) then "shot.beat needs song.bpm"
 		elif (.translation != null and ((.translation.lines // []) | length) != (.lyrics | length)) then "translation.lines must match lyrics line for line"
 		else "" end' "$sb" 2>&1) || die "storyboard $sb is not valid JSON: $why"
 	[ -z "$why" ] || die "storyboard $sb: $why"
@@ -302,7 +316,7 @@ next_id() { # next_id DIR -> 01, 02, ...
 }
 
 parse_render_opts() {
-	route="" yes=0 dry=0 qa=1 qa_provider="" json=0 proj=""
+	route="" yes=0 dry=0 qa=1 qa_provider="" json=0 proj="" numbers=""
 	prov_song="" prov_image="" prov_animate="" prov_transcribe="" route_song="" route_image="" route_animate="" route_transcribe=""
 	while [ $# -gt 0 ]; do
 		case $1 in
@@ -317,6 +331,8 @@ parse_render_opts() {
 		--route-transcribe) route_transcribe=$2; shift 2 ;;
 		--qa-provider) qa_provider=$2; shift 2 ;;
 		--no-qa) qa=0; shift ;;
+		--shot-numbers) numbers=1; shift ;;
+		--no-shot-numbers) numbers=0; shift ;;
 		--yes) yes=1; shift ;;
 		--dry-run) dry=1; shift ;;
 		--json) json=1; shift ;;
@@ -333,6 +349,7 @@ cmd_draft() {
 	kind=draft
 	parse_render_opts "$@"
 	[ -n "$route" ] || route=oss
+	[ -n "$numbers" ] || numbers=1
 	sb=$proj/storyboard.json
 	check_storyboard "$sb"
 	render_run "$proj/drafts"
@@ -345,6 +362,7 @@ cmd_final() {
 	"") die "final: --route browser|api is required (a final runs on a commercial route)" ;;
 	oss) die "final: route oss is for drafts; pass --route browser or --route api" ;;
 	esac
+	[ -n "$numbers" ] || numbers=0
 	verify_lock "$proj/lock"
 	sb=$proj/lock/storyboard.json
 	render_run "$proj/finals"
@@ -377,16 +395,20 @@ render_run() {
 		[ -n "$song" ] && [ -f "$song" ] || fail_render "song: the rod reported no audio output"
 	fi
 
-	# -- portraits: one per character, a consistent set
-	local cid cseed ref pr img
+	# -- stills: one portrait per character (a consistent set), then each
+	# stills[] image (set, ensemble, insert). A draft renders them at
+	# draft.still_size; a final at the film size.
+	local cid cseed ref pr img ssize=$size
+	[ "$kind" = final ] || ssize=$(jq -r '.draft.still_size // .size // "1280x720"' "$sb")
 	declare -A portrait=()
 	while IFS=$'\t' read -r cid cseed; do
 		pr=$render/portraits/$cid.request.json
 		mkdir -p "$render/portraits"
 		ref=""
 		[ "$kind" != final ] || [ ! -f "$proj/lock/portraits/$cid.png" ] || ref=$proj/lock/portraits/$cid.png
-		J_ID=$cid J_W=${size%x*} J_H=${size#*x} J_SEED=$seed J_REF=$ref request "$pr" '(.characters[] | select(.id == env.J_ID)) as $c
-			| {title, prompt:("Character portrait: " + $c.bible), width:(env.J_W|tonumber), height:(env.J_H|tonumber), count:1, seed:($c.seed // (env.J_SEED|tonumber))}
+		J_ID=$cid J_W=${ssize%x*} J_H=${ssize#*x} J_SEED=$seed J_REF=$ref request "$pr" '(first(.characters[] | select(.id == env.J_ID) | {prompt:("Character portrait: " + .bible), seed})
+				// first(.stills[]? | select(.id == env.J_ID) | {prompt, seed})) as $c
+			| {title, prompt:$c.prompt, width:(env.J_W|tonumber), height:(env.J_H|tonumber), count:1, seed:($c.seed // (env.J_SEED|tonumber))}
 			+ (if env.J_REF == "" then {} else {reference_images:[env.J_REF]} end)'
 		status=0
 		mapfile -t o < <(stage_opts image.generate)
@@ -398,7 +420,7 @@ render_run() {
 			cp "$img" "$render/portraits/$cid.png"
 			portrait[$cid]=$render/portraits/$cid.png
 		fi
-	done < <(jq -r '.characters[] | [.id, (.seed // "")] | @tsv' "$sb")
+	done < <(jq -r '(.characters[], .stills[]?) | [.id, (.seed // "")] | @tsv' "$sb")
 
 	# -- timing: transcribe the draft song; a final reuses the locked timing
 	if [ "$kind" = final ]; then
@@ -449,7 +471,7 @@ render_run() {
 	local k s e c sp clip clips=() take
 	mkdir -p "$render/shots"
 	while IFS=$'\t' read -r k s e; do
-		c=$(J_K=$k jq -r '.shots[env.J_K|tonumber].character' "$sb")
+		c=$(J_K=$k jq -r '.shots[env.J_K|tonumber] | .still // .character' "$sb")
 		sp=$(J_K=$k jq -r '.shots[env.J_K|tonumber].prompt // ""' "$sb")
 		take=$render/shots/$(printf '%02d' "$((k + 1))")
 		mkdir -p "$take"
@@ -471,10 +493,15 @@ render_run() {
 			clip=$(first_output "$env" video/)
 			[ -n "$clip" ] && [ -f "$clip" ] || fail_render "shot $((k + 1)): the animate rod reported no video"
 		fi
+		if [ "$numbers" = 1 ]; then
+			number_clip "$clip" "$(shot_label "$k")" "$take/numbered.mp4"
+			clip=$take/numbered.mp4
+		fi
 		clips+=("$clip")
 	done <"$render/shots.tsv"
 
 	assemble "$total" "$size" "${clips[@]}"
+	review_sheets "${clips[@]}"
 	if [ "$qa" = 1 ]; then qa_review; fi
 	finish_render "$start" "$render/film.mp4"
 }
@@ -505,16 +532,17 @@ stage_ok() {
 }
 
 # shot_bounds TOTAL: "k<TAB>start<TAB>end" per shot. A shot with "line" starts
-# at that lyric line's cue; others split the remaining time evenly.
+# at that lyric line's cue, one with "beat" on that beat of song.bpm; others
+# split the remaining time evenly. With song.bpm every cut snaps to the beat.
 shot_bounds() {
 	local total=$1
 	cues "$render/timing.srt" | cut -f1 >"$render/cue-starts.txt"
-	jq -r '.shots | to_entries[] | [.key, (.value.line // "")] | @tsv' "$sb" |
-		awk -F'\t' -v total="$total" -v starts="$render/cue-starts.txt" '
-		BEGIN { n = 0; while ((getline l < starts) > 0) cue[n++] = l }
-		{ k[NR-1] = $1; ln[NR-1] = $2; m = NR }
+	jq -r '.shots | to_entries[] | [.key, (.value.line // ""), (.value.beat // "")] | @tsv' "$sb" |
+		awk -F'\t' -v total="$total" -v starts="$render/cue-starts.txt" -v bpm="$(jq -r '.song.bpm // 0' "$sb")" '
+		BEGIN { n = 0; while ((getline l < starts) > 0) cue[n++] = l; bl = (bpm > 0) ? 60 / bpm : 0 }
+		{ k[NR-1] = $1; ln[NR-1] = $2; bt[NR-1] = $3; m = NR }
 		END {
-			for (i = 0; i < m; i++) at[i] = (i == 0) ? 0 : ((ln[i] != "" && ln[i] < n) ? cue[ln[i]] : -1)
+			for (i = 0; i < m; i++) at[i] = (i == 0) ? 0 : ((ln[i] != "" && ln[i] < n) ? cue[ln[i]] : ((bt[i] != "" && bl > 0) ? bt[i] * bl : -1))
 			ok = 1; prev = 0
 			for (i = 1; i < m; i++) { if (at[i] < 0) continue; if (at[i] <= prev || at[i] >= total) ok = 0; prev = at[i] }
 			for (i = 0; i < m; i++) if (!ok || at[i] < 0) at[i] = (i == 0 ? 0 : -1)
@@ -524,8 +552,78 @@ shot_bounds() {
 				hi = (j < m) ? at[j] : total; lo = at[i-1]
 				for (q = i; q < j; q++) at[q] = lo + (hi - lo) * (q - i + 1) / (j - i + 1)
 			}
+			# beat grid: each cut on its nearest beat, still strictly increasing
+			if (bl > 0) for (i = 1; i < m; i++) {
+				b = int(at[i] / bl + 0.5) * bl
+				if (b <= at[i-1]) b = at[i-1] + bl
+				if (b < total - bl / 2) at[i] = b
+			}
 			for (i = 0; i < m; i++) printf "%d\t%.3f\t%.3f\n", k[i], at[i], (i + 1 < m ? at[i+1] : total)
 		}'
+}
+
+# shot_label K: "SHOT 07 | CLOSE | nova" for shot index K (0-based).
+shot_label() {
+	J_K=$1 jq -r '(env.J_K|tonumber) as $k | .shots[$k] as $s
+		| "SHOT \(($k + 1) | tostring | if length < 2 then "0" + . else . end)"
+		+ (if ($s.kind // "") != "" then " | " + ($s.kind | ascii_upcase) else "" end)
+		+ " | " + ($s.still // $s.character)' "$sb"
+}
+
+# label_gif TEXT GIF: TEXT on one bold line, rendered by agg (the media fonts).
+label_gif() {
+	local cast=${2%.gif}.cast line
+	line=$(printf '\e[1m %s \e[0m\e[?25l' "$1")
+	J_L=$line J_W=$((${#1} + 2)) jq -cn '{version:2, width:(env.J_W|tonumber), height:1}, [0.0, "o", env.J_L]' >"$cast"
+	"$bashy_bin" agg --font-dir "${MEDIA_FONT_DIR:-$(dirname "$media")/fonts}" --font-family "${MEDIA_FONT_FAMILY:-IBM Plex Mono}" \
+		--font-size 28 --theme monokai --last-frame-duration 1 --no-loop "$cast" "$2" >/dev/null || fail_render "agg could not render the label $1"
+}
+
+# number_clip CLIP LABEL OUT: burn LABEL into the top-left corner of CLIP.
+number_clip() {
+	label_gif "$2" "${3%.mp4}.label.gif"
+	ffmpeg -nostdin -hide_banner -loglevel error -y -i "$1" -i "${3%.mp4}.label.gif" \
+		-filter_complex "[1:v]format=rgba,colorchannelmixer=aa=0.85[l];[0:v][l]overlay=x=main_w*0.02:y=main_h*0.03:eof_action=repeat,format=yuv420p[v]" \
+		-map '[v]' -map '0:a?' -c:v libx264 -preset veryfast -crf 20 -c:a copy "$3" || fail_render "could not burn the shot number into $1"
+}
+
+# review_sheets CLIP...: the review set beside film.mp4 — storyboard.md
+# (shot/time/kind/still/lyric/prompt/seed), contact.png (each shot's middle
+# frame, in order) and looksheet.png (every still, labelled).
+review_sheets() {
+	local sheet=$render/sheets i=0 c d id
+	mkdir -p "$sheet/contact" "$sheet/look"
+	for c in "$@"; do
+		i=$((i + 1))
+		d=$(dur "$c")
+		ffmpeg -nostdin -hide_banner -loglevel error -y -ss "$(awk -v d="$d" 'BEGIN{printf "%.3f", d/2}')" -i "$c" -frames:v 1 \
+			-vf "scale=480:-2" "$sheet/contact/$(printf '%03d' "$i").png" || fail_render "contact sheet: no frame from shot $i"
+	done
+	ffmpeg -nostdin -hide_banner -loglevel error -y -framerate 1 -i "$sheet/contact/%03d.png" \
+		-vf "tile=4x$(((i + 3) / 4)):padding=6:margin=6:color=black" -frames:v 1 "$render/contact.png" || fail_render "contact sheet failed"
+	i=0
+	while IFS= read -r id; do
+		i=$((i + 1))
+		label_gif "$id" "$sheet/look/$(printf '%03d' "$i").label.gif"
+		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$render/portraits/$id.png" -i "$sheet/look/$(printf '%03d' "$i").label.gif" \
+			-filter_complex "[0:v]scale=640:360:force_original_aspect_ratio=decrease,pad=640:360:(ow-iw)/2:(oh-ih)/2[b];[b][1:v]overlay=x=12:y=12" \
+			-frames:v 1 "$sheet/look/$(printf '%03d' "$i").png" || fail_render "look sheet: could not label $id"
+	done < <(jq -r '(.characters[], .stills[]?) | .id' "$sb")
+	ffmpeg -nostdin -hide_banner -loglevel error -y -framerate 1 -i "$sheet/look/%03d.png" \
+		-vf "tile=3x$(((i + 2) / 3)):padding=6:margin=6:color=black" -frames:v 1 "$render/looksheet.png" || fail_render "look sheet failed"
+	cues "$render/timing.srt" >"$sheet/cues.tsv"
+	{
+		printf '# %s: storyboard (%s %s)\n\n' "$(jq -r .title "$sb")" "$kind" "$(basename "$render")"
+		printf '| shot | start | end | kind | still | lyric | prompt | seed |\n|---|---|---|---|---|---|---|---|\n'
+		while IFS=$'\t' read -r k s e; do
+			J_K=$k J_S=$s J_E=$e J_SEED=$seed J_CUES=$(cat "$sheet/cues.tsv") jq -r '(env.J_K|tonumber) as $k | .shots[$k] as $sh
+				| ($sh.still // $sh.character) as $id
+				| ([.characters[], .stills[]? | select(.id == $id) | .seed] | first // (env.J_SEED|tonumber)) as $sd
+				| (env.J_S|tonumber) as $s | (env.J_E|tonumber) as $e
+				| [env.J_CUES | split("\n")[] | select(. != "") | split("\t") | select((.[0]|tonumber) < $e and (.[1]|tonumber) > $s) | .[2]] as $ly
+				| "| \($k + 1) | \($s) | \($e) | \($sh.kind // "") | \($id) | \($ly | join(" / ") | gsub("\\|"; "/")) | \(($sh.prompt // "") | gsub("\\|"; "/")) | \($sd) |"' "$sb"
+		done <"$render/shots.tsv"
+	} >"$render/storyboard.md"
 }
 
 # still_pan IMAGE AUDIO SIZE OUT: a slow push-in over the portrait for the audio's length.
