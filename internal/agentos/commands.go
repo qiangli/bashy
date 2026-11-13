@@ -630,6 +630,7 @@ var verbSynopsis = map[string]string{
 	"satellite":          "satellite operations: list/show, owner-scoped node-provisioning invites (never for members), and transfer",
 	"member":             "Cloudbox account members: list, invite, accept, set circle, remove, and check",
 	"group":              "Cloudbox account groups: list, add members, remove members, and delete",
+	"superadmin":         "Cloudbox operator repair: list and remove any owner's hosts (step-up session only)",
 	"suite":              "Cloudbox app suites: list, show, create, add, remove, delete, and share with circles",
 	"reproduce":          "dry-run what master metadata can recreate (reproduce --plan; read-only, no --apply)",
 	"paired-host":        "paired hosts from the master (paired-host ls), plus invite: the pair-once code for your OWN account — owner node provisioning, never a member invitation",

@@ -95,6 +95,17 @@ func dispatchGroup(args []string) int {
 	return 0
 }
 
+// dispatchSuperadmin runs the cloudbox operator repair tree from yoke.
+func dispatchSuperadmin(args []string) int {
+	cmd := fleet.NewSuperadminCmd()
+	setCobraArgs(cmd, args)
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy superadmin:", err)
+		return fleet.ExitCode(err)
+	}
+	return 0
+}
+
 // dispatchSuite runs the Cloudbox app suite tree from yoke.
 func dispatchSuite(args []string) int {
 	cmd := fleet.NewSuiteCmd()

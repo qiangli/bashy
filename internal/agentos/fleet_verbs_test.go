@@ -286,6 +286,19 @@ func TestShareWhoFrontDoorRegistration(t *testing.T) {
 	}
 }
 
+func TestSuperadminFrontDoorRegistration(t *testing.T) {
+	ringDir(t)
+	schemas := cobraSchemas("superadmin")
+	for _, path := range []string{"superadmin", "superadmin hosts", "superadmin hosts ls", "superadmin hosts rm"} {
+		if _, ok := schemas[path]; !ok {
+			t.Errorf("superadmin schema missing %q", path)
+		}
+	}
+	if synopsisOf("superadmin") == "" {
+		t.Error("superadmin has no synopsis")
+	}
+}
+
 func TestSuiteFrontDoorRegistration(t *testing.T) {
 	ringDir(t)
 	if !slices.Contains(alwaysShimVerbs, "suite") || synopsisOf("suite") == "" {

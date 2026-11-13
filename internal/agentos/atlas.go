@@ -208,6 +208,12 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite},
 		Stability: atlas.StabilityExperimental,
 	},
+	"superadmin": {
+		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
+		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork},
+		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite},
+		Stability: atlas.StabilityExperimental,
+	},
 	"suite": {
 		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
 		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork, atlas.CapNeedsPairing},
