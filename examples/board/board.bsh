@@ -1,0 +1,152 @@
+#!/usr/bin/env -S bashy --bashsharp
+set -euo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+runner=${BASHY_BIN:-bashy}
+git_bin=${BOARD_GIT_BIN:-/usr/bin/git}
+pin=5069fb56ce309d5572ca3ed60d4d3c322a03a452
+fork=https://github.com/qiangli/kaneo-shape.git
+home=${BASHY_HOME:-$HOME/.bashy}
+state=$home/board
+source=$state/source
+port=${BOARD_CONSOLE_PORT:-22751}
+
+usage() {
+  cat <<'EOF'
+board install|start|stop|status|source
+  install  Fetch the pinned MIT source, build the web UI and API bundle, and register a shaped app.
+  start    Run the local app console in the foreground; the board server starts on first request.
+  stop     Stop the console started by this command.
+  status   Show the managed console and source revision.
+  source   Print the managed source directory.
+EOF
+}
+
+installed() {
+  test -f "$source/.board-source-pin" &&
+    test "$(cat "$source/.board-source-pin")" = "$pin" &&
+    test -s "$source/board-console/dist/api.mjs" &&
+    test -s "$source/board-console/web/index.html" &&
+    test -f "$source/shaped.json"
+}
+
+register_app() {
+  "$runner" app add board --type shaped --source "$source" --label Board \
+    --icon '📋' --tip 'A personal board with lists and cards, and a shapeable web UI'
+}
+
+install() {
+  if installed; then
+    register_app
+    return
+  fi
+  if test -e "$source"; then
+    echo 'board: source exists but does not match the pinned build; inspect it manually' >&2
+    exit 1
+  fi
+  test -x "$git_bin"
+  command -v go >/dev/null
+  command -v node >/dev/null
+  command -v corepack >/dev/null
+  command -v initdb >/dev/null
+  command -v pg_ctl >/dev/null
+  mkdir -p "$state"
+  scratch=$(mktemp -d "$state/install.XXXXXX")
+  trap 'rm -rf "$scratch"' EXIT
+  "$git_bin" clone --quiet --filter=blob:none "$fork" "$scratch/source"
+  "$git_bin" -C "$scratch/source" switch --quiet -c shape-board "$pin"
+  if ! head -n 1 "$scratch/source/LICENSE" | grep -qx 'MIT License'; then
+    echo 'board: pinned source is not MIT licensed' >&2
+    exit 1
+  fi
+  if find "$scratch/source" -maxdepth 2 -type d \( -name ee -o -name premium -o -name enterprise \) -print | grep -q .; then
+    echo 'board: non-permissive source directory found' >&2
+    exit 1
+  fi
+  "$git_bin" -C "$scratch/source" apply --unidiff-zero "$here/board-shape.patch"
+  # The shaping pipeline refuses symlinks in imported workspaces; neither is
+  # needed to build or run the board (agent tooling pointer; email preview
+  # assets already copied into the web build).
+  "$git_bin" -C "$scratch/source" rm --quiet -- .claude/skills packages/email/src/templates/static
+  # The prebuilt bundle and web UI live under gitignored dist/ paths; without
+  # negations the shaping import would silently drop them from candidates.
+  printf '\n!board-console/dist/\n!board-console/dist/**\n' >> "$scratch/source/.gitignore"
+  cp "$here/sentry-stub.ts" "$scratch/source/board-sentry-stub.ts"
+  (cd "$scratch/source" && corepack pnpm install --frozen-lockfile)
+  (cd "$scratch/source/packages/email" && corepack pnpm run build)
+  (cd "$scratch/source/packages/permissions" && corepack pnpm run build)
+  (cd "$scratch/source/packages/importers" && corepack pnpm run build)
+  (cd "$scratch/source/apps/api" && corepack pnpm run build)
+  (cd "$scratch/source" && VITE_API_URL=/board/api corepack pnpm --dir apps/web run build)
+  "$scratch/source/node_modules/.bin/esbuild" "$scratch/source/apps/api/dist/index.js" \
+    --bundle --platform=node --format=esm \
+    --outfile="$scratch/source/board-console-build-api.mjs" \
+    --alias:@sentry/node="$scratch/source/board-sentry-stub.ts" \
+    --alias:@sentry/profiling-node="$scratch/source/board-sentry-stub.ts" \
+    --banner:js='import { createRequire as __boardCreateRequire } from "node:module";const require = __boardCreateRequire(import.meta.url);'
+  mkdir -p "$scratch/source/board-console/dist/drizzle" "$scratch/source/board-console/web"
+  mv "$scratch/source/board-console-build-api.mjs" "$scratch/source/board-console/dist/api.mjs"
+  cp "$scratch/source/apps/api/drizzle/"*.sql "$scratch/source/board-console/dist/drizzle/"
+  cp -r "$scratch/source/apps/api/drizzle/meta" "$scratch/source/board-console/dist/drizzle/meta"
+  cp -r "$scratch/source/apps/web/dist/." "$scratch/source/board-console/web/"
+  rm -f "$scratch/source/board-sentry-stub.ts"
+  cp "$here/board-console/main.go" "$scratch/source/board-console/"
+  cp "$here/go.mod" "$scratch/source/go.mod"
+  cp "$here/shaped.json" "$scratch/source/shaped.json"
+  cp "$here/contract.bsh" "$scratch/source/contract.bsh"
+  mkdir -p "$scratch/source/checks"
+  cp "$here/checks/board.bsh" "$scratch/source/checks/board.bsh"
+  find "$scratch/source" -path "$scratch/source/board-console" -prune -o \
+    -type d \( -name node_modules -o -name dist \) -prune -exec rm -rf {} +
+  printf '%s\n' "$pin" > "$scratch/source/.board-source-pin"
+  "$git_bin" -C "$scratch/source" add -f shaped.json contract.bsh checks/board.bsh \
+    go.mod board-console/main.go board-console/dist board-console/web \
+    apps/api/src/index.ts apps/web/index.html apps/web/src/main.tsx apps/web/vite.config.ts \
+    .gitignore .board-source-pin
+  "$git_bin" -C "$scratch/source" -c user.name='Bashy Board' -c user.email='board@example.invalid' \
+    commit -qm 'Add per-principal shaping adapter' \
+    -m 'Sprint: #631' -m 'Story: #210' -m 'Story-ID: 0f9898f928bb' -m 'Agent: muse-conductor'
+  mv "$scratch/source" "$source"
+  register_app
+}
+
+running_pid() {
+  test -f "$state/console.pid" || return 1
+  pid=$(cat "$state/console.pid")
+  case "$pid" in *[!0-9]*|'') return 1;; esac
+  kill -0 "$pid" 2>/dev/null || return 1
+  cmdline=$(/bin/ps -p "$pid" -o args= 2>/dev/null) || return 1
+  case "$cmdline" in *"app serve --bind lan --port $port --pair"*) ;; *) return 1 ;; esac
+  printf '%s\n' "$pid"
+}
+
+case ${1:---help} in
+  -h|--help|help) usage ;;
+  install) install ;;
+  start)
+    installed || { echo 'board: run board install first' >&2; exit 1; }
+    if running_pid >/dev/null; then echo "board: console already running on port $port"; exit 0; fi
+    echo "board: paired console starting on port $port; run bashy app pair --allow board --principal NAME --port $port"
+    "$runner" app serve --bind lan --port "$port" --pair &
+    pid=$!
+    echo "$pid" > "$state/console.pid"
+    wait "$pid" || result=$?
+    rm -f "$state/console.pid"
+    exit "${result:-0}"
+    ;;
+  stop)
+    if pid=$(running_pid); then
+      kill "$pid"
+      rm -f "$state/console.pid"
+      echo 'board: console stopped'
+    else
+      echo 'board: console is not running'
+    fi
+    ;;
+  status)
+    if installed; then echo "board: source pin $pin"; else echo 'board: not installed'; fi
+    if running_pid >/dev/null; then echo "board: console running on port $port"; else echo 'board: console stopped'; fi
+    ;;
+  source) installed && printf '%s\n' "$source" ;;
+  *) usage >&2; exit 2 ;;
+esac

@@ -1,0 +1,82 @@
+diff --git a/apps/api/src/index.ts b/apps/api/src/index.ts
+index 370c2bd..7102185 100644
+--- a/apps/api/src/index.ts
++++ b/apps/api/src/index.ts
+@@ -1072,6 +1072,9 @@ export async function startServer(
+   const server = serve(
+     {
+       fetch: app.fetch,
++      // Shapeable build: loopback only. The board console reaches the API
++      // through the launcher's same-host proxy; nothing listens for the LAN.
++      hostname: "127.0.0.1",
+       port,
+     },
+     () => {
+@@ -1160,7 +1163,10 @@ const isMainModule =
+   import.meta.url === pathToFileURL(entrypoint).href;
+ 
+ if (isMainModule) {
+-  void startServer(injectWebSocket);
++  void startServer(
++    injectWebSocket,
++    Number(process.env.BOARD_API_PORT ?? 1337),
++  );
+ }
+ 
+ export type AppType =
+diff --git a/apps/web/index.html b/apps/web/index.html
+index a26f528..ec43850 100644
+--- a/apps/web/index.html
++++ b/apps/web/index.html
+@@ -33,26 +33,6 @@
+   <meta name="application-name" content="Kaneo">
+   <link rel="canonical" href="https://kaneo.app">
+ 
+-  <script>
+-    if (window.location.hostname === 'demo.kaneo.app') {
+-      const script = document.createElement('script');
+-      script.defer = true;
+-      script.setAttribute('data-domain', 'demo.kaneo.app');
+-      script.src = 'https://plausible.kaneo.app/js/script.js';
+-      document.head.appendChild(script);
+-    }
+-
+-    if (window.location.hostname === 'cloud.kaneo.app') {
+-      window.plausible = window.plausible || function () {
+-        (window.plausible.q = window.plausible.q || []).push(arguments);
+-      };
+-      const script = document.createElement('script');
+-      script.defer = true;
+-      script.setAttribute('data-domain', 'cloud.kaneo.app');
+-      script.src = 'https://plausible.kaneo.app/js/script.js';
+-      document.head.appendChild(script);
+-    }
+-  </script>
+ </head>
+ 
+ <body>
+diff --git a/apps/web/src/main.tsx b/apps/web/src/main.tsx
+index 7d5139e..791f700 100644
+--- a/apps/web/src/main.tsx
++++ b/apps/web/src/main.tsx
+@@ -46,6 +46,7 @@ console.log(`
+ `);
+ 
+ const router = createRouter({
++  basepath: "/board",
+   routeTree,
+   defaultPreload: "intent",
+   defaultPreloadStaleTime: 0,
+diff --git a/apps/web/vite.config.ts b/apps/web/vite.config.ts
+index aacbae8..d6508e5 100644
+--- a/apps/web/vite.config.ts
++++ b/apps/web/vite.config.ts
+@@ -44,7 +44,7 @@ export default defineConfig({
+   define: {
+     __APP_VERSION__: JSON.stringify(packageJson.version),
+   },
+-  base: "/",
++  base: "/board/",
+   plugins: lazyPlugins(() => [
+     tanstackRouter({
+       autoCodeSplitting: true,
