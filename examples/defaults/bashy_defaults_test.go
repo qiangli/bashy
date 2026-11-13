@@ -98,7 +98,7 @@ echo "$*" >> "$FAKE_LOG"
 src="$BASHY_HOME/src/bashy"
 case "$1 $2" in
   "src fetch"|"src upgrade")
-    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/onboard" "$src/examples/satellite-provision" "$src/examples/media" "$src/examples/record" "$src/examples/cast" "$src/examples/service-door" "$src/examples/defaults" "$src/examples/oss-rods" "$src/kb/defaults/pages"
+    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/onboard" "$src/examples/satellite-provision" "$src/examples/media" "$src/examples/record" "$src/examples/cast" "$src/examples/chrome" "$src/examples/service-door" "$src/examples/defaults" "$src/examples/oss-rods" "$src/kb/defaults/pages"
     : > "$src/examples/outpost-profile/outpost-profile.bsh"
     : > "$src/examples/satellite-member/satellite-member.bsh"
     : > "$src/examples/onboard/onboard.bsh"
@@ -106,6 +106,7 @@ case "$1 $2" in
     : > "$src/examples/media/media.bsh"
     : > "$src/examples/record/record.bsh"
     : > "$src/examples/cast/cast.bsh"
+    : > "$src/examples/chrome/chrome.bsh"
     : > "$src/examples/service-door/service-door.bsh"
     : > "$src/examples/service-door/song-suno.bsh"
     : > "$src/examples/service-door/image-chatgpt.bsh"
@@ -208,7 +209,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "transcribe: registered", "song-acestep: registered", "image-qwen: registered", "narrate-local: registered", "transcribe-whisperx: registered"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "transcribe: registered", "song-acestep: registered", "image-qwen: registered", "narrate-local: registered", "transcribe-whisperx: registered"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}
@@ -220,6 +221,8 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 		"media":         "examples/media/media.bsh",
 		"record":        "examples/record/record.bsh",
 		"cast":          "examples/cast/cast.bsh",
+		"chrome":        "examples/chrome/chrome.bsh",
+		"chrome-open":   "examples/chrome/chrome.bsh",
 		"plan":          "examples/service-door/service-door.bsh",
 		"image":         "examples/service-door/service-door.bsh",
 		"song":          "examples/service-door/service-door.bsh",
@@ -232,7 +235,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 		}
 	}
 	// Service verbs pass their open role as the door's first fixed argument.
-	for name, role := range map[string]string{"plan": "plan", "image": "image.generate", "narrate": "narrate", "song": "song", "animate": "animate", "transcribe": "transcribe"} {
+	for name, role := range map[string]string{"chrome-open": "open", "plan": "plan", "image": "image.generate", "narrate": "narrate", "song": "song", "animate": "animate", "transcribe": "transcribe"} {
 		if got := f.registered(name + ".role"); got != role {
 			t.Errorf("%s role = %q, want %q", name, got, role)
 		}

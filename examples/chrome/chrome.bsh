@@ -1,0 +1,593 @@
+#!/usr/bin/env -S bashy --bashsharp
+#bashy
+# @name chrome
+# @synopsis Detect, install, or open Google Chrome across macOS, Linux, and Windows
+# @os darwin linux windows
+# @effects read write exec net
+# @group browser
+# @tier userland
+# @stage cross
+# @shape result
+
+~~~skill as guide
+---
+name: chrome
+description: Detect, install, or open Google Chrome across macOS, Linux, and Windows. Checks whether Chrome is already installed first (if installed, done); installs when missing and opens URLs cross-platform.
+metadata:
+  requires: "has=bashy"
+---
+# chrome — cross-platform Google Chrome detection, installation, and launcher
+
+`chrome` (and its `chrome-open` alias) is a single Bash# command and skill
+for macOS, Linux, and Windows. It always checks whether Chrome is already
+installed first: when Chrome is present, `chrome` / `chrome ensure` /
+`chrome install` reports the detected binary and exits `0` without
+reinstalling.
+
+## Usage
+
+```sh
+bashy chrome [ensure|install] [--dry-run] [--json]
+bashy chrome status [--json]
+bashy chrome doctor [--json]
+bashy chrome path
+bashy chrome open URL [URL...]
+bashy chrome-open URL [URL...]
+bashy chrome --skill
+```
+
+## Subcommands
+
+- **`ensure` / `install`** *(default when no subcommand is given)*:
+  1. Detects whether Google Chrome (or Chromium on Linux arm64) is already
+     installed via `$CHROME`, standard OS application paths, and `PATH`.
+  2. **If installed, done** — prints the path and version and exits `0`.
+  3. If missing, installs Google Chrome for the current OS (`brew install
+     --cask google-chrome` or official `.dmg` on macOS; official `.deb` /
+     `.rpm` on Linux `x86_64` or `chromium` on `arm64`; `winget` or official
+     enterprise `.msi` via a pinned `~~~powershell` fence on Windows) and
+     verifies detection afterward. Pass `--dry-run` to preview the install
+     command without executing it.
+- **`status`**:
+  Reports whether Chrome is installed, its resolved path, and its version
+  without installing (`0` if present, `1` if missing).
+- **`doctor`**:
+  Emits a side-effect-free readiness check (`--json` emits
+  `bashy-svc-doctor-v1` with `available` and `missing[].install`).
+- **`path`**:
+  Prints the resolved Chrome executable path (`0` if found, `1` if absent).
+- **`open URL...`** (also registered as `bashy chrome-open URL...`):
+  Opens each URL as a tab in Google Chrome across macOS, Linux, and Windows.
+
+## Coordinating with `bashy browser`
+
+- For headless one-shot or persistent CDP automation: `bashy browser --mode solo|probe ...`.
+- For driving the operator's logged-in Chrome (`--mode live`): claim the
+  `chrome-browser` resource first (`bashy claim chrome-browser --intent "..."`)
+  and release it when finished (`bashy claim release resource:chrome-browser`).
+~~~
+
+set -e
+
+PROG=chrome
+
+usage() {
+    cat >&2 <<EOF
+Usage: $PROG [ensure|install] [--dry-run] [--json]
+       $PROG status [--json]
+       $PROG doctor [--json]
+       $PROG path
+       $PROG open URL [URL...]
+       $PROG --skill
+EOF
+    exit 2
+}
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+detect_os() {
+    if [ -n "${CHROME_TEST_OS:-}" ]; then
+        printf '%s\n' "$CHROME_TEST_OS"
+        return 0
+    fi
+    case $(uname -s) in
+        Darwin*) printf 'darwin\n' ;;
+        Linux*) printf 'linux\n' ;;
+        MINGW*|MSYS*|CYGWIN*|Windows*) printf 'windows\n' ;;
+        *) printf 'linux\n' ;;
+    esac
+}
+
+detect_arch() {
+    if [ -n "${CHROME_TEST_ARCH:-}" ]; then
+        printf '%s\n' "$CHROME_TEST_ARCH"
+        return 0
+    fi
+    case $(uname -m 2>/dev/null || echo x86_64) in
+        arm64|aarch64) printf 'arm64\n' ;;
+        *) printf 'x86_64\n' ;;
+    esac
+}
+
+# Print the platform-appropriate one-line install hint.
+install_hint() {
+    local os arch
+    os=$(detect_os)
+    arch=$(detect_arch)
+    case "$os" in
+        darwin)
+            printf 'brew install --cask google-chrome\n'
+            ;;
+        linux)
+            if [ "$arch" = "arm64" ]; then
+                printf 'sudo apt-get update && sudo apt-get install -y chromium-browser || sudo apt-get install -y chromium\n'
+            else
+                printf 'curl -fsSL https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb -o /tmp/google-chrome.deb && sudo apt-get update && sudo apt-get install -y /tmp/google-chrome.deb\n'
+            fi
+            ;;
+        windows)
+            printf 'winget install --id Google.Chrome --exact --silent --accept-package-agreements --accept-source-agreements\n'
+            ;;
+    esac
+}
+
+# Resolve the installed Chrome executable path. Returns 0 and prints the path
+# when found; returns 1 when absent.
+detect_chrome() {
+    if [ -n "${CHROME:-}" ] && [ -f "$CHROME" ]; then
+        printf '%s\n' "$CHROME"
+        return 0
+    fi
+
+    local os root c p
+    os=$(detect_os)
+    root=${CHROME_TEST_ROOT:-}
+
+    case "$os" in
+        darwin)
+            for c in \
+                "$root/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+                "$root/Applications/Chromium.app/Contents/MacOS/Chromium"
+            do
+                if [ -f "$c" ]; then
+                    printf '%s\n' "$c"
+                    return 0
+                fi
+            done
+            if [ -z "$root" ] && [ -n "${HOME:-}" ]; then
+                for c in \
+                    "$HOME/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+                    "$HOME/Applications/Chromium.app/Contents/MacOS/Chromium"
+                do
+                    if [ -f "$c" ]; then
+                        printf '%s\n' "$c"
+                        return 0
+                    fi
+                done
+            fi
+            if [ "${CHROME_NO_SYSTEM_PATH:-0}" != "1" ]; then
+                for p in "Google Chrome" google-chrome chromium; do
+                    if c=$(command -v "$p" 2>/dev/null) && [ -n "$c" ] && [ -f "$c" ]; then
+                        printf '%s\n' "$c"
+                        return 0
+                    fi
+                done
+            fi
+            ;;
+        linux)
+            for c in \
+                "$root/usr/bin/google-chrome-stable" \
+                "$root/usr/bin/google-chrome" \
+                "$root/opt/google/chrome/google-chrome" \
+                "$root/usr/bin/chromium" \
+                "$root/usr/bin/chromium-browser" \
+                "$root/snap/bin/chromium"
+            do
+                if [ -f "$c" ] && [ -x "$c" ]; then
+                    printf '%s\n' "$c"
+                    return 0
+                fi
+            done
+            if [ "${CHROME_NO_SYSTEM_PATH:-0}" != "1" ]; then
+                for p in google-chrome-stable google-chrome chromium chromium-browser; do
+                    if c=$(command -v "$p" 2>/dev/null) && [ -n "$c" ] && [ -f "$c" ]; then
+                        printf '%s\n' "$c"
+                        return 0
+                    fi
+                done
+            fi
+            ;;
+        windows)
+            for c in \
+                "$root/c/Program Files/Google/Chrome/Application/chrome.exe" \
+                "$root/c/Program Files (x86)/Google/Chrome/Application/chrome.exe"
+            do
+                if [ -f "$c" ]; then
+                    printf '%s\n' "$c"
+                    return 0
+                fi
+            done
+            if [ -z "$root" ]; then
+                local pf pfx86 localapp
+                pf=${PROGRAMFILES:-C:/Program Files}; pf=${pf//\\//}
+                pfx86="${PROGRAMFILES(X86):-C:/Program Files (x86)}"; pfx86=${pfx86//\\//}
+                localapp=${LOCALAPPDATA:-}; localapp=${localapp//\\//}
+                for c in \
+                    "$pf/Google/Chrome/Application/chrome.exe" \
+                    "$pfx86/Google/Chrome/Application/chrome.exe" \
+                    "C:/Program Files/Google/Chrome/Application/chrome.exe" \
+                    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe" \
+                    "/c/Program Files/Google/Chrome/Application/chrome.exe" \
+                    "/c/Program Files (x86)/Google/Chrome/Application/chrome.exe" \
+                    ${localapp:+"$localapp/Google/Chrome/Application/chrome.exe"}
+                do
+                    if [ -n "$c" ] && [ -f "$c" ]; then
+                        printf '%s\n' "$c"
+                        return 0
+                    fi
+                done
+            fi
+            if [ "${CHROME_NO_SYSTEM_PATH:-0}" != "1" ]; then
+                for p in chrome.exe chrome google-chrome; do
+                    if c=$(command -v "$p" 2>/dev/null) && [ -n "$c" ] && [ -f "$c" ]; then
+                        printf '%s\n' "$c"
+                        return 0
+                    fi
+                done
+            fi
+            ;;
+    esac
+    return 1
+}
+
+chrome_version() {
+    local bin=$1 ver=""
+    ver=$("$bin" --version 2>/dev/null | head -n 1 || true)
+    ver=${ver%$'\r'}
+    ver=${ver%"${ver##*[![:space:]]}"}
+    if [ -z "$ver" ]; then
+        ver="Google Chrome"
+    fi
+    printf '%s\n' "$ver"
+}
+
+run_as_root() {
+    if [ "$(id -u 2>/dev/null || echo 0)" = "0" ]; then
+        "$@"
+    elif command -v sudo >/dev/null 2>&1; then
+        sudo -n "$@"
+    else
+        "$@"
+    fi
+}
+
+install_macos() {
+    if command -v brew >/dev/null 2>&1; then
+        brew install --cask google-chrome && return 0
+    fi
+    local tmp dmg mnt target
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/chrome-install.XXXXXX")
+    dmg="$tmp/googlechrome.dmg"
+    mnt="$tmp/mnt"
+    mkdir -p "$mnt"
+    curl -fsSL "https://dl.google.com/chrome/mac/universal/stable/GGRO/googlechrome.dmg" -o "$dmg"
+    hdiutil attach "$dmg" -mountpoint "$mnt" -nobrowse -quiet
+    target="/Applications"
+    if [ ! -w "$target" ]; then
+        target="$HOME/Applications"
+        mkdir -p "$target"
+    fi
+    cp -R "$mnt/Google Chrome.app" "$target/"
+    hdiutil detach "$mnt" -quiet || true
+    rm -rf "$tmp"
+}
+
+install_linux() {
+    local arch tmp deb rpm
+    arch=$(detect_arch)
+    if [ "$arch" = "arm64" ]; then
+        if command -v apt-get >/dev/null 2>&1; then
+            run_as_root env DEBIAN_FRONTEND=noninteractive apt-get update -y
+            run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y chromium-browser || \
+                run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y chromium
+            return 0
+        elif command -v dnf >/dev/null 2>&1; then
+            run_as_root dnf install -y chromium
+            return 0
+        fi
+        fail "unsupported Linux arm64 package manager for Chromium installation" 1
+    fi
+
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/chrome-install.XXXXXX")
+    if command -v apt-get >/dev/null 2>&1; then
+        deb="$tmp/google-chrome-stable_current_amd64.deb"
+        curl -fsSL "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" -o "$deb"
+        chmod 644 "$deb"
+        run_as_root env DEBIAN_FRONTEND=noninteractive apt-get update -y
+        run_as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y "$deb"
+        rm -rf "$tmp"
+        return 0
+    elif command -v dnf >/dev/null 2>&1; then
+        rpm="$tmp/google-chrome-stable_current_x86_64.rpm"
+        curl -fsSL "https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm" -o "$rpm"
+        run_as_root dnf localinstall -y "$rpm"
+        rm -rf "$tmp"
+        return 0
+    elif command -v yum >/dev/null 2>&1; then
+        rpm="$tmp/google-chrome-stable_current_x86_64.rpm"
+        curl -fsSL "https://dl.google.com/linux/direct/google-chrome-stable_current_x86_64.rpm" -o "$rpm"
+        run_as_root yum localinstall -y "$rpm"
+        rm -rf "$tmp"
+        return 0
+    fi
+    rm -rf "$tmp"
+    fail "no supported package manager (apt-get, dnf, yum) found on Linux" 1
+}
+
+install_windows_ps() {
+~~~powershell
+$ErrorActionPreference = 'Stop'
+$winget = Get-Command winget -ErrorAction SilentlyContinue
+if ($null -ne $winget) {
+    & winget install --id Google.Chrome --exact --silent --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -eq 0) {
+        exit 0
+    }
+}
+$msi = Join-Path $env:TEMP "googlechromestandaloneenterprise64.msi"
+Invoke-WebRequest -Uri "https://dl.google.com/dl/chrome/install/googlechromestandaloneenterprise64.msi" -OutFile $msi -UseBasicParsing
+$p = Start-Process msiexec.exe -ArgumentList @('/i', $msi, '/qn', '/norestart') -Wait -PassThru
+Remove-Item -Path $msi -Force -ErrorAction SilentlyContinue
+if ($p.ExitCode -ne 0) {
+    throw "msiexec failed with exit code $($p.ExitCode)"
+}
+~~~
+}
+
+open_windows_ps() {
+~~~powershell
+$ErrorActionPreference = 'Stop'
+Start-Process -FilePath $env:CHROME_OPEN_BIN -ArgumentList @($env:CHROME_OPEN_URL)
+~~~
+}
+
+install_chrome() {
+    if [ -n "${CHROME_INSTALL_CMD:-}" ]; then
+        eval "$CHROME_INSTALL_CMD"
+        return $?
+    fi
+    case $(detect_os) in
+        darwin) install_macos ;;
+        linux) install_linux ;;
+        windows) install_windows_ps ;;
+    esac
+}
+
+json_escape() {
+    local s=$1
+    s=${s//\\/\\\\}
+    s=${s//\"/\\\"}
+    s=${s//$'\n'/\\n}
+    s=${s//$'\r'/\\r}
+    s=${s//$'\t'/\\t}
+    printf '%s' "$s"
+}
+
+json_str_or_null() {
+    if [ -z "$1" ]; then
+        printf 'null'
+    else
+        printf '"%s"' "$(json_escape "$1")"
+    fi
+}
+
+emit_status_json() {
+    local status=$1 installed=$2 action=$3 path=$4 ver=$5 hint=$6
+    printf '{"status":"%s","installed":%s,"action":"%s","os":"%s","arch":"%s","path":%s,"version":%s,"install":%s}\n' \
+        "$(json_escape "$status")" \
+        "$installed" \
+        "$(json_escape "$action")" \
+        "$(json_escape "$(detect_os)")" \
+        "$(json_escape "$(detect_arch)")" \
+        "$(json_str_or_null "$path")" \
+        "$(json_str_or_null "$ver")" \
+        "$(json_str_or_null "$hint")"
+}
+
+cmd_status() {
+    local as_json=$1 bin="" ver="" hint=""
+    if bin=$(detect_chrome); then
+        ver=$(chrome_version "$bin")
+        if [ "$as_json" = 1 ]; then
+            emit_status_json "installed" true "none" "$bin" "$ver" ""
+        else
+            echo "$PROG: installed at $bin ($ver)"
+        fi
+        return 0
+    fi
+    hint=$(install_hint)
+    if [ "$as_json" = 1 ]; then
+        emit_status_json "missing" false "none" "" "" "$hint"
+    else
+        echo "$PROG: not installed (install: $hint)" >&2
+    fi
+    return 1
+}
+
+cmd_doctor() {
+    local as_json=$1 bin="" ver="" hint=""
+    if bin=$(detect_chrome); then
+        ver=$(chrome_version "$bin")
+        if [ "$as_json" = 1 ]; then
+            printf '{"schema_version":"bashy-svc-doctor-v1","available":true,"os":"%s","arch":"%s","path":"%s","version":"%s","missing":[]}\n' \
+                "$(json_escape "$(detect_os)")" \
+                "$(json_escape "$(detect_arch)")" \
+                "$(json_escape "$bin")" \
+                "$(json_escape "$ver")"
+        else
+            echo "$PROG doctor: ok ($bin — $ver)"
+        fi
+        return 0
+    fi
+    hint=$(install_hint)
+    if [ "$as_json" = 1 ]; then
+        printf '{"schema_version":"bashy-svc-doctor-v1","available":false,"os":"%s","arch":"%s","missing":[{"need":"has=chrome","install":"%s"}]}\n' \
+            "$(json_escape "$(detect_os)")" \
+            "$(json_escape "$(detect_arch)")" \
+            "$(json_escape "$hint")"
+    else
+        echo "$PROG doctor: missing Chrome (install: $hint)" >&2
+    fi
+    return 1
+}
+
+cmd_ensure() {
+    local dry_run=$1 as_json=$2 bin="" ver="" hint=""
+    # Step 1: Always detect first. If installed, done.
+    if bin=$(detect_chrome); then
+        ver=$(chrome_version "$bin")
+        if [ "$as_json" = 1 ]; then
+            emit_status_json "installed" true "none" "$bin" "$ver" ""
+        else
+            echo "$PROG: already installed at $bin ($ver)"
+        fi
+        return 0
+    fi
+
+    hint=$(install_hint)
+    if [ "$dry_run" = 1 ]; then
+        if [ "$as_json" = 1 ]; then
+            emit_status_json "would_install" false "dry-run" "" "" "$hint"
+        else
+            echo "$PROG: would install ($(detect_os)/$(detect_arch)): $hint"
+        fi
+        return 0
+    fi
+
+    install_chrome || fail "installation failed on $(detect_os)/$(detect_arch)" 1
+    if ! bin=$(detect_chrome); then
+        fail "install completed but Chrome executable was not found after installation" 1
+    fi
+    ver=$(chrome_version "$bin")
+    if [ "$as_json" = 1 ]; then
+        emit_status_json "installed" true "installed" "$bin" "$ver" ""
+    else
+        echo "$PROG: installed at $bin ($ver)"
+    fi
+    return 0
+}
+
+cmd_open() {
+    local dry_run=0 as_json=0 urls=()
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --dry-run) dry_run=1 ;;
+            --json) as_json=1 ;;
+            -h|--help) usage ;;
+            *) urls+=("$1") ;;
+        esac
+        shift
+    done
+    [ ${#urls[@]} -gt 0 ] || usage
+
+    local bin os u
+    if ! bin=$(detect_chrome); then
+        fail "Chrome is not installed (run: bashy chrome ensure)" 1
+    fi
+    os=$(detect_os)
+
+    for u in "${urls[@]}"; do
+        if [ "$dry_run" = 1 ]; then
+            if [ "$as_json" = 1 ]; then
+                printf '{"action":"dry-run","os":"%s","path":"%s","url":"%s"}\n' \
+                    "$(json_escape "$os")" "$(json_escape "$bin")" "$(json_escape "$u")"
+            else
+                echo "$PROG open: would open $u with $bin ($os)"
+            fi
+            continue
+        fi
+        if [ -n "${CHROME_OPEN_LOG:-}" ]; then
+            printf '%s|%s|%s\n' "$os" "$bin" "$u" >> "$CHROME_OPEN_LOG"
+            continue
+        fi
+        case "$os" in
+            darwin)
+                if [ -x /usr/bin/open ] && [ -z "${CHROME:-}" ] && [ -z "${CHROME_TEST_ROOT:-}" ]; then
+                    /usr/bin/open -a "Google Chrome" "$u"
+                else
+                    "$bin" "$u" >/dev/null 2>&1 &
+                fi
+                ;;
+            linux)
+                "$bin" "$u" >/dev/null 2>&1 &
+                ;;
+            windows)
+                CHROME_OPEN_BIN="$bin" CHROME_OPEN_URL="$u" open_windows_ps
+                ;;
+        esac
+    done
+}
+
+# Entry dispatch.
+if [ $# -eq 0 ]; then
+    cmd_ensure 0 0
+    exit 0
+fi
+
+case "$1" in
+    --skill)
+        sed -n '/^~~~skill/,/^~~~$/p' "$0" | sed '1d;$d'
+        exit 0
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+    ensure|install|status|doctor|path|open)
+        sub=$1
+        shift
+        ;;
+    --dry-run|--json)
+        sub=ensure
+        ;;
+    *)
+        usage
+        ;;
+esac
+
+if [ "$sub" = "open" ]; then
+    cmd_open "$@"
+    exit 0
+fi
+
+if [ "$sub" = "path" ]; then
+    [ $# -eq 0 ] || usage
+    detect_chrome
+    exit $?
+fi
+
+dry_run=0
+as_json=0
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --dry-run) dry_run=1 ;;
+        --json) as_json=1 ;;
+        -h|--help) usage ;;
+        *) usage ;;
+    esac
+    shift
+done
+
+case "$sub" in
+    ensure|install)
+        cmd_ensure "$dry_run" "$as_json"
+        ;;
+    status)
+        cmd_status "$as_json"
+        ;;
+    doctor)
+        cmd_doctor "$as_json"
+        ;;
+esac

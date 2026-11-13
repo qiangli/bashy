@@ -58,7 +58,9 @@ Default commands: `outpost-profile` (examples/outpost-profile),
 satellite from plan to teardown), `media` (examples/media: PDFs and narrated
 videos), `record` (examples/record: camera and microphone takes), `cast`
 (examples/cast: a command's terminal output as asciicast v2 under a
-pty/ConPTY, the recorder examples/video uses), the service verbs `plan`,
+pty/ConPTY, the recorder examples/video uses), `chrome` and `chrome-open`
+(examples/chrome: cross-platform Google Chrome detection, installation, and
+tab opening), the service verbs `plan`,
 `image`, `draw`, `pdf`, `video`, `narrate`, `song`, `animate`, `transcribe`,
 `email` and `drive` (examples/service-door: one door body per role; providers
 are rods, see docs/service-rod-contract.md), the M2 oss rods `song-acestep`,
@@ -90,6 +92,8 @@ satellite-provision|examples/satellite-provision/satellite-provision.bsh|read,wr
 media|examples/media/media.bsh|read,write,exec,net
 record|examples/record/record.bsh|read,write,exec
 cast|examples/cast/cast.bsh|read,write,exec
+chrome|examples/chrome/chrome.bsh|read,write,exec,net
+chrome-open|examples/chrome/chrome.bsh|read,exec|open
 plan|examples/service-door/service-door.bsh|read,exec,net|plan
 image|examples/service-door/service-door.bsh|read,write,exec,net|image.generate
 draw|examples/service-door/service-door.bsh|read,write,exec,net|draw
