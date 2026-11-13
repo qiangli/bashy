@@ -218,7 +218,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "film: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-klein: registered", "image-qwen: registered", "narrate-local: registered", "transcribe-whisperx: registered", "song-replicate: registered", "image-replicate: registered", "animate-replicate: registered", "replicate-media: registered"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "film: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-klein: registered", "narrate-local: registered", "transcribe-whisperx: registered", "song-replicate: registered", "image-replicate: registered", "animate-replicate: registered", "replicate-media: registered"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}
@@ -253,13 +253,16 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	// Oss rods register provides/route/requires records, not a door role.
 	for _, want := range []string{
 		"commands add song-acestep --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/song-acestep.bsh") + " --set provides.0=song --set route=oss --set requires=has=uv has=ffmpeg has=git",
-		"commands add image-qwen --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/image-qwen.bsh") + " --set provides.0=image.generate --set provides.1=image.edit --set route=oss --set requires=has=uv",
+		"commands add image-klein --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/image-klein.bsh") + " --set provides.0=image.generate --set provides.1=image.edit --set route=oss --set requires=has=uv",
 		"commands add narrate-local --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/narrate-local.bsh") + " --set provides.0=narrate --set route=oss --set requires=has=uv has=ffmpeg",
 		"commands add transcribe-whisperx --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/transcribe-whisperx.bsh") + " --set provides.0=transcribe --set route=oss --set requires=has=uv has=ffmpeg",
 	} {
 		if !strings.Contains(f.calls(), want) {
 			t.Errorf("registration missing %q:\n%s", want, f.calls())
 		}
+	}
+	if strings.Contains(f.calls(), "commands add image-qwen ") {
+		t.Fatal("optional Qwen rod must not make the default oss image route ambiguous")
 	}
 	if !strings.Contains(f.calls(), "--set effects.2=exec") {
 		t.Errorf("effects not forwarded:\n%s", f.calls())

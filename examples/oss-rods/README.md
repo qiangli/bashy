@@ -15,8 +15,10 @@ it needs a 24 GB NVIDIA host the fleet has not confirmed (M3).
 | `narrate-local` | `narrate` | Chatterbox default, `kokoro:<voice>` light path; same pins as `media voice` | text/voice → `narration.wav` (silence-trimmed) |
 | `transcribe-whisperx` | `transcribe` | WhisperX `3.8.6` on Whisper large-v3, `--compute_type int8` for Mac/CPU | audio → `transcript.srt`/`.txt` |
 
-`image-klein` is the draft default; `image-qwen` remains an optional quality
-upgrade. The FLUX.2 single-file checkpoint alone is not a full Diffusers
+`image-klein` is the only image rod registered by defaults. `image-qwen`
+remains available for explicit registration as an optional quality upgrade;
+registering both oss image rods requires `--provider` to resolve the route.
+The FLUX.2 single-file checkpoint alone is not a full Diffusers
 snapshot: stage its pinned transformer, text encoder, tokenizer, VAE, scheduler
 and `model_index.json` under `image-klein/models/FLUX.2-klein-4B` (or set
 `IMAGE_KLEIN_MODEL_DIR`). The rod checks these files before provisioning,

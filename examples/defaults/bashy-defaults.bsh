@@ -67,7 +67,7 @@ tab opening), the service verbs `plan`,
 `email` and `drive` (examples/service-door: one door body per role; providers
 are rods, see docs/service-rod-contract.md); `transcribe` has an embedded
 pipeline front door. The M2 oss rods `song-acestep`,
-`image-qwen`, `narrate-local` and `transcribe-whisperx` (examples/oss-rods:
+`image-klein`, `narrate-local` and `transcribe-whisperx` (examples/oss-rods:
 provides/route/requires records), the M5 Replicate API rods
 (`examples/api-rods`, with vault-bound HTTP tool commands), and
 `bashy-defaults` itself.
@@ -122,7 +122,6 @@ search-agy|examples/service-door/search-agy.bsh|read,exec,net||search|vendor|has
 search-muse|examples/service-door/search-muse.bsh|read,exec,net||search|vendor|has=muse
 song-acestep|examples/oss-rods/song-acestep.bsh|read,write,exec,net||song|oss|has=uv has=ffmpeg has=git
 image-klein|examples/oss-rods/image-klein.bsh|read,write,exec,net||image.generate,image.edit|oss|has=uv
-image-qwen|examples/oss-rods/image-qwen.bsh|read,write,exec,net||image.generate,image.edit|oss|has=uv
 narrate-local|examples/oss-rods/narrate-local.bsh|read,write,exec,net||narrate|oss|has=uv has=ffmpeg
 transcribe-whisperx|examples/oss-rods/transcribe-whisperx.bsh|read,write,exec,net||transcribe|oss|has=uv has=ffmpeg
 song-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|song|song|api|has=jq has=curl has=ffprobe has=python3
