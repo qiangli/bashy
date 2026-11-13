@@ -833,3 +833,110 @@ func TestDraftTranslationLinesManual(t *testing.T) {
 		t.Fatalf("subs.ass is not bilingual:\n%s", ass)
 	}
 }
+
+func TestWriteTextProvenanceAndScopedUpdate(t *testing.T) {
+	f := newFixture(t)
+	f.addRod("oss-text", "provides.0=text", "route=oss", "effects.0=read", "effects.1=write", "effects.2=exec")
+	brief := "Title: Morning\nTheme: a new day\nCharacters: lead walks beside the sea\nMood: hopeful\n"
+	if err := os.WriteFile(filepath.Join(f.proj, "brief.md"), []byte(brief), 0644); err != nil {
+		t.Fatal(err)
+	}
+	read := func() map[string]any {
+		b, err := os.ReadFile(filepath.Join(f.proj, "storyboard.json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var sb map[string]any
+		if err := json.Unmarshal(b, &sb); err != nil {
+			t.Fatal(err)
+		}
+		return sb
+	}
+	before := read()
+	out, stderr, code := f.run("write", f.proj, "--provider-text", "oss-text", "--json")
+	if code != 0 {
+		t.Fatalf("write: %d %s %s", code, out, stderr)
+	}
+	var m map[string]any
+	if err := json.Unmarshal([]byte(out), &m); err != nil {
+		t.Fatal(err)
+	}
+	if m["outcome"] != "success" || len(m["fields_written"].([]any)) != 6 {
+		t.Fatalf("manifest: %s", out)
+	}
+	for _, raw := range m["stages"].([]any) {
+		s := raw.(map[string]any)
+		if s["provider"] != "oss-text" || s["route"] != "oss" || s["cost_class"] != "oss" || s["elapsed"] == nil || s["fields_written"] == nil {
+			t.Fatalf("stage: %v", s)
+		}
+	}
+	after := read()
+	for _, key := range []string{"song", "cards", "seed", "title", "translation"} {
+		a, _ := json.Marshal(before[key])
+		b, _ := json.Marshal(after[key])
+		if string(a) != string(b) {
+			t.Fatalf("changed %s", key)
+		}
+	}
+	if !strings.HasPrefix(after["lyrics"].([]any)[0].(string), "Draft line 1:") || after["shots"].([]any)[0].(map[string]any)["description"] != "Draft shot 0" || after["characters"].([]any)[0].(map[string]any)["prompt"] != "Portrait lead" {
+		t.Fatalf("unfilled text: %v", after)
+	}
+	// Human edits remain authoritative outside the selected kind.
+	f.editStoryboard(func(sb map[string]any) { sb["lyrics"] = []string{"Hand edited first line", "Hand edited second line"} })
+	out, stderr, code = f.run("write", f.proj, "--kind", "shots", "--json")
+	if code != 0 {
+		t.Fatalf("second write: %d %s %s", code, out, stderr)
+	}
+	if read()["lyrics"].([]any)[0] != "Hand edited first line" {
+		t.Fatal("shots write overwrote lyrics")
+	}
+	f.ossRods(true)
+	out, stderr, code = f.run("draft", f.proj, "--route", "oss", "--dry-run", "--json")
+	if code != 0 {
+		t.Fatalf("draft: %d %s %s", code, out, stderr)
+	}
+	if err := json.Unmarshal([]byte(out), &m); err != nil {
+		t.Fatal(err)
+	}
+	prov := m["text_provenance"].(map[string]any)
+	if prov["id"] != "02" || len(prov["stages"].([]any)) != 1 {
+		t.Fatalf("wrong latest provenance: %v", prov)
+	}
+}
+
+func TestWriteSparseAndInvalidPatch(t *testing.T) {
+	f := newFixture(t)
+	f.addRod("oss-text", "provides.0=text", "route=oss", "effects.0=read", "effects.1=write", "effects.2=exec")
+	if err := os.WriteFile(filepath.Join(f.proj, "brief.md"), []byte("Describe only the first shot."), 0644); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(f.proj, "storyboard.json")
+	before, _ := os.ReadFile(path)
+	patch := `{"shots":[{"index":0,"description":"The sun rises."}],"lyrics":["Must not apply"],"seed":999}`
+	out, stderr, code := f.runEnv([]string{"FILM_FIXTURE_TEXT_PATCH=" + patch}, "write", f.proj, "--kind", "shots")
+	if code != 0 {
+		t.Fatalf("sparse write: %d %s %s", code, out, stderr)
+	}
+	var expected, got map[string]any
+	json.Unmarshal(before, &expected)
+	expected["shots"].([]any)[0].(map[string]any)["description"] = "The sun rises."
+	after, _ := os.ReadFile(path)
+	json.Unmarshal(after, &got)
+	want, _ := json.Marshal(expected)
+	actual, _ := json.Marshal(got)
+	if string(want) != string(actual) {
+		t.Fatalf("sparse patch changed uncovered fields: %s", actual)
+	}
+	out, stderr, code = f.runEnv([]string{`FILM_FIXTURE_TEXT_PATCH={"shots":[{"index":99,"description":"bad"}]}`}, "write", f.proj, "--kind", "shots")
+	if code != 1 {
+		t.Fatalf("invalid patch accepted: %d %s %s", code, out, stderr)
+	}
+	unchanged, _ := os.ReadFile(path)
+	if string(after) != string(unchanged) {
+		t.Fatal("invalid patch modified storyboard")
+	}
+	m := f.manifest(filepath.Join(f.proj, "text", "02", "manifest.json"))
+	if m.Outcome != "error" || len(m.Stages) != 1 || m.Stages[0].Provider != "oss-text" {
+		t.Fatalf("missing failure provenance: %+v", m)
+	}
+}

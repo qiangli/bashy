@@ -25,6 +25,16 @@ while [ "$#" -gt 0 ]; do
 done
 # BASHY_SVC_BASHY_BIN overrides the bashy used for selection and dispatch.
 bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
+# pwd uses /c/... in the Windows shell; native providers and HTTP clients
+# require C:/... when opening the request/artifact paths outside the shell.
+native_path() {
+    local p=$1
+    case ${OS:-$(uname -s)} in
+    Windows*|MINGW*|MSYS*|CYGWIN*)
+        case $p in /[a-zA-Z]/*) p="${p:1:1}:${p:2}" ;; esac ;;
+    esac
+    printf '%s\n' "$p"
+}
 # --role picks a sibling role of the same service (image -> image.edit).
 if [ -n "$role_override" ]; then
     if [ "${role_override%%.*}" != "${role%%.*}" ]; then
@@ -36,7 +46,7 @@ if [ "$providers" = 1 ]; then "$bashy_bin" providers "$role" --json; exit $?; fi
 # A JSON request is passed to the selector and, by path, to the rod; other
 # operands go to the provider.
 if [ "${#args[@]}" -gt 0 ] && [[ ${args[0]} == *.json ]] && [ -f "${args[0]}" ]; then
-    request=$(cd "$(dirname "${args[0]}")" && pwd)/$(basename "${args[0]}"); args=("${args[@]:1}")
+    request=$(native_path "$(cd "$(dirname "${args[0]}")" && pwd)/$(basename "${args[0]}")"); args=("${args[@]:1}")
 fi
 
 envelope() { # outcome text outputs-json [unavailable-json]
@@ -108,7 +118,7 @@ fi
 own_out=0
 if [ -z "$out" ]; then out=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-$role.XXXXXX"); own_out=1; fi
 mkdir -p "$out"
-out=$(cd "$out" && pwd)
+out=$(native_path "$(cd "$out" && pwd)")
 before=$(cd "$out" && find . -type f | sort)
 export BASHY_SVC_ROLE="$role" BASHY_SVC_ROUTE="$selected_route" BASHY_SVC_REQUEST="$request" BASHY_SVC_OUT="$out" BASHY_SVC_YES="$yes"
 confirm_args=()
@@ -148,7 +158,7 @@ elif [ "$async" = 0 ] && printf '%s' "${text:-}" | jq -e 'type == "object" and .
     text=$(printf '%s\n' "$rod" | jq -r '.text // ""')
     while IFS=$'\x1f' read -r o_path o_type o_note; do
         [ -n "$o_path" ] || continue
-        [[ $o_path == /* ]] || o_path=$out/$o_path
+        [[ $o_path == /* || $o_path == [a-zA-Z]:/* ]] || o_path=$out/$o_path
         [ -n "$o_type" ] || o_type=$(media_type "$o_path")
         outputs=$(printf '%s\n' "$outputs" | J_P="$o_path" J_T="$o_type" J_N="$o_note" jq -c '. + [{path:env.J_P,media_type:env.J_T} + (if env.J_N == "" then {} else {note:env.J_N} end)]')
     done < <(printf '%s\n' "$rod" | jq -r '.outputs[]? | [.path // "", .media_type // "", .note // ""] | join("\u001f")')

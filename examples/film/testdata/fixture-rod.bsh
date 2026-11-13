@@ -14,6 +14,15 @@ J_REF=$(field '.reference_images[0]') J_ARGS="$*" jq -cn \
     '{role:env.BASHY_SVC_ROLE, route:env.BASHY_SVC_ROUTE, yes:env.BASHY_SVC_YES, request:env.BASHY_SVC_REQUEST, reference:env.J_REF, args:env.J_ARGS}' >>"$FILM_ROD_LOG"
 ff() { ffmpeg -nostdin -hide_banner -loglevel error -y "$@"; }
 case $BASHY_SVC_ROLE in
+text)
+    if [ -n "${FILM_FIXTURE_TEXT_PATCH:-}" ]; then
+        printf '%s\n' "$FILM_FIXTURE_TEXT_PATCH" >"$out/text.json"
+        exit 0
+    fi
+    jq 'if .kind == "lyrics" then {lyrics:[range(0; .count) as $i | "Draft line \($i+1): \(.brief)"]}
+        elif .kind == "shots" then {shots:[.storyboard.shots | to_entries[] | {index:.key,description:("Draft shot " + (.key|tostring))}]}
+        else {shots:[.storyboard.shots | to_entries[] | {index:.key,prompt:("Shot prompt " + (.key|tostring))}],characters:[.storyboard.characters[] | {id,prompt:("Portrait " + .id)}]} end' "$req" >"$out/text.json"
+    ;;
 song)
     d=$(field .duration_s); [ -n "$d" ] || d=6
     ff -f lavfi -i "sine=frequency=440:duration=$d:sample_rate=48000" -ac 2 "$out/song.wav"

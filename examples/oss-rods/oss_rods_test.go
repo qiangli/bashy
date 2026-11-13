@@ -801,3 +801,60 @@ func TestTranslateOllamaDoctor(t *testing.T) {
 		t.Fatalf("doctor ran more than `ollama list`: %q", args)
 	}
 }
+
+func TestTextOllamaSharedClient(t *testing.T) {
+	f := newFixture(t)
+	f.addRod("translate-ollama", []string{"translate", "text"}, "oss", "has=curl has=jq")
+	var temperature float64 = 0.7
+	var reply = `{"lyrics":["Local morning","Local sky"]}`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			w.Write([]byte(`{"models":[{"name":"qwen3:8b"}]}`))
+		case "/api/chat":
+			var req struct {
+				Model    string              `json:"model"`
+				Think    *bool               `json:"think"`
+				Format   map[string]any      `json:"format"`
+				Options  map[string]any      `json:"options"`
+				Messages []map[string]string `json:"messages"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Error(err)
+			}
+			if req.Model != "qwen3:8b" || req.Think == nil || *req.Think || req.Options["temperature"] != temperature || req.Format["type"] != "object" {
+				t.Errorf("bad drafting request: %+v", req)
+			}
+			if len(req.Messages) != 2 || !strings.Contains(req.Messages[1]["content"], "Morning") {
+				t.Errorf("missing brief: %+v", req)
+			}
+			json.NewEncoder(w).Encode(map[string]any{"message": map[string]string{"content": reply}})
+		default:
+			t.Errorf("unexpected endpoint: %s", r.URL.Path)
+			http.Error(w, "forbidden", 400)
+		}
+	}))
+	defer srv.Close()
+	for i, body := range []string{
+		`{"schema_version":"bashy-svc-request-v1","brief":"Morning","kind":"lyrics","count":2,"language":"en"}`,
+		`{"schema_version":"bashy-svc-request-v1","brief":"Morning","kind":"shots","temperature":0.4,"storyboard":{"shots":[{"character":"lead"}]}}`,
+		`{"schema_version":"bashy-svc-request-v1","brief":"Morning","kind":"prompts","temperature":0.4}`,
+	} {
+		if i > 0 {
+			temperature = 0.4
+			reply = `{"shots":[{"index":0,"prompt":"Soft daylight"}]}`
+		}
+		p := filepath.Join(f.root, "text-request.json")
+		if err := os.WriteFile(p, []byte(body), 0644); err != nil {
+			t.Fatal(err)
+		}
+		env, stderr, code := f.runDoor([]string{"TRANSLATE_OLLAMA_URL=" + srv.URL}, "text", "--route", "oss", "--out", filepath.Join(f.root, "text-out"), "--json", p)
+		if code != 0 || env.Outcome != "success" || env.Provider != "translate-ollama" || env.CostClass != "oss" || len(env.RawOutputs) != 1 {
+			t.Fatalf("text: %+v %d %s", env, code, stderr)
+		}
+		b, err := os.ReadFile(filepath.Join(f.root, "text-out", "text.json"))
+		if err != nil || strings.TrimSpace(string(b)) != reply {
+			t.Fatalf("reply: %s %v", b, err)
+		}
+	}
+}

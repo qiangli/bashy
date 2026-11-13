@@ -132,3 +132,22 @@ Deferred until a host is claimed; record cost and time with the run:
    ±150 ms of the fixture timing.
 6. Re-verify each LICENSE at provisioning time (this file is the 2026-11-13
    baseline, not a substitute).
+
+### Text drafting through the same Ollama rod
+
+`translate-ollama` also provides `text` on route `oss`, using the same doctor,
+HTTP client, staged `qwen3:8b` tag and `TRANSLATE_OLLAMA_*` settings. No pulls.
+The text request is `bashy-svc-request-v1` with `brief` (Markdown string),
+`kind` (`lyrics`, `shots`, `prompts`), `language`, optional `count`,
+`duration_s`, `storyboard`, `seed` and `temperature` (default 0.7, range 0–2).
+Thinking stays off and JSON output is requested. `text.json` contains:
+
+- Lyrics: `{"lyrics":["line", "line"]}`.
+- Shots: `{"shots":[{"index":0,"description":"..."}]}`.
+- Prompts: `{"shots":[{"index":0,"prompt":"..."}],"characters":[{"id":"lead","prompt":"..."}]}`.
+
+Indices and ids refer to the supplied storyboard. Omitted objects are preserved
+by `film write`; fields outside the selected kind are never applied. A direct
+rod call validates JSON; film additionally validates the patch against its
+storyboard before applying it. Translation still uses temperature 0 and its
+existing numbered-line/count validation.

@@ -1,5 +1,8 @@
 # bashy docs index
 
+- [Sprint 634 text evidence](sprint-634-text-evidence.md) — recorded local film prose: shared Ollama client, scoped writes, fixture gate and Windows test-host live verification.
+- [Sprint 634 text plan](sprint-634-text-plan.md) — implementation and verification sequence for story #3232.
+
 - [S8 clip delivery evidence](clip/docs/s631-s8.md) — Sprint 631 S8: async clip library built as `examples/clip` (command `clips`); build decision, license, targeted tests and the shaping demo (wish → verify → preview → approve → undo, requester-scoped; negative candidate refused).
 
 - [Sprint 627 M5 API rods](plan-s627-m5-api-rods.md) — generic typed HTTP media binding, Replicate rod delivery, offline verification and remaining paid smoke.

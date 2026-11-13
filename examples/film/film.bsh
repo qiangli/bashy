@@ -5,6 +5,7 @@
 #
 #   film doctor
 #   film init DIR [--title T]
+#   film write DIR [--route oss] [--provider-text NAME] [--kind lyrics|shots|prompts|all]
 #   film draft DIR [--route oss] [--provider-ROLE NAME] [--route-ROLE R] [--qa-provider P] [--no-qa] [--no-shot-numbers]
 #   film lock DIR [--draft N] [--timing FILE]
 #   film final DIR --route browser|api [--yes] [--dry-run] [--provider-ROLE NAME] [--qa-provider P] [--no-qa] [--shot-numbers]
@@ -25,6 +26,7 @@ metadata:
 # film — draft on oss, lock, final on a commercial route
 
     film init my-video                  # my-video/storyboard.json to edit
+    film write my-video                 # draft prose locally from my-video/brief.md
     film draft my-video                 # my-video/drafts/01/film.mp4 (+ manifest.json, qa.json)
     film draft my-video                 # drafts/02 — as many as wanted, no spend
     film lock my-video --draft 2        # my-video/lock/: storyboard, timing, portraits, sha256
@@ -330,7 +332,7 @@ door() {
 		env=$(J_R="$role" J_T="$env" jq -cn '{schema_version:"bashy-svc-v1",role:env.J_R,provider:"",route:"",outcome:"error",outputs:[],text:env.J_T,cost_class:"",elapsed:0}')
 		[ "$st" != 0 ] || st=1
 	fi
-	printf '%s\n' "$env" | J_S="$stage" jq -c '{stage:env.J_S} + .' >>"$render/stages.jsonl"
+	printf '%s\n' "$env" | J_S="$stage" jq -c '{stage:env.J_S} + . + (if .role == "text" then {fields_written:[]} else {} end)' >>"$render/stages.jsonl"
 	printf '%s\n' "$env"
 	return "$st"
 }
@@ -353,6 +355,91 @@ stage_opts() {
 	[ -z "$p" ] || printf -- '--provider\n%s\n' "$p"
 	[ "$yes" = 0 ] || printf -- '--yes\n'
 	[ "$dry" = 0 ] || printf -- '--dry-run\n'
+}
+
+# ---- local text drafting -------------------------------------------------------
+
+cmd_write() {
+    kind=text route=oss dry=0 json=0 proj=""
+    local provider="" requested=all part env status output start=$SECONDS
+    while [ $# -gt 0 ]; do
+        case $1 in
+        --route) route=$2; shift 2 ;;
+        --provider-text) provider=$2; shift 2 ;;
+        --kind) requested=$2; shift 2 ;;
+        --json) json=1; shift ;;
+        -*) die "write: unknown option: $1" ;;
+        *) proj=$1; shift ;;
+        esac
+    done
+    [ "$route" = oss ] || die "write: only route oss is supported"
+    case $requested in lyrics|shots|prompts|all) ;; *) die "write: kind must be lyrics, shots, prompts or all" ;; esac
+    [ -d "$proj" ] || die "usage: film write DIR [--kind lyrics|shots|prompts|all]"
+    proj=$(cd "$proj" && pwd)
+    sb=$proj/storyboard.json
+    [ -s "$proj/brief.md" ] || die "write: $proj/brief.md is required"
+    [ -f "$sb" ] || die "write: run film init DIR first"
+    jq -e 'type == "object"' "$sb" >/dev/null || die "write: invalid storyboard"
+    render=$proj/text/$(next_id "$proj/text")
+    mkdir -p "$render"
+    : >"$render/stages.jsonl"
+    cp "$proj/brief.md" "$render/brief.md"
+    cp "$sb" "$render/storyboard.before.json"
+    local parts=$requested opts=(--route oss)
+    [ -z "$provider" ] || opts+=(--provider "$provider")
+    [ "$parts" != all ] || parts="lyrics shots prompts"
+    for part in $parts; do
+        J_BRIEF=$(cat "$render/brief.md") J_KIND=$part request "$render/$part.request.json" \
+            '{brief:env.J_BRIEF, kind:env.J_KIND, language:(.song.language // "en"), count:(if env.J_KIND == "lyrics" then (.lyrics|length) else (.shots|length) end), duration_s:.song.duration_s, storyboard:.}'
+        status=0
+        env=$(door "text.$part" text "$render/$part" "${opts[@]}" -- "$render/$part.request.json") || status=$?
+        stage_ok "text.$part" "$env" "$status"
+        output=$(printf '%s\n' "$env" | jq -r 'first(.outputs[]? | select(.path | endswith("text.json")) | .path) // empty')
+        [ -f "$output" ] || fail_render "text.$part: missing text.json"
+        # Validate the whole patch before applying any part. No model-supplied
+        # path can alter production settings, ids, timing, seeds or other prose.
+        J_KIND=$part J_PATCH=$(cat "$output") jq '
+            (env.J_PATCH|fromjson) as $p | env.J_KIND as $k | . as $sb |
+            def prose: type == "string" and length > 0;
+            def indexok: type == "number" and floor == . and . >= 0 and . < ($sb.shots|length);
+            if ($p|type) != "object" then error("text patch must be an object")
+            elif $k == "lyrics" then
+                if ($p.lyrics|type) != "array" or ($p.lyrics|length) == 0 or any($p.lyrics[]; prose|not)
+                then error("lyrics must be nonempty strings") else .lyrics=$p.lyrics | {storyboard:., fields:["lyrics"]} end
+            else
+                if (($p.shots // [])|type) != "array" or (($p.characters // [])|type) != "array"
+                then error("shots and characters must be arrays") else . end |
+                (if $k == "shots" then "description" else "prompt" end) as $field |
+                if any($p.shots[]?; (.index|indexok|not) or (.[$field]|prose|not))
+                  or (($p.shots // [] | map(.index)|unique|length) != ($p.shots // []|length))
+                then error("invalid or duplicate shot patch") else . end |
+                if $k == "prompts" and any($p.characters[]?; (.prompt|prose|not) or (.id as $id | [$sb.characters[].id] | index($id) == null))
+                then error("invalid character patch") else . end |
+                reduce $p.shots[]? as $sh (. ; .shots[$sh.index][$field]=$sh[$field]) |
+                (if $k == "prompts" then reduce $p.characters[]? as $ch (. ; .characters |= map(if .id == $ch.id then .prompt=$ch.prompt else . end)) else . end) |
+                {storyboard:., fields:([$p.shots[]? | "shots[\(.index)].\($field)"] +
+                    (if $k == "prompts" then [$p.characters[]? | .id as $id | $sb.characters | to_entries[] | select(.value.id == $id) | "characters[\(.key)].prompt"] else [] end))}
+            end' "$sb" >"$render/$part.patch.json" || fail_render "text.$part: invalid patch"
+        jq '.storyboard' "$render/$part.patch.json" >"$render/storyboard.next.json"
+        mv "$render/storyboard.next.json" "$sb"
+        J_STAGE="text.$part" J_FIELDS=$(jq -c .fields "$render/$part.patch.json") jq -c \
+            'if .stage == env.J_STAGE then . + {fields_written:(env.J_FIELDS|fromjson)} else . end' \
+            "$render/stages.jsonl" >"$render/stages.next.jsonl"
+        mv "$render/stages.next.jsonl" "$render/stages.jsonl"
+    done
+    cp "$sb" "$render/storyboard.after.json"
+    finish_render "$start" "$sb"
+}
+
+latest_text() {
+    local m latest="" n=0 id
+    for m in "$proj"/text/[0-9]*/manifest.json; do
+        [ -f "$m" ] || continue
+        id=${m%/manifest.json}; id=${id##*/}
+        [[ $id =~ ^[0-9]+$ ]] || continue
+        if [ "$((10#$id))" -gt "$n" ]; then n=$((10#$id)); latest=$m; fi
+    done
+    if [ -n "$latest" ]; then cat "$latest"; else echo null; fi
 }
 
 # ---- render (draft and final) ---------------------------------------------------
@@ -789,16 +876,18 @@ finish_render() {
 	[ "$kind" != final ] || lock_sha=$(sha "$proj/lock/lock.json")
 	J_KIND=$kind J_ID=$(basename "$render") J_ROUTE=$route J_OUTCOME=$outcome J_SB=$(sha "$sb") J_LOCK=$lock_sha J_OUT=$output \
 		J_ELAPSED=$((SECONDS - start)) J_STAGES=$(awk 'BEGIN{printf "["} NR>1{printf ","} {printf "%s", $0} END{print "]"}' "$render/stages.jsonl") \
+		J_TEXT=$(if [ "$kind" = draft ]; then latest_text; else echo null; fi) \
 		J_QA=$(if [ -f "$render/qa.json" ]; then cat "$render/qa.json"; else echo null; fi) jq -n '
 		env.J_KIND as $kind | env.J_ID as $id | env.J_ROUTE as $route | env.J_OUTCOME as $outcome | env.J_SB as $sb_sha
 		| env.J_LOCK as $lock_sha | env.J_OUT as $out | (env.J_ELAPSED|tonumber) as $elapsed | (env.J_STAGES|fromjson) as $stages
 		| [env.J_QA|fromjson] as $qa |
 		{schema_version:"bashy-film-render-v1", kind:$kind, id:$id, route:$route, outcome:$outcome,
 		 storyboard_sha256:$sb_sha, output:(if $out == "" then null else $out end), elapsed:$elapsed,
-		 stages:$stages,
+		 stages:$stages, fields_written:([$stages[].fields_written[]?] | unique),
 		 cost_classes:($stages | map(select(.outcome == "success" or .outcome == "dry-run") | .cost_class) | map(select(. != "")) | unique),
 		 degraded:[$stages[] | .outputs[]? | select(.note != null) | {path, note}],
 		 qa:($qa[0] // null)}
+		+ (if env.J_TEXT == "null" then {} else {text_provenance:(env.J_TEXT|fromjson)} end)
 		+ (if $lock_sha == "" then {} else {lock_sha256:$lock_sha} end)' >"$render/manifest.json"
 	if [ "$json" = 1 ]; then cat "$render/manifest.json"; else echo "$render/manifest.json"; fi
 }
@@ -895,9 +984,10 @@ case ${1:-} in
 -h | --help | help | "") usage; [ -n "${1:-}" ] || exit 2 ;;
 doctor) cmd_doctor ;;
 init) shift; cmd_init "$@" ;;
+write) shift; cmd_write "$@" ;;
 draft) shift; cmd_draft "$@" ;;
 lock) shift; cmd_lock "$@" ;;
 final) shift; cmd_final "$@" ;;
 status) shift; cmd_status "$@" ;;
-*) die "unknown verb: $1 (doctor, init, draft, lock, final, status)" ;;
+*) die "unknown verb: $1 (doctor, init, write, draft, lock, final, status)" ;;
 esac

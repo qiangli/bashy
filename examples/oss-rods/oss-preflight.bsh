@@ -127,17 +127,10 @@ oss_json_val() {
 	esac
 }
 
-# oss_request_get FILE KEY DEFAULT: one request field. python3 first, jq
-# (already required by the service door) as fallback; the default wins when
-# the key is missing or null.
+# oss_request_get FILE KEY DEFAULT: one request field through jq (also
+# available as bashy userland on Windows); no Python or --arg dependency.
 oss_request_get() {
-	if command -v python3 >/dev/null 2>&1; then
-		python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); v=d.get(sys.argv[2], sys.argv[3]); print("" if v is None else (v if isinstance(v,str) else json.dumps(v)))' \
-			"$1" "$2" "$3" 2>/dev/null || echo "$3"
-	else
-		jq -r --arg k "$2" --arg d "$3" '.[$k] // $d | if type == "string" then . else tostring end' \
-			"$1" 2>/dev/null || echo "$3"
-	fi
+    J_KEY=$2 J_DEFAULT=$3 jq -r '.[env.J_KEY] // env.J_DEFAULT | if type == "string" then . else tostring end' "$1"
 }
 
 # oss_check_schema FILE: refuse a request whose schema_version major is not v1.
