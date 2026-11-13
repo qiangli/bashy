@@ -1,0 +1,177 @@
+#!/usr/bin/env -S bashy --bashsharp
+# oss-preflight — shared helpers for the Sprint 627 M2 oss rods.
+# Sourced by each rod (song-acestep, image-qwen, narrate-local,
+# transcribe-whisperx); never registered as a command.
+#
+# VENUE: no model/weight downloads and no live model runs on the operator's
+# primary workstation. Rods provision pinned packages and weights on FIRST
+# USE only, behind oss_preflight_gb, and every rod honors its _FAKE/_PY hook
+# so unit tests exercise the request/preflight/envelope path with a fixture
+# generator instead of a model (same pattern as MEDIA_VOICE_PY).
+
+# shellcheck shell=sh
+
+oss_os_name() {
+	case $(uname -s) in
+	Darwin) echo darwin ;;
+	Linux) echo linux ;;
+	MINGW* | MSYS* | CYGWIN* | Windows*) echo windows ;;
+	*) echo "$(uname -s)" ;;
+	esac
+}
+
+# Per-OS install line for a missing dependency (same vocabulary as
+# examples/media/media.bsh: brew, winget, apt).
+oss_install_line() {
+	case $(oss_os_name) in
+	darwin) case $1 in uv) echo "brew install uv" ;; ffmpeg) echo "brew install ffmpeg" ;; git) echo "xcode-select --install (git)" ;; *) echo "install $1" ;; esac ;;
+	windows) case $1 in uv) echo "winget install astral-sh.uv" ;; ffmpeg) echo "winget install Gyan.FFmpeg" ;; git) echo "winget install Git.Git" ;; *) echo "install $1" ;; esac ;;
+	*) case $1 in uv) echo "curl -LsSf https://astral.sh/uv/install.sh | sh" ;; ffmpeg) echo "sudo apt install ffmpeg" ;; git) echo "sudo apt install git" ;; *) echo "install $1" ;; esac ;;
+	esac
+}
+
+# oss_cache_root ROD: the rod's cache dir for venvs and weights.
+oss_cache_root() {
+	local base=${BASHY_OSS_CACHE:-${XDG_CACHE_HOME:-${LOCALAPPDATA:-$HOME/.cache}}}
+	echo "$base/bashy/oss/$1"
+}
+
+# oss_avail_kb DIR: free KiB on the volume holding DIR.
+# OSS_AVAIL_KB_OVERRIDE (a test hook) replaces the df probe when set.
+oss_avail_kb() {
+	if [ -n "${OSS_AVAIL_KB_OVERRIDE:-}" ]; then echo "$OSS_AVAIL_KB_OVERRIDE"; return 0; fi
+	mkdir -p "$1" 2>/dev/null || return 1
+	df -k "$1" 2>/dev/null | awk 'NR==2 {print $4}' | head -1
+}
+
+# oss_preflight_gb ROD NEED_GB: fail closed unless NEED_GB GiB are free in the
+# rod cache. Weights download on first use only, never at install time, and
+# only after this passes (Sprint 382 failed on a 97%-full host).
+oss_preflight_gb() {
+	local rod=$1 need_gb=$2 root avail_kb avail_gb
+	root=$(oss_cache_root "$rod")
+	avail_kb=$(oss_avail_kb "$root") || {
+		echo "$rod: cannot probe free disk under $root; refusing weight download" >&2
+		return 1
+	}
+	[ -n "$avail_kb" ] && [ "$avail_kb" -gt 0 ] 2>/dev/null || {
+		echo "$rod: cannot probe free disk under $root; refusing weight download" >&2
+		return 1
+	}
+	avail_gb=$((avail_kb / 1024 / 1024))
+	if [ "$avail_gb" -lt "$need_gb" ]; then
+		echo "$rod: refusing weight download: need ${need_gb} GiB free in $root, have ${avail_gb} GiB" >&2
+		echo "$rod: free disk space or set BASHY_OSS_CACHE to a larger volume, then retry" >&2
+		return 1
+	fi
+}
+
+# oss_request_file: print the request JSON path. Prefers BASHY_SVC_REQUEST
+# (door handoff); with --key value operands instead, builds a request file.
+# Remaining args after --key value pairs are rejected.
+oss_request_file() {
+	if [ -n "${BASHY_SVC_REQUEST:-}" ]; then echo "$BASHY_SVC_REQUEST"; return 0; fi
+	local out=${OSS_REQUEST_TMP:-$(mktemp "${TMPDIR:-/tmp}/oss-req.XXXXXX")}.json
+	{
+		echo "{"
+		echo '  "schema_version": "bashy-svc-request-v1",'
+		local first=1 k v
+		while [ $# -gt 0 ]; do
+			case $1 in
+			--*) k=${1#--}; shift
+				if [ $# -gt 0 ]; then v=$1; shift; else v=""; fi
+				if [ $first -eq 0 ]; then echo ","; fi
+				first=0
+				printf '  %s: %s' "$(oss_json_str "$k")" "$(oss_json_val "$v")"
+				;;
+			*) echo "unexpected operand: $1 (pass a request JSON file or --key value pairs)" >&2; return 2 ;;
+			esac
+		done
+		echo ""
+		echo "}"
+	} >"$out"
+	echo "$out"
+}
+
+oss_json_str() {
+	local s=$1
+	s=${s//\\/\\\\}; s=${s//\"/\\\"}
+	printf '"%s"' "$s"
+}
+
+# Numbers and true/false/null stay bare; everything else is a string.
+oss_json_val() {
+	case $1 in
+	"" | true | false | null) printf '%s' "${1:-\"\"}" ;;
+	*[^0-9.]*) oss_json_str "$1" ;;
+	*) printf '%s' "$1" ;;
+	esac
+}
+
+# oss_request_get FILE KEY DEFAULT: one request field. python3 first, jq
+# (already required by the service door) as fallback; the default wins when
+# the key is missing or null.
+oss_request_get() {
+	if command -v python3 >/dev/null 2>&1; then
+		python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); v=d.get(sys.argv[2], sys.argv[3]); print("" if v is None else (v if isinstance(v,str) else json.dumps(v)))' \
+			"$1" "$2" "$3" 2>/dev/null || echo "$3"
+	else
+		jq -r --arg k "$2" --arg d "$3" '.[$k] // $d | if type == "string" then . else tostring end' \
+			"$1" 2>/dev/null || echo "$3"
+	fi
+}
+
+# oss_check_schema FILE: refuse a request whose schema_version major is not v1.
+oss_check_schema() {
+	local got
+	got=$(oss_request_get "$1" schema_version "")
+	case $got in
+	bashy-svc-request-v1) return 0 ;;
+	"") echo "$(basename "$0" .bsh): request has no schema_version" >&2; return 2 ;;
+	*) echo "$(basename "$0" .bsh): unsupported request schema: $got (this rod speaks bashy-svc-request-v1)" >&2; return 2 ;;
+	esac
+}
+
+# oss_rod_result OUT [MEDIA_TYPE [NOTE]]: print one bashy-svc-rod-v1 result.
+oss_rod_result() {
+	local out=$1 media=${2:-} note=${3:-} rel
+	case $out in
+	"${BASHY_SVC_OUT:-/nonexistent}/"*) rel=${out#"$BASHY_SVC_OUT"/} ;;
+	*) rel=$out ;;
+	esac
+	if [ -z "$media" ]; then
+		case $rel in
+		*.wav) media=audio/wav ;; *.mp3) media=audio/mpeg ;; *.m4a) media=audio/mp4 ;;
+		*.png) media=image/png ;; *.jpg | *.jpeg) media=image/jpeg ;; *.webp) media=image/webp ;;
+		*.mp4) media=video/mp4 ;;
+		*.srt) media=application/x-subrip ;; *.vtt) media=text/vtt ;; *.txt) media=text/plain ;;
+		*) media=application/octet-stream ;;
+		esac
+	fi
+	if [ -n "$note" ]; then
+		printf '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":%s,"media_type":%s,"note":%s}],"text":%s}\n' \
+			"$(oss_json_str "$rel")" "$(oss_json_str "$media")" "$(oss_json_str "$note")" "$(oss_json_str "$OSS_ROD_TEXT")"
+	else
+		printf '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":%s,"media_type":%s}],"text":%s}\n' \
+			"$(oss_json_str "$rel")" "$(oss_json_str "$media")" "$(oss_json_str "$OSS_ROD_TEXT")"
+	fi
+}
+
+# oss_doctor DEPS...: answer --doctor --json with no side effects.
+# Each dep is "need|probe" where probe is a command name on PATH.
+oss_doctor() {
+	local missing="[" first=1 dep need probe
+	for dep in "$@"; do
+		need=${dep%%|*}; probe=${dep#*|}
+		command -v "$probe" >/dev/null 2>&1 && continue
+		[ $first -eq 0 ] && missing="$missing,"
+		first=0
+		missing="$missing{\"need\":$(oss_json_str "$need"),\"install\":$(oss_json_str "$(oss_install_line "$probe")")}"
+	done
+	missing="$missing]"
+	if [ "$missing" = "[]" ]; then
+		printf '{"schema_version":"bashy-svc-doctor-v1","available":true,"missing":[]}\n'
+	else
+		printf '{"schema_version":"bashy-svc-doctor-v1","available":false,"missing":%s}\n' "$missing"
+	fi
+}

@@ -98,7 +98,7 @@ echo "$*" >> "$FAKE_LOG"
 src="$BASHY_HOME/src/bashy"
 case "$1 $2" in
   "src fetch"|"src upgrade")
-    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/onboard" "$src/examples/satellite-provision" "$src/examples/media" "$src/examples/record" "$src/examples/cast" "$src/examples/service-door" "$src/examples/defaults" "$src/kb/defaults/pages"
+    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/onboard" "$src/examples/satellite-provision" "$src/examples/media" "$src/examples/record" "$src/examples/cast" "$src/examples/service-door" "$src/examples/defaults" "$src/examples/oss-rods" "$src/kb/defaults/pages"
     : > "$src/examples/outpost-profile/outpost-profile.bsh"
     : > "$src/examples/satellite-member/satellite-member.bsh"
     : > "$src/examples/onboard/onboard.bsh"
@@ -113,6 +113,10 @@ case "$1 $2" in
     : > "$src/examples/service-door/search-agy.bsh"
     : > "$src/examples/service-door/search-muse.bsh"
     : > "$src/examples/defaults/bashy-defaults.bsh"
+    : > "$src/examples/oss-rods/song-acestep.bsh"
+    : > "$src/examples/oss-rods/image-qwen.bsh"
+    : > "$src/examples/oss-rods/narrate-local.bsh"
+    : > "$src/examples/oss-rods/transcribe-whisperx.bsh"
     : > "$src/kb/defaults/pages/a.md"; : > "$src/kb/defaults/pages/b.md"
     ;;
   "commands show")
@@ -201,7 +205,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "transcribe: registered", "song-acestep: registered", "image-qwen: registered", "narrate-local: registered", "transcribe-whisperx: registered"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}
@@ -225,9 +229,21 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 		}
 	}
 	// Service verbs pass their open role as the door's first fixed argument.
-	for name, role := range map[string]string{"plan": "plan", "image": "image.generate", "narrate": "narrate", "song": "song", "animate": "animate"} {
+	for name, role := range map[string]string{"plan": "plan", "image": "image.generate", "narrate": "narrate", "song": "song", "animate": "animate", "transcribe": "transcribe"} {
 		if got := f.registered(name + ".role"); got != role {
 			t.Errorf("%s role = %q, want %q", name, got, role)
+		}
+	}
+	// Oss rods register provides/route/requires records, not a door role.
+	for _, want := range []string{
+		"commands add song-acestep --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/song-acestep.bsh") + " --set provides.0=song --set route=oss --set requires=has=uv has=ffmpeg has=git",
+		"commands add image-qwen --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/image-qwen.bsh") + " --set provides.0=image.generate --set provides.1=image.edit --set route=oss --set requires=has=uv",
+		"commands add narrate-local --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/narrate-local.bsh") + " --set provides.0=narrate --set route=oss --set requires=has=uv has=ffmpeg",
+		"commands add transcribe-whisperx --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/transcribe-whisperx.bsh") + " --set provides.0=transcribe --set route=oss --set requires=has=uv has=ffmpeg",
+		"commands add transcribe --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/service-door/service-door.bsh"),
+	} {
+		if !strings.Contains(f.calls(), want) {
+			t.Errorf("registration missing %q:\n%s", want, f.calls())
 		}
 	}
 	if !strings.Contains(f.calls(), "--set effects.2=exec") {

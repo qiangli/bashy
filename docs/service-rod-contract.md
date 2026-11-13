@@ -2,7 +2,7 @@
 
 Sprint 627 M1. A **rod** is one provider of an open service role: a
 registered command that declares `provides:` and a `route:`. The service
-verbs (`bashy song`, `bashy image`, `bashy animate`, `bashy narrate`, …) are
+verbs (`bashy song`, `bashy image`, `bashy animate`, `bashy narrate`, `bashy transcribe`, …) are
 the one door body `examples/service-door/service-door.bsh`, registered by
 `bashy-defaults apply` with the role as the door's first fixed argument. The
 door selects a rod with `bashy providers select`, hands it the request, and
@@ -20,6 +20,7 @@ draft and a final.
 | `image --role image.edit` | `image.edit` | `prompt`, `image` (path), `mask` (path), `reference_images` | edited images (`image/png`) |
 | `animate` | `animate` | `image` (path, the performer), `audio` (path, drives lip sync), `prompt`, `duration_s`, `width`, `height`, `fps` | one video (`video/mp4`) |
 | `narrate` | `narrate` | `text`, `voice`, `language`, `reference_audio` (path; own or synthetic voice only) | one audio file (`audio/wav`) |
+| `transcribe` | `transcribe` | `audio` (path), `language`, `format` (`txt` or `srt`) | one transcript file (`application/x-subrip` or `text/plain`) |
 
 Common request fields: `"schema_version": "bashy-svc-request-v1"`, `seed`
 (integer; a rod without seeding ignores it), and `title`. Paths in a request

@@ -1,0 +1,177 @@
+#!/usr/bin/env -S bashy --bashsharp
+# image-qwen — oss rod for the `image.generate` and `image.edit` roles.
+# Generate: Qwen-Image-2511 (Qwen/Qwen-Image, Apache-2.0).
+# Edit: Qwen-Image-Edit-2511 (Qwen/Qwen-Image-Edit-2511, Apache-2.0).
+# Licenses re-verified 2026-11-13 (LICENSE text for Qwen-Image; HF metadata
+# license:apache-2.0 tags for both repos).
+# Driven through diffusers (0.43.0, Apache-2.0); FP8/GGUF footprints need a
+# 24 GB host. Weights download on first use only, behind the preflight.
+# IMAGE_QWEN_PY replaces the generator (fixture stand-ins in tests).
+
+~~~skill as guide
+---
+name: image-qwen
+description: Open-source image rod (Qwen-Image generate + Qwen-Image-Edit, Apache-2.0) for the image.generate and image.edit service roles. Needs uv; weights download on first use after a disk-headroom preflight.
+metadata:
+  requires: "has=uv"
+---
+# image-qwen — Qwen-Image rod (route oss)
+
+See examples/oss-rods/README.md for picks, pins and license evidence.
+The role comes from $BASHY_SVC_ROLE: image.generate (or image.edit with
+--image, optional --mask, optional --reference_images).
+~~~
+
+set -eu
+
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+# shellcheck source=oss-preflight.bsh
+. "$here/oss-preflight.bsh"
+
+ROD=image-qwen
+ROLE=${BASHY_SVC_ROLE:-image.generate}
+GEN_MODEL=Qwen/Qwen-Image
+EDIT_MODEL=Qwen/Qwen-Image-Edit-2511
+# diffusers pin verified 2026-11-13 (PyPI 0.43.0, Apache-2.0); companions
+# resolve at provision time and are recorded in the venv marker below.
+DIFFUSERS_PIN=diffusers==0.43.0
+# 24 GB-class weights plus the uv env; keep 35 GiB free.
+NEED_GB=35
+OSS_ROD_TEXT=""
+
+die() { echo "$ROD: $*" >&2; exit "${2:-1}"; }
+
+if [ "${1:-}" = --doctor ]; then
+	[ "${2:-}" = --json ] || die "--doctor needs --json" 2
+	oss_doctor "has=uv|uv"
+	exit 0
+fi
+
+case $ROLE in
+image.generate | image.edit) ;;
+*) die "$ROLE is not an image role of this rod" 2 ;;
+esac
+
+REQ=$(oss_request_file "$@") || exit $?
+oss_check_schema "$REQ" || exit 2
+prompt=$(oss_request_get "$REQ" prompt "")
+negative=$(oss_request_get "$REQ" negative "")
+width=$(oss_request_get "$REQ" width 1024)
+height=$(oss_request_get "$REQ" height 1024)
+count=$(oss_request_get "$REQ" count 1)
+seed=$(oss_request_get "$REQ" seed 436)
+image=$(oss_request_get "$REQ" image "")
+mask=$(oss_request_get "$REQ" mask "")
+refs=$(oss_request_get "$REQ" reference_images "")
+title=$(oss_request_get "$REQ" title "")
+[ -n "$prompt" ] || die "prompt is required" 2
+case $width/$height/$count in *[!0-9/]* | */*/*/*) die "width/height/count must be integers" 2 ;; esac
+if [ "$ROLE" = image.edit ]; then
+	[ -n "$image" ] || die "image.edit needs --image PATH" 2
+	[ -f "$image" ] || die "image not found: $image"
+	[ -z "$mask" ] || [ -f "$mask" ] || die "mask not found: $mask"
+fi
+
+OUT=${BASHY_SVC_OUT:-}
+[ -n "$OUT" ] || OUT=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-image.XXXXXX")
+mkdir -p "$OUT"
+
+oss_preflight_gb "$ROD" "$NEED_GB" || exit 1
+
+PY=""
+if [ -n "${IMAGE_QWEN_PY:-}" ]; then
+	gen=$IMAGE_QWEN_PY
+else
+	root=$(oss_cache_root "$ROD")
+	marker=$root/.ready-$(printf '%s\n' "$DIFFUSERS_PIN" | cksum | cut -d' ' -f1)
+	if [ ! -f "$marker" ]; then
+		command -v uv >/dev/null || die "needs uv; install: $(oss_install_line uv)"
+		echo "$ROD: provisioning the diffusers environment (first use; weights follow)" >&2
+		case $(oss_os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
+		mkdir -p "$root"
+		[ -x "$py" ] || uv venv --python 3.11 "$root/.venv" >&2 || die "uv venv failed"
+		uv pip install --python "$py" "$DIFFUSERS_PIN" torch transformers accelerate safetensors huggingface_hub >&2 || die "package install failed"
+		: >"$marker"
+	fi
+	case $(oss_os_name) in windows) PY=$root/.venv/Scripts/python.exe ;; *) PY=$root/.venv/bin/python ;; esac
+	[ -x "$PY" ] || die "provisioned environment has no python: $root/.venv"
+	gen=$root/generate-image.py
+	if [ ! -f "$gen" ]; then
+		cat >"$gen" <<'PY'
+import argparse, os
+# Driver for the pinned diffusers environment. Generate uses
+# Qwen/Qwen-Image-2511 (QwenImagePipeline); edit uses
+# Qwen/Qwen-Image-Edit-2511 (QwenImageEditPipeline) with the input
+# image, optional mask and optional reference images. FP8/GPU attention
+# variants are chosen here only when the host fits them; a 24 GB host is
+# the documented floor (see examples/oss-rods/README.md).
+ap = argparse.ArgumentParser()
+ap.add_argument("--role", default="image.generate")
+ap.add_argument("--gen-model", default=""); ap.add_argument("--edit-model", default="")
+ap.add_argument("--prompt", default=""); ap.add_argument("--negative", default="")
+ap.add_argument("--width", type=int, default=1024); ap.add_argument("--height", type=int, default=1024)
+ap.add_argument("--count", type=int, default=1); ap.add_argument("--seed", type=int, default=436)
+ap.add_argument("--image", default=""); ap.add_argument("--mask", default="")
+ap.add_argument("--refs", default=""); ap.add_argument("--outdir", required=True)
+a = ap.parse_args()
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+import torch
+from diffusers import QwenImagePipeline, QwenImageEditPipeline
+dev = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+if a.role == "image.edit":
+    from PIL import Image
+    pipe = QwenImageEditPipeline.from_pretrained(a.edit_model)
+    init = Image.open(a.image).convert("RGB")
+    kw = {"image": init}
+    if a.mask:
+        kw["mask_image"] = Image.open(a.mask).convert("RGB")
+    for i in range(a.count):
+        g = torch.Generator(device="cpu").manual_seed(a.seed + i)
+        out = pipe(prompt=a.prompt, negative_prompt=a.negative or None,
+                   generator=g, **kw).images[0]
+        out.save(os.path.join(a.outdir, f"edit-{i + 1:02d}.png"))
+        print(os.path.join(a.outdir, f"edit-{i + 1:02d}.png"), flush=True)
+else:
+    pipe = QwenImagePipeline.from_pretrained(a.gen_model)
+    if dev == "cuda":
+        pipe.enable_model_cpu_offload()
+    for i in range(a.count):
+        g = torch.Generator(device="cpu").manual_seed(a.seed + i)
+        out = pipe(prompt=a.prompt, negative_prompt=a.negative or None,
+                   width=a.width, height=a.height, generator=g).images[0]
+        out.save(os.path.join(a.outdir, f"image-{i + 1:02d}.png"))
+        print(os.path.join(a.outdir, f"image-{i + 1:02d}.png"), flush=True)
+PY
+	fi
+fi
+
+mode=generate
+model=$GEN_MODEL
+if [ "$ROLE" = image.edit ]; then mode=edit; model=$EDIT_MODEL; fi
+if [ -n "$PY" ]; then
+	mapfile -t made < <("$PY" "$gen" --role "$ROLE" --gen-model "$GEN_MODEL" --edit-model "$EDIT_MODEL" \
+		--prompt "$prompt" --negative "$negative" --width "$width" --height "$height" \
+		--count "$count" --seed "$seed" --image "$image" --mask "$mask" --refs "$refs" \
+		--outdir "$OUT" 2> >(cat >&2)) || die "generation failed"
+else
+	mapfile -t made < <("$gen" --role "$ROLE" --gen-model "$GEN_MODEL" --edit-model "$EDIT_MODEL" \
+		--prompt "$prompt" --negative "$negative" --width "$width" --height "$height" \
+		--count "$count" --seed "$seed" --image "$image" --mask "$mask" --refs "$refs" \
+		--outdir "$OUT") || die "generation failed"
+fi
+[ "${#made[@]}" -ge 1 ] || die "generator wrote no images"
+for f in "${made[@]}"; do [ -s "$f" ] || die "generator left an empty image: $f"; done
+[ -n "${title:-}" ] && OSS_ROD_TEXT="$title" || OSS_ROD_TEXT="oss $mode via $model"
+
+{
+	printf '{"schema_version":"bashy-svc-rod-v1","outputs":['
+	sep=""
+	for f in "${made[@]}"; do
+		rel=$f
+		case $f in "$OUT"/*) rel=${f#"$OUT"/} ;; esac
+		printf '%s{"path":%s,"media_type":"image/png"}' "$sep" "$(oss_json_str "$rel")"
+		sep=","
+	done
+	printf '],"text":%s}\n' "$(oss_json_str "$OSS_ROD_TEXT")"
+}

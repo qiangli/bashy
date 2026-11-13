@@ -1,0 +1,164 @@
+#!/usr/bin/env -S bashy --bashsharp
+# song-acestep — oss rod for the `song` role (ACE-Step 1.5).
+# License re-verified 2026-11-13: MIT
+# (https://github.com/ace-step/ACE-Step-1.5/blob/main/LICENSE).
+# Upstream: git clone + `uv sync`, driven through the local REST API
+# (`uv run acestep-api`, POST /release_task, POST /query_result,
+# GET /v1/audio; see docs/en/API.md). Pinned to commit ACESTEP_PIN.
+# Weights download on first use only, behind the disk-headroom preflight.
+# SONG_ACESTEP_PY replaces the generator (fixture stand-ins in tests).
+
+~~~skill as guide
+---
+name: song-acestep
+description: Open-source song rod (ACE-Step 1.5, MIT) for the song service role. Needs uv, ffmpeg and git; weights download on first use after a disk-headroom preflight.
+metadata:
+  requires: "has=uv has=ffmpeg has=git"
+---
+# song-acestep — ACE-Step 1.5 song rod (route oss)
+
+See examples/oss-rods/README.md for picks, pins and license evidence.
+~~~
+
+set -eu
+
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+# shellcheck source=oss-preflight.bsh
+. "$here/oss-preflight.bsh"
+
+ROD=song-acestep
+ROLE=song
+# Pinned upstream commit (main @ 2026-08-29); re-pin on the claimed host
+# before the first live render if upstream moved.
+ACESTEP_PIN=ca1e85fe9430179831e6bc6be790c332190a3866
+ACESTEP_REPO=https://github.com/ACE-Step/ACE-Step-1.5.git
+# 1.5 spans 4-20 GB of weights plus the uv env; keep 25 GiB free.
+NEED_GB=25
+OSS_ROD_TEXT=""
+
+die() { echo "$ROD: $*" >&2; exit "${2:-1}"; }
+
+if [ "${1:-}" = --doctor ]; then
+	[ "${2:-}" = --json ] || die "--doctor needs --json" 2
+	oss_doctor "has=uv|uv" "has=ffmpeg|ffmpeg" "has=git|git"
+	exit 0
+fi
+
+REQ=$(oss_request_file "$@") || exit $?
+oss_check_schema "$REQ" || exit 2
+prompt=$(oss_request_get "$REQ" prompt "")
+lyrics_f=$(oss_request_get "$REQ" lyrics_file "")
+[ -z "$lyrics_f" ] && lyrics_f=$(oss_request_get "$REQ" lyrics "")
+duration_s=$(oss_request_get "$REQ" duration_s 30)
+instrumental=$(oss_request_get "$REQ" instrumental false)
+language=$(oss_request_get "$REQ" language "")
+seed=$(oss_request_get "$REQ" seed 436)
+title=$(oss_request_get "$REQ" title "")
+case $duration_s in '' | *[!0-9]*) die "duration_s must be seconds (10-600)" 2 ;; esac
+[ "$duration_s" -ge 10 ] && [ "$duration_s" -le 600 ] || die "duration_s out of range 10-600" 2
+
+OUT=${BASHY_SVC_OUT:-}
+[ -n "$OUT" ] || OUT=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-song.XXXXXX")
+mkdir -p "$OUT"
+wav=$OUT/song.wav
+
+lyrics_tmp=""
+if [ -n "$lyrics_f" ] && [ ! -f "$lyrics_f" ]; then
+	lyrics_tmp=$(mktemp "${TMPDIR:-/tmp}/song-lyrics.XXXXXX")
+	printf '%s\n' "$lyrics_f" >"$lyrics_tmp"
+	lyrics_f=$lyrics_tmp
+fi
+
+oss_preflight_gb "$ROD" "$NEED_GB" || exit 1
+
+PY=""
+if [ -n "${SONG_ACESTEP_PY:-}" ]; then
+	gen=$SONG_ACESTEP_PY
+else
+	root=$(oss_cache_root "$ROD")
+	co=$root/acestep-1.5
+	if [ ! -f "$co/.ready-$ACESTEP_PIN" ]; then
+		command -v git >/dev/null || die "needs git; install: $(oss_install_line git)"
+		command -v uv >/dev/null || die "needs uv; install: $(oss_install_line uv)"
+		echo "$ROD: provisioning ACE-Step 1.5 (first use; weights follow)" >&2
+		mkdir -p "$root"
+		[ -d "$co/.git" ] || git clone "$ACESTEP_REPO" "$co" >&2 || die "git clone failed"
+		(cd "$co" && git fetch --depth 1 origin "$ACESTEP_PIN" >&2 && git checkout "$ACESTEP_PIN" >&2) || die "checkout $ACESTEP_PIN failed"
+		(cd "$co" && uv sync >&2) || die "uv sync failed"
+		: >"$co/.ready-$ACESTEP_PIN"
+	fi
+	# The driver talks to the pinned checkout's server (`uv run acestep-api`,
+	# SONG_ACESTEP_URL, default localhost:18001). The rod never starts it:
+	# one server per session, started on the claimed host like this:
+	#   cd "$(oss_cache_root song-acestep)"/acestep-1.5 && uv run acestep-api --port 18001
+	if [ -z "${SONG_ACESTEP_URL:-}" ]; then SONG_ACESTEP_URL=http://localhost:18001; export SONG_ACESTEP_URL; fi
+	case $SONG_ACESTEP_URL in http://localhost:18001)
+		curl -fsS --max-time 5 "$SONG_ACESTEP_URL/v1/models" >/dev/null 2>&1 || die "no ACE-Step server at $SONG_ACESTEP_URL; start one first: cd $co && uv run acestep-api --port 18001"
+		;; esac
+	gen=$co/generate-song.py
+	if [ ! -f "$gen" ]; then
+		cat >"$gen" <<'PY'
+import argparse, json, os, sys, time, urllib.request
+# Driver for the pinned ACE-Step 1.5 checkout: POST /release_task, poll
+# POST /query_result, fetch GET /v1/audio (docs/en/API.md). The server is
+# `uv run acestep-api` from the same checkout, at SONG_ACESTEP_URL.
+ap = argparse.ArgumentParser()
+ap.add_argument("--prompt", default=""); ap.add_argument("--lyrics-file", default="")
+ap.add_argument("--duration", type=float, default=30); ap.add_argument("--instrumental", default="false")
+ap.add_argument("--language", default=""); ap.add_argument("--seed", type=int, default=436)
+ap.add_argument("--out", required=True)
+a = ap.parse_args()
+base = os.environ.get("SONG_ACESTEP_URL", "http://localhost:18001")
+def post(path, payload):
+    req = urllib.request.Request(base + path, data=json.dumps(payload).encode(),
+                                 headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=600) as r:
+        body = json.load(r)
+    if body.get("code") != 200:
+        raise RuntimeError(f"{path}: {body}")
+    return body["data"]
+lyrics = open(a.lyrics_file, encoding="utf-8").read() if a.lyrics_file else ""
+if a.instrumental == "true":
+    lyrics = ""
+payload = {"prompt": a.prompt, "lyrics": lyrics, "audio_format": "wav",
+           "audio_duration": a.duration, "seed": a.seed}
+if a.language:
+    payload["vocal_language"] = a.language
+task = post("/release_task", payload)
+tid = task.get("task_id", task.get("id"))
+for _ in range(600):
+    time.sleep(6)
+    res = post("/query_result", {"task_ids": [tid]})
+    items = res if isinstance(res, list) else res.get("results", res.get("tasks", []))
+    st = items[0] if items else {}
+    status = st.get("status", st.get("code", 0))
+    if status == 1:
+        url = st.get("file") or (st.get("files") or [""])[0]
+        if url.startswith("/"):
+            url = base + url
+        with urllib.request.urlopen(url, timeout=600) as r, open(a.out, "wb") as f:
+            f.write(r.read())
+        sys.exit(0)
+    if status == 2:
+        raise RuntimeError(f"generation failed: {st}")
+raise RuntimeError("generation timed out waiting for /query_result")
+PY
+	fi
+	if [ -x "$co/.venv/bin/python" ]; then PY=$co/.venv/bin/python; else PY=$co/.venv/Scripts/python.exe; fi
+	[ -x "$PY" ] || die "provisioned checkout has no python: $co/.venv"
+fi
+
+if [ -n "$lyrics_f" ] && [ -f "$lyrics_f" ]; then lf=$lyrics_f; else lf=""; fi
+if [ -n "$PY" ]; then "$PY" "$gen" --prompt "$prompt" --lyrics-file "$lf" --duration "$duration_s" \
+	--instrumental "$instrumental" --language "$language" --seed "$seed" \
+	--out "$wav" >&2 || die "generation failed"
+else
+	"$gen" --prompt "$prompt" --lyrics-file "$lf" --duration "$duration_s" \
+		--instrumental "$instrumental" --language "$language" --seed "$seed" \
+		--out "$wav" >&2 || die "generation failed"
+fi
+[ -s "$wav" ] || die "generator wrote no audio"
+[ -n "${title:-}" ] && OSS_ROD_TEXT="$title" || OSS_ROD_TEXT="oss song via ACE-Step 1.5"
+
+oss_rod_result "$wav" audio/wav

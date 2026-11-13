@@ -1,0 +1,99 @@
+#!/usr/bin/env -S bashy --bashsharp
+# transcribe-whisperx — oss rod for the `transcribe` role (WhisperX on
+# Whisper large-v3; mlx-whisper is the Mac-noted fallback, see README).
+# License re-verified 2026-11-13: BSD-2-Clause
+# (https://github.com/m-bain/whisperX/blob/main/LICENSE).
+# Weights download on first use only, behind the disk-headroom preflight.
+# TRANSCRIBE_WHISPERX_PY replaces the generator (fixture stand-ins in tests).
+
+~~~skill as guide
+---
+name: transcribe-whisperx
+description: Open-source transcription rod (WhisperX, BSD-2-Clause) for the transcribe service role. Needs uv and ffmpeg; weights download on first use after a disk-headroom preflight.
+metadata:
+  requires: "has=uv has=ffmpeg"
+---
+# transcribe-whisperx — WhisperX rod (route oss)
+
+See examples/oss-rods/README.md for picks, pins and license evidence.
+Request: --audio PATH [--language TAG] [--format txt|srt] [--title T].
+~~~
+
+set -eu
+
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+# shellcheck source=oss-preflight.bsh
+. "$here/oss-preflight.bsh"
+
+ROD=transcribe-whisperx
+# whisperx pin verified 2026-11-13 (PyPI 3.8.6, BSD-2-Clause); companions
+# (torch etc.) resolve at provision time and are recorded in the marker.
+WHISPERX_PIN=whisperx==3.8.6
+MODEL=large-v3
+# large-v3 weights (~3 GB) plus the torch env; keep 10 GiB free.
+NEED_GB=10
+OSS_ROD_TEXT=""
+
+die() { echo "$ROD: $*" >&2; exit "${2:-1}"; }
+
+if [ "${1:-}" = --doctor ]; then
+	[ "${2:-}" = --json ] || die "--doctor needs --json" 2
+	oss_doctor "has=uv|uv" "has=ffmpeg|ffmpeg"
+	exit 0
+fi
+
+REQ=$(oss_request_file "$@") || exit $?
+oss_check_schema "$REQ" || exit 2
+audio=$(oss_request_get "$REQ" audio "")
+language=$(oss_request_get "$REQ" language auto)
+format=$(oss_request_get "$REQ" format srt)
+seed=$(oss_request_get "$REQ" seed 436)
+title=$(oss_request_get "$REQ" title "")
+[ -n "$audio" ] || die "audio is required" 2
+[ -f "$audio" ] || die "audio not found: $audio"
+case $format in txt | srt) ;; *) die "format must be txt or srt" 2 ;; esac
+[ "$language" = auto ] && language=""
+
+OUT=${BASHY_SVC_OUT:-}
+[ -n "$OUT" ] || OUT=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-transcribe.XXXXXX")
+mkdir -p "$OUT"
+transcript=$OUT/transcript.$format
+
+oss_preflight_gb "$ROD" "$NEED_GB" || exit 1
+
+if [ -n "${TRANSCRIBE_WHISPERX_PY:-}" ]; then
+	gen=$TRANSCRIBE_WHISPERX_PY
+	"$gen" --audio "$audio" --language "$language" --format "$format" --seed "$seed" \
+		--out "$transcript" >&2 || die "transcription failed"
+else
+	root=$(oss_cache_root "$ROD")
+	ready=$root/.ready-$(printf '%s\n' "$WHISPERX_PIN" | cksum | cut -d' ' -f1)
+	if [ ! -f "$ready" ]; then
+		command -v uv >/dev/null || die "needs uv; install: $(oss_install_line uv)"
+		echo "$ROD: provisioning the WhisperX environment (first use; weights follow)" >&2
+		case $(oss_os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
+		mkdir -p "$root"
+		[ -x "$py" ] || uv venv --python 3.11 "$root/.venv" >&2 || die "uv venv failed"
+		uv pip install --python "$py" "$WHISPERX_PIN" >&2 || die "package install failed"
+		: >"$ready"
+	fi
+	case $(oss_os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
+	[ -x "$py" ] || die "provisioned environment has no python: $root/.venv"
+	# whisperx ships its own CLI; weights fetch on first run (preflight
+	# passed above). --compute_type int8 keeps Mac/CPU hosts usable.
+	# Empty --language means auto-detect (whisperx default).
+	lang_args=()
+	[ -n "$language" ] && lang_args=(--language "$language")
+	"$py" -m whisperx "$audio" --model "$MODEL" --output_format "$format" \
+		--output_dir "$OUT" --compute_type int8 --device cpu \
+		"${lang_args[@]}" >&2 || die "transcription failed"
+	got=$(ls "$OUT"/*."$format" 2>/dev/null | head -1)
+	[ -n "${got:-}" ] || die "whisperx wrote no transcript"
+	[ "$got" = "$transcript" ] || mv "$got" "$transcript"
+fi
+[ -s "$transcript" ] || die "generator wrote no transcript"
+[ -n "${title:-}" ] && OSS_ROD_TEXT="$title" || OSS_ROD_TEXT="oss transcription via WhisperX ($MODEL)"
+if [ "$format" = srt ]; then media=application/x-subrip; else media=text/plain; fi
+
+oss_rod_result "$transcript" "$media"

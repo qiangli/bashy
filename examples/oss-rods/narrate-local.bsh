@@ -1,0 +1,145 @@
+#!/usr/bin/env -S bashy --bashsharp
+# narrate-local — oss rod for the `narrate` role.
+# Chatterbox (ResembleAI, MIT) by default, Kokoro-82M voices (hexgrad,
+# Apache-2.0) as the light path; same pinned packages as `media voice`.
+# Licenses re-verified 2026-11-13 (PyPI chatterbox-tts MIT text; HF metadata
+# license:apache-2.0 for Kokoro-82M).
+# Weights download on first use only, behind the disk-headroom preflight.
+# NARRATE_LOCAL_PY replaces the generator (fixture stand-ins in tests).
+
+~~~skill as guide
+---
+name: narrate-local
+description: Open-source narration rod (Chatterbox MIT, Kokoro-82M Apache-2.0) for the narrate service role. Needs uv and ffmpeg; weights download on first use after a disk-headroom preflight.
+metadata:
+  requires: "has=uv has=ffmpeg"
+---
+# narrate-local — neural narration rod (route oss)
+
+See examples/oss-rods/README.md for picks, pins and license evidence.
+Voice selects `chatterbox` (default, optionally conditioned on
+--reference_audio, which must be the caller's own or a synthetic voice)
+or `kokoro:<name>` (default voice am_fenrir).
+~~~
+
+set -eu
+
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+# shellcheck source=oss-preflight.bsh
+. "$here/oss-preflight.bsh"
+
+ROD=narrate-local
+# Same pins as `media voice` (examples/media/media.bsh): en_core_web_sm is
+# pinned because misaki would otherwise fetch it at first use through
+# `uv pip`, which fails outside an activated environment.
+NEURAL_PKGS=(chatterbox-tts==0.1.7 kokoro==0.9.4 "misaki[en]==0.9.4" soundfile==0.14.0 setuptools==80.10.2
+	"en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl")
+# Chatterbox + Kokoro weights plus the uv env; keep 12 GiB free.
+NEED_GB=12
+OSS_ROD_TEXT=""
+
+die() { echo "$ROD: $*" >&2; exit "${2:-1}"; }
+
+if [ "${1:-}" = --doctor ]; then
+	[ "${2:-}" = --json ] || die "--doctor needs --json" 2
+	oss_doctor "has=uv|uv" "has=ffmpeg|ffmpeg"
+	exit 0
+fi
+
+REQ=$(oss_request_file "$@") || exit $?
+oss_check_schema "$REQ" || exit 2
+text=$(oss_request_get "$REQ" text "")
+voice=$(oss_request_get "$REQ" voice chatterbox)
+language=$(oss_request_get "$REQ" language en)
+ref=$(oss_request_get "$REQ" reference_audio "")
+seed=$(oss_request_get "$REQ" seed 436)
+title=$(oss_request_get "$REQ" title "")
+[ -n "$text" ] || die "text is required" 2
+if [ -n "$ref" ]; then [ -f "$ref" ] || die "reference_audio not found: $ref"; fi
+
+OUT=${BASHY_SVC_OUT:-}
+[ -n "$OUT" ] || OUT=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-narrate.XXXXXX")
+mkdir -p "$OUT"
+wav=$OUT/narration.wav
+
+text_tmp=""
+case $text in
+*.txt) [ -f "$text" ] && text_f=$text || { text_tmp=$(mktemp "${TMPDIR:-/tmp}/narrate-text.XXXXXX"); printf '%s\n' "$text" >"$text_tmp"; text_f=$text_tmp; } ;;
+*) text_tmp=$(mktemp "${TMPDIR:-/tmp}/narrate-text.XXXXXX"); printf '%s\n' "$text" >"$text_tmp"; text_f=$text_tmp ;;
+esac
+
+oss_preflight_gb "$ROD" "$NEED_GB" || exit 1
+
+PY=""
+if [ -n "${NARRATE_LOCAL_PY:-}" ]; then
+	gen=$NARRATE_LOCAL_PY
+else
+	root=$(oss_cache_root "$ROD")
+	ready=$root/.ready-$(printf '%s\n' "${NEURAL_PKGS[@]}" | cksum | cut -d' ' -f1)
+	if [ ! -f "$ready" ]; then
+		command -v uv >/dev/null || die "needs uv; install: $(oss_install_line uv)"
+		echo "$ROD: provisioning the neural voice environment (first use; weights follow)" >&2
+		case $(oss_os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
+		mkdir -p "$root"
+		[ -x "$py" ] || uv venv --python 3.11 "$root/.venv" >&2 || die "uv venv failed"
+		uv pip install --python "$py" "${NEURAL_PKGS[@]}" >&2 || die "package install failed"
+		: >"$ready"
+	fi
+	case $(oss_os_name) in windows) PY=$root/.venv/Scripts/python.exe ;; *) PY=$root/.venv/bin/python ;; esac
+	[ -x "$PY" ] || die "provisioned environment has no python: $root/.venv"
+	gen=$root/generate-voice.py
+	if [ ! -f "$gen" ]; then
+		cat >"$gen" <<'PY'
+import argparse, os
+# Single-utterance driver for the pinned neural voice environment (same
+# packages as `media voice`): ChatterboxTTS by default, Kokoro KPipeline
+# for kokoro:<voice>. Writes one trimmed WAV.
+ap = argparse.ArgumentParser()
+ap.add_argument("--text-file", required=True); ap.add_argument("--voice", default="chatterbox")
+ap.add_argument("--language", default="en"); ap.add_argument("--reference", default="")
+ap.add_argument("--seed", type=int, default=436); ap.add_argument("--out", required=True)
+a = ap.parse_args()
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+import numpy as np, soundfile as sf, torch
+dev = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+text = open(a.text_file, encoding="utf-8").read().strip()
+if a.voice == "chatterbox" or a.voice == "":
+    from chatterbox.tts import ChatterboxTTS
+    m = ChatterboxTTS.from_pretrained(device=dev)
+    if a.reference:
+        m.prepare_conditionals(a.reference)
+    torch.manual_seed(a.seed)
+    w = m.generate(text, exaggeration=0.7, cfg_weight=0.3, temperature=0.8)
+    sf.write(a.out, w.squeeze().detach().cpu().numpy(), m.sr)
+else:
+    from kokoro import KPipeline
+    name = a.voice.split(":", 1)[1] if ":" in a.voice else "am_fenrir"
+    lang = {"en": "a", "es": "e"}.get(a.language[:2], "a")
+    p = KPipeline(lang_code=lang, repo_id="hexgrad/Kokoro-82M", device=dev)
+    torch.manual_seed(a.seed)
+    chunks = [x.cpu().numpy() for _, _, x in p(text, voice=name, speed=1.0)]
+    sf.write(a.out, np.concatenate(chunks), 24000)
+PY
+	fi
+fi
+
+if [ -n "$PY" ]; then "$PY" "$gen" --text-file "$text_f" --voice "$voice" \
+	--language "$language" --reference "$ref" --seed "$seed" \
+	--out "$wav.raw.wav" >&2 || die "generation failed"
+else
+	"$gen" --text-file "$text_f" --voice "$voice" \
+		--language "$language" --reference "$ref" --seed "$seed" \
+		--out "$wav.raw.wav" >&2 || die "generation failed"
+fi
+# Trim leading and trailing silence so the take starts on the first word.
+command -v ffmpeg >/dev/null || die "needs ffmpeg; install: $(oss_install_line ffmpeg)"
+ffmpeg -nostdin -hide_banner -loglevel error -y -i "$wav.raw.wav" \
+	-af "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse" \
+	"$wav" || die "trimming the take failed"
+rm -f "$wav.raw.wav"
+[ -s "$wav" ] || die "generator wrote no audio"
+[ -n "${title:-}" ] && OSS_ROD_TEXT="$title" || OSS_ROD_TEXT="oss narration via $voice"
+
+oss_rod_result "$wav" audio/wav
