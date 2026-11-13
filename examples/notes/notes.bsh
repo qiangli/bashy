@@ -67,7 +67,7 @@ install() {
   cp "$here/contract.bsh" "$scratch/source/contract.bsh"
   mkdir -p "$scratch/source/checks"
   cp "$here/checks/notes.bsh" "$scratch/source/checks/notes.bsh"
-  cp "$here/shape_version.go" "$scratch/source/cmd/memos/zz_shape_version.go"
+  cp "$here/shape_version.go.tmpl" "$scratch/source/cmd/memos/zz_shape_version.go"
   printf '%s\n' "$pin" > "$scratch/source/.notes-source-pin"
   "$git_bin" -C "$scratch/source" add .gitignore shaped.json contract.bsh checks/notes.bsh \
     cmd/memos/zz_shape_version.go .notes-source-pin web/vite.config.mts \
