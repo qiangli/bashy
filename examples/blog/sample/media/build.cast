@@ -1,0 +1,5 @@
+{"version":2,"width":76,"height":12,"timestamp":1794581633,"command":"bashy blog build my-journal","title":"bashy blog build","env":{"TERM":"xterm-256color"}}
+[0.043767,"o","\u001b[1;34m$\u001b[0m bashy --bashsharp blog build my-journal\r\n"]
+[0.18673,"o","blog: building with the pure-Go generator...\r\n"]
+[1.157342,"o","Blog successfully generated at: my-journal/public\r\n"]
+[1.253021,"o","blog: built 4 post file(s) -> my-journal/public\r\n"]

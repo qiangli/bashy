@@ -1,0 +1,7 @@
+public/
+**/public/
+resources/
+**/resources/
+.site-build/
+node_modules/
+.DS_Store

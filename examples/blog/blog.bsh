@@ -1,0 +1,479 @@
+#!/usr/bin/env -S bashy --bashsharp
+# blog — a personal blog or wiki with rich media, self-hosted
+# One body, two orientations: executable Bash# and its embedded agent skill.
+#
+# Writes and hosts a journal of plain Markdown posts with the media the
+# bashy families already produce: video and voice takes (record), terminal
+# scenes (cast), local captions (transcribe), plus diagrams, colored code
+# and math for technical notes. Builds to a static site with Hugo or the
+# bundled pure-Go generator, serves it from this machine, and shares it via
+# Outpost or a Pages branch. Everything renders locally; nothing phones
+# home. Sharing (publish-outpost, publish-pages) is an explicit, named act.
+
+~~~skill as guide
+---
+name: blog
+description: Author, build, serve and share a personal blog or wiki with rich media — video and voice takes with captions, recorded terminal scenes, diagrams, colored code and math — as a shapeable custom command on the S9 site base (Hugo-compatible generator + bundled admin CMS). Use when the owner wants a journal, notebook or knowledge site they host themselves.
+metadata:
+  requires: "has=bashy"
+  step-porota: 'bashy blog new my-journal'
+  check-tests: 'bashy blog build my-journal'
+---
+
+# blog — a personal journal with rich media
+
+Every post is one Markdown file. Front matter attaches the media:
+
+    ---
+    title: A take with captions
+    date: 2026-11-13
+    video: media/demo.mp4      # a take (record family)
+    captions: media/demo.vtt   # written by hand or transcribed locally
+    audio: media/note.wav      # a voice note
+    cast: media/build.cast     # a terminal scene (cast family)
+    series: shaping-notes      # linked posts
+    part: 2
+    ---
+
+The body renders fenced ```go / ```bash ... code with coloring,
+```diagram edge lists as SVG, ```math blocks and $inline math$ — all local,
+no remote fonts or scripts.
+
+## Verbs
+
+- `blog new [DIR] [--title T]` — scaffold a journal from the sample
+  (posts, pages, admin CMS at /admin, checks) and build it once.
+- `blog build [DIR]` — build `DIR` into `DIR/public/` with the Hugo CLI
+  when installed, else the bundled pure-Go generator.
+- `blog post "Title" [--series NAME] [--part N] [DIR]` — create a dated
+  draft post under `content/posts/`.
+- `blog media DIR POST.md add FILE` — copy FILE into the site's media/
+  and set the matching front matter field by kind (video/audio/cast/
+  captions by extension). Composes with the media families:
+  `blog media . content/posts/take.md add "$(record video ...)"`
+  or `... add "$(cast record scene.cast -- cmd)"`.
+- `blog record DIR POST.md [video|audio] [-- PROMPT]` — OPT-IN, opens the
+  person's browser: capture a take with the record family and attach it.
+- `blog cast DIR POST.md -- CMD...` — record a terminal scene of CMD with
+  the cast family and attach it to the post.
+- `blog captions DIR POST.md [--lang TAG]` — OPT-IN, local inference: run
+  the transcribe pipeline on the post's video/audio and attach a .vtt.
+  No network unless the pipeline is explicitly given a remote source.
+- `blog serve [DIR] [NAME]` — register `public/` with the bashy console
+  (never starts one itself).
+- `blog edit [NAME]` — the admin CMS URL at `/admin/`.
+- `blog publish-outpost NAME` / `blog publish-pages DIR REPO [BRANCH]` —
+  explicit sharing: a public Outpost link, or a Pages branch push.
+- `blog shape-register [DIR] [NAME]` — register the source as a shaped app.
+- `blog shape-demo [DIR] [NAME] [--keep]` — the full shaping lifecycle on a
+  hand-made candidate (a series index on the home page): wish -> candidate
+  -> verify -> preview -> approve -> isolation proof -> undo.
+- `blog series [DIR]` — list the series found in the posts.
+
+## Shaping
+
+Registered with `blog shape-register`, the journal earns the Shapeable
+badge: declared checks in `checks/`, per-principal activation, one-step
+undo. `demo/series-index/` holds the demo wish: a series index section on
+the home page — a small Go file the candidate drops into `generator/`.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+RUNNER=${BASHY_BIN:-bashy}
+
+die() { echo "blog: $*" >&2; exit 1; }
+
+# ---------------------------------------------------------------- build
+
+blog_build() {
+  local site_dir=${1:-$PWD}
+  site_dir=$(cd "$site_dir" && pwd)
+  local out_dir="$site_dir/public"
+
+  if command -v hugo >/dev/null 2>&1 && [[ -f "$site_dir/hugo.toml" ]]; then
+    echo "blog: building with Hugo CLI..."
+    hugo -s "$site_dir" -d "$out_dir" --quiet || {
+      echo "blog: hugo CLI failed, falling back to the pure-Go generator"
+      gen_run "$site_dir" "$out_dir"
+    }
+  else
+    echo "blog: building with the pure-Go generator..."
+    gen_run "$site_dir" "$out_dir"
+  fi
+  touch "$out_dir/.nojekyll"
+  echo "blog: built $(ls -1 "$site_dir/content/posts"/*.md 2>/dev/null | wc -l | tr -d ' ') post file(s) -> ${out_dir#$PWD/}"
+}
+
+gen_run() {
+  # go run with explicit .go files (not a package path) builds ad-hoc with
+  # no module context, so a journal directory needs no go.mod.
+  local site_dir=$1 out_dir=$2
+  if [[ -f "$site_dir/generator/main.go" ]]; then
+    (cd "$site_dir" && GOWORK=off go run ./generator/*.go "$site_dir" "$out_dir")
+  else
+    (cd "$HERE" && GOWORK=off go run ./generator/*.go "$site_dir" "$out_dir")
+  fi
+}
+
+# ---------------------------------------------------------------- new
+
+blog_new() {
+  local target_dir="" title="Field Notes"
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --title) title="$2"; shift 2 ;;
+      -*) die "unknown option $1" ;;
+      *) if [[ -z "$target_dir" ]]; then target_dir="$1"; fi; shift ;;
+    esac
+  done
+  [[ -n "$target_dir" ]] || target_dir="$PWD/my-journal"
+  if [[ -d "$target_dir" ]] && [[ -n $(ls -A "$target_dir" 2>/dev/null) ]]; then
+    die "target directory $target_dir is not empty"
+  fi
+  mkdir -p "$target_dir"
+  target_dir=$(cd "$target_dir" && pwd)
+
+  echo "blog: initializing journal template..."
+  cp -R "$HERE/sample/." "$target_dir/"
+  if [[ "$title" != "Field Notes" ]]; then
+    sed -i.bak "s/^title = \"Field Notes\"/title = \"$title\"/" "$target_dir/hugo.toml"
+    rm -f "$target_dir/hugo.toml.bak"
+    sed -i.bak "s/^title: Field Notes$/title: $title/" "$target_dir/content/_index.md"
+    rm -f "$target_dir/content/_index.md.bak"
+  fi
+  blog_build "$target_dir"
+  echo "blog: initialized journal at $target_dir"
+  echo "blog: next: cd $target_dir && bashy blog post \"First note\""
+}
+
+# ---------------------------------------------------------------- post
+
+blog_post() {
+  local title="" series="" part="" site_dir=${BLOG_DIR:-$PWD}
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --series) series="$2"; shift 2 ;;
+      --part) part="$2"; shift 2 ;;
+      --dir) site_dir="$2"; shift 2 ;;
+      -*) die "unknown option $1" ;;
+      *) title="$1"; shift ;;
+    esac
+  done
+  [[ -n "$title" ]] || die "post needs a title"
+  site_dir=$(cd "$site_dir" && pwd)
+  [[ -d "$site_dir/content" ]] || die "$site_dir has no content/ (blog new first?)"
+
+  local slug date file
+  date=$(date +%Y-%m-%d)
+  slug=$(echo "$title" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]' '-' | sed 's/^-*//;s/-*$//')
+  file="$site_dir/content/posts/$date-$slug.md"
+  [[ -e "$file" ]] && die "$file already exists"
+
+  {
+    echo "---"
+    echo "title: \"$title\""
+    echo "date: $date"
+    [[ -n "$series" ]] && { echo "series: $series"; echo "part: ${part:-1}"; }
+    echo "summary: "
+    echo "---"
+    echo
+    echo "Write here. Fences: \`\`\`go, \`\`\`diagram, \`\`\`math; inline \$x^2\$."
+  } > "$file"
+  echo "blog: $file"
+}
+
+# ---------------------------------------------------------------- media
+
+fm_set() { # file key value — replace key in front matter, or insert before its closing ---
+  local file=$1 key=$2 value=$3 tmp
+  tmp=$(mktemp)
+  awk -v k="$key" -v v="$value" '
+    NR==1 && $0 == "---" { fm=1; print; next }
+    fm && $0 == "---" && !closed { if (!replaced) print k ": " v; closed=1; print; next }
+    fm && !replaced && index($0, k ":") == 1 { print k ": " v; replaced=1; next }
+    { print }
+  ' "$file" > "$tmp" && mv "$tmp" "$file"
+}
+
+blog_media() { # blog media [DIR] POST.md add FILE
+  local args=("$@") site_dir=${BLOG_DIR:-$PWD} post src n
+  n=${#args[@]}
+  [[ $n -ge 3 && $n -le 4 ]] || die "usage: blog media [DIR] POST.md add FILE"
+  [[ ${args[$((n-2))]} == add ]] || die "expected 'add' before the media file"
+  src=${args[$((n-1))]}
+  if [[ $n -eq 3 ]]; then
+    post=${args[0]}
+  else
+    site_dir=${args[0]}
+    post=${args[1]}
+  fi
+  blog_media_add "$site_dir" "$post" "$src"
+}
+
+blog_media_add() { # site_dir post_file path
+  local site_dir=$1 post=$2 src=$3 key
+  site_dir=$(cd "$site_dir" && pwd)
+  post=$(cd "$(dirname "$post")" && pwd)/$(basename "$post")
+  [[ -f "$post" ]] || die "post not found: $post"
+  src=$(cd "$(dirname "$src")" && pwd)/$(basename "$src")
+  [[ -f "$src" ]] || die "media file not found: $src"
+
+  local base ext
+  base=$(basename "$site_dir")-$(basename "$post" .md)
+  case "${src##*.}" in
+    mp4|webm|mov|mkv) key=video; ext=${src##*.} ;;
+    wav|m4a|mp3|ogg|flac|opus) key=audio; ext=${src##*.} ;;
+    cast) key=cast; ext=cast ;;
+    vtt) key=captions; ext=vtt ;;
+    *) die "unknown media kind: ${src##*.} (video: mp4/webm/mov/mkv, audio: wav/m4a/mp3/ogg/flac/opus, cast, vtt)" ;;
+  esac
+
+  mkdir -p "$site_dir/media"
+  local dest="$site_dir/media/$base.$ext"
+  cp "$src" "$dest"
+  fm_set "$post" "$key" "media/$base.$ext"
+  echo "blog: attached $key = media/$base.$ext"
+}
+
+# ---------------------------------------------------------------- record
+
+blog_record() { # site_dir post [kind] [-- prompt...]
+  local site_dir=$1 post=$2 kind=${3:-video}; shift 2 || true
+  [[ "${1:-}" == video || "${1:-}" == audio || "${1:-}" == photo ]] && { kind=$1; shift; }
+  [[ "${1:-}" == "--" ]] && shift
+  [[ "$kind" == photo ]] && die "a journal takes video or audio, not photos"
+  command -v record >/dev/null 2>&1 || die "record is not registered (bashy skill show record; it is the media family's take command)"
+
+  local take
+  take=$(record "$kind" --prompt "${*:-(a take for $(basename "$post" .md))}" --out "$(mktemp -u).$([[ $kind == audio ]] && echo wav || echo mp4)") || die "record failed"
+  blog_media_add "$site_dir" "$post" "$take"
+  rm -f "$take"
+}
+
+blog_cast() { # site_dir post -- cmd...
+  local site_dir=$1 post=$2; shift 2
+  [[ "${1:-}" == "--" ]] && shift
+  [[ $# -gt 0 ]] || die "cast needs a command after --"
+  local runner=(bashy)
+  command -v cast >/dev/null 2>&1 && runner=(cast)
+
+  local out
+  out=$(mktemp -u).cast
+  mkdir -p "$site_dir/media"
+  "${runner[@]}" record "$out" --cols 80 --rows 20 --idle-limit 2 --title "$(basename "$post" .md)" -- "$@" || die "cast recording failed"
+  blog_media_add "$site_dir" "$post" "$out"
+  rm -f "$out"
+}
+
+blog_captions() { # site_dir post [--lang TAG]
+  local site_dir=$1 post=$2 lang=en-US
+  shift 2 || true
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --lang) lang="$2"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  site_dir=$(cd "$site_dir" && pwd)
+  post=$(cd "$(dirname "$post")" && pwd)/$(basename "$post")
+
+  local media_key media_file vtt
+  for media_key in video audio; do
+    media_file=$(sed -n "s/^$media_key:[[:space:]]*//p" "$post" | head -1)
+    [[ -n "$media_file" ]] && break
+  done
+  [[ -n "$media_file" ]] || die "$post has no video: or audio: front matter to transcribe"
+  [[ -f "$site_dir/$media_file" ]] || die "media file missing: $site_dir/$media_file"
+
+  command -v transcribe-pipeline >/dev/null 2>&1 || die "transcribe-pipeline is not registered (the local transcription pipeline; bashy skill show transcribe)"
+  vtt="$site_dir/media/$(basename "$post" .md).vtt"
+  transcribe-pipeline --format vtt --language "$lang" --output "$vtt" "$site_dir/$media_file" || die "transcription failed"
+  fm_set "$post" captions "media/$(basename "$vtt")"
+  echo "blog: captions -> ${vtt#$PWD/} (local inference; nothing left this machine)"
+}
+
+# ---------------------------------------------------------------- share
+
+blog_serve() {
+  local site_dir=${1:-$PWD} name=${2:-${NAME:-blog}} port=${CONSOLE_PORT:-22749}
+  site_dir=$(cd "$site_dir" && pwd)
+  [[ -f "$site_dir/public/index.html" ]] || blog_build "$site_dir"
+
+  if "$RUNNER" app show "$name" >/dev/null 2>&1; then
+    "$RUNNER" app set "$name" --type site --source "$site_dir/public"
+  else
+    "$RUNNER" app add "$name" --type site --source "$site_dir/public"
+  fi
+  echo "blog: $name -> http://127.0.0.1:$port/$name/"
+  if ! (exec 3<>/dev/tcp/127.0.0.1/"$port") 2>/dev/null; then
+    echo "blog: the console is not running; start it with: bashy app serve"
+  fi
+}
+
+blog_edit() {
+  local name=${1:-${NAME:-blog}} port=${CONSOLE_PORT:-22749}
+  echo "blog: admin CMS at http://127.0.0.1:$port/$name/admin/"
+}
+
+blog_publish_outpost() {
+  local name=${1:?app name} port=${CONSOLE_PORT:-22749}
+  "$RUNNER" app set "$name" --auth public
+  outpost apps add "$name" --url "http://127.0.0.1:$port/$name/"
+  echo "blog: published $name to Outpost as a public link"
+}
+
+blog_publish_pages() {
+  local site_dir repo=${2:?owner/repo} branch=${3:-gh-pages} tmp
+  site_dir=$(cd "${1:?site dir}" && pwd)
+  [[ -f "$site_dir/public/index.html" ]] || blog_build "$site_dir"
+
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' RETURN
+  if git ls-remote --exit-code --heads "https://github.com/$repo.git" "$branch" >/dev/null 2>&1; then
+    git clone -q --depth 1 --branch "$branch" "git@github.com:$repo.git" "$tmp/site"
+  else
+    git init -q "$tmp/site"
+    git -C "$tmp/site" checkout -q --orphan "$branch"
+    git -C "$tmp/site" remote add origin "git@github.com:$repo.git"
+  fi
+  find "$tmp/site" -mindepth 1 -maxdepth 1 ! -name .git -exec rm -rf {} +
+  cp -R "$site_dir/public/." "$tmp/site/"
+  git -C "$tmp/site" add -A
+  if git -C "$tmp/site" diff --cached --quiet; then
+    echo "blog: pages already up to date"
+    return 0
+  fi
+  git -C "$tmp/site" commit -q -m "blog: publish $(date -u +%Y-%m-%dT%H:%MZ)"
+  git -C "$tmp/site" push -q origin "$branch"
+  echo "blog: pushed to $repo ($branch)"
+}
+
+blog_series() {
+  local site_dir=${1:-$PWD}
+  site_dir=$(cd "$site_dir" 2>/dev/null && pwd)
+  sed -n 's/^series:[[:space:]]*//p' "$site_dir"/content/posts/*.md 2>/dev/null | sort | uniq -c | sort -rn
+}
+
+# ---------------------------------------------------------------- shaping
+
+blog_shape_register() {
+  local site_dir=${1:-$PWD} name=${2:-${NAME:-blog}}
+  site_dir=$(cd "$site_dir" && pwd)
+  [[ -f "$site_dir/public/index.html" ]] || blog_build "$site_dir"
+  "$RUNNER" app add "$name" --type shaped --source "$site_dir" --label "Blog" \
+    --tip "Personal journal with rich media" --force
+  echo "blog: registered shaped app $name from $site_dir"
+}
+
+# The demo wish: a hand-made candidate that adds /series/<name>/ index pages.
+# The base generator exposes a hook (generator/main.go, seriesIndexHook) and
+# the candidate is the single extra Go file below -- no base file is edited.
+blog_shape_demo() {
+  local site_dir=${1:-$HERE/sample} name=${2:-${NAME:-blog}} keep=false principal=${BLOG_DEMO_PRINCIPAL:-device:demo}
+  [[ "${1:-}" == --keep ]] && { keep=true; shift; }
+  [[ "${1:-}" == "-k" ]] && { keep=true; shift; }
+  "$RUNNER" app show "$name" >/dev/null 2>&1 || blog_shape_register "$site_dir" "$name"
+
+  local work
+  work=$(mktemp -d)
+  [[ "$keep" == true ]] || trap 'rm -rf "$work"' RETURN
+
+  echo "blog: preparing candidate (series index on the home page) in $work"
+  cp -R "$HERE/sample/." "$work/candidate/"
+  cp "$HERE/demo/series-index/series.go" "$work/candidate/generator/series.go"
+  (cd "$work/candidate" && GOWORK=off go run ./generator/*.go . public >/dev/null) || die "candidate does not build"
+  grep -q 'series-list' "$work/candidate/public/index.html" || die "candidate lacks the series index section"
+
+  echo "blog: wish (import hand-made workspace)"
+  local wish_json candidate
+  wish_json=$("$RUNNER" shape wish "$name" "Add a series index section to the home page" --from "$work/candidate" --user "$principal" --json)
+  candidate=$(printf '%s' "$wish_json" | sed -n 's/.*"id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+  [[ -n "$candidate" ]] || { printf '%s\n' "$wish_json"; die "could not read candidate id"; }
+  echo "blog: candidate $candidate"
+
+  echo "blog: verify (declared checks, isolated clone)"
+  "$RUNNER" shape verify "$name" "$candidate" --user "$principal"
+
+  echo "blog: preview"
+  "$RUNNER" shape preview "$name" "$candidate" --user "$principal" || echo "blog: (console not running; preview URL unavailable headless)"
+
+  echo "blog: approve (for $principal only)"
+  "$RUNNER" shape approve "$name" "$candidate" --user "$principal"
+
+  local mine base
+  mine=$("$RUNNER" src history "$name" --user "$principal" --json | sed -n 's/.*"active"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+  base=$("$RUNNER" src history "$name" --user device:someone-else --json | sed -n 's/.*"active"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+  echo "blog: isolation: $principal active=$mine ; someone-else active=${base:-<base>}"
+  [[ -n "$mine" && "$mine" != "$base" ]] || die "isolation proof failed"
+
+  local preview_dir
+  preview_dir=$("$RUNNER" src preview "$name" "$mine" --user "$principal" 2>/dev/null | sed -n 's/.*\(.previews[^ ]*\).*/\1/p' | tail -1)
+  if [[ -n "$preview_dir" && -f "$preview_dir/public/index.html" ]] && grep -q 'series-list' "$preview_dir/public/index.html"; then
+    echo "blog: exported active revision serves the series section (see $preview_dir)"
+  fi
+
+  echo "blog: undo"
+  "$RUNNER" shape undo "$name" --user "$principal"
+  local after
+  after=$("$RUNNER" src history "$name" --user "$principal" --json | sed -n 's/.*"active"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -1)
+  [[ "$after" != "$mine" ]] || die "undo failed"
+  echo "blog: demo complete (wish -> candidate -> verify -> preview -> approve -> isolation -> undo)"
+}
+
+# ---------------------------------------------------------------- cli
+
+case "${1:-}" in
+  --skill)
+    sed -n '/^~~~skill as guide$/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d'
+    ;;
+  --contract)
+    echo 'sokilili blog efefecato reada wurite exec neto fini sotepo porota porota fini enisure gereeni fini fini'
+    ;;
+  -h|--help)
+    sed -n '2,12p' "${BASH_SOURCE[0]}" >&2
+    echo "Usage: blog VERB [args...]" >&2
+    echo "  new [DIR] [--title T]        Scaffold a journal and build it" >&2
+    echo "  build [DIR]                  Build DIR into DIR/public" >&2
+    echo "  post \"Title\" [--series S] [--part N] [--dir DIR]   New dated draft" >&2
+    echo "  media DIR POST.md add FILE   Attach a media file (by kind)" >&2
+    echo "  record DIR POST.md [video|audio] [-- PROMPT]  OPT-IN: take from the person" >&2
+    echo "  cast DIR POST.md -- CMD...   Record a terminal scene and attach it" >&2
+    echo "  captions DIR POST.md [--lang TAG]  OPT-IN: local transcription -> .vtt" >&2
+    echo "  series [DIR]                 List series in the posts" >&2
+    echo "  serve [DIR] [NAME]           Register public/ with the bashy console" >&2
+    echo "  edit [NAME]                  Admin CMS URL" >&2
+    echo "  publish-outpost NAME         Share publicly via Outpost" >&2
+    echo "  publish-pages DIR REPO [BRANCH]  Push public/ to a Pages branch" >&2
+    echo "  shape-register [DIR] [NAME]  Register the source as a shaped app" >&2
+    echo "  shape-demo [DIR] [NAME] [--keep]  Full shaping lifecycle demo" >&2
+    echo "  test                         Run this example's targeted tests" >&2
+    ;;
+  new) shift; blog_new "$@" ;;
+  build) shift; blog_build "${1:-$PWD}" ;;
+  post) shift; blog_post "$@" ;;
+  media) shift; blog_media "$@" ;;
+  record) shift; blog_record "$@" ;;
+  cast) shift; blog_cast "$@" ;;
+  captions) shift; blog_captions "$@" ;;
+  series) shift; blog_series "${1:-$PWD}" ;;
+  serve) shift; blog_serve "${1:-$PWD}" "${2:-blog}" ;;
+  edit) shift; blog_edit "${1:-blog}" ;;
+  publish-outpost) shift; blog_publish_outpost "${1:?app name}" ;;
+  publish-pages) shift; blog_publish_pages "${1:?site dir}" "${2:?owner/repo}" "${3:-gh-pages}" ;;
+  shape-register) shift; blog_shape_register "${1:-$PWD}" "${2:-blog}" ;;
+  shape-demo) shift; blog_shape_demo "$@" ;;
+  test)
+    cd "$HERE"
+    GOWORK=off go test -v ./...
+    ;;
+  *)
+    if [[ -z "${1:-}" ]]; then
+      blog_serve "$PWD" "blog"
+    else
+      echo "blog: unknown command $1 (see blog --help)" >&2
+      exit 2
+    fi
+    ;;
+esac

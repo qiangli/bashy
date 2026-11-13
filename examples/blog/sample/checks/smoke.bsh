@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# Declared checks for the shaping verifier: they run inside an isolated
+# clone of a candidate and must be able to FAIL (delete public/index.html
+# and they do). They build nothing from the network: the Hugo CLI is used
+# when installed, otherwise the self-contained pure-Go generator.
+set -euo pipefail
+
+if [[ ! -d public ]]; then
+  if command -v hugo >/dev/null 2>&1; then
+    hugo -d public --quiet
+  elif [[ -f generator/main.go ]] && command -v go >/dev/null 2>&1; then
+    (GOWORK=off go run ./generator/*.go . public)
+  elif [[ -f ../generator/main.go ]] && command -v go >/dev/null 2>&1; then
+    (GOWORK=off go run ../generator/*.go . public)
+  fi
+fi
+
+# The site builds
+test -s public/index.html
+grep -qi '<title>' public/index.html
+grep -qi '<nav' public/index.html
+
+# Every post page rendered, with its rich content intact
+found_post=0
+for page in public/p/*/index.html; do
+  test -s "$page"
+  found_post=$((found_post + 1))
+done
+[ "$found_post" -ge 3 ]
+
+# The take post: player with a caption track, and the voice note
+grep -q '<video' public/p/*/index.html
+grep -q '<track kind="captions"' public/p/*/index.html
+grep -q '<audio' public/p/*/index.html
+
+# The terminal scene rendered as a transcript
+grep -q 'class="cast-screen"' public/p/*/index.html
+grep -q 'cast-title' public/p/*/index.html
+
+# Diagrams rendered to SVG and math to HTML
+grep -q '<svg class="diagram-svg"' public/p/*/index.html
+grep -q 'class="math math-block"' public/p/*/index.html
+grep -q 'm-frac' public/p/*/index.html
+
+# Code blocks colored
+grep -q 'tok-kw' public/p/*/index.html
+
+# Series metadata visible on posts
+grep -q 'series-badge' public/p/*/index.html
+
+# Feed, styles and the admin CMS all present
+test -s public/index.xml
+grep -q '<rss' public/index.xml
+test -s public/css/style.css
+test -s public/admin/index.html
+test -s public/admin/config.yml
+test -s public/admin/sveltia-cms.min.js
+grep -q 'collections:' public/admin/config.yml
+
+# Media copied through
+test -s public/media/demo.mp4
+test -s public/media/demo.vtt

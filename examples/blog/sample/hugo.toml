@@ -1,0 +1,5 @@
+baseURL = "/"
+title = "Field Notes"
+tagline = "A personal journal of builds, breaks and fixes"
+author = "The Author"
+languageCode = "en"

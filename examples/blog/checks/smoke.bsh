@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Declared checks the shaping verifier runs for the example source: same
+# rules as sample/checks/smoke.bsh (which every new journal inherits).
+set -euo pipefail
+cd "$(dirname "${BASH_SOURCE[0]}")/../sample"
+exec ./checks/smoke.bsh

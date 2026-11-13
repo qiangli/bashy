@@ -1,0 +1,4 @@
+# Shaping contract: the base effect cap `bashy src pr verify` runs checks/
+# under. A check builds the blog inside the isolated clone (read, write,
+# exec) and inspects the static public/ tree. No network is needed or used.
+@effects("read,write,exec")

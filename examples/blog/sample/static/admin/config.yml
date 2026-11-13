@@ -1,0 +1,58 @@
+backend:
+  name: git-gateway
+  branch: main
+local_backend: true
+
+media_folder: "media"
+public_folder: "/media"
+
+collections:
+  - name: "posts"
+    label: "Posts"
+    folder: "content/posts"
+    create: true
+    slug: "{{year}}-{{month}}-{{day}}-{{slug}}"
+    sortable_fields: [date, title]
+    fields:
+      - { label: "Title", name: "title", widget: "string" }
+      - { label: "Date", name: "date", widget: "datetime", date_format: "YYYY-MM-DD", time_format: false, format: "YYYY-MM-DD" }
+      - { label: "Summary", name: "summary", widget: "text", required: false }
+      - { label: "Draft", name: "draft", widget: "boolean", default: false, required: false }
+      - label: "Series"
+        name: "series"
+        widget: "string"
+        required: false
+        hint: "Posts sharing a series name are linked on each post"
+      - { label: "Part", name: "part", widget: "number", required: false, hint: "Position in the series" }
+      - label: "Video"
+        name: "video"
+        widget: "file"
+        required: false
+        hint: "A video file in media/ (mp4, webm) — a take from the record family"
+      - label: "Captions"
+        name: "captions"
+        widget: "file"
+        required: false
+        hint: "A WebVTT caption file for the video (media/*.vtt)"
+      - label: "Audio"
+        name: "audio"
+        widget: "file"
+        required: false
+        hint: "A voice take in media/ (wav, m4a, mp3)"
+      - label: "Terminal scene"
+        name: "cast"
+        widget: "file"
+        required: false
+        hint: "An asciicast v2 file in media/ recorded by the cast family"
+      - { label: "Body", name: "body", widget: "markdown" }
+
+  - name: "pages"
+    label: "Pages"
+    folder: "content"
+    create: false
+    editor:
+      preview: true
+    fields:
+      - { label: "Title", name: "title", widget: "string" }
+      - { label: "Body", name: "body", widget: "markdown" }
+    hint: "Standalone pages such as about.md; posts live in the Posts collection"

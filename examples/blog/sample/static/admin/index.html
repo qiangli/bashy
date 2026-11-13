@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Content Manager — Sveltia CMS</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .cms-fallback {
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 2rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .cms-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .cms-badge {
+      background: #10b981;
+      color: white;
+      padding: 0.25rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+    .cms-collections {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 2rem;
+    }
+    .collection-nav {
+      list-style: none;
+      border-right: 1px solid var(--border);
+      padding-right: 1rem;
+    }
+    .collection-item {
+      padding: 0.6rem 1rem;
+      cursor: pointer;
+      border-radius: 6px;
+      margin-bottom: 0.25rem;
+      color: var(--fg);
+      text-decoration: none;
+      display: block;
+    }
+    .collection-item:hover, .collection-item.active {
+      background: var(--border);
+    }
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+    .form-label {
+      display: block;
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+      font-size: 0.9rem;
+    }
+    .form-input, .form-textarea {
+      width: 100%;
+      padding: 0.6rem;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: inherit;
+    }
+    .form-textarea {
+      min-height: 140px;
+      font-family: monospace;
+    }
+    .cms-actions {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+  </style>
+</head>
+<body>
+  <!-- Sveltia CMS (MIT) - locally vendored build -->
+  <script src="./sveltia-cms.min.js" type="module"></script>
+
+  <!-- Fallback / Local Workspace Editor for sandboxed or offline environments -->
+  <div id="local-cms-container" class="cms-fallback">
+    <div class="cms-header">
+      <div>
+        <h1>Content Manager <span class="cms-badge">Sveltia CMS (MIT)</span></h1>
+        <p style="color:var(--muted);font-size:0.9rem;margin-top:0.25rem;">
+          Managing company website content via Git-backed Markdown &amp; YAML collections.
+        </p>
+      </div>
+      <div>
+        <a href="/admin/editor/" class="btn btn-primary" style="font-size:0.85rem;">Open Visual Editor</a>
+      </div>
+    </div>
+
+    <div class="cms-collections">
+      <ul class="collection-nav">
+        <li><strong style="font-size:0.85rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:0.5rem;">Pages Collection</strong></li>
+        <li><a href="#home" class="collection-item active" onclick="selectPage('home')">Home Page (<code>_index.md</code>)</a></li>
+        <li><a href="#about" class="collection-item" onclick="selectPage('about')">About (<code>about.md</code>)</a></li>
+        <li><a href="#services" class="collection-item" onclick="selectPage('services')">Services (<code>services.md</code>)</a></li>
+        <li><a href="#pricing" class="collection-item" onclick="selectPage('pricing')">Pricing (<code>pricing.md</code>)</a></li>
+        <li><a href="#contact" class="collection-item" onclick="selectPage('contact')">Contact (<code>contact.md</code>)</a></li>
+      </ul>
+
+      <div class="collection-editor">
+        <form id="editor-form" onsubmit="saveEntry(event)">
+          <div class="form-group">
+            <label class="form-label">Page Title</label>
+            <input type="text" id="entry-title" class="form-input" value="Home">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Tagline / Subheading</label>
+            <input type="text" id="entry-tagline" class="form-input" value="Engineering tomorrow's reliable software systems">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Body Markdown</label>
+            <textarea id="entry-body" class="form-textarea">### Why Choose Us
+
+We bring deep systems expertise, rigorous engineering discipline, and a relentless focus on simplicity and self-hostability.
+
+- **Self-Hostable First**: Run on the hardware you already own or standard cloud instances.
+- **Agentic Automation**: Designed from the ground up for safe, human-directed autonomous workflows.
+- **Provable Safety**: Contract-first architecture with verified gates and isolated rollbacks.</textarea>
+          </div>
+          <div class="cms-actions">
+            <button type="submit" class="btn btn-primary">Save Content</button>
+            <a href="/" class="btn btn-secondary">Back to Site</a>
+            <span id="save-status" style="align-self:center;font-size:0.85rem;color:#10b981;display:none;">Saved to local draft!</span>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const pages = {
+      home: {
+        title: "Home",
+        tagline: "Engineering tomorrow's reliable software systems",
+        body: "### Why Choose Us\n\nWe bring deep systems expertise, rigorous engineering discipline, and a relentless focus on simplicity and self-hostability.\n\n- **Self-Hostable First**: Run on the hardware you already own.\n- **Agentic Automation**: Safe, human-directed workflows.\n- **Provable Safety**: Contract-first architecture."
+      },
+      about: {
+        title: "About Us",
+        tagline: "Our mission, philosophy, and background",
+        body: "Acme Innovations was founded with a clear objective: to restore autonomy and resilience to software infrastructure."
+      },
+      services: {
+        title: "Services",
+        tagline: "Comprehensive software engineering, infrastructure consulting, and architecture",
+        body: "### What We Do\n\n- 1. Architecture Consulting\n- 2. Infrastructure Optimization\n- 3. Agentic Integration\n- 4. Continuous Verification"
+      },
+      pricing: {
+        title: "Pricing & Plans",
+        tagline: "Transparent, predictable pricing models",
+        body: "### Starter ($1,500/mo)\nUp to 3 services or apps.\n\n### Professional ($4,500/mo)\nUp to 10 services or apps.\n\n### Enterprise (Custom)\nCustom mesh and sharded LLM routing."
+      },
+      contact: {
+        title: "Contact",
+        tagline: "Get in touch with our team",
+        body: "Email: hello@acme.example.invalid\nPhone: +1 (555) 019-2834\nAddress: 100 Innovation Way, Suite 400"
+      }
+    };
+
+    function selectPage(id) {
+      document.querySelectorAll('.collection-item').forEach(el => el.classList.remove('active'));
+      const activeEl = Array.from(document.querySelectorAll('.collection-item')).find(el => el.getAttribute('href') === '#' + id);
+      if (activeEl) activeEl.classList.add('active');
+
+      const data = pages[id] || pages.home;
+      document.getElementById('entry-title').value = data.title;
+      document.getElementById('entry-tagline').value = data.tagline;
+      document.getElementById('entry-body').value = data.body;
+    }
+
+    function saveEntry(e) {
+      e.preventDefault();
+      const status = document.getElementById('save-status');
+      status.style.display = 'inline';
+      setTimeout(() => { status.style.display = 'none'; }, 2500);
+    }
+  </script>
+</body>
+</html>
