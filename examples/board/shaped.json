@@ -1,0 +1,4 @@
+{
+  "server": {"main": "board-console", "args": ["-addr", "$ADDR", "-data", "$DATA"]},
+  "genie": {"examples": ["Show my cards first", "Make the board easier to scan"]}
+}

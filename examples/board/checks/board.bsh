@@ -1,0 +1,18 @@
+set -eu
+test "$(cat .board-source-pin)" = '5069fb56ce309d5572ca3ed60d4d3c322a03a452'
+head -n 1 LICENSE | grep -qx 'MIT License'
+test -s shaped.json
+test -s go.mod
+! test -e .claude/skills
+! test -e packages/email/src/templates/static
+test -s board-console/main.go
+test -s board-console/dist/api.mjs
+test -s board-console/dist/drizzle/0000_confused_pixie.sql
+test -s board-console/dist/drizzle/meta/_journal.json
+test -s board-console/web/index.html
+grep -q '/board/' board-console/web/index.html
+! grep -q 'plausible' board-console/web/index.html
+! grep -q '@sentry/node' board-console/dist/api.mjs
+! grep -q '@sentry/profiling-node' board-console/dist/api.mjs
+grep -q 'BOARD_API_PORT' board-console/dist/api.mjs
+grep -q '"main": "board-console"' shaped.json
