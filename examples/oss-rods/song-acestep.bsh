@@ -97,8 +97,9 @@ else
 		curl -fsS --max-time 5 "$SONG_ACESTEP_URL/v1/models" >/dev/null 2>&1 || die "no ACE-Step server at $SONG_ACESTEP_URL; start one first: cd $co && uv run acestep-api --port 18001"
 		;; esac
 	gen=$co/generate-song.py
-	if [ ! -f "$gen" ]; then
-		cat >"$gen" <<'PY'
+	# Refresh the generated driver so a previous checkout cannot retain an
+	# older API shape after the rod is updated.
+	cat >"$gen" <<'PY'
 import argparse, json, os, sys, time, urllib.request
 # Driver for the pinned ACE-Step 1.5 checkout: POST /release_task, poll
 # POST /query_result, fetch GET /v1/audio (docs/en/API.md). The server is
@@ -129,12 +130,20 @@ task = post("/release_task", payload)
 tid = task.get("task_id", task.get("id"))
 for _ in range(600):
     time.sleep(6)
-    res = post("/query_result", {"task_ids": [tid]})
+    res = post("/query_result", {"task_id_list": [tid]})
     items = res if isinstance(res, list) else res.get("results", res.get("tasks", []))
     st = items[0] if items else {}
     status = st.get("status", st.get("code", 0))
     if status == 1:
+        result = st.get("result", [])
+        result = json.loads(result) if isinstance(result, str) else result
+        if isinstance(result, dict):
+            result = [result]
         url = st.get("file") or (st.get("files") or [""])[0]
+        if not url and result:
+            url = result[0].get("file", "")
+        if not url:
+            raise RuntimeError(f"generation succeeded without an audio URL: {st}")
         if url.startswith("/"):
             url = base + url
         with urllib.request.urlopen(url, timeout=600) as r, open(a.out, "wb") as f:
@@ -144,7 +153,6 @@ for _ in range(600):
         raise RuntimeError(f"generation failed: {st}")
 raise RuntimeError("generation timed out waiting for /query_result")
 PY
-	fi
 	if [ -x "$co/.venv/bin/python" ]; then PY=$co/.venv/bin/python; else PY=$co/.venv/Scripts/python.exe; fi
 	[ -x "$PY" ] || die "provisioned checkout has no python: $co/.venv"
 fi
