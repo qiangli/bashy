@@ -555,6 +555,13 @@ replace go.podman.io/podman/v6 => github.com/qiangli/podman/v6 v6.0.0-2026101300
 // fork. Keep it as an exact flat sibling in umbrella and standalone builds.
 replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/v2 v2.0.0-20261113114342-c7e10f7adc61
 
+// yoke's files panel moved to the maintained File Browser (module
+// github.com/gtsteffaniak/filebrowser/backend) via the qiangli/filebrowser-quantum
+// fork's fbembed branch. The replace is inert until the yoke pin above brings
+// that module into the graph; the old replace stays for the pinned yoke until
+// then. Bumping the yoke pin must also update internal/agentos/src_mount.go.
+replace github.com/gtsteffaniak/filebrowser/backend => github.com/qiangli/filebrowser-quantum/backend v0.0.0-20261113130027-f04d6fbf3fd6
+
 // gotreesitter: pinned local fork of upstream v0.16.0 (../gotreesitter,
 // hosted as qiangli/gotreesitter, module path kept as upstream's) with the
 // five non-permissive grammars deleted at the byte level — caddy,

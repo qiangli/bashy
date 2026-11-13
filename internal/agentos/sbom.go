@@ -212,21 +212,22 @@ func ClassifyLicense(content string) (string, LicenseClass) {
 }
 
 var firstPartyLicenses = map[string]string{
-	"github.com/qiangli/bashy":                "MIT",
-	"github.com/bashsharp/bashsharp":          "BSD-3-Clause",
-	"github.com/qiangli/coreutils":            "MIT",
-	"github.com/qiangli/yoke":                 "MIT",
-	"github.com/qiangli/yoke/pkg/llmgw":       "MIT",
-	"github.com/qiangli/ycode":                "MIT",
-	"github.com/qiangli/ycode/examples/genie": "MIT",
-	"mvdan.cc/sh/v3":                          "BSD-3-Clause",
-	"github.com/qiangli/outpost":              "MIT",
-	"github.com/ergochat/readline":            "MIT",
-	"github.com/filebrowser/filebrowser/v2":   "Apache-2.0",
-	"github.com/odvcencio/gotreesitter":       "MIT",
-	"github.com/benhoyt/goawk":                "MIT",
-	"github.com/qiangli/gfy":                  "MIT",
-	"github.com/dhnt/dhnt":                    "Apache-2.0",
+	"github.com/qiangli/bashy":                    "MIT",
+	"github.com/bashsharp/bashsharp":              "BSD-3-Clause",
+	"github.com/qiangli/coreutils":                "MIT",
+	"github.com/qiangli/yoke":                     "MIT",
+	"github.com/qiangli/yoke/pkg/llmgw":           "MIT",
+	"github.com/qiangli/ycode":                    "MIT",
+	"github.com/qiangli/ycode/examples/genie":     "MIT",
+	"mvdan.cc/sh/v3":                              "BSD-3-Clause",
+	"github.com/qiangli/outpost":                  "MIT",
+	"github.com/ergochat/readline":                "MIT",
+	"github.com/filebrowser/filebrowser/v2":       "Apache-2.0",
+	"github.com/gtsteffaniak/filebrowser/backend": "Apache-2.0",
+	"github.com/odvcencio/gotreesitter":           "MIT",
+	"github.com/benhoyt/goawk":                    "MIT",
+	"github.com/qiangli/gfy":                      "MIT",
+	"github.com/dhnt/dhnt":                        "Apache-2.0",
 }
 
 // FindLicense searches a directory for common license file names and returns
@@ -318,6 +319,8 @@ func findModuleLicenseDir(modPath, modVer string, localRoots []string) string {
 			candidate = filepath.Join(root, "readline")
 		case modPath == "github.com/filebrowser/filebrowser/v2":
 			candidate = filepath.Join(root, "filebrowser")
+		case modPath == "github.com/gtsteffaniak/filebrowser/backend":
+			candidate = filepath.Join(root, "filebrowser-quantum", "backend")
 		case modPath == "github.com/odvcencio/gotreesitter":
 			candidate = filepath.Join(root, "gotreesitter")
 		case strings.Contains(modPath, "ycode/examples/genie"):
