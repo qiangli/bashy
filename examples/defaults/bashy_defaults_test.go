@@ -98,7 +98,7 @@ echo "$*" >> "$FAKE_LOG"
 src="$BASHY_HOME/src/bashy"
 case "$1 $2" in
   "src fetch"|"src upgrade")
-    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/onboard" "$src/examples/satellite-provision" "$src/examples/media" "$src/examples/record" "$src/examples/cast" "$src/examples/chrome" "$src/examples/service-door" "$src/examples/defaults" "$src/examples/oss-rods" "$src/kb/defaults/pages"
+    mkdir -p "$src/examples/outpost-profile" "$src/examples/satellite-member" "$src/examples/onboard" "$src/examples/satellite-provision" "$src/examples/media" "$src/examples/record" "$src/examples/cast" "$src/examples/chrome" "$src/examples/service-door" "$src/examples/defaults" "$src/examples/oss-rods" "$src/examples/api-rods" "$src/kb/defaults/pages"
     : > "$src/examples/outpost-profile/outpost-profile.bsh"
     : > "$src/examples/satellite-member/satellite-member.bsh"
     : > "$src/examples/onboard/onboard.bsh"
@@ -121,6 +121,8 @@ case "$1 $2" in
     : > "$src/examples/oss-rods/image-qwen.bsh"
     : > "$src/examples/oss-rods/narrate-local.bsh"
     : > "$src/examples/oss-rods/transcribe-whisperx.bsh"
+    : > "$src/examples/api-rods/replicate-media.bsh"
+    : > "$src/examples/api-rods/replicate.yaml"
     : > "$src/kb/defaults/pages/a.md"; : > "$src/kb/defaults/pages/b.md"
     ;;
   "commands show")
@@ -133,6 +135,8 @@ case "$1 $2" in
       case "$a" in exec.2=*) printf '%s' "${a#exec.2=}" > "$FAKE_REG/$name" ;; exec.3=*) printf '%s' "${a#exec.3=}" > "$FAKE_REG/$name.role" ;; esac
     done
     ;;
+  "tool show") [ -f "$FAKE_REG/tool-replicate-media" ] || exit 1 ;;
+  "tool add") : > "$FAKE_REG/tool-replicate-media" ;;
   *) echo "fake bashy: unexpected $*" >&2; exit 1 ;;
 esac
 `
@@ -209,7 +213,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-qwen: registered", "narrate-local: registered", "transcribe-whisperx: registered"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-qwen: registered", "narrate-local: registered", "transcribe-whisperx: registered", "song-replicate: registered", "image-replicate: registered", "animate-replicate: registered", "replicate-media: registered"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}

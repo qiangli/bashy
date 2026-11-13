@@ -4,6 +4,9 @@ Start at [INDEX.md](INDEX.md), which has one entry per load-bearing doc.
 
 ## Abstracts
 
+- **[Sprint 627 M5 API rods](plan-s627-m5-api-rods.md).** Typed HTTP media binding,
+  Replicate rods, fixture verification and the separate operator approved paid smoke.
+
 - **[Sprint 614 collaboration evidence](s614-collaboration-evidence.md).**
   One final journey pass after all Sprint 614 features landed: per-tool
   results tied to the candidate commits, the Git LFS defect it found and

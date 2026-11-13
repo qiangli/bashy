@@ -136,6 +136,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	f.env = append(os.Environ(),
 		"BASHY_COMMANDS_DIR="+filepath.Join(root, "ring"), "BASHY_HOME="+filepath.Join(root, "home"),
+		"BASHY_FLEET_DIR="+filepath.Join(root, "fleet"), "BASHY_TOOLS_DIR="+filepath.Join(root, "fleet", "tools"), "BASHY_TOOLS_PATH=", "BASHY_FLEET_SEEDS=off",
 		"BASHY_HINTS=off", "BASHY_TELEMETRY_QUIET=1", "BASHY_SVC_BASHY_BIN="+f.bin,
 		"HANDOFF_LOG="+filepath.Join(root, "handoff.log"), "TMPDIR="+root)
 	return f
@@ -280,7 +281,7 @@ func TestSpendNeedsYes(t *testing.T) {
 	if f.handoff() != "" {
 		t.Fatal("refused rod ran")
 	}
-	env, _, code = f.runDoor(nil, "image.generate", "--provider", "image-paid", "--yes", "--dry-run")
+	env, _, code = f.runDoor(nil, "image.generate", "--provider", "image-paid", "--dry-run")
 	if code != 0 || env.Outcome != "dry-run" || env.Route != "api" || env.CostClass != "api" || f.handoff() != "" {
 		t.Fatalf("dry-run: exit %d %+v", code, env)
 	}

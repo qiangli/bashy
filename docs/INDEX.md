@@ -1,5 +1,7 @@
 # bashy docs index
 
+- [Sprint 627 M5 API rods](plan-s627-m5-api-rods.md) — generic typed HTTP media binding, Replicate rod delivery, offline verification and remaining paid smoke.
+
 - [Boundary control](boundary.md) — S583.1 design of record: owner by default, circles are member attributes from the Cloudbox list, grants checked only at egress; egress inventory and decisions (circle, mutuality, offline list).
 - [UI–CLI parity](ui-cli-parity.md) — S606: every cloudbox/satellite/outpost web-console action mapped to its bashy verb; missing verbs filed as parity-labelled todos; S614 adds the collaboration-app audit (S1) and the desk page-action verbs (S11).
 - [Memos decision](memos-decision.md) — S614 S7 spike: Memos assessed against Notepad + KB; adapter design recorded, PARKED by the operator (no follow-up).

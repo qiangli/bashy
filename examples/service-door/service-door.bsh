@@ -70,6 +70,18 @@ if ! chosen=$(BASHY_HINTS=off "$bashy_bin" providers "${select_args[@]}" 2>/dev/
     [ "$yes" = 0 ] || list_args+=(--yes)
     [ -z "$request" ] || list_args+=("$request")
     candidates=$(BASHY_HINTS=off "$bashy_bin" providers "${list_args[@]}" 2>/dev/null || echo '[]')
+    # A dry run may describe a paid route without granting consent. The
+    # selector's sole objection must be the spend/send confirmation; no rod
+    # is dispatched and no HTTP request is made.
+    if [ "$dry" = 1 ]; then
+        preview=$(printf '%s\n' "$candidates" | J_PROVIDER="$provider" jq -c 'first(.[] | select(.rejected == "requires --yes for spend/send effect") | select(env.J_PROVIDER == "" or .name == env.J_PROVIDER)) // empty')
+        if [ -n "$preview" ]; then
+            name=$(printf '%s\n' "$preview" | jq -r .name)
+            selected_route=$(printf '%s\n' "$preview" | jq -r .route)
+            envelope dry-run "" '[]'
+            exit 0
+        fi
+    fi
     unavailable='[]'
     while IFS=$'\x1f' read -r c_name c_kind c_route c_reason; do
         [ -n "$c_name" ] || continue

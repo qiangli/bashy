@@ -1,0 +1,99 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Replicate media rod. Prediction creation and polling use toolcmd mode:http.
+# The bearer resolves from token_ref=replicate; this script never reads a key.
+set -eu
+
+kind=${1:?song, image or animate required}; shift
+rod=${kind}-replicate
+bashy_bin=${BASHY_API_BASHY_BIN:-bashy}
+die() { echo "$rod: $1" >&2; exit "${2:-1}"; }
+
+if [ "${1:-}" = --doctor ]; then
+    [ "${2:-}" = --json ] || die '--doctor needs --json' 2
+    missing=''; available=true
+    for c in jq curl ffprobe python3; do
+        if ! command -v "$c" >/dev/null 2>&1; then
+            case $(uname -s) in
+                Darwin) install="brew install $c" ;;
+                Linux) install="sudo apt install $c" ;;
+                *) install="install $c" ;;
+            esac
+            [ -z "$missing" ] || missing="$missing,"
+            missing="$missing{\"need\":\"has=$c\",\"install\":\"$install\"}"
+            available=false
+        fi
+    done
+    printf '{"schema_version":"bashy-svc-doctor-v1","available":%s,"missing":[%s]}\n' "$available" "$missing"
+    exit 0
+fi
+
+if [ "${1:-}" = --dry-run ]; then
+    echo '{"schema_version":"bashy-svc-rod-v1","cost_class":"api","outcome":"dry-run","outputs":[]}'
+    exit 0
+fi
+# Direct rod runs obey the same consent rule as the service door.
+[ "${BASHY_SVC_YES:-0}" = 1 ] || die 'paid API generation requires --yes through the service door' 126
+[ "$#" -eq 1 ] && [ -f "$1" ] || die 'give one request JSON file' 2
+req=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+schema=$(jq -er '.schema_version // empty' "$req") || die 'missing schema_version' 2
+[ "$schema" = bashy-svc-request-v1 ] || die "unsupported schema_version $schema" 2
+out=${BASHY_SVC_OUT:-}
+[ -n "$out" ] || out=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-api.XXXXXX")
+mkdir -p "$out"
+out=$(cd "$out" && pwd)
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/bashy-api-input.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+input=$tmp/input.json
+role=${BASHY_SVC_ROLE:-$kind}
+
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+command=$(python3 "$here/make-input.py" "$kind" "$role" "$req" "$input") || exit 2
+case $kind in
+    song) ext=wav; media=audio/wav; count=1 ;;
+    image) ext=png; media=image/png; count=$(jq -r '.count // 1' "$req"); [ "$command" = image ] || count=1 ;;
+    animate) ext=mp4; media=video/mp4; count=1 ;;
+esac
+
+# Only the create command carries spend. Polling is a read, bounded below.
+run_http() {
+    "$bashy_bin" tool cmd run "replicate-media:$1" --json -- "$2"
+}
+created=$("$bashy_bin" tool cmd run "replicate-media:$command" --yes --json -- "$input") || die 'prediction creation failed (see toolcmd outcome)'
+prediction=$(printf '%s\n' "$created" | jq -er '.text | fromjson') || die 'invalid prediction response'
+id=$(printf '%s\n' "$prediction" | jq -er '.id') || die 'prediction has no id'
+case $id in ''|*[!a-zA-Z0-9_-]*) die 'prediction id is invalid' ;; esac
+max=${BASHY_API_MAX_POLLS:-120}
+interval=${BASHY_API_POLL_INTERVAL:-2}
+poll=0
+while [ "$poll" -lt "$max" ]; do
+    status=$(printf '%s\n' "$prediction" | jq -r '.status // empty')
+    case $status in
+        succeeded) break ;;
+        failed|canceled) die "prediction $id $status" ;;
+        starting|processing) ;;
+        *) die "prediction $id has unknown status" ;;
+    esac
+    poll=$((poll + 1))
+    sleep "$interval"
+    response=$(run_http prediction "$id") || die 'prediction poll failed'
+    prediction=$(printf '%s\n' "$response" | jq -er '.text | fromjson') || die 'invalid poll response'
+done
+[ "$(printf '%s\n' "$prediction" | jq -r '.status')" = succeeded ] || die "prediction $id timed out"
+urls=$(printf '%s\n' "$prediction" | jq -er '[.output | if type == "array" then .[] else . end] | map(select(type == "string"))') || die 'prediction has no output URLs'
+url_count=$(printf '%s\n' "$urls" | jq 'length')
+[ "$url_count" -eq "${count:-1}" ] || die 'prediction output count is unexpected'
+outputs='[]'
+index=0
+while [ "$index" -lt "$url_count" ]; do
+    url=$(printf '%s\n' "$urls" | jq -r ".[$index]")
+    case $url in https://replicate.delivery/*|https://*.replicate.delivery/*) ;; *) die 'prediction output URL is not on replicate.delivery' ;; esac
+    number=$(printf '%02d' $((index + 1)))
+    artifact="$out/$kind-$number.$ext"
+    curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --max-time 180 --output "$artifact" "$url" || die 'artifact download failed'
+    [ -s "$artifact" ] || die 'downloaded artifact is empty'
+    ffprobe -v error "$artifact" >/dev/null 2>&1 || die 'downloaded artifact is not decodable media'
+    outputs=$(printf '%s\n' "$outputs" | J_P="$artifact" J_M="$media" jq -c '. + [{path:env.J_P,media_type:env.J_M}]')
+    index=$((index + 1))
+done
+printf '%s\n' "$outputs" | jq -c '{schema_version:"bashy-svc-rod-v1",outputs:.,text:"Replicate prediction completed"}'

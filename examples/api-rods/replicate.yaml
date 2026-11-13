@@ -1,0 +1,61 @@
+# Replicate prediction transport for Sprint 627 M5. No credential value belongs
+# here: token_ref resolves one host vault binding (REPLICATE_API_KEY).
+name: replicate-media
+kind: cli
+display: Replicate media API
+commands:
+  - name: song
+    mode: http
+    effects: [read, net, remote, spend]
+    timeout: 2m
+    http:
+      method: POST
+      url: https://api.replicate.com
+      path: /v1/models/minimax/music-2.5/predictions
+      token_ref: replicate
+      args:
+        - {name: input, type: json-file, required: true}
+  - name: image
+    mode: http
+    effects: [read, net, remote, spend]
+    timeout: 2m
+    http:
+      method: POST
+      url: https://api.replicate.com
+      path: /v1/models/black-forest-labs/flux-schnell/predictions
+      token_ref: replicate
+      args:
+        - {name: input, type: json-file, required: true}
+  - name: image-edit
+    mode: http
+    effects: [read, net, remote, spend]
+    timeout: 2m
+    http:
+      method: POST
+      url: https://api.replicate.com
+      path: /v1/models/black-forest-labs/flux-kontext-pro/predictions
+      token_ref: replicate
+      args:
+        - {name: input, type: json-file, required: true}
+  - name: animate
+    mode: http
+    effects: [read, net, remote, spend]
+    timeout: 2m
+    http:
+      method: POST
+      url: https://api.replicate.com
+      path: /v1/models/bytedance/omni-human/predictions
+      token_ref: replicate
+      args:
+        - {name: input, type: json-file, required: true}
+  - name: prediction
+    mode: http
+    effects: [read, net, remote]
+    timeout: 30s
+    http:
+      method: GET
+      url: https://api.replicate.com
+      path: /v1/predictions/{id}
+      token_ref: replicate
+      args:
+        - {name: id, required: true}

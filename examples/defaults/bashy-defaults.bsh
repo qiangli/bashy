@@ -66,7 +66,9 @@ tab opening), the service verbs `plan`,
 are rods, see docs/service-rod-contract.md); `transcribe` has an embedded
 pipeline front door. The M2 oss rods `song-acestep`,
 `image-qwen`, `narrate-local` and `transcribe-whisperx` (examples/oss-rods:
-provides/route/requires records) and `bashy-defaults` itself.
+provides/route/requires records), the M5 Replicate API rods
+(`examples/api-rods`, with vault-bound HTTP tool commands), and
+`bashy-defaults` itself.
 
 The default kb pages (`kb/defaults` in the pin) need no setup:
 `bashy kb search|list|show` and `bashy recall` read them as a read-only
@@ -119,6 +121,9 @@ song-acestep|examples/oss-rods/song-acestep.bsh|read,write,exec,net||song|oss|ha
 image-qwen|examples/oss-rods/image-qwen.bsh|read,write,exec,net||image.generate,image.edit|oss|has=uv
 narrate-local|examples/oss-rods/narrate-local.bsh|read,write,exec,net||narrate|oss|has=uv has=ffmpeg
 transcribe-whisperx|examples/oss-rods/transcribe-whisperx.bsh|read,write,exec,net||transcribe|oss|has=uv has=ffmpeg
+song-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|song|song|api|has=jq has=curl has=ffprobe has=python3
+image-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|image|image.generate,image.edit|api|has=jq has=curl has=ffprobe has=python3
+animate-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|animate|animate|api|has=jq has=curl has=ffprobe has=python3
 bashy-defaults|examples/defaults/bashy-defaults.bsh|read,write,exec"
 
 usage() {
@@ -220,6 +225,20 @@ cmd_apply() {
         "$(bashy_bin)" commands add "$name" "$@" >/dev/null || fail "cannot register $name" 1
         echo "$PROG: $name: registered from the source pin"
     done
+    tool_path="$src/examples/api-rods/replicate.yaml"
+    if [ -f "$tool_path" ]; then
+        if "$(bashy_bin)" tool show replicate-media --json >/dev/null 2>&1; then
+            if [ "$force" = 1 ]; then
+                "$(bashy_bin)" tool add --force "$tool_path" >/dev/null || fail "cannot replace replicate-media tool" 1
+                echo "$PROG: replicate-media: replaced from the source pin"
+            else
+                echo "$PROG: replicate-media: kept your own tool registration"
+            fi
+        else
+            "$(bashy_bin)" tool add "$tool_path" >/dev/null || fail "cannot register replicate-media tool" 1
+            echo "$PROG: replicate-media: registered from the source pin"
+        fi
+    fi
     echo "$PROG: kb defaults: $(kb_pages) page(s) in $src/kb/defaults (read automatically)"
 }
 
