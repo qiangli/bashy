@@ -116,6 +116,11 @@ func newProviderSearchCmd() *cobra.Command {
 		if len(args) == 0 {
 			return base(c, args)
 		}
+		// A bare query keeps the key ladder it always had; vendor providers
+		// tie on route, so auto-selection among them would refuse it.
+		if !c.Flags().Changed("provider") && route == "" && !dryRun {
+			return base(c, args)
+		}
 		provider, _ := c.Flags().GetString("provider")
 		max, _ := c.Flags().GetInt("max")
 		jsonOut, _ := c.Flags().GetBool("json")

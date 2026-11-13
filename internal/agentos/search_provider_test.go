@@ -73,3 +73,20 @@ func TestVendorSearchEventsRequireToolAndCitation(t *testing.T) {
 		})
 	}
 }
+
+func TestBareSearchKeepsKeyLadder(t *testing.T) {
+	ringDir(t)
+	for _, k := range []string{"TAVILY_API_KEY", "BRAVE_API_KEY", "BRAVE_SEARCH_API_KEY", "SERPER_API_KEY", "SEARXNG_URL"} {
+		t.Setenv(k, "")
+	}
+	for _, name := range []string{"fixture-a", "fixture-b"} {
+		writeRecord(t, fleet.Command{Name: name, Script: "true", Route: "api", Provides: []string{"search"}, Effects: []string{"read"}})
+	}
+	cmd := newProviderSearchCmd()
+	cmd.SetOut(&bytes.Buffer{})
+	cmd.SetErr(&bytes.Buffer{})
+	cmd.SetArgs([]string{"go"})
+	if err := cmd.Execute(); err != nil && strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("bare search went through the provider selector: %v", err)
+	}
+}
