@@ -22,6 +22,13 @@ The four-leaf clover was an early visual inspiration, not a fidelity requirement
 The selected direction prioritizes simplicity and a repeatable entry point
 across participating apps.
 
+## SVG master
+
+`flow.svg` (Sprint 636) is the hand-authored vector master on a 24-unit grid:
+two cubic outlines, filled with `currentColor`, so a page draws it in its own
+text colour. The bashy web console's Shape button (yoke `genie.js`) carries
+this path verbatim. The PNG treatments below remain the colour references.
+
 ## Screen and monochrome treatments
 
 | Recommended screen treatment | Warmer alternate | Monochrome on white |
