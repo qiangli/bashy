@@ -1,0 +1,8 @@
+{"version": 2, "width": 64, "height": 12, "timestamp": 1762953600, "env": {"SHELL": "/bin/sh", "TERM": "xterm-256color"}}
+[0.1, "o", "\u001b[1m a clip, queued and forgotten\u001b[0m\r\n"]
+[0.5, "o", "$ clip queue --from demo.cast --start 0 --end 4\r\n"]
+[0.9, "o", "c1a2b3c4\r\n"]
+[1.3, "o", "$ clip work\r\n"]
+[2.0, "o", "\u001b[32mrendered 1 clip(s)\u001b[0m\r\n"]
+[2.4, "o", "$ clip take c1a2b3c4\r\n"]
+[2.8, "o", "/clips/c1a2b3c4.gif\r\n"]
