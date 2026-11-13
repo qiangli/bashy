@@ -530,6 +530,7 @@ func containsString(items []string, want string) bool {
 // their own Synopsis; builtins are standard). Brand-neutral, one line each.
 var verbSynopsis = map[string]string{
 	"transcribe":    "transcribe one media file or URL through a registered Bash# pipeline unit",
+	"providers":     "list or select service providers for a role (oss, vendor, browser, api)",
 	"install-agent": "configure a coding agent to use bashy as its shell or MCP server",
 
 	"proxy":              "standalone local network proxy: SOCKS5 CONNECT with remote DNS and optional username/password authentication",
