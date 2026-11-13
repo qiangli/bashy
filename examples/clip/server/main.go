@@ -1,7 +1,7 @@
 // Copyright (c) 2026 qiangli
 // See LICENSE for licensing information
 
-// Command clip is the clip tool (S8): an asynchronous clip library on the
+// Command clips is the clip tool (S8): an asynchronous clip library on the
 // media family. queue returns at once with a job id; work renders queued
 // jobs one at a time (ffmpeg for video, agg for terminal scenes, X11 for
 // the screen); take prints a finished clip's path so it composes with the
@@ -22,17 +22,17 @@ import (
 	"time"
 )
 
-const usage = `clip — an asynchronous clip library
+const usage = `clips — an asynchronous clip library
 
-  clip queue --from VIDEO.mp4 --start 12 --end 18 [--name NAME] [--data DIR]
-  clip queue --from SCENE.cast [--format gif|mp4] [--start S --end E]
-  clip queue screen [--seconds N] [--display :0.0] [--size WxH]
-  clip status [ID] [--json]        job list, or one job
-  clip work [--once]               render queued jobs (one with --once)
-  clip take ID                     print a finished clip's path
+  clips queue --from VIDEO.mp4 --start 12 --end 18 [--name NAME] [--data DIR]
+  clips queue --from SCENE.cast [--format gif|mp4] [--start S --end E]
+  clips queue screen [--seconds N] [--display :0.0] [--size WxH]
+  clips status [ID] [--json]        job list, or one job
+  clips work [--once]               render queued jobs (one with --once)
+  clips take ID                     print a finished clip's path
                                      exit 0 done, 3 still waiting, 1 failed
-  clip serve [-addr HOST:PORT]     the library page (loopback)
-  clip doctor                      check for ffmpeg and agg
+  clips serve [-addr HOST:PORT]     the library page (loopback)
+  clips doctor                      check for ffmpeg and agg
 
 CLIP_DATA selects the data directory (default $BASHY_APP_DATA when set, else
 a "clip" directory under the Bashy home). --json prints machine-readable
@@ -48,7 +48,7 @@ func main() {
 		os.Exit(2)
 	}
 	if err := run(os.Args[1:]); err != nil {
-		fmt.Fprintln(os.Stderr, "clip:", err)
+		fmt.Fprintln(os.Stderr, "clips:", err)
 		os.Exit(1)
 	}
 }
@@ -72,7 +72,7 @@ func dataDir() (string, error) {
 }
 
 // reorderArgs puts flag arguments (with their values) before positionals,
-// so `clip status c123 --json` and `clip status --json c123` both parse
+// so `clips status c123 --json` and `clip status --json c123` both parse
 // with the standard flag package.
 func reorderArgs(fs *flag.FlagSet, args []string) []string {
 	var flags, pos []string
@@ -201,7 +201,7 @@ func cmdQueue(args []string) error {
 	}
 	fmt.Println(j.ID)
 	fmt.Printf("queued: %s clip %s (%s)\n", j.Kind, j.ID, spanText(j))
-	fmt.Printf("render it with: clip work --data %s\n", s.Dir())
+	fmt.Printf("render it with: clips work --data %s\n", s.Dir())
 	return nil
 }
 
@@ -260,7 +260,7 @@ func cmdStatus(args []string) error {
 		return enc.Encode(jobs)
 	}
 	if len(jobs) == 0 {
-		fmt.Println("no clips yet; queue one with: clip queue --from VIDEO.mp4 --start S --end E")
+		fmt.Println("no clips yet; queue one with: clips queue --from VIDEO.mp4 --start S --end E")
 		return nil
 	}
 	for _, j := range jobs {
@@ -346,7 +346,7 @@ func cmdTake(args []string) error {
 		fmt.Println(p)
 		return nil
 	case StatusQueued, StatusRunning:
-		fmt.Fprintf(os.Stderr, "clip: %s is %s\n", j.ID, j.Status)
+		fmt.Fprintf(os.Stderr, "clips: %s is %s\n", j.ID, j.Status)
 		os.Exit(exitPending)
 		return nil
 	default:

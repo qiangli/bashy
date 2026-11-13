@@ -1,4 +1,8 @@
-# examples/clip — `clip`: async screen and video clips
+# examples/clip — `clips`: async screen and video clips
+
+The command registers as **`clips`**: bashy already ships a `clip` skill
+(the clipboard), and a registered command never shadows a command bashy
+ships. The job, directory and module stay `clip`.
 
 `clip` queues a short clip — a segment cut from a video, a terminal scene
 rendered to a looping gif or mp4, a screen recording — and returns at once
@@ -13,21 +17,21 @@ one Bash# file plus a small Go server, registered once.
 
 ```bash
 bashy dag examples/clip test      # module tests + the script end to end
-bashy dag examples/clip register  # register it as the command `clip`
+bashy dag examples/clip register  # register it as the command `clips`
 bashy dag examples/clip use       # render the sample scene with real tools
 ```
 
 After `register`:
 
 ```bash
-clip queue --from takes/intro.mp4 --start 12 --end 18 --name intro
-clip work
-clip status
-clip take c1a2b3c4                     # prints the clip's path; exit 3 while waiting
-clip queue --from scene.cast           # a terminal scene -> looping gif
-clip queue --from scene.cast --format mp4 --start 1 --end 3
-clip queue screen --seconds 10         # the screen (Linux X11 this sprint)
-clip serve                             # the library page on loopback
+clips queue --from takes/intro.mp4 --start 12 --end 18 --name intro
+clips work
+clips status
+clips take c1a2b3c4                     # prints the clip's path; exit 3 while waiting
+clips queue --from scene.cast           # a terminal scene -> looping gif
+clips queue --from scene.cast --format mp4 --start 1 --end 3
+clips queue screen --seconds 10         # the screen (Linux X11 this sprint)
+clips serve                             # the library page on loopback
 ```
 
 ## The asynchronous part
@@ -40,11 +44,11 @@ clip serve                             # the library page on loopback
   queue; a worker that dies leaves its job running, and the next `work`
   re-queues it after ten minutes.
 - `take ID` composes: exit 0 prints the finished clip's path, exit 3 means
-  still queued or rendering, exit 1 failed (`ffprobe "$(clip take ID)"`).
+  still queued or rendering, exit 1 failed (`ffprobe "$(clips take ID)"`).
 - `serve` is the library page: the queue with live statuses, finished clips
   playing inline, and a form that queues from the page. The page only reads
   and writes the data directory — the console runs shaped app pages with
-  read/write effects only — so rendering stays with `clip work`, which the
+  read/write effects only — so rendering stays with `clips work`, which the
   page names while clips are waiting.
 
 ## Anatomy
@@ -67,17 +71,17 @@ inside a shaped app, else a `clip` directory under the Bashy home).
 ## Tools and platforms
 
 `ffmpeg` cuts video and records the screen; `agg` renders terminal scenes;
-`clip doctor` checks both. They run, never bundle: the same arrangement as
+`clips doctor` checks both. They run, never bundle: the same arrangement as
 [video](../video). Screen capture is an X11 job (Linux, this sprint's
 scope); on other platforms a screen job fails with the reason instead of
 hanging. Everything else works wherever ffmpeg/agg do.
 
 ## Shaping
 
-`clip` is a shapeable app: `bash register.sh` registers the command, the
+`clips` is a shapeable app: `bash register.sh` registers the command, the
 skill and the shaped app (the public `bashy app add --type shaped` path).
-Then wish a change — at `/shape/clip/` on the console or
-`bashy shape wish clip "..."` — verify, preview, approve it for yourself,
+Then wish a change — at `/shape/clips/` on the console or
+`bashy shape wish clips "..."` — verify, preview, approve it for yourself,
 and undo. `shaped.json`'s genie examples seed the wish form.
 
 ## Verification

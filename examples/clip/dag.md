@@ -4,7 +4,7 @@ description: build, test, register and use the clip skill-tier command (async sc
 type: dag
 default: test
 vars:
-  - NAME ?= clip
+  - NAME ?= clips
 ---
 
 # clip — the skill-tier command cycle

@@ -33,7 +33,7 @@ func Serve(s *Store) http.Handler {
 		case http.MethodPost:
 			var spec Job
 			if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&spec); err != nil {
-				httpError(w, http.StatusBadRequest, fmt.Errorf("clip: read request: %v", err))
+				httpError(w, http.StatusBadRequest, fmt.Errorf("clips: read request: %v", err))
 				return
 			}
 			j, err := s.Queue(&spec)
@@ -44,7 +44,7 @@ func Serve(s *Store) http.Handler {
 			writeJSON(w, j)
 		default:
 			w.Header().Set("Allow", "GET, POST")
-			httpError(w, http.StatusMethodNotAllowed, fmt.Errorf("clip: %s not allowed", r.Method))
+			httpError(w, http.StatusMethodNotAllowed, fmt.Errorf("clips: %s not allowed", r.Method))
 		}
 	})
 	mux.HandleFunc("/media/", func(w http.ResponseWriter, r *http.Request) {
@@ -157,7 +157,7 @@ function refresh(){
   jobs.forEach(function(j){tb.appendChild(row(j))});
   var waiting=jobs.filter(function(j){return j.status=='queued'||j.status=='running'}).length;
   var pending=document.getElementById('pending');
-  pending.textContent=waiting?(waiting+' waiting — run: clip work --data '+pending.dataset.dir):'';
+  pending.textContent=waiting?(waiting+' waiting — run: clips work --data '+pending.dataset.dir):'';
  });
 }
 setInterval(refresh,2000);
@@ -193,7 +193,7 @@ func pageHTML(s *Store, jobs []*Job) string {
 		b.WriteString(rowHTML(j))
 	}
 	b.WriteString(`</tbody></table>
-<footer style="margin-top:3rem" class="hint">Finished clips stay in the library directory; render with <code>clip work</code>.</footer>
+<footer style="margin-top:3rem" class="hint">Finished clips stay in the library directory; render with <code>clips work</code>.</footer>
 `)
 	b.WriteString(pageScript)
 	b.WriteString(`

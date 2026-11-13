@@ -81,7 +81,7 @@ type Store struct {
 // NewStore returns the store rooted at dir, creating its layout.
 func NewStore(dir string) (*Store, error) {
 	if dir == "" {
-		return nil, errors.New("clip: no data directory")
+		return nil, errors.New("clips: no data directory")
 	}
 	abs, err := filepath.Abs(dir)
 	if err != nil {
@@ -126,7 +126,7 @@ func newID() (string, error) {
 // renamed over the target, so a reader never sees a half-written job.
 func (s *Store) Save(j *Job) error {
 	if j.ID == "" || !ValidID(j.ID) {
-		return fmt.Errorf("clip: invalid job id %q", j.ID)
+		return fmt.Errorf("clips: invalid job id %q", j.ID)
 	}
 	j.Updated = time.Now().UTC().Format(time.RFC3339Nano)
 	raw, err := json.MarshalIndent(j, "", "  ")
@@ -156,21 +156,21 @@ func (s *Store) Save(j *Job) error {
 // Load reads one job by id.
 func (s *Store) Load(id string) (*Job, error) {
 	if !ValidID(id) {
-		return nil, fmt.Errorf("clip: invalid job id %q", id)
+		return nil, fmt.Errorf("clips: invalid job id %q", id)
 	}
 	raw, err := os.ReadFile(s.jobPath(id))
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("clip: no job %s", id)
+			return nil, fmt.Errorf("clips: no job %s", id)
 		}
 		return nil, err
 	}
 	j := &Job{}
 	if err := json.Unmarshal(raw, j); err != nil {
-		return nil, fmt.Errorf("clip: saved job %s is invalid; preserve it for recovery", id)
+		return nil, fmt.Errorf("clips: saved job %s is invalid; preserve it for recovery", id)
 	}
 	if j.Version != 1 || j.ID != id {
-		return nil, fmt.Errorf("clip: saved job %s is invalid; preserve it for recovery", id)
+		return nil, fmt.Errorf("clips: saved job %s is invalid; preserve it for recovery", id)
 	}
 	return j, nil
 }
@@ -241,60 +241,60 @@ var trimExts = map[string]bool{".mp4": true, ".m4v": true, ".webm": true, ".mov"
 func validate(j *Job) error {
 	if j.Name != "" {
 		if len(j.Name) > 80 {
-			return errors.New("clip: name is longer than 80 characters")
+			return errors.New("clips: name is longer than 80 characters")
 		}
 		for _, r := range j.Name {
 			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == ' ' || r == '-' || r == '_' || r == '.') {
-				return errors.New("clip: name may use letters, digits, space, - _ . only")
+				return errors.New("clips: name may use letters, digits, space, - _ . only")
 			}
 		}
 	}
 	switch j.Kind {
 	case KindTrim, KindCast:
 		if j.Source == "" {
-			return fmt.Errorf("clip: %s needs --from PATH", j.Kind)
+			return fmt.Errorf("clips: %s needs --from PATH", j.Kind)
 		}
 		if !filepath.IsAbs(j.Source) {
-			return errors.New("clip: --from must be an absolute path")
+			return errors.New("clips: --from must be an absolute path")
 		}
 		info, err := os.Stat(j.Source)
 		if err != nil {
-			return fmt.Errorf("clip: source: %v", err)
+			return fmt.Errorf("clips: source: %v", err)
 		}
 		if info.IsDir() || !info.Mode().IsRegular() {
-			return errors.New("clip: source must be a regular file")
+			return errors.New("clips: source must be a regular file")
 		}
 		ext := strings.ToLower(filepath.Ext(j.Source))
 		if j.Kind == KindTrim && !trimExts[ext] {
-			return fmt.Errorf("clip: trim needs a video file (.mp4 .m4v .webm .mov .mkv), got %q", ext)
+			return fmt.Errorf("clips: trim needs a video file (.mp4 .m4v .webm .mov .mkv), got %q", ext)
 		}
 		if j.Kind == KindCast && ext != ".cast" {
-			return errors.New("clip: cast needs an asciicast v2 file (.cast)")
+			return errors.New("clips: cast needs an asciicast v2 file (.cast)")
 		}
 		if j.Start < 0 || j.End <= j.Start {
-			return errors.New("clip: --start must be >= 0 and --end greater than --start")
+			return errors.New("clips: --start must be >= 0 and --end greater than --start")
 		}
 		if j.End-j.Start > MaxSpanSeconds {
-			return fmt.Errorf("clip: a clip is at most %d seconds", MaxSpanSeconds)
+			return fmt.Errorf("clips: a clip is at most %d seconds", MaxSpanSeconds)
 		}
 		if j.Kind == KindCast && j.Format == "" {
 			j.Format = "gif"
 		}
 		if j.Format != "" && j.Format != "gif" && j.Format != "mp4" {
-			return errors.New("clip: --format is gif or mp4")
+			return errors.New("clips: --format is gif or mp4")
 		}
 	case KindScreen:
 		if j.Seconds < 1 || j.Seconds > MaxSpanSeconds {
-			return fmt.Errorf("clip: --seconds is 1..%d", MaxSpanSeconds)
+			return fmt.Errorf("clips: --seconds is 1..%d", MaxSpanSeconds)
 		}
 		if j.Size != "" && !isSize(j.Size) {
-			return errors.New("clip: --size is WIDTHxHEIGHT, e.g. 1280x720")
+			return errors.New("clips: --size is WIDTHxHEIGHT, e.g. 1280x720")
 		}
 		if j.Display != "" && (len(j.Display) > 32 || strings.ContainsAny(j.Display, " \t\n")) {
-			return errors.New("clip: --display is an X11 display like :0.0")
+			return errors.New("clips: --display is an X11 display like :0.0")
 		}
 	default:
-		return fmt.Errorf("clip: kind is trim, cast or screen, got %q", j.Kind)
+		return fmt.Errorf("clips: kind is trim, cast or screen, got %q", j.Kind)
 	}
 	return nil
 }

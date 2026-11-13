@@ -144,14 +144,14 @@ func touchVideo(t *testing.T, name string) string {
 // The embedded skill and the script's help are the two faces agents read.
 func TestSkillAndHelp(t *testing.T) {
 	out, _, code := run(t, t.TempDir(), "", "--skill")
-	if code != 0 || !strings.HasPrefix(out, "---\nname: clip\n") {
+	if code != 0 || !strings.HasPrefix(out, "---\nname: clips\n") {
 		t.Fatalf("--skill = %d %.80s", code, out)
 	}
-	if !strings.Contains(out, "clip work") {
+	if !strings.Contains(out, "clips work") {
 		t.Fatal("skill does not teach the work verb")
 	}
 	out, _, code = run(t, t.TempDir(), "", "--help")
-	if code != 0 || !strings.Contains(out, "clip") {
+	if code != 0 || !strings.Contains(out, "clips") {
 		t.Fatalf("--help = %d %s", code, out)
 	}
 }
@@ -213,7 +213,7 @@ func TestQueueWorkTake(t *testing.T) {
 func TestQueueRejectsBadSource(t *testing.T) {
 	dir := t.TempDir()
 	_, errs, code := run(t, dir, stubTools(t), "queue", "--from", filepath.Join(dir, "nope.mp4"), "--start", "1", "--end", "2", "--data", dir)
-	if code == 0 || !strings.Contains(errs, "clip:") {
+	if code == 0 || !strings.Contains(errs, "clips:") {
 		t.Fatalf("queue bad source = %d %s", code, errs)
 	}
 }
@@ -238,7 +238,7 @@ func TestQueueScreenForm(t *testing.T) {
 	}
 	_, errs, code = run(t, dir, stub, "take", id, "--data", dir)
 	if runtime.GOOS == "linux" {
-		if code != 0 || !strings.Contains(errs, "clip:") {
+		if code != 0 || !strings.Contains(errs, "clips:") {
 			t.Fatalf("take screen on linux = %d %s", code, errs)
 		}
 	} else if code != 1 || !strings.Contains(errs, "Linux") {

@@ -1,5 +1,7 @@
 # bashy docs index
 
+- [S8 clip delivery evidence](clip/docs/s631-s8.md) — Sprint 631 S8: async clip library built as `examples/clip` (command `clips`); build decision, license, targeted tests and the shaping demo (wish → verify → preview → approve → undo, requester-scoped; negative candidate refused).
+
 - [Sprint 627 M5 API rods](plan-s627-m5-api-rods.md) — generic typed HTTP media binding, Replicate rod delivery, offline verification and remaining paid smoke.
 
 - [Boundary control](boundary.md) — S583.1 design of record: owner by default, circles are member attributes from the Cloudbox list, grants checked only at egress; egress inventory and decisions (circle, mutuality, offline list).

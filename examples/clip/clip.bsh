@@ -1,16 +1,16 @@
 #!/usr/bin/env -S bashy --bashsharp
-# clip — an asynchronous clip library. queue returns at once with a job id;
+# clips — an asynchronous clip library. queue returns at once with a job id;
 # work renders queued jobs in the background of your choosing; take prints a
 # finished clip's path so it composes. One body, two orientations:
 # executable Bash# and its embedded agent skill.
 
 ~~~skill as guide
 ---
-name: clip
+name: clips
 description: Queue short screen or video clips that render asynchronously — cut a segment from a video, render a terminal scene (asciicast v2) to a looping gif or mp4, or record the screen — then take the finished path. Use when a task needs a short clip now but must not block on rendering.
 metadata:
   requires: "has=bashy"
-  check-tests: 'clip doctor'
+  check-tests: 'clips doctor'
 ---
 # Async clips
 
@@ -18,27 +18,27 @@ This is the prose face of `clip.bsh`, the same executable body used by the
 registered `clip` command. `bashy commands show clip` exposes the
 executable argv and source path; `bashy skill show clip` reads this face.
 
-- `clip queue --from VIDEO.mp4 --start 12 --end 18 [--name NAME]` cuts a
+- `clips queue --from VIDEO.mp4 --start 12 --end 18 [--name NAME]` cuts a
   segment out of a video (.mp4 .m4v .webm .mov .mkv). It prints the job id
   at once; nothing renders yet.
-- `clip queue --from SCENE.cast [--start S --end E] [--format gif|mp4]`
+- `clips queue --from SCENE.cast [--start S --end E] [--format gif|mp4]`
   renders an asciicast v2 scene (from `cast record` or asciinema) to a
   looping gif, or to mp4 with `--format mp4`.
-- `clip queue screen --seconds 10 [--display :0.0] [--size 1280x720]`
+- `clips queue screen --seconds 10 [--display :0.0] [--size 1280x720]`
   records the screen (Linux X11 this sprint; elsewhere the job fails with
   the reason, never a hang).
-- `clip work [--once] [--verbose]` renders queued jobs one at a time in the
+- `clips work [--once] [--verbose]` renders queued jobs one at a time in the
   foreground: ffmpeg for video, agg for terminal scenes. A failed job is
   recorded and does not stop the queue. The web page names the exact
   command while clips are waiting.
-- `clip status [ID] [--json]` lists the library or one job. `clip take ID`
+- `clips status [ID] [--json]` lists the library or one job. `clips take ID`
   prints a finished clip's path and composes — exit 0 done, 3 still
-  waiting, 1 failed: `ffprobe "$(clip take ID)"`.
-- `clip serve` starts the library page (loopback): the queue, each clip's
+  waiting, 1 failed: `ffprobe "$(clips take ID)"`.
+- `clips serve` starts the library page (loopback): the queue, each clip's
   status, and finished clips playing inline. It queues from the page too;
   it never renders — the console runs app pages with read/write only, so
-  rendering stays with `clip work`.
-- `clip doctor` checks for ffmpeg and agg.
+  rendering stays with `clips work`.
+- `clips doctor` checks for ffmpeg and agg.
 - `CLIP_DATA` selects the data directory; default is `$BASHY_APP_DATA`
   when set (the shaped app's private directory), else a `clip` directory
   under the Bashy home. The page shows its path.
@@ -76,7 +76,7 @@ case ${1:-list} in
 		if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
 	done < "${BASH_SOURCE[0]}"
 	;;
--h|--help) sed -n '2,4p' "${BASH_SOURCE[0]}"; echo "clip [queue|status|work|take|serve|doctor] — async screen and video clips; --skill prints its embedded skill" ;;
+-h|--help) sed -n '2,4p' "${BASH_SOURCE[0]}"; echo "clips [queue|status|work|take|serve|doctor] — async screen and video clips; --skill prints its embedded skill" ;;
 list|queue|status|work|take|doctor)
 	build
 	exec "$bin" "$@"

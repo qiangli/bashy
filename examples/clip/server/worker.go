@@ -126,7 +126,7 @@ func process(ctx context.Context, s *Store, r Runner, j *Job) error {
 	case KindScreen:
 		log, err = runScreen(ctx, r, j, s.ClipsDir())
 	default:
-		err = fmt.Errorf("clip: unknown kind %q", j.Kind)
+		err = fmt.Errorf("clips: unknown kind %q", j.Kind)
 	}
 	j.Log = log
 	if err != nil {
@@ -214,11 +214,11 @@ func runScreen(ctx context.Context, r Runner, j *Job, clipsDir string) (string, 
 // that escapes the clips directory.
 func ArtifactPath(s *Store, j *Job) (string, error) {
 	if j.Artifact == "" {
-		return "", errors.New("clip: job has no artifact")
+		return "", errors.New("clips: job has no artifact")
 	}
 	clean := filepath.Clean(j.Artifact)
 	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", errors.New("clip: artifact escapes the library")
+		return "", errors.New("clips: artifact escapes the library")
 	}
 	return filepath.Join(s.Dir(), clean), nil
 }

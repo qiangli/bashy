@@ -4,7 +4,7 @@ export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 runner=${BASHY_BIN:-bashy}
 guide=$("$runner" --bashsharp "$here/clip.bsh" --skill)
-name=${1:-clip}
+name=${1:-clips}
 "$runner" commands add "$name" --force \
   --set "exec.0=$runner" --set exec.1=--bashsharp --set "exec.2=$here/clip.bsh" \
   --set synopsis='Async clip library: queue a short clip from a video, a terminal scene or the screen; render in the background; take the finished path' \
