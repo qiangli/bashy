@@ -1,0 +1,67 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Service rods for email and drive over google.bsh (gws), Sprint 626 S5.
+# The first fixed argument is the role this registration provides:
+#   email.read  — gmail-list: operands (or request .query) are a Gmail query
+#   drive.read  — drive-search QUERY, or drive-list without one
+#   email.send  — gmail-send: request {to, subject, body} or to=/subject=/body=
+# Read roles never change the mailbox or the Drive. email.send declares the
+# send effect, so the door selects it only with --yes; it also refuses itself
+# unless BASHY_SVC_YES=1, so a direct `bashy google-email-send` sends nothing.
+# Rod contract: docs/service-rod-contract.md. Registered by register.sh.
+set -eu
+role=${1:?role required (email.read, drive.read or email.send)}; shift
+bashy_bin=${BASHY_BIN:-bashy}
+# The registered `google` command, not google.bsh by path: its record carries
+# the user's GWS_ACCOUNT / GWS_BIN (bashy commands show google).
+google() { BASHY_HINTS=off "$bashy_bin" google "$@"; }
+
+if [ "${1:-}" = --doctor ]; then
+    # No side effects: report what selection cannot see (command, credentials).
+    missing='[]'
+    if ! BASHY_HINTS=off "$bashy_bin" commands show google >/dev/null 2>&1; then
+        missing='[{"need":"bashy google","install":"bashy examples/google/register.sh"}]'
+    elif ! google auth-status >/dev/null 2>&1; then
+        missing='[{"need":"google credentials","install":"bashy google auth-guide account=you@example.com (or set GWS_ACCOUNT / GWS_BIN on the google command)"}]'
+    fi
+    M="$missing" jq -n '{schema_version:"bashy-svc-doctor-v1",available:((env.M|fromjson)|length == 0),missing:(env.M|fromjson)}'
+    exit 0
+fi
+
+# req FIELD: a string field of the request JSON, or empty.
+req() {
+    [ -n "${BASHY_SVC_REQUEST:-}" ] || return 0
+    F="$1" jq -r '.[env.F] // empty | tostring' "$BASHY_SVC_REQUEST"
+}
+
+case $role in
+    email.read)
+        query=$(req query); max=$(req max)
+        [ -n "$query" ] || query="$*"
+        set -- maxResults:="${max:-10}"
+        [ -z "$query" ] || set -- "$@" q="$query"
+        google gmail-list "$@"
+        ;;
+    drive.read)
+        query=$(req query); max=$(req max)
+        [ -n "$query" ] || query="$*"
+        if [ -n "$query" ]; then
+            google drive-search "$query" pageSize:="${max:-10}"
+        else
+            google drive-list pageSize:="${max:-10}"
+        fi
+        ;;
+    email.send)
+        if [ "${BASHY_SVC_YES:-0}" != 1 ]; then
+            echo "google-rod: email.send refuses without consent (bashy email --role email.send --yes …)" >&2
+            exit 2
+        fi
+        if [ -n "${BASHY_SVC_REQUEST:-}" ]; then
+            set -- to="$(req to)" subject="$(req subject)" body="$(req body)" "$@"
+        fi
+        google gmail-send "$@"
+        ;;
+    *)
+        echo "google-rod: unknown role $role (email.read, drive.read, email.send)" >&2
+        exit 2
+        ;;
+esac

@@ -5,7 +5,8 @@ This example exposes Google Workspace services (**Gmail**, **Google Calendar**, 
 ## Files
 
 - `google.bsh` — Executable Bash# script (`#!/usr/bin/env -S bashy --bashsharp`) with embedded `~~~skill` guide, `--contract` discovery, self-service Bring-Your-Own-Project (BYOP) onboarding, explicit per-account credential preflight, secret-in-argv refusal, 25 MiB Drive upload validation, single-service verbs, and multi-service workflows.
-- `register.sh` — Registers `google` in `bashy commands` and installs the embedded skill into `bashy skill`.
+- `google-rod.bsh` — Service rods for `bashy email` / `bashy drive` (`email.read`, `drive.read`, `email.send`); see [Service rods](#service-rods).
+- `register.sh` — Registers `google` and its three service rods in `bashy commands` and installs the embedded skill into `bashy skill`.
 - `test_cli_wrapper.py` — Hermetic offline `unittest` suite exercising onboarding, credential guards, secret refusal, single-service verbs, upload bounds, and composed workflows against a fake `gws` binary.
 
 ## Why Bring-Your-Own-Project (BYOP)?
@@ -93,6 +94,36 @@ Once registered, you can shape higher-level shortcuts over `bashy google`:
 ```bash
 bashy shape google "add a 'standup-brief' command that runs 'agenda maxResults:=5' and projects calendar_events and tasks"
 ```
+
+## Service rods
+
+`register.sh` also registers three providers for the service verbs (Sprint
+626 S5; contract: `docs/service-rod-contract.md`). They are on the `api` route,
+so `bashy email` and `bashy drive` prefer the `claude:email.read` /
+`claude:drive.read` connector commands when claude is installed. Pass
+`--route api` or `--provider NAME` to use gws instead.
+
+| Rod | Role | Effects | Calls |
+|---|---|---|---|
+| `google-email-read` | `email.read` | read,exec,net | `google gmail-list q=QUERY maxResults:=N` |
+| `google-drive-read` | `drive.read` | read,exec,net | `google drive-search QUERY` (with a query) or `google drive-list` |
+| `google-email-send` | `email.send` | read,exec,net,send | `google gmail-send to= subject= body=` |
+
+```bash
+bashy email --route api --json newer_than:7d                  # message ids
+bashy drive --provider google-drive-read --json req.json       # {"query":"report","max":3}
+bashy email --role email.send --yes --json send.json           # {"to":…,"subject":…,"body":…}
+```
+
+Read rods never change the mailbox or the Drive. The selector picks
+`google-email-send` only with `--yes`. The rod also refuses on its own unless
+`BASHY_SVC_YES=1`, so running `bashy google-email-send` directly sends
+nothing. The rods call the registered `google` command, so the
+`GWS_ACCOUNT` / `GWS_BIN` set on its record apply. Drive needs the Drive
+scope in the account's OAuth grant; without it, gws answers 403
+"insufficient authentication scopes". `GOWORK=off go -C examples/service-door
+test ./...` (`TestGoogleRods`) covers the role mapping and the send refusals
+against a fake `google`.
 
 ## Offline Verification
 
