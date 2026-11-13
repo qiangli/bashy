@@ -164,6 +164,7 @@ ass=$(media subs "$TMP/timing.srt" "$TMP/timing.es.srt" -o "$TMP/subs.ass" \
 [ "$ass" = "$TMP/subs.ass" ] || fail "subs printed '$ass'"
 grep -c '^Dialogue:' "$ass" | grep -q '^3$' || fail "subs.ass does not hold 3 cues"
 grep -q 'Primary' "$ass" && grep -q 'Secondary' "$ass" || fail "subs.ass is missing a language style"
+grep -q 'Style: Secondary,Noto Sans SC,' "$ass" || fail "subs.ass does not declare the CJK face"
 sinfo=$(ffprobe -v error -select_streams s:0 -show_entries stream=codec_name -of csv=p=0 "$TMP/burned.mp4")
 [ "$sinfo" = "mov_text" ] || fail "burned video is missing the mov_text soft track (got: $sinfo)"
 # Soft-track times must match the fixture within 150 ms.
@@ -207,6 +208,15 @@ frame_at 1.00 "$TMP/got.png"
 ymax=$(ffmpeg -nostdin -hide_banner -i "$TMP/got.png" -vf "crop=1000:140:140:540,signalstats,metadata=print:key=lavfi.signalstats.YMAX:file=-" -f null - 2>/dev/null | grep -o 'YMAX=[0-9]*' | cut -d= -f2 | tail -n 1)
 awk -v y="$ymax" 'BEGIN{exit !(y >= 215)}' || fail "burned banner has no white first-language line (YMAX $ymax)"
 pass "subs: burned banners carry both languages"
+# Offline rendering fails with a specific prefetch instruction if the pinned
+# face has not been staged; a missing font must not silently render tofu.
+if MEDIA_OFFLINE=1 MEDIA_FONT_DIR="$TMP/no-cjk-font" media subs "$TMP/timing.srt" "$TMP/timing.es.srt" \
+	-o "$TMP/missing-font.ass" --video "$TMP/base.mp4" --burn "$TMP/missing-font.mp4" 2>"$TMP/missing-font.err"; then
+	fail "subs rendered with an absent CJK font in offline mode"
+fi
+grep -q 'missing pinned CJK font' "$TMP/missing-font.err" || fail "subs did not explain the missing CJK font"
+grep -q 'SHA-256' "$TMP/missing-font.err" || fail "subs did not print the font pin"
+pass "subs: pinned CJK face is declared and missing offline cache fails closed"
 # Mismatched cue counts fail instead of silently misaligning.
 head -n 4 "$TMP/timing.es.srt" >"$TMP/short.es.srt"
 if media subs "$TMP/timing.srt" "$TMP/short.es.srt" -o "$TMP/bad.ass" 2>/dev/null; then fail "subs passed with mismatched cue counts"; fi

@@ -840,6 +840,35 @@ cmd_cards() {
 
 # ---- subs -------------------------------------------------------------------
 
+SUBS_CJK_FONT_SHA256=a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da
+SUBS_CJK_FONT_URL='https://raw.githubusercontent.com/google/fonts/29b4ec6df2522a8aee279414b78a07910b065874/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf'
+
+# The large OFL font is fetched once to the media cache. A supplied font dir
+# may be a pre-staged offline cache, but its bytes must match the pin too.
+subs_font_dir() {
+	local family=${MEDIA_SUBS_FONT_FAMILY:-Noto Sans SC}
+	if [ "$family" != 'Noto Sans SC' ]; then
+		echo "${MEDIA_FONT_DIR:-$here/fonts}"
+		return
+	fi
+	local base=${MEDIA_CACHE:-${XDG_CACHE_HOME:-${LOCALAPPDATA:-$HOME/.cache}}}
+	local dir=${MEDIA_FONT_DIR:-$base/bashy/media/fonts} font got tmp
+	font=$dir/NotoSansSC-wght.ttf
+	if [ ! -f "$font" ]; then
+		[ "${MEDIA_OFFLINE:-0}" != 1 ] || die "subs: missing pinned CJK font at $font; prefetch with: curl -fsSL -o '$font' '$SUBS_CJK_FONT_URL' (SHA-256 $SUBS_CJK_FONT_SHA256)"
+		mkdir -p "$dir"
+		tmp=$font.tmp.$$
+		note "downloading pinned Noto Sans SC font into $dir"
+		curl -fsSL --retry 3 -o "$tmp" "$SUBS_CJK_FONT_URL" || { rm -f "$tmp"; die "subs: CJK font download failed: $SUBS_CJK_FONT_URL"; }
+		got=$(sha256_of "$tmp")
+		[ "$got" = "$SUBS_CJK_FONT_SHA256" ] || { rm -f "$tmp"; die "subs: CJK font SHA-256 mismatch: got $got, want $SUBS_CJK_FONT_SHA256"; }
+		mv "$tmp" "$font"
+	fi
+	got=$(sha256_of "$font")
+	[ "$got" = "$SUBS_CJK_FONT_SHA256" ] || die "subs: CJK font SHA-256 mismatch at $font: got $got, want $SUBS_CJK_FONT_SHA256"
+	echo "$dir"
+}
+
 cmd_subs() {
 	local out="" video="" burn="" files=()
 	while [ $# -gt 0 ]; do
@@ -876,7 +905,7 @@ cmd_subs() {
 		printf '[Script Info]\nScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n'
 		printf '[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n'
 		printf 'Style: Primary,IBM Plex Mono,56,&H00FFFFFF,&H000000FF,&H80000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,40,40,50,1\n'
-		printf 'Style: Secondary,IBM Plex Mono,48,&H0000FFFF,&H000000FF,&H80000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,40,40,50,1\n\n'
+		printf 'Style: Secondary,%s,48,&H0000FFFF,&H000000FF,&H80000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,40,40,50,1\n\n' "${MEDIA_SUBS_FONT_FAMILY:-Noto Sans SC}"
 		printf '[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
 	} >"$out"
 	local i=0 s e t1 t2 text
@@ -950,7 +979,8 @@ banner_lines() {
 burn_cues() {
 	local video=$1 tmp=$2 ass=$3 burn=$4 n=$5
 	local idx=0 i s e t1 t2 cols rows line1 line2 line cast gif
-	local inputs=() fc=() prev="[0:v]" vw wrap
+	local inputs=() fc=() prev="[0:v]" vw wrap font_dir
+	font_dir=$(subs_font_dir)
 	inputs=(-i "$video")
 	# Wrap each language to the frame: agg draws 28 px IBM Plex Mono at about
 	# 17 px a column, and a banner keeps 5 % margins; at most 46 columns.
@@ -985,7 +1015,7 @@ burn_cues() {
 			printf '{"version": 2, "width": %d, "height": %d}\n' "$cols" "$rows"
 			printf '[0.0, "o", %s]\n' "$(printf '%s' "$line" | json_string)"
 		} >"$cast"
-		agg --font-dir "${MEDIA_FONT_DIR:-$here/fonts}" --font-family "${MEDIA_FONT_FAMILY:-IBM Plex Mono}" \
+		agg --font-dir "$font_dir" --font-family "${MEDIA_SUBS_FONT_FAMILY:-Noto Sans SC}" \
 			--font-size 28 --theme monokai \
 			--last-frame-duration 1 --no-loop "$cast" "$gif" >/dev/null || die "subs: agg could not render cue $i"
 		inputs+=(-i "$gif")
