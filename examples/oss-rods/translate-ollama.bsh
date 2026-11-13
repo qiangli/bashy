@@ -39,6 +39,14 @@ API=${API%/}
 OLLAMA_CMD=${TRANSLATE_OLLAMA_COMMAND:-ollama-host}
 bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
 OSS_ROD_TEXT=""
+# HTTP goes through curl. On Windows a bare `curl` found on PATH does not run
+# under bashy and `curl` cannot be registered (bashy ships that verb), so
+# film doctor registers the host binary as `curl-host`; it wins when present.
+if BASHY_HINTS=off "$bashy_bin" commands show "${TRANSLATE_CURL_COMMAND:-curl-host}" >/dev/null 2>&1; then
+	CURL=("$bashy_bin" "${TRANSLATE_CURL_COMMAND:-curl-host}")
+else
+	CURL=(curl)
+fi
 
 die() { echo "$ROD: $*" >&2; exit "${2:-1}"; }
 
@@ -107,7 +115,7 @@ n=0
 [ "$n" -gt 0 ] || die "no cues in $cues"
 
 # The model must already be staged: check the daemon's tags, never pull.
-tags=$(curl -fsS --max-time 10 "$API/api/tags" 2>/dev/null) ||
+tags=$("${CURL[@]}" -fsS --max-time 10 "$API/api/tags" 2>/dev/null) ||
 	die "ollama is not answering at $API; start it (ollama serve) or set TRANSLATE_OLLAMA_URL"
 printf '%s\n' "$tags" | J_M="$MODEL" jq -e 'any(.models[]?; .name == env.J_M or .model == env.J_M)' >/dev/null ||
 	die "model $MODEL is not staged on this host; stage it once with 'ollama pull $MODEL' (a render never pulls)"
@@ -119,7 +127,7 @@ system="You translate song lyrics for subtitles. Translate each numbered line fr
 J_MODEL=$MODEL J_SYS=$system J_USER=$numbered J_SEED=$seed jq -n '{model:env.J_MODEL, stream:false, think:false,
 	options:{temperature:0, seed:(env.J_SEED|tonumber)},
 	messages:[{role:"system", content:env.J_SYS}, {role:"user", content:env.J_USER}]}' >"$work/chat.request.json"
-curl -fsS --max-time "${TRANSLATE_OLLAMA_TIMEOUT:-600}" -H 'Content-Type: application/json' \
+"${CURL[@]}" -fsS --max-time "${TRANSLATE_OLLAMA_TIMEOUT:-600}" -H 'Content-Type: application/json' \
 	--data-binary @"$work/chat.request.json" "$API/api/chat" >"$work/chat.response.json" ||
 	die "ollama chat request failed ($API, model $MODEL)"
 jq -r '.message.content // empty' "$work/chat.response.json" >"$work/reply.txt" || die "ollama reply is not JSON"

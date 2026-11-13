@@ -296,7 +296,23 @@ register_ollama() {
 	fi
 }
 
-cmd_doctor() { preflight && register_ollama && echo "film: ready (door $door, media $media)"; }
+# register_curl: on Windows a bare `curl` on PATH does not run under bashy and
+# the name is bashy's own verb, so the system curl.exe is registered as
+# `curl-host` for the rods (translate-ollama uses it when present).
+register_curl() {
+	local p=${SYSTEMROOT:-${SystemRoot:-}}
+	[ -n "$p" ] || return 0
+	p=${p//\\//}/System32/curl.exe
+	[ -f "$p" ] || return 0
+	BASHY_HINTS=off "$bashy_bin" commands show curl-host >/dev/null 2>&1 && return 0
+	if BASHY_HINTS=off "$bashy_bin" commands add curl-host --set "exec.0=$p" --set effects.0=read --set effects.1=net >/dev/null 2>&1; then
+		note "doctor: registered curl-host ($p)"
+	else
+		note "doctor: could not register curl-host ($p)"
+	fi
+}
+
+cmd_doctor() { preflight && register_ollama && register_curl && echo "film: ready (door $door, media $media)"; }
 
 # ---- one door call -------------------------------------------------------------
 
