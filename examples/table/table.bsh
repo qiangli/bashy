@@ -27,6 +27,25 @@ table install|start|stop|status|source|publish-outpost|unpublish-outpost
   unpublish-outpost [--json] [--dry-run]
            Remove it from outpost.
 
+table docs list [--org ORG] | add NAME --workspace ID | show DOC
+table tables list DOC | add DOC TABLE [--columns ID[:Type],...]
+table columns list DOC TABLE | add DOC TABLE COLUMN [--type T] [--label L]
+table records list DOC TABLE [--where COL=VAL]... [--sort=[-]COL,...] [--limit N]
+table records add DOC TABLE (--set COL=VAL... | --fields JSON)
+table records set DOC TABLE (ROWID... | --where COL=VAL...) (--set COL=VAL... | --fields JSON)
+table records rm DOC TABLE (ROWID... | --where COL=VAL...)
+table views list DOC
+table export DOC TABLE [--format csv|json]
+table import DOC TABLE --file PATH.csv
+  Data verbs require Python 3.9+, TABLE_URL (numeric loopback URL including port
+  and optional app proxy prefix), and TABLE_TOKEN (the principal's existing app
+  API key). --url overrides TABLE_URL. No identity or credential is created or saved.
+  All data verbs accept --json (the app response); writes accept --dry-run, which
+  prints the request manifest without contacting the app or reading a key.
+  --where is equality; repeating a column matches any listed value. set/rm with
+  --where first read the matching rows through the app API, then write by row ID.
+  Writes go through the app's REST API only; the database is never edited directly.
+
 The records grid is local. Install needs the network. To enable owner-owned
 observability, set OTEL_EXPORTER_OTLP_ENDPOINT for the console's bashy OTel.
 EOF
@@ -119,6 +138,9 @@ running_pid() {
 
 case ${1:---help} in
   -h|--help|help) usage ;;
+  docs|tables|columns|records|views|export|import)
+    exec python3 "$here/table_api.py" "$@"
+    ;;
   install) install ;;
   start)
     linux_only

@@ -398,3 +398,36 @@ unit-verified mappings; running-fork authorization proof is still open.
 
 A1 owns the catalog audit section; these rows provide the A2 implementation
 mapping and explicit remaining scope for reconciliation with that audit.
+
+### Table — A3 data command mappings
+
+Source: `examples/table/table.bsh`, `table_api.py`, pinned fork
+`a3c557ac1bc4bd55b9b9d4333842bec255586ff4` (Grist REST API). All data verbs
+accept `--json`; every write accepts `--dry-run`. They call the running local
+instance's REST API with the principal's existing API key (`TABLE_URL`,
+`TABLE_TOKEN`), never the database. App responses and denials pass through
+unchanged; local errors use `{code,message}` (exit 2 invalid arguments, exit 1
+API/transport). Unit-verified mappings; running-fork authorization proof is
+still open.
+
+| Page action | Verb or recorded reason |
+|---|---|
+| Browse documents / workspaces | `table docs list [--org ORG] --json` |
+| Create document | `table docs add NAME --workspace ID --json` |
+| Open document details | `table docs show DOC --json` |
+| List tables | `table tables list DOC --json` |
+| Add table (with columns) | `table tables add DOC TABLE [--columns ID[:Type],...] --json` |
+| List columns | `table columns list DOC TABLE --json` |
+| Add column | `table columns add DOC TABLE COLUMN [--type T] [--label L] --json` |
+| Browse / filter / sort records | `table records list DOC TABLE --where COL=VAL --sort=[-]COL --limit N --json` |
+| Add row | `table records add DOC TABLE --set COL=VAL --json` |
+| Edit cells | `table records set DOC TABLE ROWID... --set COL=VAL --json` (or `--where`) |
+| Delete rows | `table records rm DOC TABLE ROWID... --json` (or `--where`) |
+| List pages / views | `table views list DOC --json` (read-only view metadata) |
+| Download table as CSV / JSON | `table export DOC TABLE --format csv\|json` |
+| Import CSV into a table | `table import DOC TABLE --file PATH.csv --json` (batches of 500, not transactional) |
+| Rename / delete / reorder columns, tables, documents; column type change | Deferred: separate schema-action endpoints, outside the requested verbs; no direct database edit is offered |
+| Create / edit views, pages, widgets, sorts and filters saved in a view | Deferred: view layout is edited through document user actions, not a stable REST resource; `views list` is read-only |
+| Formulas, conditional rules, access rules, sharing and permissions, webhooks | Deferred: administration/ACL scope; the app stays the authority |
+| Import from Excel/Google Sheets/JSON, full document download or restore | Deferred: staged upload API; only CSV rows import is claimed |
+| Shape wish / verify / preview / approve / undo | Existing `bashy shape` lifecycle, as documented in `examples/table/README.md` |

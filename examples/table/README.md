@@ -89,3 +89,51 @@ this command explicitly prevents that path.
 
 Targeted command checks: `bash table_test.sh`. The Linux runtime build uses
 `GRIST_EDITION=community yarn build:prod` after a frozen lockfile install.
+
+## Data verbs (Sprint 632 A3)
+
+Data commands use Python 3.9+ (standard library only) and the pinned app's
+REST API, the service the page itself uses. Set `TABLE_URL` to the **running
+instance for the selected principal** (numeric loopback address, port and
+optional proxy prefix) and `TABLE_TOKEN` to that principal's existing app API
+key. Neither is a Bashy pairing token; the command never logs in, mints or
+stores a key. Environment proxies and redirects are disabled so the key cannot
+be forwarded elsewhere. Writes only ever call the app API: no database file is
+opened, so the app's own access rules, validation and undo history apply.
+
+```sh
+bashy table docs list --json
+bashy table docs add 'Budget' --workspace 2 --dry-run --json
+bashy table tables add DOC People --columns Name,Age:Int --json
+bashy table columns add DOC People Email --type Text --label 'E-mail' --json
+bashy table records add DOC People --set Name=Ada --set Age=36 --json
+bashy table records list DOC People --where Age=36 --sort=-Age --limit 20 --json
+bashy table records set DOC People --where Name=Ada --set Age=37 --dry-run --json
+bashy table records rm DOC People 4 5 --json
+bashy table views list DOC --json
+bashy table export DOC People --format csv > people.csv
+bashy table import DOC People --file people.csv --json
+```
+
+`--json` returns the app response unchanged; app errors (for example the
+access-denied result a non-owner gets on the page) pass through byte for byte
+with exit 1. Local errors are `{code,message}`: invalid arguments exit 2,
+missing key or transport failure exit 1. Writes take `--dry-run`, which prints
+`{dryRun,method,url,body}` (or `{dryRun,requests:[...]}` for multi-step verbs)
+and performs no I/O. It previews the request, not an authorization decision.
+
+`--where COL=VAL` is equality; repeat a column for any-of. Values parse as JSON
+when valid (`3`, `true`), else text. `records set|rm` take row IDs or `--where`,
+never both and never neither; with `--where` the matching rows are read through
+the API first, then written by row ID. Zero matches write nothing. `views list`
+reads the document's view metadata (read-only). `export --format csv` prints the
+app's CSV; with `--json` it is `{format,content}`. `import` maps CSV headers to
+column IDs or labels, coerces Int/Numeric/Bool cells by column type, and posts
+500-row batches; an unknown header aborts before any write. Batches are not one
+transaction: a failure part way leaves earlier batches in place. Use `--sort=-COL`
+(with `=`) for descending.
+
+Targeted checks: `bash table_test.sh` (16 client tests plus dispatch checks, no
+fork or server needed). The fork and the no-phone-home gate are unchanged. The
+runtime proof (API calls, denial for a non-owner, outbound traffic) is still
+open: no gate-linux run was made for this change.
