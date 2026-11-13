@@ -1,0 +1,10 @@
+{
+  "server": {"main": "server", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA"]},
+  "genie": {
+    "examples": [
+      "Show a Loop badge on every finished clip",
+      "Show each clip's length in seconds next to its status",
+      "Add a Download button under every finished clip"
+    ]
+  }
+}

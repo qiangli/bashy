@@ -1,0 +1,103 @@
+#!/usr/bin/env -S bashy --bashsharp
+# clips — an asynchronous clip library. queue returns at once with a job id;
+# work renders queued jobs in the background of your choosing; take prints a
+# finished clip's path so it composes. One body, two orientations:
+# executable Bash# and its embedded agent skill.
+
+~~~skill as guide
+---
+name: clips
+description: Queue short screen or video clips that render asynchronously — cut a segment from a video, render a terminal scene (asciicast v2) to a looping gif or mp4, or record the screen — then take the finished path. Use when a task needs a short clip now but must not block on rendering.
+metadata:
+  requires: "has=bashy"
+  check-tests: 'clips doctor'
+---
+# Async clips
+
+This is the prose face of `clip.bsh`, the same executable body used by the
+registered `clip` command. `bashy commands show clip` exposes the
+executable argv and source path; `bashy skill show clip` reads this face.
+
+- `clips queue --from VIDEO.mp4 --start 12 --end 18 [--name NAME]` cuts a
+  segment out of a video (.mp4 .m4v .webm .mov .mkv). It prints the job id
+  at once; nothing renders yet.
+- `clips queue --from SCENE.cast [--start S --end E] [--format gif|mp4]`
+  renders an asciicast v2 scene (from `cast record` or asciinema) to a
+  looping gif, or to mp4 with `--format mp4`.
+- `clips queue screen --seconds 10 [--display :0.0] [--size 1280x720]`
+  records the screen (Linux X11 this sprint; elsewhere the job fails with
+  the reason, never a hang).
+- `clips work [--once] [--verbose]` renders queued jobs one at a time in the
+  foreground: ffmpeg for video, agg for terminal scenes. A failed job is
+  recorded and does not stop the queue. The web page names the exact
+  command while clips are waiting.
+- `clips status [ID] [--json]` lists the library or one job. `clips take ID`
+  prints a finished clip's path and composes — exit 0 done, 3 still
+  waiting, 1 failed: `ffprobe "$(clips take ID)"`.
+- `clips serve` starts the library page (loopback): the queue, each clip's
+  status, and finished clips playing inline. It queues from the page too;
+  it never renders — the console runs app pages with read/write only, so
+  rendering stays with `clips work`.
+- `clips doctor` checks for ffmpeg and agg.
+- `CLIP_DATA` selects the data directory; default is `$BASHY_APP_DATA`
+  when set (the shaped app's private directory), else a `clip` directory
+  under the Bashy home. The page shows its path.
+
+Compose, do not grow: write the storyboard with examples/video, the
+person's take with examples/record, publish with examples/vlog; clip is
+the small asynchronous cut in between. Sources are read at render time;
+finished clips stay in the library directory. Linux and the web page are
+the targets this sprint.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/clip
+exe=$(go env GOEXE)
+bin=$cache/clip$exe
+build() {
+	stale=false
+	[[ -f "$bin" ]] || stale=true
+	for src in "$here"/server/*.go "$here"/go.mod "$here"/shaped.json; do
+		[[ "$src" -nt "$bin" ]] && stale=true
+	done
+	if [[ $stale == true ]]; then
+		mkdir -p "$here/.clip-build" "$cache"
+		(cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".clip-build/clip$exe" ./server && { mv -f ".clip-build/clip$exe" "$bin" || [[ -f "$bin" ]]; })
+	fi
+}
+case ${1:-list} in
+--skill)
+	copying=false
+	while IFS= read -r line; do
+		if [[ $line == '~~~skill as guide' ]]; then copying=true; continue; fi
+		if [[ $copying == true && $line == '~~~' ]]; then break; fi
+		if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
+	done < "${BASH_SOURCE[0]}"
+	;;
+-h|--help) sed -n '2,4p' "${BASH_SOURCE[0]}"; echo "clips [queue|status|work|take|serve|doctor] — async screen and video clips; --skill prints its embedded skill" ;;
+list|queue|status|work|take|doctor)
+	build
+	exec "$bin" "$@"
+	;;
+serve)
+	shift || true
+	build
+	addr=${CLIP_ADDR:-}
+	data=${CLIP_DATA:-}
+	if [[ -n ${addr:-} && -n ${data:-} ]]; then exec "$bin" serve -addr "$addr" -data "$data" "$@"
+	elif [[ -n ${addr:-} ]]; then exec "$bin" serve -addr "$addr" "$@"
+	elif [[ -n ${data:-} ]]; then exec "$bin" serve -data "$data" "$@"
+	else exec "$bin" serve "$@"; fi
+	;;
+stop)
+	if pkill -f "$bin serve" 2>/dev/null; then echo "stopped clip"; else echo "no clip server matched $bin serve"; fi
+	;;
+test) cd "$here"; GOWORK=off go test ./... ;;
+*)
+	# Let the native CLI produce its versioned usage error.
+	build
+	exec "$bin" "$@"
+	;;
+esac
