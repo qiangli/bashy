@@ -15,6 +15,8 @@ package ossrods
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -620,5 +622,157 @@ func TestOssSchemaMajorRefused(t *testing.T) {
 	env, _, _ := f.runDoor(nil, "song", "--route", "oss", "--json", p)
 	if env.Outcome == "success" {
 		t.Fatalf("v9 request rendered: %+v", env)
+	}
+}
+
+// ollamaStub answers /api/tags with models and /api/chat by prefixing each
+// numbered line with "ZH:"; drop removes that many lines from the reply.
+// Any other path (a pull) is recorded and refused.
+func ollamaStub(t *testing.T, models []string, drop int) (*httptest.Server, *[]string) {
+	t.Helper()
+	var other []string
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			var list []map[string]string
+			for _, m := range models {
+				list = append(list, map[string]string{"name": m, "model": m})
+			}
+			json.NewEncoder(w).Encode(map[string]any{"models": list})
+		case "/api/chat":
+			var req struct {
+				Model    string           `json:"model"`
+				Think    *bool            `json:"think"`
+				Options  map[string]any   `json:"options"`
+				Messages []map[string]any `json:"messages"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Think == nil || *req.Think || req.Options["temperature"] != float64(0) || len(req.Messages) != 2 {
+				http.Error(w, "bad chat request", 400)
+				return
+			}
+			lines := strings.Split(strings.TrimSpace(req.Messages[1]["content"].(string)), "\n")
+			for i, l := range lines {
+				n, text, _ := strings.Cut(l, ". ")
+				lines[i] = n + ". ZH:" + text
+			}
+			lines = lines[:len(lines)-drop]
+			json.NewEncoder(w).Encode(map[string]any{"message": map[string]string{"content": "<think>\n</think>\n" + strings.Join(lines, "\n")}})
+		default:
+			mu.Lock()
+			other = append(other, r.URL.Path)
+			mu.Unlock()
+			http.Error(w, "not served", 404)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &other
+}
+
+func (f *fixture) cuesRequest(target string) string {
+	f.t.Helper()
+	srt := filepath.Join(f.root, "en.srt")
+	body := "1\n00:00:01,000 --> 00:00:02,500\nHello there\n\n2\n00:00:03,000 --> 00:00:04,250\nSecond <i>line</i>\nwraps\n\n3\n00:00:05,000 --> 00:00:06,000\nThird\n"
+	if err := os.WriteFile(srt, []byte(body), 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+	raw, _ := json.Marshal(map[string]any{"schema_version": "bashy-svc-request-v1", "cues": srt, "source_language": "en", "target_language": target})
+	p := filepath.Join(f.root, "translate.json")
+	if err := os.WriteFile(p, raw, 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+	return p
+}
+
+// The translate rod (Sprint 634): one chat request for the whole cue list,
+// translation.srt on the input's timestamps; a short reply fails loudly and
+// an unstaged model is refused without a pull.
+func TestTranslateOllamaRod(t *testing.T) {
+	f := newFixture(t)
+	f.addRod("translate-ollama", []string{"translate"}, "oss", "has=curl has=jq")
+	req := f.cuesRequest("zh")
+
+	srv, other := ollamaStub(t, []string{"qwen3:8b"}, 0)
+	env, stderr, code := f.runDoor([]string{"TRANSLATE_OLLAMA_URL=" + srv.URL}, "translate", "--route", "oss", "--out", filepath.Join(f.root, "out"), "--json", req)
+	if code != 0 || env.Outcome != "success" || env.Provider != "translate-ollama" || env.CostClass != "oss" || len(env.RawOutputs) != 1 {
+		t.Fatalf("exit %d envelope %+v\n%s", code, env, stderr)
+	}
+	got, _ := os.ReadFile(env.RawOutputs[0]["path"])
+	want := "1\n00:00:01,000 --> 00:00:02,500\nZH:Hello there\n\n2\n00:00:03,000 --> 00:00:04,250\nZH:Second line wraps\n\n3\n00:00:05,000 --> 00:00:06,000\nZH:Third\n\n"
+	if string(got) != want || env.RawOutputs[0]["media_type"] != "application/x-subrip" {
+		t.Fatalf("translation.srt:\n%q\nwant\n%q", got, want)
+	}
+
+	short, _ := ollamaStub(t, []string{"qwen3:8b"}, 1)
+	env, stderr, code = f.runDoor([]string{"TRANSLATE_OLLAMA_URL=" + short.URL}, "translate", "--route", "oss", "--out", filepath.Join(f.root, "out2"), "--json", req)
+	if code != 1 || env.Outcome != "error" || !strings.Contains(stderr, "returned 2 numbered line(s) for 3 cue(s)") {
+		t.Fatalf("short reply: exit %d %+v\n%s", code, env, stderr)
+	}
+	if fileExists(filepath.Join(f.root, "out2", "translation.srt")) {
+		t.Fatal("short reply wrote a translation")
+	}
+
+	unstaged, pulls := ollamaStub(t, []string{"llama3:8b"}, 0)
+	env, stderr, code = f.runDoor([]string{"TRANSLATE_OLLAMA_URL=" + unstaged.URL}, "translate", "--route", "oss", "--out", filepath.Join(f.root, "out3"), "--json", req)
+	if code != 1 || env.Outcome != "error" || !strings.Contains(stderr, "ollama pull qwen3:8b") || len(*pulls) != 0 || len(*other) != 0 {
+		t.Fatalf("unstaged model: exit %d %+v pulls %v\n%s", code, env, *pulls, stderr)
+	}
+}
+
+// --doctor is read-only and checks a registered ollama command (never a
+// bare PATH name) that lists the pinned tag.
+func TestTranslateOllamaDoctor(t *testing.T) {
+	f := newFixture(t)
+	rod := filepath.Join(f.rodsDir, "translate-ollama.bsh")
+	list := filepath.Join(f.root, "ollama-list")
+	marker := filepath.Join(f.root, "ollama-args")
+	fake := "#!/bin/sh\necho \"$*\" >>'" + marker + "'\ncat '" + list + "'\n"
+	if err := os.WriteFile(filepath.Join(f.root, "fake-ollama"), []byte(fake), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A bare `ollama` on PATH must not satisfy the doctor.
+	if err := os.WriteFile(filepath.Join(f.stubbin, "ollama"), []byte(fake), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	doctor := func(extra ...string) map[string]any {
+		cmd := exec.Command(f.bin, "--bashsharp", rod, "--doctor", "--json")
+		cmd.Env = append(append([]string{}, f.env...), extra...)
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("doctor: %v\n%s", err, out)
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(out, &doc); err != nil {
+			t.Fatalf("doctor is not JSON: %v\n%s", err, out)
+		}
+		return doc
+	}
+	missingNeed := func(doc map[string]any) string {
+		m, _ := doc["missing"].([]any)
+		if len(m) == 0 {
+			return ""
+		}
+		e, _ := m[len(m)-1].(map[string]any)
+		return e["need"].(string) + " | " + e["install"].(string)
+	}
+	os.WriteFile(list, []byte("NAME            ID              SIZE      MODIFIED\nqwen3:8b        500a1f067a9f    5.2 GB    1 hour ago\n"), 0o644)
+	if doc := doctor("TRANSLATE_OLLAMA_COMMAND=ollama-fixture"); doc["available"] != false || !strings.Contains(missingNeed(doc), "registered command ollama-fixture") {
+		t.Fatalf("unregistered ollama: %v", doc)
+	}
+	reg := exec.Command(f.bin, "commands", "add", "ollama-fixture", "--set", "exec.0="+filepath.Join(f.root, "fake-ollama"), "--set", "effects.0=read", "--set", "effects.1=exec")
+	reg.Env = f.env
+	if out, err := reg.CombinedOutput(); err != nil {
+		t.Fatalf("register: %v\n%s", err, out)
+	}
+	if doc := doctor("TRANSLATE_OLLAMA_COMMAND=ollama-fixture"); doc["available"] != true {
+		t.Fatalf("registered ollama with the model: %v", doc)
+	}
+	os.WriteFile(list, []byte("NAME            ID              SIZE      MODIFIED\nqwen3:4b        aaaa            2.5 GB    1 hour ago\n"), 0o644)
+	if doc := doctor("TRANSLATE_OLLAMA_COMMAND=ollama-fixture"); doc["available"] != false || !strings.Contains(missingNeed(doc), "ollama-fixture pull qwen3:8b") {
+		t.Fatalf("model not staged: %v", doc)
+	}
+	args, _ := os.ReadFile(marker)
+	if strings.TrimSpace(strings.ReplaceAll(string(args), "\n", " ")) != "list list" {
+		t.Fatalf("doctor ran more than `ollama list`: %q", args)
 	}
 }

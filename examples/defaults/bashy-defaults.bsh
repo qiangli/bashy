@@ -64,10 +64,10 @@ pty/ConPTY, the recorder examples/video uses), `chrome` and `chrome-open`
 (examples/chrome: cross-platform Google Chrome detection, installation, and
 tab opening), the service verbs `plan`,
 `image`, `draw`, `pdf`, `video`, `narrate`, `song`, `animate`,
-`email` and `drive` (examples/service-door: one door body per role; providers
+`translate`, `email` and `drive` (examples/service-door: one door body per role; providers
 are rods, see docs/service-rod-contract.md); `transcribe` has an embedded
 pipeline front door. The M2 oss rods `song-acestep`,
-`image-klein`, `narrate-local` and `transcribe-whisperx` (examples/oss-rods:
+`image-klein`, `narrate-local`, `transcribe-whisperx` and `translate-ollama` (examples/oss-rods:
 provides/route/requires records), the M5 Replicate API rods
 (`examples/api-rods`, with vault-bound HTTP tool commands), and
 `bashy-defaults` itself.
@@ -108,6 +108,7 @@ video|examples/service-door/service-door.bsh|read,exec,net|video.understand
 narrate|examples/service-door/service-door.bsh|read,write,exec,net|narrate
 song|examples/service-door/service-door.bsh|read,write,exec,net|song
 animate|examples/service-door/service-door.bsh|read,write,exec,net|animate
+translate|examples/service-door/service-door.bsh|read,write,exec,net|translate
 email|examples/service-door/service-door.bsh|read,write,exec,net|email.read
 drive|examples/service-door/service-door.bsh|read,write,exec,net|drive.read
 song-suno|examples/service-door/song-suno.bsh|read,write,exec,net,spend||song|browser|has=bashy has=jq has=curl has=ffprobe
@@ -124,6 +125,7 @@ song-acestep|examples/oss-rods/song-acestep.bsh|read,write,exec,net||song|oss|ha
 image-klein|examples/oss-rods/image-klein.bsh|read,write,exec,net||image.generate,image.edit|oss|has=uv
 narrate-local|examples/oss-rods/narrate-local.bsh|read,write,exec,net||narrate|oss|has=uv has=ffmpeg
 transcribe-whisperx|examples/oss-rods/transcribe-whisperx.bsh|read,write,exec,net||transcribe|oss|has=uv has=ffmpeg
+translate-ollama|examples/oss-rods/translate-ollama.bsh|read,write,exec,net||translate|oss|has=curl has=jq
 song-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|song|song|api|has=jq has=curl has=ffprobe has=python3
 image-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|image|image.generate,image.edit|api|has=jq has=curl has=ffprobe has=python3
 animate-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|animate|animate|api|has=jq has=curl has=ffprobe has=python3

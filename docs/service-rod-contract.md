@@ -21,6 +21,7 @@ draft and a final.
 | `animate` | `animate` | `image` (path, the performer), `audio` (path, drives lip sync), `prompt`, `duration_s`, `width`, `height`, `fps` | one video (`video/mp4`) |
 | `narrate` | `narrate` | `text`, `voice`, `language`, `reference_audio` (path; own or synthetic voice only) | one audio file (`audio/wav`) |
 | `transcribe` | `transcribe` | `audio` (path), `language`, `format` (`txt` or `srt`) | one transcript file (`application/x-subrip` or `text/plain`) |
+| `translate` | `translate` | `cues` (SRT path), `source_language`, `target_language` | one `translation.srt` (`application/x-subrip`): one cue per input cue on the input timestamps; a line-count mismatch is an error, never a partial file |
 
 Common request fields: `"schema_version": "bashy-svc-request-v1"`, `seed`
 (integer; a rod without seeding ignores it), and `title`. Paths in a request

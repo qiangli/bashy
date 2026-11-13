@@ -126,6 +126,7 @@ case "$1 $2" in
     : > "$src/examples/oss-rods/image-klein.bsh"
     : > "$src/examples/oss-rods/narrate-local.bsh"
     : > "$src/examples/oss-rods/transcribe-whisperx.bsh"
+    : > "$src/examples/oss-rods/translate-ollama.bsh"
     : > "$src/examples/api-rods/replicate-media.bsh"
     : > "$src/examples/api-rods/replicate.yaml"
     : > "$src/kb/defaults/pages/a.md"; : > "$src/kb/defaults/pages/b.md"
@@ -218,7 +219,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "film: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-klein: registered", "narrate-local: registered", "transcribe-whisperx: registered", "song-replicate: registered", "image-replicate: registered", "animate-replicate: registered", "replicate-media: registered"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "film: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-klein: registered", "narrate-local: registered", "transcribe-whisperx: registered", "translate-ollama: registered", "translate: registered", "song-replicate: registered", "image-replicate: registered", "animate-replicate: registered", "replicate-media: registered"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}
@@ -245,7 +246,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 		}
 	}
 	// Service verbs pass their open role as the door's first fixed argument.
-	for name, role := range map[string]string{"chrome-open": "open", "plan": "plan", "image": "image.generate", "narrate": "narrate", "song": "song", "animate": "animate"} {
+	for name, role := range map[string]string{"chrome-open": "open", "plan": "plan", "image": "image.generate", "narrate": "narrate", "song": "song", "animate": "animate", "translate": "translate"} {
 		if got := f.registered(name + ".role"); got != role {
 			t.Errorf("%s role = %q, want %q", name, got, role)
 		}
@@ -256,6 +257,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 		"commands add image-klein --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/image-klein.bsh") + " --set provides.0=image.generate --set provides.1=image.edit --set route=oss --set requires=has=uv",
 		"commands add narrate-local --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/narrate-local.bsh") + " --set provides.0=narrate --set route=oss --set requires=has=uv has=ffmpeg",
 		"commands add transcribe-whisperx --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/transcribe-whisperx.bsh") + " --set provides.0=transcribe --set route=oss --set requires=has=uv has=ffmpeg",
+		"commands add translate-ollama --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/translate-ollama.bsh") + " --set provides.0=translate --set route=oss --set requires=has=curl has=jq",
 	} {
 		if !strings.Contains(f.calls(), want) {
 			t.Errorf("registration missing %q:\n%s", want, f.calls())
