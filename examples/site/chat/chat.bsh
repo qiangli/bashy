@@ -14,13 +14,14 @@ state=${SITE_STATE_DIR:-$home/site}
 usage() {
   cat <<'EOF'
 site new --template chat [NAME] [--port PORT]
-site start|stop|status|source [NAME]
+site start|stop|status|source|export [NAME]
 
   new     Install the exact MIT fork commit and register a shapeable chat site.
   start   Start its Linux web UI on loopback. Requires an owner gateway URL.
   stop    Stop the managed web UI.
   status  Show the pinned revision and process state.
   source  Print the managed source directory.
+  export  Print or export the managed source bundle.
 
 Gateway: set OPENAI_COMPATIBLE_BASE_URL (or OPENAI_BASE_URL/LLM_BASE_URL).
 OPENAI_COMPATIBLE_API_KEY is optional. Site cloning is off by default; opt in
@@ -170,6 +171,24 @@ case ${1:---help} in
   start) start_site "${2:-chat-site}" ;;
   stop) stop_site "${2:-chat-site}" ;;
   status) status_site "${2:-chat-site}" ;;
-  source) installed "${2:-chat-site}" && source_dir "${2:-chat-site}" ;;
+  source)
+    name=${2:-chat-site}
+    installed "$name" || { echo "site: run site new --template chat $name first" >&2; exit 1; }
+    source_dir "$name"
+    ;;
+  export)
+    shift
+    name=${1:-chat-site}
+    dest=${2:-}
+    installed "$name" || { echo "site: run site new --template chat $name first" >&2; exit 1; }
+    src=$(source_dir "$name")
+    if [[ -z "$dest" ]]; then
+      echo "$src"
+    else
+      mkdir -p "$dest"
+      cp -R "$src/." "$dest/"
+      echo "site: exported $name to $dest"
+    fi
+    ;;
   *) usage >&2; exit 2 ;;
 esac

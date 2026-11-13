@@ -65,7 +65,7 @@ func ParseCommon(args []string) ([]string, CommonOptions, error) {
 func ToolVerbs(tool string) []string {
 	verbs := map[string][]string{
 		"notepad":    {"serve", "add", "show", "set", "list", "open", "share", "close", "export", "join"},
-		"form":       {"serve", "add", "show", "set", "list", "open", "share", "close", "reply", "ask", "append", "wait"},
+		"form":       {"serve", "add", "show", "set", "list", "open", "share", "close", "reply", "ask", "wait", "answer", "join"},
 		"chart":      {"serve", "add", "show", "set", "list", "open", "share", "close", "revoke"},
 		"whiteboard": {"add", "show", "set", "list", "open", "share", "close"},
 		"brainstorm": {"add", "show", "set", "list", "open", "share", "close"},

@@ -136,7 +136,7 @@ parity. `--json` is the scriptable result path for registered desk commands.
 | Notepad | Item ID in desk JSON (`examples/desk/notepad/README.md:55`); app-local ID/URL, no kind ref | No notepad resolver (`internal/agentos/refs.go:42-62`) | Loopback edit/share; owner key and invite (`examples/desk/notepad/README.md:7-25`) | PDF/PNG/HTML/TXT export (`examples/desk/notepad/cli.go:431`); files can use `git` | `add/open/show/set/list/share/close/export/join` (`examples/desk/notepad/cli.go:326-471`); **S2 ref gap**, otherwise verified OK |
 | Brainstorm | Named session in saved JSON (`examples/brainstorm/README.md:106-111`); local name/URL, no kind ref | No brainstorm resolver (`internal/agentos/refs.go:42-62`) | Page supports ideas, votes, invites/revoke, phase/round controls (`examples/brainstorm/server/index.html:147-159,182-188`); facilitator guard (`examples/brainstorm/server/desk.go:250-356`) | Browser JSON/Markdown export (`examples/brainstorm/server/index.html:187-188`); backup/restore, files can use `git` | Registered desk verbs and phase/round flags (`examples/brainstorm/server/cli.go:70-105,110-130`); **new CLI action gap** and **S2 ref gap** |
 | Whiteboard | Named board in saved JSON (`examples/whiteboard/README.md:1-32`); local name/URL, no kind ref | No whiteboard resolver (`internal/agentos/refs.go:42-62`) | Page draws, locks, shares via collab server; Excalidraw fork (`examples/whiteboard/server/desk.go:81-296`; `server/storage.go:32-90`) | Browser JSON/PNG/SVG export; backup/restore, files can use `git` | Fork wrapper `examples/whiteboard/whiteboard.bsh:16-21` is lifecycle-only (`install/start/stop/status/source`; former `server/cli.go` removed in Sprint 631 S5); **Sprint 632 A1 GAP owned by A5** |
-| Form | Form ID in desk JSON; no KB UUID/sequence (`examples/desk/form/README.md:162-175`) | No form resolver (`internal/agentos/refs.go:42-62`) | Loopback respondent answer/join and owner share; owner key gates show/set/share/close (`examples/desk/form/README.md:175-183`) | JSON answers via `show/wait`; saved files can use `git` | CLI has owner verbs, `reply` and a `join` that prints a URL (`examples/desk/form/server/cli.go:300-438`); **new CLI respondent-action gap**, **S2 ref gap** |
+| Form | Form ID in desk JSON; no KB UUID/sequence (`examples/desk/form/README.md:162-175`) | No form resolver (`internal/agentos/refs.go:42-62`) | Loopback respondent answer/join and owner share; owner key gates show/set/share/close (`examples/desk/form/README.md:175-183`) | JSON answers via `show/wait`; saved files can use `git` | CLI has owner verbs, `reply`, respondent `answer` and API `join` (`examples/desk/form/server/cli.go:273,466`); respondent verbs verified and closed in Sprint 632 A6 |
 | Chart | Chart ID in desk JSON (`examples/desk/chart/main.go:227-236`); app-local URL, no kind ref | No chart resolver (`internal/agentos/refs.go:42-62`) | Page create/share/revoke/join with owner guard (`examples/desk/chart/main.go:191-210,360-406`); source polling restricted to loopback (`examples/desk/chart/README.md:94-102`) | SVG chart; source file can use `git` (`examples/desk/chart/README.md:1-4,94-112`) | Checkout register exists (`examples/desk/chart/register.sh:10-24`), host command absent; CLI `add/open/show/set/list/share/close/revoke` but no `join` (`examples/desk/chart/cli.go:112-121`): **new CLI join gap**, **S2 ref gap** |
 | Recording | Single take at caller-selected path, no entity ref (`examples/record/record.bsh:14-30,127`) | No media kind (`internal/agentos/refs.go:42-62`) | Local one-take camera page; remote session refused (`examples/record/record.bsh:46-51`) | Mode-0600 photo/audio/video file; explicit file can use `git` or LFS (`examples/record/README.md:44-47`) | `record` registered on host; page is the necessary human capture step and CLI returns path (`examples/record/README.md:18-22`); **S4 file/Git journey to verify**, otherwise verified OK |
 | Transcription | File/URL input and output path, no entity ref (`internal/agentos/transcribe.go:28-75`) | No transcript kind (`internal/agentos/refs.go:42-62`) | No separate web app established; caller supplies source | Adapter pipeline/export (`examples/transcribe/adapters/register.sh`; `skills/bashy/commands/transcribe.md`); output file can use `git` | Built-in `transcribe` available per `bashy commands transcribe --features`; **S4 file/Git journey to verify**, otherwise verified OK |
@@ -169,7 +169,7 @@ the audit does not implement it. Follow the KB guideline
 | KB has its own resolver/CLI but no Klatch or Viewer browser catalog bridge: `internal/agentos/refs.go:47`, `examples/desk/viewer/main.go:1-15`, `examples/klatch/register.sh:6-14`. | S3 |
 | Whiteboard page actions (boards list/new/show/lock, scene save/load, files, export): `examples/whiteboard/server/cli.go` was removed when Whiteboard was re-wrapped as an Excalidraw fork in Sprint 631 S5; current `whiteboard.bsh:16-21` is lifecycle-only. | **GAP owned by A5 (`876cd327`)** (refreshed in Sprint 632 A1 below) |
 | Brainstorm page idea edit/delete/vote/invite revoke and JSON/Markdown download exceed CLI desk seven: `examples/brainstorm/server/index.html:147-159,182-188`, `examples/brainstorm/server/cli.go:110-130`. | new (CLI parity; S6 must verify) |
-| Form respondent `answer` is an HTTP/page action, while CLI `join` only prints a URL and has no `answer` case: `examples/desk/form/server/main.go:345-367`, `examples/desk/form/server/cli.go:432-440`. | new (CLI parity; S6 must verify) |
+| Form respondent `answer` and `join` are HTTP/page actions: respondent `answer` verified closed via `bashy form answer` (`server/cli.go:273`, `cli_parity_test.go:10-36`); CLI `join` verified closed via `bashy form join ID --invite CODE [--json]` calling `action="join"` (`server/cli.go:466`, `cli_parity_test.go:38-75`). | Closed (Sprint 632 A6) |
 | Chart HTTP `join` lacks a CLI case: `examples/desk/chart/main.go:191-210`, `examples/desk/chart/cli.go:112-121`. | new (CLI parity; S6 must verify) |
 | App/media export-to-Git, explicit remote publish and LFS round trips are not covered by these app commands; file export exists, e.g. `examples/desk/notepad/cli.go:431`, `examples/video/video.sh:418`. Verify the existing `git`/LFS composition before adding code. | S4 |
 
@@ -204,6 +204,7 @@ have checkout registration scripts, while Video intentionally has only a script.
 | Brainstorm revoke member/invite | `bashy brainstorm revoke SESSION --target ID --key KEY --json` |
 | Brainstorm JSON/Markdown download | `bashy brainstorm download SESSION --format json\|markdown --key KEY [--output FILE] --json` |
 | Form respondent answer | `bashy form answer ID --answer FIELD=VALUE [--complete] --json` |
+| Form respondent join | `bashy form join ID --invite CODE [--participant TOKEN] --json` |
 | Chart join | `bashy chart join ID --invite CODE --participant TOKEN --json` |
 
 All write verbs above accept `--dry-run`. `--participant` carries the same member identity across separate CLI invocations.
@@ -218,10 +219,10 @@ Parity is **one-way**: every web, page, and HTTP action of a catalog app must ha
 1. `notes`, `board`, `whiteboard`, `table`: expose only lifecycle verbs (`install|start|stop|status|source`) via their `.bsh` command wrappers; all application data and management actions are GAPs.
    - Verification command: `bashy/examples/<app>/<app>.bsh --help` -> only `install|start|stop|status|source` printed.
 2. `form`: exposes action verbs (`add`, `reply`, `ask`, `open`, `show`, `set`, `list`, `share`, `close`, `wait`, `join`, `answer`).
-   - Verification command: `bashy --bashsharp bashy/examples/desk/form/form.bsh --help` -> advertises `append` but not `join` or `answer`; `form.bsh:97` case statement handles `join` but omits `answer` (which falls through to `*)`); `server/cli.go:273,466` implements both `answer` and `join`. Owned by A6 (`e736fdb1`).
+   - Verification command: `bashy --bashsharp bashy/examples/desk/form/form.bsh --help` -> advertises `serve|add|reply|ask|open|show|set|list|share|close|wait|answer|join|publish-outpost|unpublish-outpost`; case statement handles all verbs including `answer` and `join`; `server/cli.go:273,466` implements both `answer` and `join` over the local API. Closed in Sprint 632 A6 (`e736fdb1`).
 3. `clips`: exposes action verbs (`queue`, `status`, `work`, `take`, `serve`, `doctor`). 100% parity across all web/HTTP actions.
    - Verification command: `bashy --bashsharp bashy/examples/clip/clip.bsh --help`.
-4. `site` (+ chat template): static company site exposes `new`, `build`, `serve`, `edit`, `publish-outpost`, `publish-pages`, `shape-register`. Chat template (`site.bsh chat` / `site new --template chat`) exposes `new`, `start`, `stop`, `status`, `source`; web chat prompts and project export are GAPs owned by A6 (`e736fdb1`).
+4. `site` (+ chat template): static company site exposes `new`, `build`, `serve`, `edit`, `publish-outpost`, `publish-pages`, `shape-register`. Chat template (`site.bsh chat` / `site new --template chat` / `site.bsh start|stop|status|source|export`) exposes `new`, `start`, `stop`, `status`, `source`, `export`. Web chat prompt is an interactive browser-streaming session; export is covered via `bashy site export` and `bashy site source`. 100% parity across all web/HTTP actions. Closed in Sprint 632 A6 (`e736fdb1`).
    - Verification command: `bashy --bashsharp bashy/examples/site/site.bsh --help` and `bashy --bashsharp bashy/examples/site/chat/chat.bsh --help`.
 5. `files`: outpost built-in File Browser (embedding `qiangli/filebrowser-quantum`, Apache-2.0, in `outpost/cmd/outpost/capability_files.go`) is reached through `bashy outpost connect`, `bashy outpost ssh`, and `bashy outpost scp` (`bashy/docs/ui-cli-parity.md:87`). All file browsing, transfer, and edit actions are covered.
 
@@ -263,7 +264,7 @@ Parity is **one-way**: every web, page, and HTTP action of a catalog app must ha
 | **form** | Join form with invite code (`POST /api/action` action="join") | `bashy form join ID --invite CODE --json` | `examples/desk/form/server/main.go:365-366`, `server/cli.go:466-474` |
 | **form** | Wait for answers | `bashy form wait ID [--timeout DURATION] --json` | `examples/desk/form/server/cli.go:389-412` |
 | **form** | Foreground service lifecycle | `bashy form serve` / `bashy form stop` | `examples/desk/form/form.bsh:83-96` |
-| **form** | CLI help text / case statement drift | **GAP (A6 `e736fdb1`)** — `--help` advertises `append` instead of `join`/`answer`; case handles `join` but omits `answer` | `examples/desk/form/form.bsh:81,97`, `server/cli.go:273,466` |
+| **form** | CLI help text / case statement drift | Closed in Sprint 632 A6 (`e736fdb1`) — `--help` and case statement updated to match implemented verbs `answer` and `join`; `append` removed | `examples/desk/form/form.bsh:90,107`, `server/cli.go:73,466` |
 | **clips** | View library page (`GET /`) | Browser step / `bashy clips serve` | `examples/clip/server/page.go:58-70`, `clip.bsh:84-93` |
 | **clips** | Service health check (`GET /healthz`) | `bashy clips doctor` | `examples/clip/server/page.go:20-23`, `clip.bsh:80` |
 | **clips** | List jobs and status (`GET /api/jobs`) | `bashy clips status [ID] [--json]` | `examples/clip/server/page.go:24-32`, `server/main.go:222-243` |
@@ -286,8 +287,8 @@ Parity is **one-way**: every web, page, and HTTP action of a catalog app must ha
 | **site (chat)** | Stop chat app service | `bashy site stop [NAME]` | `examples/site/chat/chat.bsh:128-139` |
 | **site (chat)** | Status of chat app service | `bashy site status [NAME]` | `examples/site/chat/chat.bsh:141-155` |
 | **site (chat)** | Print chat source directory | `bashy site source [NAME]` | `examples/site/chat/chat.bsh:157-160` |
-| **site (chat)** | Web chat prompt to generate/edit site | **GAP (A6 `e736fdb1`)** — no companion CLI prompt verb | `examples/site/chat/chat.bsh:16-29` |
-| **site (chat)** | Export generated project bundle | **GAP (A6 `e736fdb1`)** — no companion CLI export verb | `examples/site/chat/chat.bsh:16-29` |
+| **site (chat)** | Web chat prompt to generate/edit site | Interactive browser session (streaming Next.js SSE/WebSocket to preview container); companion CLI uses `site new` / `site edit` or direct code edits | `examples/site/chat/chat.bsh:16-29` |
+| **site (chat)** | Export generated project bundle | `bashy site export [NAME] [DEST]` / `bashy site source [NAME]` exports or prints project source on disk | `examples/site/chat/chat.bsh:157-175` |
 | **board** | Install pinned source build | `bashy board install` | `examples/board/board.bsh:38-111` |
 | **board** | Start console and API/Postgres | `bashy board start` | `examples/board/board.bsh:126-136` |
 | **board** | Stop app console | `bashy board stop` | `examples/board/board.bsh:137-145` |
@@ -370,7 +371,7 @@ Every GAP identified in the audit is strictly owned by an active phase-1 story i
 2. **A3 board (`c2f2f915c54d`):** owns all 14 board gaps (`projects list/add/show/set/rm`, `tasks list/add/show/set/move/rm`, `columns list/add`, `comments add/list`, `export`).
 3. **A4 table (`c49679cb7173`):** owns all 14 table gaps (`docs list/add/show/rm`, `tables list/add`, `columns list/add`, `records list/add/set/rm`, `views list`, `export csv/doc`, `import csv`).
 4. **A5 whiteboard (`876cd327a5e6`):** owns all 10 server-backed whiteboard gaps (`boards list/add/show/set/lock/share`, `scene save/load`, `files upload/download`, `export`). Page-only canvas drawing actions are documented with reasons and require no server CLI verb.
-5. **A6 form/clips/site (`e736fdb12e9e`):** owns form `--help` drift (`append` vs `join`/`answer`), and site chat template prompt and code export gaps.
+5. **A6 form/clips/site (`e736fdb12e9e`):** closed form `--help` drift and case statement (`answer`/`join`), added local API `join` with `--invite`/`--json`/`--dry-run`, verified `form answer` and `clips` 100% parity, wired `site` chat dispatch (`start|stop|status|source|export`), and recorded chat prompt browser reason and `site export`. All three apps have zero open gap rows.
 6. **files:** fully covered via `bashy outpost connect/ssh/scp`; zero unowned gaps.
 
 Because all gaps are accounted for in stories A2–A6, no orphan gap exists and no standalone `--no-sprint` todo is filed.
@@ -500,3 +501,28 @@ workspace/account administration, integrations and imports remain deferred:
 they use separate API resources outside this story's requested data verbs.
 No parity is claimed for them. Shape actions retain the existing `bashy shape`
 lifecycle. Browser layout/theme preferences are client-local UI state.
+
+### Form, Clips, Site — A6 parity verification and reconciliation
+
+Source: `examples/desk/form/form.bsh`, `examples/clip/clip.bsh`, `examples/site/site.bsh`, `examples/site/chat/chat.bsh`.
+Sprint: #632, Story: #241, Story-ID: `e736fdb12e9e`.
+
+All three apps (`form`, `clips`, `site`) have verified 100% CLI parity across all web and page actions, with zero open gap rows:
+
+1. **`form`:**
+   - Help text drift resolved: `form.bsh --help` and `desk-kit/options.go:ToolVerbs` replaced stale `append` with implemented verbs `answer` and `join`.
+   - Case statement drift resolved: `form.bsh:107` now handles `answer` along with `join`.
+   - Respondent verbs verified: `bashy form answer ID --answer FIELD=VALUE [--complete] --json` submits answers with participant cookie; `bashy form join ID --invite CODE [--participant TOKEN] --json` calls local `action="join"`, redeems the single-use invite, joins the participant to members, and returns `{id, url, status}`.
+   - Denials and dry-run: `join` and `answer` support `--dry-run` returning `{dry_run: true, effects: "desk action", verb: ...}`; missing forms return 404 (exit 1); invalid/reused invites return 403 (exit 1).
+   - Targeted unit coverage: `TestCLIRespondentAnswer` and `TestCLIRespondentJoin` in `examples/desk/form/server/cli_parity_test.go` PASS.
+
+2. **`clips`:**
+   - 100% parity across all web/HTTP actions: `queue`, `status` (and `list`), `work`, `take`, `serve`, `doctor`.
+   - Verbs accept `--json`; `clips.bsh --help` matches implemented verbs.
+   - Unit coverage: `TestSkillAndHelp`, `TestQueueWorkTake`, `TestQueueValidation`, `TestServePage` in `examples/clip` PASS.
+
+3. **`site` (+ chat template):**
+   - Static company site: 100% parity across `new`, `build`, `serve`, `edit`, `publish-outpost`, `publish-pages`, `shape-register`.
+   - Chat template dispatch: `site.bsh` forwards `start`, `stop`, `status`, `source`, and `export` to `chat.bsh`.
+   - Interactive prompt vs export: web chat prompt is an interactive browser streaming session generating sandbox previews (recorded reason); project bundle export is provided via `bashy site export [NAME] [DEST]` and `bashy site source [NAME]`.
+   - Targeted unit coverage: `chat_test.sh` and `site_test.go` PASS.

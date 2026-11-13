@@ -43,20 +43,11 @@ func runCLI(args []string, stdout io.Writer) int {
 	}
 	if common.HelpMCP {
 		help := kit.MCPHelp("form")
-		help["verbs"] = append(kit.ToolVerbs("form"), "answer")
 		fmt.Fprintln(stdout, kit.CanonicalJSON(help))
 		return 0
 	}
 	if common.Explain || common.DryRun {
 		verb := kit.FindVerb("form", args)
-		if verb == "" {
-			for _, a := range args {
-				if a == "answer" {
-					verb = a
-					break
-				}
-			}
-		}
 		if verb == "" {
 			fmt.Fprintln(stdout, "error: unknown verb")
 			return 2
@@ -70,7 +61,7 @@ func runCLI(args []string, stdout io.Writer) int {
 	// the first non-flag token so flags work on either side.
 	pre, verb, post := splitVerb(args)
 	if verb == "" {
-		fmt.Fprintln(stdout, "Usage: form [serve|add|reply|ask|open|show|set|list|share|close|wait|answer] [--json]")
+		fmt.Fprintln(stdout, "Usage: form [serve|add|reply|ask|open|show|set|list|share|close|wait|answer|join] [--json]")
 		return 2
 	}
 	gfs := flag.NewFlagSet("form", flag.ContinueOnError)
@@ -101,6 +92,7 @@ func runCLI(args []string, stdout io.Writer) int {
 	options := fs.String("options", "", "comma-separated poll choices")
 	key := fs.String("key", "", "owner key (FORM_KEY also works)")
 	participant := fs.String("participant", "", "stable respondent token")
+	invite := fs.String("invite", "", "single-use invite code for join")
 	timeout := fs.Duration("timeout", 5*time.Minute, "wait: give up after this long")
 	interval := fs.Duration("interval", 2*time.Second, "wait: poll interval")
 	answers := answerFlags{}
@@ -464,13 +456,23 @@ func runCLI(args []string, stdout io.Writer) int {
 		}
 		return emit(obj, nil)
 	case "join":
-		if len(positional) < 2 {
-			fmt.Fprintln(stdout, "error: form join ID INVITE")
+		id, ok := needID()
+		if !ok {
 			return 2
 		}
-		u := base + "/?id=" + url.QueryEscape(positional[0]) + "#invite=" + positional[1]
-		fmt.Fprintln(stdout, u)
-		return 0
+		inv := *invite
+		if inv == "" && len(positional) >= 2 {
+			inv = positional[1]
+		}
+		if inv == "" {
+			fmt.Fprintln(stdout, "error: form join needs --invite CODE")
+			return 2
+		}
+		obj, _, code := call("join", map[string]any{"id": id, "invite": inv})
+		if code != 0 {
+			return code
+		}
+		return emit(obj, nil)
 	default:
 		return kit.UsageError(stdout, "form", *asJSON, fmt.Sprintf("unknown verb %q", verb))
 	}
@@ -521,6 +523,7 @@ func parseVerbArgs(fs *flag.FlagSet, args []string) ([]string, error) {
 		"body": true, "id": true, "def": true, "definition": true,
 		"key": true, "timeout": true, "interval": true, "answer": true,
 		"poll": true, "options": true, "respondents": true, "close-at": true,
+		"invite": true,
 	}
 	var positional []string
 	i := 0

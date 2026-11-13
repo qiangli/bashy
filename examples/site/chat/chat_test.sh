@@ -24,4 +24,16 @@ fi
 grep -q 'NAME must begin with a letter' "$tmp/name.out"
 
 "$runner" --bashsharp "$here/chat.bsh" --help | grep -q 'OPENAI_COMPATIBLE_BASE_URL'
+"$runner" --bashsharp "$here/chat.bsh" --help | grep -q 'export'
+
+# Dispatch via site.bsh parent wrapper
+result_parent=$("$runner" --bashsharp "$here/../site.bsh" status demo)
+[[ $result_parent == *'site: demo not installed'* ]]
+
+if "$runner" --bashsharp "$here/../site.bsh" export demo "$tmp/out" >"$tmp/export.out" 2>&1; then
+  echo 'export uninstalled succeeded' >&2
+  exit 1
+fi
+grep -q 'run site new --template chat demo first' "$tmp/export.out"
+
 echo 'site command unit checks passed'

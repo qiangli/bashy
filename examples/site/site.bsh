@@ -199,6 +199,9 @@ case "${1:-}" in
     shift
     exec "$RUNNER" --bashsharp "$HERE/chat/chat.bsh" "$@"
     ;;
+  start|stop|status|source|export)
+    exec "$RUNNER" --bashsharp "$HERE/chat/chat.bsh" "$@"
+    ;;
   --skill)
     copying=false
     while IFS= read -r line; do
@@ -211,7 +214,7 @@ case "${1:-}" in
     echo 'sokilili site efefecato reada wurite exec neto fini sotepo porota porota fini enisure gereeni fini fini'
     ;;
   -h|--help)
-    echo "Usage: site [new|build|serve|edit|publish-outpost|unpublish-outpost|publish-pages|shape-register] [args...]"
+    echo "Usage: site [new|build|serve|edit|publish-outpost|unpublish-outpost|publish-pages|shape-register|start|stop|status|source|export] [args...]"
     echo "  site new [DIR] [--title TITLE]          Initialize a new company site (Hugo template)"
     echo "  site build [DIR]                        Generate static HTML output into public/"
     echo "  site serve [DIR] [NAME]                 Register and serve via bashy site app type"
@@ -220,6 +223,8 @@ case "${1:-}" in
     echo "  site unpublish-outpost [NAME]           Remove the site from Outpost"
     echo "  site publish-pages DIR REPO [BRANCH]    Publish static public/ to GitHub Pages"
     echo "  site shape-register DIR [NAME]          Register source as a shapeable app"
+    echo "  site start|stop|status|source [NAME]    Manage chat template site service"
+    echo "  site export [NAME] [DEST]               Export chat template project bundle"
     echo "  --skill                                 Print embedded agent skill guidance"
     echo "  --contract                              Print skill contract"
     ;;
