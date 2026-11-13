@@ -119,6 +119,9 @@ vinfo=$(ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,wid
 [ "$vinfo" = "h264,1280,720,30/1" ] || fail "unexpected cards video stream info: $vinfo"
 d=$(ffprobe -v error -show_entries format=duration -of csv=p=0 "$cards")
 awk -v d="$d" 'BEGIN{exit !(d > 3.8 && d < 4.3)}' || fail "cards duration is ${d}s, want about 4s"
+# The video stream itself must last the full --secs per card, not the GIF's 1 s frame.
+vd=$(ffprobe -v error -count_frames -select_streams v:0 -show_entries stream=nb_read_frames -of csv=p=0 "$cards")
+awk -v n="$vd" 'BEGIN{exit !(n >= 114 && n <= 126)}' || fail "cards video has $vd frames, want about 120 (4 s at 30 fps)"
 [ -n "$(ffprobe -v error -select_streams a -show_entries stream=codec_name -of csv=p=0 "$cards")" ] || fail "cards has no audio stream"
 if media cards "$TMP/title.txt" 2>/dev/null; then fail "cards passed without -o"; fi
 pass "cards: 2 cards, 1280x720, ${d}s"

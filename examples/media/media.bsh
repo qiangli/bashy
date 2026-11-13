@@ -770,6 +770,7 @@ asm_size() {
 }
 
 # card_gif TXT GIF CAST: centred card text (first line bold) rendered by agg.
+# The GIF is one 1 s frame; cmd_cards holds it (tpad clone) for --secs.
 card_gif() {
 	local txt=$1 gif=$2 cast=$3
 	local cols=60 rows=14 lines=() i=0 l pad top out=""
@@ -827,7 +828,7 @@ cmd_cards() {
 		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$tmp/card-$i.gif" \
 			-f lavfi -i "anullsrc=r=48000:cl=stereo" \
 			-map 0:v:0 -map 1:a:0 -t "$secs" \
-			-vf "scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${ASM_FPS},format=yuv420p" \
+			-vf "scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${ASM_FPS},tpad=stop_mode=clone:stop_duration=${secs},format=yuv420p" \
 			"${ASM_VENC[@]}" "${ASM_AENC[@]}" "$seg" || die "cards: ffmpeg could not render $f"
 		echo "file 'card-$i.mp4'" >>"$tmp/list.txt"
 	done
