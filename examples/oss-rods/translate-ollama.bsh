@@ -34,8 +34,9 @@ ROD=translate-ollama
 MODEL=${TRANSLATE_OLLAMA_MODEL:-qwen3:8b}
 API=${TRANSLATE_OLLAMA_URL:-http://127.0.0.1:11434}
 API=${API%/}
-# The registered command that answers `list` (never a bare PATH name).
-OLLAMA_CMD=${TRANSLATE_OLLAMA_COMMAND:-ollama}
+# The registered command that answers `list` (never a bare PATH name). bashy
+# ships its own `ollama` verb on every OS, so the host binary goes by ollama-host.
+OLLAMA_CMD=${TRANSLATE_OLLAMA_COMMAND:-ollama-host}
 bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
 OSS_ROD_TEXT=""
 
@@ -62,9 +63,8 @@ if [ "${1:-}" = --doctor ]; then
 	if ! listed=$(BASHY_HINTS=off "$bashy_bin" "$OLLAMA_CMD" list 2>/dev/null); then
 		need="registered command $OLLAMA_CMD"
 		case $(oss_os_name) in
-		windows) install="winget install Ollama.Ollama, then: bashy film doctor (registers it) or bashy commands add $OLLAMA_CMD --set exec.0=%LOCALAPPDATA%\\Programs\\Ollama\\ollama.exe" ;;
-		# bashy ships its own `ollama` verb here, so the host binary takes another name.
-		*) install="install ollama, then: bashy commands add ollama-host --set exec.0=PATH-TO-ollama and set TRANSLATE_OLLAMA_COMMAND=ollama-host" ;;
+		windows) install="install ollama (official OllamaSetup.exe or the ollama-windows-amd64.zip), then: bashy film doctor (registers it) or bashy commands add $OLLAMA_CMD --set exec.0=%LOCALAPPDATA%\\Programs\\Ollama\\ollama.exe" ;;
+		*) install="install ollama, then: bashy film doctor (registers it) or bashy commands add $OLLAMA_CMD --set exec.0=PATH-TO-ollama" ;;
 		esac
 	elif ! printf '%s\n' "$listed" | awk -v m="$MODEL" 'NR > 1 && $1 == m { f = 1 } END { exit !f }'; then
 		need="ollama model $MODEL"

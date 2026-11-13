@@ -38,11 +38,12 @@ snapshot, and starts the API with its LM disabled. Set
 render rod refuses a server that was not started by this launcher.
 
 `translate-ollama` talks to `http://127.0.0.1:11434` (`TRANSLATE_OLLAMA_URL`
-overrides). Its `--doctor --json` is read-only: it runs `bashy ollama list`
-through a REGISTERED `ollama` command (`film doctor` registers the host's
-ollama where bashy does not ship its own `ollama` verb; elsewhere register it
-under another name and set `TRANSLATE_OLLAMA_COMMAND`) and checks the pinned
-tag is listed. A render checks `/api/tags` and never pulls: stage the model
+overrides). Its `--doctor --json` is read-only: it runs `list` through a
+REGISTERED command, never a bare PATH name. bashy ships its own `ollama`
+verb on every OS, so the host binary is registered as `ollama-host`
+(`TRANSLATE_OLLAMA_COMMAND` renames it): `film doctor` does this, or
+`bashy commands add ollama-host --set exec.0=PATH-TO-ollama`. The doctor
+then checks the pinned tag is listed. A render checks `/api/tags` and never pulls: stage the model
 once with `ollama pull qwen3:8b`. A reply whose numbered line count differs
 from the cue count fails (exit 1) instead of misaligning subtitles.
 

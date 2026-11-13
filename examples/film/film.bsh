@@ -280,19 +280,19 @@ preflight() {
 }
 
 # register_ollama: the translate-ollama rod lists models through a registered
-# `ollama` command, never a bare PATH name. Register the host's ollama (the
-# Windows per-user install, or PATH) unless one already answers; where bashy
-# ships its own `ollama` verb the add is refused and the rod's doctor says how.
+# command, never a bare PATH name. bashy ships its own `ollama` verb on every
+# OS, so the host binary is registered as `ollama-host` (the rod's default,
+# TRANSLATE_OLLAMA_COMMAND): the Windows per-user install, or PATH.
 register_ollama() {
-	local p=${FILM_OLLAMA:-}
-	BASHY_HINTS=off "$bashy_bin" ollama --version >/dev/null 2>&1 && return 0
+	local p=${FILM_OLLAMA:-} name=${TRANSLATE_OLLAMA_COMMAND:-ollama-host}
+	BASHY_HINTS=off "$bashy_bin" commands show "$name" >/dev/null 2>&1 && return 0
 	[ -n "$p" ] || [ -z "${LOCALAPPDATA:-}" ] || { p=${LOCALAPPDATA//\\//}/Programs/Ollama/ollama.exe; [ -f "$p" ] || p=""; }
 	[ -n "$p" ] || p=$(type -P ollama 2>/dev/null || true)
 	[ -n "$p" ] || { note "translate: no ollama found (route oss translation needs it: winget install Ollama.Ollama)"; return 0; }
-	if BASHY_HINTS=off "$bashy_bin" commands add ollama --set "exec.0=$p" --set effects.0=read --set effects.1=write --set effects.2=exec --set effects.3=net >/dev/null 2>&1; then
-		note "translate: registered ollama ($p)"
+	if BASHY_HINTS=off "$bashy_bin" commands add "$name" --set "exec.0=$p" --set effects.0=read --set effects.1=write --set effects.2=exec --set effects.3=net >/dev/null 2>&1; then
+		note "translate: registered $name ($p)"
 	else
-		note "translate: could not register ollama ($p); see: bashy translate-ollama --doctor --json"
+		note "translate: could not register $name ($p); see: bashy translate-ollama --doctor --json"
 	fi
 }
 
