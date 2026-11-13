@@ -80,3 +80,11 @@ index aacbae8..d6508e5 100644
    plugins: lazyPlugins(() => [
      tanstackRouter({
        autoCodeSplitting: true,
+@@ -79,6 +79,7 @@ export default defineConfig({
+   },
+   resolve: {
+     alias: {
++      "@sentry/react": path.resolve(__dirname, "../../board-sentry-stub.ts"),
+       "@": path.resolve(__dirname, "./src"),
+       "@i18n": path.resolve(__dirname, "../../i18n"),
+     },

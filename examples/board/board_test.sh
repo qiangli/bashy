@@ -7,6 +7,15 @@ export BASHY_HOME="$tmp/home"
 export BASHY_HINTS=off
 runner=${BASHY_BIN:-bashy}
 
+test -f "$here/board-console/main.go.tmpl"
+test ! -e "$here/board-console/main.go"
+test -f "$here/board-console/placeholder.go"
+grep -q 'alias:@sentry/node=' "$here/board.bsh"
+grep -q '"@sentry/react": path.resolve' "$here/board-shape.patch"
+grep -q 'function captureReactException' "$here/sentry-stub.ts"
+grep -q 'function browserTracingIntegration' "$here/sentry-stub.ts"
+grep -q 'function replayIntegration' "$here/sentry-stub.ts"
+
 result=$("$runner" --bashsharp "$here/board.bsh" status)
 [[ "$result" == *'board: not installed'* ]]
 [[ "$result" == *'board: console stopped'* ]]

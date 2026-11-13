@@ -95,15 +95,10 @@ groups; each is removed, off by default, or not shipped:
 - Web analytics loader (Plausible, `apps/web/index.html`): removed by
   `board-shape.patch`. It only loaded on vendor hostnames before, and
   now the tag is gone entirely.
-- Vendor telemetry SDKs (`@sentry/node`, `@sentry/profiling-node`):
-  absent from the shipped API bundle. The install bundles the API with
-  esbuild aliasing both packages to `sentry-stub.ts` (no-op functions),
-  and the wrapper never sets `SENTRY_DSN` or related variables, so the
-  SDKs can never initialize.
-- Web telemetry SDK (`@sentry/react`): still imported by the web
-  bundle, but its `init` runs only when `VITE_SENTRY_DSN` is compiled
-  in. The install never sets it, so initialization is skipped and no
-  event, breadcrumb, or check-in can send.
+- Vendor telemetry SDKs (`@sentry/node`, `@sentry/profiling-node`,
+  `@sentry/react`): absent from the shipped API and web bundles. The install
+  aliases all three packages to `sentry-stub.ts` (no-op functions) while
+  bundling, so no vendor telemetry implementation ships.
 - Cron check-ins and error-report calls (`captureCheckIn`,
   `captureException`, `addBreadcrumb`): inert without initialization;
   scheduler failures still log to the owner's own stderr.

@@ -90,7 +90,7 @@ install() {
   cp -r "$scratch/source/apps/api/drizzle/meta" "$scratch/source/board-console/dist/drizzle/meta"
   cp -r "$scratch/source/apps/web/dist/." "$scratch/source/board-console/web/"
   rm -f "$scratch/source/board-sentry-stub.ts"
-  cp "$here/board-console/main.go" "$scratch/source/board-console/"
+  cp "$here/board-console/main.go.tmpl" "$scratch/source/board-console/main.go"
   cp "$here/go.mod" "$scratch/source/go.mod"
   cp "$here/shaped.json" "$scratch/source/shaped.json"
   cp "$here/contract.bsh" "$scratch/source/contract.bsh"

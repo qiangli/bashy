@@ -1,16 +1,15 @@
 // Shapeable build stub for the vendor telemetry SDKs.
 //
 // The pinned source imports `@sentry/node` (API) in error paths, cron
-// wrappers and integration clients, and `@sentry/profiling-node` in its
-// instrument module. The shipped board bundle must contain no vendor
-// telemetry code and open no vendor endpoint, so the install bundles the
-// API with esbuild aliasing both packages to this module: every call
-// becomes a no-op that only touches the owner's own stderr.
+// wrappers and integration clients, `@sentry/profiling-node` in its API
+// instrument module, and `@sentry/react` in its web instrument and error
+// boundary. The shipped board bundles must contain no vendor telemetry code
+// and open no vendor endpoint, so the install aliases all three packages to
+// this module: every call becomes a no-op that only touches the owner's own
+// stderr.
 //
 // Nothing in the wrapper ever sets SENTRY_DSN, SENTRY_AUTH_TOKEN,
-// SENTRY_ORG, SENTRY_PROJECT, VITE_Sentry_DSN or any sibling variable, so
-// even the un-aliased web bundle (which keeps its SDK import) can never
-// initialize: both instrument modules skip `init` unless a DSN is set.
+// SENTRY_ORG, SENTRY_PROJECT, VITE_SENTRY_DSN or any sibling variable.
 // The no-phone-home gate output and the runtime capture in the board
 // README are the evidence.
 
@@ -22,6 +21,10 @@ export function init(..._args: unknown[]): void {
 }
 
 export function captureException(..._args: unknown[]): string {
+  return "";
+}
+
+export function captureReactException(..._args: unknown[]): string {
   return "";
 }
 
@@ -48,6 +51,18 @@ export function nativeNodeFetchIntegration(
 }
 
 export function nodeProfilingIntegration(
+  ..._args: unknown[]
+): Record<string, never> {
+  return {};
+}
+
+export function browserTracingIntegration(
+  ..._args: unknown[]
+): Record<string, never> {
+  return {};
+}
+
+export function replayIntegration(
   ..._args: unknown[]
 ): Record<string, never> {
   return {};

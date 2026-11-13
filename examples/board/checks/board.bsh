@@ -14,5 +14,6 @@ grep -q '/board/' board-console/web/index.html
 ! grep -q 'plausible' board-console/web/index.html
 ! grep -q '@sentry/node' board-console/dist/api.mjs
 ! grep -q '@sentry/profiling-node' board-console/dist/api.mjs
+! grep -R -q '@sentry/react' board-console/web
 grep -q 'BOARD_API_PORT' board-console/dist/api.mjs
 grep -q '"main": "board-console"' shaped.json
