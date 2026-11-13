@@ -583,3 +583,35 @@ func TestStoryboardValidation(t *testing.T) {
 		t.Fatalf("rods ran for an invalid storyboard: %v", calls)
 	}
 }
+
+// WhisperX without an alignment model returns a few long, merged segments.
+// The draft still gets one cue per lyric line, timed to the sung words, so
+// the subtitles stay bilingual; long lines wrap inside the frame.
+func TestDraftTimesLyricLinesToTranscript(t *testing.T) {
+	f := newFixture(t)
+	f.ossRods(true)
+	long := "Second line of the song keeps going far past the edge of a small frame"
+	f.editStoryboard(func(sb map[string]any) {
+		sb["lyrics"] = []any{"First line of the song", long}
+	})
+	out, stderr, code := f.runEnv([]string{"FILM_FIXTURE_CUES=1", "FILM_FIXTURE_TRANSCRIPT=second line of the song keeps going"}, "draft", f.proj, "--no-qa")
+	if code != 0 {
+		t.Fatalf("draft: exit %d\n%s", code, stderr)
+	}
+	d := f.manifest(out)
+	if !strings.Contains(stderr, "1 of 2 lyric lines anchored to 1 transcript cue(s)") {
+		t.Fatalf("timing summary missing:\n%s", stderr)
+	}
+	timing, _ := os.ReadFile(filepath.Join(f.proj, "drafts", d.ID, "timing.srt"))
+	// Line 2's words open the single 0.2-5.9 s cue; line 1 precedes it.
+	if !strings.Contains(string(timing), "00:00:00,200 --> ") || !strings.Contains(string(timing), "\n"+long+"\n") || strings.Count(string(timing), " --> ") != 2 {
+		t.Fatalf("timing.srt:\n%s", timing)
+	}
+	ass, _ := os.ReadFile(filepath.Join(f.proj, "drafts", d.ID, "subs.ass"))
+	if !strings.Contains(string(ass), `First line of the song{\rSecondary}\NPrimera línea de la canción`) {
+		t.Fatalf("subs.ass is not bilingual:\n%s", ass)
+	}
+	if _, types := probe(t, d.Output); strings.Join(types, ",") != "video,audio,subtitle" {
+		t.Fatalf("film.mp4 streams %v", types)
+	}
+}

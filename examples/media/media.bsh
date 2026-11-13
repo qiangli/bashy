@@ -912,6 +912,24 @@ banner_width() {
 	echo "$max"
 }
 
+# wrap_cue TEXT COLS: word-wrap each \N-separated line of TEXT to COLS
+# characters, joined again with \N (a word longer than COLS keeps its line).
+wrap_cue() {
+	printf '%s\n' "$1" | awk -v cols="$2" '{
+		n = split($0, seg, /\\N/); out = ""
+		for (i = 1; i <= n; i++) {
+			m = split(seg[i], w, / +/); line = ""
+			for (j = 1; j <= m; j++) {
+				if (w[j] == "") continue
+				if (line != "" && length(line) + 1 + length(w[j]) > cols) { out = out (out == "" ? "" : "\\N") line; line = w[j] }
+				else line = (line == "" ? w[j] : line " " w[j])
+			}
+			if (line != "") out = out (out == "" ? "" : "\\N") line
+		}
+		print out
+	}'
+}
+
 # banner_lines TEXT COLS CODE: centred .cast lines for TEXT (\N-separated) in
 # ANSI style CODE (1 bold white, 33 yellow), CRLF-separated, no trailing gap.
 banner_lines() {
@@ -931,9 +949,13 @@ banner_lines() {
 # muxed as mov_text so players can toggle it.
 burn_cues() {
 	local video=$1 tmp=$2 ass=$3 burn=$4 n=$5
-	local idx=0 i s e t1 t2 cols line1 line2 line cast gif
-	local inputs=() fc=() prev="[0:v]"
+	local idx=0 i s e t1 t2 cols rows line1 line2 line cast gif
+	local inputs=() fc=() prev="[0:v]" vw wrap
 	inputs=(-i "$video")
+	# Wrap each language to the frame: agg draws 28 px IBM Plex Mono at about
+	# 17 px a column, and a banner keeps 5 % margins; at most 46 columns.
+	vw=$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$video")
+	wrap=$(awk -v w="${vw:-1280}" 'BEGIN{c = int(w * 0.9 / 17) - 4; if (c > 46) c = 46; if (c < 12) c = 12; print c}')
 	i=0
 	while IFS=$'\t' read -r s e t1; do
 		[ -n "${s:-}" ] || continue
@@ -944,10 +966,13 @@ burn_cues() {
 			t2=""
 		fi
 		idx=$((idx + 1))
+		t1=$(wrap_cue "$t1" "$wrap")
+		[ -z "$t2" ] || t2=$(wrap_cue "$t2" "$wrap")
 		cast="$tmp/sub-$idx.cast"; gif="$tmp/sub-$idx.gif"
 		line1=$(printf '%s' "$t1" | banner_width)
 		line2=$(printf '%s' "$t2" | banner_width)
 		cols=$((line1 + 4)); ((line2 + 4 > cols)) && cols=$((line2 + 4)); ((cols < 36)) && cols=36
+		rows=$(printf '%s\n%s' "$t1" "$t2" | awk '{n += gsub(/\\N/, "&") + ($0 != "")} END{print (n < 2 ? 2 : n)}')
 		line=$(banner_lines "$t1" "$cols" 1)
 		if [ -n "$t2" ]; then
 			line+=$'\r\n'
@@ -955,7 +980,7 @@ burn_cues() {
 		fi
 		line+=$'\r\n'$'\e[?25l'
 		{
-			printf '{"version": 2, "width": %d, "height": 2}\n' "$cols"
+			printf '{"version": 2, "width": %d, "height": %d}\n' "$cols" "$rows"
 			printf '[0.0, "o", %s]\n' "$(printf '%s' "$line" | json_string)"
 		} >"$cast"
 		agg --font-dir "${MEDIA_FONT_DIR:-$here/fonts}" --font-family "${MEDIA_FONT_FAMILY:-IBM Plex Mono}" \
