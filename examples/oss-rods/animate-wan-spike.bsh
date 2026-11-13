@@ -1,0 +1,158 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Experimental Windows-only Wan2.2 probe. Not registered as an animate rod.
+# Model files must already be staged locally; this command never downloads weights.
+
+~~~powershell as ps
+function Setup {
+    [OutputType([string])]
+    param([string]$root)
+    $ErrorActionPreference = 'Stop'
+    New-Item -ItemType Directory -Force -Path $root | Out-Null
+    $free = (Get-PSDrive C).Free
+    if ($free -lt 100GB) { throw "Insufficient disk headroom: $free bytes" }
+    $uv = Join-Path $root 'tools\uv.exe'
+    if (!(Test-Path $uv)) {
+        $zip = Join-Path $root 'uv-0.13.7.zip'
+        $url = 'https://github.com/astral-sh/uv/releases/download/0.13.7/uv-x86_64-pc-windows-msvc.zip'
+        Invoke-WebRequest -Uri $url -OutFile $zip
+        $unpack = Join-Path $root 'uv-unpack'
+        Expand-Archive -LiteralPath $zip -DestinationPath $unpack -Force
+        $found = Get-ChildItem $unpack -Recurse -Filter uv.exe | Select-Object -First 1
+        if (!$found) { throw 'Pinned uv archive has no uv.exe' }
+        New-Item -ItemType Directory -Force -Path (Split-Path $uv) | Out-Null
+        Copy-Item $found.FullName $uv
+    }
+    $venv = Join-Path $root 'venv'
+    $py = Join-Path $venv 'Scripts\python.exe'
+    if (!(Test-Path $py)) {
+        & $uv python install 3.12.10 | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'uv Python install failed' }
+        & $uv venv --python 3.12.10 $venv | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw 'uv venv failed' }
+    }
+    $base = 'https://repo.radeon.com/rocm/windows/rocm-rel-7.2/'
+    $wheels = @(
+        "${base}rocm_sdk_core-7.2.0.dev0-py3-none-win_amd64.whl",
+        "${base}rocm_sdk_devel-7.2.0.dev0-py3-none-win_amd64.whl",
+        "${base}rocm_sdk_libraries_custom-7.2.0.dev0-py3-none-win_amd64.whl",
+        "${base}torch-2.9.1%2Brocmsdk20260116-cp312-cp312-win_amd64.whl"
+    )
+    # AMD's rocm source metapackage cannot build in this remote Windows session;
+    # install its listed binary components directly, then Torch dependencies.
+    & $uv pip install --python $py --no-deps @wheels | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'AMD Windows ROCm wheel install failed' }
+    & $uv pip install --python $py 'filelock==3.20.1' 'typing-extensions==4.15.0' 'networkx==3.5' 'jinja2==3.1.6' 'fsspec==2025.10.0' 'sympy==1.14.0' 'numpy==2.3.4' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Torch dependency install failed' }
+    & $py -m ensurepip --upgrade | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'ensurepip failed' }
+    & $py -m pip install --no-deps "${base}rocm-7.2.0.dev0.tar.gz" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'ROCm Python bootstrap package install failed' }
+    $probe = & $py -c 'import torch,sys; ok=torch.cuda.is_available(); print("TORCH",torch.__version__,"GPU",ok,torch.cuda.get_device_name(0) if ok else "none"); sys.exit(0 if ok else 4)'
+    if ($LASTEXITCODE -ne 0) { throw 'Native GPU probe failed' }
+    return "SETUP_OK py=$py free_bytes=$free $probe"
+}
+
+function Stage {
+    [OutputType([string])]
+    param([string]$root)
+    $ErrorActionPreference = 'Stop'
+    $free = (Get-PSDrive C).Free
+    if ($free -lt 100GB) { throw "Insufficient disk headroom before model copy: $free bytes" }
+    $wsl = '\\wsl.localhost\Ubuntu-24.04\opt\s627-m3'
+    $srcModel = Join-Path $wsl 'Wan2.2-TI2V-5B'
+    $srcCode = Join-Path $wsl 'Wan2.2'
+    if (!(Test-Path $srcModel) -or !(Test-Path $srcCode)) { throw 'Existing WSL Wan model or source is unavailable' }
+    $model = Join-Path $root 'Wan2.2-TI2V-5B'
+    $code = Join-Path $root 'Wan2.2'
+    New-Item -ItemType Directory -Force -Path $model,$code | Out-Null
+    & robocopy $srcModel $model /E /MT:8 /R:1 /W:1 /XD .cache | Out-Null
+    if ($LASTEXITCODE -gt 7) { throw "Existing model copy failed: robocopy $LASTEXITCODE" }
+    & robocopy $srcCode $code /E /MT:8 /R:1 /W:1 /XD .git | Out-Null
+    if ($LASTEXITCODE -gt 7) { throw "Existing source copy failed: robocopy $LASTEXITCODE" }
+    $weights = @('Wan2.2_VAE.pth','models_t5_umt5-xxl-enc-bf16.pth',
+        'diffusion_pytorch_model-00001-of-00003.safetensors',
+        'diffusion_pytorch_model-00002-of-00003.safetensors',
+        'diffusion_pytorch_model-00003-of-00003.safetensors')
+    # Hash source inside its existing WSL filesystem; hashing over the Windows
+    # file bridge was much slower than copying. No inference runs in WSL.
+    $sourcePaths = @($weights | ForEach-Object { "/opt/s627-m3/Wan2.2-TI2V-5B/$_" })
+    $sourceHashes = @(& wsl.exe -d Ubuntu-24.04 -u root -- sha256sum @sourcePaths)
+    if ($LASTEXITCODE -ne 0 -or $sourceHashes.Count -ne $weights.Count) { throw 'WSL source SHA-256 failed' }
+    for ($i = 0; $i -lt $weights.Count; $i++) {
+        $name = $weights[$i]
+        $a = ($sourceHashes[$i] -split '\s+')[0].ToUpper()
+        $b = (Get-FileHash -Algorithm SHA256 (Join-Path $model $name)).Hash
+        if ($a -ne $b) { throw "Copied weight SHA-256 mismatch: $name" }
+    }
+    return "STAGE_OK model=$model weights_verified=$($weights.Count) free_bytes=$((Get-PSDrive C).Free)"
+}
+
+function Provision {
+    [OutputType([string])]
+    param([string]$root)
+    $ErrorActionPreference = 'Stop'
+    $uv = Join-Path $root 'tools\uv.exe'
+    $py = Join-Path $root 'venv\Scripts\python.exe'
+    if (!(Test-Path $uv) -or !(Test-Path $py)) { throw 'Run setup first' }
+    $base = 'https://repo.radeon.com/rocm/windows/rocm-rel-7.2/'
+    & $uv pip install --python $py --no-deps "${base}torchvision-0.24.1%2Brocmsdk20260116-cp312-cp312-win_amd64.whl" "${base}torchaudio-2.9.1%2Brocmsdk20260116-cp312-cp312-win_amd64.whl" | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'AMD media wheels failed' }
+    $packages = @('diffusers==0.39.0','transformers==4.51.3','tokenizers==0.21.4',
+        'accelerate==1.15.0','imageio==2.38.1','imageio-ffmpeg==0.6.0',
+        'easydict==1.14','ftfy==6.3.1','opencv-python==4.11.0.86',
+        'safetensors==0.8.0','einops==0.8.2','tqdm==4.70.1',
+        'sentencepiece==0.2.1','psutil==7.1.3','dashscope==2.0.4')
+    & $uv pip install --python $py @packages | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'Wan dependencies failed' }
+    return "PROVISION_OK py=$py"
+}
+
+function Render {
+    [OutputType([string])]
+    param([string]$root)
+    $ErrorActionPreference = 'Stop'
+    $py = Join-Path $root 'venv\Scripts\python.exe'
+    $probe = Join-Path $root 'animate_wan_probe.py'
+    $model = Join-Path $root 'Wan2.2-TI2V-5B'
+    $out = Join-Path $root 'ti2v-5b-native.mp4'
+    $stdout = Join-Path $root 'render.stdout.log'
+    $stderr = Join-Path $root 'render.stderr.log'
+    if (!(Test-Path $probe) -or !(Test-Path $model)) { throw 'Run stage and copy the local probe first' }
+    $env:HF_HUB_OFFLINE = '1'
+    $env:TRANSFORMERS_OFFLINE = '1'
+    $env:HF_HUB_DISABLE_TELEMETRY = '1'
+    $env:PYTHONIOENCODING = 'utf-8'
+    $proc = Start-Process -FilePath $py -ArgumentList @($probe) -WorkingDirectory $root -RedirectStandardOutput $stdout -RedirectStandardError $stderr -PassThru -WindowStyle Hidden
+    $timer = [Diagnostics.Stopwatch]::StartNew()
+    while (!$proc.HasExited -and $timer.Elapsed.TotalSeconds -lt 600) {
+        Start-Sleep -Seconds 2
+        $proc.Refresh()
+    }
+    if (!$proc.HasExited) {
+        Stop-Process -Id $proc.Id -Force
+        return "RENDER_TIMEOUT wall_seconds=$([math]::Round($timer.Elapsed.TotalSeconds,2)) stdout=$stdout stderr=$stderr"
+    }
+    if ($proc.ExitCode -ne 0 -or !(Test-Path $out)) {
+        return "RENDER_FAILED exit=$($proc.ExitCode) wall_seconds=$([math]::Round($timer.Elapsed.TotalSeconds,2)) stdout=$stdout stderr=$stderr"
+    }
+    return "RENDER_OK wall_seconds=$([math]::Round($timer.Elapsed.TotalSeconds,2)) bytes=$((Get-Item $out).Length) sha256=$((Get-FileHash -Algorithm SHA256 $out).Hash)"
+}
+~~~
+
+set -eu
+[ "${1:-}" = setup ] || [ "${1:-}" = stage ] || [ "${1:-}" = provision ] || [ "${1:-}" = render ] || { echo 'usage: animate-wan-spike.bsh setup|stage|provision|render NATIVE_CACHE_ROOT' >&2; exit 2; }
+[ -n "${2:-}" ] || { echo 'native cache root required' >&2; exit 2; }
+if [ "$1" = setup ]; then
+    result := ps.Setup($2)
+    echo "$result"
+elif [ "$1" = stage ]; then
+    result := ps.Stage($2)
+    echo "$result"
+elif [ "$1" = provision ]; then
+    result := ps.Provision($2)
+    echo "$result"
+else
+    result := ps.Render($2)
+    echo "$result"
+    case $result in RENDER_OK*) ;; *) exit 1 ;; esac
+fi
