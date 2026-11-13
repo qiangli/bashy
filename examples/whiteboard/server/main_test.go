@@ -203,6 +203,44 @@ func TestDeskVerbs(t *testing.T) {
 	}
 }
 
+func TestDeskRemove(t *testing.T) {
+	handler, _ := setupTestServer(t)
+
+	// Removing a missing board is a 404, like the page.
+	missingReq := httptest.NewRequest(http.MethodPost, "/api/action", strings.NewReader(`{"action":"remove","board":"no-such-board"}`))
+	missingRec := httptest.NewRecorder()
+	handler.ServeHTTP(missingRec, missingReq)
+	if missingRec.Code != http.StatusNotFound {
+		t.Fatalf("remove missing code = %d, want 404", missingRec.Code)
+	}
+
+	// Add then remove.
+	addReq := httptest.NewRequest(http.MethodPost, "/api/action", strings.NewReader(`{"action":"add","board":"temp-board"}`))
+	addRec := httptest.NewRecorder()
+	handler.ServeHTTP(addRec, addReq)
+	if addRec.Code != http.StatusOK {
+		t.Fatalf("add board code = %d", addRec.Code)
+	}
+
+	rmReq := httptest.NewRequest(http.MethodPost, "/api/action", strings.NewReader(`{"action":"remove","board":"temp-board"}`))
+	rmRec := httptest.NewRecorder()
+	handler.ServeHTTP(rmRec, rmReq)
+	if rmRec.Code != http.StatusOK {
+		t.Fatalf("remove board code = %d", rmRec.Code)
+	}
+	var rmRes map[string]any
+	if err := json.Unmarshal(rmRec.Body.Bytes(), &rmRes); err != nil || rmRes["status"] != "removed" {
+		t.Fatalf("remove board failed: %s", rmRec.Body.String())
+	}
+
+	// Removed twice is a 404 again.
+	rmAgainRec := httptest.NewRecorder()
+	handler.ServeHTTP(rmAgainRec, httptest.NewRequest(http.MethodPost, "/api/action", strings.NewReader(`{"action":"remove","board":"temp-board"}`)))
+	if rmAgainRec.Code != http.StatusNotFound {
+		t.Fatalf("remove twice code = %d, want 404", rmAgainRec.Code)
+	}
+}
+
 func TestTelemetryEnvGated(t *testing.T) {
 	// When OTEL_EXPORTER_OTLP_ENDPOINT is unset, no calls are made
 	os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")

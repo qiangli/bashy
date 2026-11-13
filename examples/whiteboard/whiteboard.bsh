@@ -20,6 +20,32 @@ whiteboard install|start|stop|status|source
   status   Show the managed console and source revision.
   source   Print the managed source directory.
 
+whiteboard boards [--json]
+whiteboard new [NAME] [--note TEXT]
+whiteboard show ID
+whiteboard set ID --note TEXT
+whiteboard lock ID
+whiteboard rm ID
+whiteboard share ID
+whiteboard save --file PATH
+whiteboard load SCENE-ID [--output PATH]
+whiteboard upload PATH --file LOCAL
+whiteboard download PATH [--output LOCAL]
+whiteboard export ID [--format json] [--scene SCENE-ID] [--output PATH]
+  Data verbs require Python 3.9+, WHITEBOARD_URL (numeric loopback URL including port
+  and optional app proxy prefix), sent to the running local whiteboard service.
+  --url overrides WHITEBOARD_URL. The local service has no per-board credential:
+  loopback reachability plus the paired console is the access boundary, exactly as
+  on the page; WHITEBOARD_TOKEN, when set, is sent as the app Bearer [REDACTED] and
+  ignored by the service. No identity or credential is created or saved.
+  All data verbs accept --json; writes accept --dry-run.
+  Dry-run prints a request manifest without contacting the app or reading a file.
+  A missing board is a not_found denial naming the board, as on the page.
+  export --format png|svg is refused: PNG/SVG export is a browser canvas render
+  with no server API; --format json exports the board record (plus --scene bytes).
+  Freehand drawing, shapes, text, move/resize, clear, zoom/pan/grid/theme are
+  page-only canvas interactions with no server API and have no verb.
+
 The shared whiteboard is local. Install needs the network. To enable owner-owned
 observability, set OTEL_EXPORTER_OTLP_ENDPOINT for the console's bashy OTel.
 EOF
@@ -101,6 +127,9 @@ running_pid() {
 
 case ${1:---help} in
   -h|--help|help) usage ;;
+  boards|new|show|set|lock|rm|share|save|load|upload|download|export)
+    exec python3 "$here/whiteboard_api.py" "$@"
+    ;;
   install) install ;;
   start)
     installed || { echo 'whiteboard: run whiteboard install first' >&2; exit 1; }

@@ -179,15 +179,25 @@ have checkout registration scripts, while Video intentionally has only a script.
 ## Sprint 614 S11: desk page actions
 
 > [!NOTE]
-> Whiteboard note (refreshed Sprint 632 A1): The whiteboard rows below originally cited `examples/whiteboard/server/cli.go`, which no longer exists. Whiteboard was re-wrapped in Sprint 631 S5 as an Excalidraw fork (`qiangli/excalidraw-shape`), whose current custom command (`whiteboard.bsh:16-21`) exposes lifecycle only (`install/start/stop/status/source`). The server-backed verbs below are refreshed and tracked as GAPs owned by story A5 (`876cd327`), while canvas drawing actions are client-side canvas interactions.
+> Whiteboard note (refreshed Sprint 632 A1): The whiteboard rows below originally cited `examples/whiteboard/server/cli.go`, which no longer exists. Whiteboard was re-wrapped in Sprint 631 S5 as an Excalidraw fork (`qiangli/excalidraw-shape`), whose current custom command (`whiteboard.bsh:16-21`) exposes lifecycle only (`install/start/stop/status/source`). The server-backed verbs below were tracked as GAPs owned by story A5 (`876cd327`) and are now implemented; the A1 matrix and gap-ownership rows stay as the audit record. Page-only canvas actions record their reason instead of filing a gap.
 
 | Page action | CLI verb |
 |---|---|
-| Whiteboard draw | *Stale row* — see Sprint 632 A1: canvas drawing is client-side only (no server REST API) |
-| Whiteboard clear | *Stale row* — see Sprint 632 A1: client-side canvas reset |
-| Whiteboard lock/unlock | `bashy whiteboard lock BOARD --key KEY [--locked=false] --json` (Sprint 632 A5 GAP) |
-| Whiteboard revoke member/invite | *Stale row* — Excalidraw room sharing uses room IDs, see Sprint 632 A1 |
-| Whiteboard JSON/PNG download | `bashy whiteboard download BOARD --format json\|png [--output FILE] --json` (Sprint 632 A5 GAP) |
+| Whiteboard boards list | `bashy whiteboard boards --json` (A5 `876cd327`) |
+| Whiteboard board create/open | `bashy whiteboard new [NAME] [--note TEXT] --json` / `bashy whiteboard show ID --json` (A5 `876cd327`) |
+| Whiteboard board note | `bashy whiteboard set ID --note TEXT --json` (A5 `876cd327`) |
+| Whiteboard draw | Page-only reason: canvas drawing is client-side only (no server REST API) |
+| Whiteboard shape/arrow/text, move/resize/rotate | Page-only reason: client-side canvas state, ephemeral Socket.IO diffs |
+| Whiteboard clear | Page-only reason: client-side canvas reset |
+| Whiteboard zoom/pan/grid/theme | Page-only reason: client-side display preference; no server state |
+| Whiteboard lock | `bashy whiteboard lock ID --json` (one-way close; the page has no unlock) (A5 `876cd327`) |
+| Whiteboard remove | `bashy whiteboard rm ID --json` (missing board is `not_found`, as on the page) (A5 `876cd327`) |
+| Whiteboard share/collab link | `bashy whiteboard share ID --json` (read-only; prints the `#room=` link) (A5 `876cd327`) |
+| Whiteboard revoke member/invite | Page-only reason: Excalidraw room sharing uses room IDs; the service keeps no member list |
+| Whiteboard scene save/load | `bashy whiteboard save --file PATH --json` / `bashy whiteboard load SCENE-ID [--output PATH]` (A5 `876cd327`) |
+| Whiteboard asset upload/download | `bashy whiteboard upload PATH --file LOCAL` / `bashy whiteboard download PATH [--output LOCAL]` (A5 `876cd327`) |
+| Whiteboard board JSON export | `bashy whiteboard export ID [--scene SCENE-ID] [--output PATH] --json` (A5 `876cd327`) |
+| Whiteboard PNG/SVG export | Page-only reason: the browser renders the canvas; no server API exists (`export --format png\|svg` is refused) |
 | Brainstorm idea edit | `bashy brainstorm edit SESSION --card ID --body TEXT --participant TOKEN --json` |
 | Brainstorm idea delete | `bashy brainstorm delete SESSION --card ID --participant TOKEN --json` |
 | Brainstorm vote/undo | `bashy brainstorm vote SESSION --card ID --participant TOKEN --json` |

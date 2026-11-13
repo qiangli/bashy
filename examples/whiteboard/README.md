@@ -30,7 +30,49 @@ frontend bundle, a small collab/storage service with standard owner-only bashy O
 and declared checks. The source is then imported into Bashy's managed checkout.
 No app source is added to Bashy core.
 
-## Shape a personal version
+## Data verbs (Sprint 632 A5)
+
+The command also speaks to the running local whiteboard service, so scripts get
+the same server-backed actions as the page. Every verb takes `--json`; writes
+take `--dry-run`. Point `WHITEBOARD_URL` at the running principal instance's
+numeric loopback URL with port (optional app proxy prefix); `--url` overrides
+it. The service has no per-board credential: loopback reachability plus the
+paired console is the access boundary, exactly as on the page.
+
+```sh
+whiteboard boards --json
+whiteboard new my-board --note 'Kickoff' --json
+whiteboard show my-board --json
+whiteboard set my-board --note 'Decided: teal theme' --json
+whiteboard lock my-board --json
+whiteboard share my-board --json
+whiteboard save --file ./scene.bin --json
+whiteboard load 0123456789abcdef --output ./scene.bin --json
+whiteboard upload rooms/my-board/logo --file ./logo.png --json
+whiteboard download rooms/my-board/logo --output ./logo.png --json
+whiteboard export my-board --scene 0123456789abcdef --output ./board.json
+whiteboard rm my-board --json
+```
+
+| Page action | Verb or recorded reason |
+|---|---|
+| List boards | `whiteboard boards --json` |
+| Create board | `whiteboard new [NAME] [--note TEXT]` (name omitted: the service mints the id) |
+| Open / show board | `whiteboard show ID` (auto-initializes, exactly as opening the page does) |
+| Add a board note | `whiteboard set ID --note TEXT` (appends, bumps the revision, as on the page) |
+| Lock board | `whiteboard lock ID` (one-way close; the page has no unlock) |
+| Remove board | `whiteboard rm ID` (missing board is a `not_found` denial, as on the page) |
+| Share / collab room link | `whiteboard share ID` (read-only; prints the `#room=` link the page opens) |
+| Save scene buffer | `whiteboard save --file PATH` (returns the scene id the page embeds in its link) |
+| Load scene buffer | `whiteboard load SCENE-ID` (raw bytes, as the page fetches them) |
+| Upload asset file | `whiteboard upload PATH --file LOCAL` |
+| Download asset file | `whiteboard download PATH [--output LOCAL]` |
+| Export board JSON | `whiteboard export ID [--scene SCENE-ID]` (board record, plus base64 scene bytes) |
+| Export PNG / SVG | Page-only: the browser renders the canvas; no server API exists |
+| Freehand drawing, shapes, text, move/resize | Page-only: client-side canvas state, ephemeral Socket.IO diffs; no server REST API |
+| Clear canvas, zoom, pan, grid, theme | Page-only: client-side canvas or display preference; no server state |
+
+# Shape a personal version
 
 Use the paired principal's full `device:` identity with the CLI. A web user
 can run the same actions from `/shape/whiteboard/`.
