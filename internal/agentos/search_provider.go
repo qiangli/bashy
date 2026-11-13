@@ -72,8 +72,8 @@ func selectedSearch(ctx context.Context, query string, opt searchSelection) ([]s
 
 func chooseSearchProvider(query string, opt searchSelection) (providerselector.Candidate, error) {
 	tools, errs := fleet.New().Tools(false)
-	if len(errs) > 0 {
-		return providerselector.Candidate{}, fmt.Errorf("search providers: %w", errs[0])
+	for _, err := range errs {
+		fmt.Fprintln(os.Stderr, "search providers: warning:", err)
 	}
 	selection := providerselector.Options{Role: "search", Provider: opt.Provider, Route: opt.Route, Request: map[string]any{"query": query}, Yes: opt.Yes}
 	return providerselector.Select(providerselector.Project(registeredCommands(), tools, selection), selection)

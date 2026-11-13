@@ -60,12 +60,11 @@ func runProviders(args []string, stdout, stderr io.Writer) int {
 			return 2
 		}
 	}
+	// A broken tool record is reported, never fatal: the selector rejects
+	// an invalid command on its own and every other provider stays usable.
 	tools, toolErrs := fleet.New().Tools(false)
-	if len(toolErrs) > 0 {
-		for _, err := range toolErrs {
-			fmt.Fprintln(stderr, "providers:", err)
-		}
-		return 2
+	for _, err := range toolErrs {
+		fmt.Fprintln(stderr, "providers: warning:", err)
 	}
 	if !selectMode && role == "" {
 		// List every declared role using the same projection path.

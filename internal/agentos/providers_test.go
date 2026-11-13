@@ -87,7 +87,8 @@ func TestProvidersReportsCatalogError(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, errout bytes.Buffer
-	if code := runProviders([]string{"plan"}, &out, &errout); code != 2 || !strings.Contains(errout.String(), "broken") {
-		t.Fatalf("catalog error: code=%d stderr=%s", code, errout.String())
+	// Reported, not fatal: one broken record never takes every role down.
+	if code := runProviders([]string{"plan"}, &out, &errout); code != 0 || !strings.Contains(errout.String(), "broken") || !strings.Contains(out.String(), "claude:plan") {
+		t.Fatalf("catalog error: code=%d stdout=%s stderr=%s", code, out.String(), errout.String())
 	}
 }
