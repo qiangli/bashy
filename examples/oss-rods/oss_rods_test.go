@@ -277,7 +277,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	fakes := map[string]string{
 		"SONG_ACESTEP_PY": fakeWavGen, "IMAGE_QWEN_PY": fakePngGen,
-		"IMAGE_KLEIN_PY": fakePngGen,
+		"IMAGE_KLEIN_PY":   fakePngGen,
 		"NARRATE_LOCAL_PY": fakeWavGen, "TRANSCRIBE_WHISPERX_PY": fakeSRTGen,
 	}
 	f.env = append(os.Environ(),
@@ -286,6 +286,9 @@ func newFixture(t *testing.T) *fixture {
 		"BASHY_HINTS=off", "BASHY_TELEMETRY_QUIET=1",
 		"BASHY_SVC_BASHY_BIN="+f.bin,
 		"BASHY_OSS_CACHE="+filepath.Join(root, "cache"),
+		// Hermetic disk preflight: 100 GiB free regardless of the host volume.
+		// The refusal test sets a smaller value later in its env, which wins.
+		"OSS_AVAIL_KB_OVERRIDE=104857600",
 		"TMPDIR="+root, "TMP="+root, "TEMP="+root,
 		"PATH="+stubbin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	for hook, script := range fakes {
@@ -487,31 +490,53 @@ func TestSongOfflineServerUsesStagedCheckpoint(t *testing.T) {
 	stage := filepath.Join(root, "models", "Ace-Step1.5")
 	for _, part := range []string{"Qwen3-Embedding-0.6B/model.safetensors", "acestep-v15-turbo/model.safetensors", "vae/diffusion_pytorch_model.safetensors"} {
 		path := filepath.Join(stage, part)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil { t.Fatal(err) }
-		if err := os.WriteFile(path, []byte("staged fixture"), 0o644); err != nil { t.Fatal(err) }
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("staged fixture"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	co := filepath.Join(root, "acestep-1.5")
 	api := filepath.Join(co, ".venv", "bin", "acestep-api")
-	if err := os.MkdirAll(filepath.Dir(api), 0o755); err != nil { t.Fatal(err) }
+	if err := os.MkdirAll(filepath.Dir(api), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	ready := filepath.Join(co, ".ready-ca1e85fe9430179831e6bc6be790c332190a3866")
-	if err := os.WriteFile(ready, []byte("ready"), 0o644); err != nil { t.Fatal(err) }
+	if err := os.WriteFile(ready, []byte("ready"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	proof := filepath.Join(f.root, "server-env")
-	body := "#!/bin/sh\nprintf '%s\\n' \"$ACESTEP_INIT_LLM $ACESTEP_CHECKPOINTS_DIR $HF_HUB_OFFLINE $TRANSFORMERS_OFFLINE $MODELSCOPE_OFFLINE $MS_OFFLINE\" >'"+proof+"'\n"
-	if err := os.WriteFile(api, []byte(body), 0o755); err != nil { t.Fatal(err) }
+	body := "#!/bin/sh\nprintf '%s\\n' \"$ACESTEP_INIT_LLM $ACESTEP_CHECKPOINTS_DIR $HF_HUB_OFFLINE $TRANSFORMERS_OFFLINE $MODELSCOPE_OFFLINE $MS_OFFLINE\" >'" + proof + "'\n"
+	if err := os.WriteFile(api, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
 	run := func(extra ...string) (string, error) {
 		cmd := exec.Command(f.bin, "--bashsharp", filepath.Join(f.rodsDir, "song-acestep.bsh"), "--serve")
 		cmd.Env = append(append([]string{}, f.env...), extra...)
 		out, err := cmd.CombinedOutput()
 		return string(out), err
 	}
-	if out, err := run(); err != nil { t.Fatalf("offline server failed: %v\n%s", err, out) }
+	if out, err := run(); err != nil {
+		t.Fatalf("offline server failed: %v\n%s", err, out)
+	}
 	link := filepath.Join(co, "checkpoints")
-	if info, err := os.Stat(link); err != nil || !info.IsDir() { t.Fatalf("staged link missing: %v", err) }
-	if target, err := os.Readlink(link); err != nil || target != stage { t.Fatalf("checkpoints = %q, %v", target, err) }
+	if info, err := os.Stat(link); err != nil || !info.IsDir() {
+		t.Fatalf("staged link missing: %v", err)
+	}
+	if target, err := os.Readlink(link); err != nil || target != stage {
+		t.Fatalf("checkpoints = %q, %v", target, err)
+	}
 	raw, err := os.ReadFile(proof)
-	if err != nil { t.Fatal(err) }
-	if got, want := strings.TrimSpace(string(raw)), "false "+stage+" 1 1 1 1"; got != want { t.Fatalf("server env = %q, want %q", got, want) }
-	if out, err := run("SONG_ACESTEP_LM=1.7B"); err == nil || !strings.Contains(out, "staged weight missing") { t.Fatalf("unstaged LM started: %v\n%s", err, out) }
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := strings.TrimSpace(string(raw)), "false "+stage+" 1 1 1 1"; got != want {
+		t.Fatalf("server env = %q, want %q", got, want)
+	}
+	if out, err := run("SONG_ACESTEP_LM=1.7B"); err == nil || !strings.Contains(out, "staged weight missing") {
+		t.Fatalf("unstaged LM started: %v\n%s", err, out)
+	}
 }
 
 // A rod whose requires fails is unavailable: exit 126 with the rod's own
