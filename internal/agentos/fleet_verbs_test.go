@@ -265,7 +265,7 @@ func TestGroupFrontDoorRegistration(t *testing.T) {
 func TestShareWhoFrontDoorRegistration(t *testing.T) {
 	ringDir(t)
 	schemas := cobraSchemas("share")
-	for _, path := range []string{"share", "share qr", "share who"} {
+	for _, path := range []string{"share", "share qr", "share who", "share add", "share ls", "share rm"} {
 		if _, ok := schemas[path]; !ok {
 			t.Errorf("share schema missing %q", path)
 		}
@@ -273,6 +273,12 @@ func TestShareWhoFrontDoorRegistration(t *testing.T) {
 	out, err := runFleetVerb(t, "share", "who", "--help")
 	if err != nil || !strings.Contains(out, "--json") {
 		t.Errorf("share who --help missing --json: %v\n%s", err, out)
+	}
+	addOut, err := runFleetVerb(t, "share", "add", "--help")
+	for _, flag := range []string{"--circle", "--group", "--email", "--dry-run"} {
+		if err != nil || !strings.Contains(addOut, flag) {
+			t.Errorf("share add --help missing %s: %v\n%s", flag, err, addOut)
+		}
 	}
 	qrOut, err := runFleetVerb(t, "share", "qr", "--help")
 	if err != nil || !strings.Contains(qrOut, "--png") {

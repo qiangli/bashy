@@ -106,14 +106,18 @@ func dispatchSuite(args []string) int {
 	return 0
 }
 
-// newShareCmd mounts yoke's `who` subcommand under the existing `share` command.
+// newShareCmd mounts yoke's host-app share verbs (`who`, and the grant rule
+// verbs `add`, `ls`, `rm`) under the existing `share` command beside `qr`.
 func newShareCmd() *cobra.Command {
 	cmd := share.NewCmd()
-	cmd.AddCommand(fleet.NewShareWhoCmd())
+	for _, sub := range fleet.NewShareCmd().Commands() {
+		cmd.AddCommand(sub)
+	}
 	return cmd
 }
 
-// dispatchShare runs the `bashy share` verb (`share qr` and `share who`).
+// dispatchShare runs the `bashy share` verb (`share qr`, `share who` and the
+// host grant verbs `share add|ls|rm`).
 func dispatchShare(args []string) int {
 	cmd := newShareCmd()
 	setCobraArgs(cmd, args)
