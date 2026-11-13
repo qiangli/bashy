@@ -49,3 +49,27 @@ func TestSearchDryRunUsesSharedProviderSelector(t *testing.T) {
 		t.Fatalf("dry-run output = %s", out.String())
 	}
 }
+
+func TestVendorSearchEventsRequireToolAndCitation(t *testing.T) {
+	cases := []struct{ name, events string }{
+		{"search-codex", `{"type":"item.completed","item":{"type":"web_search","results":[{"title":"Go","url":"https://go.dev/"}]}}
+{"type":"turn.completed"}`},
+		{"search-agy", `{"event":"step_update","step_update":{"step_type":"tool","tool_name":"search_web","state":"DONE"}}
+{"event":"result","result":{"status":"SUCCESS","response":"[Go](https://go.dev/)"}}`},
+		{"search-muse", `{"payload_type":"task.lifecycle.proposed","payload":{"task_id":"t1","event":{"task_kind":"tool.web_search"}}}
+{"payload_type":"task.lifecycle.completed","payload":{"task_id":"t1"}}
+{"payload_type":"run.terminal.completed","payload":{"terminal":"completed","text":"[Go](https://go.dev/)"}}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			candidate := providerselector.Candidate{Name: tc.name}
+			results, err := decodeSearchResults([]byte(tc.events), candidate)
+			if err != nil || len(results) != 1 || results[0].URL != "https://go.dev/" || results[0].RetrievedAt.IsZero() {
+				t.Fatalf("results = %+v, %v", results, err)
+			}
+			if _, err := decodeSearchResults([]byte(strings.Split(tc.events, "\n")[len(strings.Split(tc.events, "\n"))-1]), candidate); err == nil {
+				t.Fatal("answer without search accepted")
+			}
+		})
+	}
+}

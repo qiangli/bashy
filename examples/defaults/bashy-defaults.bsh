@@ -102,6 +102,9 @@ tavily|examples/service-door/search-provider.bsh|read,exec,net|tavily|search|api
 brave|examples/service-door/search-provider.bsh|read,exec,net|brave|search|api
 serper|examples/service-door/search-provider.bsh|read,exec,net|serper|search|api
 search-claude|examples/service-door/search-claude.bsh|read,exec,net||search|vendor|claude>=2.1.284
+search-codex|examples/service-door/search-codex.bsh|read,exec,net||search|vendor|has=codex
+search-agy|examples/service-door/search-agy.bsh|read,exec,net||search|vendor|has=agy
+search-muse|examples/service-door/search-muse.bsh|read,exec,net||search|vendor|has=muse
 bashy-defaults|examples/defaults/bashy-defaults.bsh|read,write,exec"
 
 usage() {

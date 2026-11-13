@@ -1,0 +1,7 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Measured: muse exec invokes tool.web_search and completes with a cited result.
+set -eu
+if [ "${1:-}" = --json ]; then shift; fi
+if [ "${1:-}" = --max ]; then max=${2:?maximum required}; shift 2; else max=8; fi
+[ "$#" -gt 0 ] || { echo 'search-muse: query required' >&2; exit 2; }
+exec muse exec --json --max-model-steps 8 "Use web_search for: $*. Return up to $max source titles and URLs as markdown links. Do not answer from memory. Finish after the search."

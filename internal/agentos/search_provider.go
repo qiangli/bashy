@@ -56,6 +56,9 @@ func selectedSearch(ctx context.Context, query string, opt searchSelection) ([]s
 	if err != nil {
 		return nil, providerselector.Candidate{}, err
 	}
+	if opt.Max > 0 && len(results) > opt.Max {
+		results = results[:opt.Max]
+	}
 	for _, result := range results {
 		if !strings.HasPrefix(result.URL, "https://") && !strings.HasPrefix(result.URL, "http://") {
 			return nil, providerselector.Candidate{}, fmt.Errorf("search provider %s returned a result without an HTTP citation", chosen.Name)
@@ -167,6 +170,9 @@ func newProviderSearchCmd() *cobra.Command {
 var markdownCitation = regexp.MustCompile(`\[([^\]]+)\]\((https?://[^\s)]+)\)`)
 
 func decodeSearchResults(raw []byte, chosen providerselector.Candidate) ([]search.Result, error) {
+	if strings.HasPrefix(chosen.Name, "search-codex") || strings.HasPrefix(chosen.Name, "search-agy") || strings.HasPrefix(chosen.Name, "search-muse") {
+		return decodeVendorSearchEvents(raw, chosen.Name)
+	}
 	var envelope struct {
 		Outcome string          `json:"outcome"`
 		Text    string          `json:"text"`
@@ -215,4 +221,103 @@ func decodeSearchResults(raw []byte, chosen providerselector.Candidate) ([]searc
 		return nil, fmt.Errorf("search provider %s returned no cited results", chosen.Name)
 	}
 	return envelope.Results, nil
+}
+
+// decodeVendorSearchEvents accepts only an actual search tool invocation and
+// cited output. A fluent answer from model memory is not a search result.
+func decodeVendorSearchEvents(raw []byte, provider string) ([]search.Result, error) {
+	usedSearch := false
+	completed := false
+	body := ""
+	museSearchTask := ""
+	var results []search.Result
+	for _, line := range bytes.Split(raw, []byte{'\n'}) {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var event struct {
+			Type        string `json:"type"`
+			Event       string `json:"event"`
+			PayloadType string `json:"payload_type"`
+			Item        struct {
+				Type    string `json:"type"`
+				Text    string `json:"text"`
+				Results []struct {
+					Title   string `json:"title"`
+					URL     string `json:"url"`
+					Snippet string `json:"snippet"`
+				} `json:"results"`
+			} `json:"item"`
+			StepUpdate struct {
+				State    string `json:"state"`
+				StepType string `json:"step_type"`
+				ToolName string `json:"tool_name"`
+			} `json:"step_update"`
+			Result struct {
+				Status   string `json:"status"`
+				Response string `json:"response"`
+			} `json:"result"`
+			Payload struct {
+				TaskID   string `json:"task_id"`
+				Text     string `json:"text"`
+				Terminal string `json:"terminal"`
+				Event    struct {
+					TaskKind string `json:"task_kind"`
+				} `json:"event"`
+			} `json:"payload"`
+		}
+		if err := json.Unmarshal(line, &event); err != nil {
+			return nil, fmt.Errorf("search provider %s returned malformed event: %w", provider, err)
+		}
+		switch provider {
+		case "search-codex":
+			if event.Type == "item.completed" && event.Item.Type == "web_search" {
+				usedSearch = true
+				for _, hit := range event.Item.Results {
+					if hit.Title != "" && hit.URL != "" {
+						results = append(results, search.Result{Title: hit.Title, URL: hit.URL, Snippet: hit.Snippet, RetrievedAt: time.Now().UTC(), Backend: provider})
+					}
+				}
+			}
+			if event.Type == "turn.completed" {
+				completed = true
+			}
+		case "search-agy":
+			if event.Event == "step_update" && event.StepUpdate.StepType == "tool" && event.StepUpdate.ToolName == "search_web" && event.StepUpdate.State == "DONE" {
+				usedSearch = true
+			}
+			if event.Event == "result" && event.Result.Status == "SUCCESS" {
+				completed = true
+				body = event.Result.Response
+			}
+		case "search-muse":
+			if event.PayloadType == "task.lifecycle.proposed" && event.Payload.Event.TaskKind == "tool.web_search" {
+				museSearchTask = event.Payload.TaskID
+			}
+			if event.PayloadType == "task.lifecycle.completed" && museSearchTask != "" && event.Payload.TaskID == museSearchTask {
+				usedSearch = true
+			}
+			if event.PayloadType == "run.terminal.completed" && event.Payload.Terminal == "completed" {
+				completed = true
+				body = event.Payload.Text
+			}
+		}
+	}
+	if !usedSearch || !completed {
+		return nil, fmt.Errorf("search provider %s did not complete a web search", provider)
+	}
+	if len(results) == 0 {
+		seen := map[string]bool{}
+		for _, m := range markdownCitation.FindAllStringSubmatch(body, -1) {
+			if seen[m[2]] {
+				continue
+			}
+			seen[m[2]] = true
+			results = append(results, search.Result{Title: m[1], URL: m[2], RetrievedAt: time.Now().UTC(), Backend: provider})
+		}
+	}
+	if len(results) == 0 {
+		return nil, fmt.Errorf("search provider %s returned no cited results", provider)
+	}
+	return results, nil
 }

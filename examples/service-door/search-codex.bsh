@@ -1,0 +1,7 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Measured: codex exec (without --search) emits a web_search item with cited results.
+set -eu
+if [ "${1:-}" = --json ]; then shift; fi
+if [ "${1:-}" = --max ]; then max=${2:?maximum required}; shift 2; else max=8; fi
+[ "$#" -gt 0 ] || { echo 'search-codex: query required' >&2; exit 2; }
+exec codex exec --ephemeral -s read-only --json "Search the web for: $*. Return up to $max source titles and URLs as markdown links. Do not answer from memory."

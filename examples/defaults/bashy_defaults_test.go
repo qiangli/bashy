@@ -109,6 +109,9 @@ case "$1 $2" in
     : > "$src/examples/service-door/service-door.bsh"
     : > "$src/examples/service-door/search-provider.bsh"
     : > "$src/examples/service-door/search-claude.bsh"
+    : > "$src/examples/service-door/search-codex.bsh"
+    : > "$src/examples/service-door/search-agy.bsh"
+    : > "$src/examples/service-door/search-muse.bsh"
     : > "$src/examples/defaults/bashy-defaults.bsh"
     : > "$src/kb/defaults/pages/a.md"; : > "$src/kb/defaults/pages/b.md"
     ;;
@@ -198,7 +201,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "record: registered", "cast: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}
