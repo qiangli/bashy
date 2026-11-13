@@ -1,156 +1,74 @@
-# Shared whiteboard
+# Whiteboard: a shapeable visual collaboration web app
 
-An independent general-purpose LAN whiteboard under the repository's
-permissive [BSD-3-Clause license](../../LICENSE). No accounts, containers,
-database service, external web assets, or AI calls. Participants use a browser.
-It is **not** a tab or component of brainstorm: its own command, skill,
-server, default port (`18093`), URL shape and data directory. It starts and
-stops independently with brainstorm and Matrix absent, and all three can run
-concurrently on different ports.
+This example wraps a pinned, permissively licensed collaborative canvas as a Bashy
+custom command. It builds the web UI, imports a local adapter into a shaped app,
+and lets the app console select a version and data directory for each paired principal.
+It folds in LAN whiteboard sketching and brainstorming canvas workflows. It targets
+Linux and the web UI.
 
-`whiteboard.bsh` is the canonical Bash# body: an embedded `~~~skill` face,
-a Go fence for status/verified backups, and orchestration of the native board.
-The Go HTTP server and browser page are supporting resources. The `.sh` entry
-point is a compatibility shim, not another implementation.
+## Install and run
 
-Register once from this directory:
+Requirements: `bashy`, Go 1.27.2, Git, Node, and Yarn. The install downloads
+source and frontend packages. From this directory:
 
-```bash
-bashy ./register.sh
-bashy whiteboard serve
+```sh
+bash register.sh
+bashy whiteboard install
+bashy whiteboard status
+bashy whiteboard start
 ```
 
-The same body can run directly, without registration:
+`start` runs the paired console in the foreground. In another terminal, use
+`bashy app pair --allow whiteboard --principal requester` to open the app. Set
+`WHITEBOARD_CONSOLE_PORT` for a different console port; pass that port to `app pair`
+as well. `bashy whiteboard stop` stops the console started by this command. The
+whiteboard server starts on its first request.
 
-```bash
-bashy --bashsharp /path/to/bashy/examples/whiteboard/whiteboard.bsh serve
+The install creates a local `shape-whiteboard` branch from the exact fork pin. Its
+adapter adds the server manifest, a `/whiteboard/` frontend base prefix, the built
+frontend bundle, a small collab/storage service with standard owner-only bashy OTel,
+and declared checks. The source is then imported into Bashy's managed checkout.
+No app source is added to Bashy core.
+
+## Shape a personal version
+
+Use the paired principal's full `device:` identity with the CLI. A web user
+can run the same actions from `/shape/whiteboard/`.
+
+```sh
+bashy shape wish whiteboard 'Make the canvas background darker' --user device:requester
+bashy shape verify whiteboard CANDIDATE --user device:requester
+bashy shape preview whiteboard CANDIDATE --user device:requester --console CONSOLE_ORIGIN
+bashy shape approve whiteboard CANDIDATE --user device:requester
+bashy shape history whiteboard --user device:requester
+bashy shape undo whiteboard --user device:requester
 ```
 
-The command and executable skill are two orientations of that body:
+For a deterministic candidate, make a copy of the managed source, edit its
+frontend or configuration, and run `bashy shape wish whiteboard 'My change' --from COPY --user device:requester`.
+The candidate's preview is private to that principal.
 
-```bash
-bashy whiteboard status                       # command → Bash# body
-bashy skill show whiteboard                    # embedded skill projection
-bashy skill run whiteboard                     # skill → command → same body
-WHITEBOARD_ACTION=backup bashy skill run whiteboard
-bashy commands show whiteboard                 # executable source + typed args
-```
+## Shapeable evidence
 
-The skill's default action is a finite, read-only service check, not starting a
-second server. Its contract checks health after the selected action and records
-an attestation. Registration projects skill prose and its canonical contract
-from the `.bsh` source through existing verbs; no hand-edited catalog files or
-core registration. Re-run registration after editing embedded guidance.
+- **Registered:** `bashy app list --json` reports `whiteboard` with a
+  `/shape/whiteboard/` launch path.
+- **Checks:** `checks/whiteboard.bsh` runs during verification and fails if the
+  pinned license, source marker, frontend bundle, server adapter, or no-phone-home
+  invariants are missing.
+- **Scope:** the console selects a revision and app data by paired principal.
+- **Undo:** `bashy shape history` records approval and undo; another principal
+  keeps the base page.
+- **Interface parity:** the web Shape page and `bashy shape` use the same
+  candidate lifecycle.
 
-The optional DAG target is `bashy dag serve`; some Bashy versions buffer DAG
-output, so the direct command above is preferred for immediately seeing links.
-The first launch builds a small native Go server (Go 1.27+ required). The server
-stays in the foreground; Ctrl-C stops it, or `bashy whiteboard stop` stops a
-server started for the same data directory. Restart resumes the saved boards.
+The source is the GitHub fork
+[`qiangli/excalidraw-shape`](https://github.com/qiangli/excalidraw-shape) of
+[`excalidraw/excalidraw`](https://github.com/excalidraw/excalidraw), pinned to
+`a2ec2889babf7d2295469c6d90ebe77fae57df84` (tag `v0.18.1`). Its actual
+[`LICENSE`](https://github.com/qiangli/excalidraw-shape/blob/a2ec2889babf7d2295469c6d90ebe77fae57df84/LICENSE)
+is MIT (SPDX `MIT`). The upstream GitHub repository reported 135,622 stars
+and a push on 2026-11-12 when checked through its repository API on 2026-11-13.
+The pinned tree contains no `ee/`, `premium/`, or `enterprise/` directory.
 
-## Run a session
-
-CLI page actions: `draw BOARD --points '[{"x":1,"y":1},{"x":2,"y":2}]' [--color #222222 --width 3]`, `clear BOARD`, `lock BOARD [--locked=false]`, `revoke BOARD --target MEMBER_OR_INVITE`, and `download BOARD --format json|png [--output FILE]`. Add `--json` for the action/export envelope and `--dry-run` to preview writes. Use `--key` for facilitator actions and `--participant TOKEN` to reuse a member identity across calls.
-
-1. Keep the host awake and connected to the group's LAN. Open the printed
-   facilitator link privately. Share a printed **Participant** LAN URL;
-   `127.0.0.1` works only on the host. Use the same LAN URL for the
-   facilitator page when copying its participant link (keep the facilitator
-   fragment).
-2. Create a named board per group or topic. Boards are persistent, isolated
-   sessions: clearing or locking one never touches the others. The `main`
-   board is open; every other named board is private — press **Create invite**
-   once per participant and share each link privately. Each invite is consumed
-   on first join; the code lives in the URL fragment, outside HTTP request
-   paths. Anyone with only the
-   board name (a guessed URL) is denied on state, draw/note, sync poll, and
-   both exports until they join with a valid invite. Revoking a member or an
-   invite takes effect immediately and survives restarts.
-3. Draw freehand on the canvas and pin sticky notes. Every open browser polls
-   and re-renders, so contributions appear everywhere within a couple of
-   seconds; a dropped connection shows "Reconnecting…" and resumes.
-4. Lock the board to freeze contributions while presenting; unlock to continue.
-   Only the facilitator link can lock or clear — the server rejects anyone
-   else, not just the buttons.
-5. Export JSON or PNG for the record. Facilitator keys and browser ownership
-   tokens never appear in state responses or exports.
-
-Browser cookies identify participants; clearing cookies or using another browser
-creates a new participant. Ownership limits suit a cooperative group, not a
-verified election. Do not share the facilitator link. The host operator can read
-the saved files.
-
-Data defaults to `~/.local/share/bashy/whiteboard/boards` (respects
-`XDG_DATA_HOME`). No automatic deletion. Start a fresh set of boards without
-deleting the old ones:
-
-```bash
-WHITEBOARD_DATA="$HOME/.local/share/bashy/whiteboard/session-2" bashy ./whiteboard.sh
-```
-
-Set `WHITEBOARD_ADDR=0.0.0.0:18093` to use another port. Set
-`WHITEBOARD_PREFIX=/whiteboard` when a proxy preserves that sub-path. Outpost
-strips `/app/<name>` before forwarding, so leave the prefix empty there. Bind
-to loopback and register with
-`outpost apps add whiteboard --url http://127.0.0.1:18093`. Its HTTPS URL is
-`https://<cloudbox>/matrix/h/<host>/app/whiteboard/`. Custom-app add/remove
-are live operations; `outpost apps rm whiteboard` removes the route without
-restarting the daemon. All page URLs are relative so the board keeps working
-there. Host firewall rules and Wi-Fi client isolation can prevent guest access
-even on the same Wi-Fi. Everything works without internet once Go and the
-executable are available.
-
-`bashy whiteboard backup` prints a verified snapshot directory. Stop the
-server, choose a **add, empty** data directory, then run
-`WHITEBOARD_DATA=/add/board-data bashy whiteboard restore /saved/snapshot`
-before serving it again. Restore refuses nonempty destinations, invalid
-records and overwrites. Snapshot JSON contains facilitator capabilities;
-store it privately. Members and revocations survive restore.
-
-Run focused tests with `bashy dag test`. There is no change to the Bashy binary.
-Run `python3 verify-duality.py` after registration to check direct script,
-registered command and attested skill against an isolated temporary board,
-including equivalent status, byte-identical backup contents and rejection of
-failed steps without a passing attestation.
-For the optional browser test, install Playwright separately and set
-`PLAYWRIGHT_MODULE` to its module path and `WHITEBOARD_BIN` to the built server,
-then run `node browser-test.mjs`. `CHROMIUM_PATH` can select an existing browser.
-
-## As a shaped app
-
-`server/shaped.json` declares whiteboard's server, so it can be registered as a
-shaped app and get per-user source history, preview, restore and undo:
-
-```bash
-bashy app add whiteboard --type shaped --source "$PWD/server"
-```
-
-The console builds that server from each user's active revision and proxies
-`/whiteboard/` to it. Item URLs follow the mount: a request that arrives through
-the app shell (`X-Forwarded-Prefix`) gets `…/whiteboard/?…`, never the server's
-internal loopback address. The app root is `server/`, which holds the module.
-
-A fork is activated only on a passing verdict. `server/contract.bsh` is the base
-contract `bashy src pr verify` freezes: its `@effects` line is the effect cap
-(read, write, exec, plus net to provision the Go toolchain in the clone), and
-`server/checks/go.bsh` builds the module and runs its tests:
-
-```bash
-bashy src pr open whiteboard alice-fork --title "..." && bashy src pr verify 1
-bashy src activate whiteboard REV --principal device:alice   # bashy src undo whiteboard rolls back
-```
-
-## Desk door (agents and scripts)
-
-The whiteboard follows the shared desk contract (`examples/desk/kit`): the page
-uses the kit's copy buttons and status badge, and `bashy whiteboard` gains
-`add|open|show|set|list|share|close` over the same `/api/action` route the page
-uses. A board is the item and its name is the id; `open` prints id, URL and
-status only. `add` makes a private board and prints its owner key (pass it as
-`--key` or `WHITEBOARD_KEY`); `set` pins a note; `close` locks the board. A
-launcher tile is added by `register.sh` (`bashy app add`).
-
-Recorded exceptions to the desk defaults: the server keeps its LAN default bind
-(`0.0.0.0:18093`; pinned by `TestDefaultBindStaysLAN`), and the contract test
-runs with `StateHasContent: true` because `/api/state` is the page's full
-board state, not a contentless re-surface.
+Targeted command checks: `bash whiteboard_test.sh`. Targeted source tests:
+`GOWORK=off CGO_ENABLED=0 go test ./server/...` from the installed source.

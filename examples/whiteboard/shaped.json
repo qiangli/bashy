@@ -1,0 +1,12 @@
+{
+  "server": {
+    "main": "server",
+    "args": ["-addr", "$ADDR", "-data", "$DATA"]
+  },
+  "genie": {
+    "examples": [
+      "Make the canvas background darker",
+      "Add quick templates for brainstorming"
+    ]
+  }
+}

@@ -1,0 +1,358 @@
+diff --git a/.env.production b/.env.production
+index 11e9fd8..a6d7ef8 100644
+--- a/.env.production
++++ b/.env.production
+@@ -1,32 +1,5 @@
+-VITE_APP_BACKEND_V2_GET_URL=https://json.excalidraw.com/api/v2/
+-VITE_APP_BACKEND_V2_POST_URL=https://json.excalidraw.com/api/v2/post/
+-
+-VITE_APP_LIBRARY_URL=https://libraries.excalidraw.com
+-VITE_APP_LIBRARY_BACKEND=https://us-central1-excalidraw-room-persistence.cloudfunctions.net/libraries
+-
+-VITE_APP_PLUS_LP=https://plus.excalidraw.com
+-VITE_APP_PLUS_APP=https://app.excalidraw.com
+-
+-VITE_APP_AI_BACKEND=https://oss-ai.excalidraw.com
+-
+-# socket server URL used for collaboration
+-VITE_APP_WS_SERVER_URL=https://oss-collab.excalidraw.com
+-
+-VITE_APP_FIREBASE_CONFIG='{"apiKey":"AIzaSyAd15pYlMci_xIp9ko6wkEsDzAAA0Dn0RU","authDomain":"excalidraw-room-persistence.firebaseapp.com","databaseURL":"https://excalidraw-room-persistence.firebaseio.com","projectId":"excalidraw-room-persistence","storageBucket":"excalidraw-room-persistence.appspot.com","messagingSenderId":"654800341332","appId":"1:654800341332:web:4a692de832b55bd57ce0c1"}'
+-
++VITE_APP_BACKEND_V2_GET_URL=/whiteboard/api/v2/
++VITE_APP_BACKEND_V2_POST_URL=/whiteboard/api/v2/post/
++VITE_APP_WS_SERVER_URL=/whiteboard
+ VITE_APP_ENABLE_TRACKING=false
+-
+-VITE_APP_PLUS_EXPORT_PUBLIC_KEY='MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApQ0jM9Qz8TdFLzcuAZZX
+-/WvuKSOJxiw6AR/ZcE3eFQWM/mbFdhQgyK8eHGkKQifKzH1xUZjCxyXcxW6ZO02t
+-kPOPxhz+nxUrIoWCD/V4NGmUA1lxwHuO21HN1gzKrN3xHg5EGjyouR9vibT9VDGF
+-gq6+4Ic/kJX+AD2MM7Yre2+FsOdysrmuW2Fu3ahuC1uQE7pOe1j0k7auNP0y1q53
+-PrB8Ts2LUpepWC1l7zIXFm4ViDULuyWXTEpUcHSsEH8vpd1tckjypxCwkipfZsXx
+-iPszy0o0Dx2iArPfWMXlFAI9mvyFCyFC3+nSvfyAUb2C4uZgCwAuyFh/ydPF4DEE
+-PQIDAQAB'
+-
+-# Set the below flags explicitly to false in production mode since vite loads and merges .env.local vars when  running the build command
+-VITE_APP_DEBUG_ENABLE_TEXT_CONTAINER_BOUNDING_BOX=false
+-VITE_APP_COLLAPSE_OVERLAY=false
+-# Enable eslint in dev server
+ VITE_APP_ENABLE_ESLINT=false
+-
+diff --git a/.github/workflows/sentry-production.yml b/.github/workflows/sentry-production.yml
+deleted file mode 100644
+index cea4cf6..0000000
+--- a/.github/workflows/sentry-production.yml
++++ /dev/null
+@@ -1,37 +0,0 @@
+-name: New Sentry production release
+-
+-on:
+-  push:
+-    branches:
+-      - release
+-
+-jobs:
+-  sentry:
+-    runs-on: ubuntu-latest
+-    steps:
+-      - uses: actions/checkout@v2
+-      - name: Setup Node.js 18.x
+-        uses: actions/setup-node@v2
+-        with:
+-          node-version: 18.x
+-      - name: Install and build
+-        run: |
+-          yarn --frozen-lockfile
+-          yarn build:app
+-        env:
+-          CI: true
+-      - name: Install Sentry
+-        run: |
+-          curl -sL https://sentry.io/get-cli/ | bash
+-      - name: Create new Sentry release
+-        run: |
+-          export SENTRY_RELEASE=$(sentry-cli releases propose-version)
+-          sentry-cli releases new $SENTRY_RELEASE --project $SENTRY_PROJECT
+-          sentry-cli releases set-commits --auto $SENTRY_RELEASE
+-          sentry-cli releases files $SENTRY_RELEASE upload-sourcemaps --no-rewrite ./build/static/js/ --url-prefix "~/static/js"
+-          sentry-cli releases finalize $SENTRY_RELEASE
+-          sentry-cli releases deploys $SENTRY_RELEASE new -e production
+-        env:
+-          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+-          SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
+-          SENTRY_PROJECT: ${{ secrets.SENTRY_PROJECT }}
+diff --git a/excalidraw-app/bug-issue-template.js b/excalidraw-app/bug-issue-template.js
+index bc04886..bbde2d3 100644
+--- a/excalidraw-app/bug-issue-template.js
++++ b/excalidraw-app/bug-issue-template.js
+@@ -5,7 +5,7 @@ export default (sentryErrorId) => `
+ Paste scene content here
+ \`\`\`
+ 
+-### Sentry Error ID
++### Error ID
+ 
+ ${sentryErrorId}
+ `;
+diff --git a/excalidraw-app/components/TopErrorBoundary.tsx b/excalidraw-app/components/TopErrorBoundary.tsx
+index e7e00be..5fbf35c 100644
+--- a/excalidraw-app/components/TopErrorBoundary.tsx
++++ b/excalidraw-app/components/TopErrorBoundary.tsx
+@@ -1,5 +1,4 @@
+ import React from "react";
+-import * as Sentry from "@sentry/browser";
+ import { t } from "@excalidraw/excalidraw/i18n";
+ import Trans from "@excalidraw/excalidraw/components/Trans";
+ 
+@@ -33,15 +32,11 @@ export class TopErrorBoundary extends React.Component<
+       }
+     }
+ 
+-    Sentry.withScope((scope) => {
+-      scope.setExtras(errorInfo);
+-      const eventId = Sentry.captureException(error);
+-
+-      this.setState((state) => ({
+-        hasError: true,
+-        sentryEventId: eventId,
+-        localStorage: JSON.stringify(_localStorage),
+-      }));
++    console.error("TopErrorBoundary caught error:", error, errorInfo);
++    this.setState({
++      hasError: true,
++      sentryEventId: "",
++      localStorage: JSON.stringify(_localStorage),
+     });
+   }
+ 
+@@ -115,9 +110,9 @@ export class TopErrorBoundary extends React.Component<
+           </div>
+           <div>
+             <div className="ErrorSplash-paragraph">
+-              {t("errorSplash.trackedToSentry", {
++              {this.state.sentryEventId ? t("errorSplash.trackedToSentry", {
+                 eventId: this.state.sentryEventId,
+-              })}
++              }) : null}
+             </div>
+             <div className="ErrorSplash-paragraph">
+               <Trans
+diff --git a/excalidraw-app/index.html b/excalidraw-app/index.html
+index 750824c..5b12fb3 100644
+--- a/excalidraw-app/index.html
++++ b/excalidraw-app/index.html
+@@ -93,45 +93,11 @@
+     </style>
+ 
+     <!-- Warmup the connection for Google fonts -->
+-    <link rel="preconnect" href="https://fonts.googleapis.com" />
+-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
++    
++    
+ 
+     <!------------------------------------------------------------------------->
+-    <% if (typeof PROD != 'undefined' && PROD == true) { %>
+-    <script>
+-      // Redirect Excalidraw+ users which have auto-redirect enabled.
+-      //
+-      // Redirect only the bare root path, so link/room/library urls are not
+-      // redirected.
+-      //
+-      // Putting into index.html for best performance (can't redirect on server
+-      // due to location.hash checks).
+-      if (
+-        window.location.pathname === "/" &&
+-        !window.location.hash &&
+-        !window.location.search &&
+-        // if its present redirect
+-        document.cookie.includes("excplus-autoredirect=true")
+-      ) {
+-        window.location.href = "https://app.excalidraw.com";
+-      }
+-    </script>
+-
+-    <!-- Following placeholder is replaced during the build step -->
+-    <!-- PLACEHOLDER:EXCALIDRAW_APP_FONTS -->
+-
+-    <!-- Register Assistant as the UI font, before the scene inits -->
+-    <link
+-      rel="stylesheet"
+-      href="../packages/excalidraw/fonts/fonts.css"
+-      type="text/css"
+-    />
+-
+-    <% } else { %>
+-    <script>
+-      window.EXCALIDRAW_ASSET_PATH = window.origin;
+-    </script>
+-    <% } %>
++    
+ 
+     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+@@ -214,39 +180,6 @@
+     </header>
+     <div id="root"></div>
+     <script type="module" src="index.tsx"></script>
+-    <% if (typeof PROD != 'undefined' && PROD == true) { %>
+-    <!-- 100% privacy friendly analytics -->
+-    <script>
+-      // need to load this script dynamically bcs. of iframe embed tracking
+-      var scriptEle = document.createElement("script");
+-      scriptEle.setAttribute(
+-        "src",
+-        "https://scripts.simpleanalyticscdn.com/latest.js",
+-      );
+-      scriptEle.setAttribute("type", "text/javascript");
+-      scriptEle.setAttribute("defer", true);
+-      scriptEle.setAttribute("async", true);
+-      // if iframe
+-      if (window.self !== window.top) {
+-        scriptEle.setAttribute("data-auto-collect", true);
+-      }
+-
+-      document.body.appendChild(scriptEle);
+-
+-      // if iframe
+-      if (window.self !== window.top) {
+-        scriptEle.addEventListener("load", () => {
+-          if (window.sa_pageview) {
+-            window.window.sa_event(action, {
+-              category: "iframe",
+-              label: "embed",
+-              value: window.location.pathname,
+-            });
+-          }
+-        });
+-      }
+-    </script>
+-    <!-- end LEGACY GOOGLE ANALYTICS -->
+-    <% } %>
++    
+   </body>
+ </html>
+diff --git a/excalidraw-app/index.tsx b/excalidraw-app/index.tsx
+index a28bd9e..45629e5 100644
+--- a/excalidraw-app/index.tsx
++++ b/excalidraw-app/index.tsx
+@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
+ import ExcalidrawApp from "./App";
+ import { registerSW } from "virtual:pwa-register";
+ 
+-import "../excalidraw-app/sentry";
++
+ window.__EXCALIDRAW_SHA__ = import.meta.env.VITE_APP_GIT_SHA;
+ const rootElement = document.getElementById("root")!;
+ const root = createRoot(rootElement);
+diff --git a/excalidraw-app/package.json b/excalidraw-app/package.json
+index e5dcde0..38692c8 100644
+--- a/excalidraw-app/package.json
++++ b/excalidraw-app/package.json
+@@ -27,7 +27,7 @@
+   },
+   "dependencies": {
+     "@excalidraw/random-username": "1.0.0",
+-    "@sentry/browser": "9.0.1",
++    
+     "callsites": "4.2.0",
+     "firebase": "11.3.1",
+     "i18next-browser-languagedetector": "6.1.4",
+diff --git a/excalidraw-app/sentry.ts b/excalidraw-app/sentry.ts
+deleted file mode 100644
+index 30b84f3..0000000
+--- a/excalidraw-app/sentry.ts
++++ /dev/null
+@@ -1,81 +0,0 @@
+-import * as Sentry from "@sentry/browser";
+-import callsites from "callsites";
+-
+-const SentryEnvHostnameMap: { [key: string]: string } = {
+-  "excalidraw.com": "production",
+-  "staging.excalidraw.com": "staging",
+-  "vercel.app": "staging",
+-};
+-
+-const SENTRY_DISABLED = import.meta.env.VITE_APP_DISABLE_SENTRY === "true";
+-
+-// Disable Sentry locally or inside the Docker to avoid noise/respect privacy
+-const onlineEnv =
+-  !SENTRY_DISABLED &&
+-  Object.keys(SentryEnvHostnameMap).find(
+-    (item) => window.location.hostname.indexOf(item) >= 0,
+-  );
+-
+-Sentry.init({
+-  dsn: onlineEnv
+-    ? "https://7bfc596a5bf945eda6b660d3015a5460@sentry.io/5179260"
+-    : undefined,
+-  environment: onlineEnv ? SentryEnvHostnameMap[onlineEnv] : undefined,
+-  release: import.meta.env.VITE_APP_GIT_SHA,
+-  ignoreErrors: [
+-    "undefined is not an object (evaluating 'window.__pad.performLoop')", // Only happens on Safari, but spams our servers. Doesn't break anything
+-    "InvalidStateError: Failed to execute 'transaction' on 'IDBDatabase': The database connection is closing.", // Not much we can do about the IndexedDB closing error
+-    /(Failed to fetch|(fetch|loading) dynamically imported module)/i, // This is happening when a service worker tries to load an old asset
+-    /QuotaExceededError: (The quota has been exceeded|.*setItem.*Storage)/i, // localStorage quota exceeded
+-    "Internal error opening backing store for indexedDB.open", // Private mode and disabled indexedDB
+-  ],
+-  integrations: [
+-    Sentry.captureConsoleIntegration({
+-      levels: ["error"],
+-    }),
+-  ],
+-  beforeSend(event) {
+-    if (event.request?.url) {
+-      event.request.url = event.request.url.replace(/#.*$/, "");
+-    }
+-
+-    if (!event.exception) {
+-      event.exception = {
+-        values: [
+-          {
+-            type: "ConsoleError",
+-            value: event.message ?? "Unknown error",
+-            stacktrace: {
+-              frames: callsites()
+-                .slice(1)
+-                .filter(
+-                  (frame) =>
+-                    frame.getFileName() &&
+-                    !frame.getFileName()?.includes("@sentry_browser.js"),
+-                )
+-                .map((frame) => ({
+-                  filename: frame.getFileName() ?? undefined,
+-                  function: frame.getFunctionName() ?? undefined,
+-                  in_app: !(
+-                    frame.getFileName()?.includes("node_modules") ?? false
+-                  ),
+-                  lineno: frame.getLineNumber() ?? undefined,
+-                  colno: frame.getColumnNumber() ?? undefined,
+-                })),
+-            },
+-            mechanism: {
+-              type: "instrument",
+-              handled: true,
+-              data: {
+-                function: "console.error",
+-                handler: "Sentry.beforeSend",
+-              },
+-            },
+-          },
+-        ],
+-      };
+-    }
+-
+-    return event;
+-  },
+-});
+diff --git a/excalidraw-app/vite.config.mts b/excalidraw-app/vite.config.mts
+index 57a4d19..fffbc7a 100644
+--- a/excalidraw-app/vite.config.mts
++++ b/excalidraw-app/vite.config.mts
+@@ -13,6 +13,7 @@ export default defineConfig(({ mode }) => {
+   const envVars = loadEnv(mode, `../`);
+   // https://vitejs.dev/config/
+   return {
++    base: "/whiteboard/",
+     server: {
+       port: Number(envVars.VITE_APP_PORT || 3000),
+       // open the browser

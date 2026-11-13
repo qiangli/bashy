@@ -1,0 +1,16 @@
+set -eu
+test "$(cat .whiteboard-source-pin)" = 'a2ec2889babf7d2295469c6d90ebe77fae57df84'
+head -n 1 LICENSE | grep -qx 'MIT License'
+test ! -d ee
+test ! -d premium
+test ! -d enterprise
+test -s shaped.json
+test -s contract.bsh
+test -s excalidraw-app/build/index.html
+test -s server/main.go
+test -s server/collab.go
+test -s server/storage.go
+test -s server/telemetry.go
+! grep -rn "sentry\.io" excalidraw-app/
+! grep -rn "simpleanalyticscdn" excalidraw-app/
+! grep -rn "fonts\.googleapis\.com" excalidraw-app/

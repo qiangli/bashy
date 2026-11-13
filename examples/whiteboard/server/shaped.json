@@ -1,1 +1,0 @@
-{"server": {"main": ".", "args": ["-addr", "$ADDR", "-data", "$DATA"]}}

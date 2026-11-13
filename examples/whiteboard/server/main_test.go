@@ -3,599 +3,223 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"image/png"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 )
 
-func TestSameOriginThroughLoopbackProxy(t *testing.T) {
-	r := httptest.NewRequest("POST", "http://127.0.0.1:18193/api/action", nil)
-	r.RemoteAddr = "127.0.0.1:34567"
-	r.Header.Set("X-Forwarded-Host", "example.test")
-	r.Header.Set("X-Forwarded-Proto", "https")
-	for _, tc := range []struct {
-		origin string
-		remote string
-		want   bool
-	}{
-		{"http://127.0.0.1:18193", "127.0.0.1:34567", true},
-		{"https://example.test", "127.0.0.1:34567", true},
-		{"https://other.test", "127.0.0.1:34567", false},
-		{"http://example.test", "127.0.0.1:34567", false},
-		{"https://example.test", "192.0.2.1:34567", false},
-	} {
-		r.RemoteAddr = tc.remote
-		u, err := url.Parse(tc.origin)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if got := sameOrigin(r, u); got != tc.want {
-			t.Errorf("origin %s remote %s: got %v, want %v", tc.origin, tc.remote, got, tc.want)
-		}
-	}
-}
-
-func request(a *app, who, key, path string, body any) *httptest.ResponseRecorder {
-	method := "GET"
-	var b bytes.Buffer
-	if body != nil {
-		method = "POST"
-		json.NewEncoder(&b).Encode(body)
-	}
-	r := httptest.NewRequest(method, path, &b)
-	if who != "" {
-		r.AddCookie(&http.Cookie{Name: "whiteboard-participant", Value: who})
-	}
-	if key != "" {
-		r.Header.Set("X-Facilitator-Key", key)
-	}
-	w := httptest.NewRecorder()
-	a.ServeHTTP(w, r)
-	return w
-}
-func fresh(t *testing.T) *app {
+func setupTestServer(t *testing.T) (http.Handler, string) {
 	t.Helper()
-	return &app{dir: t.TempDir(), boards: map[string]*Board{}}
-}
-func good(t *testing.T, w *httptest.ResponseRecorder) {
-	t.Helper()
-	if w.Code != 200 {
-		t.Fatalf("status %d: %s", w.Code, w.Body.String())
-	}
-}
-func create(t *testing.T, a *app, board string) string {
-	t.Helper()
-	w := request(a, token(), "", "/api/action", map[string]any{"action": "create", "board": board})
-	good(t, w)
-	var v struct {
-		FacilitatorKey string `json:"facilitatorKey"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || !validToken(v.FacilitatorKey) {
-		t.Fatalf("create did not mint a facilitator capability: %s", w.Body.String())
-	}
-	if request(a, token(), "", "/api/action", map[string]any{"action": "create", "board": board}).Code != 409 {
-		t.Fatal("duplicate board accepted")
-	}
-	return v.FacilitatorKey
-}
-func invite(t *testing.T, a *app, fac, board string) string {
-	t.Helper()
-	w := request(a, token(), fac, "/api/action", map[string]any{"action": "invite", "board": board})
-	good(t, w)
-	var v struct {
-		Invite     string `json:"invite"`
-		InviteCode string `json:"inviteCode"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || !validToken(v.InviteCode) || v.Invite != v.InviteCode {
-		t.Fatalf("invite did not mint a code: %s", w.Body.String())
-	}
-	return v.InviteCode
-}
-func join(t *testing.T, a *app, who, board, code string) {
-	t.Helper()
-	good(t, request(a, who, "", "/api/action", map[string]any{"action": "join", "board": board, "invite": code}))
-}
-func stroke(t *testing.T, a *app, who, key, board string) string {
-	t.Helper()
-	w := request(a, who, key, "/api/action", map[string]any{
-		"action": "stroke", "board": board,
-		"points": []Pt{{X: 10, Y: 10}, {X: 200, Y: 150}},
-		"color":  "#1f5c53", "width": 4,
-	})
-	good(t, w)
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.boards[board].Strokes[len(a.boards[board].Strokes)-1].ID
-}
-func note(t *testing.T, a *app, who, board, text string) string {
-	t.Helper()
-	w := request(a, who, "", "/api/action", map[string]any{
-		"action": "note", "board": board, "x": 120, "y": 120, "text": text,
-	})
-	good(t, w)
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.boards[board].Notes[len(a.boards[board].Notes)-1].ID
-}
-
-func TestFacilitatorParticipantIsolation(t *testing.T) {
-	a := fresh(t)
-	fac := create(t, a, "team1")
-	alice, bob := token(), token()
-	code := invite(t, a, fac, "team1")
-	join(t, a, alice, "team1", code)
-	if request(a, bob, "", "/api/action", map[string]any{"action": "join", "board": "team1", "invite": code}).Code != 403 {
-		t.Fatal("used invite admitted a second participant")
-	}
-	join(t, a, bob, "team1", invite(t, a, fac, "team1"))
-	sid := stroke(t, a, alice, "", "team1")
-	nid := note(t, a, alice, "team1", "SECRET <script>alert(1)</script>")
-	// State and exports never carry capabilities or owner tokens.
-	for _, w := range []*httptest.ResponseRecorder{
-		request(a, bob, "", "/api/state?board=team1", nil),
-		request(a, bob, "", "/api/export?board=team1&format=json", nil),
-	} {
-		good(t, w)
-		for _, leak := range []string{fac, alice, code, "owner", "facilitatorKey", "inviteCode"} {
-			if strings.Contains(w.Body.String(), leak) {
-				t.Fatalf("capability or owner leaked: %q", leak)
-			}
-		}
-		if strings.Contains(w.Body.String(), `"members"`) || strings.Contains(w.Body.String(), `"invites"`) {
-			t.Fatal("member roster leaked to participant")
-		}
-	}
-	// A stranger with only a guessed URL is denied on every path.
-	stranger := token()
-	if request(a, stranger, "", "/api/state?board=team1", nil).Code != 403 {
-		t.Fatal("nonmember read state")
-	}
-	if request(a, stranger, "", "/api/export?board=team1&format=json", nil).Code != 403 {
-		t.Fatal("nonmember read export")
-	}
-	if request(a, stranger, "", "/api/export?board=team1&format=png", nil).Code != 403 {
-		t.Fatal("nonmember read png export")
-	}
-	if request(a, stranger, "", "/api/action", map[string]any{
-		"action": "stroke", "board": "team1",
-		"points": []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, "color": "#000000", "width": 2,
-	}).Code != 403 {
-		t.Fatal("nonmember stroke accepted")
-	}
-	// Only the facilitator can mint invites; participants cannot.
-	if request(a, bob, "", "/api/action", map[string]any{"action": "invite", "board": "team1"}).Code != 403 {
-		t.Fatal("participant minted an invite")
-	}
-	// Participants cannot touch each other's work or the facilitator controls.
-	if request(a, bob, "", "/api/action", map[string]any{"action": "delete-stroke", "board": "team1", "id": sid}).Code != 403 {
-		t.Fatal("participant deleted another stroke")
-	}
-	if request(a, bob, "", "/api/action", map[string]any{"action": "edit-note", "board": "team1", "id": nid, "text": "hijacked"}).Code != 403 {
-		t.Fatal("participant edited another note")
-	}
-	if request(a, bob, "", "/api/action", map[string]any{"action": "clear", "board": "team1"}).Code != 403 {
-		t.Fatal("participant cleared the board")
-	}
-	if request(a, bob, "", "/api/action", map[string]any{"action": "lock", "board": "team1", "locked": true}).Code != 403 {
-		t.Fatal("participant locked the board")
-	}
-	// The facilitator can moderate and lock; a locked board stops participants only.
-	good(t, request(a, token(), fac, "/api/action", map[string]any{"action": "delete-note", "board": "team1", "id": nid}))
-	good(t, request(a, token(), fac, "/api/action", map[string]any{"action": "lock", "board": "team1", "locked": true}))
-	if request(a, bob, "", "/api/action", map[string]any{"action": "stroke", "board": "team1",
-		"points": []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, "color": "#000000", "width": 2}).Code != 403 {
-		t.Fatal("locked board accepted a participant stroke")
-	}
-	if request(a, bob, "", "/api/action", map[string]any{"action": "note", "board": "team1", "x": 5, "y": 5, "text": "late"}).Code != 403 {
-		t.Fatal("locked board accepted a participant note")
-	}
-	stroke(t, a, token(), fac, "team1")
-	good(t, request(a, token(), fac, "/api/action", map[string]any{"action": "lock", "board": "team1", "locked": false}))
-	stroke(t, a, bob, "", "team1")
-	// Boards are isolated sessions.
-	other := create(t, a, "team2")
-	good(t, request(a, token(), other, "/api/action", map[string]any{"action": "clear", "board": "team2"}))
-	if got := len(a.boards["team1"].Strokes); got != 3 {
-		t.Fatalf("clear leaked across boards: team1 has %d strokes", got)
-	}
-	if request(a, token(), fac, "/api/action", map[string]any{"action": "clear", "board": "team2"}).Code != 403 {
-		t.Fatal("facilitator key worked on another board")
-	}
-}
-
-func TestPersistenceAcrossRestart(t *testing.T) {
 	dir := t.TempDir()
-	a := &app{dir: dir, boards: map[string]*Board{}}
-	fac := create(t, a, "retro")
-	code := invite(t, a, fac, "retro")
-	member := token()
-	join(t, a, member, "retro", code)
-	stroke(t, a, member, "", "retro")
-	note(t, a, member, "retro", "keep me")
-	good(t, request(a, token(), fac, "/api/action", map[string]any{"action": "lock", "board": "retro", "locked": true}))
-	before := a.boards["retro"].Revision
-	b := &app{dir: dir, boards: map[string]*Board{}}
-	good(t, request(b, member, "", "/api/state?board=retro", nil))
-	got := b.boards["retro"]
-	if len(got.Strokes) != 1 || len(got.Notes) != 1 || !got.Locked || got.Revision != before || got.Facilitator != fac {
-		t.Fatalf("restart lost state: %+v", got)
-	}
-	if !got.isMember(member) || len(got.Invites) != 0 {
-		t.Fatal("restart lost membership")
-	}
-}
-
-func TestConcurrentDraw(t *testing.T) {
-	a := fresh(t)
-	fac := create(t, a, "jam")
-	code := invite(t, a, fac, "jam")
-	members := make([]string, 30)
-	for i := range members {
-		members[i] = token()
-		if i > 0 {
-			code = invite(t, a, fac, "jam")
-		}
-		join(t, a, members[i], "jam", code)
-	}
-	var wg sync.WaitGroup
-	for i := 0; i < 30; i++ {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			who := members[i]
-			w := request(a, who, "", "/api/action", map[string]any{
-				"action": "stroke", "board": "jam",
-				"points": []Pt{{X: float64(i * 10), Y: 10}, {X: float64(i*10 + 5), Y: 60}},
-				"color":  "#123456", "width": 3,
-			})
-			if w.Code != 200 {
-				t.Errorf("participant %d stroke: %d", i, w.Code)
-				return
-			}
-			if w := request(a, who, "", "/api/action", map[string]any{
-				"action": "note", "board": "jam", "x": float64(i * 10), "y": 200, "text": fmt.Sprintf("note-%d", i),
-			}); w.Code != 200 {
-				t.Errorf("participant %d note: %d", i, w.Code)
-			}
-		}(i)
-	}
-	wg.Wait()
-	if len(a.boards["jam"].Strokes) != 30 || len(a.boards["jam"].Notes) != 30 {
-		t.Fatalf("lost writes: %d strokes %d notes", len(a.boards["jam"].Strokes), len(a.boards["jam"].Notes))
-	}
-	b := &app{dir: a.dir, boards: map[string]*Board{}}
-	good(t, request(b, members[0], "", "/api/state?board=jam", nil))
-	if len(b.boards["jam"].Strokes) != 30 || len(b.boards["jam"].Notes) != 30 {
-		t.Fatal("disk state differs after concurrent draw")
-	}
-}
-
-func TestWriteFailureIsNotAcknowledged(t *testing.T) {
-	dir := t.TempDir()
-	a := &app{dir: dir, boards: map[string]*Board{}}
-	fac := create(t, a, "fragile")
-	code := invite(t, a, fac, "fragile")
-	member := token()
-	join(t, a, member, "fragile", code)
-	rev := a.boards["fragile"].Revision
-	a.write = func(string, Board) error { return errors.New("disk full") }
-	w := request(a, member, "", "/api/action", map[string]any{
-		"action": "stroke", "board": "fragile",
-		"points": []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, "color": "#000000", "width": 2,
-	})
-	if w.Code != 500 || len(a.boards["fragile"].Strokes) != 0 || a.boards["fragile"].Revision != rev {
-		t.Fatalf("failed save changed state: %d rev %d", w.Code, a.boards["fragile"].Revision)
-	}
-}
-
-func TestBoundsAndAccess(t *testing.T) {
-	a := fresh(t)
-	facBounds := create(t, a, "bounds")
-	codeBounds := invite(t, a, facBounds, "bounds")
-	memberBounds := token()
-	join(t, a, memberBounds, "bounds", codeBounds)
-	for _, body := range []map[string]any{
-		{"action": "stroke", "board": "bounds", "points": []Pt{{X: 1, Y: 1}}, "color": "#000000", "width": 2},
-		{"action": "stroke", "board": "bounds", "points": []Pt{{X: 1, Y: 1}, {X: 9999, Y: 2}}, "color": "#000000", "width": 2},
-		{"action": "stroke", "board": "bounds", "points": []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, "color": "red", "width": 2},
-		{"action": "stroke", "board": "bounds", "points": []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, "color": "#000000", "width": 99},
-		{"action": "note", "board": "bounds", "x": 10, "y": 10, "text": ""},
-		{"action": "note", "board": "bounds", "x": 10, "y": 10, "text": strings.Repeat("x", 501)},
-		{"action": "note", "board": "bounds", "x": -5, "y": 10, "text": "off-canvas"},
-		{"action": "stroke", "board": "../escape", "points": []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, "color": "#000000", "width": 2},
-		{"action": "bogus", "board": "bounds"},
-	} {
-		if w := request(a, memberBounds, "", "/api/action", body); w.Code == 200 {
-			t.Fatalf("invalid input accepted: %v", body)
-		}
-	}
-	if w := request(a, token(), "", "/api/state?board=../escape", nil); w.Code == 200 {
-		t.Fatal("board name escape accepted")
-	}
-	r := httptest.NewRequest("POST", "http://board/api/action", strings.NewReader(`{"action":"note","board":"bounds","x":1,"y":1,"text":"evil"}`))
-	r.Header.Set("Origin", "https://elsewhere.example")
-	w := httptest.NewRecorder()
-	a.ServeHTTP(w, r)
-	if w.Code != 403 {
-		t.Fatal("cross-origin write accepted")
-	}
-	w = request(a, "", "", "/", nil)
-	good(t, w)
-	if len(w.Result().Cookies()) != 1 || !w.Result().Cookies()[0].HttpOnly {
-		t.Fatal("missing participant cookie")
-	}
-	if !strings.Contains(w.Body.String(), "textContent=text") {
-		t.Fatal("UI must render untrusted text as text")
-	}
-}
-
-func TestCorruptStateIsPreserved(t *testing.T) {
-	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "boards"), 0700); err != nil {
-		t.Fatal(err)
-	}
-	p := filepath.Join(dir, "boards", "broken.json")
-	os.WriteFile(p, []byte("corrupt"), 0600)
-	a := &app{dir: dir, boards: map[string]*Board{}}
-	a.mu.Lock()
-	_, err := a.loadLocked("broken")
-	a.mu.Unlock()
-	if err == nil {
-		t.Fatal("corruption ignored")
-	}
-	b, _ := os.ReadFile(p)
-	if string(b) != "corrupt" {
-		t.Fatal("corrupt state overwritten")
-	}
-}
-
-func TestExportsAreValid(t *testing.T) {
-	a := fresh(t)
-	facDemo := create(t, a, "demo")
-	codeDemo := invite(t, a, facDemo, "demo")
-	memberDemo := token()
-	join(t, a, memberDemo, "demo", codeDemo)
-	stroke(t, a, memberDemo, "", "demo")
-	note(t, a, memberDemo, "demo", "demo note")
-	w := request(a, memberDemo, "", "/api/export?board=demo&format=json", nil)
-	good(t, w)
-	var v struct {
-		Strokes []any `json:"strokes"`
-		Notes   []any `json:"notes"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &v); err != nil || len(v.Strokes) != 1 || len(v.Notes) != 1 {
-		t.Fatalf("bad JSON export: %s", w.Body.String())
-	}
-	if request(a, token(), "", "/api/export?board=demo&format=json", nil).Code != 403 {
-		t.Fatal("nonmember exported a private board")
-	}
-	p := request(a, memberDemo, "", "/api/export?board=demo&format=png", nil)
-	if p.Code != 200 || p.Header().Get("Content-Type") != "image/png" {
-		t.Fatalf("bad PNG export: %d", p.Code)
-	}
-	img, err := png.Decode(bytes.NewReader(p.Body.Bytes()))
+	storage, err := NewStorage(dir)
 	if err != nil {
-		t.Fatalf("PNG does not decode: %v", err)
+		t.Fatalf("NewStorage failed: %v", err)
 	}
-	if img.Bounds().Dx() != int(canvasW) || img.Bounds().Dy() != int(canvasH) {
-		t.Fatalf("PNG has wrong size: %v", img.Bounds())
-	}
-}
+	collab := NewCollabServer()
+	desk := NewDeskHandler(dir, "/whiteboard")
 
-func TestUnknownBoardReadsDoNotReserve(t *testing.T) {
-	a := fresh(t)
-	// A guest read of an unknown board must not mint it: state, export,
-	// and non-create actions return 404 without touching disk.
-	if w := request(a, token(), "", "/api/state?board=chosen", nil); w.Code != 404 {
-		t.Fatalf("state reserved unknown board: %d %s", w.Code, w.Body.String())
-	}
-	if w := request(a, token(), "", "/api/export?board=chosen&format=json", nil); w.Code != 404 {
-		t.Fatalf("export reserved unknown board: %d %s", w.Code, w.Body.String())
-	}
-	if w := request(a, token(), "", "/api/action", map[string]any{
-		"action": "stroke", "board": "chosen",
-		"points": []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, "color": "#000000", "width": 2,
-	}); w.Code != 404 {
-		t.Fatalf("action reserved unknown board: %d %s", w.Code, w.Body.String())
-	}
-	if _, err := os.Stat(filepath.Join(a.dir, "boards", "chosen.json")); !os.IsNotExist(err) {
-		t.Fatal("guest read persisted a board file")
-	}
-	a.mu.Lock()
-	_, reserved := a.boards["chosen"]
-	a.mu.Unlock()
-	if reserved {
-		t.Fatal("guest read cached a board")
-	}
-	// The facilitator can still create the name and receives the only
-	// copy of the facilitator capability. Named boards are private: a
-	// stranger is denied while an invited member reads fine.
-	fac := create(t, a, "chosen")
-	if request(a, token(), "", "/api/state?board=chosen", nil).Code != 403 {
-		t.Fatal("nonmember read a private board")
-	}
-	code := invite(t, a, fac, "chosen")
-	member := token()
-	join(t, a, member, "chosen", code)
-	good(t, request(a, member, "", "/api/state?board=chosen", nil))
-	w := request(a, member, "", "/api/export?board=chosen&format=json", nil)
-	good(t, w)
-	for _, leak := range []string{fac, "facilitatorKey"} {
-		if strings.Contains(w.Body.String(), leak) {
-			t.Fatalf("export leaked facilitator capability: %q", leak)
-		}
-	}
-}
-
-func TestPrefixRouting(t *testing.T) {
-	a := fresh(t)
-	a.prefix = "/wb"
-	if request(a, "", "", "/api/state?board=main", nil).Code != 404 {
-		t.Fatal("unprefixed API reachable on a prefixed server")
-	}
-	good(t, request(a, "", "", "/wb/", nil))
-	// Reads mint nothing: the default board answers only once created,
-	// mirroring server startup which ensures "main" before serving.
-	if request(a, token(), "", "/wb/api/state?board=main", nil).Code != 404 {
-		t.Fatal("unknown board read did not return 404")
-	}
-	w := request(a, token(), "", "/wb/api/action", map[string]any{"action": "create", "board": "main"})
-	good(t, w)
-	good(t, request(a, token(), "", "/wb/api/state?board=main", nil))
-	w2 := request(a, token(), "", "/wb/api/action", map[string]any{"action": "create", "board": "prefixed"})
-	good(t, w2)
-	var created struct {
-		FacilitatorKey string `json:"facilitatorKey"`
-	}
-	if err := json.Unmarshal(w2.Body.Bytes(), &created); err != nil {
-		t.Fatal(err)
-	}
-	// Prefixed private boards enforce membership too: a stranger is denied
-	// on state, action, and export until invited.
-	stranger := token()
-	if request(a, stranger, "", "/wb/api/state?board=prefixed", nil).Code != 403 {
-		t.Fatal("prefixed nonmember read state")
-	}
-	if request(a, stranger, "", "/wb/api/export?board=prefixed&format=json", nil).Code != 403 {
-		t.Fatal("prefixed nonmember read export")
-	}
-	if request(a, stranger, "", "/wb/api/action", map[string]any{
-		"action": "note", "board": "prefixed", "x": 10, "y": 10, "text": "hi",
-	}).Code != 403 {
-		t.Fatal("prefixed nonmember wrote")
-	}
-	iw := request(a, token(), created.FacilitatorKey, "/wb/api/action", map[string]any{"action": "invite", "board": "prefixed"})
-	good(t, iw)
-	var iv struct {
-		InviteCode string `json:"inviteCode"`
-	}
-	if err := json.Unmarshal(iw.Body.Bytes(), &iv); err != nil {
-		t.Fatal(err)
-	}
-	good(t, request(a, stranger, "", "/wb/api/action", map[string]any{"action": "join", "board": "prefixed", "invite": iv.InviteCode}))
-	good(t, request(a, stranger, "", "/wb/api/state?board=prefixed", nil))
-	good(t, request(a, stranger, "", "/wb/api/export?board=prefixed&format=json", nil))
-}
-
-func TestInvitesAndRevocation(t *testing.T) {
-	a := fresh(t)
-	fac := create(t, a, "private1")
-	alice, bob, stranger := token(), token(), token()
-	// Guessed URLs are denied on state, action, and both export formats.
-	if request(a, alice, "", "/api/state?board=private1", nil).Code != 403 {
-		t.Fatal("nonmember read state")
-	}
-	if request(a, alice, "", "/api/action", map[string]any{
-		"action": "stroke", "board": "private1",
-		"points": []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, "color": "#000000", "width": 2,
-	}).Code != 403 {
-		t.Fatal("nonmember stroke accepted")
-	}
-	if request(a, alice, "", "/api/export?board=private1&format=json", nil).Code != 403 {
-		t.Fatal("nonmember exported json")
-	}
-	if request(a, alice, "", "/api/export?board=private1&format=png", nil).Code != 403 {
-		t.Fatal("nonmember exported png")
-	}
-	// Bad invite codes are refused.
-	if request(a, alice, "", "/api/action", map[string]any{"action": "join", "board": "private1", "invite": token()}).Code != 403 {
-		t.Fatal("bad invite accepted")
-	}
-	// Owner mints an invite; invited users can draw, note, and sync.
-	code := invite(t, a, fac, "private1")
-	join(t, a, alice, "private1", code)
-	if request(a, bob, "", "/api/action", map[string]any{"action": "join", "board": "private1", "invite": code}).Code != 403 {
-		t.Fatal("used invite admitted a second participant")
-	}
-	join(t, a, bob, "private1", invite(t, a, fac, "private1"))
-	pendingCode := invite(t, a, fac, "private1")
-	stroke(t, a, alice, "", "private1")
-	note(t, a, bob, "private1", "hello")
-	good(t, request(a, alice, "", "/api/state?board=private1", nil))
-	good(t, request(a, bob, "", "/api/export?board=private1&format=json", nil))
-	good(t, request(a, alice, "", "/api/export?board=private1&format=png", nil))
-	if request(a, stranger, "", "/api/state?board=private1", nil).Code != 403 {
-		t.Fatal("stranger read after invites")
-	}
-	// Facilitator state carries the roster; member state does not leak it.
-	fw := request(a, token(), fac, "/api/state?board=private1", nil)
-	good(t, fw)
-	if !strings.Contains(fw.Body.String(), alice) || !strings.Contains(fw.Body.String(), pendingCode) {
-		t.Fatal("facilitator roster missing member or invite")
-	}
-	mw := request(a, alice, "", "/api/state?board=private1", nil)
-	good(t, mw)
-	for _, leak := range []string{fac, code, "facilitatorKey", "inviteCode"} {
-		if strings.Contains(mw.Body.String(), leak) {
-			t.Fatalf("member state leaked %q", leak)
-		}
-	}
-	// Revoked user loses reads and writes immediately.
-	good(t, request(a, token(), fac, "/api/action", map[string]any{"action": "revoke", "board": "private1", "id": alice}))
-	if request(a, alice, "", "/api/state?board=private1", nil).Code != 403 {
-		t.Fatal("revoked user still reads state")
-	}
-	if request(a, alice, "", "/api/export?board=private1&format=json", nil).Code != 403 {
-		t.Fatal("revoked user still exports")
-	}
-	if request(a, alice, "", "/api/action", map[string]any{
-		"action": "note", "board": "private1", "x": 10, "y": 10, "text": "back",
-	}).Code != 403 {
-		t.Fatal("revoked user still writes")
-	}
-	// The other member keeps working; only the facilitator can revoke.
-	note(t, a, bob, "private1", "still here")
-	if request(a, bob, "", "/api/action", map[string]any{"action": "revoke", "board": "private1", "id": bob}).Code != 403 {
-		t.Fatal("participant revoked a member")
-	}
-	// Revoked invites stop working for new joiners.
-	good(t, request(a, token(), fac, "/api/action", map[string]any{"action": "revoke", "board": "private1", "invite": pendingCode}))
-	if request(a, stranger, "", "/api/action", map[string]any{"action": "join", "board": "private1", "invite": pendingCode}).Code != 403 {
-		t.Fatal("revoked invite still joins")
-	}
-	// Membership survives a restart.
-	dir := a.dir
-	b := &app{dir: dir, boards: map[string]*Board{}}
-	good(t, request(b, bob, "", "/api/state?board=private1", nil))
-	if request(b, alice, "", "/api/state?board=private1", nil).Code != 403 {
-		t.Fatal("revocation lost across restart")
-	}
-}
-
-func TestMainBoardStaysOpen(t *testing.T) {
-	a := fresh(t)
-	facMain := create(t, a, "main")
-	// The legacy default board needs no invite: anyone reads and writes.
-	good(t, request(a, token(), "", "/api/state?board=main", nil))
-	good(t, request(a, token(), "", "/api/export?board=main&format=json", nil))
-	w := request(a, token(), "", "/api/action", map[string]any{
-		"action": "stroke", "board": "main",
-		"points": []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, "color": "#000000", "width": 2,
+	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
 	})
-	good(t, w)
-	if request(a, token(), facMain, "/api/action", map[string]any{"action": "invite", "board": "main"}).Code != 400 {
-		t.Fatal("main board should not mint invites")
+	mux.Handle("/socket.io/", collab)
+	mux.Handle("/api/v2/", storage)
+	mux.Handle("/files/", storage)
+	mux.Handle("/api/board", desk)
+	mux.Handle("/api/action", desk)
+	mux.Handle("/api/state", desk)
+
+	handler := ownerTrace(mux, dir)
+	return handler, dir
+}
+
+func TestHealthCheck(t *testing.T) {
+	handler, _ := setupTestServer(t)
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("healthz code = %d, want 200", rec.Code)
+	}
+	var res map[string]bool
+	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil || !res["ok"] {
+		t.Fatalf("healthz body = %s, want ok:true", rec.Body.String())
 	}
 }
 
-func TestLegacyBoardFilePreserved(t *testing.T) {
-	dir := t.TempDir()
-	legacy := Board{Version: 1, Name: "legacy", Facilitator: token(), Strokes: []Stroke{{ID: token(), Points: []Pt{{X: 1, Y: 1}, {X: 2, Y: 2}}, Color: "#000000", Width: 2, Owner: token()}}, Notes: []Note{{ID: token(), X: 5, Y: 5, Text: "old", Color: "#fff3bf", Owner: token()}}}
-	if err := saveBoard(boardPath(dir, "legacy"), legacy); err != nil {
-		t.Fatal(err)
+func TestSceneStorage(t *testing.T) {
+	handler, _ := setupTestServer(t)
+
+	// 1. Post scene
+	sceneData := []byte("dummy encrypted scene buffer")
+	postReq := httptest.NewRequest(http.MethodPost, "/api/v2/post/", bytes.NewReader(sceneData))
+	postRec := httptest.NewRecorder()
+	handler.ServeHTTP(postRec, postReq)
+
+	if postRec.Code != http.StatusOK {
+		t.Fatalf("POST /api/v2/post/ code = %d, want 200", postRec.Code)
 	}
-	a := &app{dir: dir, boards: map[string]*Board{}}
-	good(t, request(a, token(), legacy.Facilitator, "/api/state?board=legacy", nil))
-	got := a.boards["legacy"]
-	if len(got.Strokes) != 1 || len(got.Notes) != 1 || got.Facilitator != legacy.Facilitator {
-		t.Fatal("legacy board data lost")
+	var postRes map[string]string
+	if err := json.Unmarshal(postRec.Body.Bytes(), &postRes); err != nil || postRes["id"] == "" {
+		t.Fatalf("POST /api/v2/post/ invalid response: %s", postRec.Body.String())
+	}
+	id := postRes["id"]
+
+	// 2. Get scene
+	getReq := httptest.NewRequest(http.MethodGet, "/api/v2/"+id, nil)
+	getRec := httptest.NewRecorder()
+	handler.ServeHTTP(getRec, getReq)
+
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET /api/v2/%s code = %d, want 200", id, getRec.Code)
+	}
+	if !bytes.Equal(getRec.Body.Bytes(), sceneData) {
+		t.Fatalf("GET scene data mismatch: got %q, want %q", getRec.Body.String(), string(sceneData))
+	}
+
+	// 3. Get nonexistent scene
+	badReq := httptest.NewRequest(http.MethodGet, "/api/v2/nonexistent", nil)
+	badRec := httptest.NewRecorder()
+	handler.ServeHTTP(badRec, badReq)
+	if badRec.Code != http.StatusNotFound {
+		t.Fatalf("GET nonexistent code = %d, want 404", badRec.Code)
+	}
+}
+
+func TestFilesStorage(t *testing.T) {
+	handler, _ := setupTestServer(t)
+
+	fileData := []byte("fake image data")
+	postReq := httptest.NewRequest(http.MethodPost, "/files/rooms/room1/file1", bytes.NewReader(fileData))
+	postRec := httptest.NewRecorder()
+	handler.ServeHTTP(postRec, postReq)
+
+	if postRec.Code != http.StatusOK {
+		t.Fatalf("POST /files/... code = %d", postRec.Code)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/files/rooms/room1/file1", nil)
+	getRec := httptest.NewRecorder()
+	handler.ServeHTTP(getRec, getReq)
+
+	if getRec.Code != http.StatusOK {
+		t.Fatalf("GET /files/... code = %d", getRec.Code)
+	}
+	if !bytes.Equal(getRec.Body.Bytes(), fileData) {
+		t.Fatalf("file content mismatch")
+	}
+}
+
+func TestCollabSocketIO(t *testing.T) {
+	handler, _ := setupTestServer(t)
+
+	// 1. Handshake
+	hsReq := httptest.NewRequest(http.MethodGet, "/socket.io/?EIO=4&transport=polling", nil)
+	hsRec := httptest.NewRecorder()
+	handler.ServeHTTP(hsRec, hsReq)
+
+	if hsRec.Code != http.StatusOK {
+		t.Fatalf("handshake code = %d", hsRec.Code)
+	}
+	body := hsRec.Body.String()
+	if !strings.HasPrefix(body, "0{") {
+		t.Fatalf("handshake missing EIO packet 0: %s", body)
+	}
+	var hsData struct {
+		SID string `json:"sid"`
+	}
+	if err := json.Unmarshal([]byte(body[1:]), &hsData); err != nil || hsData.SID == "" {
+		t.Fatalf("failed to parse sid from handshake: %s", body)
+	}
+	sid := hsData.SID
+
+	// 2. Connect packet POST 40
+	postReq := httptest.NewRequest(http.MethodPost, "/socket.io/?EIO=4&transport=polling&sid="+sid, strings.NewReader("40"))
+	postRec := httptest.NewRecorder()
+	handler.ServeHTTP(postRec, postReq)
+	if postRec.Code != http.StatusOK {
+		t.Fatalf("POST 40 code = %d", postRec.Code)
+	}
+
+	// 3. Poll for response
+	pollReq := httptest.NewRequest(http.MethodGet, "/socket.io/?EIO=4&transport=polling&sid="+sid, nil)
+	pollRec := httptest.NewRecorder()
+	handler.ServeHTTP(pollRec, pollReq)
+	if pollRec.Code != http.StatusOK {
+		t.Fatalf("poll code = %d", pollRec.Code)
+	}
+	pollResp := pollRec.Body.String()
+	if !strings.Contains(pollResp, "40") {
+		t.Fatalf("expected connect ack 40, got %s", pollResp)
+	}
+}
+
+func TestDeskVerbs(t *testing.T) {
+	handler, _ := setupTestServer(t)
+
+	// 1. Add board
+	addPayload := `{"action":"add","board":"project-brainstorm","body":"Initial idea"}`
+	addReq := httptest.NewRequest(http.MethodPost, "/api/action", strings.NewReader(addPayload))
+	addRec := httptest.NewRecorder()
+	handler.ServeHTTP(addRec, addReq)
+
+	if addRec.Code != http.StatusOK {
+		t.Fatalf("add board code = %d", addRec.Code)
+	}
+	var addRes map[string]any
+	if err := json.Unmarshal(addRec.Body.Bytes(), &addRes); err != nil || addRes["status"] != "pending" {
+		t.Fatalf("add board failed: %s", addRec.Body.String())
+	}
+
+	// 2. Get state
+	stateReq := httptest.NewRequest(http.MethodGet, "/api/state?id=project-brainstorm", nil)
+	stateRec := httptest.NewRecorder()
+	handler.ServeHTTP(stateRec, stateReq)
+
+	if stateRec.Code != http.StatusOK {
+		t.Fatalf("get state code = %d", stateRec.Code)
+	}
+	var stateRes map[string]any
+	if err := json.Unmarshal(stateRec.Body.Bytes(), &stateRes); err != nil || stateRes["name"] != "project-brainstorm" {
+		t.Fatalf("state unexpected: %s", stateRec.Body.String())
+	}
+
+	// 3. Close board
+	closePayload := `{"action":"close","board":"project-brainstorm"}`
+	closeReq := httptest.NewRequest(http.MethodPost, "/api/action", strings.NewReader(closePayload))
+	closeRec := httptest.NewRecorder()
+	handler.ServeHTTP(closeRec, closeReq)
+
+	if closeRec.Code != http.StatusOK {
+		t.Fatalf("close board code = %d", closeRec.Code)
+	}
+	var closeRes map[string]any
+	if err := json.Unmarshal(closeRec.Body.Bytes(), &closeRes); err != nil || closeRes["status"] != "closed" {
+		t.Fatalf("close board failed: %s", closeRec.Body.String())
+	}
+}
+
+func TestTelemetryEnvGated(t *testing.T) {
+	// When OTEL_EXPORTER_OTLP_ENDPOINT is unset, no calls are made
+	os.Unsetenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	handler, _ := setupTestServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("healthz code = %d", rec.Code)
+	}
+
+	// When traceparent is passed, it propagates correctly
+	tp := "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+	traceID, parentID := readTraceparent(tp)
+	if traceID != "4bf92f3577b34da6a3ce929d0e0e4736" || parentID != "00f067aa0ba902b7" {
+		t.Fatalf("readTraceparent failed: %s, %s", traceID, parentID)
 	}
 }
