@@ -192,7 +192,17 @@ site_shape_register() {
   echo "site: registered shaped app $name from $site_dir"
 }
 
+# The chat template (start a new site from a chat) lives in chat/chat.bsh.
+if [[ ${1:-} == new || ${1:-} == init ]] && [[ " $* " == *" --template chat "* ]]; then
+  shift
+  exec "$RUNNER" --bashsharp "$HERE/chat/chat.bsh" new "$@"
+fi
+
 case "${1:-}" in
+  chat)
+    shift
+    exec "$RUNNER" --bashsharp "$HERE/chat/chat.bsh" "$@"
+    ;;
   --skill)
     copying=false
     while IFS= read -r line; do

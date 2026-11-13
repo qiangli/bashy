@@ -1,0 +1,12 @@
+{
+  "server": {
+    "main": "node_modules/.bin/next",
+    "args": ["start", "--hostname", "127.0.0.1", "--port", "$PORT"]
+  },
+  "genie": {
+    "examples": [
+      "Make the landing page calmer and easier to scan",
+      "Add a pricing section with three plans"
+    ]
+  }
+}
