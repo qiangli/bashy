@@ -560,7 +560,7 @@ replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/
 // fork's fbembed branch. The replace is inert until the yoke pin above brings
 // that module into the graph; the old replace stays for the pinned yoke until
 // then. Bumping the yoke pin must also update internal/agentos/src_mount.go.
-replace github.com/gtsteffaniak/filebrowser/backend => github.com/qiangli/filebrowser-quantum/backend v0.0.0-20261113130027-f04d6fbf3fd6
+replace github.com/gtsteffaniak/filebrowser/backend => github.com/qiangli/filebrowser-quantum/backend v0.0.0-20261113140828-88b90a50350d
 
 // gotreesitter: pinned local fork of upstream v0.16.0 (../gotreesitter,
 // hosted as qiangli/gotreesitter, module path kept as upstream's) with the
