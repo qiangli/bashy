@@ -467,7 +467,7 @@ cmd_ensure() {
         return 0
     fi
 
-    install_chrome || fail "installation failed on $(detect_os)/$(detect_arch)" 1
+    install_chrome >&2 || fail "installation failed on $(detect_os)/$(detect_arch)" 1
     if ! bin=$(detect_chrome); then
         fail "install completed but Chrome executable was not found after installation" 1
     fi
