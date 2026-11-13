@@ -1,0 +1,69 @@
+#!/usr/bin/env -S bashy --bashsharp
+# FLUX.2 klein-4B draft rod. Model loading is local-only: never fetch weights.
+set -eu
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+. "$here/oss-preflight.bsh"
+
+ROD=image-klein
+ROLE=${BASHY_SVC_ROLE:-image.generate}
+OSS_ROD_TEXT=""
+die() { echo "$ROD: $*" >&2; exit "${2:-1}"; }
+
+if [ "${1:-}" = --doctor ]; then
+    [ "${2:-}" = --json ] || die "--doctor needs --json" 2
+    oss_doctor "has=uv|uv"
+    exit 0
+fi
+case $ROLE in image.generate|image.edit) ;; *) die "unsupported role: $ROLE" 2 ;; esac
+REQ=$(oss_request_file "$@") || exit $?
+oss_check_schema "$REQ" || exit 2
+prompt=$(oss_request_get "$REQ" prompt "")
+width=$(oss_request_get "$REQ" width 512)
+height=$(oss_request_get "$REQ" height 512)
+seed=$(oss_request_get "$REQ" seed 436)
+image=$(oss_request_get "$REQ" image "")
+[ -n "$prompt" ] || die "prompt is required" 2
+if [ "$ROLE" = image.edit ]; then
+    [ -n "$image" ] && [ -f "$image" ] || die "image.edit needs an existing --image" 2
+fi
+OUT=${BASHY_SVC_OUT:-}
+[ -n "$OUT" ] || OUT=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-image.XXXXXX")
+mkdir -p "$OUT"
+oss_preflight_gb "$ROD" 35 || exit 1
+
+if [ -n "${IMAGE_KLEIN_PY:-}" ]; then
+    gen=$IMAGE_KLEIN_PY
+    py=""
+else
+    root=$(oss_cache_root "$ROD")
+    model=${IMAGE_KLEIN_MODEL_DIR:-$root/models/FLUX.2-klein-4B}
+    # The 7.75 GB single-file transformer is not a full Diffusers pipeline.
+    # Check all components before provisioning packages or invoking inference.
+    for part in model_index.json transformer/config.json transformer/diffusion_pytorch_model.safetensors \
+        text_encoder/config.json text_encoder/model-00001-of-00002.safetensors \
+        text_encoder/model-00002-of-00002.safetensors text_encoder/model.safetensors.index.json \
+        tokenizer/tokenizer.json vae/config.json vae/diffusion_pytorch_model.safetensors \
+        scheduler/scheduler_config.json; do
+        [ -e "$model/$part" ] || die "offline model incomplete: missing $part under local FLUX.2 klein-4B snapshot"
+    done
+    case $(oss_os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
+    if [ ! -x "$py" ]; then
+        command -v uv >/dev/null || die "needs uv; install: $(oss_install_line uv)"
+        uv venv --python 3.11 "$root/.venv" >&2 || die "uv venv failed"
+        uv pip install --python "$py" 'diffusers==0.43.0' transformers accelerate safetensors pillow torch >&2 || die "package install failed"
+    fi
+    gen="$here/image-klein.py"
+fi
+
+if [ -n "$py" ]; then
+    made=$(HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 "$py" "$gen" \
+        --role "$ROLE" --model "$model" --prompt "$prompt" --width "$width" \
+        --height "$height" --seed "$seed" --image "$image" --outdir "$OUT") || die "offline inference failed"
+else
+    made=$("$gen" --role "$ROLE" --prompt "$prompt" --width "$width" \
+        --height "$height" --seed "$seed" --image "$image" --outdir "$OUT") || die "fixture inference failed"
+fi
+[ -n "$made" ] && [ -s "$made" ] || die "generator wrote no image"
+OSS_ROD_TEXT="oss draft via FLUX.2 klein-4B"
+oss_rod_result "$made" image/png

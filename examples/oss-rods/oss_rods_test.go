@@ -65,6 +65,9 @@ func bashyBin(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		t.Skip("fixture rods are POSIX paths")
 	}
+	if bin := os.Getenv("OSS_RODS_BASHY_BIN"); bin != "" {
+		return bin
+	}
 	buildOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -168,6 +171,18 @@ func rodDefs() []rodDef {
 			withInput: "image",
 		},
 		{
+			name: "image-klein", provides: []string{"image.generate", "image.edit"},
+			requires: "has=uv", role: "image.generate",
+			request: map[string]any{"prompt": "Nora on stage, blue light", "width": 512, "height": 512},
+			wantExt: ".png", wantMedia: "image/png",
+		},
+		{
+			name: "image-klein", provides: []string{"image.generate", "image.edit"},
+			requires: "has=uv", role: "image.edit",
+			request: map[string]any{"prompt": "same stage, warmer light"},
+			wantExt: ".png", wantMedia: "image/png", withInput: "image",
+		},
+		{
 			name: "narrate-local", provides: []string{"narrate"},
 			requires: "has=uv has=ffmpeg",
 			role:     "narrate",
@@ -256,6 +271,7 @@ func newFixture(t *testing.T) *fixture {
 	}
 	fakes := map[string]string{
 		"SONG_ACESTEP_PY": fakeWavGen, "IMAGE_QWEN_PY": fakePngGen,
+		"IMAGE_KLEIN_PY": fakePngGen,
 		"NARRATE_LOCAL_PY": fakeWavGen, "TRANSCRIBE_WHISPERX_PY": fakeSRTGen,
 	}
 	f.env = append(os.Environ(),

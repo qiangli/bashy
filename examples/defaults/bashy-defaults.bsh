@@ -121,6 +121,7 @@ search-codex|examples/service-door/search-codex.bsh|read,exec,net||search|vendor
 search-agy|examples/service-door/search-agy.bsh|read,exec,net||search|vendor|has=agy
 search-muse|examples/service-door/search-muse.bsh|read,exec,net||search|vendor|has=muse
 song-acestep|examples/oss-rods/song-acestep.bsh|read,write,exec,net||song|oss|has=uv has=ffmpeg has=git
+image-klein|examples/oss-rods/image-klein.bsh|read,write,exec,net||image.generate,image.edit|oss|has=uv
 image-qwen|examples/oss-rods/image-qwen.bsh|read,write,exec,net||image.generate,image.edit|oss|has=uv
 narrate-local|examples/oss-rods/narrate-local.bsh|read,write,exec,net||narrate|oss|has=uv has=ffmpeg
 transcribe-whisperx|examples/oss-rods/transcribe-whisperx.bsh|read,write,exec,net||transcribe|oss|has=uv has=ffmpeg

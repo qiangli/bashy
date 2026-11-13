@@ -62,6 +62,9 @@ func bashyBin(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake bashy is a POSIX shell fixture")
 	}
+	if bin := os.Getenv("DEFAULTS_BASHY_BIN"); bin != "" {
+		return bin
+	}
 	buildOnce.Do(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
@@ -120,6 +123,7 @@ case "$1 $2" in
     : > "$src/examples/defaults/bashy-defaults.bsh"
     : > "$src/examples/oss-rods/song-acestep.bsh"
     : > "$src/examples/oss-rods/image-qwen.bsh"
+    : > "$src/examples/oss-rods/image-klein.bsh"
     : > "$src/examples/oss-rods/narrate-local.bsh"
     : > "$src/examples/oss-rods/transcribe-whisperx.bsh"
     : > "$src/examples/api-rods/replicate-media.bsh"
@@ -214,7 +218,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "film: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-qwen: registered", "narrate-local: registered", "transcribe-whisperx: registered", "song-replicate: registered", "image-replicate: registered", "animate-replicate: registered", "replicate-media: registered"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "film: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-klein: registered", "image-qwen: registered", "narrate-local: registered", "transcribe-whisperx: registered", "song-replicate: registered", "image-replicate: registered", "animate-replicate: registered", "replicate-media: registered"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}

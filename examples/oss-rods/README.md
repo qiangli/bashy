@@ -11,12 +11,16 @@ it needs a 24 GB NVIDIA host the fleet has not confirmed (M3).
 |---|---|---|---|
 | `song-acestep` | `song` | ACE-Step 1.5, pinned commit `ca1e85fe` (2026-08-29), driven via its local REST API (`uv run acestep-api`, `POST /release_task`, `POST /query_result`, `GET /v1/audio`) | prompt/lyrics/duration → `song.wav` |
 | `image-qwen` | `image.generate`, `image.edit` | Qwen-Image-2511 + Qwen-Image-Edit-2511 via diffusers `0.43.0`; FP8/GGUF footprints need a 24 GB host | prompt/size/count (+ image/mask) → `image-NN.png` |
+| `image-klein` | `image.generate`, `image.edit` | FLUX.2 klein-4B, pinned local Diffusers snapshot; offline only | prompt/size (+ image for edit) → one PNG |
 | `narrate-local` | `narrate` | Chatterbox default, `kokoro:<voice>` light path; same pins as `media voice` | text/voice → `narration.wav` (silence-trimmed) |
 | `transcribe-whisperx` | `transcribe` | WhisperX `3.8.6` on Whisper large-v3, `--compute_type int8` for Mac/CPU | audio → `transcript.srt`/`.txt` |
 
-Light-model alternative for small Macs: Z-Image Turbo or FLUX.2 klein-4B
-(both Apache-2.0, verified below) as the `image-qwen` backend once a claimed
-host measures the Qwen-Image footprint. Mac fallback for transcribe:
+`image-klein` is the draft default; `image-qwen` remains an optional quality
+upgrade. The FLUX.2 single-file checkpoint alone is not a full Diffusers
+snapshot: stage its pinned transformer, text encoder, tokenizer, VAE, scheduler
+and `model_index.json` under `image-klein/models/FLUX.2-klein-4B` (or set
+`IMAGE_KLEIN_MODEL_DIR`). The rod checks these files before provisioning,
+loads only local files and sets Hub/Transformers offline flags. Mac fallback for transcribe:
 mlx-whisper (MIT).
 
 Every rod:
