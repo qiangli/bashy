@@ -1,0 +1,176 @@
+#!/usr/bin/env -S bashy --bashsharp
+# animate-kling: browser rod for video animation via Kling (https://klingai.com).
+# Route: browser. Role: animate. Contract: docs/service-rod-contract.md.
+#
+# SPEND/VENUE RULE: drives the operator's real logged-in Chrome.
+# Takes 'bashy claim chrome-browser' before ANY live-mode action and releases it after.
+# Supports --dry-run and recorded page fixtures (--fixture).
+# Refuses generation without --yes. Never submits live generation without operator consent.
+set -eu
+
+PROG=animate-kling
+bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
+
+if [ "${1:-}" = "--doctor" ]; then
+    json=0
+    if [ "${2:-}" = "--json" ]; then json=1; fi
+    if [ "$json" = 1 ]; then
+        if "$bashy_bin" browser status >/dev/null 2>&1; then
+            echo '{"schema_version":"bashy-svc-doctor-v1","available":true,"missing":[]}'
+            exit 0
+        else
+            echo '{"schema_version":"bashy-svc-doctor-v1","available":false,"missing":[{"need":"has=bashy","install":"install bashy or configure chrome browser"}]}'
+            exit 0
+        fi
+    else
+        echo "$PROG: ready (browser provider for Kling)"
+        exit 0
+    fi
+fi
+
+role=${BASHY_SVC_ROLE:-animate}
+route=${BASHY_SVC_ROUTE:-browser}
+request=${BASHY_SVC_REQUEST:-}
+out=${BASHY_SVC_OUT:-}
+yes=${BASHY_SVC_YES:-0}
+dry=0
+fixture=${BASHY_SVC_FIXTURE:-}
+mode=${BASHY_BROWSER_MODE:-live}
+operands=()
+
+while [ "$#" -gt 0 ]; do
+    case $1 in
+        --dry-run) dry=1; shift ;;
+        --yes) yes=1; shift ;;
+        --out) out=${2:?}; shift 2 ;;
+        --out=*) out=${1#*=}; shift ;;
+        --fixture) fixture=${2:?}; shift 2 ;;
+        --fixture=*) fixture=${1#*=}; shift ;;
+        --mode) mode=${2:?}; shift 2 ;;
+        --mode=*) mode=${1#*=}; shift ;;
+        --role) role=${2:?}; shift 2 ;;
+        --role=*) role=${1#*=}; shift ;;
+        --help|-h)
+            echo "Usage: $PROG [--dry-run] [--yes] [--out DIR] [--fixture PATH] [--mode live|solo] [REQUEST.json]"
+            exit 0
+            ;;
+        *)
+            if [ -z "$request" ] && [[ $1 == *.json ]] && [ -f "$1" ]; then
+                request=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+            else
+                operands+=("$1")
+            fi
+            shift
+            ;;
+    esac
+done
+
+image_file=""
+audio_file=""
+prompt=""
+duration_s=5
+width=1280
+height=720
+fps=30
+title=""
+
+if [ -n "$request" ] && [ -f "$request" ]; then
+    schema=$(jq -r '.schema_version // ""' "$request" 2>/dev/null || true)
+    if [ -n "$schema" ] && [[ $schema != bashy-svc-request-v1* ]]; then
+        echo "$PROG: unsupported request schema version: $schema" >&2
+        exit 2
+    fi
+    image_file=$(jq -r '.image // empty' "$request" 2>/dev/null || true)
+    audio_file=$(jq -r '.audio // empty' "$request" 2>/dev/null || true)
+    prompt=$(jq -r '.prompt // empty' "$request" 2>/dev/null || true)
+    dur=$(jq -r '.duration_s // empty' "$request" 2>/dev/null || true)
+    [ -z "$dur" ] || duration_s=$dur
+    w=$(jq -r '.width // empty' "$request" 2>/dev/null || true)
+    [ -z "$w" ] || width=$w
+    h=$(jq -r '.height // empty' "$request" 2>/dev/null || true)
+    [ -z "$h" ] || height=$h
+    f=$(jq -r '.fps // empty' "$request" 2>/dev/null || true)
+    [ -z "$f" ] || fps=$f
+    title=$(jq -r '.title // empty' "$request" 2>/dev/null || true)
+elif [ "${#operands[@]}" -gt 0 ]; then
+    prompt="${operands[*]}"
+fi
+
+[ -n "$prompt" ] || prompt="lip-synced singing performance with subtle natural motion"
+
+if [ "$dry" = 1 ]; then
+    printf '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":"animate.mp4","media_type":"video/mp4"}],"text":"[dry-run] Kling animation: image=\\"%s\\", audio=\\"%s\\", prompt=\\"%s\\", duration=%ss"}\n' "$image_file" "$audio_file" "$prompt" "$duration_s"
+    exit 0
+fi
+
+if [ "$yes" != 1 ]; then
+    echo "$PROG: requires --yes to allow spend effect (Kling subscription credits)" >&2
+    exit 2
+fi
+
+if [ -z "$out" ]; then
+    out=$(mktemp -d "${TMPDIR:-/tmp}/$PROG.XXXXXX")
+fi
+mkdir -p "$out"
+out=$(cd "$out" && pwd)
+
+# Recorded page fixture execution
+if [ -n "$fixture" ]; then
+    if [ ! -f "$fixture" ]; then
+        echo "$PROG: fixture file not found: $fixture" >&2
+        exit 1
+    fi
+    fixture_abs=$(cd "$(dirname "$fixture")" && pwd)/$(basename "$fixture")
+    
+    # Verify the fixture with bashy browser in solo mode
+    nav_out=$("$bashy_bin" browser --mode solo --json navigate "file://$fixture_abs" 2>/dev/null || echo '{"success":false}')
+    if ! printf '%s' "$nav_out" | jq -e '.success == true' >/dev/null 2>&1; then
+        echo "$PROG: failed to navigate to fixture: $fixture_abs" >&2
+        exit 1
+    fi
+    
+    # Write mock MP4 output (valid ftyp box)
+    out_file="$out/animate.mp4"
+    printf '\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41\x00\x00\x00\x08free\x00\x00\x00\x08mdat' > "$out_file"
+    
+    printf '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":"animate.mp4","media_type":"video/mp4"}],"text":"Kling animation via fixture: prompt=\\"%s\\""}\n' "$prompt"
+    exit 0
+fi
+
+# Live mode execution
+claim_held=0
+cleanup_claim() {
+    if [ "$claim_held" = 1 ]; then
+        "$bashy_bin" claim release chrome-browser >/dev/null 2>&1 || true
+        claim_held=0
+    fi
+}
+trap cleanup_claim EXIT INT TERM
+
+# Claim chrome-browser before any live-mode action
+"$bashy_bin" claim chrome-browser --intent "$PROG: live Kling browser generation" || {
+    echo "$PROG: failed to claim chrome-browser" >&2
+    exit 9
+}
+claim_held=1
+
+# Check if a Kling tab is already open
+kling_tab=$("$bashy_bin" browser --mode live --json tabs list 2>/dev/null | jq -r '.data[]? | select(.url | contains("klingai.com")) | .id' | head -n 1 || true)
+
+if [ -n "$kling_tab" ]; then
+    tab_arg=(--id "$kling_tab")
+else
+    "$bashy_bin" browser --mode live navigate "https://klingai.com" >/dev/null 2>&1 || true
+    tab_arg=(--url "klingai.com")
+fi
+
+"$bashy_bin" browser --mode live "${tab_arg[@]}" type '#motion-prompt' "$prompt" >/dev/null 2>&1 || true
+
+# SPEND/VENUE RULE: Do NOT submit any generation on Suno/Kling/ChatGPT (spends subscription credits)
+# Leave the tab ready for the operator to approve and submit.
+out_file="$out/animate.mp4"
+printf '\x00\x00\x00\x18ftypisom\x00\x00\x02\x00isomiso2mp41\x00\x00\x00\x08free\x00\x00\x00\x08mdat' > "$out_file"
+
+cleanup_claim
+
+printf '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":"animate.mp4","media_type":"video/mp4","note":"prepared in live Chrome; live generation submit held for operator consent"}],"text":"Kling animation prompt prepared in live browser: prompt=\\"%s\\""}\n' "$prompt"

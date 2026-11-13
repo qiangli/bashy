@@ -98,6 +98,9 @@ song|examples/service-door/service-door.bsh|read,write,exec,net|song
 animate|examples/service-door/service-door.bsh|read,write,exec,net|animate
 email|examples/service-door/service-door.bsh|read,write,exec,net|email.read
 drive|examples/service-door/service-door.bsh|read,write,exec,net|drive.read
+song-suno|examples/service-door/song-suno.bsh|read,write,exec,net,spend||song|browser|has=bashy
+image-chatgpt|examples/service-door/image-chatgpt.bsh|read,write,exec,net,spend||image.generate,image.edit|browser|has=bashy
+animate-kling|examples/service-door/animate-kling.bsh|read,write,exec,net,spend||animate|browser|has=bashy
 tavily|examples/service-door/search-provider.bsh|read,exec,net|tavily|search|api
 brave|examples/service-door/search-provider.bsh|read,exec,net|brave|search|api
 serper|examples/service-door/search-provider.bsh|read,exec,net|serper|search|api
@@ -191,7 +194,13 @@ cmd_apply() {
         fi
         set -- --set "exec.0=$(runtime_bin)" --set exec.1=--bashsharp --set "exec.2=$registry"
         [ -z "$role" ] || set -- "$@" --set "exec.3=$role"
-        [ -z "$provides" ] || set -- "$@" --set "provides.0=$provides"
+        if [ -n "$provides" ]; then
+            pi=0
+            for pr in ${provides//,/ }; do
+                set -- "$@" --set "provides.$pi=$pr"
+                pi=$((pi + 1))
+            done
+        fi
         [ -z "$route" ] || set -- "$@" --set "route=$route"
         [ -z "$requires" ] || set -- "$@" --set "requires=$requires"
         i=0

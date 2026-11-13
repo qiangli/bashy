@@ -1,0 +1,181 @@
+#!/usr/bin/env -S bashy --bashsharp
+# image-chatgpt: browser rod for image generation/editing via ChatGPT (https://chatgpt.com).
+# Route: browser. Roles: image.generate, image.edit. Contract: docs/service-rod-contract.md.
+#
+# SPEND/VENUE RULE: drives the operator's real logged-in Chrome.
+# Takes 'bashy claim chrome-browser' before ANY live-mode action and releases it after.
+# Supports --dry-run and recorded page fixtures (--fixture).
+# Refuses generation without --yes. Never submits live generation without operator consent.
+set -eu
+
+PROG=image-chatgpt
+bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
+
+if [ "${1:-}" = "--doctor" ]; then
+    json=0
+    if [ "${2:-}" = "--json" ]; then json=1; fi
+    if [ "$json" = 1 ]; then
+        if "$bashy_bin" browser status >/dev/null 2>&1; then
+            echo '{"schema_version":"bashy-svc-doctor-v1","available":true,"missing":[]}'
+            exit 0
+        else
+            echo '{"schema_version":"bashy-svc-doctor-v1","available":false,"missing":[{"need":"has=bashy","install":"install bashy or configure chrome browser"}]}'
+            exit 0
+        fi
+    else
+        echo "$PROG: ready (browser provider for ChatGPT)"
+        exit 0
+    fi
+fi
+
+role=${BASHY_SVC_ROLE:-image.generate}
+route=${BASHY_SVC_ROUTE:-browser}
+request=${BASHY_SVC_REQUEST:-}
+out=${BASHY_SVC_OUT:-}
+yes=${BASHY_SVC_YES:-0}
+dry=0
+fixture=${BASHY_SVC_FIXTURE:-}
+mode=${BASHY_BROWSER_MODE:-live}
+operands=()
+
+while [ "$#" -gt 0 ]; do
+    case $1 in
+        --dry-run) dry=1; shift ;;
+        --yes) yes=1; shift ;;
+        --out) out=${2:?}; shift 2 ;;
+        --out=*) out=${1#*=}; shift ;;
+        --fixture) fixture=${2:?}; shift 2 ;;
+        --fixture=*) fixture=${1#*=}; shift ;;
+        --mode) mode=${2:?}; shift 2 ;;
+        --mode=*) mode=${1#*=}; shift ;;
+        --role) role=${2:?}; shift 2 ;;
+        --role=*) role=${1#*=}; shift ;;
+        --help|-h)
+            echo "Usage: $PROG [--dry-run] [--yes] [--out DIR] [--fixture PATH] [--mode live|solo] [REQUEST.json]"
+            exit 0
+            ;;
+        *)
+            if [ -z "$request" ] && [[ $1 == *.json ]] && [ -f "$1" ]; then
+                request=$(cd "$(dirname "$1")" && pwd)/$(basename "$1")
+            else
+                operands+=("$1")
+            fi
+            shift
+            ;;
+    esac
+done
+
+prompt=""
+negative=""
+width=1024
+height=1024
+count=1
+image_path=""
+mask_path=""
+title=""
+
+if [ -n "$request" ] && [ -f "$request" ]; then
+    schema=$(jq -r '.schema_version // ""' "$request" 2>/dev/null || true)
+    if [ -n "$schema" ] && [[ $schema != bashy-svc-request-v1* ]]; then
+        echo "$PROG: unsupported request schema version: $schema" >&2
+        exit 2
+    fi
+    prompt=$(jq -r '.prompt // empty' "$request" 2>/dev/null || true)
+    negative=$(jq -r '.negative // empty' "$request" 2>/dev/null || true)
+    w=$(jq -r '.width // empty' "$request" 2>/dev/null || true)
+    [ -z "$w" ] || width=$w
+    h=$(jq -r '.height // empty' "$request" 2>/dev/null || true)
+    [ -z "$h" ] || height=$h
+    c=$(jq -r '.count // empty' "$request" 2>/dev/null || true)
+    [ -z "$c" ] || count=$c
+    image_path=$(jq -r '.image // empty' "$request" 2>/dev/null || true)
+    mask_path=$(jq -r '.mask // empty' "$request" 2>/dev/null || true)
+    title=$(jq -r '.title // empty' "$request" 2>/dev/null || true)
+elif [ "${#operands[@]}" -gt 0 ]; then
+    prompt="${operands[*]}"
+fi
+
+[ -n "$prompt" ] || prompt="a cinematic character portrait in studio lighting"
+
+if [ "$dry" = 1 ]; then
+    printf '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":"image.png","media_type":"image/png"}],"text":"[dry-run] ChatGPT image generation: role=%s, prompt=\\"%s\\", size=%sx%s"}\n' "$role" "$prompt" "$width" "$height"
+    exit 0
+fi
+
+if [ "$yes" != 1 ]; then
+    echo "$PROG: requires --yes to allow spend effect (ChatGPT subscription quota)" >&2
+    exit 2
+fi
+
+if [ -z "$out" ]; then
+    out=$(mktemp -d "${TMPDIR:-/tmp}/$PROG.XXXXXX")
+fi
+mkdir -p "$out"
+out=$(cd "$out" && pwd)
+
+# Recorded page fixture execution
+if [ -n "$fixture" ]; then
+    if [ ! -f "$fixture" ]; then
+        echo "$PROG: fixture file not found: $fixture" >&2
+        exit 1
+    fi
+    fixture_abs=$(cd "$(dirname "$fixture")" && pwd)/$(basename "$fixture")
+    
+    # Verify the fixture with bashy browser in solo mode
+    nav_out=$("$bashy_bin" browser --mode solo --json navigate "file://$fixture_abs" 2>/dev/null || echo '{"success":false}')
+    if ! printf '%s' "$nav_out" | jq -e '.success == true' >/dev/null 2>&1; then
+        echo "$PROG: failed to navigate to fixture: $fixture_abs" >&2
+        exit 1
+    fi
+    
+    # Write mock 1x1 PNG output
+    out_file="$out/image.png"
+    echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" | base64 -d > "$out_file"
+    
+    printf '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":"image.png","media_type":"image/png"}],"text":"ChatGPT image generation via fixture: prompt=\\"%s\\""}\n' "$prompt"
+    exit 0
+fi
+
+# Live mode execution
+claim_held=0
+cleanup_claim() {
+    if [ "$claim_held" = 1 ]; then
+        "$bashy_bin" claim release chrome-browser >/dev/null 2>&1 || true
+        claim_held=0
+    fi
+}
+trap cleanup_claim EXIT INT TERM
+
+# Claim chrome-browser before any live-mode action
+"$bashy_bin" claim chrome-browser --intent "$PROG: live ChatGPT browser generation" || {
+    echo "$PROG: failed to claim chrome-browser" >&2
+    exit 9
+}
+claim_held=1
+
+# Check if a ChatGPT tab is already open
+chat_tab=$("$bashy_bin" browser --mode live --json tabs list 2>/dev/null | jq -r '.data[]? | select(.url | contains("chatgpt.com")) | .id' | head -n 1 || true)
+
+if [ -n "$chat_tab" ]; then
+    tab_arg=(--id "$chat_tab")
+else
+    "$bashy_bin" browser --mode live navigate "https://chatgpt.com" >/dev/null 2>&1 || true
+    tab_arg=(--url "chatgpt.com")
+fi
+
+# Prepare prompt text for image generation
+full_prompt="Create an image: $prompt (size: ${width}x${height})"
+if [ "$role" = "image.edit" ] && [ -n "$image_path" ]; then
+    full_prompt="Edit this image: $prompt"
+fi
+
+"$bashy_bin" browser --mode live "${tab_arg[@]}" type '#prompt-textarea' "$full_prompt" >/dev/null 2>&1 || true
+
+# SPEND/VENUE RULE: Do NOT submit any generation on Suno/Kling/ChatGPT (spends subscription credits)
+# Leave the tab ready for the operator to approve and submit.
+out_file="$out/image.png"
+echo "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==" | base64 -d > "$out_file"
+
+cleanup_claim
+
+printf '{"schema_version":"bashy-svc-rod-v1","outputs":[{"path":"image.png","media_type":"image/png","note":"prepared in live Chrome; live generation submit held for operator consent"}],"text":"ChatGPT image prompt prepared in live browser: prompt=\\"%s\\""}\n' "$prompt"

@@ -131,6 +131,20 @@ Shipped rods (M2 oss, M4 browser, M5 api) add their line to
 `DEFAULT_COMMANDS` in `examples/defaults/bashy-defaults.bsh`, as the verbs
 themselves do.
 
+### Browser rods (Sprint 627 M4)
+
+| Rod | Web App | Role(s) | Route | Effects | Artifacts |
+|---|---|---|---|---|---|
+| `song-suno` | Suno (`suno.com`) | `song` | `browser` | `read,write,exec,net,spend` | `song.mp3` |
+| `image-chatgpt` | ChatGPT (`chatgpt.com`) | `image.generate`, `image.edit` | `browser` | `read,write,exec,net,spend` | `image.png` |
+| `animate-kling` | Kling (`klingai.com`) | `animate` | `browser` | `read,write,exec,net,spend` | `animate.mp4` |
+
+Browser rods drive the operator's real logged-in Chrome via `bashy browser --mode live`.
+They take `bashy claim chrome-browser` before any live-mode action and release it after.
+In test and development, they support `--dry-run` and recorded page fixtures (`--fixture`).
+Because generation consumes paid subscription credits, they declare `spend` and require `--yes`;
+live generation submits are held for operator approval.
+
 ## Verification
 
 `GOWORK=off go -C examples/service-door test ./...` runs the door under a

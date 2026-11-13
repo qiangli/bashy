@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Kling AI - Video Generation</title>
+</head>
+<body>
+  <div class="kling-studio">
+    <h1>Kling AI Video Generator</h1>
+    <div class="inputs">
+      <div class="field">
+        <label for="image-upload">Character Image</label>
+        <input type="file" id="image-upload" name="image" accept="image/*">
+      </div>
+      <div class="field">
+        <label for="audio-upload">Lip Sync Audio</label>
+        <input type="file" id="audio-upload" name="audio" accept="audio/*">
+      </div>
+      <div class="field">
+        <label for="motion-prompt">Prompt</label>
+        <textarea id="motion-prompt" placeholder="Describe the motion and action"></textarea>
+      </div>
+      <div class="field">
+        <label for="duration">Duration</label>
+        <select id="duration">
+          <option value="5">5s</option>
+          <option value="10">10s</option>
+        </select>
+      </div>
+      <button id="generate-btn" class="generate-btn" type="button">Generate</button>
+    </div>
+    <div class="preview-area">
+      <video id="video-player" src="take.mp4" controls></video>
+    </div>
+  </div>
+</body>
+</html>
