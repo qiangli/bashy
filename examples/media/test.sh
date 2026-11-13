@@ -201,6 +201,12 @@ banner_present 1.90; banner_absent 2.10
 banner_absent 4.50; banner_present 5.10
 banner_present 6.90; banner_absent 7.10
 pass "subs: burned banners flip within 100 ms of every cue edge"
+# Both languages are burned: the first (bold white) line must survive above
+# the second (yellow); a trailing newline once scrolled it off the banner.
+frame_at 1.00 "$TMP/got.png"
+ymax=$(ffmpeg -nostdin -hide_banner -i "$TMP/got.png" -vf "crop=1000:140:140:540,signalstats,metadata=print:key=lavfi.signalstats.YMAX:file=-" -f null - 2>/dev/null | grep -o 'YMAX=[0-9]*' | cut -d= -f2 | tail -n 1)
+awk -v y="$ymax" 'BEGIN{exit !(y >= 215)}' || fail "burned banner has no white first-language line (YMAX $ymax)"
+pass "subs: burned banners carry both languages"
 # Mismatched cue counts fail instead of silently misaligning.
 head -n 4 "$TMP/timing.es.srt" >"$TMP/short.es.srt"
 if media subs "$TMP/timing.srt" "$TMP/short.es.srt" -o "$TMP/bad.ass" 2>/dev/null; then fail "subs passed with mismatched cue counts"; fi

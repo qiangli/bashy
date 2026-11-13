@@ -978,7 +978,9 @@ burn_cues() {
 			line+=$'\r\n'
 			line+=$(banner_lines "$t2" "$cols" 33)
 		fi
-		line+=$'\r\n'$'\e[?25l'
+		# no trailing newline: in a cast exactly $rows tall it would scroll the
+		# first language off the top (S627 M8 draft 08)
+		line+=$'\e[?25l'
 		{
 			printf '{"version": 2, "width": %d, "height": %d}\n' "$cols" "$rows"
 			printf '[0.0, "o", %s]\n' "$(printf '%s' "$line" | json_string)"
