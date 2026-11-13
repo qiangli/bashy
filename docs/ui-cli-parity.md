@@ -194,3 +194,39 @@ have checkout registration scripts, while Video intentionally has only a script.
 | Chart join | `bashy chart join ID --invite CODE --participant TOKEN --json` |
 
 All write verbs above accept `--dry-run`. `--participant` carries the same member identity across separate CLI invocations.
+
+## Sprint 632: catalog apps (A1 audit, A2 notes mappings)
+
+### Notes — A2 data command mappings
+
+Source: `examples/notes/notes.bsh`, `notes_api.py`, pinned fork
+`d0c6e2a7afc6de17220f9b439bb077a5aa12f83f` (`proto/api/memo_service.proto`).
+All listed data verbs accept `--json`; every write accepts `--dry-run`.
+They use the existing principal's app token on the running local instance.
+App response/error objects pass through unchanged. Local errors use
+`{code,message}`; exit 2 means invalid arguments, exit 1 means API/transport
+failure. Dry-run is `{dryRun,method,url,body}` and performs no I/O. These are
+unit-verified mappings; running-fork authorization proof is still open.
+
+| Page action | Verb or recorded reason |
+|---|---|
+| Browse notes / next page / sort / filter | `notes list --page-size N --page-token TOKEN --order-by ORDER --filter CEL --json` |
+| Read note | `notes show ID --json` |
+| Create note | `notes add --content MARKDOWN --visibility private --json` |
+| Edit content / task checkboxes | `notes set ID --content MARKDOWN --json` (full replacement, including task markers) |
+| Edit tags | `notes set ID --content MARKDOWN --tags a,b --json`; tags are derived from content, so removing/changing inline hashtags is a content edit |
+| Change visibility | `notes set ID --visibility private\|protected\|public\|space --json` |
+| Pin / unpin | `notes set ID --pinned true\|false --json` |
+| Move to a space / remove placement | `notes set ID --space spaces/ID --json` / `--space ''` |
+| Archive / restore | `notes archive ID --json` / `notes unarchive ID --json` |
+| Browse archived notes | `notes list --state archived --json` |
+| Delete note and its comment descendants | `notes rm ID --json` |
+| Search notes | `notes search TEXT --filter CEL --json` |
+| Export one note's Markdown / JSON | `notes export ID --format markdown\|json`; `--json` always returns the app Memo object |
+| Full settings backup ZIP / import | Deferred: separate streamed file and staged import APIs; single-note export does not claim backup parity |
+| Attachments, relations, comments, reactions, share-link create/revoke | Deferred: separate subresources in the pinned API, outside A2's requested memo data verbs; content edits do not claim these actions |
+| Account, space membership, notification and instance settings | Deferred: account/administration API scope, outside A2's memo data verbs; no new identity or settings store introduced |
+| Shape wish / verify / preview / approve / undo | Existing `bashy shape` lifecycle, as documented in `examples/notes/README.md` |
+
+A1 owns the catalog audit section; these rows provide the A2 implementation
+mapping and explicit remaining scope for reconciliation with that audit.

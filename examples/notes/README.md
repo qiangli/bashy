@@ -71,3 +71,71 @@ The pinned tree contains no `ee/`, `premium/`, or `enterprise/` directory.
 Targeted command checks: `bash notes_test.sh`. Targeted source tests:
 `GOWORK=off CGO_ENABLED=0 go test ./cmd/memos ./server/frontend` from the
 installed source.
+
+## Data verbs (Sprint 632 A2)
+
+Data commands use Python 3.9+ (standard library only) and the pinned app's
+Connect JSON API, the same service used by the page. Set `NOTES_URL` to the
+**running instance for the selected principal**, using its numeric loopback
+address, port and optional proxy prefix. Set `NOTES_TOKEN` to that principal's
+existing app access token. These are not a Bashy pairing token or a new CLI
+identity. The command does not log in, mint, refresh or store tokens. An expired
+token gets the app's unauthenticated result; renew it through the existing app.
+A paired console also has its own device authentication: use the selected app
+instance's loopback backend URL, not an unauthenticated console URL.
+
+```sh
+bashy notes list --page-size 20 --json
+bashy notes show memos/ID --json
+bashy notes add --content 'Meeting notes' --tags work --visibility private --dry-run --json
+bashy notes set ID --content 'Revised notes' --tags work/project --json
+bashy notes set ID --visibility protected --pinned true --json
+bashy notes archive ID --dry-run --json
+bashy notes unarchive ID --json
+bashy notes rm ID --dry-run --json
+bashy notes search 'meeting' --filter '"work" in tags' --json
+bashy notes export ID --format markdown
+bashy notes export ID --format json
+```
+
+All data verbs take `--json`; writes take `--dry-run`. ID also accepts
+`memos/ID`. `list` and `search` return one API page; continue with
+`--page-token` from `nextPageToken`, preserving filters and ordering. Use
+`--state archived` for the archive, `--order-by 'update_time desc'` for order,
+and `--space spaces/ID` on add/set for placement. An empty `--space ''`
+removes placement. The server decides membership and visibility rules.
+
+Tags are output-only in the API, extracted from Markdown. Edit/remove tags by
+replacing `--content`, just as in the page editor. `--tags a,b` is a convenience
+that appends `#a #b` to that explicit content; it never strips hashtags from
+existing text or guesses how to rewrite code blocks. Hence `set --tags`
+requires the full replacement `--content`.
+
+`--json` preserves the app response object without wrapping it: a Memo for
+show/add/set/archive/unarchive/export, `{memos,nextPageToken}` for list/search,
+and `{}` for rm. App errors (including non-owner `permission_denied` and
+inaccessible private-note `not_found`) pass through unchanged, with exit 1.
+Local errors use the same `{code,message}` shape; invalid arguments exit 2,
+credential/transport failures exit 1. `--json` takes precedence over Markdown
+export: it returns the original Memo JSON, whose `content` holds the Markdown.
+Export is one memo's content/JSON, not the settings page's full backup ZIP.
+
+Dry-run produces `{dryRun:true,method:"POST",url,body}` without contacting the
+app or reading a token. It previews the request, not an authorization decision.
+The app remains the authority for ownership, administrative access, validation,
+and deletion of comment descendants. Credentials never appear in a manifest.
+Only numeric loopback endpoints are allowed; environment proxies and redirects
+are disabled so a local token cannot be forwarded to another destination.
+
+Run `bash examples/notes/notes_test.sh` from the Bashy repository. It includes
+13 isolated client tests and Bash# dispatch checks, requiring no fork or server.
+The fork and the no-phone-home gate are unchanged. The current source pin's
+static scan returns 10 explained hits: five indirect OTel module references
+(no exporter setup in application Go source), three opt-in upstream installer
+version-resolution lines (our installer uses an exact Git pin), one demo-only
+seed text containing the word telemetry, and one migrator comment. Demo seed
+content includes external sponsor images and is not used by the normal app;
+this is not evidence for a demo-mode offline guarantee. Runtime API/denial and
+outbound-traffic proof remain open: the claimed Linux gate was reachable but
+had no running notes instance or prepared notes image. No app was run on the
+dev box, and the gate claim was released.

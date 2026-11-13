@@ -19,6 +19,23 @@ notes install|start|stop|status|source
   stop     Stop the console started by this command.
   status   Show the managed console and source revision.
   source   Print the managed source directory.
+
+notes list [--filter CEL] [--state normal|archived] [--page-size N] [--page-token TOKEN]
+notes show ID
+notes add --content MARKDOWN [--tags a,b] [--visibility private|protected|public|space] [--space spaces/ID]
+notes set ID [--content MARKDOWN] [--tags a,b] [--visibility VALUE] [--pinned true|false] [--space spaces/ID]
+notes archive|unarchive|rm ID
+notes search TEXT [--filter CEL] [--page-size N] [--page-token TOKEN]
+notes export ID [--format markdown|json]
+  Data verbs require Python 3.9+, NOTES_URL (numeric loopback URL including port
+  and optional app proxy prefix), and NOTES_TOKEN (existing app bearer token).
+  --url overrides NOTES_URL. No identity or credential is created or saved.
+  All data verbs accept --json (the app response); writes accept --dry-run.
+  Dry-run prints a request manifest without contacting the app or reading a token.
+  Tags are Markdown hashtags: --tags appends them to explicit replacement --content.
+  list/search return one page and nextPageToken; --order-by passes API ordering.
+  export defaults to Markdown; --json always returns the original memo JSON.
+  rm also deletes comment descendants, as on the page.
 EOF
 }
 
@@ -92,6 +109,9 @@ running_pid() {
 
 case ${1:---help} in
   -h|--help|help) usage ;;
+  list|show|add|set|archive|unarchive|rm|search|export)
+    exec python3 "$here/notes_api.py" "$@"
+    ;;
   install) install ;;
   start)
     installed || { echo 'notes: run notes install first' >&2; exit 1; }
