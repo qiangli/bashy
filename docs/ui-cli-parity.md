@@ -135,7 +135,7 @@ parity. `--json` is the scriptable result path for registered desk commands.
 | Viewer | Book ID in desk JSON (`examples/desk/viewer/main.go:13-15`); app-local ID/URL, no kind ref | No viewer resolver (`internal/agentos/refs.go:42-62`) | Loopback book page and invite; same CLI/API actions (`examples/desk/viewer/cli.go:1,181-242`) | HTML/PDF export (`examples/desk/viewer/viewer.bsh:25-27`); exported files can use `git` | `add/append/open/show/list/share/close/export`; view-only set refusal (`examples/desk/viewer/cli.go:217-242`); **S2 ref gap**, otherwise verified OK |
 | Notepad | Item ID in desk JSON (`examples/desk/notepad/README.md:55`); app-local ID/URL, no kind ref | No notepad resolver (`internal/agentos/refs.go:42-62`) | Loopback edit/share; owner key and invite (`examples/desk/notepad/README.md:7-25`) | PDF/PNG/HTML/TXT export (`examples/desk/notepad/cli.go:431`); files can use `git` | `add/open/show/set/list/share/close/export/join` (`examples/desk/notepad/cli.go:326-471`); **S2 ref gap**, otherwise verified OK |
 | Brainstorm | Named session in saved JSON (`examples/brainstorm/README.md:106-111`); local name/URL, no kind ref | No brainstorm resolver (`internal/agentos/refs.go:42-62`) | Page supports ideas, votes, invites/revoke, phase/round controls (`examples/brainstorm/server/index.html:147-159,182-188`); facilitator guard (`examples/brainstorm/server/desk.go:250-356`) | Browser JSON/Markdown export (`examples/brainstorm/server/index.html:187-188`); backup/restore, files can use `git` | Registered desk verbs and phase/round flags (`examples/brainstorm/server/cli.go:70-105,110-130`); **new CLI action gap** and **S2 ref gap** |
-| Whiteboard | Named board in saved JSON (`examples/whiteboard/README.md:81-86`); local name/URL, no kind ref | No whiteboard resolver (`internal/agentos/refs.go:42-62`) | Page draws, locks, clears, invites/revokes; facilitator and participant checks (`examples/whiteboard/server/index.html:115-120`; `examples/whiteboard/server/desk.go:180-224`) | Browser JSON/PNG export; backup/restore, files can use `git` (`examples/whiteboard/server/index.html:119-120`) | Registered desk seven (`examples/whiteboard/server/cli.go:63-106`); **new CLI action gap** and **S2 ref gap** |
+| Whiteboard | Named board in saved JSON (`examples/whiteboard/README.md:1-32`); local name/URL, no kind ref | No whiteboard resolver (`internal/agentos/refs.go:42-62`) | Page draws, locks, shares via collab server; Excalidraw fork (`examples/whiteboard/server/desk.go:81-296`; `server/storage.go:32-90`) | Browser JSON/PNG/SVG export; backup/restore, files can use `git` | Fork wrapper `examples/whiteboard/whiteboard.bsh:16-21` is lifecycle-only (`install/start/stop/status/source`; former `server/cli.go` removed in Sprint 631 S5); **Sprint 632 A1 GAP owned by A5** |
 | Form | Form ID in desk JSON; no KB UUID/sequence (`examples/desk/form/README.md:162-175`) | No form resolver (`internal/agentos/refs.go:42-62`) | Loopback respondent answer/join and owner share; owner key gates show/set/share/close (`examples/desk/form/README.md:175-183`) | JSON answers via `show/wait`; saved files can use `git` | CLI has owner verbs, `reply` and a `join` that prints a URL (`examples/desk/form/server/cli.go:300-438`); **new CLI respondent-action gap**, **S2 ref gap** |
 | Chart | Chart ID in desk JSON (`examples/desk/chart/main.go:227-236`); app-local URL, no kind ref | No chart resolver (`internal/agentos/refs.go:42-62`) | Page create/share/revoke/join with owner guard (`examples/desk/chart/main.go:191-210,360-406`); source polling restricted to loopback (`examples/desk/chart/README.md:94-102`) | SVG chart; source file can use `git` (`examples/desk/chart/README.md:1-4,94-112`) | Checkout register exists (`examples/desk/chart/register.sh:10-24`), host command absent; CLI `add/open/show/set/list/share/close/revoke` but no `join` (`examples/desk/chart/cli.go:112-121`): **new CLI join gap**, **S2 ref gap** |
 | Recording | Single take at caller-selected path, no entity ref (`examples/record/record.bsh:14-30,127`) | No media kind (`internal/agentos/refs.go:42-62`) | Local one-take camera page; remote session refused (`examples/record/record.bsh:46-51`) | Mode-0600 photo/audio/video file; explicit file can use `git` or LFS (`examples/record/README.md:44-47`) | `record` registered on host; page is the necessary human capture step and CLI returns path (`examples/record/README.md:18-22`); **S4 file/Git journey to verify**, otherwise verified OK |
@@ -167,7 +167,7 @@ the audit does not implement it. Follow the KB guideline
 |---|---|
 | **Addressed by S2:** registered apps with `show <id> --json` use the generic `app:<command>/<id>` ref, for example `bashy define app:notepad/<id>`. The app's own access check remains authoritative. Media file proof is tracked separately. | S2 (media file proof also S4) |
 | KB has its own resolver/CLI but no Klatch or Viewer browser catalog bridge: `internal/agentos/refs.go:47`, `examples/desk/viewer/main.go:1-15`, `examples/klatch/register.sh:6-14`. | S3 |
-| Whiteboard page draw/clear/lock/invite revoke and JSON/PNG download exceed CLI desk seven: `examples/whiteboard/server/index.html:115-120`, `examples/whiteboard/server/cli.go:63-106`. | new (CLI parity; S6 must verify) |
+| Whiteboard page actions (boards list/new/show/lock, scene save/load, files, export): `examples/whiteboard/server/cli.go` was removed when Whiteboard was re-wrapped as an Excalidraw fork in Sprint 631 S5; current `whiteboard.bsh:16-21` is lifecycle-only. | **GAP owned by A5 (`876cd327`)** (refreshed in Sprint 632 A1 below) |
 | Brainstorm page idea edit/delete/vote/invite revoke and JSON/Markdown download exceed CLI desk seven: `examples/brainstorm/server/index.html:147-159,182-188`, `examples/brainstorm/server/cli.go:110-130`. | new (CLI parity; S6 must verify) |
 | Form respondent `answer` is an HTTP/page action, while CLI `join` only prints a URL and has no `answer` case: `examples/desk/form/server/main.go:345-367`, `examples/desk/form/server/cli.go:432-440`. | new (CLI parity; S6 must verify) |
 | Chart HTTP `join` lacks a CLI case: `examples/desk/chart/main.go:191-210`, `examples/desk/chart/cli.go:112-121`. | new (CLI parity; S6 must verify) |
@@ -178,13 +178,16 @@ have checkout registration scripts, while Video intentionally has only a script.
 
 ## Sprint 614 S11: desk page actions
 
+> [!NOTE]
+> Whiteboard note (refreshed Sprint 632 A1): The whiteboard rows below originally cited `examples/whiteboard/server/cli.go`, which no longer exists. Whiteboard was re-wrapped in Sprint 631 S5 as an Excalidraw fork (`qiangli/excalidraw-shape`), whose current custom command (`whiteboard.bsh:16-21`) exposes lifecycle only (`install/start/stop/status/source`). The server-backed verbs below are refreshed and tracked as GAPs owned by story A5 (`876cd327`), while canvas drawing actions are client-side canvas interactions.
+
 | Page action | CLI verb |
 |---|---|
-| Whiteboard draw | `bashy whiteboard draw BOARD --points JSON --json` |
-| Whiteboard clear | `bashy whiteboard clear BOARD --key KEY --json` |
-| Whiteboard lock/unlock | `bashy whiteboard lock BOARD --key KEY [--locked=false] --json` |
-| Whiteboard revoke member/invite | `bashy whiteboard revoke BOARD --key KEY --target ID --json` |
-| Whiteboard JSON/PNG download | `bashy whiteboard download BOARD --format json\|png [--output FILE] --json` |
+| Whiteboard draw | *Stale row* — see Sprint 632 A1: canvas drawing is client-side only (no server REST API) |
+| Whiteboard clear | *Stale row* — see Sprint 632 A1: client-side canvas reset |
+| Whiteboard lock/unlock | `bashy whiteboard lock BOARD --key KEY [--locked=false] --json` (Sprint 632 A5 GAP) |
+| Whiteboard revoke member/invite | *Stale row* — Excalidraw room sharing uses room IDs, see Sprint 632 A1 |
+| Whiteboard JSON/PNG download | `bashy whiteboard download BOARD --format json\|png [--output FILE] --json` (Sprint 632 A5 GAP) |
 | Brainstorm idea edit | `bashy brainstorm edit SESSION --card ID --body TEXT --participant TOKEN --json` |
 | Brainstorm idea delete | `bashy brainstorm delete SESSION --card ID --participant TOKEN --json` |
 | Brainstorm vote/undo | `bashy brainstorm vote SESSION --card ID --participant TOKEN --json` |
@@ -195,9 +198,174 @@ have checkout registration scripts, while Video intentionally has only a script.
 
 All write verbs above accept `--dry-run`. `--participant` carries the same member identity across separate CLI invocations.
 
-## Sprint 632: catalog apps (A1 audit, A2 notes mappings)
+## Sprint 632 A1: Shapeable apps parity audit (eight catalog apps)
 
-### Notes — A2 data command mappings
+Audit of web/page/HTTP actions against bashy CLI companion verbs for the eight catalog apps delivered in Sprint 631 and shaped for Sprint 632.
+
+Parity is **one-way**: every web, page, and HTTP action of a catalog app must have a companion bashy verb (`--json`; `--dry-run` on writes; same owner/member auth checks and the same denied result as the page). CLI-only features need no page.
+
+### Current state verified by review (commands run)
+1. `notes`, `board`, `whiteboard`, `table`: expose only lifecycle verbs (`install|start|stop|status|source`) via their `.bsh` command wrappers; all application data and management actions are GAPs.
+   - Verification command: `bashy/examples/<app>/<app>.bsh --help` -> only `install|start|stop|status|source` printed.
+2. `form`: exposes action verbs (`add`, `reply`, `ask`, `open`, `show`, `set`, `list`, `share`, `close`, `wait`, `join`, `answer`).
+   - Verification command: `bashy --bashsharp bashy/examples/desk/form/form.bsh --help` -> advertises `append` but not `join` or `answer`; `form.bsh:97` case statement handles `join` but omits `answer` (which falls through to `*)`); `server/cli.go:273,466` implements both `answer` and `join`. Owned by A6 (`e736fdb1`).
+3. `clips`: exposes action verbs (`queue`, `status`, `work`, `take`, `serve`, `doctor`). 100% parity across all web/HTTP actions.
+   - Verification command: `bashy --bashsharp bashy/examples/clip/clip.bsh --help`.
+4. `site` (+ chat template): static company site exposes `new`, `build`, `serve`, `edit`, `publish-outpost`, `publish-pages`, `shape-register`. Chat template (`site.bsh chat` / `site new --template chat`) exposes `new`, `start`, `stop`, `status`, `source`; web chat prompts and project export are GAPs owned by A6 (`e736fdb1`).
+   - Verification command: `bashy --bashsharp bashy/examples/site/site.bsh --help` and `bashy --bashsharp bashy/examples/site/chat/chat.bsh --help`.
+5. `files`: outpost built-in File Browser (embedding `qiangli/filebrowser-quantum`, Apache-2.0, in `outpost/cmd/outpost/capability_files.go`) is reached through `bashy outpost connect`, `bashy outpost ssh`, and `bashy outpost scp` (`bashy/docs/ui-cli-parity.md:87`). All file browsing, transfer, and edit actions are covered.
+
+### Parity matrix
+
+| App | Action / HTTP Endpoint | Existing verb or GAP | Evidence (file:line or command output) |
+|---|---|---|---|
+| **notes** | Install pinned source build | `bashy notes install` | `examples/notes/notes.bsh:37-81` |
+| **notes** | Start console and app server | `bashy notes start` | `examples/notes/notes.bsh:96-106` |
+| **notes** | Stop app console | `bashy notes stop` | `examples/notes/notes.bsh:107-115` |
+| **notes** | Check status and revision pin | `bashy notes status` | `examples/notes/notes.bsh:116-119` |
+| **notes** | Print managed source directory | `bashy notes source` | `examples/notes/notes.bsh:120` |
+| **notes** | List memos timeline (`GET /notes/api/v1/memos`) | **GAP (A2 `57624adf`)** | `examples/notes/notes.bsh:16-21`, `web-prefix.patch:connect.ts:66` |
+| **notes** | View single memo (`GET /notes/api/v1/memos/{id}`) | **GAP (A2 `57624adf`)** | `examples/notes/notes.bsh:16-21` |
+| **notes** | Create/post memo (`POST /notes/api/v1/memos`) | **GAP (A2 `57624adf`)** | `examples/notes/notes.bsh:16-21` |
+| **notes** | Edit/update memo (`PATCH /notes/api/v1/memos/{id}`) | **GAP (A2 `57624adf`)** | `examples/notes/notes.bsh:16-21` |
+| **notes** | Archive memo (`PATCH /notes/api/v1/memos/{id}` state=ARCHIVED) | **GAP (A2 `57624adf`)** | `examples/notes/notes.bsh:16-21` |
+| **notes** | Unarchive memo (`PATCH /notes/api/v1/memos/{id}` state=NORMAL) | **GAP (A2 `57624adf`)** | `examples/notes/notes.bsh:16-21` |
+| **notes** | Delete memo (`DELETE /notes/api/v1/memos/{id}`) | **GAP (A2 `57624adf`)** | `examples/notes/notes.bsh:16-21` |
+| **notes** | Search/filter memos by text/tag (`GET /notes/api/v1/memos:search`) | **GAP (A2 `57624adf`)** | `examples/notes/notes.bsh:16-21` |
+| **notes** | Export memos to Markdown/JSON (`GET /notes/api/v1/memos:export`) | **GAP (A2 `57624adf`)** | `examples/notes/notes.bsh:16-21` |
+| **notes** | List tags (`GET /notes/api/v1/tags`) | **GAP (A2 `57624adf`)** | `examples/notes/notes.bsh:16-21` |
+| **notes** | Upload attachment/resource (`POST /notes/api/v1/resources`) | **GAP (A2 `57624adf`)** | `examples/notes/notes.bsh:16-21` |
+| **notes** | Live update stream (`GET /notes/api/sse`) | Server stream transport; companion verb `notes list` (A2) | `examples/notes/web-prefix.patch:useLiveMemoRefresh.ts:402` |
+| **form** | View form loopback page (`GET /`) | Browser step / `bashy form open ID` (prints URL) | `examples/desk/form/server/main.go:302-306`, `server/cli.go:369-377` |
+| **form** | Health check (`GET /healthz`) | `curl http://127.0.0.1:18107/healthz` | `examples/desk/form/server/main.go:308-311` |
+| **form** | Form state query (`GET /api/state?id=ID`) | `bashy form show ID --json` | `examples/desk/form/server/main.go:312-328`, `server/cli.go:379-388` |
+| **form** | Render Markdown preview (`POST /api/render`) | Internal render helper / `bashy form reply` | `examples/desk/form/server/main.go:329-332`, `server/cli.go:291-311` |
+| **form** | Define/create form (`POST /api/action` action="add") | `bashy form add --def FILE [--title TITLE] --json` | `examples/desk/form/server/main.go:345-346`, `server/cli.go:334-367` |
+| **form** | Prefill/reply assist form (`POST /api/action` action="reply") | `bashy form reply --extract FILE --values FILE --refusals FILE --json` | `examples/desk/form/server/main.go:347-348`, `server/cli.go:291-311` |
+| **form** | Create questionnaire (`POST /api/action` action="ask") | `bashy form ask --def FILE [--title TITLE] --json` | `examples/desk/form/server/main.go:349-350`, `server/cli.go:313-332` |
+| **form** | Surface form URL (`POST /api/action` action="open") | `bashy form open ID --json` | `examples/desk/form/server/main.go:351-352`, `server/cli.go:369-377` |
+| **form** | Read form and answers (`POST /api/action` action="show") | `bashy form show ID --json` | `examples/desk/form/server/main.go:353-354`, `server/cli.go:379-388` |
+| **form** | Mutate/prefill answers (`POST /api/action` action="set") | `bashy form set ID --answer FIELD=VALUE --json` | `examples/desk/form/server/main.go:355-356`, `server/cli.go:414-438` |
+| **form** | Close form (`POST /api/action` action="close") | `bashy form close ID --json` | `examples/desk/form/server/main.go:357-358`, `server/cli.go:456-464` |
+| **form** | Submit respondent answer (`POST /api/action` action="answer") | `bashy form answer ID --answer FIELD=VALUE [--complete] --json` | `examples/desk/form/server/main.go:359-360`, `server/cli.go:273-289` |
+| **form** | List forms (`POST /api/action` action="list") | `bashy form list --json` | `examples/desk/form/server/main.go:361-362`, `server/cli.go:440-444` |
+| **form** | Share form with members (`POST /api/action` action="share") | `bashy form share ID --json` | `examples/desk/form/server/main.go:363-364`, `server/cli.go:446-454` |
+| **form** | Join form with invite code (`POST /api/action` action="join") | `bashy form join ID --invite CODE --json` | `examples/desk/form/server/main.go:365-366`, `server/cli.go:466-474` |
+| **form** | Wait for answers | `bashy form wait ID [--timeout DURATION] --json` | `examples/desk/form/server/cli.go:389-412` |
+| **form** | Foreground service lifecycle | `bashy form serve` / `bashy form stop` | `examples/desk/form/form.bsh:83-96` |
+| **form** | CLI help text / case statement drift | **GAP (A6 `e736fdb1`)** — `--help` advertises `append` instead of `join`/`answer`; case handles `join` but omits `answer` | `examples/desk/form/form.bsh:81,97`, `server/cli.go:273,466` |
+| **clips** | View library page (`GET /`) | Browser step / `bashy clips serve` | `examples/clip/server/page.go:58-70`, `clip.bsh:84-93` |
+| **clips** | Service health check (`GET /healthz`) | `bashy clips doctor` | `examples/clip/server/page.go:20-23`, `clip.bsh:80` |
+| **clips** | List jobs and status (`GET /api/jobs`) | `bashy clips status [ID] [--json]` | `examples/clip/server/page.go:24-32`, `server/main.go:222-243` |
+| **clips** | Queue video segment (`POST /api/jobs` kind="video") | `bashy clips queue --from VIDEO.mp4 --start S --end E [--name NAME]` | `examples/clip/server/page.go:33-44`, `server/main.go:121-196` |
+| **clips** | Queue asciicast render (`POST /api/jobs` kind="cast") | `bashy clips queue --from SCENE.cast [--start S --end E] [--format gif\|mp4]` | `examples/clip/server/page.go:33-44`, `server/main.go:121-196` |
+| **clips** | Queue screen recording (`POST /api/jobs` kind="screen") | `bashy clips queue screen --seconds S [--display :0.0] [--size WxH]` | `examples/clip/server/page.go:33-44`, `server/main.go:121-196` |
+| **clips** | Stream/play clip artifact (`GET /media/{name}`) | `bashy clips take ID` (outputs finished artifact path) | `examples/clip/server/page.go:50-57`, `server/main.go:245-274` |
+| **clips** | Render queued jobs in background | `bashy clips work [--once] [--verbose]` | `examples/clip/server/worker.go`, `clip.bsh:80` |
+| **clips** | Start library server | `bashy clips serve` / `bashy clips stop` | `examples/clip/clip.bsh:84-96` |
+| **site** | Initialize new company site | `bashy site new [DIR] [--title TITLE]` | `examples/site/site.bsh:46-90` |
+| **site** | Generate static HTML | `bashy site build [DIR]` | `examples/site/site.bsh:92-119` |
+| **site** | Serve static site on console | `bashy site serve [DIR] [NAME]` | `examples/site/site.bsh:121-142` |
+| **site** | Open Sveltia CMS & visual editor | `bashy site edit [NAME]` | `examples/site/site.bsh:144-148` |
+| **site** | Publish to Outpost | `bashy site publish-outpost NAME` | `examples/site/site.bsh:150-156` |
+| **site** | Publish to GitHub Pages | `bashy site publish-pages [DIR] REPO [BRANCH]` | `examples/site/site.bsh:158-184` |
+| **site** | Register as shapeable app | `bashy site shape-register [DIR] [NAME]` | `examples/site/site.bsh:186-193` |
+| **site** | Content authoring in Sveltia CMS | Direct markdown/file editing or Git commit | `examples/site/site.bsh:20-28` |
+| **site (chat)** | Install chat site from fork | `bashy site new --template chat [NAME] [--port PORT]` | `examples/site/chat/chat.bsh:53-93` |
+| **site (chat)** | Start chat app service | `bashy site start [NAME]` | `examples/site/chat/chat.bsh:107-126` |
+| **site (chat)** | Stop chat app service | `bashy site stop [NAME]` | `examples/site/chat/chat.bsh:128-139` |
+| **site (chat)** | Status of chat app service | `bashy site status [NAME]` | `examples/site/chat/chat.bsh:141-155` |
+| **site (chat)** | Print chat source directory | `bashy site source [NAME]` | `examples/site/chat/chat.bsh:157-160` |
+| **site (chat)** | Web chat prompt to generate/edit site | **GAP (A6 `e736fdb1`)** — no companion CLI prompt verb | `examples/site/chat/chat.bsh:16-29` |
+| **site (chat)** | Export generated project bundle | **GAP (A6 `e736fdb1`)** — no companion CLI export verb | `examples/site/chat/chat.bsh:16-29` |
+| **board** | Install pinned source build | `bashy board install` | `examples/board/board.bsh:38-111` |
+| **board** | Start console and API/Postgres | `bashy board start` | `examples/board/board.bsh:126-136` |
+| **board** | Stop app console | `bashy board stop` | `examples/board/board.bsh:137-145` |
+| **board** | Check status and revision pin | `bashy board status` | `examples/board/board.bsh:146-149` |
+| **board** | Print managed source directory | `bashy board source` | `examples/board/board.bsh:150` |
+| **board** | List projects (`GET /board/api/projects`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21`, `board-console/main.go:80-87` |
+| **board** | Create project (`POST /board/api/projects`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | Show project details (`GET /board/api/projects/{id}`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | Update project (`PATCH /board/api/projects/{id}`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | Delete project (`DELETE /board/api/projects/{id}`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | List tasks in project (`GET /board/api/projects/{id}/tasks`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | Add task / card (`POST /board/api/tasks`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | Show task details (`GET /board/api/tasks/{id}`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | Set / update task (`PATCH /board/api/tasks/{id}`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | Move task column/status (`PATCH /board/api/tasks/{id}/move`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | Delete task (`DELETE /board/api/tasks/{id}`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | List columns (`GET /board/api/projects/{id}/columns`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | Add column (`POST /board/api/projects/{id}/columns`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | List comments on task (`GET /board/api/tasks/{id}/comments`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | Add comment to task (`POST /board/api/tasks/{id}/comments`) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **board** | Export board tasks (JSON/CSV) | **GAP (A3 `c2f2f915`)** | `examples/board/board.bsh:16-21` |
+| **whiteboard** | Install pinned source build | `bashy whiteboard install` | `examples/whiteboard/whiteboard.bsh:40-90` |
+| **whiteboard** | Start console and server | `bashy whiteboard start` | `examples/whiteboard/whiteboard.bsh:105-120` |
+| **whiteboard** | Stop app console | `bashy whiteboard stop` | `examples/whiteboard/whiteboard.bsh:121-129` |
+| **whiteboard** | Check status and revision pin | `bashy whiteboard status` | `examples/whiteboard/whiteboard.bsh:130-133` |
+| **whiteboard** | Print managed source directory | `bashy whiteboard source` | `examples/whiteboard/whiteboard.bsh:134-137` |
+| **whiteboard** | List boards (`GET /whiteboard/api/board` or action="list") | **GAP (A5 `876cd327`)** | `examples/whiteboard/server/desk.go:81-119` |
+| **whiteboard** | Create/add board (`POST /whiteboard/api/action` action="add") | **GAP (A5 `876cd327`)** | `examples/whiteboard/server/desk.go:188-217` |
+| **whiteboard** | Show board state (`GET /whiteboard/api/state?id=ID`) | **GAP (A5 `876cd327`)** | `examples/whiteboard/server/desk.go:121-154,218-240` |
+| **whiteboard** | Set board note (`POST /whiteboard/api/action` action="set") | **GAP (A5 `876cd327`)** | `examples/whiteboard/server/desk.go:241-263` |
+| **whiteboard** | Close/lock board (`POST /whiteboard/api/action` action="close") | **GAP (A5 `876cd327`)** | `examples/whiteboard/server/desk.go:264-281` |
+| **whiteboard** | Share room link (`POST /whiteboard/api/action` action="share") | **GAP (A5 `876cd327`)** | `examples/whiteboard/server/desk.go:285-296` |
+| **whiteboard** | Save scene buffer (`POST /whiteboard/api/v2/post`) | **GAP (A5 `876cd327`)** | `examples/whiteboard/server/storage.go:55-73` |
+| **whiteboard** | Load scene buffer (`GET /whiteboard/api/v2/{id}`) | **GAP (A5 `876cd327`)** | `examples/whiteboard/server/storage.go:75-89` |
+| **whiteboard** | Upload asset file (`POST /whiteboard/files/{path}`) | **GAP (A5 `876cd327`)** | `examples/whiteboard/server/storage.go:91-100` |
+| **whiteboard** | Download asset file (`GET /whiteboard/files/{path}`) | **GAP (A5 `876cd327`)** | `examples/whiteboard/server/storage.go:91-100` |
+| **whiteboard** | Export board to PNG/SVG/JSON | **GAP (A5 `876cd327`)** | `examples/whiteboard/whiteboard.bsh:16-21` |
+| **whiteboard** | Freehand canvas drawing | Client-side React state, ephemeral Socket.IO diffs; no server REST API | `examples/whiteboard/server/collab.go:50-70` |
+| **whiteboard** | Insert shape/arrow/text tool | Client-side React state; no server REST API | `examples/whiteboard/server/collab.go` |
+| **whiteboard** | Move/resize/rotate element | Client-side React state; no server REST API | In-browser canvas event |
+| **whiteboard** | Clear canvas | Client-side canvas reset; no server REST API | In-browser canvas event |
+| **whiteboard** | Zoom, pan, grid, theme toggle | Client-side user display preference; no server state | In-browser canvas event |
+| **table** | Install pinned source build | `bashy table install` | `examples/table/table.bsh:47-102` |
+| **table** | Start console and Grist runtime | `bashy table start` | `examples/table/table.bsh:117-133` |
+| **table** | Stop app console | `bashy table stop` | `examples/table/table.bsh:134-142` |
+| **table** | Check status and revision pin | `bashy table status` | `examples/table/table.bsh:143-146` |
+| **table** | Print managed source directory | `bashy table source` | `examples/table/table.bsh:147` |
+| **table** | List documents (`GET /table/api/docs`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | Create document (`POST /table/api/docs`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | Show document details (`GET /table/api/docs/{docId}`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | Delete document (`DELETE /table/api/docs/{docId}`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | List tables in document (`GET /table/api/docs/{docId}/tables`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | Create table (`POST /table/api/docs/{docId}/tables`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | List columns (`GET /table/api/docs/{docId}/tables/{tableId}/columns`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | Add column (`POST /table/api/docs/{docId}/tables/{tableId}/columns`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | List records (`GET /table/api/docs/{docId}/tables/{tableId}/records`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | Add records (`POST /table/api/docs/{docId}/tables/{tableId}/records`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | Set / update records (`PATCH /table/api/docs/{docId}/tables/{tableId}/records`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | Delete records (`POST /table/api/docs/{docId}/tables/{tableId}/data/delete`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | List views and page layouts | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | Export table to CSV (`GET /table/api/docs/{docId}/download/csv`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | Export / download full document | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **table** | Import CSV to table (`POST /table/api/docs/{docId}/tables/{tableId}/data`) | **GAP (A4 `c49679cb`)** | `examples/table/table.bsh:17-22` |
+| **files** | Reach built-in File Browser | `bashy outpost connect`, `bashy outpost ssh\|scp` | `bashy/docs/ui-cli-parity.md:87`, `outpost/cmd/outpost/capability_files.go:16-105` |
+| **files** | Authenticate / login (`POST /api/login`) | `bashy outpost register` / pair credential / local tunnel auth | `outpost/cmd/outpost/capability_files.go:34-45` |
+| **files** | Browse directory (`GET /api/resources/{path}`) | `bashy outpost ssh "ls -la {path}"` / `bashy outpost connect` | `bashy/docs/ui-cli-parity.md:87` |
+| **files** | Read / download file (`GET /api/raw/{path}`) | `bashy outpost scp HOST:{path} LOCAL` or `bashy outpost ssh "cat {path}"` | `bashy/docs/ui-cli-parity.md:87` |
+| **files** | Upload file (`POST /api/resources/{path}`) | `bashy outpost scp LOCAL HOST:{path}` (requires `allow_write`) | `outpost/cmd/outpost/capability_files.go:27-30` |
+| **files** | Create directory (`POST /api/resources/{path}/`) | `bashy outpost ssh "mkdir -p {path}"` (requires `allow_write`) | `outpost/cmd/outpost/capability_files.go:27-30` |
+| **files** | Edit / save text file (`PUT /api/resources/{path}`) | `bashy outpost scp` / remote editor via `bashy outpost ssh` / `connect` | `outpost/cmd/outpost/capability_files.go:27-30` |
+| **files** | Rename / move file or directory (`PATCH /api/resources/{path}`) | `bashy outpost ssh "mv {old} {new}"` (requires `allow_write`) | `outpost/cmd/outpost/capability_files.go:27-30` |
+| **files** | Delete file or directory (`DELETE /api/resources/{path}`) | `bashy outpost ssh "rm -rf {path}"` (requires `allow_write`) | `outpost/cmd/outpost/capability_files.go:27-30` |
+| **files** | Preview media, image, or document | Companion CLI inspection via `bashy lens`, `cat`, `ffprobe`, `outpost scp` | Read-only inspect, covered by CLI |
+
+### Gap ownership & phase-1 story handoff
+
+Every GAP identified in the audit is strictly owned by an active phase-1 story in Sprint 632:
+
+1. **A2 notes (`57624adf88eb`):** owns all 10 notes data and management gaps (`list`, `show`, `add`, `set`, `archive`, `unarchive`, `rm`, `search`, `export`, `tags`, `upload`).
+2. **A3 board (`c2f2f915c54d`):** owns all 14 board gaps (`projects list/add/show/set/rm`, `tasks list/add/show/set/move/rm`, `columns list/add`, `comments add/list`, `export`).
+3. **A4 table (`c49679cb7173`):** owns all 14 table gaps (`docs list/add/show/rm`, `tables list/add`, `columns list/add`, `records list/add/set/rm`, `views list`, `export csv/doc`, `import csv`).
+4. **A5 whiteboard (`876cd327a5e6`):** owns all 10 server-backed whiteboard gaps (`boards list/add/show/set/lock/share`, `scene save/load`, `files upload/download`, `export`). Page-only canvas drawing actions are documented with reasons and require no server CLI verb.
+5. **A6 form/clips/site (`e736fdb12e9e`):** owns form `--help` drift (`append` vs `join`/`answer`), and site chat template prompt and code export gaps.
+6. **files:** fully covered via `bashy outpost connect/ssh/scp`; zero unowned gaps.
+
+Because all gaps are accounted for in stories A2–A6, no orphan gap exists and no standalone `--no-sprint` todo is filed.
+
+## Sprint 632 A2: notes data command mappings
 
 Source: `examples/notes/notes.bsh`, `notes_api.py`, pinned fork
 `d0c6e2a7afc6de17220f9b439bb077a5aa12f83f` (`proto/api/memo_service.proto`).
