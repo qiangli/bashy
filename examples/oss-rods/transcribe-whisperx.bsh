@@ -85,7 +85,14 @@ else
 	# Empty --language means auto-detect (whisperx default).
 	lang_args=()
 	[ -n "$language" ] && lang_args=(--language "$language")
-	"$py" -m whisperx "$audio" --model "$MODEL" --output_format "$format" \
+	model=${TRANSCRIBE_WHISPERX_MODEL:-$MODEL}
+	cache_args=()
+	if [ -n "${TRANSCRIBE_WHISPERX_MODEL:-}" ]; then
+		[ -f "$model/model.bin" ] || die "local model missing model.bin: $model"
+		cache_args=(--model_cache_only True)
+	fi
+	[ "${TRANSCRIBE_WHISPERX_NO_ALIGN:-0}" = 1 ] && cache_args+=(--no_align)
+	"$py" -m whisperx "$audio" --model "$model" "${cache_args[@]}" --output_format "$format" \
 		--output_dir "$OUT" --compute_type int8 --device cpu \
 		"${lang_args[@]}" >&2 || die "transcription failed"
 	got=$(ls "$OUT"/*."$format" 2>/dev/null | head -1)
