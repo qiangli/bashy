@@ -603,8 +603,9 @@ func TestDraftTimesLyricLinesToTranscript(t *testing.T) {
 		t.Fatalf("timing summary missing:\n%s", stderr)
 	}
 	timing, _ := os.ReadFile(filepath.Join(f.proj, "drafts", d.ID, "timing.srt"))
-	// Line 2's words open the single 0.2-5.9 s cue; line 1 precedes it.
-	if !strings.Contains(string(timing), "00:00:00,200 --> ") || !strings.Contains(string(timing), "\n"+long+"\n") || strings.Count(string(timing), " --> ") != 2 {
+	// Line 2's words open the single 0.2-5.9 s cue; line 1 precedes it and
+	// keeps its minimum 1 s, so line 2 follows at 1 s.
+	if !strings.Contains(string(timing), "00:00:00,000 --> 00:00:01,000\nFirst line") || !strings.Contains(string(timing), "00:00:01,000 --> 00:00:05,900\n"+long+"\n") || strings.Count(string(timing), " --> ") != 2 {
 		t.Fatalf("timing.srt:\n%s", timing)
 	}
 	ass, _ := os.ReadFile(filepath.Join(f.proj, "drafts", d.ID, "subs.ass"))
@@ -681,5 +682,29 @@ func TestDraftAnimatic(t *testing.T) {
 	}
 	if !fileExists(filepath.Join(f.proj, "lock", "portraits", "harbor.png")) {
 		t.Fatal("lock has no set still")
+	}
+}
+
+// The VAD can fold a long instrumental intro into the first cue (S627 M8
+// draft 07: 0.03-29.8 s for two lines). The sung words then sit at the
+// cue's end, and the lines before them keep a visible span (at least 1 s)
+// instead of collapsing to the song's first milliseconds.
+func TestDraftTimingIntroFoldedIntoCue(t *testing.T) {
+	f := newFixture(t)
+	f.ossRods(false)
+	f.editStoryboard(func(sb map[string]any) {
+		sb["song"].(map[string]any)["duration_s"] = 30
+	})
+	out, stderr, code := f.runEnv([]string{"FILM_FIXTURE_CUES=1", "FILM_FIXTURE_TRANSCRIPT=Second line of the song"}, "draft", f.proj, "--no-qa", "--no-shot-numbers")
+	if code != 0 {
+		t.Fatalf("draft: exit %d\n%s", code, stderr)
+	}
+	timing, _ := os.ReadFile(filepath.Join(f.proj, "drafts", f.manifest(out).ID, "timing.srt"))
+	// The 23-character line sings in about 2.9 s at the cue's end (29.9 s).
+	if !strings.Contains(string(timing), "00:00:27,025 --> 00:00:29,900\nSecond line of the song") {
+		t.Fatalf("line 2 is not at the end of the folded cue:\n%s", timing)
+	}
+	if !strings.Contains(string(timing), "00:00:24,275 --> 00:00:27,025\nFirst line of the song") {
+		t.Fatalf("line 1 lost its span:\n%s", timing)
 	}
 }

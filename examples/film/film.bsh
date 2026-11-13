@@ -118,17 +118,21 @@ shift_srt() { cues "$1" | awk -F'\t' -v o="$2" 'BEGIN{OFS="\t"} {print $1+o, $2+
 # of LYRICS (one lyric line per line), timed to the sung words of TRANSCRIPT
 # (an SRT whose cues need not match the lyric lines; WhisperX without an
 # alignment model returns a few long segments). Each transcript word gets a
-# time interpolated across its cue by character offset; a semi-global word
+# time interpolated across its cue by character offset; a cue more than twice
+# as long as its words take to sing (about 8 characters a second) holds them
+# at its end, since the VAD folds a leading instrumental into the segment
+# (S627 M8 draft 07: 0.03-29.8 s for two lines). A semi-global word
 # alignment (free end gaps) matches lyric words to transcript words; a line
 # with matched words spans them. Lines left unmatched share the gaps between
-# their neighbours by length, at the anchored lines' singing rate. The
-# summary ("A of N lines anchored") goes to stderr.
+# their neighbours by length, at the anchored lines' singing rate; every cue
+# lasts at least 1 s. The summary ("A of N lines anchored") goes to stderr.
 lyric_timing() {
 	cues "$1" | awk -F'\t' -v total="$3" -v lyrics="$2" '
 	function norm(w) { w = tolower(w); gsub(/[^[:alnum:]]/, "", w); return w }
 	function same(a, b) { return a != "" && (a == b || (length(a) >= 4 && length(b) >= 4 && substr(a, 1, 4) == substr(b, 1, 4))) }
 	{
 		s = $1 + 0; e = $2 + 0; t = $3; L = length(t); if (L < 1) L = 1
+		if (e - s > 2 * L / 8) s = e - L / 8
 		if (ncue == 0 || s < vs) vs = s; if (ncue == 0 || e > ve) ve = e; ncue++; tchars += L; tdur += e - s
 		pos = 0; n = split(t, w, / +/)
 		for (i = 1; i <= n; i++) {
@@ -188,11 +192,15 @@ lyric_timing() {
 			t = lo; for (q = i; q < j; q++) { st[q] = t; t += (hi - lo) * lc[q] / sum; en[q] = t }
 			i = j
 		}
-		for (i = 0; i < N; i++) {
-			if (i + 1 < N && en[i] > st[i+1]) en[i] = st[i+1]
-			if (en[i] > total) en[i] = total; if (st[i] > total - 0.1) st[i] = total - 0.1; if (en[i] <= st[i]) en[i] = st[i] + 0.1
-			printf "%.3f\t%.3f\t%s\n", st[i], en[i], txt[i]
+		for (i = 0; i < N; i++) if (i + 1 < N && en[i] > st[i+1]) en[i] = st[i+1]
+		# at least 1 s a cue, pushing later lines on; then pull back from the end
+		for (i = 0; i < N; i++) { if (i > 0 && st[i] < en[i-1]) st[i] = en[i-1]; if (en[i] < st[i] + 1) en[i] = st[i] + 1 }
+		for (i = N - 1; i >= 0; i--) {
+			lim = (i + 1 < N) ? st[i+1] : total
+			if (en[i] > lim) { d = en[i] - lim; en[i] -= d; st[i] -= d }
+			if (st[i] < 0) st[i] = 0; if (en[i] <= st[i]) en[i] = st[i] + 0.1
 		}
+		for (i = 0; i < N; i++) printf "%.3f\t%.3f\t%s\n", st[i], en[i], txt[i]
 		printf "film: timing: %d of %d lyric lines anchored to %d transcript cue(s); the rest interpolated\n", na, N, ncue > "/dev/stderr"
 	}'
 }
