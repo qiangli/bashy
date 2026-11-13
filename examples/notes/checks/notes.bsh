@@ -1,0 +1,6 @@
+set -eu
+test "$(cat .notes-source-pin)" = 'd0c6e2a7afc6de17220f9b439bb077a5aa12f83f'
+head -n 1 LICENSE | grep -qx 'MIT License'
+test -s server/frontend/dist/index.html
+test -s shaped.json
+test -s cmd/memos/zz_shape_version.go

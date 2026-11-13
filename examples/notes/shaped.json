@@ -1,0 +1,4 @@
+{
+  "server": {"main": "cmd/memos", "args": ["--addr", "127.0.0.1", "--port", "$PORT", "--data", "$DATA", "--config-apply", "off"]},
+  "genie": {"examples": ["Show my recent notes first", "Make the notes list easier to scan"]}
+}

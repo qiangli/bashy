@@ -1,0 +1,30 @@
+diff --git a/web/src/connect.ts b/web/src/connect.ts
+index 8176d468..e48968cf 100644
+--- a/web/src/connect.ts
++++ b/web/src/connect.ts
+@@ -66 +66 @@ const refreshTransport = createConnectTransport({
+-  baseUrl: window.location.origin,
++  baseUrl: `${window.location.origin}/notes`,
+@@ -185 +185 @@ const transport = createConnectTransport({
+-  baseUrl: window.location.origin,
++  baseUrl: `${window.location.origin}/notes`,
+diff --git a/web/src/hooks/useLiveMemoRefresh.ts b/web/src/hooks/useLiveMemoRefresh.ts
+index a9a0b164..d4a0174d 100644
+--- a/web/src/hooks/useLiveMemoRefresh.ts
++++ b/web/src/hooks/useLiveMemoRefresh.ts
+@@ -402 +402 @@ function fetchSSEStream(token: string, signal: AbortSignal): Promise<Response> {
+-  return fetch("/api/sse", {
++  return fetch("/notes/api/sse", {
+diff --git a/web/src/router/index.tsx b/web/src/router/index.tsx
+index e3466e34..8750016a 100644
+--- a/web/src/router/index.tsx
++++ b/web/src/router/index.tsx
+@@ -169 +169 @@ export const routeConfig: RouteObject[] = [
+-const router = createBrowserRouter(routeConfig);
++const router = createBrowserRouter(routeConfig, { basename: "/notes" });
+diff --git a/web/vite.config.mts b/web/vite.config.mts
+index a2231cbf..7e6f59aa 100644
+--- a/web/vite.config.mts
++++ b/web/vite.config.mts
+@@ -14,0 +15 @@ export default defineConfig({
++  base: "/notes/",
