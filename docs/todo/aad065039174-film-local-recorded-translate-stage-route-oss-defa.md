@@ -10,7 +10,8 @@ labels:
     - film
     - provenance
 created: 2026-11-13T19:24:26.933245Z
-assignee: claude-opus5.5-s634
+weave: 104
+assignee: claude-opus5.5
 sprint: 634
 sprint_id: f57b15f7-34b1-5edb-80df-fa3588507b7c
 sprint_title: 'Film pipeline follow-ups: local, recorded translation (and text) stages; subtitle font fix'
