@@ -1,0 +1,12 @@
+set -eu
+test "$(cat .table-source-pin)" = 'a3c557ac1bc4bd55b9b9d4333842bec255586ff4'
+grep -q 'Apache License' LICENSE.txt
+test "$(cat grist-edition)" = community
+test ! -d ext
+test -s shaped.json
+test -s shape-adapter/main.go
+test -s shape-adapter/telemetry.go
+test -s shape-adapter/view.css
+! grep -q 'https://telemetry.getgrist.com' app/server/lib/Telemetry.ts
+! grep -q 'https://www.googletagmanager.com' app/common/tagManager.ts
+! grep -q 'https://hub.docker.com/v2/' app/server/lib/UpdateManager.ts

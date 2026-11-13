@@ -1,0 +1,149 @@
+#!/usr/bin/env -S bashy --bashsharp
+set -euo pipefail
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+runner=${BASHY_BIN:-bashy}
+git_bin=${TABLE_GIT_BIN:-git}
+pin=a3c557ac1bc4bd55b9b9d4333842bec255586ff4
+fork=https://github.com/qiangli/grist-core-shape.git
+home=${BASHY_HOME:-$HOME/.bashy}
+state=$home/table
+source=$state/source
+runtime=$state/runtime
+port=${TABLE_CONSOLE_PORT:-22750}
+
+usage() {
+  cat <<'EOF'
+table install|start|stop|status|source
+  install  Fetch the pinned Apache-2.0 source, build the community web UI, and register a shaped app (Linux; downloads source and build dependencies).
+  start    Run the paired app console in the foreground.
+  stop     Stop the console started by this command.
+  status   Show the managed console and source revision.
+  source   Print the managed source directory.
+
+The records grid is local. Install needs the network. To enable owner-owned
+observability, set OTEL_EXPORTER_OTLP_ENDPOINT for the console's bashy OTel.
+EOF
+}
+
+linux_only() {
+  test "$(uname -s)" = Linux || { echo 'table: Linux is required' >&2; exit 1; }
+}
+
+installed() {
+  test -f "$source/.table-source-pin" &&
+    test "$(cat "$source/.table-source-pin")" = "$pin" &&
+    test -s "$runtime/_build/stubs/app/server/server.js" &&
+    test -s "$source/shaped.json" &&
+    test "$(cat "$source/grist-edition")" = community &&
+    test ! -d "$source/ext"
+}
+
+register_app() {
+  "$runner" app add table --type shaped --source "$source" --label Table \
+    --icon '▦' --tip 'A personal records grid with shapeable views'
+}
+
+install() {
+  linux_only
+  if installed; then register_app; return; fi
+  if test -e "$source" || test -e "$runtime"; then
+    echo 'table: source or runtime exists but does not match the pinned build; inspect it manually' >&2
+    exit 1
+  fi
+  command -v "$git_bin" >/dev/null
+  command -v yarn >/dev/null
+  command -v node >/dev/null
+  command -v go >/dev/null
+  mkdir -p "$state"
+  scratch=$(mktemp -d "$state/install.XXXXXX")
+  trap 'rm -rf "$scratch"' EXIT
+  "$git_bin" clone --quiet "$fork" "$scratch/source"
+  "$git_bin" -C "$scratch/source" cat-file -e "$pin^{commit}" || {
+    echo 'table: reviewed pin is absent from the fork' >&2; exit 1;
+  }
+  "$git_bin" -C "$scratch/source" switch --quiet -c shape-table "$pin"
+  grep -q '^ *Apache License$' "$scratch/source/LICENSE.txt" &&
+    grep -q '^ *Version 2.0, January 2004$' "$scratch/source/LICENSE.txt" || {
+    echo 'table: pinned source is not Apache-2.0 licensed' >&2; exit 1;
+  }
+  if find "$scratch/source" -type d \( -name ee -o -name premium -o -name enterprise \) -print | grep -q .; then
+    echo 'table: non-permissive source directory found' >&2; exit 1
+  fi
+  printf 'community\n' > "$scratch/source/grist-edition"
+  "$git_bin" -C "$scratch/source" apply --unidiff-zero "$here/web-prefix.patch"
+  (cd "$scratch/source" && GRIST_EDITION=community yarn install --frozen-lockfile && GRIST_EDITION=community yarn build:prod)
+  if find "$scratch/source" -type d \( -name ee -o -name premium -o -name enterprise -o -name ext \) -print | grep -q .; then
+    echo 'table: build fetched a non-community directory' >&2; exit 1
+  fi
+  cp "$here/shaped.json" "$here/contract.bsh" "$here/go.mod" "$scratch/source/"
+  mkdir -p "$scratch/source/checks" "$scratch/source/shape-adapter"
+  cp "$here/checks/table.bsh" "$scratch/source/checks/table.bsh"
+  cp "$here/shape-adapter/main.go" "$here/shape-adapter/telemetry.go" "$here/shape-adapter/view.css" "$scratch/source/shape-adapter/"
+  printf '%s\n' "$pin" > "$scratch/source/.table-source-pin"
+  printf '\n!grist-edition\n' >> "$scratch/source/.gitignore"
+  "$git_bin" -C "$scratch/source" add -f grist-edition
+  "$git_bin" -C "$scratch/source" add .gitignore app/common/urlUtils.ts app/common/tagManager.ts \
+    app/server/lib/Telemetry.ts app/server/lib/UpdateManager.ts app/server/lib/updateChecker.ts \
+    shaped.json contract.bsh go.mod checks/table.bsh \
+    shape-adapter/main.go shape-adapter/telemetry.go shape-adapter/view.css .table-source-pin
+  "$git_bin" -C "$scratch/source" -c user.name='Bashy Table' -c user.email='table@example.invalid' \
+    commit -qm 'Add private table shaping adapter' \
+    -m 'Sprint: #631' -m 'Story: #212' -m 'Story-ID: fcaa3d3e6109' -m 'Agent: codex-gpt6-sol'
+  mv "$scratch/source" "$scratch/runtime"
+  mkdir -p "$scratch/source"
+  "$git_bin" -C "$scratch/runtime" archive HEAD | tar -x -C "$scratch/source"
+  # The base has development links into node_modules. The shaped source is
+  # self-contained and contains only regular files; the runtime keeps them.
+  find "$scratch/source" -type l -delete
+  mv "$scratch/runtime" "$runtime"
+  mv "$scratch/source" "$source"
+  register_app
+}
+
+running_pid() {
+  test -f "$state/console.pid" || return 1
+  pid=$(cat "$state/console.pid")
+  case "$pid" in *[!0-9]*|'') return 1;; esac
+  kill -0 "$pid" 2>/dev/null || return 1
+  cmdline=$(ps -p "$pid" -o args= 2>/dev/null) || return 1
+  case "$cmdline" in *"app serve --bind lan --port $port --pair"*) ;; *) return 1 ;; esac
+  printf '%s\n' "$pid"
+}
+
+case ${1:---help} in
+  -h|--help|help) usage ;;
+  install) install ;;
+  start)
+    linux_only
+    installed || { echo 'table: run table install first' >&2; exit 1; }
+    if running_pid >/dev/null; then echo "table: console already running on port $port"; exit 0; fi
+    if test -n "${OTEL_EXPORTER_OTLP_ENDPOINT:-}"; then
+      (umask 077; printf '%s\n' "$OTEL_EXPORTER_OTLP_ENDPOINT" > "$state/otel-endpoint")
+    else
+      rm -f "$state/otel-endpoint"
+    fi
+    echo "table: paired console starting on port $port; run bashy app pair --allow table --principal NAME --port $port"
+    "$runner" app serve --bind lan --port "$port" --pair &
+    pid=$!
+    echo "$pid" > "$state/console.pid"
+    wait "$pid" || result=$?
+    rm -f "$state/console.pid"
+    exit "${result:-0}"
+    ;;
+  stop)
+    if pid=$(running_pid); then
+      kill "$pid"
+      rm -f "$state/console.pid"
+      echo 'table: console stopped'
+    else
+      echo 'table: console is not running'
+    fi
+    ;;
+  status)
+    if installed; then echo "table: source pin $pin"; else echo 'table: not installed'; fi
+    if running_pid >/dev/null; then echo "table: console running on port $port"; else echo 'table: console stopped'; fi
+    ;;
+  source) installed && printf '%s\n' "$source" ;;
+  *) usage >&2; exit 2 ;;
+esac
