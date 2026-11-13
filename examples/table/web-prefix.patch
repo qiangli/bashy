@@ -1,0 +1,68 @@
+diff --git a/app/common/tagManager.ts b/app/common/tagManager.ts
+index 4e2b742..7cc800f 100644
+--- a/app/common/tagManager.ts
++++ b/app/common/tagManager.ts
+@@ -1,29 +1,10 @@
+-/**
+- * Returns the Google Tag Manager snippet to insert into <head> of the page, if
+- * `tagId` is set to a non-empty value. Otherwise returns an empty string.
+- */
++/** Vendor tag manager is disabled in the personal table build. */
+ export function getTagManagerSnippet(tagId?: string) {
+-  // Note also that we only insert the snippet for the <head>. The second recommended part (for
+-  // <body>) is for <noscript> scenario, which doesn't apply to the Grist app (such visits, if
+-  // any, wouldn't work and shouldn't be counted for any metrics we care about).
+-  if (!tagId) { return ""; }
+-
+-  return `
+-<!-- Google Tag Manager -->
+-<script>${getTagManagerScript(tagId)}</script>
+-<!-- End Google Tag Manager -->
+-`;
++  void tagId;
++  return "";
+ }
+ 
+-/**
+- * Returns the body of the Google Tag Manager script. This is suitable for use by the client,
+- * since it must dynamically load it by calling `document.createElement('script')` and setting
+- * its `innerHTML`.
+- */
+ export function getTagManagerScript(tagId: string) {
+-  return `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+-new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+-j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+-'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+-})(window,document,'script','dataLayer','${tagId}');`;
++  void tagId;
++  return "";
+ }
+diff --git a/app/common/urlUtils.ts b/app/common/urlUtils.ts
+index 3c3daf8..99d80ce 100644
+--- a/app/common/urlUtils.ts
++++ b/app/common/urlUtils.ts
+@@ -65,7 +65,7 @@ export function docUrl(docWorkerUrl: string | null | undefined, path?: string) {
+ // Get a url on the same webserver as the current page, adding a prefix to encode
+ // the current organization if necessary.
+ export function getOriginUrl(path: string) {
+-  return `${window.location.origin}${addCurrentOrgToPath("/", true)}${path}`;
++  return `${window.location.origin}/table${addCurrentOrgToPath("/", true)}${path}`;
+ }
+ 
+ // Return a string docId if server has provided one (as in hosted Grist), otherwise null
+diff --git a/app/server/lib/Telemetry.ts b/app/server/lib/Telemetry.ts
+index 3c99526..06f1566 100644
+--- a/app/server/lib/Telemetry.ts
++++ b/app/server/lib/Telemetry.ts
+@@ -70,9 +70,8 @@ export class Telemetry implements ITelemetry {
+   private _activation: Activation | undefined;
+   private _telemetryPrefs: TelemetryPrefsWithSources | undefined;
+   private readonly _deploymentType = this._gristServer.getDeploymentType();
+-  private readonly _shouldForwardTelemetryEvents = this._deploymentType !== "saas";
+-  private readonly _forwardTelemetryEventsUrl = process.env.GRIST_TELEMETRY_URL ||
+-    "https://telemetry.getgrist.com/api/telemetry";
++  private readonly _shouldForwardTelemetryEvents = false;
++  private readonly _forwardTelemetryEventsUrl = "";
+ 
+   private _numPendingForwardEventRequests = 0;
+   private readonly _logger = new LogMethods<RequestOrSession | undefined>("Telemetry ", requestOrSession =>

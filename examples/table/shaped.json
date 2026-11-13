@@ -1,0 +1,4 @@
+{
+  "server": {"main": "shape-adapter", "args": ["$ADDR", "$DATA"]},
+  "genie": {"examples": ["Show my records in a compact grid", "Make my saved views easier to find"]}
+}
