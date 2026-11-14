@@ -1,0 +1,16 @@
+{
+  "schema_version": "bashy-film-takes-v1",
+  "note": "test fixture: a synthetic ffmpeg testsrc clip standing in for a lip-synced take returned through S3",
+  "takes": {
+    "01": {
+      "file": "nova-03.mp4",
+      "provider": "aws-ec2",
+      "model": "EchoMimicV3-Flash",
+      "revision": "fixture",
+      "instance_type": "g5.xlarge",
+      "elapsed_s": 412,
+      "cost_usd": 0.65,
+      "sha256": "4076e23c65d2bd9499abe291a49ecd2e387c95e1d9b51c33bb0126df85cfa862"
+    }
+  }
+}

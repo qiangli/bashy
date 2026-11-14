@@ -134,6 +134,16 @@ Shipped rods (M2 oss, M4 browser, M5 api) add their line to
 `DEFAULT_COMMANDS` in `examples/defaults/bashy-defaults.bsh`, as the verbs
 themselves do.
 
+A rod that serves only some requests declares an `accepts` matcher (an RFC
+6901 JSON pointer and an RE2 pattern; the eighth `DEFAULT_COMMANDS` field,
+`PTR=RE2`). The selector rejects it for a request without a matching
+scalar, so it never shadows the role's fallback. `animate-prerendered`
+(Sprint 635) accepts `/takes_dir=.`: it returns a lip-synced take rendered
+off-host from `takes_dir` (`takes.json`: file, provider, model, revision,
+instance_type, elapsed_s, cost_usd, sha256), and fails a shot without a
+verified take. `film draft|final --takes DIR` adds `shot` and `takes_dir`
+to each shot's request that has a take.
+
 ### Browser rods (Sprint 627 M4)
 
 | Rod | Web App | Role(s) | Route | Effects | Artifacts |

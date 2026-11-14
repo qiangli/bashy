@@ -1,0 +1,151 @@
+#!/usr/bin/env -S bashy --bashsharp
+# animate-prerendered — oss rod for the `animate` role that returns a take
+# rendered elsewhere (Sprint 635: lip-synced clips from a self-terminating
+# AWS GPU instance — EchoMimicV3 / InfiniteTalk, Apache-2.0 — returned
+# through S3). It renders nothing and never spends: it looks the shot up in
+# the request's takes_dir, verifies the clip, and reports its provenance.
+# A shot without a take FAILS (exit 1); never a silent still-pan fallback.
+
+~~~skill as guide
+---
+name: animate-prerendered
+description: Animate rod that returns a prerendered lip-synced take (rendered off-host, e.g. on an AWS GPU instance) from a takes directory, verifying its sha256 against takes.json and reporting model, instance and cost. A shot without a take fails.
+metadata:
+  requires: "has=ffmpeg"
+---
+# animate-prerendered — prerendered takes (route oss)
+
+Request: {image, audio, shot, takes_dir}. `shot` is a shot id or the
+1-based shot number (`3` and `03` are the same shot). The take is
+`takes_dir/takes.json` `.takes[shot]` when present, else
+`takes_dir/<shot>.mp4`:
+
+    {"schema_version":"bashy-film-takes-v1",
+     "takes":{"03":{"file":"03.mp4","provider":"aws-ec2","model":"EchoMimicV3-Flash",
+                    "revision":"<pinned>","instance_type":"g5.xlarge",
+                    "elapsed_s":412,"cost_usd":0.65,"sha256":"<64 hex>"}}}
+
+A recorded sha256 must match the clip. The clip must decode (ffmpeg).
+Registered with `accepts /takes_dir`, so the selector only offers it for
+a request that carries a takes directory (film adds it per shot with a take).
+`--doctor --json [--takes DIR]` is read-only: ffmpeg registered, DIR readable.
+~~~
+
+set -eu
+
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+# shellcheck source=oss-preflight.bsh
+. "$here/oss-preflight.bsh"
+
+ROD=animate-prerendered
+bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
+OSS_ROD_TEXT=""
+
+die() { echo "$ROD: $*" >&2; exit "${2:-1}"; }
+
+# ffmpeg goes through the registered command (`bashy media doctor` registers
+# the native binary on every OS); a bare PATH ffmpeg is the fallback off
+# Windows only, where it cannot run under bashy.
+FFMPEG=()
+if BASHY_HINTS=off "$bashy_bin" commands show ffmpeg >/dev/null 2>&1; then
+	FFMPEG=("$bashy_bin" ffmpeg)
+elif [ "$(oss_os_name)" != windows ] && command -v ffmpeg >/dev/null 2>&1; then
+	FFMPEG=(ffmpeg)
+fi
+
+# native_path P: /c/... (the Windows shell's pwd) as C:/... for a native exe.
+native_path() {
+	local p=$1
+	if [ "$(oss_os_name)" = windows ]; then case $p in /[a-zA-Z]/*) p="${p:1:1}:${p:2}" ;; esac; fi
+	printf '%s\n' "$p"
+}
+
+sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+
+if [ "${1:-}" = --doctor ]; then
+	[ "${2:-}" = --json ] || die "--doctor needs --json" 2
+	takes=${FILM_TAKES:-}
+	[ "${3:-}" != --takes ] || takes=${4:-}
+	missing='[]'
+	if [ ${#FFMPEG[@]} -eq 0 ]; then
+		missing=$(J_I="$(oss_install_line ffmpeg), then: bashy media doctor (registers ffmpeg)" jq -cn '[{need:"registered command ffmpeg",install:env.J_I}]')
+	fi
+	if [ -n "$takes" ] && { [ ! -d "$takes" ] || [ ! -r "$takes" ]; }; then
+		missing=$(printf '%s\n' "$missing" | J_N="takes dir readable: $takes" jq -c '. + [{need:env.J_N,install:"copy the returned takes (clips + takes.json) into that directory"}]')
+	fi
+	printf '%s\n' "$missing" | jq -c '{schema_version:"bashy-svc-doctor-v1",available:(length == 0),missing:.}'
+	exit 0
+fi
+
+REQ=$(oss_request_file "$@") || exit $?
+oss_check_schema "$REQ" || exit 2
+shot=$(oss_request_get "$REQ" shot "")
+takes=$(oss_request_get "$REQ" takes_dir "")
+[ -n "$shot" ] || die "shot is required (a shot id or 1-based number)" 2
+[ -n "$takes" ] || die "takes_dir is required" 2
+takes=${takes//\\//}
+case $takes in
+/* | [A-Za-z]:/*) ;;
+*) takes=$(cd "$(dirname "$REQ")" && pwd)/$takes ;;
+esac
+[ -d "$takes" ] || die "takes_dir not found: $takes"
+
+# Keys for one shot: as given; a number also as 2-digit and unpadded.
+keys=("$shot")
+case $shot in
+*[!0-9]*) ;;
+*) keys+=("$(printf '%02d' "$((10#$shot))")" "$((10#$shot))") ;;
+esac
+
+manifest=$takes/takes.json
+entry=null
+if [ -f "$manifest" ]; then
+	jq -e 'type == "object" and (.takes | type) == "object"' "$manifest" >/dev/null 2>&1 ||
+		die "takes.json is not a takes manifest (needs a .takes object): $manifest"
+	for k in "${keys[@]}"; do
+		entry=$(J_K=$k jq -c '.takes[env.J_K] // null' "$manifest")
+		[ "$entry" = null ] || { shot=$k; break; }
+	done
+fi
+if [ "$entry" != null ]; then
+	file=$(printf '%s\n' "$entry" | jq -r '.file // empty')
+	[ -n "$file" ] || die "takes.json entry for shot $shot has no file"
+	file=${file//\\//}
+	case $file in /* | [A-Za-z]:/*) clip=$file ;; *) clip=$takes/$file ;; esac
+	[ -f "$clip" ] || die "no take for shot $shot: takes.json maps it to $clip, which is missing"
+else
+	clip=""
+	for k in "${keys[@]}"; do
+		[ -f "$takes/$k.mp4" ] && { clip=$takes/$k.mp4; shot=$k; break; }
+	done
+	[ -n "$clip" ] || die "no take for shot $shot in $takes (no takes.json entry, no clip named ${keys[*]/%/.mp4}); refusing a still-pan fallback"
+	entry='{}'
+fi
+
+want=$(printf '%s\n' "$entry" | jq -r '.sha256 // empty')
+got=$(sha "$clip")
+if [ -n "$want" ] && [ "$(printf '%s' "$want" | tr 'A-F' 'a-f')" != "$got" ]; then
+	die "sha256 mismatch for shot $shot: $clip is $got, takes.json records $want"
+fi
+
+[ ${#FFMPEG[@]} -gt 0 ] || die "needs a registered ffmpeg; install: $(oss_install_line ffmpeg), then: bashy media doctor"
+"${FFMPEG[@]}" -nostdin -hide_banner -loglevel error -i "$(native_path "$clip")" -map 0:v:0 -frames:v 1 -f null - >/dev/null 2>&1 ||
+	die "take for shot $shot does not decode as video: $clip"
+
+OUT=${BASHY_SVC_OUT:-}
+[ -n "$OUT" ] || OUT=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-animate.XXXXXX")
+mkdir -p "$OUT"
+cp "$clip" "$OUT/take.mp4"
+printf '%s\n' "$entry" | J_S="$shot" J_C="$clip" J_H="$got" jq '{schema_version:"bashy-film-take-v1", shot:env.J_S, source:env.J_C, sha256:env.J_H, verified:(.sha256 != null)} + del(.file, .sha256)' >"$OUT/take.json"
+
+cost=$(printf '%s\n' "$entry" | jq -r '.cost_usd // empty')
+if [ -n "$cost" ]; then cost="USD $(awk -v c="$cost" 'BEGIN{printf "%.2f", c}')"; else cost="USD unrecorded"; fi
+OSS_ROD_TEXT=$(printf '%s\n' "$entry" | J_S="$shot" J_COST="$cost" jq -r '"prerendered take \(env.J_S): \(.model // "unrecorded model")"
+	+ (if .revision then "@\(.revision)" else "" end)
+	+ " on \(.instance_type // "unrecorded instance")"
+	+ (if .provider then " via \(.provider)" else "" end)
+	+ " (\(env.J_COST))"
+	+ (if .elapsed_s != null then ", \(.elapsed_s) s" else "" end)
+	+ (if .sha256 then ", sha256 verified" else ", no recorded sha256" end)')
+oss_rod_result "$OUT/take.mp4" video/mp4

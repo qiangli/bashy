@@ -6,9 +6,9 @@
 #   film doctor
 #   film init DIR [--title T]
 #   film write DIR [--route oss] [--provider-text NAME] [--kind lyrics|shots|prompts|all]
-#   film draft DIR [--route oss] [--provider-ROLE NAME] [--route-ROLE R] [--qa-provider P] [--no-qa] [--no-shot-numbers]
+#   film draft DIR [--route oss] [--provider-ROLE NAME] [--route-ROLE R] [--takes DIR] [--qa-provider P] [--no-qa] [--no-shot-numbers]
 #   film lock DIR [--draft N] [--timing FILE]
-#   film final DIR --route browser|api [--yes] [--dry-run] [--provider-ROLE NAME] [--qa-provider P] [--no-qa] [--shot-numbers]
+#   film final DIR --route browser|api [--yes] [--dry-run] [--provider-ROLE NAME] [--takes DIR] [--qa-provider P] [--no-qa] [--shot-numbers]
 #   film status DIR
 #
 # Every generative stage goes through the service door
@@ -41,6 +41,15 @@ metadata:
   cost_class, elapsed) lands in the render's manifest.json.
 - A draft without an animate rod renders a still portrait with a slow pan
   and its manifest says so. A final never degrades: a missing rod fails.
+- Prerendered takes: `--takes DIR` (or FILM_TAKES) names a directory of
+  lip-synced clips rendered elsewhere (e.g. on a self-terminating GPU
+  instance, returned through S3): `DIR/takes.json` maps a shot (its `id`,
+  or its number `03`/`3`) to a file with provider, model, revision,
+  instance_type, elapsed_s, cost_usd and sha256, or a clip is named
+  `DIR/03.mp4`. A shot with a take goes to rod animate-prerendered (route
+  oss), which verifies the sha256 and reports the take's model and cost in
+  the stage text; a missing or mismatched mapped take fails the render.
+  Shots without a take render as before.
 - A draft is an animatic for review: every shot carries its burned-in shot
   number and kind, stills render at `draft.still_size` (e.g. 768x432), and
   each render writes `storyboard.md` (shot/time/lyric/prompt/seed),
@@ -351,6 +360,8 @@ stage_opts() {
 	p=$(eval "printf '%s' \"\${prov_$key:-}\"")
 	r=$(eval "printf '%s' \"\${route_$key:-}\"")
 	[ -n "$r" ] || r=$route
+	# A shot with a prerendered take (take_key) uses its rod on route oss.
+	if [ "$role" = animate ] && [ -n "$shot_take" ]; then p=animate-prerendered r=oss; fi
 	printf -- '--route\n%s\n' "$r"
 	[ -z "$p" ] || printf -- '--provider\n%s\n' "$p"
 	[ "$yes" = 0 ] || printf -- '--yes\n'
@@ -451,7 +462,7 @@ next_id() { # next_id DIR -> 01, 02, ...
 }
 
 parse_render_opts() {
-	route="" yes=0 dry=0 qa=1 qa_provider="" json=0 proj="" numbers=""
+	route="" yes=0 dry=0 qa=1 qa_provider="" json=0 proj="" numbers="" takes=${FILM_TAKES:-} shot_take=""
 	prov_song="" prov_image="" prov_animate="" prov_transcribe="" prov_translate=""
 	route_song="" route_image="" route_animate="" route_transcribe="" route_translate=""
 	while [ $# -gt 0 ]; do
@@ -467,6 +478,7 @@ parse_render_opts() {
 		--route-animate) route_animate=$2; shift 2 ;;
 		--route-transcribe) route_transcribe=$2; shift 2 ;;
 		--route-translate) route_translate=$2; shift 2 ;;
+		--takes) takes=$2; shift 2 ;;
 		--qa-provider) qa_provider=$2; shift 2 ;;
 		--no-qa) qa=0; shift ;;
 		--shot-numbers) numbers=1; shift ;;
@@ -481,6 +493,27 @@ parse_render_opts() {
 	[ -n "$proj" ] || die "usage: film $kind DIR ..."
 	[ -d "$proj" ] || die "$kind: no such project: $proj"
 	proj=$(cd "$proj" && pwd)
+	if [ -n "$takes" ]; then
+		[ -d "$takes" ] || die "$kind: no such takes directory: $takes"
+		takes=$(cd "$takes" && pwd)
+		[ ! -f "$takes/takes.json" ] || jq -e '(.takes | type) == "object"' "$takes/takes.json" >/dev/null 2>&1 ||
+			die "$kind: $takes/takes.json is not a takes manifest (needs a .takes object)"
+	fi
+}
+
+# take_key K: the takes key for shot index K (0-based) when --takes holds a
+# take for it: its id, else its number as 03 or 3 (a takes.json entry, or a
+# clip named KEY.mp4). Prints nothing for a shot without a take.
+take_key() {
+	local k=$1 key id
+	[ -n "$takes" ] || return 0
+	id=$(J_K=$k jq -r '.shots[env.J_K|tonumber].id // ""' "$sb")
+	for key in ${id:+"$id"} "$(printf '%02d' "$((k + 1))")" "$((k + 1))"; do
+		if { [ -f "$takes/takes.json" ] && J_K=$key jq -e '.takes | has(env.J_K)' "$takes/takes.json" >/dev/null; } || [ -f "$takes/$key.mp4" ]; then
+			printf '%s\n' "$key"
+			return 0
+		fi
+	done
 }
 
 cmd_draft() {
@@ -635,12 +668,15 @@ render_run() {
 		mkdir -p "$take"
 		ffmpeg -nostdin -hide_banner -loglevel error -y -ss "$s" -t "$(awk -v a="$s" -v b="$e" 'BEGIN{printf "%.3f", b-a}')" -i "$song" -ac 2 -ar 48000 "$take/audio.wav" ||
 			fail_render "shot $((k + 1)): could not slice the song"
+		shot_take=$(take_key "$k")
 		J_P=$sp J_IMG=${portrait[$c]} J_A=$take/audio.wav J_D=$(awk -v a="$s" -v b="$e" 'BEGIN{printf "%.3f", b-a}') J_W=${size%x*} J_H=${size#*x} J_SEED=$seed \
-			request "$take/request.json" '{prompt:env.J_P, image:env.J_IMG, audio:env.J_A, duration_s:(env.J_D|tonumber), width:(env.J_W|tonumber), height:(env.J_H|tonumber), fps:30, seed:(env.J_SEED|tonumber)}'
+			J_SHOT=$shot_take J_TAKES=$takes \
+			request "$take/request.json" '{prompt:env.J_P, image:env.J_IMG, audio:env.J_A, duration_s:(env.J_D|tonumber), width:(env.J_W|tonumber), height:(env.J_H|tonumber), fps:30, seed:(env.J_SEED|tonumber)}
+				+ (if env.J_SHOT == "" then {} else {shot:env.J_SHOT, takes_dir:env.J_TAKES} end)'
 		status=0
 		mapfile -t o < <(stage_opts animate)
 		env=$(door "animate:$((k + 1))" animate "$take/out" "${o[@]}" -- "$take/request.json") || status=$?
-		if [ "$status" = 126 ] && [ "$kind" = draft ]; then
+		if [ "$status" = 126 ] && [ "$kind" = draft ] && [ -z "$shot_take" ]; then
 			# Spec, Venue: no lip-sync host -> a still portrait with a slow pan, and the output says so.
 			clip=$take/pan.mp4
 			still_pan "${portrait[$c]}" "$take/audio.wav" "$size" "$clip"

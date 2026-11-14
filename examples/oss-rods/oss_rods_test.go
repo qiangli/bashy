@@ -14,6 +14,8 @@ package ossrods
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -858,3 +860,143 @@ func TestTextOllamaSharedClient(t *testing.T) {
 		}
 	}
 }
+
+// prerenderedTakes writes a takes dir: clip 03.mp4 (synthetic, real ffmpeg)
+// and takes.json mapping shot 03 to it with its sha256 and provenance, and
+// registers ffmpeg plus animate-prerendered (accepts /takes_dir) in the ring.
+func (f *fixture) prerenderedTakes() string {
+	f.t.Helper()
+	ffmpeg, err := exec.LookPath("ffmpeg")
+	if err != nil || strings.HasPrefix(ffmpeg, f.stubbin) {
+		f.t.Skip("animate-prerendered decodes the take with a real ffmpeg")
+	}
+	takes := filepath.Join(f.root, "takes")
+	if err := os.MkdirAll(takes, 0o755); err != nil {
+		f.t.Fatal(err)
+	}
+	clip := filepath.Join(takes, "03.mp4")
+	if out, err := exec.Command(ffmpeg, "-nostdin", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=160x90:rate=10:duration=1",
+		"-c:v", "libx264", "-pix_fmt", "yuv420p", clip).CombinedOutput(); err != nil {
+		f.t.Fatalf("ffmpeg fixture clip: %v\n%s", err, out)
+	}
+	b, _ := os.ReadFile(clip)
+	sum := sha256.Sum256(b)
+	manifest := map[string]any{"schema_version": "bashy-film-takes-v1", "takes": map[string]any{
+		"03": map[string]any{"file": "03.mp4", "provider": "aws-ec2", "model": "InfiniteTalk", "revision": "abc123",
+			"instance_type": "g5.xlarge", "elapsed_s": 300, "cost_usd": 0.5, "sha256": hex.EncodeToString(sum[:])},
+	}}
+	raw, _ := json.Marshal(manifest)
+	if err := os.WriteFile(filepath.Join(takes, "takes.json"), raw, 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+	for _, args := range [][]string{
+		{"commands", "add", "ffmpeg", "--set", "exec.0=" + ffmpeg, "--set", "effects.0=read", "--set", "effects.1=write", "--set", "effects.2=exec"},
+		{"commands", "add", "animate-prerendered", "--set", "exec.0=" + f.bin, "--set", "exec.1=--bashsharp", "--set", "exec.2=" + filepath.Join(f.rodsDir, "animate-prerendered.bsh"),
+			"--set", "provides.0=animate", "--set", "route=oss", "--set", "requires=has=ffmpeg",
+			"--set", "accepts.0.path=/takes_dir", "--set", "accepts.0.pattern=.",
+			"--set", "effects.0=read", "--set", "effects.1=write", "--set", "effects.2=exec"},
+	} {
+		cmd := exec.Command(f.bin, args...)
+		cmd.Env = f.env
+		if out, err := cmd.CombinedOutput(); err != nil {
+			f.t.Fatalf("bashy %v: %v\n%s", args, err, out)
+		}
+	}
+	return takes
+}
+
+func (f *fixture) prerenderedRequest(shot any, takes string) string {
+	f.t.Helper()
+	raw, _ := json.Marshal(map[string]any{"schema_version": "bashy-svc-request-v1", "shot": shot, "takes_dir": takes,
+		"image": filepath.Join(f.root, "still.png"), "audio": filepath.Join(f.root, "take.wav")})
+	p := filepath.Join(f.root, "prerendered.json")
+	if err := os.WriteFile(p, raw, 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+	return p
+}
+
+// Sprint 635: the prerendered-take rod returns the mapped clip with its
+// provenance, fails a missing take or a sha256 mismatch, and is offered by
+// the selector only to a request that carries takes_dir.
+func TestAnimatePrerenderedRod(t *testing.T) {
+	f := newFixture(t)
+	takes := f.prerenderedTakes()
+	out := filepath.Join(f.root, "out")
+
+	// shot 3 (a number) finds key 03.
+	env, stderr, code := f.runDoor(nil, "animate", "--route", "oss", "--json", "--out", out, f.prerenderedRequest(3, takes))
+	if code != 0 || env.Outcome != "success" || env.Provider != "animate-prerendered" || env.CostClass != "oss" || len(env.RawOutputs) != 1 ||
+		env.RawOutputs[0]["media_type"] != "video/mp4" || env.Text != "prerendered take 03: InfiniteTalk@abc123 on g5.xlarge via aws-ec2 (USD 0.50), 300 s, sha256 verified" {
+		t.Fatalf("prerendered take: exit %d %+v\n%s", code, env, stderr)
+	}
+	got, _ := os.ReadFile(env.RawOutputs[0]["path"])
+	want, _ := os.ReadFile(filepath.Join(takes, "03.mp4"))
+	if len(got) == 0 || string(got) != string(want) {
+		t.Fatalf("output %s is not the take", env.RawOutputs[0]["path"])
+	}
+
+	// No take for shot 04: an error, never a fallback clip.
+	env, stderr, code = f.runDoor(nil, "animate", "--route", "oss", "--json", "--out", filepath.Join(f.root, "out4"), f.prerenderedRequest("04", takes))
+	if code == 0 || env.Outcome != "error" || len(env.RawOutputs) != 0 || !strings.Contains(env.Text+stderr, "no take for shot 04") {
+		t.Fatalf("missing take: exit %d %+v\n%s", code, env, stderr)
+	}
+
+	// A clip whose sha256 differs from takes.json is refused.
+	if err := os.WriteFile(filepath.Join(takes, "03.mp4"), append(want, 0), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env, stderr, code = f.runDoor(nil, "animate", "--route", "oss", "--json", "--out", filepath.Join(f.root, "out5"), f.prerenderedRequest("03", takes))
+	if code == 0 || env.Outcome != "error" || !strings.Contains(env.Text+stderr, "sha256 mismatch for shot 03") {
+		t.Fatalf("sha mismatch: exit %d %+v\n%s", code, env, stderr)
+	}
+
+	// A request without takes_dir never selects the rod.
+	p := filepath.Join(f.root, "plain.json")
+	os.WriteFile(p, []byte(`{"schema_version":"bashy-svc-request-v1","image":"x.png","audio":"x.wav"}`), 0o644)
+	env, _, code = f.runDoor(nil, "animate", "--route", "oss", "--json", p)
+	if code != 126 || env.Outcome != "unavailable" {
+		t.Fatalf("request without takes_dir: exit %d %+v", code, env)
+	}
+}
+
+// --doctor --json is read-only: registered ffmpeg and a readable takes dir.
+func TestAnimatePrerenderedDoctor(t *testing.T) {
+	f := newFixture(t)
+	takes := f.prerenderedTakes()
+	rod := filepath.Join(f.rodsDir, "animate-prerendered.bsh")
+	doctor := func(env []string, args ...string) map[string]any {
+		cmd := exec.Command(f.bin, append([]string{"--bashsharp", rod, "--doctor", "--json"}, args...)...)
+		cmd.Env = append(append([]string{}, f.env...), env...)
+		out, err := cmd.Output()
+		if err != nil {
+			t.Fatalf("doctor: %v\n%s", err, out)
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(out, &doc); err != nil || doc["schema_version"] != "bashy-svc-doctor-v1" {
+			t.Fatalf("doctor is not a doctor document: %v\n%s", err, out)
+		}
+		return doc
+	}
+	before, _ := os.ReadDir(takes)
+	if doc := doctor(nil, "--takes", takes); doc["available"] != true {
+		t.Fatalf("doctor with ffmpeg and takes: %v", doc)
+	}
+	doc := doctor(nil, "--takes", filepath.Join(f.root, "missing"))
+	if doc["available"] != false || !strings.Contains(fmtJSON(doc["missing"]), "takes dir readable") {
+		t.Fatalf("doctor with a missing takes dir: %v", doc)
+	}
+	// An empty ring (no registered ffmpeg) and no ffmpeg on PATH.
+	empty := filepath.Join(f.root, "empty-ring")
+	os.MkdirAll(empty, 0o755)
+	doc = doctor([]string{"BASHY_COMMANDS_DIR=" + empty, "PATH=/usr/bin:/bin"})
+	if doc["available"] != false || !strings.Contains(fmtJSON(doc["missing"]), "registered command ffmpeg") {
+		t.Fatalf("doctor without ffmpeg: %v", doc)
+	}
+	after, _ := os.ReadDir(takes)
+	if len(before) != len(after) {
+		t.Fatalf("doctor changed the takes dir: %v -> %v", before, after)
+	}
+}
+
+func fmtJSON(v any) string { b, _ := json.Marshal(v); return string(b) }

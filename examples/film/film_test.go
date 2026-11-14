@@ -940,3 +940,132 @@ func TestWriteSparseAndInvalidPatch(t *testing.T) {
 		t.Fatalf("missing failure provenance: %+v", m)
 	}
 }
+
+// takesDir copies testdata/takes (a synthetic clip + takes.json mapping shot
+// 01 to it) into a scratch dir the test may edit, and registers the real
+// animate-prerendered rod with its default-registration record (route oss,
+// accepts /takes_dir), so the selector offers it only to a request that
+// carries a takes directory.
+func (f *fixture) takesDir() string {
+	f.t.Helper()
+	src := filepath.Join(moduleRoot(f.t), "examples", "film", "testdata", "takes")
+	dst := filepath.Join(f.root, "takes")
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		f.t.Fatal(err)
+	}
+	for _, name := range []string{"takes.json", "nova-03.mp4"} {
+		b, err := os.ReadFile(filepath.Join(src, name))
+		if err != nil {
+			f.t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dst, name), b, 0o644); err != nil {
+			f.t.Fatal(err)
+		}
+	}
+	rod := filepath.Join(moduleRoot(f.t), "examples", "oss-rods", "animate-prerendered.bsh")
+	f.bashy("commands", "add", "animate-prerendered", "--set", "exec.0="+f.bin, "--set", "exec.1=--bashsharp", "--set", "exec.2="+rod,
+		"--set", "provides.0=animate", "--set", "route=oss", "--set", "requires=has=ffmpeg",
+		"--set", "accepts.0.path=/takes_dir", "--set", "accepts.0.pattern=.",
+		"--set", "effects.0=read", "--set", "effects.1=write", "--set", "effects.2=exec")
+	return dst
+}
+
+type takeStage struct {
+	Stage    string `json:"stage"`
+	Provider string `json:"provider"`
+	Route    string `json:"route"`
+	Cost     string `json:"cost_class"`
+	Text     string `json:"text"`
+	Outputs  []struct {
+		Path string `json:"path"`
+		Note string `json:"note"`
+	} `json:"outputs"`
+}
+
+// Sprint 635: a draft with --takes assembles the mapped shot's prerendered
+// lip-sync take as an ordinary animate stage (provider, route, cost_class as
+// the rod reports; model and cost in its text); the unmapped shot keeps the
+// still-pan fallback, recorded as degraded.
+func TestDraftUsesPrerenderedTakes(t *testing.T) {
+	f := newFixture(t)
+	f.ossRods(false)
+	takes := f.takesDir()
+	d := f.draft("--takes", takes)
+	if d.Outcome != "success" {
+		t.Fatalf("draft with takes: %+v", d)
+	}
+	raw, _ := os.ReadFile(filepath.Join(f.proj, "drafts", "01", "manifest.json"))
+	var m struct {
+		Stages []takeStage `json:"stages"`
+	}
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]takeStage{}
+	for _, s := range m.Stages {
+		got[s.Stage] = s
+	}
+	s1, s2 := got["animate:1"], got["animate:2"]
+	if s1.Provider != "animate-prerendered" || s1.Route != "oss" || s1.Cost != "oss" ||
+		s1.Text != "prerendered take 01: EchoMimicV3-Flash@fixture on g5.xlarge via aws-ec2 (USD 0.65), 412 s, sha256 verified" ||
+		len(s1.Outputs) != 1 || s1.Outputs[0].Note != "" {
+		t.Fatalf("animate:1 stage: %+v", s1)
+	}
+	clip, _ := os.ReadFile(s1.Outputs[0].Path)
+	want, _ := os.ReadFile(filepath.Join(takes, "nova-03.mp4"))
+	if len(clip) == 0 || string(clip) != string(want) {
+		t.Fatalf("animate:1 output %s is not the prerendered clip", s1.Outputs[0].Path)
+	}
+	if s2.Provider != "film-still-pan" || s2.Route != "local" || len(s2.Outputs) != 1 || s2.Outputs[0].Note != "still image with a slow pan" {
+		t.Fatalf("animate:2 stage: %+v", s2)
+	}
+	if len(d.Degraded) != 1 || !strings.Contains(d.Degraded[0]["path"], "/shots/02/") {
+		t.Fatalf("degraded: %v", d.Degraded)
+	}
+	req, _ := os.ReadFile(filepath.Join(f.proj, "drafts", "01", "shots", "01", "request.json"))
+	if !strings.Contains(string(req), `"takes_dir"`) || !strings.Contains(string(req), `"shot": "01"`) {
+		t.Fatalf("shot 1 request carries no take: %s", req)
+	}
+	req, _ = os.ReadFile(filepath.Join(f.proj, "drafts", "01", "shots", "02", "request.json"))
+	if strings.Contains(string(req), "takes_dir") {
+		t.Fatalf("shot 2 request carries a takes_dir without a take: %s", req)
+	}
+	if _, types := probe(t, d.Output); strings.Join(types, ",") != "video,audio,subtitle" {
+		t.Fatalf("film.mp4 streams %v", types)
+	}
+
+	// FILM_TAKES is the same option; without either, both shots still-pan
+	// (the rod is never selected for a request without takes_dir).
+	out, stderr, code := f.runEnv([]string{"FILM_TAKES=" + takes}, "draft", f.proj, "--no-qa")
+	if code != 0 || len(f.manifest(out).Degraded) != 1 {
+		t.Fatalf("FILM_TAKES draft: exit %d\n%s", code, stderr)
+	}
+	if d := f.draft("--no-qa"); len(d.Degraded) != 2 {
+		t.Fatalf("draft without takes: degraded %v", d.Degraded)
+	}
+}
+
+// A mapped take that is missing or fails its sha256 fails the render: never
+// a silent still-pan fallback.
+func TestDraftPrerenderedTakeFailures(t *testing.T) {
+	f := newFixture(t)
+	f.ossRods(false)
+	takes := f.takesDir()
+	clip := filepath.Join(takes, "nova-03.mp4")
+	b, _ := os.ReadFile(clip)
+	if err := os.WriteFile(clip, append(b, 0), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, stderr, code := f.run("draft", f.proj, "--no-qa", "--takes", takes)
+	if code != 1 || !strings.Contains(stderr, "animate:1 failed") || !strings.Contains(stderr, "sha256 mismatch for shot 01") {
+		t.Fatalf("bad sha256: exit %d\n%s", code, stderr)
+	}
+	os.Remove(clip)
+	_, stderr, code = f.run("draft", f.proj, "--no-qa", "--takes", takes)
+	if code != 1 || !strings.Contains(stderr, "no take for shot 01") {
+		t.Fatalf("missing mapped take: exit %d\n%s", code, stderr)
+	}
+	if _, stderr, code = f.run("draft", f.proj, "--no-qa", "--takes", filepath.Join(f.root, "nope")); code != 1 || !strings.Contains(stderr, "no such takes directory") {
+		t.Fatalf("missing takes dir: exit %d\n%s", code, stderr)
+	}
+}

@@ -127,6 +127,7 @@ case "$1 $2" in
     : > "$src/examples/oss-rods/narrate-local.bsh"
     : > "$src/examples/oss-rods/transcribe-whisperx.bsh"
     : > "$src/examples/oss-rods/translate-ollama.bsh"
+    : > "$src/examples/oss-rods/animate-prerendered.bsh"
     : > "$src/examples/api-rods/replicate-media.bsh"
     : > "$src/examples/api-rods/replicate.yaml"
     : > "$src/kb/defaults/pages/a.md"; : > "$src/kb/defaults/pages/b.md"
@@ -219,7 +220,7 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("apply: exit %d\n%s", code, out)
 	}
-	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "film: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-klein: registered", "narrate-local: registered", "transcribe-whisperx: registered", "translate-ollama: registered", "translate: registered", "song-replicate: registered", "image-replicate: registered", "animate-replicate: registered", "replicate-media: registered"} {
+	for _, want := range []string{"fetched the bashy source pin", "outpost-profile: registered", "satellite-member: registered", "onboard: registered", "satellite-provision: registered", "media: registered", "film: registered", "record: registered", "cast: registered", "chrome: registered", "chrome-open: registered", "plan: registered", "image: registered", "narrate: registered", "song: registered", "animate: registered", "tavily: registered", "brave: registered", "serper: registered", "search-claude: registered", "search-codex: registered", "search-agy: registered", "search-muse: registered", "bashy-defaults: registered", "kb defaults: 2 page(s)", "song-acestep: registered", "image-klein: registered", "narrate-local: registered", "transcribe-whisperx: registered", "translate-ollama: registered", "animate-prerendered: registered", "translate: registered", "song-replicate: registered", "image-replicate: registered", "animate-replicate: registered", "replicate-media: registered"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("apply output missing %q:\n%s", want, out)
 		}
@@ -258,6 +259,8 @@ func TestApplyFetchesRegistersAndReports(t *testing.T) {
 		"commands add narrate-local --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/narrate-local.bsh") + " --set provides.0=narrate --set route=oss --set requires=has=uv has=ffmpeg",
 		"commands add transcribe-whisperx --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/transcribe-whisperx.bsh") + " --set provides.0=transcribe --set route=oss --set requires=has=uv has=ffmpeg",
 		"commands add translate-ollama --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/translate-ollama.bsh") + " --set provides.0=translate --set provides.1=text --set route=oss --set requires=has=curl",
+		// Sprint 635: offered only to a request that carries a takes directory.
+		"commands add animate-prerendered --set exec.0=bashy --set exec.1=--bashsharp --set exec.2=" + f.pin("examples/oss-rods/animate-prerendered.bsh") + " --set provides.0=animate --set route=oss --set requires=has=ffmpeg --set accepts.0.path=/takes_dir --set accepts.0.pattern=. --set effects.0=read --set effects.1=write --set effects.2=exec",
 	} {
 		if !strings.Contains(f.calls(), want) {
 			t.Errorf("registration missing %q:\n%s", want, f.calls())

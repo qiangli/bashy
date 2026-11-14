@@ -67,8 +67,10 @@ tab opening), the service verbs `plan`,
 `translate`, `email` and `drive` (examples/service-door: one door body per role; providers
 are rods, see docs/service-rod-contract.md); `transcribe` has an embedded
 pipeline front door. The M2 oss rods `song-acestep`,
-`image-klein`, `narrate-local`, `transcribe-whisperx` and `translate-ollama` (examples/oss-rods:
-provides/route/requires records), the M5 Replicate API rods
+`image-klein`, `narrate-local`, `transcribe-whisperx`, `translate-ollama` and
+`animate-prerendered` (examples/oss-rods: provides/route/requires records;
+`animate-prerendered` also `accepts /takes_dir`, so only a request with a
+takes directory selects it), the M5 Replicate API rods
 (`examples/api-rods`, with vault-bound HTTP tool commands), and
 `bashy-defaults` itself.
 
@@ -89,7 +91,7 @@ set -e
 
 PROG=bashy-defaults
 
-# name|path inside the source tree|effects
+# name|path inside the source tree|effects[|door role|provides|route|requires|accepts PTR=RE2]
 DEFAULT_COMMANDS="outpost-profile|examples/outpost-profile/outpost-profile.bsh|read,write,exec
 satellite-member|examples/satellite-member/satellite-member.bsh|read,write,exec
 onboard|examples/onboard/onboard.bsh|read,write,exec
@@ -126,6 +128,7 @@ image-klein|examples/oss-rods/image-klein.bsh|read,write,exec,net||image.generat
 narrate-local|examples/oss-rods/narrate-local.bsh|read,write,exec,net||narrate|oss|has=uv has=ffmpeg
 transcribe-whisperx|examples/oss-rods/transcribe-whisperx.bsh|read,write,exec,net||transcribe|oss|has=uv has=ffmpeg
 translate-ollama|examples/oss-rods/translate-ollama.bsh|read,write,exec,net||translate,text|oss|has=curl
+animate-prerendered|examples/oss-rods/animate-prerendered.bsh|read,write,exec||animate|oss|has=ffmpeg|/takes_dir=.
 song-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|song|song|api|has=jq has=curl has=ffprobe has=python3
 image-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|image|image.generate,image.edit|api|has=jq has=curl has=ffprobe has=python3
 animate-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|animate|animate|api|has=jq has=curl has=ffprobe has=python3
@@ -200,7 +203,7 @@ cmd_apply() {
         echo "$PROG: upgraded the bashy source pin"
     fi
     [ -d "$src/examples" ] || fail "no source pin at $src" 1
-    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects role provides route requires; do
+    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects role provides route requires accepts; do
         [ -n "$name" ] || continue
         path="$src/$rel"
         if [ ! -f "$path" ]; then
@@ -222,6 +225,9 @@ cmd_apply() {
         IFS=$save_ifs
         [ -z "$route" ] || set -- "$@" --set "route=$route"
         [ -z "$requires" ] || set -- "$@" --set "requires=$requires"
+        # accepts: one JSON-pointer=RE2 request matcher (the selector skips the
+        # rod for a request without it).
+        [ -z "$accepts" ] || set -- "$@" --set "accepts.0.path=${accepts%%=*}" --set "accepts.0.pattern=${accepts#*=}"
         i=0
         for e in ${effects//,/ }; do
             set -- "$@" --set "effects.$i=$e"

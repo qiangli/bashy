@@ -15,6 +15,7 @@ it needs a 24 GB NVIDIA host the fleet has not confirmed (M3).
 | `narrate-local` | `narrate` | Chatterbox default, `kokoro:<voice>` light path; same pins as `media voice` | text/voice → `narration.wav` (silence-trimmed) |
 | `transcribe-whisperx` | `transcribe` | WhisperX `3.8.6` on Whisper large-v3, `--compute_type int8` for Mac/CPU | audio → `transcript.srt`/`.txt` |
 | `translate-ollama` | `translate` | Qwen3 `qwen3:8b` through a local ollama's HTTP API (Sprint 634); think off, temperature 0, one numbered request per cue list; needs only curl (jq is bashy's own applet, which `command -v` cannot see, so no rod declares `has=jq`) | SRT cues + target language → `translation.srt` (same timestamps, line count checked) |
+| `animate-prerendered` | `animate` | none on this host: returns a lip-synced take rendered off-host (Sprint 635: EchoMimicV3 / InfiniteTalk, Apache-2.0, on a self-terminating AWS GPU instance, returned through S3); `accepts /takes_dir`, so the selector offers it only to a request with a takes directory; needs a registered ffmpeg (decode check) | shot + takes_dir → `take.mp4` (+ `take.json` provenance); `takes.json` sha256 verified; a shot without a take fails, never a still-pan |
 
 All oss rods render from local snapshots under `BASHY_OSS_CACHE/bashy/oss`.
 They set `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`,
@@ -108,6 +109,7 @@ diffusers.
 | narrate-local | 12 | Chatterbox/Kokoro weights + uv env |
 | transcribe-whisperx | 10 | large-v3 (~3 GB) + torch env |
 | translate-ollama | — | weights live in ollama's own store (staged once); no rod cache |
+| animate-prerendered | — | renders nothing; reads the takes dir |
 
 Override the cache with `BASHY_OSS_CACHE`; the failure message names the
 remedy. `OSS_AVAIL_KB_OVERRIDE` replaces the `df` probe in tests only.
