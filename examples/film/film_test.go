@@ -1205,3 +1205,52 @@ func TestLipsyncTakesReviewAndDraft(t *testing.T) {
 		t.Fatalf("draft --takes: %s %v", d.Outcome, providers)
 	}
 }
+
+// film draft --locked assembles on the lock: the locked draft's song and the
+// locked portraits are reused (provider film-locked, no song or image rod
+// call), the timing and shot bounds are the lock's, the manifest carries the
+// lock's sha256, and a take cut from that song lands on its locked shot.
+func TestDraftLockedAssemblesOnTheLock(t *testing.T) {
+	f := newFixture(t)
+	f.ossRods(false)
+	f.draft()
+	if _, stderr, code := f.run("lock", f.proj); code != 0 {
+		t.Fatalf("film lock: exit %d\n%s", code, stderr)
+	}
+	takes := f.takesDir()
+	f.resetRodLog()
+	d := f.draft("--locked", "--takes", takes)
+	if d.Outcome != "success" || d.Lock == "" || d.ID != "02" {
+		t.Fatalf("locked draft: %+v", d)
+	}
+	for _, r := range f.rods() {
+		if r["role"] == "song" || r["role"] == "image.generate" {
+			t.Fatalf("locked draft called a %s rod: %v", r["role"], r)
+		}
+	}
+	got := map[string]stage{}
+	for _, s := range d.Stages {
+		got[s.Stage] = s
+	}
+	song := got["song"]
+	if song.Provider != "film-locked" || song.Route != "local" || song.Outcome != "success" || len(song.Outputs) != 1 ||
+		!strings.HasPrefix(song.Outputs[0]["path"], filepath.Join(f.proj, "drafts", "01", "song")) {
+		t.Fatalf("song stage: %+v", song)
+	}
+	if p := got["portrait:lead"]; p.Provider != "film-locked" || len(p.Outputs) != 1 {
+		t.Fatalf("portrait stage: %+v", p)
+	}
+	if a := got["animate:1"]; a.Provider != "animate-prerendered" || a.Route != "oss" {
+		t.Fatalf("animate:1 stage: %+v", a)
+	}
+	for _, name := range []string{"shots.tsv", "timing.srt"} {
+		want, _ := os.ReadFile(filepath.Join(f.proj, "lock", name))
+		have, _ := os.ReadFile(filepath.Join(f.proj, "drafts", "02", name))
+		if len(want) == 0 || string(want) != string(have) {
+			t.Fatalf("draft 02 %s differs from the lock", name)
+		}
+	}
+	if _, stderr, code := f.run("final", f.proj, "--route", "browser", "--locked"); code != 1 || !strings.Contains(stderr, "--locked is for drafts") {
+		t.Fatalf("final --locked: exit %d\n%s", code, stderr)
+	}
+}

@@ -73,15 +73,17 @@ Timeout: 24h
 ```
 
 ### draft-lipsync
-A draft that assembles the takes (animate-prerendered per shot with a take;
-the other shots keep the oss route or the labelled still-pan fallback).
+A draft that assembles the takes on the LOCK (`--locked`: the locked draft's
+song, timing, portraits and shot bounds, so the takes cut from that song stay
+in sync; animate-prerendered per shot with a take, the other shots keep the
+oss route or the labelled still-pan fallback).
 Effects: read, write, exec, net
 Timeout: 2h
 
 ```bash
 [ -n "$PROJECT" ] || { echo "draft-lipsync: set PROJECT=DIR (the film directory)" >&2; exit 2; }
 [ -f "$PROJECT/takes/takes.json" ] || { echo "draft-lipsync: no $PROJECT/takes/takes.json (run proof-lipsync or takes-lipsync)" >&2; exit 1; }
-"$BASHY" film draft "$PROJECT" --takes "$PROJECT/takes" --route oss
+"$BASHY" film draft "$PROJECT" --takes "$PROJECT/takes" --locked --route oss
 ```
 
 ### review-lipsync

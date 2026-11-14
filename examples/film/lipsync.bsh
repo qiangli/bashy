@@ -13,7 +13,8 @@
 # --provider P (default animate-echomimic) and "model":"echomimicv3-flash-pro",
 # and record TDIR/NN.mp4 (default TDIR: DIR/takes) in TDIR/takes.json
 # (bashy-film-takes-v1: file, provider, model, revision, elapsed_s, sha256) —
-# the manifest `film draft DIR --takes TDIR` and animate-prerendered read.
+# the manifest `film draft DIR --takes TDIR --locked` (assembled on the locked
+# song the takes were cut from) and animate-prerendered read.
 # --proof renders only the first selected shot, --seconds (default 5) long.
 # review: per take, TDIR/review/NN-sheet.png (contact sheet),
 # NN-mouth.png (mouth-region grid) and a mouth-region motion metric (ffmpeg

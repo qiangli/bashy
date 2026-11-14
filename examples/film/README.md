@@ -77,7 +77,7 @@ PROJECT=DIR [SHOTS="3 5"]` from anywhere; bodies call only registered commands
 | `doctor-lipsync` | `animate-echomimic --doctor --json` (read-only; the default target) |
 | `proof-lipsync` | one 5 s take from the first close-up shot's locked still and sung segment: `PROJECT/takes/NN.mp4` + `takes.json` |
 | `takes-lipsync` | every close-up shot (`kind: close`) of the locked storyboard whose still exists, full segments, same `takes.json` |
-| `draft-lipsync` | `film draft PROJECT --takes PROJECT/takes --route oss` |
+| `draft-lipsync` | `film draft PROJECT --takes PROJECT/takes --locked --route oss` |
 | `review-lipsync` | contact sheet, mouth-region grid and mouth motion metric per take into `PROJECT/takes/review/` |
 
 `film-lipsync` (`lipsync.bsh`, registered by `bashy-defaults`) is the body

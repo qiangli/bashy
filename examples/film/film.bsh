@@ -6,7 +6,7 @@
 #   film doctor
 #   film init DIR [--title T]
 #   film write DIR [--route oss] [--provider-text NAME] [--kind lyrics|shots|prompts|all]
-#   film draft DIR [--route oss] [--provider-ROLE NAME] [--route-ROLE R] [--takes DIR] [--qa-provider P] [--no-qa] [--no-shot-numbers]
+#   film draft DIR [--route oss] [--provider-ROLE NAME] [--route-ROLE R] [--takes DIR] [--locked] [--qa-provider P] [--no-qa] [--no-shot-numbers]
 #   film lock DIR [--draft N] [--timing FILE]
 #   film final DIR --route browser|api [--yes] [--dry-run] [--provider-ROLE NAME] [--takes DIR] [--qa-provider P] [--no-qa] [--shot-numbers]
 #   film status DIR
@@ -50,6 +50,11 @@ metadata:
   oss), which verifies the sha256 and reports the take's model and cost in
   the stage text; a missing or mismatched mapped take fails the render.
   Shots without a take render as before.
+- `--locked` (draft only): assemble on the lock — the locked draft's song,
+  the locked timing, translation, portraits and shot bounds, exactly what a
+  final reuses — so takes cut from the locked song land on their shots in
+  sync; only the animate stage runs a rod. A reused stage records provider
+  `film-locked` (route local) and the manifest carries lock_sha256.
 - A draft is an animatic for review: every shot carries its burned-in shot
   number and kind, stills render at `draft.still_size` (e.g. 768x432), and
   each render writes `storyboard.md` (shot/time/lyric/prompt/seed),
@@ -84,6 +89,12 @@ bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
 
 die() { echo "film: $*" >&2; exit 1; }
 note() { echo "film: $*" >&2; }
+# reuse_stage STAGE ROLE PATH MEDIA_TYPE WHAT: a stage served from the lock
+# (film draft --locked), recorded like a rod result, no rod called.
+reuse_stage() {
+	J_S=$1 J_R=$2 J_P=$3 J_M=$4 J_W=$5 jq -cn '{stage:env.J_S,schema_version:"bashy-svc-v1",role:env.J_R,provider:"film-locked",route:"local",outcome:"success",outputs:[{path:env.J_P,media_type:env.J_M}],text:("reused " + env.J_W),cost_class:"local",elapsed:0}' >>"$render/stages.jsonl"
+	note "$1: reused $5"
+}
 usage() { sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 # The command registry passes typed flags as --name=value; accept both forms.
@@ -462,7 +473,7 @@ next_id() { # next_id DIR -> 01, 02, ...
 }
 
 parse_render_opts() {
-	route="" yes=0 dry=0 qa=1 qa_provider="" json=0 proj="" numbers="" takes=${FILM_TAKES:-} shot_take=""
+	route="" yes=0 dry=0 qa=1 qa_provider="" json=0 proj="" numbers="" takes=${FILM_TAKES:-} shot_take="" locked=0
 	prov_song="" prov_image="" prov_animate="" prov_transcribe="" prov_translate=""
 	route_song="" route_image="" route_animate="" route_transcribe="" route_translate=""
 	while [ $# -gt 0 ]; do
@@ -479,6 +490,7 @@ parse_render_opts() {
 		--route-transcribe) route_transcribe=$2; shift 2 ;;
 		--route-translate) route_translate=$2; shift 2 ;;
 		--takes) takes=$2; shift 2 ;;
+		--locked) locked=1; shift ;;
 		--qa-provider) qa_provider=$2; shift 2 ;;
 		--no-qa) qa=0; shift ;;
 		--shot-numbers) numbers=1; shift ;;
@@ -493,6 +505,7 @@ parse_render_opts() {
 	[ -n "$proj" ] || die "usage: film $kind DIR ..."
 	[ -d "$proj" ] || die "$kind: no such project: $proj"
 	proj=$(cd "$proj" && pwd)
+	[ "$locked" = 0 ] || [ "$kind" = draft ] || die "$kind: --locked is for drafts (a final always renders from the lock)"
 	if [ -n "$takes" ]; then
 		[ -d "$takes" ] || die "$kind: no such takes directory: $takes"
 		takes=$(cd "$takes" && pwd)
@@ -521,7 +534,12 @@ cmd_draft() {
 	parse_render_opts "$@"
 	[ -n "$route" ] || route=oss
 	[ -n "$numbers" ] || numbers=1
-	sb=$proj/storyboard.json
+	if [ "$locked" = 1 ]; then
+		verify_lock "$proj/lock"
+		sb=$proj/lock/storyboard.json
+	else
+		sb=$proj/storyboard.json
+	fi
 	check_storyboard "$sb"
 	render_run "$proj/drafts"
 }
@@ -554,19 +572,31 @@ render_run() {
 	: >"$render/stages.jsonl"
 	size=$(jq -r '.size // "1280x720"' "$sb")
 	seed=$(jq -r '.seed // 1' "$sb")
+	# A final, or a locked draft, reuses the lock's timing, translation and shot
+	# bounds; a locked draft also reuses the locked draft's song and the locked
+	# portraits (stage provider film-locked, no rod).
+	local reuse=0 ldraft=""
+	if [ "$kind" = final ] || [ "$locked" = 1 ]; then reuse=1; fi
+	[ "$locked" = 0 ] || ldraft=$(jq -r '.draft' "$proj/lock/lock.json")
 	if [ "$dry" = 1 ]; then note "$kind $id: route $route (dry run)"; else note "$kind $id: route $route"; fi
 
 	# -- song
 	local env status=0 song
 	local sdur
-	sdur=$(if [ "$kind" = final ]; then cat "$proj/lock/duration"; else jq -r '.song.duration_s // 75' "$sb"; fi)
-	J_D=$sdur J_SEED=$seed request "$render/song.request.json" '{title, prompt:.song.prompt, lyrics:(.lyrics | join("\n")), duration_s:(env.J_D|tonumber), language:(.song.language // "en"), seed:(env.J_SEED|tonumber)}'
-	mapfile -t o < <(stage_opts song)
-	env=$(door song song "$render/song" "${o[@]}" -- "$render/song.request.json") || status=$?
-	stage_ok song "$env" "$status" || return $?
-	if [ "$dry" = 0 ]; then
-		song=$(first_output "$env" audio/)
-		[ -n "$song" ] && [ -f "$song" ] || fail_render "song: the rod reported no audio output"
+	if [ "$locked" = 1 ]; then
+		song=$(find "$proj/drafts/$ldraft/song" -type f \( -name '*.wav' -o -name '*.mp3' -o -name '*.flac' -o -name '*.m4a' \) 2>/dev/null | sort | head -1)
+		[ -n "$song" ] && [ -f "$song" ] || fail_render "song: the locked draft $ldraft has no song under $proj/drafts/$ldraft/song"
+		reuse_stage song song "$song" "audio/${song##*.}" "the locked draft $ldraft's song"
+	else
+		sdur=$(if [ "$kind" = final ]; then cat "$proj/lock/duration"; else jq -r '.song.duration_s // 75' "$sb"; fi)
+		J_D=$sdur J_SEED=$seed request "$render/song.request.json" '{title, prompt:.song.prompt, lyrics:(.lyrics | join("\n")), duration_s:(env.J_D|tonumber), language:(.song.language // "en"), seed:(env.J_SEED|tonumber)}'
+		mapfile -t o < <(stage_opts song)
+		env=$(door song song "$render/song" "${o[@]}" -- "$render/song.request.json") || status=$?
+		stage_ok song "$env" "$status" || return $?
+		if [ "$dry" = 0 ]; then
+			song=$(first_output "$env" audio/)
+			[ -n "$song" ] && [ -f "$song" ] || fail_render "song: the rod reported no audio output"
+		fi
 	fi
 
 	# -- stills: one portrait per character (a consistent set), then each
@@ -576,6 +606,14 @@ render_run() {
 	[ "$kind" = final ] || ssize=$(jq -r '.draft.still_size // .size // "1280x720"' "$sb")
 	declare -A portrait=()
 	while IFS=$'\t' read -r cid cseed; do
+		if [ "$locked" = 1 ]; then
+			[ -f "$proj/lock/portraits/$cid.png" ] || fail_render "portrait $cid: not in the lock ($proj/lock/portraits)"
+			mkdir -p "$render/portraits"
+			cp "$proj/lock/portraits/$cid.png" "$render/portraits/$cid.png"
+			portrait[$cid]=$render/portraits/$cid.png
+			reuse_stage "portrait:$cid" image.generate "${portrait[$cid]}" image/png "the locked portrait"
+			continue
+		fi
 		pr=$render/portraits/$cid.request.json
 		mkdir -p "$render/portraits"
 		ref=""
@@ -597,7 +635,7 @@ render_run() {
 	done < <(jq -r '(.characters[], .stills[]?) | [.id, (.seed // "")] | @tsv' "$sb")
 
 	# -- timing: transcribe the draft song; a final reuses the locked timing
-	if [ "$kind" = final ]; then
+	if [ "$reuse" = 1 ]; then
 		cp "$proj/lock/timing.srt" "$render/timing.srt"
 	elif [ "$dry" = 0 ]; then
 		J_A=$song request "$render/transcribe.request.json" '{audio:env.J_A, language:(.song.language // "en"), format:"srt"}'
@@ -625,6 +663,10 @@ render_run() {
 	if jq -e '.translation != null' "$sb" >/dev/null; then
 		if [ "$kind" = final ]; then
 			cp "$proj/lock/translation.srt" "$render/translation.srt"
+		elif [ "$locked" = 1 ] && [ -f "$proj/lock/translation.srt" ]; then
+			cp "$proj/lock/translation.srt" "$render/translation.srt"
+		elif [ "$locked" = 1 ] && [ -f "$proj/drafts/$ldraft/translation.srt" ]; then
+			cp "$proj/drafts/$ldraft/translation.srt" "$render/translation.srt"
 		elif [ "$dry" = 1 ]; then
 			if ! jq -e '.translation.lines != null' "$sb" >/dev/null; then
 				status=0
@@ -649,7 +691,7 @@ render_run() {
 
 	# -- shot bounds from the timing; a final reuses the locked bounds
 	local total
-	if [ "$kind" = final ]; then
+	if [ "$reuse" = 1 ]; then
 		total=$(cat "$proj/lock/duration")
 		cp "$proj/lock/shots.tsv" "$render/shots.tsv"
 	else
@@ -909,7 +951,7 @@ finish_render() {
 	local start=$1 output=$2 outcome=${3:-}
 	[ -n "$outcome" ] || { if [ "$dry" = 1 ]; then outcome=dry-run; else outcome=success; fi; }
 	local lock_sha=""
-	[ "$kind" != final ] || lock_sha=$(sha "$proj/lock/lock.json")
+	[ "$kind" != final ] && [ "${locked:-0}" != 1 ] || lock_sha=$(sha "$proj/lock/lock.json")
 	J_KIND=$kind J_ID=$(basename "$render") J_ROUTE=$route J_OUTCOME=$outcome J_SB=$(sha "$sb") J_LOCK=$lock_sha J_OUT=$output \
 		J_ELAPSED=$((SECONDS - start)) J_STAGES=$(awk 'BEGIN{printf "["} NR>1{printf ","} {printf "%s", $0} END{print "]"}' "$render/stages.jsonl") \
 		J_TEXT=$(if [ "$kind" = draft ]; then latest_text; else echo null; fi) \
@@ -994,11 +1036,11 @@ cmd_lock() {
 # verify_lock DIR: every locked file is present and unchanged.
 verify_lock() {
 	local lock=$1 f want got
-	[ -f "$lock/lock.json" ] || die "final: no lock (run: film lock DIR after a draft you like)"
+	[ -f "$lock/lock.json" ] || die "$kind: no lock (run: film lock DIR after a draft you like)"
 	while IFS=$'\t' read -r f want; do
-		[ -f "$lock/$f" ] || die "final: locked file missing: $lock/$f"
+		[ -f "$lock/$f" ] || die "$kind: locked file missing: $lock/$f"
 		got=$(sha "$lock/$f")
-		[ "$got" = "$want" ] || die "final: locked file changed: $lock/$f (re-lock with film lock)"
+		[ "$got" = "$want" ] || die "$kind: locked file changed: $lock/$f (re-lock with film lock)"
 	done < <(jq -r '.files | to_entries[] | [.key, .value] | @tsv' "$lock/lock.json")
 }
 
