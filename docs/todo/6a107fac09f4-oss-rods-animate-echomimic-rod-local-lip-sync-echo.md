@@ -3,16 +3,20 @@ id: 6a107fac09f4
 kind: feature
 title: 'oss-rods: animate-echomimic rod (local lip sync: EchoMimicV3 Flash, image + audio -> talking take) with bashy-only provisioning'
 seq: 3236
-status: todo
+status: done
 priority: p1
 labels:
     - media
     - film
     - windows
 created: 2026-11-14T12:18:48.834395Z
+weave: 107
+assignee: claude-opus5.5
 sprint: 635
 sprint_id: b2a7f529-ebc1-5236-9cb0-1327ba3c2e8c
 sprint_title: 'M8 showcase: commercial final + lip sync (carried from Sprint 627, operator decision)'
+closed: 2026-11-14T12:47:26.077292Z
+closed_by: claude-fable5.1-s635
 ---
 
 Sprint 635 (conductor claude-fable5.1-s635). Operator rules: local first; everything missing goes into examples/ and is registered as a custom command; all installs via bashy (bashy uv for Python/venv/packages, never winget/pip on the host); Windows native first.
