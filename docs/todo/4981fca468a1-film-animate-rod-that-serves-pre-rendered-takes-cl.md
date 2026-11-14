@@ -3,15 +3,19 @@ id: 4981fca468a1
 kind: feature
 title: 'film: animate rod that serves pre-rendered takes (cloud lip-sync clips) with recorded provider, model and cost'
 seq: 3235
-status: todo
+status: done
 priority: p1
 labels:
     - media
     - film
 created: 2026-11-14T00:04:19.873199Z
+weave: 106
+assignee: claude-opus5.5
 sprint: 635
 sprint_id: b2a7f529-ebc1-5236-9cb0-1327ba3c2e8c
 sprint_title: 'M8 showcase: commercial final + lip sync (carried from Sprint 627, operator decision)'
+closed: 2026-11-14T00:20:36.518551Z
+closed_by: claude-fable5.1-s635
 ---
 
 Sprint 635 lip sync (conductor claude-fable5.1-s635; plan: the Sprint 635 card continuity + umbrella docs/todo/efd9bc004b56 M8 rules). Lip-synced performance clips are rendered on a self-terminating AWS GPU instance (EchoMimicV3 / InfiniteTalk, Apache-2.0) and returned through S3; the film must assemble them as ordinary animate takes with honest provenance.
