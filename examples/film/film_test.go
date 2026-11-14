@@ -20,6 +20,8 @@ package film
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -1067,5 +1069,139 @@ func TestDraftPrerenderedTakeFailures(t *testing.T) {
 	}
 	if _, stderr, code = f.run("draft", f.proj, "--no-qa", "--takes", filepath.Join(f.root, "nope")); code != 1 || !strings.Contains(stderr, "no such takes directory") {
 		t.Fatalf("missing takes dir: exit %d\n%s", code, stderr)
+	}
+}
+
+// runLipsync runs examples/film/lipsync.bsh (the registered film-lipsync).
+func (f *fixture) runLipsync(args ...string) (string, string, int) {
+	f.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, f.bin, append([]string{"--bashsharp", filepath.Join(moduleRoot(f.t), "examples", "film", "lipsync.bsh")}, args...)...)
+	cmd.Env = f.env
+	cmd.Dir = f.root
+	var stderr strings.Builder
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	code := 0
+	if ee, ok := err.(*exec.ExitError); ok {
+		code = ee.ExitCode()
+	} else if err != nil {
+		f.t.Fatalf("film-lipsync %v: %v", args, err)
+	}
+	return strings.TrimSpace(string(out)), stderr.String(), code
+}
+
+// Sprint 635: film-lipsync (behind examples/film/dag.md) renders a take per
+// close-up shot of the LOCKED storyboard through the animate door, records
+// takes.json with provenance and sha256, reviews each take, and `film draft
+// --takes` assembles them. The fixture rod stands in for animate-echomimic.
+func TestLipsyncTakesReviewAndDraft(t *testing.T) {
+	f := newFixture(t)
+	f.ossRods(true)
+	f.editStoryboard(func(sb map[string]any) {
+		sb["shots"].([]any)[0].(map[string]any)["kind"] = "close"
+	})
+	f.draft()
+	if _, stderr, code := f.run("lock", f.proj); code != 0 {
+		t.Fatalf("film lock: exit %d\n%s", code, stderr)
+	}
+	takes := filepath.Join(f.proj, "takes")
+	manifest := filepath.Join(takes, "takes.json")
+	type entry struct {
+		File     string  `json:"file"`
+		Provider string  `json:"provider"`
+		SHA      string  `json:"sha256"`
+		Seconds  float64 `json:"seconds"`
+		Route    string  `json:"route"`
+	}
+	read := func() map[string]entry {
+		var m struct {
+			Schema string           `json:"schema_version"`
+			Takes  map[string]entry `json:"takes"`
+		}
+		raw, err := os.ReadFile(manifest)
+		if err != nil || json.Unmarshal(raw, &m) != nil || m.Schema != "bashy-film-takes-v1" {
+			t.Fatalf("takes.json: %v\n%s", err, raw)
+		}
+		return m.Takes
+	}
+
+	// proof: the first close-up only, 5 s requested (the 6 s song ends first).
+	out, stderr, code := f.runLipsync("takes", f.proj, "--proof", "--provider", "oss-animate")
+	if code != 0 || out != manifest {
+		t.Fatalf("proof: exit %d %q\n%s", code, out, stderr)
+	}
+	got := read()
+	e, ok := got["01"]
+	if len(got) != 1 || !ok || e.File != "01.mp4" || e.Provider != "oss-animate" || e.Route != "oss" || e.Seconds != 5 {
+		t.Fatalf("proof takes.json: %+v", got)
+	}
+	b, _ := os.ReadFile(filepath.Join(takes, "01.mp4"))
+	sum := sha256.Sum256(b)
+	if e.SHA != hex.EncodeToString(sum[:]) {
+		t.Fatalf("sha256 %s does not match the clip", e.SHA)
+	}
+	if _, err := os.Stat(filepath.Join(takes, "work")); err == nil {
+		if left, _ := os.ReadDir(filepath.Join(takes, "work")); len(left) != 0 {
+			t.Errorf("work dirs left behind: %v", left)
+		}
+	}
+	// The request asked for EchoMimicV3 with the locked still.
+	raw, _ := os.ReadFile(f.rodLog())
+	if !strings.Contains(string(raw), `"role":"animate"`) {
+		t.Fatalf("rod log has no animate call:\n%s", raw)
+	}
+
+	// takes: every close-up (shot 2 is not one); --shots filters.
+	if _, stderr, code = f.runLipsync("takes", f.proj, "--provider", "oss-animate"); code != 0 {
+		t.Fatalf("takes: exit %d\n%s", code, stderr)
+	}
+	if got = read(); len(got) != 1 || got["01"].Seconds >= 5 {
+		t.Fatalf("takes takes.json: %+v", got)
+	}
+	if _, stderr, code = f.runLipsync("takes", f.proj, "--shots", "2", "--provider", "oss-animate"); code == 0 || !strings.Contains(stderr, "no close-up shot") {
+		t.Fatalf("--shots 2 (not a close-up): exit %d\n%s", code, stderr)
+	}
+
+	// review: contact sheet, mouth grid, motion metric.
+	out, stderr, code = f.runLipsync("review", f.proj)
+	if code != 0 || out != filepath.Join(takes, "review", "review.json") {
+		t.Fatalf("review: exit %d %q\n%s", code, out, stderr)
+	}
+	var rv struct {
+		Takes map[string]struct {
+			Sheet  string `json:"sheet"`
+			Mouth  string `json:"mouth_grid"`
+			Motion struct {
+				Pairs int     `json:"pairs"`
+				Mean  float64 `json:"mean"`
+			} `json:"motion"`
+		} `json:"takes"`
+	}
+	raw, _ = os.ReadFile(out)
+	if err := json.Unmarshal(raw, &rv); err != nil {
+		t.Fatalf("review.json: %v\n%s", err, raw)
+	}
+	r := rv.Takes["01"]
+	if r.Motion.Pairs < 10 || !fileExists(filepath.Join(takes, "review", r.Sheet)) || !fileExists(filepath.Join(takes, "review", r.Mouth)) {
+		t.Fatalf("review: %s", raw)
+	}
+
+	// film draft --takes assembles the take through animate-prerendered.
+	rod := filepath.Join(moduleRoot(t), "examples", "oss-rods", "animate-prerendered.bsh")
+	f.bashy("commands", "add", "animate-prerendered", "--set", "exec.0="+f.bin, "--set", "exec.1=--bashsharp", "--set", "exec.2="+rod,
+		"--set", "provides.0=animate", "--set", "route=oss", "--set", "requires=has=ffmpeg",
+		"--set", "accepts.0.path=/takes_dir", "--set", "accepts.0.pattern=.",
+		"--set", "effects.0=read", "--set", "effects.1=write", "--set", "effects.2=exec")
+	d := f.draft("--takes", takes)
+	var providers []string
+	for _, s := range d.Stages {
+		if strings.HasPrefix(s.Stage, "animate:") {
+			providers = append(providers, s.Stage+"="+s.Provider)
+		}
+	}
+	if d.Outcome != "success" || strings.Join(providers, " ") != "animate:1=animate-prerendered animate:2=oss-animate" {
+		t.Fatalf("draft --takes: %s %v", d.Outcome, providers)
 	}
 }

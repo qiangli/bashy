@@ -1,0 +1,315 @@
+#!/usr/bin/env -S bashy --bashsharp
+# animate-echomimic — oss rod for the `animate` role: a lip-synced take from
+# one still and one audio clip with EchoMimicV3 Flash (Ant Group, Apache-2.0)
+# on a local NVIDIA GPU, Windows native first. Sprint 635: the recipe is
+# docs/sprint-635-echomimic-staging-reference.ps1 (proved on an A10G, AWS
+# attempt 12) — pins, env and the two infer_flash.py patches are its.
+# Staging is deliberate (--stage); a render never provisions, runs offline
+# and refuses with the exact staging command when anything is missing.
+# ANIMATE_ECHOMIMIC_PY replaces the generator (fixture stand-ins in tests).
+
+~~~skill as guide
+---
+name: animate-echomimic
+description: Open-source lip-sync rod (EchoMimicV3 Flash, Apache-2.0) for the animate service role on a local NVIDIA GPU, Windows native first. --stage provisions the pinned Python stack and weights through bashy uv; renders run offline from the staged cache and refuse when it is incomplete.
+metadata:
+  requires: "has=uv"
+---
+# animate-echomimic — EchoMimicV3 Flash rod (route oss)
+
+    bashy animate-echomimic --stage [--dry-run]   # provision once (~12 GB weights)
+    bashy animate-echomimic --doctor --json       # read-only: what is staged
+    bashy animate --route oss --json req.json     # req.json carries "model":"echomimicv3-flash-pro"
+
+Request: {image, audio, model?, prompt?, duration_s? | video_length?, seed?
+(7011), sample_size? (512), steps? (8)} -> take.mp4 (H.264 + AAC, the
+request's audio muxed) + take.json (provider, model, revisions, elapsed_s,
+sha256) + one bashy-svc-rod-v1 result. Registered with `accepts
+/model=^echomimic`, so the selector offers it only to a request that asks
+for it and it never shadows film's still-pan fallback.
+
+Cache: BASHY_OSS_CACHE/bashy/oss/animate-echomimic/{venv,echomimic_v3,weights}.
+Pins and the attempt history: examples/oss-rods/README.md and the umbrella's
+docs/sprint-635-lipsync-evidence.md.
+~~~
+
+set -eu
+
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+# shellcheck source=oss-preflight.bsh
+. "$here/oss-preflight.bsh"
+
+ROD=animate-echomimic
+bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
+OSS_ROD_TEXT=""
+
+# -- pins (Sprint 635 attempt 12)
+SOURCE_URL=https://github.com/antgroup/echomimic_v3
+SOURCE_REV=7e89489ca51c0d008fc1963ec6c03fc5bd0b9397
+ECHO_REPO=BadToBest/EchoMimicV3
+ECHO_REV=311e176905a8c4c24b240b530488fe636ce4d249
+ECHO_VARIANT=echomimicv3-flash-pro
+WAN_REPO=alibaba-pai/Wan2.1-Fun-V1.1-1.3B-InP
+WAN_REV=fc913c34361f4ec879e2f9c78b4f11ae50a937d1
+W2V_REPO=TencentGameMate/chinese-wav2vec2-base
+W2V_REV=3991242c806928916fff4a8c0e4f76acf661b743
+PYTHON_VERSION=3.10
+TORCH_PINS=(torch==2.6.0 torchvision==0.21.0 torchaudio==2.6.0)
+STACK_PINS=(diffusers==0.33.1 transformers==4.51.3 accelerate==1.6.0 numpy==1.26.4
+	huggingface_hub==0.30.2 safetensors einops omegaconf decord==0.6.0 moviepy==2.2.1
+	"imageio[ffmpeg]" librosa scikit-image opencv-python SentencePiece ftfy func_timeout
+	pyloudnorm timm torchdiffeq torchsde beautifulsoup4 tomesd albumentations scenedetect
+	onnxruntime mmgp)
+# Weights (~12 GB) plus the CUDA torch stack (~6 GB) and headroom.
+NEED_GB=30
+INFER=infer_flash_bashy.py
+
+die() { echo "$ROD: $*" >&2; exit "${2:-1}"; }
+
+# native_path P: /c/... (the Windows shell's pwd) as C:/... for a native exe.
+native_path() {
+	local p=$1
+	if [ "$(oss_os_name)" = windows ]; then case $p in /[a-zA-Z]/*) p="${p:1:1}:${p:2}" ;; esac; fi
+	printf '%s\n' "$p"
+}
+
+sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+
+root=$(oss_cache_root "$ROD")
+root=${root//\\//}
+venv=$root/venv
+srcdir=$root/echomimic_v3
+weights=$root/weights
+stamp=$root/staged.json
+case $(oss_os_name) in windows) py=$venv/Scripts/python.exe ;; *) py=$venv/bin/python ;; esac
+STAGE_CMD="bashy $ROD --stage"
+
+# staged_missing: one "need<TAB>path" line per staged item that is absent.
+staged_missing() {
+	local item
+	for item in "python venv|$py" "echomimic_v3 source at $SOURCE_REV|$srcdir/config/config.yaml" \
+		"patched $INFER|$srcdir/$INFER" \
+		"$WAN_REPO@$WAN_REV|$weights/Wan2.1-Fun-V1.1-1.3B-InP/diffusion_pytorch_model.safetensors" \
+		"$W2V_REPO@$W2V_REV|$weights/chinese-wav2vec2-base/pytorch_model.bin" \
+		"$ECHO_REPO@$ECHO_REV ($ECHO_VARIANT)|$weights/transformer/diffusion_pytorch_model.safetensors" \
+		"staging record|$stamp"; do
+		[ -s "${item#*|}" ] || printf '%s\t%s\n' "${item%%|*}" "${item#*|}"
+	done
+}
+
+# ffmpeg goes through the registered command (--stage registers the
+# imageio-ffmpeg binary when none is); a bare PATH ffmpeg is the fallback
+# off Windows only, where it cannot run under bashy.
+FFMPEG=()
+if BASHY_HINTS=off "$bashy_bin" commands show ffmpeg >/dev/null 2>&1; then
+	FFMPEG=("$bashy_bin" ffmpeg)
+elif [ "$(oss_os_name)" != windows ] && command -v ffmpeg >/dev/null 2>&1; then
+	FFMPEG=(ffmpeg)
+fi
+
+# ---- doctor (read-only) ------------------------------------------------------
+
+if [ "${1:-}" = --doctor ]; then
+	[ "${2:-}" = --json ] || die "--doctor needs --json" 2
+	missing='[]'
+	add_missing() { missing=$(printf '%s\n' "$missing" | J_N="$1" J_I="$2" jq -c '. + [{need:env.J_N,install:env.J_I}]'); }
+	command -v uv >/dev/null 2>&1 || add_missing has=uv "bashy uv --version (bashy provisions its managed uv)"
+	[ ${#FFMPEG[@]} -gt 0 ] || add_missing "registered command ffmpeg" "$STAGE_CMD (registers ffmpeg from imageio-ffmpeg)"
+	if [ -z "${ANIMATE_ECHOMIMIC_PY:-}" ]; then
+		while IFS=$'\t' read -r need path; do
+			[ -n "$need" ] && add_missing "staged: $need ($path)" "$STAGE_CMD"
+		done < <(staged_missing)
+	fi
+	printf '%s\n' "$missing" | J_C="$root" jq -c '{schema_version:"bashy-svc-doctor-v1",available:(length == 0),missing:.,cache:env.J_C}'
+	exit 0
+fi
+
+# ---- stage (deliberate provisioning) -------------------------------------------
+
+# run_step DESC CMD...: print the step; with --dry-run, only print it.
+run_step() {
+	local desc=$1; shift
+	echo "$ROD: stage: $desc" >&2
+	if [ "$dry" = 1 ]; then printf '  %s\n' "$*" >&2; return 0; fi
+	"$@"
+}
+
+# hf_get REPO REV DIR [FILES...]: one pinned snapshot over classic HTTP, retried.
+hf_get() {
+	local repo=$1 rev=$2 dir=$3 try
+	shift 3
+	if [ "$dry" = 1 ]; then
+		printf '  %s\n' "$py -m huggingface_hub.commands.huggingface_cli download $repo $* --revision $rev --local-dir $(native_path "$dir")" >&2
+		return 0
+	fi
+	for try in 1 2 3; do
+		if HF_HUB_DISABLE_XET=1 HF_HUB_ENABLE_HF_TRANSFER=0 "$py" -m huggingface_hub.commands.huggingface_cli download \
+			"$repo" "$@" --revision "$rev" --local-dir "$(native_path "$dir")" >&2; then
+			return 0
+		fi
+		echo "$ROD: stage: download of $repo failed (attempt $try of 3)" >&2
+	done
+	die "could not download $repo@$rev"
+}
+
+if [ "${1:-}" = --stage ]; then
+	dry=0
+	[ "${2:-}" != --dry-run ] || dry=1
+	[ "$dry" = 1 ] || oss_preflight_gb "$ROD" "$NEED_GB" || exit 1
+	[ "$dry" = 1 ] || mkdir -p "$root" "$weights"
+	# Toolchain: uv-managed Python in an isolated venv (the Store python is a stub).
+	if [ ! -x "$py" ]; then
+		run_step "python $PYTHON_VERSION" "$bashy_bin" uv python install "$PYTHON_VERSION"
+		run_step "venv $(native_path "$venv")" "$bashy_bin" uv venv "$(native_path "$venv")" --python "$PYTHON_VERSION"
+	fi
+	# Pinned stack: CUDA 12.4 torch on Windows/Linux (PyPI torch on macOS).
+	pins_key=$(printf '%s\n' "${TORCH_PINS[@]}" "${STACK_PINS[@]}" | cksum | cut -d' ' -f1)
+	if [ ! -f "$root/.pip-$pins_key" ]; then
+		torch_index=${ECHOMIMIC_TORCH_INDEX-}
+		if [ -z "${ECHOMIMIC_TORCH_INDEX+x}" ] && [ "$(oss_os_name)" != darwin ]; then torch_index=https://download.pytorch.org/whl/cu124; fi
+		index_args=()
+		[ -z "$torch_index" ] || index_args=(--index-url "$torch_index")
+		run_step "torch (${TORCH_PINS[*]})" "$bashy_bin" uv pip install --python "$(native_path "$py")" "${TORCH_PINS[@]}" "${index_args[@]}"
+		run_step "stack (${#STACK_PINS[@]} packages)" "$bashy_bin" uv pip install --python "$(native_path "$py")" "${STACK_PINS[@]}"
+		[ "$dry" = 1 ] || : >"$root/.pip-$pins_key"
+	fi
+	# Source at the pinned revision; the patches go to a COPY of infer_flash.py.
+	if [ ! -d "$srcdir/.git" ]; then
+		run_step "clone $SOURCE_URL" "$bashy_bin" git clone -q "$SOURCE_URL" "$(native_path "$srcdir")"
+	fi
+	if [ "$dry" = 1 ]; then
+		run_step "checkout $SOURCE_REV" "$bashy_bin" git -C "$(native_path "$srcdir")" checkout -q "$SOURCE_REV"
+	elif [ "$("$bashy_bin" git -C "$(native_path "$srcdir")" rev-parse HEAD 2>/dev/null)" != "$SOURCE_REV" ]; then
+		run_step "checkout $SOURCE_REV" "$bashy_bin" git -C "$(native_path "$srcdir")" checkout -q "$SOURCE_REV"
+		[ "$("$bashy_bin" git -C "$(native_path "$srcdir")" rev-parse HEAD)" = "$SOURCE_REV" ] || die "source is not at $SOURCE_REV"
+	fi
+	run_step "patch a copy of infer_flash.py -> $INFER" "$py" "$(native_path "$here/animate-echomimic-patch.py")" \
+		"$(native_path "$srcdir/infer_flash.py")" "$(native_path "$srcdir/$INFER")" >&2
+	# Weights at the pinned revisions (~12 GB), each fetched once.
+	[ -s "$weights/Wan2.1-Fun-V1.1-1.3B-InP/diffusion_pytorch_model.safetensors" ] ||
+		{ echo "$ROD: stage: weights $WAN_REPO@$WAN_REV" >&2; hf_get "$WAN_REPO" "$WAN_REV" "$weights/Wan2.1-Fun-V1.1-1.3B-InP"; }
+	[ -s "$weights/chinese-wav2vec2-base/pytorch_model.bin" ] ||
+		{ echo "$ROD: stage: weights $W2V_REPO@$W2V_REV" >&2; hf_get "$W2V_REPO" "$W2V_REV" "$weights/chinese-wav2vec2-base"; }
+	if [ ! -s "$weights/transformer/diffusion_pytorch_model.safetensors" ]; then
+		echo "$ROD: stage: weights $ECHO_REPO@$ECHO_REV ($ECHO_VARIANT)" >&2
+		hf_get "$ECHO_REPO" "$ECHO_REV" "$weights/dl" "$ECHO_VARIANT/diffusion_pytorch_model.safetensors" "$ECHO_VARIANT/config.json"
+		if [ "$dry" = 0 ]; then mkdir -p "$weights/transformer" && cp "$weights/dl/$ECHO_VARIANT"/* "$weights/transformer/"; fi
+	fi
+	# ffmpeg comes from the imageio-ffmpeg package (no winget), registered once.
+	ff=""
+	if [ "$dry" = 0 ]; then
+		ff=$("$py" -c "import imageio_ffmpeg; print(imageio_ffmpeg.get_ffmpeg_exe())" | tail -1)
+		ff=${ff%$'\r'}
+		[ -n "$ff" ] || die "imageio-ffmpeg reported no ffmpeg"
+	fi
+	if ! BASHY_HINTS=off "$bashy_bin" commands show ffmpeg >/dev/null 2>&1; then
+		run_step "register ffmpeg (imageio-ffmpeg)" "$bashy_bin" commands add ffmpeg --set "exec.0=${ff:-<imageio-ffmpeg exe>}" \
+			--set effects.0=read --set effects.1=write --set effects.2=exec >&2
+	fi
+	if [ "$dry" = 1 ]; then echo "$ROD: stage: dry run; nothing written under $root" >&2; exit 0; fi
+	tsha=$(sha "$weights/transformer/diffusion_pytorch_model.safetensors")
+	echo "$ROD: transformer sha256 $tsha" >&2
+	J_SRC=$SOURCE_REV J_E="$ECHO_REPO@$ECHO_REV/$ECHO_VARIANT" J_W="$WAN_REPO@$WAN_REV" J_A="$W2V_REPO@$W2V_REV" \
+		J_T="$tsha" J_F="$ff" J_P="$(printf '%s\n' "${TORCH_PINS[@]}" "${STACK_PINS[@]}")" J_C="$root" \
+		jq -n '{schema_version:"bashy-oss-stage-v1", rod:"animate-echomimic", cache:env.J_C, source:env.J_SRC,
+			weights:{transformer:env.J_E, base:env.J_W, audio_encoder:env.J_A}, transformer_sha256:env.J_T,
+			ffmpeg:env.J_F, pins:(env.J_P | split("\n") | map(select(. != "")))}' >"$stamp.new"
+	mv "$stamp.new" "$stamp"
+	cat "$stamp"
+	exit 0
+fi
+
+# ---- render (offline; never provisions) ----------------------------------------
+
+REQ=$(oss_request_file "$@") || exit $?
+oss_check_schema "$REQ" || exit 2
+image=$(oss_request_get "$REQ" image "")
+audio=$(oss_request_get "$REQ" audio "")
+prompt=$(oss_request_get "$REQ" prompt "A person sings to camera, close-up, lips moving with the song, gentle head motion.")
+duration=$(oss_request_get "$REQ" duration_s "")
+frames=$(oss_request_get "$REQ" video_length "")
+seed=$(oss_request_get "$REQ" seed 7011)
+size=$(oss_request_get "$REQ" sample_size 512)
+steps=$(oss_request_get "$REQ" steps 8)
+fps=25
+[ -n "$image" ] || die "image is required" 2
+[ -n "$audio" ] || die "audio is required" 2
+image=${image//\\//}; audio=${audio//\\//}
+[ -f "$image" ] || die "image not found: $image"
+[ -f "$audio" ] || die "audio not found: $audio"
+case $seed$size$steps in *[!0-9]*) die "seed, sample_size and steps must be integers" 2 ;; esac
+[ ${#FFMPEG[@]} -gt 0 ] || die "needs a registered ffmpeg; stage it with: $STAGE_CMD"
+
+OUT=${BASHY_SVC_OUT:-}
+[ -n "$OUT" ] || OUT=$(mktemp -d "${TMPDIR:-/tmp}/bashy-svc-animate.XXXXXX")
+mkdir -p "$OUT"
+OUT=$(cd "$OUT" && pwd)
+
+if [ -z "${ANIMATE_ECHOMIMIC_PY:-}" ]; then
+	gaps=$(staged_missing)
+	if [ -n "$gaps" ]; then
+		printf '%s\n' "$gaps" | while IFS=$'\t' read -r need path; do echo "$ROD: not staged: $need ($path)" >&2; done
+		die "refusing to render without the staged model; stage it with: $STAGE_CMD (or: bashy --bashsharp $(native_path "$here/$ROD.bsh") --stage)"
+	fi
+fi
+oss_preflight_gb "$ROD" 2 || exit 1
+oss_offline
+export USE_TF=0 TRANSFORMERS_NO_TF=1 HF_HUB_DISABLE_XET=1 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+if [ -s "$stamp" ]; then
+	ff=$(jq -r '.ffmpeg // empty' "$stamp")
+	[ -z "$ff" ] || export IMAGEIO_FFMPEG_EXE="$ff" FFMPEG_BINARY="$ff"
+fi
+
+# Frames: video_length, else duration_s (or the audio's own length) at 25 fps,
+# rounded up to 4k+1 (the Wan VAE packs 4 frames per latent; 5 s = 125).
+if [ -z "$frames" ]; then
+	if [ -z "$duration" ]; then
+		duration=$("${FFMPEG[@]}" -hide_banner -nostdin -i "$(native_path "$audio")" 2>&1 |
+			awk '/Duration:/ {split($2, t, ":"); sub(",", "", t[3]); printf "%.3f", t[1]*3600 + t[2]*60 + t[3]; exit}' || true)
+		[ -n "$duration" ] || duration=5
+	fi
+	frames=$(awk -v d="$duration" -v r="$fps" 'BEGIN{n=int(d*r+0.5); if (n<5) n=5; printf "%d", int((n-1+3)/4)*4+1}')
+fi
+case $frames in "" | *[!0-9]*) die "video_length must be an integer" 2 ;; esac
+
+gen=$OUT/gen
+rm -rf "$gen"
+mkdir -p "$gen"
+args=(--image_path "$(native_path "$image")" --audio_path "$(native_path "$audio")" --prompt "$prompt"
+	--num_inference_steps "$steps" --config_path config/config.yaml
+	--model_name "$(native_path "$weights/Wan2.1-Fun-V1.1-1.3B-InP")" --ckpt_idx 50000
+	--transformer_path "$(native_path "$weights/transformer/diffusion_pytorch_model.safetensors")"
+	--save_path "$(native_path "$gen")" --wav2vec_model_dir "$(native_path "$weights/chinese-wav2vec2-base")"
+	--sampler_name Flow_Unipc --video_length "$frames" --guidance_scale 6.0 --audio_guidance_scale 3.0
+	--audio_scale 1.0 --neg_scale 1.0 --neg_steps 0 --seed "$seed" --enable_teacache --teacache_threshold 0.1
+	--num_skip_start_steps 5 --riflex_k 6 --ulysses_degree 1 --ring_degree 1 --weight_dtype bfloat16
+	--sample_size "$size" "$size" --fps "$fps" --add_prompt "" --negative_prompt "" --shift 5.0)
+start=$SECONDS
+if [ -n "${ANIMATE_ECHOMIMIC_PY:-}" ]; then
+	"$ANIMATE_ECHOMIMIC_PY" "${args[@]}" >&2 || die "fixture inference failed"
+else
+	# One GPU job under a watchdog (ECHOMIMIC_TIMEOUT_S, default 2 h).
+	(cd "$srcdir" && timeout "${ECHOMIMIC_TIMEOUT_S:-7200}" "$py" "$INFER" "${args[@]}") >&2 ||
+		die "inference failed or timed out (see the log above)"
+fi
+elapsed=$((SECONDS - start))
+clip=$(find "$gen" -type f -name '*.mp4' | sort | tail -1)
+[ -n "$clip" ] && [ -s "$clip" ] || die "generator wrote no video under $gen"
+
+# The take: H.264 video, the request's audio muxed as AAC.
+"${FFMPEG[@]}" -nostdin -hide_banner -loglevel error -y -i "$(native_path "$clip")" -i "$(native_path "$audio")" \
+	-map 0:v:0 -map 1:a:0 -c:v libx264 -pix_fmt yuv420p -crf 18 -c:a aac -b:a 192k -shortest \
+	"$(native_path "$OUT/take.mp4")" >&2 || die "could not mux the audio into the take"
+[ -s "$OUT/take.mp4" ] || die "mux wrote no take"
+rm -rf "$gen"
+
+tsha=$(sha "$OUT/take.mp4")
+J_E=$ECHO_REV J_SRC=$SOURCE_REV J_W="$WAN_REPO@$WAN_REV" J_A="$W2V_REPO@$W2V_REV" J_S=$tsha J_EL=$elapsed \
+	J_SEED=$seed J_ST=$steps J_SZ=$size J_N=$frames J_FPS=$fps J_H="$(uname -n 2>/dev/null || echo unknown)" \
+	jq -n '{schema_version:"bashy-film-take-v1", file:"take.mp4", provider:"animate-echomimic", model:"EchoMimicV3-flash-pro",
+		revision:env.J_E, source_revision:env.J_SRC, base:env.J_W, audio_encoder:env.J_A, host:env.J_H,
+		elapsed_s:(env.J_EL|tonumber), cost_usd:0, sha256:env.J_S, seed:(env.J_SEED|tonumber), steps:(env.J_ST|tonumber),
+		sample_size:(env.J_SZ|tonumber), video_length:(env.J_N|tonumber), fps:(env.J_FPS|tonumber)}' >"$OUT/take.json"
+OSS_ROD_TEXT="oss lip-sync take via EchoMimicV3 $ECHO_VARIANT@${ECHO_REV:0:7} ($frames frames at $fps fps, $steps steps, seed $seed, ${elapsed} s)"
+oss_rod_result "$OUT/take.mp4" video/mp4

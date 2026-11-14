@@ -63,6 +63,34 @@ runs, and film exits 126. `--dry-run` names the rod each generative stage
 would use and writes `finals/dry-run/manifest.json`. Passing `--yes` is the
 operator's decision.
 
+## Lip sync on a local GPU (Sprint 635)
+
+`dag.md` is a literate task file for real lip-synced takes with the
+open-source `animate-echomimic` rod (EchoMimicV3 Flash on a local NVIDIA GPU,
+Windows native first). Run it with `bashy dag -f examples/film/dag.md TARGET
+PROJECT=DIR [SHOTS="3 5"]` from anywhere; bodies call only registered commands
+(`bashy animate-echomimic`, `bashy film-lipsync`, `bashy film`).
+
+| target | does |
+|---|---|
+| `stage-lipsync` | `animate-echomimic --stage`: pinned venv, packages, source, patched copy, weights, ffmpeg; idempotent |
+| `doctor-lipsync` | `animate-echomimic --doctor --json` (read-only; the default target) |
+| `proof-lipsync` | one 5 s take from the first close-up shot's locked still and sung segment: `PROJECT/takes/NN.mp4` + `takes.json` |
+| `takes-lipsync` | every close-up shot (`kind: close`) of the locked storyboard whose still exists, full segments, same `takes.json` |
+| `draft-lipsync` | `film draft PROJECT --takes PROJECT/takes --route oss` |
+| `review-lipsync` | contact sheet, mouth-region grid and mouth motion metric per take into `PROJECT/takes/review/` |
+
+`film-lipsync` (`lipsync.bsh`, registered by `bashy-defaults`) is the body
+behind the take and review targets. `takes` needs `film lock` first: it reads
+`lock/storyboard.json`, `lock/shots.tsv`, `lock/portraits/` and the locked
+draft's song, sends each shot through the animate door with `--provider
+animate-echomimic` (`--provider` overrides) and `"model":"echomimicv3-flash-pro"`,
+and records `takes.json` (`bashy-film-takes-v1`: file, provider, model,
+revision, elapsed_s, sha256, still, seconds) — the manifest `film draft
+--takes` and `animate-prerendered` verify. `review` writes `NN-sheet.png`,
+`NN-mouth.png` and `review.json` with the tblend=difference + signalstats
+YAVG mean/max over the mouth region (the Sprint 635 evidence's measure).
+
 ## Test
 
 ```bash
@@ -81,6 +109,8 @@ selector, and cover:
 - the still-pan fallback, and the final refusing to degrade;
 - QA verdicts;
 - storyboard validation.
+- `film-lipsync takes --proof|--shots` → `takes.json` with sha256, `review`,
+  and `film draft --takes` assembling the take (fixture rod as the provider).
 
 They need the host's ffmpeg, ffprobe and agg, as `examples/media/test.sh`
 does, and skip without them. Real oss drafts run on a claimed test host. The

@@ -1,0 +1,180 @@
+#!/usr/bin/env -S bashy --bashsharp
+# film-lipsync — lip-synced takes for a film's LOCKED storyboard and their
+# review (Sprint 635). The body behind examples/film/dag.md's proof-lipsync,
+# takes-lipsync and review-lipsync targets; registered by bashy-defaults as
+# `bashy film-lipsync`.
+#
+#   film-lipsync takes DIR [--shots "3 5"] [--proof] [--seconds N] [--provider P] [--takes TDIR]
+#   film-lipsync review DIR [--takes TDIR]
+#
+# takes: for every close-up shot (`kind: close`) of DIR/lock/storyboard.json
+# whose still exists in DIR/lock/portraits, cut the shot's sung segment from
+# the locked draft's song, call the animate door on route oss with
+# --provider P (default animate-echomimic) and "model":"echomimicv3-flash-pro",
+# and record TDIR/NN.mp4 (default TDIR: DIR/takes) in TDIR/takes.json
+# (bashy-film-takes-v1: file, provider, model, revision, elapsed_s, sha256) —
+# the manifest `film draft DIR --takes TDIR` and animate-prerendered read.
+# --proof renders only the first selected shot, --seconds (default 5) long.
+# review: per take, TDIR/review/NN-sheet.png (contact sheet),
+# NN-mouth.png (mouth-region grid) and a mouth-region motion metric (ffmpeg
+# tblend=difference + signalstats YAVG, the Sprint 635 evidence's measure)
+# into TDIR/review/review.json.
+# Every tool is a registered command: ffmpeg through `bashy ffmpeg`.
+
+set -eu
+
+PROG=film-lipsync
+bashy_bin=${BASHY_SVC_BASHY_BIN:-bashy}
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+# The animate door body, as film.bsh calls it (`bashy animate` is this door).
+door=${FILM_DOOR:-$here/../service-door/service-door.bsh}
+die() { echo "$PROG: $*" >&2; exit "${2:-1}"; }
+
+os_name() { case $(uname -s) in MINGW* | MSYS* | CYGWIN* | Windows*) echo windows ;; *) echo other ;; esac; }
+# native_path P: /c/... (the Windows shell's pwd) as C:/... for a native exe.
+native_path() {
+	local p=$1
+	if [ "$(os_name)" = windows ]; then case $p in /[a-zA-Z]/*) p="${p:1:1}:${p:2}" ;; esac; fi
+	printf '%s\n' "$p"
+}
+sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | cut -d' ' -f1; else shasum -a 256 "$1" | cut -d' ' -f1; fi; }
+
+BASHY_HINTS=off "$bashy_bin" commands show ffmpeg >/dev/null 2>&1 ||
+	die "needs a registered ffmpeg (bashy media doctor, or bashy animate-echomimic --stage)"
+ff() { "$bashy_bin" ffmpeg -nostdin -hide_banner -loglevel error -y "$@"; }
+
+verb=${1:-}
+[ $# -eq 0 ] || shift
+proj="" shots="" proof=0 seconds=5 provider=animate-echomimic takes=""
+while [ $# -gt 0 ]; do
+	case $1 in
+	--shots) shots=$2; shift 2 ;;
+	--proof) proof=1; shift ;;
+	--seconds) seconds=$2; shift 2 ;;
+	--provider) provider=$2; shift 2 ;;
+	--takes) takes=$2; shift 2 ;;
+	-*) die "unknown option: $1" 2 ;;
+	*) [ -z "$proj" ] || die "one project directory only" 2; proj=$1; shift ;;
+	esac
+done
+case $verb in takes | review) ;; *) die "usage: $PROG takes|review DIR [options] (see the header)" 2 ;; esac
+[ -n "$proj" ] && [ -d "$proj" ] || die "$verb: no such project directory: ${proj:-<none>}" 2
+proj=$(cd "$proj" && pwd)
+[ -n "$takes" ] || takes=$proj/takes
+mkdir -p "$takes"
+takes=$(cd "$takes" && pwd)
+manifest=$takes/takes.json
+
+# ---- takes --------------------------------------------------------------------
+
+cmd_takes() {
+	local lock=$proj/lock sb draft song
+	[ -f "$lock/lock.json" ] || die "takes: $proj has no lock (film lock $proj after a draft you like)"
+	sb=$lock/storyboard.json
+	draft=$(jq -r '.draft' "$lock/lock.json")
+	song=$(find "$proj/drafts/$draft/song" -type f \( -name '*.wav' -o -name '*.mp3' -o -name '*.flac' -o -name '*.m4a' \) 2>/dev/null | sort | head -1)
+	[ -n "$song" ] || die "takes: the locked draft $draft has no song under $proj/drafts/$draft/song"
+	[ -f "$manifest" ] || echo '{"schema_version":"bashy-film-takes-v1","takes":{}}' >"$manifest"
+
+	# Close-up shots (0-based index, start, end) whose still is locked.
+	local k s e still key n=0 want ok
+	while IFS=$'\t' read -r k s e; do
+		[ "$(J_K=$k jq -r '.shots[env.J_K|tonumber].kind // ""' "$sb")" = close ] || continue
+		still=$(J_K=$k jq -r '.shots[env.J_K|tonumber] | .still // .character' "$sb")
+		[ -f "$lock/portraits/$still.png" ] || { echo "$PROG: shot $((k + 1)): no locked still $still; skipped" >&2; continue; }
+		key=$(printf '%02d' "$((k + 1))")
+		if [ -n "$shots" ]; then
+			ok=0
+			for want in ${shots//,/ }; do
+				case $want in *[!0-9]*) [ "$want" = "$(J_K=$k jq -r '.shots[env.J_K|tonumber].id // ""' "$sb")" ] && ok=1 ;; *) [ "$((10#$want))" = "$((k + 1))" ] && ok=1 ;; esac
+			done
+			[ "$ok" = 1 ] || continue
+		fi
+		take_one "$k" "$s" "$e" "$still" "$key"
+		n=$((n + 1))
+		[ "$proof" = 0 ] || break
+	done <"$lock/shots.tsv"
+	[ "$n" -gt 0 ] || die "takes: no close-up shot (kind: close) with a locked still${shots:+ among: $shots}"
+	echo "$manifest"
+}
+
+# take_one K START END STILL KEY: one shot through the animate door.
+take_one() {
+	local k=$1 s=$2 e=$3 still=$4 key=$5 work dur env st=0 clip entry sum
+	work=$takes/work/$key
+	rm -rf "$work"
+	mkdir -p "$work/out"
+	if [ "$proof" = 1 ]; then dur=$seconds; else dur=$(awk -v a="$s" -v b="$e" 'BEGIN{printf "%.3f", b-a}'); fi
+	ff -ss "$s" -t "$dur" -i "$(native_path "$song")" -ac 2 -ar 48000 "$(native_path "$work/audio.wav")" ||
+		die "shot $((k + 1)): could not cut the sung segment"
+	J_K=$k J_IMG=$(native_path "$lock/portraits/$still.png") J_A=$(native_path "$work/audio.wav") J_D=$dur \
+		jq '.shots[env.J_K|tonumber] as $sh | {schema_version:"bashy-svc-request-v1", model:"echomimicv3-flash-pro",
+			image:env.J_IMG, audio:env.J_A, duration_s:(env.J_D|tonumber),
+			prompt:($sh.prompt // "close-up, singing to camera, lips moving with the song"),
+			seed:(first((.characters[]?, .stills[]?) | select(.id == ($sh.still // $sh.character)) | .seed) // 7011)}' "$sb" >"$work/request.json"
+	echo "$PROG: shot $key: rendering ${dur} s through $provider" >&2
+	env=$(BASHY_SVC_BASHY_BIN="$bashy_bin" "$bashy_bin" --bashsharp "$door" animate --route oss --provider "$provider" --json --out "$(native_path "$work/out")" "$(native_path "$work/request.json")") || st=$?
+	printf '%s\n' "$env" >"$work/envelope.json"
+	[ "$st" = 0 ] && [ "$(printf '%s' "$env" | jq -r '.outcome' 2>/dev/null)" = success ] ||
+		die "shot $key: the animate door failed (exit $st): $(printf '%s' "$env" | jq -r '.text // empty' 2>/dev/null)"
+	clip=$(printf '%s' "$env" | jq -r 'first(.outputs[]? | select(.media_type | startswith("video/")) | .path) // empty')
+	clip=${clip//\\//}
+	[ -n "$clip" ] && [ -s "$clip" ] || die "shot $key: the rod reported no video"
+	cp "$clip" "$takes/$key.mp4"
+	# Provenance: the rod's take.json when it writes one, the envelope otherwise.
+	entry='{}'
+	[ ! -f "$work/out/take.json" ] || entry=$(jq -c . "$work/out/take.json")
+	sum=$(sha "$takes/$key.mp4")
+	entry=$(printf '%s\n' "$entry" | J_F="$key.mp4" J_S="$sum" J_ENV="$env" J_STILL=$still J_SEC=$dur \
+		jq -c '(env.J_ENV | fromjson) as $e | del(.schema_version, .file)
+			| {file:env.J_F, provider:(.provider // $e.provider), model:(.model // $e.provider), revision:(.revision // "unrecorded"),
+			   elapsed_s:(.elapsed_s // $e.elapsed), cost_usd:(.cost_usd // 0), sha256:env.J_S, still:env.J_STILL,
+			   seconds:(env.J_SEC|tonumber), route:$e.route} + . + {sha256:env.J_S}')
+	J_K=$key J_E="$entry" jq '.takes[env.J_K] = (env.J_E | fromjson)' "$manifest" >"$manifest.new"
+	mv "$manifest.new" "$manifest"
+	rm -rf "$work"
+	echo "$PROG: shot $key: $takes/$key.mp4" >&2
+}
+
+# ---- review -------------------------------------------------------------------
+
+cmd_review() {
+	[ -f "$manifest" ] || die "review: no takes manifest: $manifest (run: $PROG takes $proj)"
+	local rv=$takes/review key file clip mouth stats log
+	mkdir -p "$rv"
+	echo '{"schema_version":"bashy-film-takes-review-v1","takes":{}}' >"$rv/review.json"
+	# Mouth region of a centred close-up: the middle half, 55-80 % down the frame.
+	mouth="crop=iw/2:ih/4:iw/4:ih*0.55"
+	while IFS=$'\t' read -r key file; do
+		[ -n "$key" ] || continue
+		file=${file//\\//}
+		case $file in /* | [A-Za-z]:/*) clip=$file ;; *) clip=$takes/$file ;; esac
+		[ -f "$clip" ] || { echo "$PROG: review: take $key missing: $clip" >&2; continue; }
+		ff -i "$(native_path "$clip")" -vf "fps=2,scale=256:-2,tile=5x2" -frames:v 1 "$(native_path "$rv/$key-sheet.png")" ||
+			die "review: contact sheet for $key failed"
+		ff -i "$(native_path "$clip")" -vf "$mouth,fps=4,scale=192:-2,tile=5x2" -frames:v 1 "$(native_path "$rv/$key-mouth.png")" ||
+			die "review: mouth grid for $key failed"
+		# signalstats YAVG of the frame-to-frame difference in the mouth region:
+		# printed on the log (no file= path inside the filtergraph, so a
+		# Windows drive colon never needs escaping).
+		log=$rv/$key-motion.log
+		"$bashy_bin" ffmpeg -nostdin -hide_banner -loglevel info -i "$(native_path "$clip")" \
+			-vf "$mouth,tblend=all_mode=difference,signalstats,metadata=print:key=lavfi.signalstats.YAVG" -an -f null - 2>"$log" ||
+			die "review: motion metric for $key failed (see $log)"
+		stats=$(awk -F'YAVG=' '/lavfi.signalstats.YAVG=/ {v = $2 + 0; n++; t += v; if (n == 1 || v > m) m = v}
+			END {if (n) printf "%d %.3f %.3f", n, t / n, m; else print "0 0 0"}' "$log")
+		J_K=$key J_ST="$stats" jq '(env.J_ST | split(" ")) as $s
+			| .takes[env.J_K] = {sheet:(env.J_K + "-sheet.png"), mouth_grid:(env.J_K + "-mouth.png"),
+				motion:{metric:"mouth-region tblend=difference signalstats YAVG", pairs:($s[0]|tonumber), mean:($s[1]|tonumber), max:($s[2]|tonumber)}}' \
+			"$rv/review.json" >"$rv/review.json.new"
+		mv "$rv/review.json.new" "$rv/review.json"
+		echo "$PROG: review $key: mouth motion mean/max $(printf '%s' "$stats" | cut -d' ' -f2,3 | tr ' ' /) over $(printf '%s' "$stats" | cut -d' ' -f1) pairs" >&2
+	done < <(jq -r '.takes | to_entries[] | [.key, .value.file] | @tsv' "$manifest")
+	echo "$rv/review.json"
+}
+
+case $verb in
+takes) cmd_takes ;;
+review) cmd_review ;;
+esac

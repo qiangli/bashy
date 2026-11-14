@@ -58,6 +58,8 @@ Default commands: `outpost-profile` (examples/outpost-profile),
 satellite from plan to teardown), `media` (examples/media: PDFs and narrated
 videos), `film` (examples/film: a music video from a storyboard — oss
 drafts, a lock, a commercial-route final through the service verbs),
+`film-lipsync` (examples/film/lipsync.bsh: lip-synced takes and their review
+for the locked storyboard, behind examples/film/dag.md),
 `record` (examples/record: camera and microphone takes), `cast`
 (examples/cast: a command's terminal output as asciicast v2 under a
 pty/ConPTY, the recorder examples/video uses), `chrome` and `chrome-open`
@@ -67,10 +69,12 @@ tab opening), the service verbs `plan`,
 `translate`, `email` and `drive` (examples/service-door: one door body per role; providers
 are rods, see docs/service-rod-contract.md); `transcribe` has an embedded
 pipeline front door. The M2 oss rods `song-acestep`,
-`image-klein`, `narrate-local`, `transcribe-whisperx`, `translate-ollama` and
-`animate-prerendered` (examples/oss-rods: provides/route/requires records;
-`animate-prerendered` also `accepts /takes_dir`, so only a request with a
-takes directory selects it), the M5 Replicate API rods
+`image-klein`, `narrate-local`, `transcribe-whisperx`, `translate-ollama`,
+`animate-prerendered` and `animate-echomimic` (examples/oss-rods:
+provides/route/requires records; `animate-prerendered` also `accepts
+/takes_dir`, so only a request with a takes directory selects it, and
+`animate-echomimic` `accepts /model=^echomimic`, so only a request that asks
+for EchoMimicV3 does), the M5 Replicate API rods
 (`examples/api-rods`, with vault-bound HTTP tool commands), and
 `bashy-defaults` itself.
 
@@ -98,6 +102,7 @@ onboard|examples/onboard/onboard.bsh|read,write,exec
 satellite-provision|examples/satellite-provision/satellite-provision.bsh|read,write,exec,net
 media|examples/media/media.bsh|read,write,exec,net
 film|examples/film/film.bsh|read,write,exec,net
+film-lipsync|examples/film/lipsync.bsh|read,write,exec,net
 record|examples/record/record.bsh|read,write,exec
 cast|examples/cast/cast.bsh|read,write,exec
 chrome|examples/chrome/chrome.bsh|read,write,exec,net
@@ -129,6 +134,7 @@ narrate-local|examples/oss-rods/narrate-local.bsh|read,write,exec,net||narrate|o
 transcribe-whisperx|examples/oss-rods/transcribe-whisperx.bsh|read,write,exec,net||transcribe|oss|has=uv has=ffmpeg
 translate-ollama|examples/oss-rods/translate-ollama.bsh|read,write,exec,net||translate,text|oss|has=curl
 animate-prerendered|examples/oss-rods/animate-prerendered.bsh|read,write,exec||animate|oss|has=ffmpeg|/takes_dir=.
+animate-echomimic|examples/oss-rods/animate-echomimic.bsh|read,write,exec,net||animate|oss|has=uv|/model=^echomimic
 song-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|song|song|api|has=jq has=curl has=ffprobe has=python3
 image-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|image|image.generate,image.edit|api|has=jq has=curl has=ffprobe has=python3
 animate-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|animate|animate|api|has=jq has=curl has=ffprobe has=python3

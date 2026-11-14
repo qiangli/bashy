@@ -16,6 +16,7 @@ it needs a 24 GB NVIDIA host the fleet has not confirmed (M3).
 | `transcribe-whisperx` | `transcribe` | WhisperX `3.8.6` on Whisper large-v3, `--compute_type int8` for Mac/CPU | audio → `transcript.srt`/`.txt` |
 | `translate-ollama` | `translate` | Qwen3 `qwen3:8b` through a local ollama's HTTP API (Sprint 634); think off, temperature 0, one numbered request per cue list; needs only curl (jq is bashy's own applet, which `command -v` cannot see, so no rod declares `has=jq`) | SRT cues + target language → `translation.srt` (same timestamps, line count checked) |
 | `animate-prerendered` | `animate` | none on this host: returns a lip-synced take rendered off-host (Sprint 635: EchoMimicV3 / InfiniteTalk, Apache-2.0, on a self-terminating AWS GPU instance, returned through S3); `accepts /takes_dir`, so the selector offers it only to a request with a takes directory; needs a registered ffmpeg (decode check) | shot + takes_dir → `take.mp4` (+ `take.json` provenance); `takes.json` sha256 verified; a shot without a take fails, never a still-pan |
+| `animate-echomimic` | `animate` | EchoMimicV3 Flash (Ant Group, Apache-2.0) on a local NVIDIA GPU, Windows native first (Sprint 635; recipe `docs/sprint-635-echomimic-staging-reference.ps1`, proved on an A10G): source `7e89489c`, weights `BadToBest/EchoMimicV3@311e1769` (`echomimicv3-flash-pro`), `alibaba-pai/Wan2.1-Fun-V1.1-1.3B-InP@fc913c34`, `TencentGameMate/chinese-wav2vec2-base@3991242c`; torch 2.6.0 cu124, diffusers 0.33.1, transformers 4.51.3, accelerate 1.6.0, numpy 1.26.4, huggingface_hub 0.30.2, mmgp; `accepts /model=^echomimic`, so only a request that asks for it selects it | image + audio (+ prompt, duration_s or video_length, seed 7011, sample_size 512, steps 8) → `take.mp4` (H.264 + AAC, the request audio muxed) + `take.json` (provider, model, revisions, elapsed_s, sha256) |
 
 All oss rods render from local snapshots under `BASHY_OSS_CACHE/bashy/oss`.
 They set `HF_HUB_OFFLINE=1`, `TRANSFORMERS_OFFLINE=1`,
@@ -30,6 +31,23 @@ offline gate in `oss_rods_test.go`. For example:
 hf download --revision 19671f406d603126926c1b7e2adc169acbcade22 ACE-Step/Ace-Step1.5 \
   --local-dir "$BASHY_OSS_CACHE/bashy/oss/song-acestep/models/Ace-Step1.5"
 ```
+
+`animate-echomimic` stages itself, deliberately, with `bashy animate-echomimic
+--stage` (`--dry-run` prints every step and writes nothing): `bashy uv python
+install 3.10`, a `bashy uv venv` under `BASHY_OSS_CACHE/bashy/oss/animate-echomimic/venv`,
+the pinned packages via `bashy uv pip install` (CUDA 12.4 torch on Windows and
+Linux; `ECHOMIMIC_TORCH_INDEX` overrides), `bashy git clone` + checkout of the
+pinned source, a patched COPY of `infer_flash.py` (`infer_flash_bashy.py`,
+written by `animate-echomimic-patch.py`: `low_cpu_mem_usage=False`, and the mmgp
+`LowRAM_HighVRAM` offload at 80 % of VRAM replacing the first
+`pipeline.to(device)` and neutralising the second), the three weight snapshots
+at their pinned revisions over classic HTTP (`HF_HUB_DISABLE_XET=1`), ffmpeg
+from `imageio-ffmpeg` registered as `bashy ffmpeg` when none is, and
+`staged.json` with the transformer weight's sha256. A render sets `USE_TF=0
+TRANSFORMERS_NO_TF=1 HF_HUB_DISABLE_XET=1
+PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`, runs the copy under a
+watchdog (`ECHOMIMIC_TIMEOUT_S`, default 7200) and muxes the request audio with
+the registered ffmpeg. `examples/film/dag.md` drives it for a film project.
 
 For song, stage the pinned ACE-Step checkout and its Python environment,
 then launch `bashy --bashsharp song-acestep.bsh --serve`. The launcher checks
@@ -71,7 +89,7 @@ Every rod:
   (`oss_preflight_gb` in `oss-preflight.bsh`);
 - refuses to provision packages or weights during a render;
 - honors its `_PY` hook (`SONG_ACESTEP_PY`, `IMAGE_QWEN_PY`,
-  `NARRATE_LOCAL_PY`, `TRANSCRIBE_WHISPERX_PY`) so tests exercise the
+  `NARRATE_LOCAL_PY`, `TRANSCRIBE_WHISPERX_PY`, `ANIMATE_ECHOMIMIC_PY`) so tests exercise the
   request/preflight/envelope path with a fixture generator, same pattern as
   `MEDIA_VOICE_PY` in `examples/media/test.sh`;
 - refuses a request whose `schema_version` major is not v1;
@@ -94,6 +112,9 @@ Every rod:
 | mlx-whisper (fallback) | MIT | PyPI metadata |
 | openai-whisper (reference) | MIT | PyPI metadata |
 | diffusers 0.43.0 | Apache-2.0 | PyPI metadata |
+| EchoMimicV3 (`antgroup/echomimic_v3`, `BadToBest/EchoMimicV3`) | Apache-2.0 | Sprint 635 evidence (umbrella `docs/sprint-635-lipsync-evidence.md`) |
+| Wan2.1-Fun-V1.1-1.3B-InP | Apache-2.0 | same |
+| chinese-wav2vec2-base | MIT | same |
 
 Excluded as not permissive — referenced by no rod: FLUX.2 dev and klein-9B,
 SD3.5, Hunyuan models, LTX-2, YuE2, Sonic, F5-TTS, IndexTTS2, Higgs Audio,
@@ -110,6 +131,7 @@ diffusers.
 | transcribe-whisperx | 10 | large-v3 (~3 GB) + torch env |
 | translate-ollama | — | weights live in ollama's own store (staged once); no rod cache |
 | animate-prerendered | — | renders nothing; reads the takes dir |
+| animate-echomimic | 30 at `--stage`, 2 at render | ~12 GB weights + CUDA torch env; a render only writes the take |
 
 Override the cache with `BASHY_OSS_CACHE`; the failure message names the
 remedy. `OSS_AVAIL_KB_OVERRIDE` replaces the `df` probe in tests only.
