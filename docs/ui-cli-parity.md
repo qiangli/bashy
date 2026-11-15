@@ -209,6 +209,28 @@ have checkout registration scripts, while Video intentionally has only a script.
 
 All write verbs above accept `--dry-run`. `--participant` carries the same member identity across separate CLI invocations.
 
+## Sprint 641: hosted desktop (Periscope / cloudbox Shape button)
+
+Every action on the hosted desktop's Shape button and settings panel has a
+`bashy desktop` equivalent with the same server rules (`--json`; exit 0
+success, 3 refusal with a reason, 1 other).
+
+| UI action | CLI |
+|---|---|
+| See what can be changed | `desktop schema --json` |
+| See the current look and where each value came from | `desktop get --json` (`resolved`, `provenance`, `unhonoured`) |
+| See the tiles that can be ordered, hidden or relabelled | `desktop catalog --json` |
+| Change a setting (theme, font, density, background, tiles, sections, Shape-only) | `desktop set PROPERTY VALUE [--dry-run] --json` |
+| Shape-only on / off | `desktop shape-only on\|off\|toggle` |
+| Ask for a change in words (typed or spoken) | `desktop wish WORDS... --json` |
+| Undo (repeatable) | `desktop undo --json` |
+| History | `desktop history --json` |
+| Wishes left today, or why they are unavailable | `desktop allowance --json` (`reason`) |
+| Live page actions | `desktop pages --json`, `desktop invoke PAGE ACTION [JSON]`, `desktop result ID` |
+| Set the daily wish allowance (superadmin; satellite owner) | `desktop policy ls\|set OWNER LIMIT\|unset OWNER` (signed-in session only) |
+
+Walkthrough skill-script: `examples/desktop/desktop.bsh walkthrough`.
+
 ## Sprint 632 A1: Shapeable apps parity audit (eight catalog apps)
 
 Audit of web/page/HTTP actions against bashy CLI companion verbs for the eight catalog apps delivered in Sprint 631 and shaped for Sprint 632.
