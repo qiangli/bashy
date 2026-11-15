@@ -65,3 +65,6 @@ vsxgen/
 
 # GoReleaser stages the pinned outpost license inside its project root.
 /.release-assets/
+
+# macOS Finder metadata
+.DS_Store
