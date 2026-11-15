@@ -167,6 +167,7 @@ func bashyShapeCmd() *cobra.Command {
 		cmd.AddCommand(sub)
 	}
 	addShapePromotionCmds(cmd, &o)
+ addShapePageCmds(cmd, &o)
 	return cmd
 }
 
