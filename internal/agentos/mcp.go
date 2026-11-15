@@ -146,6 +146,15 @@ func dispatchMCP(args []string) int {
 		fmt.Fprintln(os.Stderr, "bashy mcp:", err)
 		return 2
 	}
+	if outpost {
+		// The loopback sync route gates exactly like the pull route: a
+		// destroy/spend/cred/priv effect raises a digest-bound approval
+		// instead of denying outright. The digest binds the candidate
+		// argv to this host; the task id stays empty because the
+		// loopback app owns no gateway task (the G3 sync handler
+		// supplies the claimed task id when it fronts this server).
+		opts.Policy.RaiseApproval = yokemcp.GatewayApprovalHook(auditHost(), "")
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	// cli.BashyVersion is the exported source of what `bashy --version`
