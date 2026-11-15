@@ -15,10 +15,10 @@ import (
 // carries only the 12-character pseudo-version suffix. Keep these in step
 // with go.mod; the version check below fails closed after an unpaired bump.
 var srcModulePins = map[string]struct{ module, commit string }{
-	"yoke":        {"github.com/qiangli/yoke", "0c97d8e05ce1d43ab66e98bd39d92a9a43e83535"},
-	"coreutils":   {"github.com/qiangli/coreutils", "97e83ec7afdf4134a7bbc80b55ee3ff274d897ea"},
+	"yoke":        {"github.com/qiangli/yoke", "d160182c8479b8f305b96293841dbc5ebdedc6e9"},
+	"coreutils":   {"github.com/qiangli/coreutils", "6dd7a3ee1858352003e7cf05e9d2268ac5c76c26"},
 	"sh":          {"github.com/qiangli/sh/v3", "d2913001421b8a2a6b247ee9953ca89c84ff2868"},
-	"filebrowser": {"github.com/qiangli/filebrowser/v2", "c796ddbc1a08f786c0d1680efb983533bafac51a"},
+	"filebrowser": {"github.com/qiangli/filebrowser-quantum/backend", "40f3c84d55a9bfac36a126246e794b8aec676f0f"},
 }
 
 func srcPinnedCommit(repo string) (string, error) {
