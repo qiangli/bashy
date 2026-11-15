@@ -110,9 +110,9 @@ func TestMCPVerbPolicy(t *testing.T) {
 	}
 	ctx, cs, _ := mcpFrontClient(t, mcpVerbOptions(t, "", "all"))
 	result := mcpSessionCall(t, ctx, cs, name, map[string]any{"args": []string{"--help"}})
-	denied := mcpVerbDecode(t, result)
-	if !result.IsError || denied.ExitCode != 126 || got.Calls != 0 {
-		t.Fatalf("policy bypass: %+v calls=%d", denied, got.Calls)
+	gated := mcpGatedDecode(t, result)
+	if !result.IsError || gated.State != yokemcp.GatedState || len(gated.Effects) == 0 || got.Calls != 0 {
+		t.Fatalf("policy bypass: %+v calls=%d", gated, got.Calls)
 	}
 	ctx, cs, _ = mcpFrontClient(t, mcpVerbOptions(t, "destroy,spend,cred,priv", "all"))
 	out := mcpVerbDecode(t, mcpSessionCall(t, ctx, cs, name, map[string]any{"args": []string{"--help"}}))
@@ -223,6 +223,21 @@ func TestMCPVerbStaticRefresh(t *testing.T) {
 		}
 	}
 	t.Fatal("ring descriptor not refreshed")
+}
+
+// A gated destroy/spend/cred/priv call answers the pull-route handoff:
+// {state: "gated", effects: [...]}, with no execution and no approval.
+func mcpGatedDecode(t *testing.T, result *mcpsdk.CallToolResult) yokemcp.Gated {
+	t.Helper()
+	raw, err := json.Marshal(result.StructuredContent)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gated yokemcp.Gated
+	if err := json.Unmarshal(raw, &gated); err != nil {
+		t.Fatal(err)
+	}
+	return gated
 }
 
 // Error results still carry the subprocess status and streams.

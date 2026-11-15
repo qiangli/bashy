@@ -124,8 +124,8 @@ func TestMCPDbLifecycleSelectionAndPolicy(t *testing.T) {
 	opts.Policy.Audit = func(yokemcp.Record) {}
 	ctx, client, _ := mcpFrontClient(t, opts)
 	result := mcpSessionCall(t, ctx, client, "db_lifecycle", map[string]any{"verb": "list"})
-	out, _ := dbMCPResult(t, result.StructuredContent)
-	if !result.IsError || out.ExitCode != 126 {
-		t.Fatalf("destroy policy: %+v %+v", result, out)
+	gated := mcpGatedDecode(t, result)
+	if !result.IsError || gated.State != yokemcp.GatedState || len(gated.Effects) == 0 {
+		t.Fatalf("destroy policy: %+v %+v", result, gated)
 	}
 }
