@@ -38,11 +38,33 @@ func mcpOutpostAuthenticate(r *http.Request) bool {
 	}
 	var config struct {
 		ServiceSSO map[string]string `json:"service_sso"`
+		Apps       []struct {
+			Name      string `json:"name"`
+			SSOSecret string `json:"sso_secret"`
+		} `json:"apps"`
 	}
 	if json.NewDecoder(f).Decode(&config) != nil {
 		return false
 	}
-	if !coopauth.VerifyOutpost(r, []byte(config.ServiceSSO["bashy-mcp"])) {
+	// The outpost signs with the key of whichever registration fronts the
+	// app: the bashy-mcp service unit (service_sso) or an app published with
+	// `outpost apps add --trust-cloud-identity` (apps[].sso_secret). Both are
+	// host-private entries in the same 0600 file; accept a signature from
+	// either, never from anything else.
+	keys := []string{config.ServiceSSO["bashy-mcp"]}
+	for _, app := range config.Apps {
+		if app.Name == "bashy-mcp" {
+			keys = append(keys, app.SSOSecret)
+		}
+	}
+	verified := false
+	for _, key := range keys {
+		if strings.TrimSpace(key) != "" && coopauth.VerifyOutpost(r, []byte(key)) {
+			verified = true
+			break
+		}
+	}
+	if !verified {
 		return false
 	}
 	// Trust only the signed identity, never the advisory cloud role. Reject

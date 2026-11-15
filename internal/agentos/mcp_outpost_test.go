@@ -150,3 +150,21 @@ func TestMCPOutpostToolsMatchCLI(t *testing.T) {
 		t.Fatal("HTTP tools/list differs from CLI definitions")
 	}
 }
+
+// An app published with `outpost apps add --trust-cloud-identity` signs with
+// its own apps[].sso_secret; that key is accepted, another app's is not.
+func TestMCPOutpostAuthenticationAppsKey(t *testing.T) {
+	path := mcpFixtureConfig(t)
+	cfg := `{"apps":[{"name":"bashy-mcp","sso_secret":"app-published-key"},{"name":"other","sso_secret":"other-app-key"}]}`
+	if err := os.WriteFile(path, []byte(cfg), 0600); err != nil {
+		t.Fatal(err)
+	}
+	for key, want := range map[string]bool{"app-published-key": true, "other-app-key": false, mcpFixtureKey: false} {
+		r := httptest.NewRequest("POST", "http://localhost/mcp", nil)
+		r.RemoteAddr = "127.0.0.1:1234"
+		mcpSignedRequest(r, key)
+		if got := mcpOutpostAuthenticate(r); got != want {
+			t.Fatalf("key %q: authentication = %v, want %v", key, got, want)
+		}
+	}
+}
