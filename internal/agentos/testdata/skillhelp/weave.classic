@@ -28,6 +28,7 @@ Available Commands:
   check        List every subcommand and its implementation status
   comment      Append a comment to an issue's history thread
   comments     Show an issue's history thread
+  conduct      Poll a joined shared session for host-side directives
   doctor       Reap limbo states and audit the lifecycle of every open item
   finalize     Terminalize an explicitly observed-idle interactive run
   fleet        Show each fleet member's availability (installed? on PATH? cooling down? signed in? model usable?)
