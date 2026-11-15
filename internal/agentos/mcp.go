@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"os/signal"
 	"slices"
@@ -29,13 +30,14 @@ import (
 // mcpUsage is the `bashy mcp` front-door usage, printed to stderr with
 // exit 2 when no subcommand (or --help) is given.
 const mcpUsage = `usage: bashy mcp serve [--transport stdio|http] [--listen ADDR] [--allow EFFECTS]
-                       [--tools default|all|NAME,...] [--max-output BYTES]
+                       [--tools default|all|NAME,...] [--max-output BYTES] [--outpost]
        bashy mcp tools [--tools default|all|NAME,...] [--json]
 
 Serve bashy commands to agents over the Model Context Protocol.
 
   serve --transport stdio   run the MCP server over stdio (default)
   serve --transport http    loopback HTTP at /mcp (default 127.0.0.1:0)
+  --outpost                 require the bashy-mcp outpost app identity signature (HTTP only)
   tools                     print the tools a profile would serve, without serving
                             (--json: the bashy-mcp-tools-v1 envelope)
   --tools default           registered tools plus available core commands
@@ -78,6 +80,7 @@ func dispatchMCP(args []string) int {
 		return 2
 	}
 	transport := "stdio"
+	outpost := false
 	allow := ""
 	profile, listen := "default", ""
 	rest := args[1:]
@@ -95,6 +98,11 @@ func dispatchMCP(args []string) int {
 			}
 		}
 		switch name {
+		case "--outpost":
+			if hasValue {
+				return 2
+			}
+			outpost = true
 		case "--transport":
 			if !hasValue || value == "" {
 				fmt.Fprint(os.Stderr, mcpUsage)
@@ -129,6 +137,10 @@ func dispatchMCP(args []string) int {
 		fmt.Fprint(os.Stderr, mcpUsage)
 		return 2
 	}
+	if outpost && transport != "http" {
+		fmt.Fprintln(os.Stderr, "bashy mcp: --outpost requires --transport http")
+		return 2
+	}
 	opts, err := mcpOptions(allow, profile)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy mcp:", err)
@@ -148,7 +160,7 @@ func dispatchMCP(args []string) int {
 			fmt.Fprintln(os.Stderr, "bashy mcp:", err)
 			return 2
 		}
-		if err := runMCPHTTP(ctx, srv, opts, maxOutput, listen); err != nil {
+		if err := runMCPHTTP(ctx, srv, opts, maxOutput, listen, outpost); err != nil {
 			fmt.Fprintln(os.Stderr, "bashy mcp:", err)
 			return 2
 		}
@@ -376,12 +388,16 @@ func runMCPStdio(ctx context.Context, srv *mcpsdk.Server, opts yokemcp.Options, 
 // runMCPHTTP serves the SAME prebuilt server as stdio — shell sessions and
 // the registered-ring watcher attach to the server actually being served —
 // over loopback-only stateless Streamable HTTP, until ctx is cancelled.
-func runMCPHTTP(ctx context.Context, srv *mcpsdk.Server, opts yokemcp.Options, maxOutput int, listen string) error {
+func runMCPHTTP(ctx context.Context, srv *mcpsdk.Server, opts yokemcp.Options, maxOutput int, listen string, outpost bool) error {
 	ctx, cancel := context.WithCancel(ctx)
 	sessions := registerMCPShells(ctx, srv, maxOutput)
 	watcher := watchMCPRegistered(ctx, srv, opts, 2*time.Second)
 	defer func() { cancel(); <-sessions.done; <-watcher }()
-	addr, shutdown, err := yokemcp.ServeHTTPServerWithShutdown(ctx, srv, listen)
+	var authenticate func(*http.Request) bool
+	if outpost {
+		authenticate = mcpOutpostAuthenticate
+	}
+	addr, shutdown, err := yokemcp.ServeHTTPServerWithAuth(ctx, srv, listen, authenticate)
 	if err != nil {
 		return err
 	}

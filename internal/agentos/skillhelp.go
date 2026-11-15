@@ -374,6 +374,8 @@ func mcpToolDefinitions(opts yokemcp.Options) ([]*mcpsdk.Tool, error) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	shells := registerMCPShells(ctx, srv, defaultMCPMaxOutput)
+	defer func() { cancel(); <-shells.done }()
 	st, ct := mcpsdk.NewInMemoryTransports()
 	ss, err := srv.Connect(ctx, st, nil)
 	if err != nil {

@@ -129,3 +129,24 @@ OpenCode (`opencode.json`):
 To write one of these entries non-interactively, see the install-agent usage;
 it registers the absolute path of the running bashy instead of the bare name,
 so a session whose PATH lacks the install dir still starts the server.
+
+## Outpost tunnel app
+
+The `bashy-mcp` service runs `bashy mcp serve --transport http --outpost`
+on loopback port 22750. Outpost publishes it while the service is active,
+with login required and trusted identity enabled; it has no mesh exposure.
+The local outpost admin proxy and the legacy loopback trust escape hatch
+cannot reach this app. `bashy service disable bashy-mcp` withdraws it.
+
+`--outpost` requires HTTP and rejects every request without a fresh outpost
+identity HMAC for the `bashy-mcp` app. The key is provisioned by outpost in
+its private `service_sso` configuration and re-read for each request, so
+provisioning and rotation need no MCP restart. Missing keys, invalid
+signatures, empty callers and conflicting caller headers fail closed. The
+key is never a command-line argument or a client-visible credential.
+
+The forwarded role grants no effects. The existing MCP policy and audit
+still apply: `destroy`, `spend`, `cred` and `priv` require explicit host-side
+approval (`--allow` grants); the shipped service grants none. Digest-bound
+per-call approval is handled by the gateway/conductor approval workflow.
+The non-loopback bind refusal also applies with `--outpost`.
