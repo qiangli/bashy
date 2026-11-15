@@ -146,6 +146,11 @@ func dispatchMCP(args []string) int {
 		fmt.Fprintln(os.Stderr, "bashy mcp:", err)
 		return 2
 	}
+	if outpost {
+		// Every executing call claims the shared host gateway record so the
+		// pull fallback with the same idempotency key never runs it twice.
+		opts.Policy.Execute = mcpGatewayExecute
+	}
 	// A gated destroy/spend/cred/priv call answers {state: "gated"} here
 	// and never raises an approval: the master's router re-dispatches it
 	// over the pull route with the same idempotency key, where the pull
