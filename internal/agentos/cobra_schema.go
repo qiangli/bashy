@@ -106,6 +106,8 @@ func cobraVerb(name string) *cobra.Command {
 		return fleet.NewGroupCmd()
 	case "superadmin":
 		return fleet.NewSuperadminCmd()
+	case "desktop":
+		return fleet.NewDesktopCmd()
 	case "suite":
 		return fleet.NewSuiteCmd()
 	case "reproduce":

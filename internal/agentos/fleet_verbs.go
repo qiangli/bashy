@@ -160,3 +160,14 @@ func dispatchPairedHost(args []string) int {
 	}
 	return 0
 }
+
+// dispatchDesktop uses the existing account-level fleet transport.
+func dispatchDesktop(args []string) int {
+	cmd := fleet.NewDesktopCmd()
+	setCobraArgs(cmd, args)
+	if err := cmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, "bashy desktop:", err)
+		return fleet.DesktopExitCode(err)
+	}
+	return 0
+}

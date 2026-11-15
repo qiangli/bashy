@@ -1,0 +1,48 @@
+#!/usr/bin/env -S bashy --bashsharp
+~~~skill as guide
+---
+name: desktop
+description: Inspect and personalize a Cloudbox desktop through its server, using the same operations as the Shape button and settings controls.
+---
+# Desktop shaping
+
+Agents are first-class users. The GUI is a view of server capabilities.
+Use existing member, group, suite, share, paired-host, token and app commands
+for their operations; desktop supplies personal presentation, history and live
+page actions. `pages` lists mounted actions; `invoke PAGE ACTION JSON` waits
+for completion; `result ID` inspects an uncertain outcome without replay.
+When building pages, give every operation CLI/API parity, register semantic
+handlers shared with human controls, validate input, enforce server permissions,
+and test errors, account isolation, disconnection and handler unmount.
+Keep the Shape control reachable in Shape-only mode. Domain mutations keep
+their own API scopes; desktop handlers are for presentation only.
+
+Start with `bashy desktop schema --json`, `get --json`, and `catalog --json`.
+Use `set PROPERTY VALUE --dry-run --json` to validate; omit --dry-run to apply.
+`shape-only` toggles the single-Shape-button view; `shape-only off` restores it.
+`wish "words" --json` uses the configured model allowance; ordinary `set` does not.
+`history` and `undo` use the same numbered revisions as the page.
+Use --revision for an explicit base. A conflict is a refusal, never auto-retry.
+Account selection and credentials are those of the existing Cloudbox commands.
+
+Run this script with no arguments to inspect. Pass `walkthrough` to demonstrate
+a density change and undo against the selected account. Other arguments pass
+through to the desktop command. No browser or model is needed for the walkthrough.
+~~~
+set -euo pipefail
+runner=${BASHY_BIN:-bashy}
+case ${1:-inspect} in
+ inspect)
+  "$runner" desktop schema --json
+  "$runner" desktop get --json
+  "$runner" desktop catalog --json
+  ;;
+ walkthrough)
+  "$runner" desktop get --json
+  "$runner" desktop set density compact --dry-run --json
+  "$runner" desktop set density compact --json
+  "$runner" desktop undo --json
+  "$runner" desktop history --json
+  ;;
+ *) "$runner" desktop "$@" ;;
+esac
