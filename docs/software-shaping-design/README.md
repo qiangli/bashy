@@ -24,9 +24,11 @@ across participating apps.
 
 ## SVG master
 
-`flow.svg` (Sprint 636) is the hand-authored vector master on a 24-unit grid:
-two cubic outlines, filled with `currentColor`, so a page draws it in its own
-text colour. The bashy web console's Shape button (yoke `genie.js`) carries
+`flow.svg` is the hand-authored vector master on a 256-unit grid, corrected
+in Sprint 641 to preserve the approved opposing rounded ends: upper-left and
+lower-right. The lower curve is rotated 180 degrees, not a translated copy
+of the upper curve. Both broad outlines fill with `currentColor`, so a page
+draws them in its own text colour. The bashy web console's Shape button (yoke `genie.js`) carries
 this path verbatim. The PNG treatments below remain the colour references.
 
 ## Screen and monochrome treatments
@@ -88,8 +90,9 @@ single-resolution; it is not a multi-image 16/32/48 ICO container.
 
 ### Limits of this delivery
 
-These are PNG/ICO raster assets, not an SVG master, native platform icon
-package, layered Apple icon, or verified Android/PWA maskable asset. No app
+The original delivery consisted of PNG/ICO raster assets. The SVG master
+was added later; this archive is not a native platform icon package, layered
+Apple icon, or verified Android/PWA maskable asset. No app
 manifest, browser metadata, source code or installed app was changed. Test
 platform masks and small-size rendering during integration; these exports do
 not establish that validation. For large print work, a future vector redraw
