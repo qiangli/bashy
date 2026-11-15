@@ -17,7 +17,7 @@ import (
 var srcModulePins = map[string]struct{ module, commit string }{
 	"yoke":        {"github.com/qiangli/yoke", "d160182c8479b8f305b96293841dbc5ebdedc6e9"},
 	"coreutils":   {"github.com/qiangli/coreutils", "6dd7a3ee1858352003e7cf05e9d2268ac5c76c26"},
-	"sh":          {"github.com/qiangli/sh/v3", "d2913001421b8a2a6b247ee9953ca89c84ff2868"},
+	"sh":          {"github.com/qiangli/sh/v3", "a4141771a3dc9b920f17864bcc37c75c69159701"},
 	"filebrowser": {"github.com/qiangli/filebrowser-quantum/backend", "40f3c84d55a9bfac36a126246e794b8aec676f0f"},
 }
 

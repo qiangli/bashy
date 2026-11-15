@@ -21,7 +21,7 @@ require (
 	github.com/qiangli/ycode v0.3.1-dev.0.20261103194741-5e1538ce6281
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261115042953-d160182c8479
-	github.com/qiangli/yoke/external/otel v0.0.0-20261112215151-dc698f7c9799
+	github.com/qiangli/yoke/external/otel v0.0.0-20261115042953-d160182c8479
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -68,13 +68,9 @@ require (
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/aead/serpent v0.0.0-20160714141033-fba169763ea6 // indirect
 	github.com/agnivade/levenshtein v1.2.1 // indirect
-	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40 // indirect
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 // indirect
 	github.com/asdine/storm/v3 v3.2.1 // indirect
-	github.com/asticode/go-astikit v0.59.0 // indirect
-	github.com/asticode/go-astisub v0.42.0 // indirect
-	github.com/asticode/go-astits v1.15.0 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
@@ -160,7 +156,6 @@ require (
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8 // indirect
 	github.com/digitalocean/go-libvirt v0.0.0-20220804181439-8648fbde413e // indirect
 	github.com/digitalocean/go-qemu v0.0.0-20250212194115-ee9b0668d242 // indirect
-	github.com/disintegration/imaging v1.6.2 // indirect
 	github.com/disiqueira/gotree/v3 v3.0.2 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
@@ -170,7 +165,6 @@ require (
 	github.com/docker/go-connections v0.7.0 // indirect
 	github.com/docker/go-plugins-helpers v0.0.0-20240701071450-45e2431495c8 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
-	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/dsoprea/go-exif/v3 v3.0.1 // indirect
 	github.com/dsoprea/go-logging v0.0.0-20200710184922-b02d349568dd // indirect
 	github.com/dsoprea/go-utility/v2 v2.0.0-20221003172846-a3e1774ef349 // indirect
@@ -185,8 +179,6 @@ require (
 	github.com/fatedier/golib v0.6.0 // indirect
 	github.com/felixge/fgprof v0.9.5 // indirect
 	github.com/felixge/httpsnoop v1.1.0 // indirect
-	github.com/filebrowser/filebrowser/v2 v2.63.23 // indirect
-	github.com/flynn/go-shlex v0.0.0-20150515145356-3f9db97f8568 // indirect
 	github.com/flynn/noise v1.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/fsouza/go-dockerclient v1.13.1 // indirect
@@ -271,7 +263,6 @@ require (
 	github.com/jackpal/go-nat-pmp v1.0.2 // indirect
 	github.com/jbenet/go-context v0.0.0-20150711004518-d14ea06fba99 // indirect
 	github.com/jbenet/go-temp-err-catcher v0.1.0 // indirect
-	github.com/jellydator/ttlcache/v3 v3.4.1 // indirect
 	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kevinburke/ssh_config v1.6.0 // indirect
@@ -300,8 +291,6 @@ require (
 	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/manifoldco/promptui v0.9.0 // indirect
 	github.com/marten-seemann/tcp v0.0.0-20210406111302-dfbc87cc63fd // indirect
-	github.com/maruel/natural v1.3.0 // indirect
-	github.com/marusama/semaphore/v2 v2.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mattn/go-runewidth v0.0.27 // indirect
@@ -363,7 +352,6 @@ require (
 	github.com/pdevine/tensor v0.0.0-20240510204454-f88f4562727c // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/pierrec/lz4/v4 v4.1.27 // indirect
 	github.com/pion/datachannel v1.5.10 // indirect
 	github.com/pion/dtls/v3 v3.1.2 // indirect
 	github.com/pion/ice/v4 v4.0.10 // indirect
@@ -397,15 +385,14 @@ require (
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261103194740-24dd0f47247e // indirect
 	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261112210155-2a0736305fb1 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261115054331-64854e3ab7bb // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261112215151-dc698f7c9799 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261112215151-dc698f7c9799 // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261112215151-dc698f7c9799 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261115042953-d160182c8479 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261115042953-d160182c8479 // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261115042953-d160182c8479 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
-	github.com/redis/go-redis/v9 v9.21.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
@@ -451,7 +438,6 @@ require (
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
 	github.com/tklauser/numcpus v0.11.0 // indirect
 	github.com/tklauser/ps v0.0.5-0.20260804061010-39c4acb07b31 // indirect
-	github.com/tomasen/realip v0.0.0-20180522021738-f0c99a92ddce // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/twpayne/go-geom v1.6.1 // indirect
 	github.com/u-root/u-root v0.16.0 // indirect
@@ -505,7 +491,6 @@ require (
 	go.podman.io/image/v5 v5.39.3-0.20260423135811-cbaa5f41e643 // indirect
 	go.podman.io/podman/v6 v6.0.0-20260424181651-a8c36318565d // indirect
 	go.podman.io/storage v1.62.1-0.20260423135811-cbaa5f41e643 // indirect
-	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/dig v1.19.0 // indirect
 	go.uber.org/fx v1.24.0 // indirect
 	go.uber.org/mock v0.6.0 // indirect
@@ -559,7 +544,7 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261106222844-d2913001421b
+replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261112194059-a4141771a3dc
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
