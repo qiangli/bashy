@@ -222,7 +222,6 @@ var firstPartyLicenses = map[string]string{
 	"mvdan.cc/sh/v3":                              "BSD-3-Clause",
 	"github.com/qiangli/outpost":                  "MIT",
 	"github.com/ergochat/readline":                "MIT",
-	"github.com/filebrowser/filebrowser/v2":       "Apache-2.0",
 	"github.com/gtsteffaniak/filebrowser/backend": "Apache-2.0",
 	"github.com/odvcencio/gotreesitter":           "MIT",
 	"github.com/benhoyt/goawk":                    "MIT",
@@ -317,8 +316,6 @@ func findModuleLicenseDir(modPath, modVer string, localRoots []string) string {
 			candidate = filepath.Join(root, "coreutils", "third_party", "goawk")
 		case modPath == "github.com/ergochat/readline":
 			candidate = filepath.Join(root, "readline")
-		case modPath == "github.com/filebrowser/filebrowser/v2":
-			candidate = filepath.Join(root, "filebrowser")
 		case modPath == "github.com/gtsteffaniak/filebrowser/backend":
 			candidate = filepath.Join(root, "filebrowser-quantum", "backend")
 		case modPath == "github.com/odvcencio/gotreesitter":

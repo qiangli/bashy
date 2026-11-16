@@ -38,7 +38,7 @@ if [ -z "${CONTAINER_HOST:-}" ] && [ "$(uname -s)" = Darwin ]; then
   fi
 fi
 
-for path in bashy sh coreutils readline filebrowser; do
+for path in bashy sh coreutils readline; do
   [ -d "$dhnt/$path" ] || { echo "test-self-container: missing sibling $dhnt/$path" >&2; exit 2; }
 done
 "${oci[@]}" container exists "$container" && {
@@ -110,15 +110,13 @@ fi
   -v "$cache_volume:/cache" \
   -v "$dhnt/bashy:/source/bashy:ro" -v "$dhnt/sh:/source/sh:ro" \
   -v "$dhnt/coreutils:/source/coreutils:ro" -v "$dhnt/readline:/source/readline:ro" \
-  -v "$dhnt/filebrowser:/source/filebrowser:ro" \
   "$image" bash -lc '
     set -euo pipefail
     cp -a /source/bashy/. /work/bashy/
-    mkdir -p /work/sh /work/coreutils /work/readline /work/filebrowser
+    mkdir -p /work/sh /work/coreutils /work/readline
     cp -a /source/sh/. /work/sh/
     cp -a /source/coreutils/. /work/coreutils/
     cp -a /source/readline/. /work/readline/
-    cp -a /source/filebrowser/. /work/filebrowser/
     cd /work/bashy
     mkdir -p bin
     go build -o bin/bashy ./cmd/bashy

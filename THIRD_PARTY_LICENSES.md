@@ -25,7 +25,7 @@ cache or the sibling checkout, not inferred from a repository badge.
 | `github.com/qiangli/yoke` (+ `external/otel`, `pkg/oci`, `pkg/llmgw`) | `../yoke` | MIT |
 | `github.com/qiangli/outpost` | `../outpost` | MIT |
 | `github.com/ergochat/readline` (qiangli fork) | `../readline` | MIT |
-| `github.com/filebrowser/filebrowser/v2` (qiangli fork) | `../filebrowser` | Apache-2.0 |
+| `github.com/gtsteffaniak/filebrowser/backend` (qiangli/filebrowser-quantum fork) | module | Apache-2.0 |
 | `github.com/dhnt/dhnt` | module | Apache-2.0 |
 
 ## Direct third-party modules

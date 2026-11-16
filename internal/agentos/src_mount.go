@@ -14,11 +14,17 @@ import (
 // Full dependency revisions are needed by src fetch: Go's module build info
 // carries only the 12-character pseudo-version suffix. Keep these in step
 // with go.mod; the version check below fails closed after an unpaired bump.
-var srcModulePins = map[string]struct{ module, commit string }{
-	"yoke":        {"github.com/qiangli/yoke", "a2f8669058d16ac2ea5401fe19b055bc02063573"},
-	"coreutils":   {"github.com/qiangli/coreutils", "6dd7a3ee1858352003e7cf05e9d2268ac5c76c26"},
-	"sh":          {"github.com/qiangli/sh/v3", "a4141771a3dc9b920f17864bcc37c75c69159701"},
-	"filebrowser": {"github.com/qiangli/filebrowser-quantum/backend", "40f3c84d55a9bfac36a126246e794b8aec676f0f"},
+//
+// A fork published under an upstream module path also names that path
+// (replaces) and the module's directory inside the repo (subdir), which
+// `self build --local` needs to point the replace at the local clone.
+type srcModulePin struct{ module, commit, replaces, subdir string }
+
+var srcModulePins = map[string]srcModulePin{
+	"yoke":        {"github.com/qiangli/yoke", "8ee6c331358a6e2bc290b9ac5e6c7b1f78eafdbf", "", ""},
+	"coreutils":   {"github.com/qiangli/coreutils", "6dd7a3ee1858352003e7cf05e9d2268ac5c76c26", "", ""},
+	"sh":          {"github.com/qiangli/sh/v3", "a4141771a3dc9b920f17864bcc37c75c69159701", "mvdan.cc/sh/v3", ""},
+	"filebrowser": {"github.com/qiangli/filebrowser-quantum/backend", "40f3c84d55a9bfac36a126246e794b8aec676f0f", "github.com/gtsteffaniak/filebrowser/backend", "backend"},
 }
 
 func srcPinnedCommit(repo string) (string, error) {

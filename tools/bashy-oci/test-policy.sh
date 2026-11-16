@@ -10,6 +10,7 @@ makefile=$repo/Makefile
 
 fail() { echo "test-bashy-oci-policy: $*" >&2; exit 1; }
 has() { grep -Fq "$1" "$2" || fail "$2 lacks required policy: $1"; }
+lacks() { ! grep -Fq "$1" "$2" || fail "$2 still references removed input: $1"; }
 
 [ -f "$recipe" ] || fail "missing Containerfile"
 [ -x "$builder" ] || fail "build-smoke.sh is not executable"
@@ -41,7 +42,8 @@ has 'stage_tree "$repo" "$context/bashy"' "$builder"
 has 'stage_tree "$parent/coreutils" "$context/coreutils"' "$builder"
 has 'stage_tree "$parent/sh" "$context/sh"' "$builder"
 has 'stage_tree "$parent/readline" "$context/readline"' "$builder"
-has 'stage_tree "$parent/filebrowser" "$context/filebrowser"' "$builder"
+lacks 'filebrowser' "$builder"
+lacks 'filebrowser' "$recipe"
 has 'git ls-files --cached --others --exclude-standard -z' "$builder"
 has 'localhost/bashy-base:ubuntu24.04' "$builder"
 has 'platform=linux/$native_arch' "$builder"

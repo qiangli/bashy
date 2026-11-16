@@ -132,7 +132,14 @@ func buildRepoLocal(home, repo string) (string, error) {
 	}
 	defer os.RemoveAll(clone)
 	out := filepath.Join(localBuildsDir(home), repo, shortSHA12(st.Local), releaseBinaryName())
-	if err := buildBashyWithReplace(root, pin.module, clone, out, "local-"+shortSHA12(st.Local)); err != nil {
+	module, replacement := pin.module, clone
+	if pin.replaces != "" {
+		module = pin.replaces
+	}
+	if pin.subdir != "" {
+		replacement = filepath.Join(clone, pin.subdir)
+	}
+	if err := buildBashyWithReplace(root, module, replacement, out, "local-"+shortSHA12(st.Local)); err != nil {
 		return "", err
 	}
 	m := localBuildManifest{Repo: repo, Base: st.Base, Local: st.Local, State: string(st.State), Binary: out, BuiltAt: nowUTC()}

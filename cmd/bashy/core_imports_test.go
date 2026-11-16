@@ -57,7 +57,7 @@ func TestCoreImportBoundary(t *testing.T) {
 				for _, forbidden := range []string{
 					"github.com/qiangli/bashy/internal/agentos",
 					"github.com/qiangli/ycode",
-					"github.com/qiangli/filebrowser",
+					"github.com/gtsteffaniak/filebrowser",
 					"github.com/qiangli/yoke",
 					"github.com/bashsharp/bashsharp/transpile",
 					"modernc.org/sqlite",

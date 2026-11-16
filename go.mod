@@ -20,7 +20,7 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261112194059-6dd7a3ee1858
 	github.com/qiangli/ycode v0.3.1-dev.0.20261103194741-5e1538ce6281
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261116103639-a2f8669058d1
+	github.com/qiangli/yoke v0.0.0-20261116114346-8ee6c331358a
 	github.com/qiangli/yoke/external/otel v0.0.0-20261115042953-d160182c8479
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -563,15 +563,10 @@ replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261016181
 // propagate from yoke's go.mod, so bashy (the main module) restates them.
 replace go.podman.io/podman/v6 => github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb
 
-// The AgentOS file-management surface uses the maintained qiangli/filebrowser
-// fork. Keep it as an exact flat sibling in umbrella and standalone builds.
-replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/v2 v2.0.0-20261113181544-c796ddbc1a08
-
-// yoke's files panel moved to the maintained File Browser (module
+// yoke's files panel uses the maintained File Browser (module
 // github.com/gtsteffaniak/filebrowser/backend) via the qiangli/filebrowser-quantum
-// fork's fbembed branch. The replace is inert until the yoke pin above brings
-// that module into the graph; the old replace stays for the pinned yoke until
-// then. Bumping the yoke pin must also update internal/agentos/src_mount.go.
+// fork's fbembed branch. Bumping it must also update
+// internal/agentos/src_mount.go.
 replace github.com/gtsteffaniak/filebrowser/backend => github.com/qiangli/filebrowser-quantum/backend v0.0.0-20261115042727-40f3c84d55a9
 
 // gotreesitter: pinned local fork of upstream v0.16.0 (../gotreesitter,

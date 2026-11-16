@@ -151,7 +151,7 @@ the forks published under an upstream path:
 ```
 replace mvdan.cc/sh/v3                        => github.com/qiangli/sh/v3 <pseudo>
 replace github.com/ergochat/readline          => github.com/qiangli/readline <pseudo>
-replace github.com/filebrowser/filebrowser/v2 => github.com/qiangli/filebrowser/v2 <pseudo>
+replace github.com/gtsteffaniak/filebrowser/backend => github.com/qiangli/filebrowser-quantum/backend <pseudo>
 replace github.com/odvcencio/gotreesitter     => github.com/qiangli/gotreesitter <pseudo>
 replace github.com/benhoyt/goawk              => github.com/qiangli/coreutils/third_party/goawk <pseudo>
 replace github.com/ollama/ollama              => github.com/qiangli/ollama <pseudo>
@@ -180,9 +180,9 @@ own binary, what the `bashsharp-tests` corpus harness measures. `../coreutils` i
 supplies the pure-Go userland + code-intel verbs the `bashy` binary injects (only
 `agentos.go` imports it); `../readline` is the ergochat/readline fork the
 interactive loop uses (the module path keeps the upstream name — the flat-layout
-convention is about the sibling dir, not the module string); and `../filebrowser`
-is the maintained qiangli/filebrowser fork used by the AgentOS file-management
-surface. A standalone clone builds with stock go (it downloads the pins); inside the
+convention is about the sibling dir, not the module string). The files panel
+uses the qiangli/filebrowser-quantum fork as a versioned module (no sibling;
+the old `../filebrowser` v2 fork was removed 2026-11-16). A standalone clone builds with stock go (it downloads the pins); inside the
 dhnt umbrella the root go.work builds the live sibling submodules instead.
 The shell runtime stamp (`transpile.ShellRuntimeCommit`) is the sh fork
 version on the go.mod replace line.
