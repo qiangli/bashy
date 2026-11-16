@@ -22,14 +22,17 @@ outpost, nor any of its service units (including the apps console).
 Outpost's lifecycle belongs to its supervisor (and the admin UI); a second
 controller in the user session fights the supervisor.
 
-**Browser hub: on/off** is the one switch, and it keeps that rule. Outpost's
-`browser-hub` service stays running; the item flips the hub's *logical* gate
+**Browser hubs: on/off** is the one switch, and it keeps that rule. Outpost's
+`browser-hub` (Chrome, 58082) and `browser-hub-edge` (Edge, 58083) services
+stay running; the item flips every running hub's *logical* gate together
 (`GET`/`POST http://127.0.0.1:58082/gate`, authorised by the token in
 `$BASHY_HOME/browser/hub-control.token`). Off, the hub refuses the bashy live
 extension, agents and copy sheets; on, everything works again. It is the same
 gate as `bashy browser hub pause|resume|status`, so an agent that needs the
 browser can turn it back on itself. The item reads "(not running)" when no hub
-answers and is disabled; `BASHY_BROWSER_HUB_PORT` picks another port.
+answers and is disabled. One browser only: `bashy browser --browser edge hub
+pause|resume`. `BASHY_BROWSER_HUB_PORT` / `BASHY_BROWSER_EDGE_HUB_PORT` pick
+other ports.
 
 Place an optional `tray.yaml` in your bashy config directory
 (`$XDG_CONFIG_HOME/bashy` when set, otherwise `~/.config/bashy`):

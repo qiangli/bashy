@@ -127,3 +127,49 @@ func (s hubState) titleFor(name string) string {
 		return name + " (not running)"
 	}
 }
+
+// hubPorts are every browser's hub (Chrome 58082, Edge 58083).
+func hubPorts() []string { return []string{hubPort(), edgeHubPort()} }
+
+// readAllHubs folds every running hub into one state for the single tray
+// item: on when every running hub is open, off when any is paused,
+// not running when none answers.
+func readAllHubs() hubState {
+	running, paused, noGate := 0, 0, 0
+	for _, p := range hubPorts() {
+		switch readHubGateAt(p) {
+		case hubOn:
+			running++
+		case hubOff:
+			running++
+			paused++
+		case hubNoGate:
+			running++
+			noGate++
+		}
+	}
+	switch {
+	case running == 0:
+		return hubDown
+	case paused > 0:
+		return hubOff
+	case noGate == running:
+		return hubNoGate
+	default:
+		return hubOn
+	}
+}
+
+// setAllHubs pauses or resumes every running hub; per-browser control is
+// `bashy browser --browser edge hub pause|resume` (or outpost).
+func setAllHubs(paused bool) error {
+	var errs []error
+	for _, p := range hubPorts() {
+		if s := readHubGateAt(p); s == hubOn || s == hubOff {
+			if err := setHubGateAt(p, paused); err != nil {
+				errs = append(errs, fmt.Errorf("port %s: %w", p, err))
+			}
+		}
+	}
+	return errors.Join(errs...)
+}

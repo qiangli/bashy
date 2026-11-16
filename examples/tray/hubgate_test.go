@@ -58,3 +58,49 @@ func TestHubGateItemReadsAndFlipsTheGate(t *testing.T) {
 		t.Fatalf("no hub read as %v", s)
 	}
 }
+
+// One tray item switches every running hub (Chrome and Edge) together.
+func TestOneItemSwitchesEveryRunningHub(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("BASHY_HOME", home)
+	_ = os.MkdirAll(filepath.Join(home, "browser"), 0o700)
+	_ = os.WriteFile(filepath.Join(home, "browser", "hub-control.token"), []byte("tok123\n"), 0o600)
+	fake := func() (*httptest.Server, *bool) {
+		paused := new(bool)
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPost {
+				var req struct{ Paused bool }
+				_ = json.NewDecoder(r.Body).Decode(&req)
+				*paused = req.Paused
+			}
+			_ = json.NewEncoder(w).Encode(map[string]bool{"paused": *paused})
+		}))
+		return srv, paused
+	}
+	chrome, cp := fake()
+	defer chrome.Close()
+	edge, ep := fake()
+	defer edge.Close()
+	_, cport, _ := net.SplitHostPort(chrome.Listener.Addr().String())
+	_, eport, _ := net.SplitHostPort(edge.Listener.Addr().String())
+	t.Setenv("BASHY_BROWSER_HUB_PORT", cport)
+	t.Setenv("BASHY_BROWSER_EDGE_HUB_PORT", eport)
+
+	if s := readAllHubs(); s != hubOn {
+		t.Fatalf("both open read as %v", s)
+	}
+	*ep = true // Edge paused from the CLI
+	if s := readAllHubs(); s != hubOff {
+		t.Fatalf("one paused read as %v, want off", s)
+	}
+	if err := setAllHubs(false); err != nil || *cp || *ep {
+		t.Fatalf("resume all: %v chrome=%v edge=%v", err, *cp, *ep)
+	}
+	if err := setAllHubs(true); err != nil || !*cp || !*ep {
+		t.Fatalf("pause all: %v chrome=%v edge=%v", err, *cp, *ep)
+	}
+	t.Setenv("BASHY_BROWSER_EDGE_HUB_PORT", "1") // Edge hub not running
+	if s := readAllHubs(); s != hubOff {
+		t.Fatalf("chrome paused, edge absent read as %v", s)
+	}
+}
