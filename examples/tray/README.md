@@ -23,7 +23,8 @@ Outpost's lifecycle belongs to its supervisor (and the admin UI); a second
 controller in the user session fights the supervisor.
 
 **Browser hubs: on/off** is the one switch, and it keeps that rule. Outpost's
-`browser-hub` (Chrome, 58082) and `browser-hub-edge` (Edge, 58083) services
+`browser-hub` (Chrome, 58082) and `browser-hub-edge` (Edge, 58084) services
+(each browser's port is 58081 + its first letter - 'b'; Brave 58081)
 stay running; the item flips every running hub's *logical* gate together
 (`GET`/`POST http://127.0.0.1:58082/gate`, authorised by the token in
 `$BASHY_HOME/browser/hub-control.token`). Off, the hub refuses the bashy live

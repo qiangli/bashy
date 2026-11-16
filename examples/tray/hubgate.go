@@ -19,9 +19,9 @@ import (
 	"time"
 )
 
-// hubPort is the Chrome hub's loopback port ($BASHY_BROWSER_HUB_PORT, default
-// 58082, the browser-hub service); edgeHubPort is Edge's own hub
-// ($BASHY_BROWSER_EDGE_HUB_PORT, default 58083, browser-hub-edge).
+// Each browser has its own hub port, 58081 + (first letter - 'b'): brave
+// 58081, chrome 58082 (browser-hub; $BASHY_BROWSER_HUB_PORT), edge 58084
+// (browser-hub-edge; $BASHY_BROWSER_EDGE_HUB_PORT).
 func hubPort() string {
 	if p := strings.TrimSpace(os.Getenv("BASHY_BROWSER_HUB_PORT")); p != "" {
 		return p
@@ -33,7 +33,7 @@ func edgeHubPort() string {
 	if p := strings.TrimSpace(os.Getenv("BASHY_BROWSER_EDGE_HUB_PORT")); p != "" {
 		return p
 	}
-	return "58083"
+	return "58084"
 }
 
 func hubGateToken() (string, error) {
@@ -128,8 +128,15 @@ func (s hubState) titleFor(name string) string {
 	}
 }
 
-// hubPorts are every browser's hub (Chrome 58082, Edge 58083).
-func hubPorts() []string { return []string{hubPort(), edgeHubPort()} }
+// hubPorts are every browser's hub slot (Brave 58081, Chrome, Edge); only
+// the ones that answer count.
+func hubPorts() []string {
+	brave := strings.TrimSpace(os.Getenv("BASHY_BROWSER_BRAVE_HUB_PORT"))
+	if brave == "" {
+		brave = "58081"
+	}
+	return []string{brave, hubPort(), edgeHubPort()}
+}
 
 // readAllHubs folds every running hub into one state for the single tray
 // item: on when every running hub is open, off when any is paused,

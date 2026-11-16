@@ -21,7 +21,7 @@ import (
 type srcModulePin struct{ module, commit, replaces, subdir string }
 
 var srcModulePins = map[string]srcModulePin{
-	"yoke":        {"github.com/qiangli/yoke", "b85422a6f6987fdfba98e6a0d59b5935ed37e13e", "", ""},
+	"yoke":        {"github.com/qiangli/yoke", "507b0eb2333ffcc5af87293406b39eeb66a0c26e", "", ""},
 	"coreutils":   {"github.com/qiangli/coreutils", "6dd7a3ee1858352003e7cf05e9d2268ac5c76c26", "", ""},
 	"sh":          {"github.com/qiangli/sh/v3", "a4141771a3dc9b920f17864bcc37c75c69159701", "mvdan.cc/sh/v3", ""},
 	"filebrowser": {"github.com/qiangli/filebrowser-quantum/backend", "40f3c84d55a9bfac36a126246e794b8aec676f0f", "github.com/gtsteffaniak/filebrowser/backend", "backend"},
