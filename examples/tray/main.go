@@ -182,6 +182,7 @@ type tray struct {
 	closed      bool
 	admin, apps *systray.MenuItem
 	hub         *systray.MenuItem // browser hub logical on/off (hubgate.go)
+	edgeHub     *systray.MenuItem // Edge's own hub (port 58083)
 }
 
 func (t *tray) open(raw, title string) {
@@ -316,6 +317,8 @@ func (t *tray) run(items []extraItem, admin string) {
 		t.apps = systray.AddMenuItem("Apps", "Open bashy apps")
 		t.hub = systray.AddMenuItemCheckbox("Browser hub (not running)", "Turn the bashy browser hub on or off (it keeps running; off refuses the extension and agents)", false)
 		t.hub.Disable()
+		t.edgeHub = systray.AddMenuItemCheckbox("Edge hub (not running)", "Turn the Edge browser hub on or off", false)
+		t.edgeHub.Disable()
 		for _, it := range items {
 			item := systray.AddMenuItem(it.Label, it.URL)
 			go func(it extraItem) {
@@ -336,15 +339,19 @@ func (t *tray) run(items []extraItem, admin string) {
 			shownRun   = -1 // -1 unknown, 0 off, 1 running
 			lastStatus status
 			lastHub    = hubState(-1)
+			lastEdge   = hubState(-1)
 			shownIcon  string
 		)
 		// render draws the icon and tooltip from outpost's status AND the
 		// browser hub's state (called with uiMu held).
 		render := func() {
-			hubOK := lastHub == hubOn || lastHub == hubNoGate
+			hubOK := (lastHub == hubOn || lastHub == hubNoGate) && lastEdge != hubOff
 			tip := lastStatus.title()
-			if !hubOK && lastHub != hubState(-1) {
+			if lastHub != hubOn && lastHub != hubNoGate && lastHub != hubState(-1) {
 				tip += " · " + lastHub.title()
+			}
+			if lastEdge == hubOff {
+				tip += " · " + lastEdge.titleFor("Edge hub")
 			}
 			key := lastStatus.level() + "|" + tip
 			if key == shownIcon {
@@ -434,7 +441,44 @@ func (t *tray) run(items []extraItem, admin string) {
 		}
 		// The browser hub item flips the hub's logical gate; it never starts
 		// or stops the browser-hub service (outpost's supervisor owns it).
-		shownHub := hubState(-1)
+		shownHub, shownEdge := hubState(-1), hubState(-1)
+		refreshEdge := func() hubState {
+			s := readHubGateAt(edgeHubPort())
+			uiMu.Lock()
+			defer uiMu.Unlock()
+			if s != shownEdge {
+				shownEdge = s
+				lastEdge = s
+				render()
+				t.edgeHub.SetTitle(s.titleFor("Edge hub"))
+				if s == hubOn {
+					t.edgeHub.Check()
+				} else {
+					t.edgeHub.Uncheck()
+				}
+				if s == hubOn || s == hubOff {
+					t.edgeHub.Enable()
+				} else {
+					t.edgeHub.Disable()
+				}
+			}
+			return s
+		}
+		go func() {
+			for range t.edgeHub.ClickedCh {
+				switch refreshEdge() {
+				case hubOn:
+					if err := setHubGateAt(edgeHubPort(), true); err != nil {
+						log.Printf("edge hub off: %v", err)
+					}
+				case hubOff:
+					if err := setHubGateAt(edgeHubPort(), false); err != nil {
+						log.Printf("edge hub on: %v", err)
+					}
+				}
+				refreshEdge()
+			}
+		}()
 		refreshHub := func() hubState {
 			s := readHubGate()
 			uiMu.Lock()
@@ -476,6 +520,7 @@ func (t *tray) run(items []extraItem, admin string) {
 			refresh(true)
 			refreshApps()
 			refreshHub()
+			refreshEdge()
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			for range ticker.C {
@@ -488,6 +533,7 @@ func (t *tray) run(items []extraItem, admin string) {
 				refresh(false)
 				refreshApps()
 				refreshHub()
+				refreshEdge()
 			}
 		}()
 		go func() {

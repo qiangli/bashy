@@ -19,13 +19,21 @@ import (
 	"time"
 )
 
-// hubPort is the live hub's loopback port ($BASHY_BROWSER_HUB_PORT, default
-// 58082, the browser-hub service's port).
+// hubPort is the Chrome hub's loopback port ($BASHY_BROWSER_HUB_PORT, default
+// 58082, the browser-hub service); edgeHubPort is Edge's own hub
+// ($BASHY_BROWSER_EDGE_HUB_PORT, default 58083, browser-hub-edge).
 func hubPort() string {
 	if p := strings.TrimSpace(os.Getenv("BASHY_BROWSER_HUB_PORT")); p != "" {
 		return p
 	}
 	return "58082"
+}
+
+func edgeHubPort() string {
+	if p := strings.TrimSpace(os.Getenv("BASHY_BROWSER_EDGE_HUB_PORT")); p != "" {
+		return p
+	}
+	return "58083"
 }
 
 func hubGateToken() (string, error) {
@@ -56,8 +64,10 @@ const (
 
 var hubClient = &http.Client{Timeout: 2 * time.Second}
 
-func readHubGate() hubState {
-	resp, err := hubClient.Get("http://127.0.0.1:" + hubPort() + "/gate")
+func readHubGate() hubState { return readHubGateAt(hubPort()) }
+
+func readHubGateAt(port string) hubState {
+	resp, err := hubClient.Get("http://127.0.0.1:" + port + "/gate")
 	if err != nil {
 		return hubDown
 	}
@@ -77,13 +87,15 @@ func readHubGate() hubState {
 	return hubOn
 }
 
-func setHubGate(paused bool) error {
+func setHubGate(paused bool) error { return setHubGateAt(hubPort(), paused) }
+
+func setHubGateAt(port string, paused bool) error {
 	tok, err := hubGateToken()
 	if err != nil {
 		return fmt.Errorf("no hub control token (start the browser hub once): %w", err)
 	}
 	body, _ := json.Marshal(map[string]any{"paused": paused, "by": "tray"})
-	req, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:"+hubPort()+"/gate", bytes.NewReader(body))
+	req, err := http.NewRequest(http.MethodPost, "http://127.0.0.1:"+port+"/gate", bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -100,15 +112,18 @@ func setHubGate(paused bool) error {
 	return nil
 }
 
-func (s hubState) title() string {
+func (s hubState) title() string { return s.titleFor("Browser hub") }
+
+// titleFor names the hub ("Browser hub", "Edge hub") in the item text.
+func (s hubState) titleFor(name string) string {
 	switch s {
 	case hubOn:
-		return "Browser hub: on"
+		return name + ": on"
 	case hubOff:
-		return "Browser hub: off"
+		return name + ": off"
 	case hubNoGate:
-		return "Browser hub: on (update bashy for on/off)"
+		return name + ": on (update bashy for on/off)"
 	default:
-		return "Browser hub (not running)"
+		return name + " (not running)"
 	}
 }
