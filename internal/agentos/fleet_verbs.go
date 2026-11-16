@@ -166,6 +166,11 @@ func dispatchDesktop(args []string) int {
 	cmd := fleet.NewDesktopCmd()
 	setCobraArgs(cmd, args)
 	if err := cmd.Execute(); err != nil {
+		// --json (the default) gets the refusal as an envelope on stdout so
+		// an agent reads status, reason code and exit; people get stderr.
+		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
+			fmt.Fprintln(os.Stdout, fleet.DesktopErrorJSON(err))
+		}
 		fmt.Fprintln(os.Stderr, "bashy desktop:", err)
 		return fleet.DesktopExitCode(err)
 	}
