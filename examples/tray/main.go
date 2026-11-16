@@ -251,7 +251,12 @@ func (t *tray) quit() {
 	systray.Quit()
 }
 
-func icon(level string) []byte {
+func icon(level string) []byte { return iconWithHub(level, true) }
+
+// iconWithHub draws the outpost dot; when the browser hub is not on (paused,
+// or not answering) a grey badge sits in the lower-right corner, so "bashy
+// cannot reach your browser" shows without opening the menu.
+func iconWithHub(level string, hubOK bool) []byte {
 	col := color.RGBA{235, 28, 36, 255} // off: bright red, readable on light and dark menu bars
 	if level == "on" {
 		col = color.RGBA{39, 172, 94, 255}
@@ -265,6 +270,21 @@ func icon(level string) []byte {
 			dx, dy := x-16, y-16
 			if dx*dx+dy*dy <= 196 {
 				im.Set(x, y, col)
+			}
+		}
+	}
+	if !hubOK {
+		// Badge: a grey disc with a light rim at the lower right.
+		for y := 0; y < 32; y++ {
+			for x := 0; x < 32; x++ {
+				dx, dy := x-25, y-25
+				d := dx*dx + dy*dy
+				switch {
+				case d <= 25:
+					im.Set(x, y, color.RGBA{110, 110, 120, 255})
+				case d <= 42:
+					im.Set(x, y, color.RGBA{245, 245, 248, 255})
+				}
 			}
 		}
 	}
@@ -311,10 +331,33 @@ func (t *tray) run(items []extraItem, admin string) {
 		// something changed: on Windows, rewriting menu items from a poller
 		// while the user has the menu open hangs the tray's message loop.
 		var (
-			uiMu      sync.Mutex
-			shownText string
-			shownRun  = -1 // -1 unknown, 0 off, 1 running
+			uiMu       sync.Mutex
+			shownText  string
+			shownRun   = -1 // -1 unknown, 0 off, 1 running
+			lastStatus status
+			lastHub    = hubState(-1)
+			shownIcon  string
 		)
+		// render draws the icon and tooltip from outpost's status AND the
+		// browser hub's state (called with uiMu held).
+		render := func() {
+			hubOK := lastHub == hubOn || lastHub == hubNoGate
+			tip := lastStatus.title()
+			if !hubOK && lastHub != hubState(-1) {
+				tip += " · " + lastHub.title()
+			}
+			key := lastStatus.level() + "|" + tip
+			if key == shownIcon {
+				return
+			}
+			shownIcon = key
+			systray.SetIcon(iconWithHub(lastStatus.level(), hubOK || lastHub == hubState(-1)))
+			systray.SetTooltip(tip)
+			if lastStatus.title() != shownText {
+				shownText = lastStatus.title()
+				statusItem.SetTitle(shownText)
+			}
+		}
 		adminAddr := admin
 		if u, err := url.Parse(admin); err == nil {
 			adminAddr = u.Host
@@ -354,12 +397,8 @@ func (t *tray) run(items []extraItem, admin string) {
 				run = 1
 			}
 			uiMu.Lock()
-			if s.title() != shownText {
-				shownText = s.title()
-				systray.SetIcon(icon(s.level()))
-				systray.SetTooltip(shownText)
-				statusItem.SetTitle(shownText)
-			}
+			lastStatus = s
+			render()
 			if run != shownRun {
 				shownRun = run
 				if s.Running {
@@ -402,6 +441,8 @@ func (t *tray) run(items []extraItem, admin string) {
 			defer uiMu.Unlock()
 			if s != shownHub {
 				shownHub = s
+				lastHub = s
+				render()
 				t.hub.SetTitle(s.title())
 				if s == hubOn {
 					t.hub.Check()
