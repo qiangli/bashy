@@ -17,10 +17,19 @@ apps console that outpost's `apps` service unit runs; while it does not answer
 the item reads "Apps (service not running)" and is disabled. Quit closes the
 tray and its windows only.
 
-The tray only watches outpost: it never starts, stops, enables or restarts it,
-nor any of its service units (including the apps console).
+The tray never controls a process: it never starts, stops, enables or restarts
+outpost, nor any of its service units (including the apps console).
 Outpost's lifecycle belongs to its supervisor (and the admin UI); a second
 controller in the user session fights the supervisor.
+
+**Browser hub: on/off** is the one switch, and it keeps that rule. Outpost's
+`browser-hub` service stays running; the item flips the hub's *logical* gate
+(`GET`/`POST http://127.0.0.1:58082/gate`, authorised by the token in
+`$BASHY_HOME/browser/hub-control.token`). Off, the hub refuses the bashy live
+extension, agents and copy sheets; on, everything works again. It is the same
+gate as `bashy browser hub pause|resume|status`, so an agent that needs the
+browser can turn it back on itself. The item reads "(not running)" when no hub
+answers and is disabled; `BASHY_BROWSER_HUB_PORT` picks another port.
 
 Place an optional `tray.yaml` in your bashy config directory
 (`$XDG_CONFIG_HOME/bashy` when set, otherwise `~/.config/bashy`):

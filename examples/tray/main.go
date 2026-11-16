@@ -181,6 +181,7 @@ type tray struct {
 	windows     map[string]*windowProcess
 	closed      bool
 	admin, apps *systray.MenuItem
+	hub         *systray.MenuItem // browser hub logical on/off (hubgate.go)
 }
 
 func (t *tray) open(raw, title string) {
@@ -293,6 +294,8 @@ func (t *tray) run(items []extraItem, admin string) {
 		t.admin = systray.AddMenuItem("Admin", "Open outpost admin")
 		t.admin.Disable()
 		t.apps = systray.AddMenuItem("Apps", "Open bashy apps")
+		t.hub = systray.AddMenuItemCheckbox("Browser hub (not running)", "Turn the bashy browser hub on or off (it keeps running; off refuses the extension and agents)", false)
+		t.hub.Disable()
 		for _, it := range items {
 			item := systray.AddMenuItem(it.Label, it.URL)
 			go func(it extraItem) {
@@ -390,9 +393,48 @@ func (t *tray) run(items []extraItem, admin string) {
 			}
 			return up
 		}
+		// The browser hub item flips the hub's logical gate; it never starts
+		// or stops the browser-hub service (outpost's supervisor owns it).
+		shownHub := hubState(-1)
+		refreshHub := func() hubState {
+			s := readHubGate()
+			uiMu.Lock()
+			defer uiMu.Unlock()
+			if s != shownHub {
+				shownHub = s
+				t.hub.SetTitle(s.title())
+				if s == hubOn {
+					t.hub.Check()
+				} else {
+					t.hub.Uncheck()
+				}
+				if s == hubOn || s == hubOff {
+					t.hub.Enable()
+				} else {
+					t.hub.Disable()
+				}
+			}
+			return s
+		}
+		go func() {
+			for range t.hub.ClickedCh {
+				switch refreshHub() {
+				case hubOn:
+					if err := setHubGate(true); err != nil {
+						log.Printf("browser hub off: %v", err)
+					}
+				case hubOff:
+					if err := setHubGate(false); err != nil {
+						log.Printf("browser hub on: %v", err)
+					}
+				}
+				refreshHub()
+			}
+		}()
 		go func() {
 			refresh(true)
 			refreshApps()
+			refreshHub()
 			ticker := time.NewTicker(10 * time.Second)
 			defer ticker.Stop()
 			for range ticker.C {
@@ -404,6 +446,7 @@ func (t *tray) run(items []extraItem, admin string) {
 				}
 				refresh(false)
 				refreshApps()
+				refreshHub()
 			}
 		}()
 		go func() {
