@@ -1,0 +1,57 @@
+# syntax=docker/dockerfile:1
+# The official build image: every build and test of bashy, yoke, outpost and
+# cloudbox runs in it, here, on the gate host and on GitHub alike. It adds
+# toolchains to the Bashy OCI base (tools/bashy-oci), which carries a pinned,
+# released bashy. Its identity is recorded in tools/bashy-build/image.lock;
+# gate scripts refuse to run without BASHY_BUILD_IMAGE (see run.sh).
+#
+# Build with tools/bashy-build/build.sh, which passes the locked arguments.
+ARG BASE_IMAGE=localhost/bashy-base:ubuntu24.04
+FROM ${BASE_IMAGE}
+
+ARG APT_SNAPSHOT=20260821T190000Z
+ARG GO_VERSION=1.27.2
+ARG GO_SHA256_AMD64=ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5
+ARG GO_SHA256_ARM64=94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8
+ARG TARGETARCH
+ARG IMAGE_ID=unset
+
+USER 0:0
+
+# The cgo libraries are the ones the build lanes need (yoke cmds/all links
+# gpgme; podman bindings need btrfs, devmapper and seccomp headers).
+RUN set -eux; \
+    apt-get update --snapshot "${APT_SNAPSHOT}"; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      build-essential git make pkg-config python3 curl xz-utils \
+      libgpgme-dev libbtrfs-dev libdevmapper-dev libseccomp-dev; \
+    rm -rf /var/lib/apt/lists/*
+
+# Go from the official tarball, verified against the locked checksum.
+RUN set -eux; \
+    case "${TARGETARCH:-amd64}" in \
+      amd64) sum="${GO_SHA256_AMD64}" ;; \
+      arm64) sum="${GO_SHA256_ARM64}" ;; \
+      *) echo "unsupported arch ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    curl -fsSL -o /tmp/go.tgz "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH:-amd64}.tar.gz"; \
+    echo "${sum}  /tmp/go.tgz" | sha256sum -c -; \
+    tar -C /usr/local -xzf /tmp/go.tgz; \
+    rm -f /tmp/go.tgz; \
+    /usr/local/go/bin/go version
+
+# Caches live on the runner and are mounted here (run.sh), never re-downloaded.
+ENV PATH=/usr/local/go/bin:/opt/bashy/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    GOTOOLCHAIN=local \
+    GOPATH=/var/cache/bashy-build/go \
+    GOMODCACHE=/var/cache/bashy-build/go/pkg/mod \
+    GOCACHE=/var/cache/bashy-build/go-build \
+    GOTMPDIR=/var/cache/bashy-build/tmp \
+    BASHY_BUILD_IMAGE=${IMAGE_ID}
+
+RUN install -d -o 10001 -g 10001 /var/cache/bashy-build /var/cache/bashy-build/go \
+      /var/cache/bashy-build/go-build /var/cache/bashy-build/tmp /work
+
+USER 10001:10001
+WORKDIR /work
+ENTRYPOINT ["/bashy"]

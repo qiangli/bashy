@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+# A rolling bashy-base: the same runtime as tools/bashy-oci/Containerfile, but
+# it takes a bashy binary that was already compiled inside the previous
+# official build image (tools/bashy-build/build.sh roll). That keeps every
+# version strictly built upon the one before it.
+ARG RUNTIME_IMAGE=docker.io/library/ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
+FROM ${RUNTIME_IMAGE}
+
+ARG VERSION=dev
+ARG APT_SNAPSHOT=20260821T190000Z
+ARG BUILT_WITH=unset
+LABEL org.opencontainers.image.title="Bashy OCI base" \
+      org.opencontainers.image.version="${VERSION}" \
+      org.opencontainers.image.source="https://github.com/qiangli/bashy" \
+      io.dhnt.bashy.built-with="${BUILT_WITH}"
+
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    HOME=/home/bashy \
+    BASHY_BIN_CACHE=/var/cache/bashy/bin \
+    OTEL_TRACES_EXPORTER=none \
+    PATH=/opt/bashy/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+RUN set -eux; \
+    apt-get update --snapshot "${APT_SNAPSHOT}"; \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      ca-certificates locales ncurses-base tzdata; \
+    rm -rf /var/lib/apt/lists/*; \
+    printf '%s\n' 'en_US.UTF-8 UTF-8' > /etc/locale.gen; \
+    locale-gen; \
+    groupadd --gid 10001 bashy; \
+    useradd --uid 10001 --gid 10001 --create-home --shell /bin/sh bashy; \
+    install -d -o 10001 -g 10001 /var/cache/bashy/bin /home/bashy/.cache
+
+COPY --chown=0:0 bashy /bashy
+
+RUN set -eux; \
+    chmod 0755 /bashy; \
+    install -d /opt/bashy/bin; \
+    ln -s /bashy /usr/local/bin/bashy; \
+    ln -s /bashy /opt/bashy/bin/sh; \
+    test ! /bin/sh -ef /bashy; \
+    /bashy --version >/dev/null
+
+USER 10001:10001
+WORKDIR /work
+ENTRYPOINT ["/bashy"]

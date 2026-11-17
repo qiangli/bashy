@@ -1,0 +1,24 @@
+# The official build image's identity. Every build and test runs in this
+# image (tools/bashy-build/run.sh). Change it only with tools/bashy-build/
+# build.sh, committing the values it prints.
+#
+# Rolling: the previous release builds the next one (built_with_digest). If it
+# cannot, only the bugs that block that build are fixed, in the new version,
+# never in the old release. The new version then rebuilds itself; that
+# self-built image is the real one and is what the lock names for its gates.
+# The chain starts at the released v1.0.0-rc.35 binary (build.sh seed);
+# earlier releases are not rebuilt.
+#
+# key=value, one per line; build.sh and run.sh read it.
+bashy_version=v1.0.0-rc.35
+bashy_sha256=814033603c239562fa8dd4dd1aee707e7792850485b016f8400a658776a9d0a4
+previous_version=
+built_with_digest=released-binary:sha256:814033603c239562fa8dd4dd1aee707e7792850485b016f8400a658776a9d0a4
+apt_snapshot=20260821T190000Z
+go_version=1.27.2
+go_sha256_amd64=ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5
+go_sha256_arm64=94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8
+base_image=localhost/bashy-base:v1.0.0-rc.35
+base_digest=sha256:4e5bba10d63103a69ec49cd14a1a6fd1717eb534d0590b120d39cbffb80eaf8d
+image=localhost/bashy-build:v1.0.0-rc.35-go1.27.2
+image_digest=sha256:7c9b441d1309135755ea059eb8511de02fd679fa15fcd94b9690327eee9a362e
