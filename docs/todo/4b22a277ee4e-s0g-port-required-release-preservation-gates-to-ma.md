@@ -3,11 +3,13 @@ id: 4b22a277ee4e
 kind: refactor
 title: S0G Port required release-preservation gates to make-free DAG targets
 seq: 3240
-status: todo
+status: assigned
 priority: p0
 labels:
     - layer-separation
 created: 2026-11-17T22:01:17.140744Z
+weave: 108
+assignee: agy-gemini3.8-flash
 sprint: 575
 sprint_id: 65ce85f5-87c0-5863-bf55-62de86f5df36
 sprint_title: 'Layer separation: Classic <- Bash# <- Yoke import-graph delineation'
