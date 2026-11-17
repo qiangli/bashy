@@ -14,6 +14,11 @@ FROM ${BASE_IMAGE}
 # release gate) runs as an unprivileged user, so install as root.
 ARG APT_SNAPSHOT=20260821T190000Z
 USER 0:0
+# The testee runs among plain system tools, as on a bare distro: drop the
+# build tooling's bashy-as-sh (/opt/bashy/bin, which `command -p` searches
+# first) and its PATH, so fixtures such as execscript reach the system sh.
+RUN rm -rf /opt/bashy/bin
+ENV PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # locales the suite exercises (intl/glob-test/…) + compiler/helper tools; same
 # Ubuntu 24.04 substrate intended for the later POSIX profile images.
