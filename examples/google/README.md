@@ -57,6 +57,14 @@ pass `scopes=...` to change it.
 | Calendar | `calendar.events` | the calendar verbs | calendar settings and sharing |
 | Tasks | `tasks` | the task verbs | |
 
+Tasks and Calendar have no app-limited scope: `tasks` and `calendar.events` can
+also delete, so bashy deletes only when you run `tasks-delete` or `calendar-delete`.
+Each API must be enabled in your project once; a 403 "API has not been used in
+project" names it, e.g. `gcloud services enable drive.googleapis.com
+gmail.googleapis.com calendar-json.googleapis.com tasks.googleapis.com --project P`.
+Login opens Google's consent page in your browser (`GWS_NO_BROWSER=1` only prints
+the link to the terminal).
+
 `scopes=` accepts full scope URLs, short names (`drive.file`, `gmail.readonly`)
 or bare service names (`scopes=gmail,drive`), which ask gws for its broader
 per-service scopes, including full Drive access.

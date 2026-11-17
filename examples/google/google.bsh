@@ -728,18 +728,12 @@ def handle_auth_import(parsed):
     gws_bin = find_gws_bin()
     env = dict(os.environ)
     env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = acct_dir
-    login_proc = subprocess.run(
-        gws_bin + ["auth", "login"] + scope_login_args(scopes),
-        env=env,
-        capture_output=True,
-        text=True,
-    )
-    if login_proc.returncode != 0:
+    login_rc = run_gws_login(gws_bin + ["auth", "login"] + scope_login_args(scopes), env)
+    if login_rc != 0:
         fail(
             "AUTH_LOGIN_FAILED",
-            f"gws auth login failed (exit {login_proc.returncode})",
-            exit_code=login_proc.returncode,
-            extra={"stderr": login_proc.stderr.strip()},
+            f"gws auth login failed (exit {login_rc})",
+            exit_code=login_rc,
         )
 
     export_proc = subprocess.run(
@@ -819,13 +813,12 @@ def handle_auth_setup(parsed):
             exit_code=proc.returncode,
             extra={"stderr": proc.stderr.strip()},
         )
-    login_proc = subprocess.run(gws_bin + login_cmd, env=env, capture_output=True, text=True)
-    if login_proc.returncode != 0:
+    login_rc = run_gws_login(gws_bin + login_cmd, env)
+    if login_rc != 0:
         fail(
             "AUTH_LOGIN_FAILED",
-            f"gws auth login failed (exit {login_proc.returncode})",
-            exit_code=login_proc.returncode,
-            extra={"stderr": login_proc.stderr.strip()},
+            f"gws auth login failed (exit {login_rc})",
+            exit_code=login_rc,
         )
 
     export_proc = subprocess.run(
@@ -900,6 +893,31 @@ def normalize_attendees(val):
     return []
 
 
+def run_gws_login(cmd, env):
+    """Run `gws auth login`, which waits for the user's consent in a browser.
+    Bash# captures this program's stderr until it exits, so the consent link
+    would never be seen: open it in the browser (unless GWS_NO_BROWSER is set)
+    and print it on the terminal."""
+    proc = subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    announced = False
+    for line in proc.stdout:
+        sys.stderr.write(line)
+        if announced or "https://accounts.google.com/" not in line:
+            continue
+        url = line[line.index("https://accounts.google.com/"):].split()[0]
+        announced = True
+        try:
+            with open("/dev/tty", "w") as tty:
+                tty.write(f"Approve access in your browser:\n{url}\n")
+        except OSError:
+            pass
+        if not os.environ.get("GWS_NO_BROWSER"):
+            opener = shutil.which("open") or shutil.which("xdg-open")
+            if opener:
+                subprocess.run([opener, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return proc.wait()
+
+
 def handle_auth_login(parsed):
     """Re-consent an existing account (its client_secret.json is already in
     place) with the given scopes, then refresh credentials.json, which every
@@ -926,13 +944,12 @@ def handle_auth_login(parsed):
     gws_bin = find_gws_bin()
     env = dict(os.environ)
     env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = acct_dir
-    login_proc = subprocess.run(gws_bin + login_cmd, env=env, capture_output=True, text=True)
-    if login_proc.returncode != 0:
+    login_rc = run_gws_login(gws_bin + login_cmd, env)
+    if login_rc != 0:
         fail(
             "AUTH_LOGIN_FAILED",
-            f"gws auth login failed (exit {login_proc.returncode})",
-            exit_code=login_proc.returncode,
-            extra={"stderr": login_proc.stderr.strip()},
+            f"gws auth login failed (exit {login_rc})",
+            exit_code=login_rc,
         )
     export_proc = subprocess.run(gws_bin + ["auth", "export", "--unmasked"], env=env, capture_output=True, text=True)
     if export_proc.returncode != 0 or not export_proc.stdout.strip():
