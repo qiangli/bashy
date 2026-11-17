@@ -42,8 +42,9 @@ $oci volume exists "$volume" 2>/dev/null || $oci volume create "$volume" >/dev/n
 # a blocked mask is inherited across exec: bashy, like bash, keeps it and
 # every test process got it (a background terminal read then fails with EIO
 # instead of stopping; bashy internal/cli job-control tests failed). dash
-# clears the mask at startup, so it is the trampoline that execs bashy with a
-# clean one. Both go away when bashy reaps as PID 1 (Sprint 653 R9).
+# starts the commands it forks with an empty mask (measured), so it forks
+# bashy rather than exec-ing it: an exec keeps the blocked mask. Its exit
+# status is bashy's. Both go away when bashy reaps as PID 1 (Sprint 653 R9).
 exec $oci run --rm --init \
   -v "$volume:/var/cache/bashy-build:U" \
   -v "$src:/work:U" \
@@ -51,5 +52,5 @@ exec $oci run --rm --init \
   -e BASHY_BUILD_RUN=1 \
   ${BASHY_BUILD_OUT:+-v "$BASHY_BUILD_OUT:/out:U"} \
   --entrypoint /usr/bin/dash \
-  "$ref" -c 'exec /bashy -c "$1"' dash \
+  "$ref" -c '/bashy -c "$1"' dash \
   'mkdir -p "$GOMODCACHE" "$GOCACHE" "$GOTMPDIR" && '"$*"
