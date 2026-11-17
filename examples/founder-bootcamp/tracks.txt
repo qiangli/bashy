@@ -1,0 +1,39 @@
+# Founder bootcamp tracks. One step per line:
+# track|step|who|title|guide|url   (url = the real site, or empty)
+# who: founder (only the founder can do it), agent (an agent prepares or fills it), both.
+# {company} and {founder} come from BOOTCAMP_COMPANY / BOOTCAMP_FOUNDER (fictitious defaults).
+# Not legal or tax advice. General US process as of 2026; verify fees and rules at the source.
+
+company|employment-check|both|Check invention-assignment agreements (current and recent employers)|Find the PIIA/CIIAA, offer letter, equity docs and any status amendment. Read scope, prior-inventions exhibit, holdover clause, notice duties and your state's carve-out (e.g. California Labor Code 2870). Keep the agreements out of shared repos; an agent can scan them for unusual clauses.|
+company|ip-release|founder|Get a written IP release if an employer could claim your invention|If you still hold options or a part-time role, the usual default is to keep your status and ask for a short written release excluding your startup's inventions.|
+company|atlas-ready|both|Prepare the Stripe Atlas inputs|Name and backup, one-line description, founder legal name/address/email/phone/SSN, roles (sole director, all officers), shares (defaults are fine), founder vesting, company address (a virtual mailbox keeps your home off public records), card for the fee. Use ONE email everywhere.|https://stripe.com/atlas
+company|incorporate|founder|Incorporate {company} (Delaware C-corp via Stripe Atlas)|You log in; the agent fills the forms in your browser (bashy browser --mode live); you consent, pay and submit. Record the date: the 83(b) clock starts with the stock purchase.|https://dashboard.stripe.com/atlas
+company|83b|founder|Confirm the 83(b) election reached the IRS within 30 days|Atlas files it; confirm it was filed and keep the proof. Add a deadline 30 days after the stock purchase the day you incorporate.|https://www.irs.gov/forms-pubs/about-form-15620
+company|home-state|founder|Register in your home state if required|Living or working outside Delaware may require foreign registration; California's minimum franchise tax is about $800 a year.|https://bizfileonline.sos.ca.gov/
+company|ip-assignment|founder|Sign the IP assignment from {founder} to {company} after a lawyer has read the employer agreements|One assignment can move code, patent applications, domains and trademarks to the company.|
+company|bank|founder|Open the {company} business bank account|Programs and investors ask for it; credits and payouts need it. Then move cloud, domain and email billing to the company.|
+company|cap-table|both|Record share counts and a cap table|Keep a private list of where each document is: certificate, bylaws, stock purchase agreement, EIN letter, 83(b) proof.|
+
+patent|record|both|Write a dated private invention record|What it is, why it is new, the discussion, superseded alternatives. Keep it private.|
+patent|poc|agent|Build a small private proof of concept|One test per mechanism you will claim, so the example section states only measured facts. Keep the repo private until filed.|
+patent|prior-art|agent|Do a quick prior-art pass with generic queries|Never paste draft text into outside tools. Expect the broad idea to be known; the distinction is usually the combination or the process. Keep a private map of references.|https://patents.google.com/
+patent|spec|agent|Draft specification, drawings and claims|Background as approaches that "may lack" X (no admissions, no product names); claims from one party's side; every term with an antecedent; abstract <= 150 words; mark what was built vs described.|
+patent|review|agent|Run an independent review after every revision, and once over the whole claim set|Each pass in practice found real defects: contradictions, missing antecedents, facts not matching the POC, wording that read as an admission.|
+patent|preflight|agent|Pre-flight the PDFs|Letter size, all fonts embedded, unencrypted, under the size limit, abstract last; record a SHA-256 of each file you upload.|
+patent|file|founder|File the provisional in Patent Center|You log in; the agent fills the Web ADS in your browser (title, docket, inventor, correspondence, entity; domestic benefit empty); you upload the PDFs, sign /Your Name/, pay and submit.|https://patentcenter.uspto.gov/
+patent|record-filing|agent|Record the application number, confirmation and receipt|Mark materials "patent pending"; never publish the text. Add a deadline 12 months after the FIRST provisional for the non-provisional.|https://www.uspto.gov/learning-and-resources/fees-and-payment/uspto-fee-schedule
+patent|assign|founder|Assign the application to {company} and record the assignment|After the founder IP assignment.|https://assignmentcenter.uspto.gov/
+patent|non-provisional|both|File the non-provisional (with a patent attorney) within 12 months of the first provisional|One non-provisional can claim several provisionals; before it: full-text searches and counsel review.|
+
+funding|website|agent|Make the website pass reviewers|Founders and product text in the SERVED HTML (check with curl; reviewers often run no JavaScript) and the team listed publicly.|
+funding|kit|both|Write the application kit|Pitch order (what, why now, how, proof, ask), one-liners at several lengths, standing answers (company, founders, contact, full-time, raise, burn, users, revenue, ownership, prior companies, market), materials map.|
+funding|ledger|agent|Start the outcome ledger|One row per program: date, outcome, a "learned" line. Declines teach you what to fix.|
+funding|assets|founder|Record generic assets (deck link, demo video, founder intro video)|A program-specific asset ("... with <Program>") never goes to another program.|
+funding|program-list|agent|Build the program list with deadlines|Accelerators, funds, grants, cloud credits; verify each deadline on the program's own site; add deadlines.|https://www.ycombinator.com/apply
+funding|apply|both|Apply in batches|You log in; the agent fills each form in your browser; you upload, consent, answer demographics and submit. A submission counts only with a confirmation page or email.|https://apply.ycombinator.com/
+funding|credits|both|Claim cloud credits and track redemption windows|Partner catalogs (e.g. NVIDIA Inception benefits) unlock other credits; approvals come in phases; some codes must be redeemed within a window: add deadlines.|https://www.nvidia.com/en-us/startups/
+funding|follow-up|both|Follow up and update|Programs like YC take updates after applying; send short, specific notes; ask for intros only through people you know.|
+
+launch|claims|founder|Agree on what you never claim|No certifications, endorsements or results you are not authorized to state.|
+launch|patent-first|founder|Nothing public before the patent is filed|Open-source pushes, demos, posts and widely sent decks count as public disclosure.|
+launch|confirm|agent|Confirm before recording|Every "sent" needs a confirmation page or email.|

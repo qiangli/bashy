@@ -1,0 +1,494 @@
+#!/usr/bin/env -S bashy --bashsharp
+# One body, two orientations: executable Bash# and its embedded agent skill.
+
+~~~skill as guide
+---
+name: founder-bootcamp
+description: Walk a solo founder through forming the company, filing provisional patents and applying for funding, with progress, deadlines and the "you log in, the agent fills, you submit" browser takeover. Use when a founder asks what to do next, wants to file or apply for something, or needs a deadline checked.
+metadata:
+  requires: "has=bashy"
+  step-porota: 'bashy founder-bootcamp status'
+---
+# Founder bootcamp
+
+This is the prose face of `bootcamp.bsh`, the same body as the registered
+`founder-bootcamp` command. Not legal or tax advice.
+
+- `founder-bootcamp status [--json]` shows each track's progress and the
+  deadlines due in 30 days or overdue. Run it first.
+- `founder-bootcamp next [TRACK]` prints the next open steps with their
+  guidance and who does each (founder, agent or both).
+- `founder-bootcamp show TRACK [--guide]` lists a track: company, patent,
+  funding, launch.
+- `founder-bootcamp done|skip|reopen TRACK STEP [--note TEXT] [--date D]`
+  records progress. Record a step only when it is really done: a filing or
+  application counts only with a confirmation page or email.
+- `founder-bootcamp deadline add YYYY-MM-DD TITLE [--track T]`,
+  `deadline done TEXT`, and `deadlines` keep dates that must not slip
+  (83(b) within 30 days of the stock purchase; the non-provisional within
+  12 months of the first provisional; credit redemption windows).
+- `founder-bootcamp takeover` checks the bashy live browser hub and prints
+  the split of work for filing anything in the founder's own browser.
+- `founder-bootcamp go TRACK STEP` opens the step's real site (Stripe Atlas,
+  USPTO Patent Center, a program's application) in the founder's own browser
+  through the live hub; the founder logs in, then the agent fills.
+- `founder-bootcamp check-site URL [TEXT...]` fetches the served HTML with
+  `bashy fetch` (no JavaScript, as reviewers see it) and checks the company and
+  founder names (or the given texts) appear.
+- `founder-bootcamp preflight FILE.pdf` reads a PDF with `bashy lens` before
+  upload: text extracts, abstract at most 150 words, and the SHA-256 to record.
+- `founder-bootcamp guide TRACK` prints the general runbook from `bashy kb`.
+- `founder-bootcamp deck init DIR` writes a pitch deck outline (`deck.md`, the
+  usual investor order); `deck build DIR` renders each slide with
+  `bashy browser` and joins them into `DIR/build/deck.pdf` with `media pdf`.
+- `founder-bootcamp demo init DIR [--deck DECKDIR]` scaffolds a ~90 s demo
+  project for `media` (title card, deck slides, a real terminal scene, closing
+  card, narration); `demo build DIR [--voice NAME]` narrates (your own takes, or
+  a draft system voice) and builds `DIR/build/demo.mp4` with `media build`.
+- Deadlines are mirrored into `bashy todo` (label `founder-bootcamp`) in the
+  records repository when `BOOTCAMP_DIR` is inside one; `BOOTCAMP_TODO=0` turns
+  that off.
+- `founder-bootcamp page [FILE]` writes a one-page HTML progress report.
+
+How an agent files for the founder: run `takeover`; if the hub is up, ask
+the founder to log in to the site in their own browser; fill every field
+with `bashy browser --mode live` from the prepared record, re-reading after
+each step; never type passwords, usernames, SSNs or card numbers (the guard
+asks the founder); stop at uploads, consents, signatures, payment and the
+final Submit, which are the founder's; then confirm by the confirmation page
+or email and record it with `done ... --note`.
+
+`BOOTCAMP_COMPANY` and `BOOTCAMP_FOUNDER` name the company and founder
+(defaults are fictitious: "Acme Labs, Inc." and "Alex Founder"); track text
+uses them through `{company}` and `{founder}`.
+`BOOTCAMP_DIR` selects where progress and deadlines are kept (default
+`${XDG_DATA_HOME:-$HOME/.local/share}/bashy/founder-bootcamp`). Point it at a
+private directory, for example in the founder's private records repository.
+The tracks live in `tracks.txt` next to this file.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+tracks_file=${BOOTCAMP_TRACKS:-$here/tracks.txt}
+dir=${BOOTCAMP_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy/founder-bootcamp}
+progress=$dir/progress.tsv
+deadlines=$dir/deadlines.tsv
+# The command registry passes flags first as --name=value (booleans as
+# --name=true). Put positionals first and flags after, in their usual form.
+_pos=() _flg=()
+while (( $# )); do
+  case $1 in
+    --*=true) _flg+=("${1%=true}") ;;
+    --*=*) _flg+=("${1%%=*}" "${1#*=}") ;;
+    --*) _flg+=("$1"); if [[ $# -gt 1 && $2 != --* && $1 =~ ^--(note|date|track|deck|voice)$ ]]; then _flg+=("$2"); shift; fi ;;
+    *) _pos+=("$1") ;;
+  esac
+  shift
+done
+set -- "${_pos[@]}" "${_flg[@]}"
+[[ -n ${BOOTCAMP_DEBUG:-} ]] && printf 'argv: %q\n' "$@" >&2
+today=${BOOTCAMP_TODAY:-$(date +%Y-%m-%d)}
+# Names come from the environment; the defaults are fictitious.
+company=${BOOTCAMP_COMPANY:-Acme Labs, Inc.}
+founder=${BOOTCAMP_FOUNDER:-Alex Founder}
+
+die() { printf 'founder-bootcamp: %s\n' "$*" >&2; exit 2; }
+init() { mkdir -p "$dir"; touch "$progress" "$deadlines"; }
+
+# steps prints the tracks file without comments: track|step|who|title|guide|url
+steps() { grep -v -e '^#' -e '^[[:space:]]*$' "$tracks_file"; }
+# fill replaces {company} and {founder} after parsing, so any name is safe.
+fill() { local x=$1; x=${x//\{company\}/"$company"}; x=${x//\{founder\}/"$founder"}; printf '%s' "$x"; }
+track_names() { steps | cut -d'|' -f1 | awk '!seen[$0]++'; }
+
+# state TRACK STEP prints "status<TAB>date<TAB>note" (latest record wins).
+state() {
+  local t=$1 s=$2 line out=$'open\t\t'
+  while IFS=$'\t' read -r rt rs st dt nt; do
+    [[ $rt == "$t" && $rs == "$s" ]] && out="$st"$'\t'"$dt"$'\t'"$nt"
+  done < "$progress"
+  printf '%s\n' "$out"
+}
+
+mark() {
+  local status=$1 t=${2:-} s=${3:-}; shift 3 || true
+  [[ -n $t && -n $s ]] || die "usage: $status TRACK STEP [--note TEXT] [--date YYYY-MM-DD]"
+  steps | grep -q "^$t|$s|" || die "no step $t/$s (see: show $t)"
+  local note="" d=$today
+  while (( $# )); do
+    case $1 in
+      --note) note=${2:-}; shift 2 ;;
+      --date) d=${2:-}; shift 2 ;;
+      *) die "unknown option $1" ;;
+    esac
+  done
+  [[ $d =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "date must be YYYY-MM-DD"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$t" "$s" "$status" "$d" "${note//$'\t'/ }" >> "$progress"
+  printf '%s %s/%s (%s)\n' "$status" "$t" "$s" "$d"
+}
+
+box() { case $1 in done) echo '[x]' ;; skip) echo '[-]' ;; *) echo '[ ]' ;; esac; }
+
+show() {
+  local t=${1:-} guide=${2:-}
+  [[ -n $t ]] || die "usage: show TRACK [--guide]"
+  steps | grep -q "^$t|" || die "no track $t (tracks: $(track_names | paste -sd' ' -))"
+  while IFS='|' read -r tt s who title g url; do
+    [[ $tt == "$t" ]] || continue
+    IFS=$'\t' read -r st dt nt <<< "$(state "$t" "$s")"
+    printf '%s %-20s %-7s %s' "$(box "$st")" "$s" "$who" "$(fill "$title")"
+    [[ -n $dt && $st != open ]] && printf '  (%s%s)' "$dt" "${nt:+: $nt}"
+    printf '\n'
+    [[ $guide == --guide ]] && printf '      %s\n' "$(fill "$g")"
+    [[ $guide == --guide && -n $url ]] && printf '      %s\n' "$url"
+  done < <(steps)
+}
+
+next() {
+  local only=${1:-} n=0
+  while IFS='|' read -r t s who title g url; do
+    [[ -z $only || $t == "$only" ]] || continue
+    IFS=$'\t' read -r st _ _ <<< "$(state "$t" "$s")"
+    [[ $st == open ]] || continue
+    printf '%s/%s  [%s] %s\n    %s\n' "$t" "$s" "$who" "$(fill "$title")" "$(fill "$g")"
+    [[ -n $url ]] && printf '    %s\n' "$url"
+    n=$((n+1)); (( n < 3 )) || break
+  done < <(steps)
+  (( n > 0 )) || echo "nothing open${only:+ in $only}"
+}
+
+days_until() {
+  local a b
+  a=$(date -u -d "$today" +%s); b=$(date -u -d "$1" +%s)
+  echo $(( (b - a) / 86400 ))
+}
+
+deadline() {
+  case ${1:-} in
+    add)
+      local d=${2:-} title=${3:-} track=""
+      [[ $d =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ && -n $title ]] || die "usage: deadline add YYYY-MM-DD TITLE [--track T]"
+      [[ ${4:-} == --track ]] && track=${5:-}
+      # Tab is IFS whitespace, so empty fields would collapse on read: store "-".
+      printf '%s\t%s\t%s\topen\n' "$d" "${title//$'\t'/ }" "${track:--}" >> "$deadlines"
+      echo "deadline $d $title"
+      # Mirror into bashy todo (the records repo's store when BOOTCAMP_DIR is in one).
+      if [[ ${BOOTCAMP_TODO:-1} == 1 ]]; then
+        (cd "$dir" && bashy todo add "$title" --due "$d" --label founder-bootcamp ${track:+--label "$track"} \
+          --note "Founder bootcamp deadline ($company)." >/dev/null 2>&1) && echo "  also in: bashy todo list --label founder-bootcamp" || true
+      fi
+      ;;
+    done)
+      local pat=${2:-} tmp; [[ -n $pat ]] || die "usage: deadline done TEXT"
+      tmp=$(mktemp)
+      awk -F'\t' -v OFS='\t' -v p="$pat" 'index($2,p) && $4=="open" {$4="done"; c++} {print} END {exit c?0:1}' "$deadlines" > "$tmp" \
+        || { rm -f "$tmp"; die "no open deadline matches '$pat'"; }
+      mv "$tmp" "$deadlines"; echo "closed deadline(s) matching '$pat'"
+      ;;
+    *) die "usage: deadline add|done ..." ;;
+  esac
+}
+
+list_deadlines() {
+  local within=${1:-99999}
+  sort "$deadlines" | while IFS=$'\t' read -r d title track st; do
+    [[ $st == open ]] || continue
+    local left; left=$(days_until "$d")
+    (( left <= within )) || continue
+    local tag="in $left days"; (( left < 0 )) && tag="OVERDUE by $(( -left )) days"; (( left == 0 )) && tag="TODAY"
+    [[ $track == - ]] && track=""
+    printf '%s  %-18s %s%s\n' "$d" "$tag" "$title" "${track:+ ($track)}"
+  done
+}
+
+status() {
+  local json=${1:-}
+  if [[ $json == --json ]]; then
+    printf '{"company":"%s","dir":"%s","today":"%s","tracks":[' "${company//\"/\\\"}" "$dir" "$today"
+    local first=1
+    for t in $(track_names); do
+      local total=0 done=0
+      while IFS='|' read -r tt s _; do
+        [[ $tt == "$t" ]] || continue; total=$((total+1))
+        IFS=$'\t' read -r st _ _ <<< "$(state "$t" "$s")"; [[ $st == open ]] || done=$((done+1))
+      done < <(steps)
+      (( first )) || printf ','; first=0
+      printf '{"track":"%s","done":%d,"total":%d}' "$t" "$done" "$total"
+    done
+    printf '],"deadlines_30d":%d}\n' "$(list_deadlines 30 | grep -c . || true)"
+    return
+  fi
+  printf 'Founder bootcamp — %s, %s — %s (records: %s)\n\n' "$company" "$founder" "$today" "$dir"
+  for t in $(track_names); do
+    local total=0 done=0
+    while IFS='|' read -r tt s _; do
+      [[ $tt == "$t" ]] || continue; total=$((total+1))
+      IFS=$'\t' read -r st _ _ <<< "$(state "$t" "$s")"; [[ $st == open ]] || done=$((done+1))
+    done < <(steps)
+    printf '  %-8s %2d/%-2d done\n' "$t" "$done" "$total"
+  done
+  local due; due=$(list_deadlines 30)
+  printf '\nDeadlines (overdue or within 30 days):\n%s\n' "${due:-  none}"
+  printf '\nNext: founder-bootcamp next\n'
+}
+
+takeover() {
+  local s; s=$(bashy browser --mode live status 2>&1 || true)
+  printf 'Browser hub: %s\n\n' "$s"
+  if [[ $s == *hub_up=true* && $s == *extension_connected=true* ]]; then
+    echo 'Ready. Ask the founder to log in to the site in their own browser.'
+  else
+    echo 'Not ready: run `bashy browser setup live` and connect the extension, then retry.'
+  fi
+  cat <<'EOF'
+
+Who does what:
+  1. agent    check this hub (done above)
+  2. founder  log in to the site in their own browser, including 2FA
+  3. agent    fill every field with `bashy browser --mode live` from the prepared record; re-read after each step
+  4. founder  answer the guard's questions (passwords, usernames, SSNs, card numbers are never typed by the agent)
+  5. founder  uploads, consents, signature (e.g. /Your Name/), payment, final Submit
+  6. agent    confirm by the confirmation page or email, then: founder-bootcamp done TRACK STEP --note "<number/receipt>"
+EOF
+}
+
+# media runs the sibling media example (PDF, slides, narrated video) through
+# bashy, or the registered `media` command when the sibling is absent.
+media() {
+  if [[ -f $here/../media/media.bsh ]]; then bashy --bashsharp "$here/../media/media.bsh" "$@"
+  else bashy media "$@"; fi
+}
+
+esc() { local x=$1; x=${x//&/&amp;}; x=${x//</&lt;}; x=${x//>/&gt;}; printf '%s' "$x"; }
+
+# deck init writes a pitch deck outline in the usual investor order; edit it,
+# then `deck build` renders each slide with bashy browser and joins them with
+# media pdf.
+deck_init() {
+  local d=${1:-}; [[ -n $d ]] || die "usage: deck init DIR"
+  [[ -e $d/deck.md ]] && die "$d/deck.md exists; edit it or choose another DIR"
+  mkdir -p "$d"
+  cat > "$d/deck.md" <<EOF
+# $company
+- What it does, in one sentence a customer would say
+- $founder, founder
+
+---
+# Problem
+- Who has it, how often, what it costs them today
+
+---
+# Solution
+- What the product does for them (lead with people, not infrastructure)
+
+---
+# Demo
+- One screenshot or a link to the demo video
+
+---
+# Why now
+- What changed that makes this possible or urgent
+
+---
+# Market
+- Bottom-up: who buys, how many, at what price
+
+---
+# Business model
+- How you charge, and for what
+
+---
+# Traction
+- Users, pilots, revenue, releases, usage (only what you can show)
+
+---
+# Competition
+- Alternatives and why customers would switch
+
+---
+# Team
+- $founder: why you, what you have built
+
+---
+# The ask
+- Raise, what it buys, milestones it reaches
+EOF
+  echo "wrote $d/deck.md — edit it, then: founder-bootcamp deck build $d"
+}
+
+deck_build() {
+  local d=${1:-}; [[ -f $d/deck.md ]] || die "usage: deck build DIR (with DIR/deck.md; see deck init)"
+  local out=$d/build; mkdir -p "$out"
+  rm -f -- "${out:?}"/[0-9][0-9].png "${out:?}"/[0-9][0-9].html
+  local n=0 title="" items=() f abs
+  abs=$(cd "$out" && pwd)
+  flush() {
+    [[ -n $title ]] || return 0
+    n=$((n+1)); f=$(printf '%02d' "$n")
+    {
+      printf '<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;position:relative;overflow:hidden;width:1280px;height:720px;background:#fff;color:#1d1d1f;font-family:system-ui,sans-serif;display:flex;flex-direction:column;justify-content:center;padding:0 110px;box-sizing:border-box}h1{font-size:64px;margin:0 0 36px}li{font-size:34px;line-height:1.4;margin:10px 0}footer{position:absolute;bottom:28px;right:48px;font-size:18px;color:#888}</style></head><body>'
+      printf '<h1>%s</h1><ul>' "$(esc "$title")"
+      local it; for it in "${items[@]}"; do printf '<li>%s</li>' "$(esc "$it")"; done
+      printf '</ul><footer>%s · %d</footer></body></html>' "$(esc "$company")" "$n"
+    } > "$abs/$f.html"
+    bashy browser --mode probe navigate "file://$abs/$f.html" >/dev/null
+    bashy browser --mode probe screenshot --full-page --output "$abs/$f.png" >/dev/null
+    title=""; items=()
+  }
+  while IFS= read -r line || [[ -n $line ]]; do
+    case $line in
+      '---') flush ;;
+      '# '*) title=${line#\# } ;;
+      '- '*) items+=("${line#- }") ;;
+    esac
+  done < "$d/deck.md"
+  flush
+  (( n > 0 )) || die "no slides in $d/deck.md"
+  media pdf "$abs"/[0-9][0-9].png -o "$abs/deck.pdf" --title "$company" --author "$founder" >/dev/null
+  echo "$abs/deck.pdf ($n slides; PNGs in $abs)"
+}
+
+# demo init scaffolds a ~90 s narrated demo for bashy media: title card,
+# slides from a built deck, a real terminal scene, closing card.
+demo_init() {
+  local d=${1:-} deckdir=${3:-}; [[ -n $d ]] || die "usage: demo init DIR [--deck DECKDIR]"
+  [[ -z ${2:-} || ${2:-} == --deck ]] || die "usage: demo init DIR [--deck DECKDIR]"
+  [[ -e $d/storyboard.txt ]] && die "$d/storyboard.txt exists"
+  mkdir -p "$d/cards" "$d/slides" "$d/steps"
+  printf '%s\n%s\n' "$company" "A 90-second demo" > "$d/cards/title.txt"
+  printf '%s\n%s\n' "$company" "$founder" > "$d/cards/close.txt"
+  local sb="card title 4" nar="$company, in ninety seconds."
+  if [[ -n $deckdir && -f $deckdir/build/02.png && -f $deckdir/build/03.png ]]; then
+    cp "$deckdir/build/02.png" "$d/slides/problem.png"; cp "$deckdir/build/03.png" "$d/slides/solution.png"
+    sb+=$'\nslide problem.png 8\nslide solution.png 8'
+    nar+=$'\nThe problem, in one sentence.\nWhat we do about it.'
+  fi
+  cat > "$d/steps/product.sh" <<'EOF'
+# A real terminal scene: replace with the product's own commands.
+founder-bootcamp status
+EOF
+  sb+=$'\nstep product\ncard close 4'
+  nar+=$'\nHere it is, running for real.\nThank you.'
+  printf '%s\n' "$sb" > "$d/storyboard.txt"
+  printf '%s\n' "$nar" > "$d/narration.txt"
+  echo "wrote $d (storyboard.txt, narration.txt, cards/, steps/) — edit, then: founder-bootcamp demo build $d [--voice NAME]"
+}
+
+demo_build() {
+  local d=${1:-} voice="";
+  export GOWORK=off  # Bash# Go fences in sibling examples (cast) build outside any go.work
+  [[ -f $d/storyboard.txt ]] || die "usage: demo build DIR [--voice NAME]"
+  [[ ${2:-} == --voice ]] && voice=${3:-}
+  media doctor >/dev/null || { media doctor; die "install what media doctor prints, then rerun"; }
+  if [[ -n $voice ]]; then media narrate "$d" --voice "$voice"; else media narrate "$d" --own; fi
+  media build "$d"
+}
+
+# go opens a step's site in the founder's own browser (live hub), so the
+# founder can log in and the agent can take over filling.
+go() {
+  local t=${1:-} s=${2:-} url=""
+  [[ -n $t && -n $s ]] || die "usage: go TRACK STEP"
+  url=$(steps | awk -F'|' -v t="$t" -v s="$s" '$1==t && $2==s {print $6}')
+  [[ -n $url ]] || die "step $t/$s has no site"
+  if [[ ${BOOTCAMP_DRY_RUN:-} == 1 ]]; then echo "would open $url"; return; fi
+  bashy browser --mode live navigate "$url" >/dev/null && echo "opened $url in the founder's browser; log in, then the agent fills"
+}
+
+# check_site verifies the SERVED HTML (no JavaScript) names the company and
+# founder: reviewers often read pages without running scripts.
+check_site() {
+  local url=${1:-}; [[ -n $url ]] || die "usage: check-site URL [TEXT...]"; shift
+  local want=("$@"); (( ${#want[@]} )) || want=("$company" "$founder")
+  local body; body=$(bashy fetch "$url" 2>/dev/null) || die "could not fetch $url"
+  local text; text=$(printf '%s' "$body" | sed -e 's/<script[^>]*>.*<\/script>//g' -e 's/<[^>]*>/ /g')
+  local miss=0 w
+  for w in "${want[@]}"; do
+    if grep -qiF -- "$w" <<< "$text"; then printf 'ok      %s\n' "$w"; else printf 'MISSING %s\n' "$w"; miss=1; fi
+  done
+  (( miss == 0 )) && echo "served HTML of $url names them" || { echo "fix: put this text in the served HTML, outside JavaScript"; return 1; }
+}
+
+# preflight checks a PDF before upload with bashy lens: text extracts (fonts
+# usable), abstract length, and the SHA-256 to record with the filing.
+preflight() {
+  local f=${1:-}; [[ -f $f ]] || die "usage: preflight FILE.pdf"
+  local md; md=$(bashy lens -t md "$f" 2>/dev/null) || die "bashy lens could not read $f"
+  local words; words=$(printf '%s' "$md" | wc -w | tr -d ' ')
+  (( words > 0 )) && echo "ok      text extracts ($words words)" || { echo "FAIL    no extractable text (scanned or fonts not embedded?)"; return 1; }
+  local abs; abs=$(printf '%s\n' "$md" | awk 'tolower($0) ~ /^#* *abstract/ {on=1; next} on' | wc -w | tr -d ' ')
+  if (( abs > 0 )); then
+    (( abs <= 150 )) && echo "ok      abstract $abs words (<= 150)" || echo "WARN    abstract $abs words (USPTO limit 150)"
+  fi
+  printf 'sha256  %s\n' "$(sha256sum "$f" | cut -d' ' -f1)"
+}
+
+# guide prints the general runbook for a track from the bashy kb (host ring).
+runbook() {
+  local slug
+  case ${1:-} in
+    company) slug=forming-a-us-startup-with-stripe-atlas ;;
+    patent) slug=filing-a-us-provisional-patent-as-a-solo-founder ;;
+    funding|launch) slug=applying-to-accelerators-funds-and-cloud-credits ;;
+    *) die "usage: guide company|patent|funding" ;;
+  esac
+  (cd / && bashy kb show --user "$slug" 2>/dev/null) || { echo "no kb page $slug on this host; the step guidance is in: show ${1} --guide"; }
+}
+
+page() {
+  local out=${1:-/dev/stdout}
+  {
+    printf '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Founder bootcamp</title>'
+    printf '<style>body{font:15px/1.5 system-ui,sans-serif;max-width:860px;margin:24px auto;padding:0 16px;color:#1d1d1f;background:#fff}h2{margin-top:28px}li{margin:4px 0}.done{color:#555;text-decoration:line-through}.skip{color:#888}.who{font-size:12px;color:#666;border:1px solid #ccc;border-radius:4px;padding:0 4px;margin-right:6px}.overdue{color:#b00020;font-weight:600}</style></head><body>'
+    printf '<h1>Founder bootcamp: %s</h1><p>%s · %s. Not legal or tax advice.</p>' "${company//</&lt;}" "${founder//</&lt;}" "$today"
+    printf '<h2>Deadlines</h2><ul>'
+    list_deadlines | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' | while IFS= read -r l; do
+      if [[ $l == *OVERDUE* || $l == *TODAY* ]]; then printf '<li class="overdue">%s</li>' "$l"; else printf '<li>%s</li>' "$l"; fi
+    done
+    printf '</ul>'
+    for t in $(track_names); do
+      printf '<h2>%s</h2><ul>' "$t"
+      while IFS='|' read -r tt s who title g url; do
+        [[ $tt == "$t" ]] || continue
+        IFS=$'\t' read -r st dt nt <<< "$(state "$t" "$s")"
+        title=$(fill "$title"); title=${title//&/&amp;}; title=${title//</&lt;}; nt=${nt//&/&amp;}; nt=${nt//</&lt;}
+        printf '<li class="%s"><span class="who">%s</span>%s%s%s</li>' "$st" "$who" "$title" "${url:+ <a href=\"$url\">site</a>}" "${dt:+ <small>($st $dt${nt:+: $nt})</small>}"
+      done < <(steps)
+      printf '</ul>'
+    done
+    printf '</body></html>\n'
+  } > "$out"
+  [[ $out == /dev/stdout ]] || echo "wrote $out"
+}
+
+usage='founder-bootcamp status [--json] | next [TRACK] | show TRACK [--guide] | go TRACK STEP | done|skip|reopen TRACK STEP [--note TEXT] [--date D] | deadline add DATE TITLE [--track T] | deadline done TEXT | deadlines | takeover | go TRACK STEP | check-site URL [TEXT...] | preflight FILE.pdf | guide TRACK | deck init|build DIR | demo init|build DIR | page [FILE] | test | --skill'
+
+case ${1:-status} in
+--skill)
+  copying=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then copying=true; continue; fi
+    if [[ $copying == true && $line == '~~~' ]]; then break; fi
+    if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  ;;
+-h|--help|help) echo "$usage" ;;
+status) init; status "${2:-}" ;;
+next) init; next "${2:-}" ;;
+show) init; show "${2:-}" "${3:-}" ;;
+done|skip) init; s=$1; shift; mark "$s" "$@" ;;
+reopen) init; shift; mark open "$@" ;;
+deadline) init; shift; deadline "$@" ;;
+deadlines) init; list_deadlines ;;
+takeover) takeover ;;
+go) shift; go "$@" ;;
+check-site) shift; check_site "$@" ;;
+deck) case ${2:-} in init) deck_init "${3:-}" ;; build) deck_build "${3:-}" ;; *) die "usage: deck init|build DIR" ;; esac ;;
+demo) case ${2:-} in init) shift 2; demo_init "$@" ;; build) shift 2; demo_build "$@" ;; *) die "usage: demo init|build DIR" ;; esac ;;
+preflight) shift; preflight "$@" ;;
+guide) shift; runbook "$@" ;;
+page) init; page "${2:-}" ;;
+test) exec bash "$here/checks/bootcamp_test.sh" ;;
+*) echo "$usage" >&2; exit 2 ;;
+esac
