@@ -98,11 +98,12 @@ Effects: exec, net, write
 
 ```bash
 BASHY_EXE="${BASHY:-bashy}"
+go_cmd="${GO:-$BASHY_EXE go}"
 bin_dir="${BIN_DIR:-bin}"
-goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
+goos="${GOOS:-$($go_cmd env GOOS)}"
 ext=""
 [ "$goos" = windows ] && ext=.exe
-"$BASHY_EXE" go run ./tools/installbashy \
+$go_cmd run ./tools/installbashy \
   -bash "$bin_dir/bash${ext}" -bashy "$bin_dir/bashy${ext}"
 ```
 
@@ -114,7 +115,8 @@ Effects: cred, exec, net, read, write
 ```bash
 set -e
 BASHY_EXE="${BASHY:-bashy}"
-"$BASHY_EXE" go test ./...
+go_cmd="${GO:-$BASHY_EXE go}"
+$go_cmd test ./...
 ```
 
 ### test-meet-spa-fresh-regression
@@ -137,9 +139,10 @@ Effects: exec, net, read, write
 ```bash
 set -e
 BASHY_EXE="${BASHY:-bashy}"
+go_cmd="${GO:-$BASHY_EXE go}"
 bin_dir="${BIN_DIR:-bin}"
 mkdir -p "$bin_dir"
-GOWORK=off "$BASHY_EXE" go build -o "$bin_dir/bashy-spa-check" ./cmd/bashy
+GOWORK=off $go_cmd build -o "$bin_dir/bashy-spa-check" ./cmd/bashy
 BASHY_BIN="$(pwd -P)/$bin_dir/bashy-spa-check" scripts/build-meet-spa.sh check
 ```
 
@@ -208,10 +211,15 @@ Effects: exec, net, read, write
 ```bash
 set -e
 BASHY_EXE="${BASHY:-bashy}"
+go_cmd="${GO:-$BASHY_EXE go}"
 bin_dir="${BIN_DIR:-bin}"
-if [ "$("$BASHY_EXE" go env GOOS)" = linux ]; then
+if [ "$($go_cmd env GOOS)" = linux ]; then
   mkdir -p "$bin_dir"
-  CGO_ENABLED=1 scripts/go-product.sh build -tags bashy_cert,bashy_cert_base,osusergo -ldflags=-w -o "$bin_dir/bashy-startup-check" ./cmd/bashy
+  if [ -n "${GO:-}" ]; then
+    CGO_ENABLED=1 BASHY_EXE="" scripts/go-product.sh build -tags bashy_cert,bashy_cert_base,osusergo -ldflags=-w -o "$bin_dir/bashy-startup-check" ./cmd/bashy
+  else
+    CGO_ENABLED=1 BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -tags bashy_cert,bashy_cert_base,osusergo -ldflags=-w -o "$bin_dir/bashy-startup-check" ./cmd/bashy
+  fi
   scripts/test-startup-linux.sh "$bin_dir/bashy-startup-check"
 else
   echo "test-startup-linux: skipped (Linux only)"
@@ -1385,8 +1393,6 @@ rm -rf "$bin_dir"
 Build ONLY `bin/bash` — the pure Bash 5.3 drop-in from cmd/bash (import graph
 never includes coreutils; ~5.7 MB). All the conformance harness needs. Uses
 `scripts/go-product.sh build` so the startup signal contract is enabled.
-Sources: cmd/bash, internal/cli, go.mod, go.sum
-Generates: bin/bash
 Effects: cred, exec, net, read, write
 
 ```bash
@@ -1394,8 +1400,11 @@ set -e
 bin_dir="${BIN_DIR:-bin}"
 mkdir -p "$bin_dir"
 BASHY_EXE="${BASHY:-bashy}"
-goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
-hostgoos="$("$BASHY_EXE" go env GOOS)"
+go_cmd="${GO:-$BASHY_EXE go}"
+goos="${GOOS:-$($go_cmd env GOOS)}"
+goarch="${GOARCH:-$($go_cmd env GOARCH)}"
+hostgoos="$($go_cmd env GOHOSTOS)"
+hostgoarch="$($go_cmd env GOHOSTARCH)"
 ext=""
 [ "$goos" = windows ] && ext=.exe
 BUILD_ID="${BUILD_ID:-}"
@@ -1411,20 +1420,26 @@ SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/s
 SHELL_RUNTIME_COMMIT_TIME=
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 out="$bin_dir/bash"
-if [ "$goos" = "$hostgoos" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build-bash)" = 1 ]; then
-  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" ./cmd/bash
+if [ "$goos" = "$hostgoos" ] && [ "$goarch" = "$hostgoarch" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build-bash)" = 1 ]; then
+  if [ -n "${GO:-}" ]; then
+    BASHY_EXE="" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" ./cmd/bash
+  else
+    BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" ./cmd/bash
+  fi
   cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o "$out" native/siglaunch.c.in
 else
   rm -f "$out.real"
-  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" ./cmd/bash
+  if [ -n "${GO:-}" ]; then
+    BASHY_EXE="" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" ./cmd/bash
+  else
+    BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" ./cmd/bash
+  fi
 fi
 echo "built $out (pure drop-in)"
 ```
 
 ### build-sh
 Build ONLY `bin/sh` — the pure strict POSIX sh for the opt-in shell conformance gate.
-Sources: cmd/sh, internal/cli, go.mod, go.sum
-Generates: bin/sh
 Effects: cred, exec, net, read, write
 
 ```bash
@@ -1432,8 +1447,11 @@ set -e
 bin_dir="${BIN_DIR:-bin}"
 mkdir -p "$bin_dir"
 BASHY_EXE="${BASHY:-bashy}"
-goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
-hostgoos="$("$BASHY_EXE" go env GOOS)"
+go_cmd="${GO:-$BASHY_EXE go}"
+goos="${GOOS:-$($go_cmd env GOOS)}"
+goarch="${GOARCH:-$($go_cmd env GOARCH)}"
+hostgoos="$($go_cmd env GOHOSTOS)"
+hostgoarch="$($go_cmd env GOHOSTARCH)"
 ext=""
 [ "$goos" = windows ] && ext=.exe
 BUILD_ID="${BUILD_ID:-}"
@@ -1449,12 +1467,20 @@ SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/s
 SHELL_RUNTIME_COMMIT_TIME=
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 out="$bin_dir/sh"
-if [ "$goos" = "$hostgoos" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build-sh)" = 1 ]; then
-  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" ./cmd/sh
+if [ "$goos" = "$hostgoos" ] && [ "$goarch" = "$hostgoarch" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build-sh)" = 1 ]; then
+  if [ -n "${GO:-}" ]; then
+    BASHY_EXE="" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" ./cmd/sh
+  else
+    BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" ./cmd/sh
+  fi
   cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o "$out" native/siglaunch.c.in
 else
   rm -f "$out.real"
-  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" ./cmd/sh
+  if [ -n "${GO:-}" ]; then
+    BASHY_EXE="" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" ./cmd/sh
+  else
+    BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" ./cmd/sh
+  fi
 fi
 echo "built $out (pure POSIX sh)"
 ```
@@ -1462,8 +1488,6 @@ echo "built $out (pure POSIX sh)"
 ### build-bashy
 Build ONLY `bin/bashy` — the AgentOS shell from cmd/bashy. Set BASHY_TAGS to add
 embed tags (embed_podman/…). Lean worker by default.
-Sources: cmd/bashy, internal, go.mod, go.sum
-Generates: bin/bashy
 Effects: cred, exec, net, read, write
 
 ```bash
@@ -1471,7 +1495,8 @@ set -e
 bin_dir="${BIN_DIR:-bin}"
 mkdir -p "$bin_dir"
 BASHY_EXE="${BASHY:-bashy}"
-goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
+go_cmd="${GO:-$BASHY_EXE go}"
+goos="${GOOS:-$($go_cmd env GOOS)}"
 ext=""
 [ "$goos" = windows ] && ext=.exe
 "$BASHY_EXE" scripts/build-meet-spa.sh optional >/dev/null
@@ -1492,7 +1517,11 @@ LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-ba
 BASHY_LDFLAGS=${LDFLAGS#-s }
 tags="${BASHY_TAGS:-}"
 out="$bin_dir/bashy$ext"
-BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "$out" "$BASHY_LDFLAGS" "$tags"
+if [ -n "${GO:-}" ]; then
+  BASHY_EXE="" "$BASHY_EXE" scripts/build-bashy-artifact.sh "$out" "$BASHY_LDFLAGS" "$tags"
+else
+  BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "$out" "$BASHY_LDFLAGS" "$tags"
+fi
 echo "built $out (AgentOS)"
 ```
 
@@ -1500,7 +1529,6 @@ echo "built $out (AgentOS)"
 Build the lean, static linux Bashy profile used by Cloudbox and by the offline image (`bashy self image`).
 The stable amd64 artifact path is bin/scratch/bashy-linux-amd64; BASHY_SCRATCH_GOARCH=arm64
 builds bin/scratch/bashy-linux-arm64 (override BASHY_SCRATCH_ARTIFACT to move it).
-Sources: cmd/bashy, internal, go.mod, go.sum
 Effects: cred, exec, net, read, write
 
 ```bash
@@ -1527,7 +1555,11 @@ SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/s
 SHELL_RUNTIME_COMMIT_TIME=
 LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 BASHY_LDFLAGS=${LDFLAGS#-s }
-CGO_ENABLED=0 GOOS=linux GOARCH="$arch" BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "$out" "$BASHY_LDFLAGS" "bashy_scratch"
+if [ -n "${GO:-}" ]; then
+  CGO_ENABLED=0 GOOS=linux GOARCH="$arch" BASHY_EXE="" "$BASHY_EXE" scripts/build-bashy-artifact.sh "$out" "$BASHY_LDFLAGS" "bashy_scratch"
+else
+  CGO_ENABLED=0 GOOS=linux GOARCH="$arch" BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "$out" "$BASHY_LDFLAGS" "bashy_scratch"
+fi
 ```
 
 ### test-bash-fixtures
