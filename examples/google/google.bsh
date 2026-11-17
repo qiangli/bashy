@@ -48,6 +48,8 @@ SECRET_VIA_ARGV).
 - Gmail: gmail-list, gmail-get, gmail-send, gmail-draft
 - Calendar: calendar-list, calendar-get, calendar-create, calendar-update, calendar-delete, calendar-freebusy
 - Tasks: tasklists-list, tasks-list, tasks-get, tasks-create, tasks-complete, tasks-update, tasks-delete
+  Deletes (calendar-delete, tasks-delete, and raw ... delete/clear/trash) require
+  confirm=yes; agents ask the user first.
 - Drive: drive-list, drive-search, drive-get, drive-upload, drive-mkdir, drive-home [set id=FOLDER_ID]
   Uploads and new folders go to a "bashy" folder it creates on first use
   (GWS_DRIVE_HOME renames it; empty means My Drive root) unless parent=FOLDER_ID.
@@ -893,6 +895,20 @@ def normalize_attendees(val):
     return []
 
 
+DESTRUCTIVE_METHODS = "delete clear trash emptyTrash"
+
+
+def require_confirm(verb, shaped, dry_run, what):
+    """Deletes cannot be undone and the Calendar and Tasks scopes cannot be
+    narrowed to exclude them, so the wrapper requires an explicit confirm=yes
+    (not needed for --dry-run)."""
+    confirm = str(shaped.pop("confirm", "")).lower()
+    if dry_run or confirm == "yes":
+        return
+    fail("CONFIRM_REQUIRED", f"{verb} would delete {what}; this cannot be undone. Add confirm=yes to proceed.",
+         extra={"verb": verb})
+
+
 def run_gws_login(cmd, env):
     """Run `gws auth login`, which waits for the user's consent in a browser.
     Bash# captures this program's stderr until it exits, so the consent link
@@ -1303,6 +1319,7 @@ def main(
         event_id = positionals[0] if positionals else shaped.pop("eventId", None)
         if not event_id:
             fail("USAGE", "calendar-delete requires <event-id>")
+        require_confirm(verb, shaped, dry_run, f"calendar event {event_id}")
         params = {"calendarId": shaped.pop("calendarId", "primary"), "eventId": str(event_id)}
         if dry_run:
             emit_json({
@@ -1417,6 +1434,7 @@ def main(
         task_id = positionals[0] if positionals else shaped.pop("task", None)
         if not task_id:
             fail("USAGE", "tasks-delete requires <task-id>")
+        require_confirm(verb, shaped, dry_run, f"task {task_id}")
         params = {"tasklist": shaped.pop("tasklist", "@default"), "task": str(task_id)}
         if dry_run:
             emit_json({
@@ -1558,6 +1576,11 @@ def main(
                 f"Service '{service}' is not in the admitted Google Workspace registry: {', '.join(sorted(ADMITTED_SERVICES))}",
             )
         cmd = list(positionals)
+        destructive = [w for w in positionals[1:] if w in DESTRUCTIVE_METHODS.split()]
+        if destructive:
+            require_confirm(verb, shaped, dry_run, f"via {' '.join(positionals)}")
+        else:
+            shaped.pop("confirm", None)
         if parsed["raw_params_json"]:
             cmd.extend(["--params", parsed["raw_params_json"]])
         elif shaped:

@@ -526,6 +526,22 @@ class GoogleWrapperTest(unittest.TestCase):
         self.assertEqual(task_body["title"], "[Email] Q4 Architecture Review")
         self.assertIn("gmail_message_id: msg_123", task_body["notes"])
 
+    def test_deletes_require_confirm(self):
+        env = self.auth_env()
+        for argv in (["calendar-delete", "evt_1"], ["tasks-delete", "tsk_1"],
+                     ["raw", "drive", "files", "delete", "fileId=drv_1"]):
+            res = self.run_wrapper(argv, env_overrides=env)
+            self.assertNotEqual(res.returncode, 0, argv)
+            self.assertEqual(json.loads(res.stderr)["error"]["code"], "CONFIRM_REQUIRED", argv)
+        self.assertEqual(self.read_calls(), [])
+        res = self.run_wrapper(["calendar-delete", "evt_1", "confirm=yes"], env_overrides=env)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        res = self.run_wrapper(["tasks-delete", "tsk_1", "--dry-run"], env_overrides=env)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        calls = self.read_calls()
+        self.assertEqual(len(calls), 1)
+        self.assertNotIn("confirm", calls[0]["argv"][-1])
+
     def test_drive_share_mail_reports_partial_mutation_without_retry(self):
         doc_path = os.path.join(self.root, "brief.md")
         with open(doc_path, "w", encoding="utf-8") as fh:

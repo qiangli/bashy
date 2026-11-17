@@ -993,7 +993,7 @@ class GoogleLoopbackE2ETest(unittest.TestCase):
         self.assertEqual(res_patch.returncode, 0, res_patch.stderr)
 
         # Delete
-        res_del = self.run_wrapper(["calendar-delete", "evt_1"])
+        res_del = self.run_wrapper(["calendar-delete", "evt_1", "confirm=yes"])
         self.assertEqual(res_del.returncode, 0, res_del.stderr)
 
         # FreeBusy
@@ -1021,7 +1021,7 @@ class GoogleLoopbackE2ETest(unittest.TestCase):
         res_complete = self.run_wrapper(["tasks-complete", "tsk_1"])
         self.assertEqual(res_complete.returncode, 0, res_complete.stderr)
 
-        res_del = self.run_wrapper(["tasks-delete", "tsk_1"])
+        res_del = self.run_wrapper(["tasks-delete", "tsk_1", "confirm=yes"])
         self.assertEqual(res_del.returncode, 0, res_del.stderr)
 
         requests = self.server.get_requests()
