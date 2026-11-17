@@ -1,10 +1,7 @@
 # The gate: does bashy pass? One command per line; stops at the first failure.
 #
-# NOTE this spans repos: `make test-bash` builds cmd/bash, which compiles ../sh.
-# A per-repo gate could not express that — which is why a gate is defined per
-# PROJECT, and a project is a path set.
-go build ./...
-go test ./internal/... ./tools/...
-# Force the host GNU Make for this GNU Makefile; Bashy's in-process POSIX make
-# intentionally does not implement its inference-rule syntax.
-env make test-bash
+# Make-free DAG release gate.
+# Conductor must dispatch on gatehost using locked official image / GO wrapper.
+"${BASHY:-bashy}" dag build
+"${BASHY:-bashy}" dag test
+"${BASHY:-bashy}" dag test-bash-gate
