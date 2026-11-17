@@ -17,8 +17,8 @@ fail() {
 
 # The verifier owns the build so a stale artifact can never produce a green
 # result. The profile target is separate from normal lean and release builds.
-make -C "$root" --no-print-directory build-bashy-scratch \
-	BASHY_SCRATCH_ARTIFACT="$artifact"
+bashy_bin=${BASHY:-$(command -v bashy 2>/dev/null || echo "$root/bin/bashy")}
+(cd "$root" && "$bashy_bin" dag build-bashy-scratch BASHY_SCRATCH_ARTIFACT="$artifact")
 [ -f "$artifact" ] || fail "build did not produce $artifact"
 [ -x "$artifact" ] || fail "artifact is not executable: $artifact"
 
