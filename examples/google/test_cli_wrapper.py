@@ -547,7 +547,7 @@ class GoogleWrapperTest(unittest.TestCase):
 
         # Ensure upload was only called ONCE (never retried)
         calls = self.read_calls()
-        upload_calls = [c for c in calls if c["argv"][:3] == ["drive", "files", "create"]]
+        upload_calls = [c for c in calls if c["argv"][:3] == ["drive", "files", "create"] and "--upload" in c["argv"]]
         self.assertEqual(len(upload_calls), 1)
 
     def test_agenda_combines_calendar_tasks_and_gmail(self):

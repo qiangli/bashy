@@ -848,13 +848,16 @@ class GoogleLoopbackE2ETest(unittest.TestCase):
         self.assertEqual(out["drive_file"]["id"], "drv_uploaded_777")
         self.assertEqual(out["message"]["id"], "sent_999")
 
+        # No parent given: the default "bashy" folder is created first.
         requests = self.server.get_requests()
-        self.assertEqual(len(requests), 2)
-        self.assertEqual(requests[0]["path"], "/upload/drive/v3/files")
-        self.assertEqual(requests[1]["path"], "/gmail/v1/users/me/messages/send")
+        self.assertEqual(len(requests), 3)
+        self.assertEqual(requests[0]["path"], "/drive/v3/files")
+        self.assertEqual(requests[0]["body_json"]["name"], "bashy")
+        self.assertEqual(requests[1]["path"], "/upload/drive/v3/files")
+        self.assertEqual(requests[2]["path"], "/gmail/v1/users/me/messages/send")
 
         # Verify email body payload contains the uploaded drive link
-        mail_body_raw = requests[1]["body_json"]["raw"]
+        mail_body_raw = requests[2]["body_json"]["raw"]
         padded = mail_body_raw + "=" * (-len(mail_body_raw) % 4)
         decoded_mail = base64.urlsafe_b64decode(padded).decode("utf-8")
         self.assertIn("https://drive.google.com/file/d/drv_uploaded_777/view", decoded_mail)
@@ -1045,16 +1048,31 @@ class GoogleLoopbackE2ETest(unittest.TestCase):
         res_upload = self.run_wrapper(["drive-upload", test_file, "name=Notes-Final.txt"])
         self.assertEqual(res_upload.returncode, 0, res_upload.stderr)
 
+        # No parent given: bashy creates its default "bashy" folder once,
+        # remembers it, and puts the new folder and the upload in it.
         requests = self.server.get_requests()
-        self.assertEqual(len(requests), 2)
+        self.assertEqual(len(requests), 3)
         self.assertEqual(requests[0]["method"], "POST")
         self.assertEqual(requests[0]["path"], "/drive/v3/files")
+        self.assertEqual(requests[0]["body_json"]["name"], "bashy")
         self.assertEqual(requests[0]["body_json"]["mimeType"], "application/vnd.google-apps.folder")
+        self.assertNotIn("parents", requests[0]["body_json"])
 
-        self.assertEqual(requests[1]["method"], "POST")
-        self.assertEqual(requests[1]["path"], "/upload/drive/v3/files")
-        self.assertEqual(requests[1]["query"].get("uploadType"), "multipart")
-        self.assertEqual(requests[1]["body_json"]["name"], "Notes-Final.txt")
+        self.assertEqual(requests[1]["path"], "/drive/v3/files")
+        self.assertEqual(requests[1]["body_json"]["name"], "Project Alpha")
+        home_id = requests[1]["body_json"]["parents"][0]
+
+        self.assertEqual(requests[2]["method"], "POST")
+        self.assertEqual(requests[2]["path"], "/upload/drive/v3/files")
+        self.assertEqual(requests[2]["query"].get("uploadType"), "multipart")
+        self.assertEqual(requests[2]["body_json"]["name"], "Notes-Final.txt")
+        self.assertEqual(requests[2]["body_json"]["parents"], [home_id])
+
+        # An explicit parent wins over the default folder.
+        res_explicit = self.run_wrapper(["drive-mkdir", "Elsewhere", "parent=folder_xyz"])
+        self.assertEqual(res_explicit.returncode, 0, res_explicit.stderr)
+        last = self.server.get_requests()[-1]
+        self.assertEqual(last["body_json"]["parents"], ["folder_xyz"])
 
     # =========================================================================
     # 7. Fake GWS Shim Direct Invocation Tests

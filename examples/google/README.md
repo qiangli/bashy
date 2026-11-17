@@ -40,7 +40,35 @@ bashy google auth-import ~/Downloads/client_secret.json account=alice@example.co
 
 # Check credential status and permissions:
 bashy google auth-status account=alice@example.com
+
+# Re-consent later (to narrow or widen permissions); refreshes credentials.json:
+bashy google auth-login account=alice@example.com
 ```
+
+#### Default permissions
+
+`auth-setup`, `auth-import` and `auth-login` ask for the least that the verbs need;
+pass `scopes=...` to change it.
+
+| Service | Scope | Allows | Does not allow |
+|---|---|---|---|
+| Drive | `drive.file` | create folders and upload files; read and change what bashy created | seeing, changing or deleting anything else in your Drive |
+| Gmail | `gmail.readonly`, `gmail.compose`, `gmail.send` | read all mail and labels, write drafts, send | modifying labels, trashing or deleting mail |
+| Calendar | `calendar.events` | the calendar verbs | calendar settings and sharing |
+| Tasks | `tasks` | the task verbs | |
+
+`scopes=` accepts full scope URLs, short names (`drive.file`, `gmail.readonly`)
+or bare service names (`scopes=gmail,drive`), which ask gws for its broader
+per-service scopes, including full Drive access.
+
+#### The `bashy` Drive folder
+
+With `drive.file`, bashy cannot see folders you made yourself. So uploads and new
+folders without `parent=` go to a `bashy` folder that bashy creates on first use
+and remembers (`drive_home.json` next to the credentials). Treat it as the agents'
+folder; keep your own documents in your own folders. `bashy google drive-home`
+prints its link, `GWS_DRIVE_HOME=name` changes the name, and `GWS_DRIVE_HOME=`
+(empty) puts them at the top of My Drive instead.
 
 ### 3. Single-Service Verbs
 
@@ -70,7 +98,8 @@ bashy google tasks-complete task_987
 # Google Drive
 bashy google drive-list pageSize:=10
 bashy google drive-search "architecture"
-bashy google drive-mkdir "Sprint Artifacts"
+bashy google drive-home                     # the default "bashy" folder (created on first use)
+bashy google drive-mkdir "Sprint Artifacts" # inside the bashy folder
 bashy google drive-upload ./report.pdf name="Sprint-Report.pdf" parent=folder_123
 ```
 

@@ -23,6 +23,13 @@ Cloud project:
   bashy google auth-setup account=alice@example.com project=my-bashy-gws
   bashy google auth-import ~/Downloads/client_secret.json account=alice@example.com
   bashy google auth-status account=alice@example.com
+  bashy google auth-login account=alice@example.com [scopes=...]   # re-consent, refresh credentials
+
+Default permissions (scopes=... overrides; short names like drive.file are expanded):
+Drive drive.file (only files and folders bashy creates; it can make any folders and
+upload into them, but cannot see or change the rest of your Drive), Gmail read,
+compose and send (no modify or delete), Calendar events, Tasks. Bare service names
+(scopes=gmail,drive) ask gws for its broader per-service scopes.
 
 ## Runtime Environment Variables
 
@@ -41,7 +48,9 @@ SECRET_VIA_ARGV).
 - Gmail: gmail-list, gmail-get, gmail-send, gmail-draft
 - Calendar: calendar-list, calendar-get, calendar-create, calendar-update, calendar-delete, calendar-freebusy
 - Tasks: tasklists-list, tasks-list, tasks-get, tasks-create, tasks-complete, tasks-update, tasks-delete
-- Drive: drive-list, drive-search, drive-get, drive-upload, drive-mkdir
+- Drive: drive-list, drive-search, drive-get, drive-upload, drive-mkdir, drive-home [set id=FOLDER_ID]
+  Uploads and new folders go to a "bashy" folder it creates on first use
+  (GWS_DRIVE_HOME renames it; empty means My Drive root) unless parent=FOLDER_ID.
 - Escape hatch: raw <service> <resource...>
 
 ## Composed Multi-Service Workflows
@@ -66,6 +75,7 @@ fi
 
 ~~~python as py
 import base64
+import glob
 from email.message import EmailMessage
 import json
 import mimetypes
@@ -334,6 +344,32 @@ def config_root():
     return os.path.expanduser("~/.config/bashy/google")
 
 
+# Default OAuth scopes: least privilege for general users. Drive is
+# drive.file (only files and folders bashy itself creates, never the rest of
+# the user's Drive); Gmail is read, compose and send (no modify or delete);
+# Calendar events and Tasks keep those verbs working. Pass scopes=... to
+# change: full scope URLs, short names (drive.file, gmail.readonly), or bare
+# service names (gmail,drive,...) for gws's broader service picker.
+DEFAULT_SCOPES = (
+    "https://www.googleapis.com/auth/drive.file,"
+    "https://www.googleapis.com/auth/gmail.readonly,"
+    "https://www.googleapis.com/auth/gmail.compose,"
+    "https://www.googleapis.com/auth/gmail.send,"
+    "https://www.googleapis.com/auth/calendar.events,"
+    "https://www.googleapis.com/auth/tasks"
+)
+LEGACY_SERVICES = "gmail calendar tasks drive sheets docs slides people chat"
+FOLDER_MIME = "application/vnd.google-apps.folder"
+
+
+def scope_login_args(scopes):
+    toks = [t.strip() for t in str(scopes).split(",") if t.strip()]
+    if toks and all(t in LEGACY_SERVICES.split() for t in toks):
+        return ["-s", ",".join(toks)]
+    full = [t if "://" in t else "https://www.googleapis.com/auth/" + t for t in toks]
+    return ["--scopes", ",".join(full)]
+
+
 def sanitize_account_dir(account):
     safe = "".join(c if (c.isalnum() or c in ("@", ".", "_", "-", "+")) else "_" for c in account.strip())
     return os.path.join(config_root(), safe)
@@ -438,14 +474,27 @@ def find_gws_bin():
     override = os.environ.get("GWS_BIN", "").strip()
     if override:
         if os.path.isfile(override) and os.access(override, os.X_OK):
-            return override
+            return [override]
         fail("GWS_NOT_FOUND", f"GWS_BIN is not an executable file: {override}", exit_code=127)
     found = shutil.which("gws")
     if found:
-        return found
+        return [found]
+    # bashy downloads gws into its cache on first `bashy gws`; use that copy.
+    home = os.path.expanduser("~")
+    roots = [os.environ.get("XDG_CACHE_HOME", ""), os.path.join(home, "Library", "Caches"), os.path.join(home, ".cache")]
+    cached = []
+    for root in roots:
+        if root:
+            cached.extend(glob.glob(os.path.join(root, "bashy", "bin", "gws", "v*", "gws")))
+    cached = [c for c in cached if os.access(c, os.X_OK)]
+    if cached:
+        def version_key(path):
+            ver = os.path.basename(os.path.dirname(path)).lstrip("v")
+            return [int(x) if x.isdigit() else 0 for x in ver.split(".")]
+        return [max(cached, key=version_key)]
     fail(
         "GWS_NOT_FOUND",
-        "gws (Google Workspace CLI) was not found on PATH. Install gws or set GWS_BIN.",
+        "gws (Google Workspace CLI) was not found on PATH or in the bashy cache. Run `bashy gws --version` once, install gws, or set GWS_BIN.",
         exit_code=127,
     )
 
@@ -462,13 +511,13 @@ def build_gws_env(cred_info):
     return env
 
 
-def run_gws(cred_info, argv, capture=False):
+def run_gws(cred_info, argv, capture=False, cwd=None):
     gws_bin = find_gws_bin()
-    cmd = [gws_bin] + argv
+    cmd = gws_bin + argv
     if "--format=json" not in cmd and not any(a.startswith("--format") for a in cmd):
         cmd.append("--format=json")
     env = build_gws_env(cred_info)
-    proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
+    proc = subprocess.run(cmd, env=env, capture_output=True, text=True, cwd=cwd)
     if capture:
         return proc
     if proc.stdout:
@@ -499,7 +548,7 @@ def handle_contract():
             "secret_via_argv": "refused",
         },
         "verbs": {
-            "onboarding": ["auth-guide", "auth-setup", "auth-import", "auth-status"],
+            "onboarding": ["auth-guide", "auth-setup", "auth-import", "auth-login", "auth-status"],
             "gmail": ["gmail-list", "gmail-get", "gmail-send", "gmail-draft"],
             "calendar": [
                 "calendar-list",
@@ -518,7 +567,7 @@ def handle_contract():
                 "tasks-update",
                 "tasks-delete",
             ],
-            "drive": ["drive-list", "drive-search", "drive-get", "drive-upload", "drive-mkdir"],
+            "drive": ["drive-list", "drive-search", "drive-get", "drive-upload", "drive-mkdir", "drive-home"],
             "workflows": ["mail-to-task", "drive-share-mail", "agenda"],
             "escape_hatch": ["raw"],
         },
@@ -535,7 +584,7 @@ def handle_auth_guide(parsed):
     shaped = parsed["shaped"]
     account = resolve_account(shaped, required=False) or "you@example.com"
     project = shaped.get("project", "bashy-gws-personal")
-    scopes = shaped.get("scopes", "gmail,calendar,tasks,drive")
+    scopes = shaped.get("scopes", DEFAULT_SCOPES)
     acct_dir = sanitize_account_dir(account)
 
     guide_data = {
@@ -596,7 +645,7 @@ def handle_auth_import(parsed):
         fail("USAGE", "auth-import requires <path-to-client_secret-or-credentials.json>")
     src_path = os.path.expanduser(positionals[0])
     account = resolve_account(shaped, required=True)
-    scopes = shaped.get("scopes", "gmail,calendar,tasks,drive")
+    scopes = shaped.get("scopes", DEFAULT_SCOPES)
 
     if not os.path.exists(src_path) or not os.path.isfile(src_path):
         fail("FILE_NOT_FOUND", f"Credential file not found: {src_path}")
@@ -672,7 +721,7 @@ def handle_auth_import(parsed):
             "status": "client_secret_staged",
             "client_secret_file": target_client_secret,
             "permissions": "0600",
-            "next_step": f"GOOGLE_WORKSPACE_CLI_CONFIG_DIR={acct_dir} bashy gws auth login -s {scopes}",
+            "next_step": f"GOOGLE_WORKSPACE_CLI_CONFIG_DIR={acct_dir} bashy gws auth login {' '.join(scope_login_args(scopes))}",
         })
         sys.exit(0)
 
@@ -680,7 +729,7 @@ def handle_auth_import(parsed):
     env = dict(os.environ)
     env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = acct_dir
     login_proc = subprocess.run(
-        [gws_bin, "auth", "login", "-s", scopes],
+        gws_bin + ["auth", "login"] + scope_login_args(scopes),
         env=env,
         capture_output=True,
         text=True,
@@ -694,7 +743,7 @@ def handle_auth_import(parsed):
         )
 
     export_proc = subprocess.run(
-        [gws_bin, "auth", "export", "--unmasked"],
+        gws_bin + ["auth", "export", "--unmasked"],
         env=env,
         capture_output=True,
         text=True,
@@ -730,13 +779,14 @@ def handle_auth_setup(parsed):
     shaped = parsed["shaped"]
     account = resolve_account(shaped, required=True)
     project = shaped.get("project", "")
-    scopes = shaped.get("scopes", "gmail,calendar,tasks,drive")
+    scopes = shaped.get("scopes", DEFAULT_SCOPES)
     acct_dir = sanitize_account_dir(account)
     target_creds = os.path.join(acct_dir, "credentials.json")
 
-    setup_cmd = ["auth", "setup", "--login"]
+    setup_cmd = ["auth", "setup"]
     if project:
         setup_cmd.extend(["--project", str(project)])
+    login_cmd = ["auth", "login"] + scope_login_args(scopes)
 
     if parsed["dry_run"]:
         emit_json({
@@ -748,6 +798,7 @@ def handle_auth_setup(parsed):
             "scopes": scopes,
             "planned_commands": [
                 ["gws"] + setup_cmd,
+                ["gws"] + login_cmd,
                 ["gws", "auth", "export", "--unmasked"],
             ],
             "target_credentials_file": target_creds,
@@ -760,7 +811,7 @@ def handle_auth_setup(parsed):
     env = dict(os.environ)
     env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = acct_dir
 
-    proc = subprocess.run([gws_bin] + setup_cmd, env=env, capture_output=True, text=True)
+    proc = subprocess.run(gws_bin + setup_cmd, env=env, capture_output=True, text=True)
     if proc.returncode != 0:
         fail(
             "AUTH_SETUP_FAILED",
@@ -768,9 +819,17 @@ def handle_auth_setup(parsed):
             exit_code=proc.returncode,
             extra={"stderr": proc.stderr.strip()},
         )
+    login_proc = subprocess.run(gws_bin + login_cmd, env=env, capture_output=True, text=True)
+    if login_proc.returncode != 0:
+        fail(
+            "AUTH_LOGIN_FAILED",
+            f"gws auth login failed (exit {login_proc.returncode})",
+            exit_code=login_proc.returncode,
+            extra={"stderr": login_proc.stderr.strip()},
+        )
 
     export_proc = subprocess.run(
-        [gws_bin, "auth", "export", "--unmasked"],
+        gws_bin + ["auth", "export", "--unmasked"],
         env=env,
         capture_output=True,
         text=True,
@@ -839,6 +898,118 @@ def normalize_attendees(val):
     if isinstance(val, str):
         return [{"email": e.strip()} for e in val.split(",") if e.strip()]
     return []
+
+
+def handle_auth_login(parsed):
+    """Re-consent an existing account (its client_secret.json is already in
+    place) with the given scopes, then refresh credentials.json, which every
+    other verb reads. Use it to narrow or widen permissions."""
+    shaped = parsed["shaped"]
+    account = resolve_account(shaped, required=True)
+    scopes = shaped.get("scopes", DEFAULT_SCOPES)
+    acct_dir = sanitize_account_dir(account)
+    target_creds = os.path.join(acct_dir, "credentials.json")
+    login_cmd = ["auth", "login"] + scope_login_args(scopes)
+    if parsed["dry_run"]:
+        emit_json({
+            "ok": True,
+            "dry_run": True,
+            "verb": "auth-login",
+            "account": account,
+            "scopes": scopes,
+            "planned_commands": [["gws"] + login_cmd, ["gws", "auth", "export", "--unmasked"]],
+            "target_credentials_file": target_creds,
+        })
+        sys.exit(0)
+    if not os.path.isfile(os.path.join(acct_dir, "client_secret.json")):
+        fail("MISSING_CLIENT_SECRET", "No client_secret.json for this account; run auth-setup or auth-import first.")
+    gws_bin = find_gws_bin()
+    env = dict(os.environ)
+    env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = acct_dir
+    login_proc = subprocess.run(gws_bin + login_cmd, env=env, capture_output=True, text=True)
+    if login_proc.returncode != 0:
+        fail(
+            "AUTH_LOGIN_FAILED",
+            f"gws auth login failed (exit {login_proc.returncode})",
+            exit_code=login_proc.returncode,
+            extra={"stderr": login_proc.stderr.strip()},
+        )
+    export_proc = subprocess.run(gws_bin + ["auth", "export", "--unmasked"], env=env, capture_output=True, text=True)
+    if export_proc.returncode != 0 or not export_proc.stdout.strip():
+        fail("AUTH_EXPORT_FAILED", "gws auth export failed after login.", exit_code=export_proc.returncode or 1)
+    with open(target_creds, "w", encoding="utf-8") as fh:
+        fh.write(export_proc.stdout)
+    os.chmod(target_creds, 0o600)
+    stale = os.path.join(acct_dir, "token_cache.json")
+    if os.path.exists(stale):
+        os.replace(stale, stale + ".stale")
+    emit_json({
+        "ok": True,
+        "verb": "auth-login",
+        "account": account,
+        "scopes": scopes,
+        "credentials_file": target_creds,
+        "permissions": "0600",
+    })
+    sys.exit(0)
+
+
+def drive_home_name():
+    return os.environ.get("GWS_DRIVE_HOME", "bashy").strip()
+
+
+def drive_home_file(account):
+    return os.path.join(sanitize_account_dir(account), "drive_home.json")
+
+
+def read_drive_home(account):
+    try:
+        with open(drive_home_file(account), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        return data if data.get("id") else None
+    except Exception:
+        return None
+
+
+def write_drive_home(account, name, folder_id):
+    path = drive_home_file(account)
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump({"name": name, "id": folder_id}, fh)
+    os.chmod(path, 0o600)
+
+
+def ensure_drive_home(cred_info):
+    """The default Drive folder for uploads and new folders (GWS_DRIVE_HOME,
+    default "bashy"; empty means My Drive root). With the drive.file scope bashy
+    can only write to folders it created, so it creates this folder once and
+    remembers its id; the user may move or rename it afterwards. parent=ID
+    always overrides it."""
+    account = cred_info["account"]
+    home = read_drive_home(account)
+    if home:
+        return home["id"]
+    name = drive_home_name()
+    proc = run_gws(cred_info, ["drive", "files", "create", "--json", json.dumps({"name": name, "mimeType": FOLDER_MIME})], capture=True)
+    folder_id = None
+    if proc.returncode == 0:
+        try:
+            out = proc.stdout or ""
+            folder_id = json.loads(out[out.find("{"):]).get("id")
+        except Exception:
+            folder_id = None
+    if not folder_id:
+        fail("DRIVE_HOME_FAILED", f"Could not create the Drive home folder '{name}'.", exit_code=proc.returncode or 1,
+             extra={"stderr": (proc.stderr or "").strip()})
+    write_drive_home(account, name, folder_id)
+    return folder_id
+
+
+def default_parent_note(account):
+    if not drive_home_name():
+        return None
+    home = read_drive_home(account)
+    return home["id"] if home else f"(Drive folder '{drive_home_name()}', created on first use)"
 
 
 def validate_drive_upload(local_path, explicit_mime=None):
@@ -944,6 +1115,8 @@ def main(
         handle_auth_import(parsed)
     if verb == "auth-setup":
         handle_auth_setup(parsed)
+    if verb == "auth-login":
+        handle_auth_login(parsed)
 
     # All service and workflow verbs require explicit account + credentials preflight
     cred_info = require_credentials(shaped)
@@ -1300,13 +1473,34 @@ def main(
                 "size_bytes": size,
                 "mime_type": mime_clean,
                 "metadata": meta,
+                "default_parent": None if parent else default_parent_note(cred_info["account"]),
             })
             sys.exit(0)
 
+        if not parent and drive_home_name():
+            meta["parents"] = [ensure_drive_home(cred_info)]
+        # gws only uploads files under its working directory.
         run_gws(
             cred_info,
-            ["drive", "files", "create", "--upload", expanded, "--json", json.dumps(meta)],
+            ["drive", "files", "create", "--upload", os.path.basename(expanded), "--json", json.dumps(meta)],
+            cwd=os.path.dirname(expanded),
         )
+
+    if verb == "drive-home":
+        if positionals and positionals[0] == "set":
+            folder_id = shaped.pop("id", None)
+            if not folder_id:
+                fail("USAGE", "drive-home set id=FOLDER_ID (a folder bashy created)")
+            write_drive_home(cred_info["account"], shaped.pop("name", drive_home_name() or "bashy"), str(folder_id))
+        elif dry_run:
+            emit_json({"ok": True, "dry_run": True, "verb": verb, "account": cred_info["account"],
+                       "home": default_parent_note(cred_info["account"])})
+            sys.exit(0)
+        folder_id = ensure_drive_home(cred_info)
+        home = read_drive_home(cred_info["account"]) or {"id": folder_id}
+        emit_json({"ok": True, "verb": verb, "account": cred_info["account"], "name": home.get("name"),
+                   "id": folder_id, "url": f"https://drive.google.com/drive/folders/{folder_id}"})
+        sys.exit(0)
 
     if verb == "drive-mkdir":
         folder_name = positionals[0] if positionals else shaped.pop("name", None)
@@ -1328,9 +1522,12 @@ def main(
                 "verb": verb,
                 "account": cred_info["account"],
                 "metadata": meta,
+                "default_parent": None if parent else default_parent_note(cred_info["account"]),
             })
             sys.exit(0)
 
+        if not parent and drive_home_name():
+            meta["parents"] = [ensure_drive_home(cred_info)]
         run_gws(cred_info, ["drive", "files", "create", "--json", json.dumps(meta)])
 
     # --- Escape hatch ---
@@ -1503,6 +1700,7 @@ def main(
                     "size_bytes": size,
                     "mime_type": mime_clean,
                     "metadata": meta,
+                    "default_parent": None if parent else default_parent_note(cred_info["account"]),
                 },
                 "planned_email": {
                     "to": to_addr,
@@ -1511,10 +1709,13 @@ def main(
             })
             sys.exit(0)
 
+        if not parent and drive_home_name():
+            meta["parents"] = [ensure_drive_home(cred_info)]
         upload_proc = run_gws(
             cred_info,
-            ["drive", "files", "create", "--upload", expanded, "--json", json.dumps(meta)],
+            ["drive", "files", "create", "--upload", os.path.basename(expanded), "--json", json.dumps(meta)],
             capture=True,
+            cwd=os.path.dirname(expanded),
         )
         if upload_proc.returncode != 0:
             fail(
