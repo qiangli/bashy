@@ -33,7 +33,11 @@ fi
 volume=${BASHY_BUILD_CACHE_VOLUME:-bashy-build-cache}
 $oci volume exists "$volume" 2>/dev/null || $oci volume create "$volume" >/dev/null
 
-exec $oci run --rm \
+# --init: PID 1 is a real init that reaps orphans. Without it PID 1 is
+# bashy, killed grandchildren linger as zombies and look alive, and every
+# process-group kill test fails in the image (yoke agentpty, chat, cligw,
+# dag signal; passes with --init).
+exec $oci run --rm --init \
   -v "$volume:/var/cache/bashy-build:U" \
   -v "$src:/work:U" \
   -w /work \
