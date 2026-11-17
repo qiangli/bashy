@@ -38,6 +38,9 @@ $oci volume exists "$volume" 2>/dev/null || $oci volume create "$volume" >/dev/n
 # process-group kill test fails in the image (yoke agentpty, chat, cligw,
 # dag signal; passes with --init).
 #
+# BASHY_BUILD_CPUS=N caps one run at N CPUs and N parallel go packages, so
+# several runs can share a runner without starving each other.
+#
 # podman-init starts its child with SIGTSTP, SIGTTIN and SIGTTOU blocked, and
 # a blocked mask is inherited across exec: bashy, like bash, keeps it and
 # every test process got it (a background terminal read then fails with EIO
@@ -51,6 +54,7 @@ exec $oci run --rm --init \
   -w /work \
   -e BASHY_BUILD_RUN=1 \
   ${BASHY_BUILD_OUT:+-v "$BASHY_BUILD_OUT:/out:U"} \
+  ${BASHY_BUILD_CPUS:+--cpus "$BASHY_BUILD_CPUS" -e GOFLAGS=-p=$BASHY_BUILD_CPUS} \
   --entrypoint /usr/bin/dash \
   "$ref" -c '/bashy -c "$1"' dash \
   'mkdir -p "$GOMODCACHE" "$GOCACHE" "$GOTMPDIR" && '"$*"
