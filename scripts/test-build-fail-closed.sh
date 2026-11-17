@@ -82,7 +82,7 @@ if [ "\${1-}" = go ]; then
 	shift
 	exec "$fakebin/go" "\$@"
 fi
-export GO="\$fakebin/go"
+export GO="$fakebin/go"
 exec "$real_bashy" "\$@"
 EOF
 
@@ -91,7 +91,7 @@ chmod +x "$fakebin/go" "$fakebin/cc" "$fakebin/bashy"
 # Exclude Homebrew and other optional tool locations so build-meet-spa.sh takes
 # its documented no-node/no-UI path and cannot install packages or use network.
 test_path=$fakebin:/usr/bin:/bin
-export GO=go
+export GO="$fakebin/go"
 
 # A direct build-bashy failure must not compile its native launcher.
 if (cd "$root" && PATH=$test_path "$fakebin/bashy" dag build-bashy BIN_DIR="$bindir") >/dev/null 2>"$tmp/build.err"; then
