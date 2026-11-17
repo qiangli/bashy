@@ -53,16 +53,20 @@ func TestRunSessionCommand(t *testing.T) {
 // socket, asserting the response carries the command output and exit code.
 func TestServeRoundTrip(t *testing.T) {
 	// Keep the socket path short — macOS caps sun_path at 104 bytes, well
-	// under a typical t.TempDir() path, so use the shorter os.TempDir().
-	sock := filepath.Join(os.TempDir(), "bst-roundtrip.sock")
-	_ = os.Remove(sock)
-	t.Cleanup(func() { _ = os.Remove(sock) })
+	// under a typical t.TempDir() path — but in a directory this test owns:
+	// Serve refuses a socket directory owned by another uid, and on Linux
+	// os.TempDir() is /tmp, owned by root (the official build image).
+	dir, err := os.MkdirTemp("", "bst")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	sock := filepath.Join(dir, "roundtrip.sock")
 
 	go func() { _ = Serve(sock) }()
 
 	// Wait for the listener to come up.
 	var conn net.Conn
-	var err error
 	for i := 0; i < 100; i++ {
 		conn, err = net.Dial("unix", sock)
 		if err == nil {

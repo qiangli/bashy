@@ -14,6 +14,13 @@ import (
 
 func TestProvidersCLIAndMCPDiscovery(t *testing.T) {
 	ringDir(t)
+	// claude:plan is a vendor route, offered only when the vendor CLI is on
+	// PATH. A build host has none, so stand one in; selection never runs it.
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "claude"), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	for _, name := range []string{"plan", "image"} {
 		writeRecord(t, fleet.Command{Name: name, Script: "true", Effects: []string{"read"}})
 	}
