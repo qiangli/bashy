@@ -62,7 +62,9 @@ also delete, so bashy refuses `tasks-delete`, `calendar-delete` and
 `raw ... delete|clear|trash` without `confirm=yes`.
 Each API must be enabled in your project once; a 403 "API has not been used in
 project" names it, e.g. `gcloud services enable drive.googleapis.com
-gmail.googleapis.com calendar-json.googleapis.com tasks.googleapis.com --project P`.
+gmail.googleapis.com calendar-json.googleapis.com tasks.googleapis.com --project P`. Setup, import and
+login do this for you when gcloud is installed (project from `project=` or the
+downloaded client file); `bashy google auth-enable-apis` runs it on its own.
 Login opens Google's consent page in your browser (`GWS_NO_BROWSER=1` only prints
 the link to the terminal).
 
@@ -76,8 +78,8 @@ With `drive.file`, bashy cannot see folders you made yourself. So uploads and ne
 folders without `parent=` go to a `bashy` folder that bashy creates on first use
 and remembers (`drive_home.json` next to the credentials). Treat it as the agents'
 folder; keep your own documents in your own folders. `bashy google drive-home`
-prints its link, `GWS_DRIVE_HOME=name` changes the name, and `GWS_DRIVE_HOME=`
-(empty) puts them at the top of My Drive instead.
+prints its link, `GWS_DRIVE_HOME=name` changes the name, and `GWS_DRIVE_HOME=none`
+puts them at the top of My Drive instead.
 
 ### 3. Single-Service Verbs
 

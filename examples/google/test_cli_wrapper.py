@@ -164,6 +164,11 @@ class GoogleWrapperTest(unittest.TestCase):
         with open(self.fake_gws, "w", encoding="utf-8") as fh:
             fh.write(FAKE_GWS_SCRIPT)
         os.chmod(self.fake_gws, 0o755)
+        self.gcloud_log = os.path.join(self.root, "gcloud_calls.txt")
+        self.fake_gcloud = os.path.join(self.root, "fake-gcloud")
+        with open(self.fake_gcloud, "w", encoding="utf-8") as fh:
+            fh.write("#!/bin/sh\necho \"$*\" >> " + self.gcloud_log + "\n")
+        os.chmod(self.fake_gcloud, 0o755)
 
         self.cred_file = os.path.join(self.root, "authorized_user.json")
         with open(self.cred_file, "w", encoding="utf-8") as fh:
@@ -194,6 +199,7 @@ class GoogleWrapperTest(unittest.TestCase):
         env["GWS_CONFIG_ROOT"] = self.config_root
         env["GWS_BIN"] = self.fake_gws
         env["FAKE_GWS_LOG"] = self.log_file
+        env["GWS_GCLOUD_BIN"] = self.fake_gcloud
         if os.path.exists(BASHY_BIN):
             env["PATH"] = os.path.dirname(BASHY_BIN) + os.pathsep + env.get("PATH", "")
         if env_overrides:
@@ -309,6 +315,28 @@ class GoogleWrapperTest(unittest.TestCase):
         # Verify a service call succeeds using the per-account store with only GWS_ACCOUNT set
         list_res = self.run_wrapper(["gmail-list"], env_overrides={"GWS_ACCOUNT": "alice@example.com"})
         self.assertEqual(list_res.returncode, 0, list_res.stderr)
+
+    def test_auth_import_enables_apis_in_client_project(self):
+        client_secret_path = os.path.join(self.root, "client_secret.json")
+        with open(client_secret_path, "w", encoding="utf-8") as fh:
+            json.dump({"installed": {"client_id": "1.apps.googleusercontent.com",
+                                     "client_secret": "s", "project_id": "my-proj"}}, fh)
+        res = self.run_wrapper(["auth-import", client_secret_path, "account=alice@example.com"])
+        self.assertEqual(res.returncode, 0, res.stderr)
+        out = json.loads(res.stdout)
+        self.assertEqual(out["apis"]["status"], "enabled")
+        with open(self.gcloud_log, encoding="utf-8") as fh:
+            line = fh.read().strip()
+        self.assertEqual(line, "services enable drive.googleapis.com gmail.googleapis.com "
+                               "calendar-json.googleapis.com tasks.googleapis.com --project my-proj")
+
+        # No gcloud: never fatal, says what to run.
+        res = self.run_wrapper(["auth-enable-apis", "account=alice@example.com"],
+                               env_overrides={"GWS_GCLOUD_BIN": "none"})
+        self.assertNotEqual(res.returncode, 0)
+        out = json.loads(res.stdout)
+        self.assertEqual(out["apis"]["status"], "skipped")
+        self.assertIn("--project my-proj", out["apis"]["command"])
 
     def test_auth_import_rejects_invalid_json_structure(self):
         bad_path = os.path.join(self.root, "bad.json")

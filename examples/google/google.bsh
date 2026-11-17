@@ -24,6 +24,11 @@ Cloud project:
   bashy google auth-import ~/Downloads/client_secret.json account=alice@example.com
   bashy google auth-status account=alice@example.com
   bashy google auth-login account=alice@example.com [scopes=...]   # re-consent, refresh credentials
+  bashy google auth-enable-apis account=alice@example.com [project=ID]
+
+Setup, import and login also enable the Drive, Gmail, Calendar and Tasks APIs in
+the project (gcloud; the project comes from project= or client_secret.json) and
+open Google's consent page in the browser.
 
 Default permissions (scopes=... overrides; short names like drive.file are expanded):
 Drive drive.file (only files and folders bashy creates; it can make any folders and
@@ -37,7 +42,10 @@ compose and send (no modify or delete), Calendar events, Tasks. Bare service nam
 - GWS_CREDENTIALS_FILE: Explicit path to OAuth authorized_user JSON file (optional if imported via auth-import).
 - GWS_SERVICE_ACCOUNT_KEY_FILE: Explicit path to Service Account JSON key file.
 - GWS_CONFIG_ROOT: Base directory for per-account credentials (default: ~/.config/bashy/google).
-- GWS_BIN: Override path to the gws executable (default: gws on PATH).
+- GWS_BIN: Override path to the gws executable (default: gws on PATH, else bashy's cached copy).
+- GWS_DRIVE_HOME: Default Drive folder name (default: bashy; none = My Drive root).
+- GWS_NO_BROWSER: Set to print the consent link instead of opening the browser.
+- GWS_GCLOUD_BIN: gcloud used to enable APIs (default: gcloud on PATH; none = skip).
 
 Secrets (token, access_token, refresh_token, client_secret, private_key, password,
 api_key, credentials, bearer, authorization) are strictly refused in argv (exit 2,
@@ -52,7 +60,7 @@ SECRET_VIA_ARGV).
   confirm=yes; agents ask the user first.
 - Drive: drive-list, drive-search, drive-get, drive-upload, drive-mkdir, drive-home [set id=FOLDER_ID]
   Uploads and new folders go to a "bashy" folder it creates on first use
-  (GWS_DRIVE_HOME renames it; empty means My Drive root) unless parent=FOLDER_ID.
+  (GWS_DRIVE_HOME renames it; GWS_DRIVE_HOME=none means My Drive root) unless parent=FOLDER_ID.
 - Escape hatch: raw <service> <resource...>
 
 ## Composed Multi-Service Workflows
@@ -530,6 +538,9 @@ def run_gws(cred_info, argv, capture=False, cwd=None):
         sys.stderr.write(proc.stderr)
         if not proc.stderr.endswith("\n"):
             sys.stderr.write("\n")
+    if proc.returncode != 0 and "has not been used in project" in (proc.stdout or "") + (proc.stderr or ""):
+        sys.stderr.write(json.dumps({"hint": "This Google API is not enabled in your Cloud project. Enable the APIs bashy uses once: "
+                                             f"bashy google auth-enable-apis account={cred_info['account']}"}) + "\n")
     sys.exit(proc.returncode)
 
 
@@ -550,7 +561,7 @@ def handle_contract():
             "secret_via_argv": "refused",
         },
         "verbs": {
-            "onboarding": ["auth-guide", "auth-setup", "auth-import", "auth-login", "auth-status"],
+            "onboarding": ["auth-guide", "auth-setup", "auth-import", "auth-login", "auth-enable-apis", "auth-status"],
             "gmail": ["gmail-list", "gmail-get", "gmail-send", "gmail-draft"],
             "calendar": [
                 "calendar-list",
@@ -730,6 +741,7 @@ def handle_auth_import(parsed):
     gws_bin = find_gws_bin()
     env = dict(os.environ)
     env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = acct_dir
+    apis = enable_apis(client_project(acct_dir, shaped.get("project")))
     login_rc = run_gws_login(gws_bin + ["auth", "login"] + scope_login_args(scopes), env)
     if login_rc != 0:
         fail(
@@ -763,6 +775,7 @@ def handle_auth_import(parsed):
         "client_secret_file": target_client_secret,
         "credentials_file": target_creds,
         "permissions": "0600",
+        "apis": apis,
         "env_exports": {
             "GWS_ACCOUNT": account,
             "GWS_CREDENTIALS_FILE": target_creds,
@@ -794,6 +807,7 @@ def handle_auth_setup(parsed):
             "scopes": scopes,
             "planned_commands": [
                 ["gws"] + setup_cmd,
+                enable_apis_command(project),
                 ["gws"] + login_cmd,
                 ["gws", "auth", "export", "--unmasked"],
             ],
@@ -815,6 +829,7 @@ def handle_auth_setup(parsed):
             exit_code=proc.returncode,
             extra={"stderr": proc.stderr.strip()},
         )
+    apis = enable_apis(client_project(acct_dir, project))
     login_rc = run_gws_login(gws_bin + login_cmd, env)
     if login_rc != 0:
         fail(
@@ -847,6 +862,7 @@ def handle_auth_setup(parsed):
         "project": project,
         "credentials_file": target_creds,
         "permissions": "0600",
+        "apis": apis,
         "env_exports": {
             "GWS_ACCOUNT": account,
             "GWS_CREDENTIALS_FILE": target_creds,
@@ -896,6 +912,69 @@ def normalize_attendees(val):
 
 
 DESTRUCTIVE_METHODS = "delete clear trash emptyTrash"
+# The APIs the default verbs call; each must be enabled once in the user's
+# own Google Cloud project or calls fail with 403 "API has not been used".
+REQUIRED_APIS = "drive.googleapis.com gmail.googleapis.com calendar-json.googleapis.com tasks.googleapis.com"
+
+
+def find_gcloud():
+    override = os.environ.get("GWS_GCLOUD_BIN")
+    if override is not None:
+        override = override.strip()
+        if not override or override == "none":
+            return None
+        return override if os.access(override, os.X_OK) else None
+    return shutil.which("gcloud")
+
+
+def client_project(acct_dir, explicit=None):
+    """The Cloud project: project=..., else the one in client_secret.json."""
+    if explicit:
+        return str(explicit)
+    try:
+        with open(os.path.join(acct_dir, "client_secret.json"), "r", encoding="utf-8") as fh:
+            data = json.load(fh)
+        for section in ("installed", "web"):
+            if isinstance(data.get(section), dict) and data[section].get("project_id"):
+                return data[section]["project_id"]
+    except Exception:
+        pass
+    return ""
+
+
+def enable_apis_command(project):
+    return ["gcloud", "services", "enable"] + REQUIRED_APIS.split() + ["--project", project or "PROJECT_ID"]
+
+
+def enable_apis(project):
+    """Enable REQUIRED_APIS with gcloud. Never fatal: the result says what to
+    run by hand when gcloud or the project is missing."""
+    cmd = enable_apis_command(project)
+    if not project:
+        return {"status": "skipped", "reason": "project unknown; pass project=ID", "command": " ".join(cmd)}
+    gcloud = find_gcloud()
+    if not gcloud:
+        return {"status": "skipped", "reason": "gcloud not found; run the command or enable the APIs in the Cloud Console",
+                "command": " ".join(cmd)}
+    env = dict(os.environ)
+    env.setdefault("HOME", os.path.expanduser("~"))
+    proc = subprocess.run([gcloud] + cmd[1:], env=env, capture_output=True, text=True)
+    if proc.returncode != 0:
+        return {"status": "failed", "command": " ".join(cmd), "stderr": (proc.stderr or "").strip()[-500:]}
+    return {"status": "enabled", "project": project, "apis": REQUIRED_APIS.split()}
+
+
+def handle_auth_enable_apis(parsed):
+    shaped = parsed["shaped"]
+    account = resolve_account(shaped, required=True)
+    project = client_project(sanitize_account_dir(account), shaped.get("project"))
+    if parsed["dry_run"]:
+        emit_json({"ok": True, "dry_run": True, "verb": "auth-enable-apis", "account": account,
+                   "planned_commands": [enable_apis_command(project)]})
+        sys.exit(0)
+    result = enable_apis(project)
+    emit_json({"ok": result["status"] == "enabled", "verb": "auth-enable-apis", "account": account, "apis": result})
+    sys.exit(0 if result["status"] == "enabled" else 1)
 
 
 def require_confirm(verb, shaped, dry_run, what):
@@ -960,6 +1039,7 @@ def handle_auth_login(parsed):
     gws_bin = find_gws_bin()
     env = dict(os.environ)
     env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = acct_dir
+    apis = enable_apis(client_project(acct_dir, shaped.get("project")))
     login_rc = run_gws_login(gws_bin + login_cmd, env)
     if login_rc != 0:
         fail(
@@ -983,12 +1063,14 @@ def handle_auth_login(parsed):
         "scopes": scopes,
         "credentials_file": target_creds,
         "permissions": "0600",
+        "apis": apis,
     })
     sys.exit(0)
 
 
 def drive_home_name():
-    return os.environ.get("GWS_DRIVE_HOME", "bashy").strip()
+    name = os.environ.get("GWS_DRIVE_HOME", "bashy").strip()
+    return "" if name.lower() == "none" else name
 
 
 def drive_home_file(account):
@@ -1014,7 +1096,7 @@ def write_drive_home(account, name, folder_id):
 
 def ensure_drive_home(cred_info):
     """The default Drive folder for uploads and new folders (GWS_DRIVE_HOME,
-    default "bashy"; empty means My Drive root). With the drive.file scope bashy
+    default "bashy"; "none" means My Drive root). With the drive.file scope bashy
     can only write to folders it created, so it creates this folder once and
     remembers its id; the user may move or rename it afterwards. parent=ID
     always overrides it."""
@@ -1107,6 +1189,11 @@ def main(
     env_flogin="",
     env_fsetup="",
     env_fsend="",
+    env_home="",
+    env_xdg="",
+    env_drive_home="",
+    env_no_browser="",
+    env_gcloud="",
     *args,
 ):
     apply_caller_env(
@@ -1123,6 +1210,11 @@ def main(
             "FAKE_GWS_FAIL_LOGIN": str(env_flogin),
             "FAKE_GWS_FAIL_SETUP": str(env_fsetup),
             "FAKE_GWS_FAIL_GMAIL_SEND": str(env_fsend),
+            "HOME": str(env_home),
+            "XDG_CACHE_HOME": str(env_xdg),
+            "GWS_DRIVE_HOME": str(env_drive_home),
+            "GWS_NO_BROWSER": str(env_no_browser),
+            "GWS_GCLOUD_BIN": str(env_gcloud),
         }
     )
     raw_args = [str(a) for a in args]
@@ -1150,6 +1242,8 @@ def main(
         handle_auth_setup(parsed)
     if verb == "auth-login":
         handle_auth_login(parsed)
+    if verb == "auth-enable-apis":
+        handle_auth_enable_apis(parsed)
 
     # All service and workflow verbs require explicit account + credentials preflight
     cred_info = require_credentials(shaped)
@@ -1881,6 +1975,11 @@ py.main \
   "${FAKE_GWS_FAIL_LOGIN:-}" \
   "${FAKE_GWS_FAIL_SETUP:-}" \
   "${FAKE_GWS_FAIL_GMAIL_SEND:-}" \
+  "${HOME:-}" \
+  "${XDG_CACHE_HOME:-}" \
+  "${GWS_DRIVE_HOME:-}" \
+  "${GWS_NO_BROWSER:-}" \
+  "${GWS_GCLOUD_BIN:-}" \
   "$@"
 
 
