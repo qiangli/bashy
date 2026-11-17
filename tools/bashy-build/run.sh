@@ -6,7 +6,8 @@
 #
 # SRC_DIR is mounted at /work (chowned to the image's unprivileged user).
 # Go module and build caches live in a named volume on this runner and are
-# reused by every run, so nothing is downloaded twice.
+# reused by every run, so nothing is downloaded twice. The volume hides the
+# image's cache directories, so each run creates them inside it first.
 set -eu
 here=$(CDPATH= cd -P "$(dirname "$0")" && pwd)
 lock=${BASHY_BUILD_LOCK:-$here/image.lock}
@@ -32,4 +33,4 @@ exec $oci run --rm \
   -v "$src:/work:U" \
   -w /work \
   -e BASHY_BUILD_RUN=1 \
-  "$ref" -c "$*"
+  "$ref" -c 'mkdir -p "$GOMODCACHE" "$GOCACHE" "$GOTMPDIR" && '"$*"
