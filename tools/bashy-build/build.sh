@@ -83,6 +83,10 @@ $oci build -t "$image" -f "$here/Containerfile" \
   --build-arg IMAGE_ID="$image" \
   "$here"
 image_digest=$(digest_of "$image")
+# A unique tag per build: a later build reuses $image, and an untagged image
+# cannot be found locally by name@digest, so the lock names this tag.
+unique=$image-$(echo "$image_digest" | sed 's/^sha256://' | cut -c1-12)
+$oci tag "$image" "$unique"
 
 # Smoke: the image runs bashy as its shell and has the toolchain.
 $oci run --rm "$image@$image_digest" -c 'bashy --version | head -1; go version; cc --version | head -1; test -n "$BASHY_BUILD_IMAGE"'
@@ -95,7 +99,7 @@ previous_version=$previous
 built_with_digest=$built_with
 base_image=$base_image
 base_digest=$base_digest
-image=$image
+image=$unique
 image_digest=$image_digest
 EOF
 if [ "$mode" = roll ] && [ -f "$sources/commits.txt" ]; then

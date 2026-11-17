@@ -13,15 +13,15 @@
 bashy_version=v1.0.0-rc.37
 bashy_sha256=5621e14a3d131fcf3a163bfdb00f3ece65db6464ae87e78571aeac5ec197e48c
 previous_version=v1.0.0-rc.37
-built_with_digest=localhost/bashy-build:v1.0.0-rc.37-go1.27.2@sha256:e59c46d4c284e4d489182f1ff1176eb1492160d1d4ba71edaaa92996c18a7128
+built_with_digest=localhost/bashy-build:v1.0.0-rc.37-go1.27.2@sha256:f3f4aac075101fd19593817a6c3e41a5d5a6b12858ee4c866ed6792e8dccccb3
 apt_snapshot=20260821T190000Z
 go_version=1.27.2
 go_sha256_amd64=ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5
 go_sha256_arm64=94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8
 base_image=localhost/bashy-base:v1.0.0-rc.37
-base_digest=sha256:12a2e5c25e26313aeb543f23e34f26b837618c1b940459e9ff258611921800a3
-image=localhost/bashy-build:v1.0.0-rc.37-go1.27.2
-image_digest=sha256:f3f4aac075101fd19593817a6c3e41a5d5a6b12858ee4c866ed6792e8dccccb3
+base_digest=sha256:5f8240251dc99c0467c08d60108118e72f11565a250a50c30b8a1a5ce623b860
+image=localhost/bashy-build:v1.0.0-rc.37-go1.27.2-28e521bcd0f5
+image_digest=sha256:28e521bcd0f5ff768f6fcc9d381e46aba1589d0c786cabb3d5cd4b3af75db374
 # Sources of this image's bashy (built by itself, fixed point verified):
 source_bashy_commit=513c5adb1ef42384951a6c171a1b6eaab534f7ba
 source_coreutils_commit=6dd7a3ee1858352003e7cf05e9d2268ac5c76c26

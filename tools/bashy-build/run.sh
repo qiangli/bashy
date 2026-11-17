@@ -21,10 +21,15 @@ shift 2
 image=$(get image)
 digest=$(get image_digest)
 [ -n "$image" ] || fail "image.lock names no image"
-ref=$image
-[ -n "$digest" ] && ref=$image@$digest
-
 oci=${BASHY_OCI:-bashy oci}
+# Run by the lock's unique tag and verify its digest: a local image is not
+# reliably found by name@digest, and a mismatch must never fall back to a pull.
+ref=$image
+if [ -n "$digest" ]; then
+  have=$($oci image inspect --format '{{.Digest}}' "$image" 2>/dev/null) ||
+    fail "the locked image $image is not on this runner; build it with build.sh"
+  [ "$have" = "$digest" ] || fail "$image is $have, but the lock says $digest"
+fi
 volume=${BASHY_BUILD_CACHE_VOLUME:-bashy-build-cache}
 $oci volume exists "$volume" 2>/dev/null || $oci volume create "$volume" >/dev/null
 
