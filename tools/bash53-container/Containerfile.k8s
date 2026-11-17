@@ -56,9 +56,16 @@ COPY bash53/    /bash53/
 
 # uid 1000 must own the workdir it writes helper builds / private trees under
 RUN getent passwd 1000 >/dev/null || useradd -u 1000 -m runner; \
-    chown -R 1000:1000 /work /bash53
+    chown -R 1000:1000 /work /bash53; \
+    install -d -o 1000 -g 1000 /home/bash53
 WORKDIR /work
 USER 1000:1000
+# The gate image's own contract, whatever BASE_IMAGE is: CMD runs as given
+# (the official build image's ENTRYPOINT is /bashy, which would take "sh" as
+# a script name), and uid 1000 has a HOME it owns (that image's HOME belongs
+# to its build account).
+ENTRYPOINT []
+ENV HOME=/home/bash53
 
 # default: run one chunk (CHUNK=I/N env), through sigdfl so the realtime-signal
 # mask a CRI runtime injects never reaches the harness. The k8s Job / Argo
