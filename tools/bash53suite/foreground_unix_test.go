@@ -174,12 +174,25 @@ func TestFixtureTerminalControl(t *testing.T) {
 			var cancel context.CancelFunc
 			ctx, cancel = context.WithCancel(ctx)
 			defer cancel()
-			stop := time.AfterFunc(100*time.Millisecond, cancel)
-			defer stop.Stop()
+			go func() {
+				deadline := time.Now().Add(5 * time.Second)
+				for time.Now().Before(deadline) {
+					if _, err := os.Stat(filepath.Join(dir, "child.pid")); err == nil {
+						break
+					}
+					time.Sleep(10 * time.Millisecond)
+				}
+				cancel()
+			}()
 		}
+		// The kill checks below need both pids, so the fixture must have
+		// published them before it is stopped. A fixed 100 ms stop raced the
+		// fixture shell's startup under full-suite load (official build
+		// image); the timeout is now long enough for that, and cancel waits
+		// for the pids. Both still stop a fixture blocked in `wait`.
 		timeout := 5 * time.Second
 		if scenario == "timeout" {
-			timeout = 100 * time.Millisecond
+			timeout = 2 * time.Second
 		}
 		sh, err := exec.LookPath("sh")
 		if err != nil {
