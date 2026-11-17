@@ -53,9 +53,10 @@ bash53)
   # SHA-256-pinned cache as the Makefile target instead of assuming a checkout
   # already has the gitignored external/bash-5.3 link.
   # The fixture corpus is SHA-256 verified data, cached in the user cache
-  # dir and linked into this checkout, so it is fetched on this host; GO may
-  # build in a container (tools/bashy-build/go.sh), whose paths are not ours.
-  make --no-print-directory test-bash-fixtures GO="${FIXTURES_GO:-$GO_CMD}"
+  # dir and linked into this checkout, so it is fetched on this host with
+  # HOST_GO; GO may build in a container (tools/bashy-build/go.sh), whose
+  # paths are not ours.
+  make --no-print-directory test-bash-fixtures GO="${HOST_GO:-$GO_CMD}"
   mkdir -p "$CTX/bin/bash-linux-$ARCH" "$CTX/bash53"
   log "building linux/$ARCH testee + bash53 harness…"
   GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 "${go_cmd[@]}" build -trimpath -o "$CTX/bin/bash-linux-$ARCH/bash" ./cmd/bash

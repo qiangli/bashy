@@ -104,5 +104,8 @@ evidence_args=(-input "$report_json" -output "$evidence" -bashy-commit "$commit"
   -uid 1000 -host-os "$host_os")
 if [ -n "${BASH53_BASELINE:-}" ]; then evidence_args+=(-baseline "$BASH53_BASELINE"); fi
 if [ "${BASH53_GATE:-0}" = 1 ]; then evidence_args+=(-gate); fi
-"${go_cmd[@]}" run ./tools/bash53evidence "${evidence_args[@]}"
+# The evidence writer reads this host's files: run it with HOST_GO, since GO
+# may build in a container (tools/bashy-build/go.sh).
+read -r -a host_go_cmd <<<"${HOST_GO:-$GO_CMD}"
+"${host_go_cmd[@]}" run ./tools/bash53evidence "${evidence_args[@]}"
 exit "$runner_status"
