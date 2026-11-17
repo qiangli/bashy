@@ -18,9 +18,9 @@ require (
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/coreutils v0.0.0-20261112194059-6dd7a3ee1858
-	github.com/qiangli/ycode v0.3.1-dev.0.20261103194741-5e1538ce6281
+	github.com/qiangli/ycode v0.3.1-dev.0.20261116115352-32c57c76b180
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261117054639-66fc60045c6e
+	github.com/qiangli/yoke v0.0.0-20261117061719-e2a09279929e
 	github.com/qiangli/yoke/external/otel v0.0.0-20261115042953-d160182c8479
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -385,7 +385,7 @@ require (
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261103194740-24dd0f47247e // indirect
 	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261117054932-428e02920874 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261117062010-b1c62aadd95e // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
 	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261115042953-d160182c8479 // indirect
 	github.com/qiangli/yoke/pkg/oci v0.0.0-20261115042953-d160182c8479 // indirect
@@ -582,7 +582,7 @@ replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.
 
 replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261103194741-5e1538ce6281
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261116115352-32c57c76b180
 
 tool github.com/qiangli/outpost/cmd/outpost
 
