@@ -175,7 +175,7 @@ deadline() {
       echo "deadline $d $title"
       # Mirror into bashy todo (the records repo's store when BOOTCAMP_DIR is in one).
       if [[ ${BOOTCAMP_TODO:-1} == 1 ]]; then
-        (cd "$dir" && bashy todo add "$title" --due "$d" --label founder-bootcamp ${track:+--label "$track"} \
+        (cd "$dir" && bashy todo add "$title" --no-sprint --due "$d" --label founder-bootcamp ${track:+--label "$track"} \
           --note "Founder bootcamp deadline ($company)." >/dev/null 2>&1) && echo "  also in: bashy todo list --label founder-bootcamp" || true
       fi
       ;;
