@@ -11,19 +11,19 @@
 #
 # key=value, one per line; build.sh and run.sh read it.
 bashy_version=v1.0.0-rc.37
-bashy_sha256=5621e14a3d131fcf3a163bfdb00f3ece65db6464ae87e78571aeac5ec197e48c
+bashy_sha256=3452109ff522ba25f2f8602549eab197e8a11de25d7ffeaed2251b74ef940d0f
 previous_version=v1.0.0-rc.37
-built_with_digest=localhost/bashy-build:v1.0.0-rc.37-go1.27.2@sha256:f3f4aac075101fd19593817a6c3e41a5d5a6b12858ee4c866ed6792e8dccccb3
+built_with_digest=localhost/bashy-build:v1.0.0-rc.37-go1.27.2-42d228aeee00@sha256:42d228aeee00c3c09f8b282c63505b5d07db78fb6387803458525877dba803ec
 apt_snapshot=20260821T190000Z
 go_version=1.27.2
 go_sha256_amd64=ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5
 go_sha256_arm64=94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8
 base_image=localhost/bashy-base:v1.0.0-rc.37
-base_digest=sha256:5f8240251dc99c0467c08d60108118e72f11565a250a50c30b8a1a5ce623b860
-image=localhost/bashy-build:v1.0.0-rc.37-go1.27.2-28e521bcd0f5
-image_digest=sha256:28e521bcd0f5ff768f6fcc9d381e46aba1589d0c786cabb3d5cd4b3af75db374
+base_digest=sha256:876b7738e0a5c181c22962d4d041c7b6ac09537c4ead3717795f0b825a6f1c81
+image=localhost/bashy-build:v1.0.0-rc.37-go1.27.2-c99fcb7318b2
+image_digest=sha256:c99fcb7318b23ed06b3775368ee3966795a5498fb9a050a92d6f21866680b7ba
 # Sources of this image's bashy (built by itself, fixed point verified):
-source_bashy_commit=513c5adb1ef42384951a6c171a1b6eaab534f7ba
+source_bashy_commit=7d906572c39abb7518e9ca5c36910be5c4cf207b
 source_coreutils_commit=6dd7a3ee1858352003e7cf05e9d2268ac5c76c26
 source_sh_commit=a4141771a3dc9b920f17864bcc37c75c69159701
 source_readline_commit=df59d4e258e407fec3b895279f8bcc7d7cd02e15
