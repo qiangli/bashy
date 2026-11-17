@@ -81,12 +81,14 @@ goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
 hostgoos="$("$BASHY_EXE" go env GOOS)"
 ext=""
 [ "$goos" = windows ] && ext=.exe
-BUILD_ID=""
+# BUILD_ID from the caller wins: the official build image builds from source
+# trees without .git (tools/bashy-build) and passes the commit.
+BUILD_ID="${BUILD_ID:-}"
 # git through bashy too: on Windows it is the MinGit bashy provisioned, and a
 # PATH-restricted rebuild has no other git. describe and diff --quiet need
 # --external=true: the native engine refuses them, which stamped every
 # self-contained rebuild "-dirty" and never with its tag.
-if [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if [ -z "$BUILD_ID" ] && [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   BUILD_ID=$("$BASHY_EXE" git --external=true describe --tags --exact-match HEAD 2>/dev/null || "$BASHY_EXE" git rev-parse --short=7 HEAD 2>/dev/null || true)
   if [ -n "$BUILD_ID" ]; then
     if ! "$BASHY_EXE" git --external=true diff --quiet --ignore-submodules -- 2>/dev/null || ! "$BASHY_EXE" git --external=true diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
@@ -1354,8 +1356,10 @@ Effects: cred, exec, net, read, write
 set -e
 mkdir -p bin
 BASHY_EXE="${BASHY:-bashy}"
-BUILD_ID=""
-if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+# BUILD_ID from the caller wins (the official build image builds from source
+# trees without .git and passes the commit); otherwise read it from git.
+BUILD_ID="${BUILD_ID:-}"
+if [ -z "$BUILD_ID" ] && [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   BUILD_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || true)
 fi
 tags=""

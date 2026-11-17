@@ -55,12 +55,14 @@ else
   previous_image=$(get image)
   previous_digest=$(get image_digest)
   [ -n "$previous_digest" ] || fail "the lock has no image_digest for $previous; seed or roll it first"
-  # Strictly upon the previous version: compile the new bashy inside it, in
-  # the release shape (one static file).
-  # bashy's Makefile is a GNU Makefile: run it with GNU make explicitly. In
-  # the image, a bare `make` is bashy's in-process POSIX make, which rejects
-  # it ("invalid inference rule", todo fefc62706f89).
-  "$here/run.sh" "$sources" -- "cd bashy && CGO_ENABLED=0 /usr/bin/make build-bashy VERSION=$version && test ! -e bin/bashy.real"
+  # Strictly upon the previous version: the previous bashy (the image's shell)
+  # builds the new one with bashy's own dag build target (Bash#, no make), in
+  # the release shape: one static Go file, stamped with version and commit.
+  build_id=
+  [ -f "$sources/commits.txt" ] && build_id=$(sed -n 's/^bashy_commit=//p' "$sources/commits.txt" | cut -c1-7)
+  # Released bashy never assumes GNU make to build itself: make is shadowed
+  # by a stub that fails, so any make call in the self-build breaks loudly.
+  "$here/run.sh" "$sources" -- "mkdir -p /tmp/no-make && printf '#!/bin/sh\necho bashy self-build must not call make >&2\nexit 127\n' > /tmp/no-make/make && chmod +x /tmp/no-make/make && cp /tmp/no-make/make /tmp/no-make/gmake && export PATH=/tmp/no-make:\$PATH && cd bashy && CGO_ENABLED=0 VERSION=$version BUILD_ID=$build_id bashy dag build && test ! -e bin/bashy.real"
   cp "$sources/bashy/bin/bashy" "$ctx/bashy"
   built_with=$previous_image@$previous_digest
 fi

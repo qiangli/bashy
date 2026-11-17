@@ -4,7 +4,7 @@ kind: bug
 title: bashy make cannot run bashy's own Makefile (invalid inference rule; no --no-print-directory)
 seq: 3167
 status: todo
-priority: p1
+priority: p2
 labels:
     - test
 created: 2026-11-07T12:59:52.129471Z
@@ -21,3 +21,8 @@ rc.37. The build script now calls GNU make explicitly (/usr/bin/make), as the
 convention for GNU Makefiles requires, so the release build is unblocked.
 Raised to p1: bashy's make should hand a GNU Makefile it cannot parse to an
 available GNU make (or name it in the refusal), not fail with a parse error.
+
+Update the same day: the official build no longer uses make at all. bashy is
+built by the previous bashy with its own `bashy dag build` target (Bash#), as
+decided, so this is back to p2: the in-process make should still hand a GNU
+Makefile it cannot parse to GNU make, but it no longer blocks any build.
