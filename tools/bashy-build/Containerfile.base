@@ -16,7 +16,7 @@ LABEL org.opencontainers.image.title="Bashy OCI base" \
 
 ENV LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
-    HOME=/home/bashy \
+    HOME=/home/builder \
     BASHY_BIN_CACHE=/var/cache/bashy/bin \
     OTEL_TRACES_EXPORTER=none \
     PATH=/opt/bashy/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -28,9 +28,9 @@ RUN set -eux; \
     rm -rf /var/lib/apt/lists/*; \
     printf '%s\n' 'en_US.UTF-8 UTF-8' > /etc/locale.gen; \
     locale-gen; \
-    groupadd --gid 10001 bashy; \
-    useradd --uid 10001 --gid 10001 --create-home --shell /bin/sh bashy; \
-    install -d -o 10001 -g 10001 /var/cache/bashy/bin /home/bashy/.cache
+    groupadd --gid 10001 builder; \
+    useradd --uid 10001 --gid 10001 --create-home --shell /bin/sh builder; \
+    install -d -o 10001 -g 10001 /var/cache/bashy/bin /home/builder/.cache
 
 COPY --chown=0:0 bashy /bashy
 
