@@ -57,7 +57,10 @@ else
   [ -n "$previous_digest" ] || fail "the lock has no image_digest for $previous; seed or roll it first"
   # Strictly upon the previous version: compile the new bashy inside it, in
   # the release shape (one static file).
-  "$here/run.sh" "$sources" -- "cd bashy && CGO_ENABLED=0 make build-bashy VERSION=$version && test ! -e bin/bashy.real"
+  # bashy's Makefile is a GNU Makefile: run it with GNU make explicitly. In
+  # the image, a bare `make` is bashy's in-process POSIX make, which rejects
+  # it ("invalid inference rule", todo fefc62706f89).
+  "$here/run.sh" "$sources" -- "cd bashy && CGO_ENABLED=0 /usr/bin/make build-bashy VERSION=$version && test ! -e bin/bashy.real"
   cp "$sources/bashy/bin/bashy" "$ctx/bashy"
   built_with=$previous_image@$previous_digest
 fi
