@@ -7,7 +7,7 @@ root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd -P)
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/bashy-container-mode.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM
 mkdir -p "$scratch/repo/scripts" "$scratch/fakebin"
-cp "$root/Makefile" "$scratch/repo/Makefile"
+cp "$root/dag.md" "$scratch/repo/dag.md"
 printf '%s\n' 'replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v0.0.0-test' >"$scratch/repo/go.mod"
 cp "$root/scripts/test-bash-container.sh" "$root/scripts/test-lane-id.sh" "$scratch/repo/scripts/"
 
@@ -46,6 +46,7 @@ EOF
 chmod +x "$scratch/fakebin/bash" "$scratch/fakebin/go" "$scratch/fakebin/oci" "$scratch/fakebin/git" \
   "$scratch/repo/scripts/build-conformance-image.sh"
 export MODE_OCI_LOG=$scratch/oci.log MODE_SHELL_LOG=$scratch/shell.log
+bashy_bin=${BASHY:-$(command -v bashy 2>/dev/null || echo "$root/bin/bashy")}
 export PATH=$scratch/fakebin:/usr/bin:/bin BASHY_TEST_LANE=mode-regression
 export GO=go BASH53_OCI=oci CONTAINER_HOST=unused
 fail() { echo "test-bash-container-mode: $*" >&2; exit 1; }
@@ -57,8 +58,7 @@ for mode in 0 1; do
   : >"$MODE_SHELL_LOG"
   # An inherited product selector and a stale harness request cannot override
   # either target. The helper's env-bash consumes the former before forwarding.
-  BASHY_BASHPP=1 BASH53_BASHPP=stale MAKEFLAGS= \
-    make -j1 -C "$scratch/repo" "$target" >"$scratch/out" 2>"$scratch/err" || {
+  (cd "$scratch/repo" && BASHY_BASHPP=1 BASH53_BASHPP=stale "$bashy_bin" dag "$target") >"$scratch/out" 2>"$scratch/err" || {
       cat "$scratch/err" >&2
       fail "target $target failed"
     }

@@ -56,7 +56,8 @@ bash53)
   # dir and linked into this checkout, so it is fetched on this host with
   # HOST_GO; GO may build in a container (tools/bashy-build/go.sh), whose
   # paths are not ours.
-  make --no-print-directory test-bash-fixtures GO="${HOST_GO:-$GO_CMD}"
+  bashy_bin=${BASHY:-$(command -v bashy 2>/dev/null || echo "$REPO/bin/bashy")}
+  HOST_GO="${HOST_GO:-$GO_CMD}" "$bashy_bin" dag test-bash-fixtures
   mkdir -p "$CTX/bin/bash-linux-$ARCH" "$CTX/bash53"
   log "building linux/$ARCH testee + bash53 harness…"
   GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 "${go_cmd[@]}" build -trimpath -o "$CTX/bin/bash-linux-$ARCH/bash" ./cmd/bash

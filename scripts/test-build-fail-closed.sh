@@ -72,14 +72,25 @@ done
 chmod +x "$out"
 EOF
 
-chmod +x "$fakebin/go" "$fakebin/cc"
+real_bashy=${BASHY:-$(command -v bashy 2>/dev/null || echo "$root/bin/bashy")}
+
+cat >"$fakebin/bashy" <<EOF
+#!/bin/sh
+if [ "\${1-}" = go ]; then
+	shift
+	exec "$fakebin/go" "\$@"
+fi
+exec "$real_bashy" "\$@"
+EOF
+
+chmod +x "$fakebin/go" "$fakebin/cc" "$fakebin/bashy"
 
 # Exclude Homebrew and other optional tool locations so build-meet-spa.sh takes
 # its documented no-node/no-UI path and cannot install packages or use network.
 test_path=$fakebin:/usr/bin:/bin
 
 # A direct build-bashy failure must not compile its native launcher.
-if PATH=$test_path MAKEFLAGS= make -j1 -C "$root" BIN_DIR="$bindir" build-bashy >/dev/null 2>"$tmp/build.err"; then
+if (cd "$root" && PATH=$test_path "$fakebin/bashy" dag build-bashy BIN_DIR="$bindir") >/dev/null 2>"$tmp/build.err"; then
 	echo 'test-build-fail-closed: build-bashy unexpectedly succeeded' >&2
 	exit 1
 fi
@@ -95,8 +106,8 @@ stale_sum=$(cksum "$bindir/bashy" "$bindir/bashy.real")
 : >"$FAKE_CC_LOG"
 : >"$FAKE_GO_LOG"
 
-if PATH=$test_path MAKEFLAGS= DHNT_BIN_DIR="$tmp/install" \
-	make -j1 -C "$root" BIN_DIR="$bindir" install >/dev/null 2>"$tmp/install.err"; then
+if (cd "$root" && PATH=$test_path DHNT_BIN_DIR="$tmp/install" \
+	"$fakebin/bashy" dag install BIN_DIR="$bindir") >/dev/null 2>"$tmp/install.err"; then
 	echo 'test-build-fail-closed: install unexpectedly succeeded' >&2
 	exit 1
 fi

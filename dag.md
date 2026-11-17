@@ -49,76 +49,12 @@ topological order through the in-process shell — add `-j N` for parallel.
 ### build
 Build both independent binaries into bin/ (bash = pure drop-in from cmd/bash;
 bashy = AgentOS shell from cmd/bashy). Separate compilations — bash's import
-graph never includes coreutils. Product compilation uses the pinned runtime
-overlay through `scripts/go-product.sh`, so an
-installed or checkout-local bashy owns the Go toolchain path. This is the
-**lean worker** bashy: shell + coreutils userland + git + dag + `bashy go`
-(self-provisioning Go toolchain) +
-weave; ~121 MB unix, ~47 MB Windows (it cross-compiles everywhere — podman/ollama
-are !windows-gated, the otel observability stack is off by default). For a host
-build with the observability stack, use `build-host`.
-On linux and darwin the lean `bash` drop-in retains its native pre-Go signal
-launcher and `.real` payload. `bashy` is one physical Go executable. Its cgo
-constructor records inherited ignored signals when cgo is enabled; the Linux
-ELF symbol gate preserves Coreutils' inherited-signal repair in every build.
-The separate pure-Go release shell-signal question remains open. Keep the build
-and post-build audit in step with Makefile `build-bashy`.
-
-No Sources:/Generates: here on purpose: the content-fingerprint cache only
-hashes files inside this document's own tree, so it cannot see a go.work
-sibling (`../ycode`, `../yoke`, `../sh`) changing underneath an unrelated
-`Sources:` list — `bashy dag install` (`Requires: build`) would then reinstall
-a stale `bin/bashy` after a sibling-only fix. Always run `go build`; its own
-cache keeps a true no-op invocation cheap. (Mirrors the Makefile's `build` /
-`install`, which are plain `.PHONY` targets for the same reason.)
+graph never includes coreutils.
+Requires: build-bash, build-bashy
+Effects: cred, exec, net, read, write
 
 ```bash
-set -e
-mkdir -p bin
-VERSION="${VERSION:-dev}"
-BASHY_EXE="${BASHY:-bashy}"
-goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
-hostgoos="$("$BASHY_EXE" go env GOOS)"
-ext=""
-[ "$goos" = windows ] && ext=.exe
-# BUILD_ID from the caller wins: the official build image builds from source
-# trees without .git (tools/bashy-build) and passes the commit.
-BUILD_ID="${BUILD_ID:-}"
-# git through bashy too: on Windows it is the MinGit bashy provisioned, and a
-# PATH-restricted rebuild has no other git. describe and diff --quiet need
-# --external=true: the native engine refuses them, which stamped every
-# self-contained rebuild "-dirty" and never with its tag.
-if [ -z "$BUILD_ID" ] && [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  BUILD_ID=$("$BASHY_EXE" git --external=true describe --tags --exact-match HEAD 2>/dev/null || "$BASHY_EXE" git rev-parse --short=7 HEAD 2>/dev/null || true)
-  if [ -n "$BUILD_ID" ]; then
-    if ! "$BASHY_EXE" git --external=true diff --quiet --ignore-submodules -- 2>/dev/null || ! "$BASHY_EXE" git --external=true diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
-      BUILD_ID="${BUILD_ID}-dirty"
-    fi
-  fi
-fi
-SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
-SHELL_RUNTIME_COMMIT_TIME=
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
-BASHY_LDFLAGS=${LDFLAGS#-s }
-# Helper scripts run THROUGH bashy: a Windows host has no /bin/sh to honour
-# their shebang, and PATH-restricted rebuilds have no other shell either.
-"$BASHY_EXE" scripts/build-meet-spa.sh optional >/dev/null
-# The launcher is compiled by the HOST cc, so it can only be produced for the
-# host's own platform. A cross-build therefore emits the plain Go binaries: a
-# host-native launcher paired with a foreign payload would be a broken pair that
-# builds cleanly and fails only when run.
-# Without a host C compiler the build still succeeds: it ships the plain Go
-# binaries — the same form the release archives ship — and says so, because
-# the launcher's job (preserving inherited SIGQUIT/SIGPIPE ignore dispositions)
-# is then simply absent rather than visibly failing.
-if [ "$goos" = "$hostgoos" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build)" = 1 ]; then
-  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o bin/bash.real  ./cmd/bash
-  cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o bin/bash  native/siglaunch.c.in
-else
-  rm -f bin/bash.real
-  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "bin/bash${ext}"  ./cmd/bash
-fi
-BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "bin/bashy${ext}" "$BASHY_LDFLAGS"
+:
 ```
 
 ### build-host
@@ -162,24 +98,124 @@ Effects: exec, net, write
 
 ```bash
 BASHY_EXE="${BASHY:-bashy}"
+bin_dir="${BIN_DIR:-bin}"
 goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
 ext=""
 [ "$goos" = windows ] && ext=.exe
 "$BASHY_EXE" go run ./tools/installbashy \
-  -bash "bin/bash${ext}" -bashy "bin/bashy${ext}"
+  -bash "$bin_dir/bash${ext}" -bashy "$bin_dir/bashy${ext}"
 ```
 
 ### test
-Run the hermetic Meet SPA freshness regression and the required non-mutating
-current-artifact gate, then all Go tests. The freshness check builds ignored SPA
-output while verifying the tracked artifact, so this target writes ignored build
-outputs.
+Run all test prerequisites matching the Makefile test contract, then all Go tests.
+Requires: test-meet-spa-fresh-regression, test-meet-spa-fresh, test-build-fail-closed, test-isolated-lanes, test-release-qa-lane, test-build-tag-matrix, test-bash-container-mode, verify-bashy-scratch, test-startup-linux
+Effects: cred, exec, net, read, write
 
 ```bash
-scripts/test-meet-spa-fresh.sh || exit 1
-scripts/build-meet-spa.sh check || exit 1
+set -e
 BASHY_EXE="${BASHY:-bashy}"
 "$BASHY_EXE" go test ./...
+```
+
+### test-meet-spa-fresh-regression
+Hermetic regression for the freshness gate — proves fresh accepted, stale
+rejected and left unchanged, and missing toolchain fails closed. No network,
+no real SPA build.
+Effects: exec, read, write
+
+```bash
+set -e
+scripts/test-meet-spa-fresh.sh
+```
+
+### test-meet-spa-fresh
+REQUIRED non-mutating gate — build a fresh meet SPA and compare it against the
+tracked artifact WITHOUT promoting. Fails when the committed bundle is stale,
+or fails closed when no node/pnpm toolchain is available.
+Effects: exec, net, read, write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+bin_dir="${BIN_DIR:-bin}"
+mkdir -p "$bin_dir"
+GOWORK=off "$BASHY_EXE" go build -o "$bin_dir/bashy-spa-check" ./cmd/bashy
+BASHY_BIN="$(pwd -P)/$bin_dir/bashy-spa-check" scripts/build-meet-spa.sh check
+```
+
+### test-build-fail-closed
+Prove a failed Go build cannot fall through to the native launcher compiler or
+the installer and reuse stale binaries.
+Effects: exec, read, write
+
+```bash
+set -e
+scripts/test-build-fail-closed.sh
+```
+
+### test-isolated-lanes
+Verify concurrent test-lane naming and ownership wiring.
+Effects: exec, read, write
+
+```bash
+set -e
+scripts/test-isolated-lanes.sh
+```
+
+### test-release-qa-lane
+Focused test for the release QA lane (xfail-card rule + known-failing/skipped
+summary counts). Hermetic fixtures only.
+Effects: exec, read, write
+
+```bash
+set -e
+scripts/test-release-qa-lane.sh
+```
+
+### test-build-tag-matrix
+Type-check every combination of the two host build layers.
+Effects: exec, net, read, write
+
+```bash
+set -e
+scripts/test-build-tag-matrix.sh
+```
+
+### test-bash-container-mode
+Prove requested container modes survive a helper shell that consumes
+BASHY_BASHPP (fake OCI/build commands; no container).
+Effects: exec, read, write
+
+```bash
+set -e
+/bin/sh scripts/test-bash-container-mode.sh
+```
+
+### verify-bashy-scratch
+Rebuild and fail closed unless the Cloudbox artifact is static Linux amd64,
+purego-free, command-smoked, and scratch-runnable when an OCI runtime is available.
+Effects: cred, exec, net, read, write
+
+```bash
+set -e
+BASHY_SCRATCH_ARTIFACT="${BASHY_SCRATCH_ARTIFACT:-}" scripts/verify-bashy-scratch.sh
+```
+
+### test-startup-linux
+Gate package initialization and 100 background jobs on Linux.
+Effects: exec, net, read, write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+bin_dir="${BIN_DIR:-bin}"
+if [ "$("$BASHY_EXE" go env GOOS)" = linux ]; then
+  mkdir -p "$bin_dir"
+  CGO_ENABLED=1 scripts/go-product.sh build -tags bashy_cert,bashy_cert_base,osusergo -ldflags=-w -o "$bin_dir/bashy-startup-check" ./cmd/bashy
+  scripts/test-startup-linux.sh "$bin_dir/bashy-startup-check"
+else
+  echo "test-startup-linux: skipped (Linux only)"
+fi
 ```
 
 ### fmtcheck
@@ -991,19 +1027,41 @@ PLAN_FILE="${PLAN_FILE:-bin/bash53-chunks.plan.tsv}" \
 ```
 
 ### test-bash-container
-Run the authoritative, complete GNU Bash 5.3 conformance gate in one
-self-contained Linux image through `bashy podman`. The image bakes the testee,
-the one fixture runner, and the SHA-256-pinned fixture corpus. Runtime is
-non-root, networkless, read-only, tmpfs-isolated, and PTY-backed, so host `/tmp`,
-locale, permissions, and controlling-terminal state cannot alter the verdict.
-The prepare/run targets below remain the bind-mounted chunk-worker leaves for
-heterogeneous fleet throughput; they are not the release verdict.
-Effects: write
+Run the authoritative 86-fixture Bash 5.3 gate in a self-contained Linux image
+through bashy podman (mode 0, BASH53_BASHPP=0).
+Effects: exec, net, read, write
 
 ```bash
 set -e
 BASHY_EXE="${BASHY:-bashy}"
-BASH53_OCI="$BASHY_EXE podman" make test-bash-container
+BASH53_BASHPP=0 BASH53_OCI="${BASH53_OCI:-$BASHY_EXE podman}" \
+  scripts/test-bash-container.sh
+```
+
+### test-bash-container-bashpp
+Run the same hermetic 86-fixture gate with Bash++ selected explicitly for each
+top-level testee process (mode 1, BASH53_BASHPP=1).
+Effects: exec, net, read, write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+BASH53_BASHPP=1 BASH53_OCI="${BASH53_OCI:-$BASHY_EXE podman}" \
+  scripts/test-bash-container.sh
+```
+
+### test-bash-gate
+Release gate, sealed 86/86 in both modes (off then on).
+Writes bin/bash53-evidence-{0,1}.json; BASH53_BASELINE compares fixture names.
+Effects: exec, net, read, write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+BASH53_BASHPP=0 BASH53_GATE=1 BASH53_OCI="${BASH53_OCI:-$BASHY_EXE podman}" \
+  scripts/test-bash-container.sh
+BASH53_BASHPP=1 BASH53_GATE=1 BASH53_OCI="${BASH53_OCI:-$BASHY_EXE podman}" \
+  scripts/test-bash-container.sh
 ```
 
 ### test-posix-shell
@@ -1040,6 +1098,7 @@ Effects: cred, exec, net, read, write
 
 ```bash
 set -eu
+BASHY_EXE="${BASHY:-bashy}"
 : "${VSC_PCTS_HARNESS_DIR:?set VSC_PCTS_HARNESS_DIR to the licensed harness checkout}"
 : "${VSC_DO_STATE_DIR:?set VSC_DO_STATE_DIR to approved DO2 state}"
 : "${VSC_DO_STATE:?set VSC_DO_STATE to approved DO2 state name}"
@@ -1052,9 +1111,7 @@ if [ ! -x "$gate" ]; then
   exit 1
 fi
 export BASHY_SOURCE_DIR="$(pwd -P)"
-# The DAG shell has its own make command. `env make` selects the host's GNU
-# Makefile target, which builds the pure strict sh with its native launcher.
-env make build-sh
+"$BASHY_EXE" dag build-sh
 env "$gate"
 ```
 
@@ -1076,9 +1133,7 @@ set -e
 BASHY_EXE="${BASHY:-bashy}"
 arch="${BASHY_IMAGE_ARCH:-$("$BASHY_EXE" go env GOARCH)}"
 version="${BASHY_IMAGE_VERSION:-dev}"
-# `env make`: inside a dag body `make` is bashy's in-process POSIX make, which
-# cannot drive this GNU Makefile (docs/dag.md §Bash++ bodies)
-env make --no-print-directory build-bashy-scratch BASHY_SCRATCH_GOARCH="$arch"
+"$BASHY_EXE" dag build-bashy-scratch BASHY_SCRATCH_GOARCH="$arch"
 BASHY_SCRATCH_BIN="bin/scratch/bashy-linux-$arch" "$BASHY_EXE" self image --arch "$arch" --version "$version"
 ```
 
@@ -1322,7 +1377,8 @@ Remove built binaries.
 Effects: destroy
 
 ```bash
-rm -rf bin
+bin_dir="${BIN_DIR:-bin}"
+rm -rf "$bin_dir"
 ```
 
 ### build-bash
@@ -1335,14 +1391,72 @@ Effects: cred, exec, net, read, write
 
 ```bash
 set -e
-mkdir -p bin
+bin_dir="${BIN_DIR:-bin}"
+mkdir -p "$bin_dir"
 BASHY_EXE="${BASHY:-bashy}"
-BUILD_ID=""
-if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  BUILD_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || true)
+goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
+hostgoos="$("$BASHY_EXE" go env GOOS)"
+ext=""
+[ "$goos" = windows ] && ext=.exe
+BUILD_ID="${BUILD_ID:-}"
+if [ -z "$BUILD_ID" ] && [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_ID=$("$BASHY_EXE" git --external=true describe --tags --exact-match HEAD 2>/dev/null || "$BASHY_EXE" git rev-parse --short=7 HEAD 2>/dev/null || true)
+  if [ -n "$BUILD_ID" ]; then
+    if ! "$BASHY_EXE" git --external=true diff --quiet --ignore-submodules -- 2>/dev/null || ! "$BASHY_EXE" git --external=true diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+      BUILD_ID="${BUILD_ID}-dirty"
+    fi
+  fi
 fi
-scripts/go-product.sh build -trimpath -ldflags "-s -w -X 'github.com/qiangli/bashy/internal/cli.buildID=$BUILD_ID'" -o bin/bash ./cmd/bash
-echo "built bin/bash (pure drop-in)"
+SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT_TIME=
+LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+out="$bin_dir/bash"
+if [ "$goos" = "$hostgoos" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build-bash)" = 1 ]; then
+  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" ./cmd/bash
+  cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o "$out" native/siglaunch.c.in
+else
+  rm -f "$out.real"
+  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" ./cmd/bash
+fi
+echo "built $out (pure drop-in)"
+```
+
+### build-sh
+Build ONLY `bin/sh` — the pure strict POSIX sh for the opt-in shell conformance gate.
+Sources: cmd/sh, internal/cli, go.mod, go.sum
+Generates: bin/sh
+Effects: cred, exec, net, read, write
+
+```bash
+set -e
+bin_dir="${BIN_DIR:-bin}"
+mkdir -p "$bin_dir"
+BASHY_EXE="${BASHY:-bashy}"
+goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
+hostgoos="$("$BASHY_EXE" go env GOOS)"
+ext=""
+[ "$goos" = windows ] && ext=.exe
+BUILD_ID="${BUILD_ID:-}"
+if [ -z "$BUILD_ID" ] && [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_ID=$("$BASHY_EXE" git --external=true describe --tags --exact-match HEAD 2>/dev/null || "$BASHY_EXE" git rev-parse --short=7 HEAD 2>/dev/null || true)
+  if [ -n "$BUILD_ID" ]; then
+    if ! "$BASHY_EXE" git --external=true diff --quiet --ignore-submodules -- 2>/dev/null || ! "$BASHY_EXE" git --external=true diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+      BUILD_ID="${BUILD_ID}-dirty"
+    fi
+  fi
+fi
+SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT_TIME=
+LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+out="$bin_dir/sh"
+if [ "$goos" = "$hostgoos" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build-sh)" = 1 ]; then
+  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" ./cmd/sh
+  cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o "$out" native/siglaunch.c.in
+else
+  rm -f "$out.real"
+  scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" ./cmd/sh
+fi
+echo "built $out (pure POSIX sh)"
 ```
 
 ### build-bashy
@@ -1354,18 +1468,85 @@ Effects: cred, exec, net, read, write
 
 ```bash
 set -e
-mkdir -p bin
+bin_dir="${BIN_DIR:-bin}"
+mkdir -p "$bin_dir"
 BASHY_EXE="${BASHY:-bashy}"
+goos="${GOOS:-$("$BASHY_EXE" go env GOOS)}"
+ext=""
+[ "$goos" = windows ] && ext=.exe
+"$BASHY_EXE" scripts/build-meet-spa.sh optional >/dev/null
 # BUILD_ID from the caller wins (the official build image builds from source
 # trees without .git and passes the commit); otherwise read it from git.
 BUILD_ID="${BUILD_ID:-}"
-if [ -z "$BUILD_ID" ] && [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  BUILD_ID=$(git rev-parse --short=7 HEAD 2>/dev/null || true)
+if [ -z "$BUILD_ID" ] && [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_ID=$("$BASHY_EXE" git --external=true describe --tags --exact-match HEAD 2>/dev/null || "$BASHY_EXE" git rev-parse --short=7 HEAD 2>/dev/null || true)
+  if [ -n "$BUILD_ID" ]; then
+    if ! "$BASHY_EXE" git --external=true diff --quiet --ignore-submodules -- 2>/dev/null || ! "$BASHY_EXE" git --external=true diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+      BUILD_ID="${BUILD_ID}-dirty"
+    fi
+  fi
 fi
-tags=""
-[ -n "${BASHY_TAGS:-}" ] && tags=${BASHY_TAGS}
-BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh bin/bashy "-w -X 'github.com/qiangli/bashy/internal/cli.buildID=$BUILD_ID'" "$tags"
-echo "built bin/bashy (AgentOS)"
+SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT_TIME=
+LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+BASHY_LDFLAGS=${LDFLAGS#-s }
+tags="${BASHY_TAGS:-}"
+out="$bin_dir/bashy$ext"
+BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "$out" "$BASHY_LDFLAGS" "$tags"
+echo "built $out (AgentOS)"
+```
+
+### build-bashy-scratch
+Build the lean, static linux Bashy profile used by Cloudbox and by the offline image (`bashy self image`).
+The stable amd64 artifact path is bin/scratch/bashy-linux-amd64; BASHY_SCRATCH_GOARCH=arm64
+builds bin/scratch/bashy-linux-arm64 (override BASHY_SCRATCH_ARTIFACT to move it).
+Sources: cmd/bashy, internal, go.mod, go.sum
+Effects: cred, exec, net, read, write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+bin_dir="${BIN_DIR:-bin}"
+arch="${BASHY_SCRATCH_GOARCH:-amd64}"
+out="${BASHY_SCRATCH_ARTIFACT:-}"
+if [ -z "$out" ] || { [ "$out" = "$bin_dir/scratch/bashy-linux-amd64" ] && [ "$arch" != amd64 ]; }; then
+  out="$bin_dir/scratch/bashy-linux-$arch"
+fi
+mkdir -p "$(dirname "$out")"
+echo "building static linux/$arch Bashy at $out ..."
+BUILD_ID="${BUILD_ID:-}"
+if [ -z "$BUILD_ID" ] && [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  BUILD_ID=$("$BASHY_EXE" git --external=true describe --tags --exact-match HEAD 2>/dev/null || "$BASHY_EXE" git rev-parse --short=7 HEAD 2>/dev/null || true)
+  if [ -n "$BUILD_ID" ]; then
+    if ! "$BASHY_EXE" git --external=true diff --quiet --ignore-submodules -- 2>/dev/null || ! "$BASHY_EXE" git --external=true diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
+      BUILD_ID="${BUILD_ID}-dirty"
+    fi
+  fi
+fi
+SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT_TIME=
+LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+BASHY_LDFLAGS=${LDFLAGS#-s }
+CGO_ENABLED=0 GOOS=linux GOARCH="$arch" BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "$out" "$BASHY_LDFLAGS" "bashy_scratch"
+```
+
+### test-bash-fixtures
+Ensure the pinned GNU Bash 5.3 fixtures are present.
+The default tree is SHA-256 verified, cached under the user cache directory,
+and linked at external/bash-5.3. A custom BASH_TESTS_DIR is never downloaded.
+Effects: exec, net, read, write
+
+```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
+go_cmd="${HOST_GO:-${GO:-$BASHY_EXE go}}"
+BASH_TESTS_DIR="${BASH_TESTS_DIR:-external/bash-5.3/tests}"
+if [ "$BASH_TESTS_DIR" = "external/bash-5.3/tests" ]; then
+  $go_cmd run ./tools/bash53fixtures -root "$(pwd -P)" >/dev/null
+elif [ ! -d "$BASH_TESTS_DIR" ]; then
+  echo "test-bash-fixtures: custom BASH_TESTS_DIR is missing: $BASH_TESTS_DIR" >&2
+  exit 2
+fi
 ```
 
 ### build-fips
