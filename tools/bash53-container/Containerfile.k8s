@@ -9,11 +9,16 @@
 # that refuse to run as root behave (mirror of the lane's --user 1000).
 ARG BASE_IMAGE=docker.io/library/ubuntu@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517
 FROM ${BASE_IMAGE}
+# The pinned apt snapshot of tools/bashy-build/image.lock: the gate image is
+# never a moving target. The official build image (BASE_IMAGE for the
+# release gate) runs as an unprivileged user, so install as root.
+ARG APT_SNAPSHOT=20260821T190000Z
+USER 0:0
 
 # locales the suite exercises (intl/glob-test/…) + compiler/helper tools; same
 # Ubuntu 24.04 substrate intended for the later POSIX profile images.
 RUN set -eux; \
-    apt-get update; \
+    apt-get update --snapshot "${APT_SNAPSHOT}"; \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       build-essential locales tzdata bsdextrautils ca-certificates; \
     rm -rf /var/lib/apt/lists/*; \

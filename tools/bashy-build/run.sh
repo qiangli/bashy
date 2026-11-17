@@ -37,9 +37,19 @@ $oci volume exists "$volume" 2>/dev/null || $oci volume create "$volume" >/dev/n
 # bashy, killed grandchildren linger as zombies and look alive, and every
 # process-group kill test fails in the image (yoke agentpty, chat, cligw,
 # dag signal; passes with --init).
+#
+# podman-init starts its child with SIGTSTP, SIGTTIN and SIGTTOU blocked, and
+# a blocked mask is inherited across exec: bashy, like bash, keeps it and
+# every test process got it (a background terminal read then fails with EIO
+# instead of stopping; bashy internal/cli job-control tests failed). dash
+# clears the mask at startup, so it is the trampoline that execs bashy with a
+# clean one. Both go away when bashy reaps as PID 1 (Sprint 653 R9).
 exec $oci run --rm --init \
   -v "$volume:/var/cache/bashy-build:U" \
   -v "$src:/work:U" \
   -w /work \
   -e BASHY_BUILD_RUN=1 \
-  "$ref" -c 'mkdir -p "$GOMODCACHE" "$GOCACHE" "$GOTMPDIR" && '"$*"
+  ${BASHY_BUILD_OUT:+-v "$BASHY_BUILD_OUT:/out:U"} \
+  --entrypoint /usr/bin/dash \
+  "$ref" -c 'exec /bashy -c "$1"' dash \
+  'mkdir -p "$GOMODCACHE" "$GOCACHE" "$GOTMPDIR" && '"$*"
