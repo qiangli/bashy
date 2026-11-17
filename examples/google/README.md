@@ -58,7 +58,8 @@ pass `scopes=...` to change it.
 | Tasks | `tasks` | the task verbs | |
 
 Tasks and Calendar have no app-limited scope: `tasks` and `calendar.events` can
-also delete, so bashy deletes only when you run `tasks-delete` or `calendar-delete`.
+also delete, so bashy refuses `tasks-delete`, `calendar-delete` and
+`raw ... delete|clear|trash` without `confirm=yes`.
 Each API must be enabled in your project once; a 403 "API has not been used in
 project" names it, e.g. `gcloud services enable drive.googleapis.com
 gmail.googleapis.com calendar-json.googleapis.com tasks.googleapis.com --project P`.
