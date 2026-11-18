@@ -34,18 +34,23 @@ scripts/go-tool.sh bashysignalprobe "$stage/bashy"
 # ../outpost is the go.mod-pinned outpost module (scripts/resolve-pinned-siblings.sh).
 outpost_commit=${OUTPOST_COMMIT:-}
 [[ $outpost_commit =~ ^[0-9a-f]{40}$ ]] || { echo "missing OUTPOST_COMMIT (run scripts/resolve-pinned-siblings.sh)" >&2; exit 1; }
+# Source-separated shell products use their own command module and product driver.
+shell_root=${BASH_SOURCE_ROOT:-$root/../bash}
+shell_source_commit=$(git -C "$shell_root" rev-parse HEAD)
+[[ $shell_source_commit =~ ^[0-9a-f]{40}$ ]] || { echo "invalid standalone Bash commit" >&2; exit 1; }
+[[ -z $(git -C "$shell_root" status --porcelain) ]] || { echo "standalone Bash source is dirty" >&2; exit 1; }
 for shell in bash sh; do
- package=./cmd/$shell; [ "$shell" != bash ] || package=github.com/qiangli/bash/cmd/bash
- CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-s -w -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-$tag'" -o "$stage/$shell" "$package"
+ (cd "$shell_root/cmd" && CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" ../scripts/go-product.sh build -mod=readonly -trimpath -ldflags "-s -w -X github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-$tag -X github.com/bashsharp/bashsharp/cli.buildID=$shell_source_commit" -o "$stage/$shell.real" "./$shell")
+ cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o "$stage/$shell" "$shell_root/native/siglaunch.c.in"
 done
 (cd ../outpost && CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath -tags fb_archives -ldflags "-s -w -X github.com/qiangli/outpost/internal/agent.releaseTag=$tag -X github.com/qiangli/outpost/internal/agent.ldCommit=$outpost_commit -X github.com/qiangli/outpost/internal/agent.ldDirty=false" -o "$stage/outpost" ./cmd/outpost)
 mkdir -p "$outdir/../signature-status"
 ./scripts/sign-darwin-release.sh "$stage" "$outdir/../signature-status/darwin-$arch.json"
 cp README.md LICENSE "$stage/"
 cp ../outpost/LICENSE "$stage/LICENSE.outpost"
-COPYFILE_DISABLE=1 tar -czf "$stage/$name" -C "$stage" bashy outpost bash sh README.md LICENSE LICENSE.outpost
-[[ $(tar -tzf "$stage/$name" | LC_ALL=C sort | tr '\n' ' ') == 'LICENSE LICENSE.outpost README.md bash bashy outpost sh ' ]] || { echo "bad Darwin archive contents" >&2; exit 1; }
+COPYFILE_DISABLE=1 tar -czf "$stage/$name" -C "$stage" bashy outpost bash bash.real sh sh.real README.md LICENSE LICENSE.outpost
+[[ $(tar -tzf "$stage/$name" | LC_ALL=C sort | tr '\n' ' ') == 'LICENSE LICENSE.outpost README.md bash bash.real bashy outpost sh sh.real ' ]] || { echo "bad Darwin archive contents" >&2; exit 1; }
 mv "$stage/$name" "$outdir/$name"
-COPYFILE_DISABLE=1 tar -czf "$outdir/bash-darwin-$arch.tar.gz" -C "$stage" bash sh README.md LICENSE
+COPYFILE_DISABLE=1 tar -czf "$outdir/bash-darwin-$arch.tar.gz" -C "$stage" bash bash.real sh sh.real README.md LICENSE
 cp "$stage/outpost" "$outdir/outpost-v$base-darwin-$arch"
 shasum -a 256 "$outdir/$name"

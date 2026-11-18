@@ -294,42 +294,35 @@ fi
 ```
 
 ### dist
-Cross-compile static binaries for all release platforms into bin/dist/ (both
-bash and bashy; a local cross-compile sanity check — goreleaser does real
-releases).
-Generates: bin/dist
-Effects: cred, exec, net, read, write
+Build independent source-owned release products in the locked previous-release
+image, with warm caches, bounded target parallelism and measured stages. Package
+34 assets under `dist/assets`; keep `dist/release-assets.json` outside that set.
+The source root and exact commit/tag inputs are explicit. No tags or publication.
+`DIST_SOURCE_ROOT` contains clean `bashy`, `bash`, `outpost`, and `yoke` Git
+checkouts plus `dist-inputs.json`: `{"tag":"vX.Y.Z-rc.N-dev","sources":{...}}`,
+where each source name maps to `{"path":"relative-checkout","commit":"full-sha"}`.
+The default is two target jobs sharing eight CPUs and a 300-second wall budget.
+Windows ARM64 retains the existing no-runner profile; other targets embed their
+own verified signed runner. Optional signing keeps the existing explicit unsigned
+status when credentials are absent. For native signing with credentials, run
+`DIST_STAGE=build`, sign the staged Darwin files using
+`scripts/sign-darwin-release.sh`, then `DIST_STAGE=package` inside the locked
+image; the original wall clock continues across this handoff. The signer writes
+`dist/metadata/signature-status/darwin-arm64.json`. Stage times and failure logs
+are retained. A five-minute result is established only by an actual candidate
+run and the separately measured upload handoff.
+Effects: exec, net, read, write
 
 ```bash
-set -e
-mkdir -p bin/dist
-VERSION="${VERSION:-dev}"
-BASHY_EXE="${BASHY:-bashy}"
-BUILD_ID=""
-if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-  BUILD_ID=$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short=7 HEAD 2>/dev/null || true)
-  if [ -n "$BUILD_ID" ]; then
-    if ! git diff --quiet --ignore-submodules -- 2>/dev/null || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then
-      BUILD_ID="${BUILD_ID}-dirty"
-    fi
-  fi
-fi
-SHELL_RUNTIME_COMMIT=$(sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
-SHELL_RUNTIME_COMMIT_TIME=
-LDFLAGS="-s -w -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/bashsharp/bashsharp/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
-BASHY_LDFLAGS=${LDFLAGS#-s }
-for plat in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
-  os=${plat%/*}; arch=${plat#*/}; ext=""
-  [ "$os" = windows ] && ext=.exe
-  bash_out="bin/dist/bash-${os}-${arch}${ext}"
-  bashy_out="bin/dist/bashy-${os}-${arch}${ext}"
-  echo "building $bash_out..."
-  CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-    scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$bash_out" github.com/qiangli/bash/cmd/bash
-  echo "building $bashy_out..."
-  CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" BASHY_EXE="$BASHY_EXE" \
-    "$BASHY_EXE" scripts/build-bashy-artifact.sh "$bashy_out" "$BASHY_LDFLAGS"
-done
+"${BASHY:-bashy}" scripts/dist.sh
+```
+
+### dist-plan
+Inspect the immutable-source/platform/budget inputs without building or publishing.
+Effects: read
+
+```bash
+python3 scripts/dist.py --plan --inputs "${DIST_SOURCE_ROOT:?}/dist-inputs.json"
 ```
 
 ### test-bash-data

@@ -18,10 +18,10 @@ class HostReleaseRecipeTest(unittest.TestCase):
                 self.assertTrue(value in workflow, f"host workflow lacks {value}")
         builder = (ROOT / "scripts/build-host-release.sh").read_text()
         self.assertIn("-tags bashy_engines,embed_runner,bashy_host", builder)
-        recipe = (ROOT / ".goreleaser.yaml").read_text()
-        lean = recipe.split("  - id: bashy\n", 1)[1].split("\n  - id:", 1)[0]
-        self.assertIn("CGO_ENABLED=0", lean)
+        lean = (ROOT / "scripts/dist.py").read_text()
+        self.assertIn('CGO_ENABLED="0"', lean)
         self.assertNotIn("bashy_engines", lean)
+        self.assertIn('tags = "embed_runner" if target in SIGNED_RUNNERS else ""', lean)
 
     def test_host_asset_has_separate_manifest_and_signature_gate(self):
         workflow_path = ROOT / ".github/workflows/host-release.yml"

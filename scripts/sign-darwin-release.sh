@@ -23,12 +23,16 @@ security import "$work/developer.p12" -k "$keychain" -P "$APPLE_DEVELOPER_ID_P12
 security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" >/dev/null
 identity=$(security find-identity -v -p codesigning "$keychain" | awk '/Developer ID Application: dhnt, Inc\./ {print $2; exit}')
 [[ -n $identity ]] || { echo "Developer ID Application identity for dhnt, Inc. not found" >&2; exit 1; }
-for binary in bashy outpost bash sh; do
+binaries=(bashy outpost bash sh)
+for payload in bash.real sh.real; do
+ [[ ! -e "$stage/$payload" ]] || binaries+=("$payload")
+done
+for binary in "${binaries[@]}"; do
  codesign --force --sign "$identity" --keychain "$keychain" --options runtime --timestamp "$stage/$binary"
  codesign --verify --strict --verbose=2 "$stage/$binary"
 done
 # Bare Mach-O files cannot be stapled. The notarization ticket remains online.
-(cd "$stage" && zip -q "$work/notarize.zip" bashy outpost bash sh)
+(cd "$stage" && zip -q "$work/notarize.zip" "${binaries[@]}")
 xcrun notarytool submit "$work/notarize.zip" --key "$work/notary.p8" --key-id "$APPLE_NOTARY_KEY_ID" --issuer "$APPLE_NOTARY_ISSUER_ID" --wait --output-format json > "$work/notary-result.json"
 python3 - "$work/notary-result.json" <<'PY_NOTARY'
 import json, sys
