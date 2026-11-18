@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/secrets"
 	"github.com/qiangli/yoke/pkg/service"
 )
 
@@ -120,10 +121,14 @@ func (p *processProvider) Activate(_ context.Context, u fleet.Service, rt servic
 		if lerr != nil {
 			return lerr
 		}
-		cmd.Stdout, cmd.Stderr, logc = lw, lw, lw
-		lw.mark(fmt.Sprintf("supervisord: start %s", strings.Join(argv, " ")))
+		r := secrets.EnvValueRedactor(cmd.Env)
+		writer := &redactedUnitLog{WriteCloser: r.LiveWriter(lw), log: lw}
+		cmd.Stdout, cmd.Stderr, logc = writer, writer, writer
+		writer.mark(fmt.Sprintf("supervisord: start %s", strings.Join(argv, " ")))
 	} else {
-		cmd.Stdout, cmd.Stderr = p.stdout, p.stderr
+		r := secrets.EnvValueRedactor(cmd.Env)
+		out, errOut := r.LiveWriter(p.stdout), r.LiveWriter(p.stderr)
+		cmd.Stdout, cmd.Stderr, logc = out, errOut, outputClosers{out, errOut}
 	}
 	child, err := startTracked(cmd, p.reaper)
 	if err != nil {
@@ -161,8 +166,11 @@ func (p *processProvider) wait(name string, u *procUnit, rt service.Runtime) {
 	u.status.State, u.status.Reason, u.status.Since = service.Inactive, ex.String(), p.now()
 	stopping := u.stopping
 	p.mu.Unlock()
-	if lw, ok := u.log.(*rotatingLog); ok {
+	if lw, ok := u.log.(interface{ mark(string) }); ok {
 		lw.mark("supervisord: " + ex.String())
+	}
+	if u.log != nil {
+		_ = u.log.Close()
 	}
 	close(u.done)
 	if !stopping && rt.Emit != nil {
@@ -350,4 +358,34 @@ func (l *rotatingLog) Close() error {
 	err := l.f.Close()
 	l.f = nil
 	return err
+}
+
+// Flush redaction tails before closing their underlying log files.
+type outputClosers []io.Closer
+
+func (closers outputClosers) Close() error {
+	var first error
+	for _, closer := range closers {
+		if err := closer.Close(); err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
+}
+
+type redactedUnitLog struct {
+	io.WriteCloser
+	log *rotatingLog
+}
+
+func (l *redactedUnitLog) mark(s string) {
+	fmt.Fprintf(l.WriteCloser, "%s %s\n", time.Now().UTC().Format(time.RFC3339), s)
+}
+func (l *redactedUnitLog) Close() error {
+	err := l.WriteCloser.Close()
+	closeErr := l.log.Close()
+	if err != nil {
+		return err
+	}
+	return closeErr
 }

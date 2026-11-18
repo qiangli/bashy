@@ -21,12 +21,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qiangli/bash/interp"
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/reduce"
 	"github.com/qiangli/yoke/pkg/secrets"
 	"golang.org/x/term"
-	"github.com/qiangli/bash/interp"
 )
 
 // optionalBool distinguishes an absent --reduce from --reduce=false.
@@ -128,22 +128,7 @@ func shellOutputStoreForEnv(env []string) (*reduce.Store, error) {
 }
 
 func shellOutputRedactor(env []string) *secrets.Redactor {
-	values := make(map[string]string, len(env))
-	for _, entry := range env {
-		if name, value, ok := strings.Cut(entry, "="); ok {
-			values[name] = value
-		}
-	}
-	r := secrets.NewRedactor()
-	_ = r.SetShapeMode(secrets.ShapeMask)
-	for name := range secrets.VaultEnvNames() {
-		if value, ok := values[name]; ok {
-			// Short values cannot be masked safely; Register refuses them without
-			// including the value in its error. Shape masking still applies.
-			_ = r.Register(name, value)
-		}
-	}
-	return r
+	return secrets.EnvValueRedactor(env)
 }
 
 type shellOutputReducer struct {

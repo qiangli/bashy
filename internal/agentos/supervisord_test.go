@@ -314,6 +314,11 @@ func supervisordTestChild() int {
 	fmt.Printf("child argv: %s\n", strings.Join(args, " "))
 	mode, arg, _ := strings.Cut(script, ":")
 	switch mode {
+	case "redaction-fixture":
+		token := "9f42e8a1b0c7d6358a4f1c962e0b3d75f8a9c6102e4d7b953a6f8c012d35b7e4"
+		fmt.Fprintln(os.Stdout, "ready token="+token)
+		fmt.Fprintln(os.Stderr, "Authorization: Bearer "+token)
+		return 0
 	case "exit":
 		n, _ := strconv.Atoi(arg)
 		return n
