@@ -11,10 +11,23 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
 const testSecret = "test-secret"
+
+// fixture is a fixed asset tree, so these tests never depend on the owner's
+// own site.json or fields.
+var fixture = fstest.MapFS{
+	"site.json": {Data: []byte(`{"site_url":"https://example.com","title":"Example Person","contact":"mailto:owner@example.com",
+	  "ai":{"base_url":"http://127.0.0.1:1","model":"m","key_env":"SITE_AI_KEY","daily_cap":5,"daily_max":50},
+	  "views":[{"name":"recruiter-summary","title":"Recruiter summary","prompt":"Summarize.","audience":{"signed_in":true}}]}`)},
+	"fields/contact.md":      {Data: []byte("---\nlabel: Contact\ncircles: recruiter\n---\nEmail: owner@example.com\n")},
+	"fields/certificates.md": {Data: []byte("---\nlabel: Certificates\ncircles: recruiter\n---\nExample Certified Professional\n")},
+	"fields/notes.md":        {Data: []byte("---\nlabel: Owner notes\n---\nowner only\n")},
+	"public/shaping.js":      {Data: []byte("//")},
+}
 
 // stamp signs headers the way outpost does (version-2 relationship payload).
 func stamp(r *http.Request, kind, circle, groups, visitor, user string, now time.Time) {
@@ -56,7 +69,7 @@ var (
 func newTestServer(t *testing.T, site, model string, key string) *server {
 	t.Helper()
 	env := map[string]string{"SITE_SSO_SECRET": testSecret, "SITE_AI_KEY": key}
-	s, err := newServer(func(k string) string { return env[k] })
+	s, err := newServerFrom(fixture, func(k string) string { return env[k] })
 	if err != nil {
 		t.Fatal(err)
 	}

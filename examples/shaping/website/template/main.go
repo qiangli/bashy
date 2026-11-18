@@ -67,7 +67,13 @@ func main() {
 }
 
 func newServer(getenv func(string) string) (*server, error) {
-	raw, err := assets.ReadFile("site.json")
+	return newServerFrom(assets, getenv)
+}
+
+// newServerFrom builds the server from an asset tree laid out like this app:
+// site.json, fields/, public/. Tests pass a fixture instead of the embedded one.
+func newServerFrom(fsys fs.FS, getenv func(string) string) (*server, error) {
+	raw, err := fs.ReadFile(fsys, "site.json")
 	if err != nil {
 		return nil, err
 	}
@@ -78,11 +84,11 @@ func newServer(getenv func(string) string) (*server, error) {
 	if cfg.SignIn == "" {
 		cfg.SignIn = "/signin"
 	}
-	fields, err := loadFields(assets, "fields")
+	fields, err := loadFields(fsys, "fields")
 	if err != nil {
 		return nil, err
 	}
-	pub, _ := fs.Sub(assets, "public")
+	pub, _ := fs.Sub(fsys, "public")
 	keyEnv := cfg.AI.KeyEnv
 	if keyEnv == "" {
 		keyEnv = "SITE_AI_KEY"
