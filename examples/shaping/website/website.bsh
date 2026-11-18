@@ -278,7 +278,8 @@ cmd_stop_quiet() {
     # The recorded pid may be a wrapper's: also stop whatever holds the port.
     portf="$(state_dir)/$NAME.port"
     if [ -f "$portf" ] && have_pkill; then
-        pkill -f "site-shaping -addr 127.0.0.1:$(cat "$portf")" 2>/dev/null || true
+        # [s]: the pattern must not match a wrapper's own command line.
+        pkill -f "[s]ite-shaping -addr 127.0.0.1:$(cat "$portf")" 2>/dev/null || true
     fi
 }
 
