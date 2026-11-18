@@ -12,7 +12,7 @@
       "description": "Your satellite to attach to (outpost satellite list)."
     },
     "SITE_AI_KEY": {
-      "description": "Key for the AI route in site.json (e.g. a GitHub token with models:read)."
+      "description": "Key for the AI route in site.json (default: a free Gemini API key from Google AI Studio)."
     }
   },
   "postCreateCommand": "bash -lc 'curl -fsSL https://dhnt.io/install.sh | sh -s -- --no-service' > /tmp/shaping-create.log 2>&1",

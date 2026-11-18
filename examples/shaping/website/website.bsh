@@ -191,7 +191,7 @@ cmd_enable() {
             echo "  \"title\": \"$title\","
             echo "  \"contact\": \"$contact\","
             echo '  "sign_in": "/signin",'
-            echo '  "ai": {"base_url": "https://models.github.ai/inference", "model": "openai/gpt-4.1-mini", "key_env": "SITE_AI_KEY", "daily_cap": 5, "daily_max": 50, "max_tokens": 900},'
+            echo '  "ai": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-flash-lite-latest", "key_env": "SITE_AI_KEY", "daily_cap": 5, "daily_max": 50, "max_tokens": 900},'
             echo '  "views": [{"name": "recruiter-summary", "title": "Recruiter summary", "audience": {"signed_in": true},'
             echo '    "prompt": "Write a one-page recruiter summary: a two-sentence headline, the strongest skills as bullets, the most relevant roles with years, and certifications. If contact details are among the facts, end with them; otherwise end with one line saying more details are shared on request."}]'
             echo '}'
@@ -262,7 +262,12 @@ cmd_serve() {
     secret=$(app_secret "$NAME")
     [ -n "$secret" ] || echo "$PROG: warning: no SSO secret for $NAME; every visitor will be anonymous" >&2
     cmd_stop_quiet
-    SITE_SSO_SECRET="$secret" nohup "$dir/.build/site-shaping" -addr "127.0.0.1:$PORT" >"$st/$NAME.log" 2>&1 </dev/null &
+    # Its own session, so it outlives the shell (or ssh session) that started it.
+    if command -v setsid >/dev/null 2>&1; then
+        SITE_SSO_SECRET="$secret" setsid nohup "$dir/.build/site-shaping" -addr "127.0.0.1:$PORT" >"$st/$NAME.log" 2>&1 </dev/null &
+    else
+        SITE_SSO_SECRET="$secret" nohup "$dir/.build/site-shaping" -addr "127.0.0.1:$PORT" >"$st/$NAME.log" 2>&1 </dev/null &
+    fi
     echo $! >"$st/$NAME.pid"
     echo "$PORT" >"$st/$NAME.port"
     echo "serving: $NAME on 127.0.0.1:$PORT (pid $(cat "$st/$NAME.pid"), log $st/$NAME.log)"
