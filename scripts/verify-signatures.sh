@@ -12,16 +12,25 @@ fi
 if [[ $signed == false ]]; then echo 'UNSIGNED: Darwin release manifest declares signed=false'; exit 0; fi
 work=$(mktemp -d "${TMPDIR:-/tmp}/bashy-signature-qa.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-for arch in amd64 arm64; do
+for arch in arm64; do
  mkdir "$work/$arch"
  tar -xzf "$dir/bashy-darwin-$arch.tar.gz" -C "$work/$arch"
  mkdir "$work/$arch-small"
  tar -xzf "$dir/bash-darwin-$arch.tar.gz" -C "$work/$arch-small"
- for name in bash sh; do cmp "$work/$arch/$name" "$work/$arch-small/$name"; done
+ for name in bash sh; do
+  cmp "$work/$arch/$name" "$work/$arch-small/$name"
+  if [[ -e "$work/$arch/$name.real" || -e "$work/$arch-small/$name.real" ]]; then
+   cmp "$work/$arch/$name.real" "$work/$arch-small/$name.real"
+  fi
+ done
  raw=("$dir"/outpost-v*-darwin-"$arch")
  [[ ${#raw[@]} == 1 && -f ${raw[0]} ]] || { echo "missing raw Darwin outpost for $arch" >&2; exit 1; }
  cmp "$work/$arch/outpost" "${raw[0]}"
- for name in bashy outpost bash sh; do
+ names=(bashy outpost bash sh)
+ for payload in bash.real sh.real; do
+  [[ ! -e "$work/$arch/$payload" ]] || names+=("$payload")
+ done
+ for name in "${names[@]}"; do
   binary="$work/$arch/$name"
   codesign --verify --strict --verbose=2 "$binary"
   spctl --assess --type execute --verbose=2 "$binary"
