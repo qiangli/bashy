@@ -1,0 +1,169 @@
+#!/usr/bin/env -S bashy --bashsharp
+# shaping-host: bring up a shaping host on a free cloud workspace (GitHub
+# Codespaces first) or on the owner's own machine: bashy and outpost
+# installed, paired once with the owner's account, attached to the owner's
+# satellite (which carries the tunnel), and the outpost daemon running.
+# One editable Bash# body for the shaping-host command and skill.
+#
+#   shaping-host check     what is installed, paired, attached, running
+#   shaping-host up        do whatever is missing (rerun = resume)
+#   shaping-host status    same report as check
+#
+# Rod not fish: every action is one existing verb (install.sh, git + go build,
+# outpost register / satellite attach / start); this script orders them.
+
+~~~skill as guide
+---
+name: shaping-host
+description: Bring up a session-scoped shaping host on a free cloud workspace (GitHub Codespaces) or on the owner's own machine - bashy and outpost installed, paired once with the owner's cloudbox account, attached to the owner's satellite, daemon running. Credentials come from platform or host secrets only. The executable body is this Bash# file; run it with bashy --bashsharp.
+metadata:
+  requires: "has=bashy"
+---
+# shaping-host — a free workspace as the shaping host
+
+A free cloud workspace is a SESSION-scoped host: apps are live while it
+runs, and a stopped workspace shows visitors the cloudbox offline page while
+the static site keeps working. An app that must always be on graduates to
+the owner's own outpost or satellite. A workspace is never a satellite or a
+relay, and gets no keep-alive tricks.
+
+## Secrets (platform secrets, never committed)
+
+| Variable | Used for |
+|---|---|
+| `BASHY_PAIR_CODE` | one-time pairing code from the owner's cloudbox account (first `up` only) |
+| `SHAPING_SATELLITE` | the owner's satellite to attach to (id or name) |
+| `SITE_AI_KEY` | the AI route's key (read by the site server, not by this script) |
+
+Optional: `SHAPING_HOST_NAME` (default `shape-<platform>-<repo>`),
+`SHAPING_OUTPOST_REF` (build outpost from source at this ref instead of the
+released installer, for a feature not yet released).
+
+## The sequence
+
+1. `check` — platform (`codespaces` or `host`), bashy, outpost, paired,
+   attached, daemon running.
+2. `up` — installs what is missing (`install.sh --no-service`, or
+   a source build of outpost at `SHAPING_OUTPOST_REF`), pairs once with
+   `BASHY_PAIR_CODE` under a stable host name, attaches to
+   `SHAPING_SATELLITE`, and starts the daemon in the background (no systemd).
+   On the owner's own machine every step that is already done is skipped.
+3. Then run `website serve` for the site.
+
+`--dry-run` prints the calls and runs none. `SHAPING_OUTPOST_BIN` overrides
+the outpost executable.
+~~~
+
+set -e
+
+PROG=shaping-host
+DRY_RUN=0
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+outpost_bin() { printf '%s\n' "${SHAPING_OUTPOST_BIN:-outpost}"; }
+
+run() {
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $*"
+        return 0
+    fi
+    "$@"
+}
+
+platform() {
+    if [ "${CODESPACES:-}" = "true" ]; then
+        echo codespaces
+    elif [ -n "${GITPOD_WORKSPACE_ID:-}" ]; then
+        echo gitpod
+    else
+        echo host
+    fi
+}
+
+host_name() {
+    if [ -n "${SHAPING_HOST_NAME:-}" ]; then
+        echo "$SHAPING_HOST_NAME"
+        return
+    fi
+    repo="${GITHUB_REPOSITORY:-}"
+    repo="${repo##*/}"
+    if [ -z "$repo" ]; then
+        repo=$(basename "$(pwd)")
+    fi
+    echo "shape-$(platform)-$repo"
+}
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+paired() {
+    have "$(outpost_bin)" || return 1
+    "$(outpost_bin)" status --json 2>/dev/null | LC_ALL=C grep -q -e '"state": *"paired' -e '"configured": *true'
+}
+
+attached() {
+    have "$(outpost_bin)" || return 1
+    "$(outpost_bin)" satellite list --json 2>/dev/null | LC_ALL=C grep -q '"attached": *true'
+}
+
+running() {
+    have "$(outpost_bin)" || return 1
+    "$(outpost_bin)" status --local-presence >/dev/null 2>&1
+}
+
+yn() { if "$@"; then echo true; else echo false; fi; }
+
+cmd_check() {
+    echo "{\"platform\":\"$(platform)\",\"host\":\"$(host_name)\",\"bashy\":$(yn have bashy),\"outpost\":$(yn have "$(outpost_bin)"),\"running\":$(yn running),\"paired\":$(yn paired),\"attached\":$(yn attached)}"
+}
+
+cmd_up() {
+    if [ -n "${SHAPING_OUTPOST_REF:-}" ]; then
+        # A feature not yet released: build outpost at that ref. A clone, not
+        # `go install pkg@ref`, because outpost's go.mod carries replaces.
+        src="$HOME/.cache/shaping-host/outpost"
+        if [ ! -d "$src/.git" ]; then
+            run git clone -q https://github.com/qiangli/outpost "$src"
+        fi
+        run git -C "$src" fetch -q origin
+        run git -C "$src" checkout -q "$SHAPING_OUTPOST_REF"
+        run mkdir -p "$HOME/.local/bin"
+        run env GOWORK=off CGO_ENABLED=0 go -C "$src" build -tags fb_archives -o "$HOME/.local/bin/outpost" ./cmd/outpost
+    elif ! have "$(outpost_bin)"; then
+        if [ "$DRY_RUN" = 1 ]; then
+            echo "would run: curl -fsSL https://dhnt.io/install.sh | sh -s -- --no-service"
+        else
+            curl -fsSL https://dhnt.io/install.sh | sh -s -- --no-service
+        fi
+    fi
+    if ! running; then
+        if [ "$DRY_RUN" = 1 ]; then
+            echo "would run: nohup $(outpost_bin) start &"
+        else
+            nohup "$(outpost_bin)" start >"$HOME/.shaping-host-outpost.log" 2>&1 &
+            sleep 2
+        fi
+    fi
+    if ! paired; then
+        [ -n "${BASHY_PAIR_CODE:-}" ] || fail "not paired: set the BASHY_PAIR_CODE secret (a one-time code from your cloudbox account), then rerun $PROG up"
+        run "$(outpost_bin)" register --code "$BASHY_PAIR_CODE" --name "$(host_name)" --no-input
+    fi
+    if ! attached; then
+        [ -n "${SHAPING_SATELLITE:-}" ] || fail "paired but not attached: set SHAPING_SATELLITE to your satellite (outpost satellite list), then rerun $PROG up"
+        run "$(outpost_bin)" satellite attach "$SHAPING_SATELLITE"
+    fi
+    cmd_check
+}
+
+while [ "${1:-}" = "--dry-run" ]; do
+    DRY_RUN=1
+    shift
+done
+case "${1:-check}" in
+    check | status) cmd_check ;;
+    up) cmd_up ;;
+    *) echo "Usage: $PROG [--dry-run] check|up|status" >&2; exit 2 ;;
+esac

@@ -166,11 +166,18 @@ cmd_enable() {
             run cp "$t/$f" "$dir/$f"
         fi
     done
-    for d in public checks fields; do
+    for d in public checks fields .devcontainer; do
         if [ -e "$dir/$d" ]; then
             echo "keep: $d/ (exists)"
         else
             run cp -R "$t/$d" "$dir/$d"
+        fi
+    done
+    run mkdir -p "$dir/bin"
+    for f in "$0" "$(dirname "$0")/../../shaping-host/shaping-host.bsh"; do
+        b=$(basename "$f")
+        if [ -f "$f" ] && [ ! -e "$dir/bin/$b" ]; then
+            run cp "$f" "$dir/bin/$b"
         fi
     done
     if [ -e "$dir/site.json" ]; then

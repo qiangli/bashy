@@ -21,6 +21,12 @@ bashy --bashsharp website.bsh serve ~/my-site-shaping --name site
 bashy --bashsharp website.bsh register ~/my-site-shaping --name site   # owner shaping
 ```
 
+On a free Codespace, `enable` has already written `.devcontainer/` and
+`bin/{website,shaping-host}.bsh` into the companion repo: push it as a
+PRIVATE repo, set the Codespaces secrets `BASHY_PAIR_CODE`,
+`SHAPING_SATELLITE` and `SITE_AI_KEY`, and open it in a Codespace; it runs
+`shaping-host up` and `website serve` on every start.
+
 Then link the engine face from the static site:
 `<a href="https://<cloudbox>/matrix/h/<host>/app/site/">Shape this page</a>`.
 

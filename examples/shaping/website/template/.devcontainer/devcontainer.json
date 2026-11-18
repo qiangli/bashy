@@ -1,0 +1,14 @@
+{
+  "name": "site shaping host",
+  "image": "mcr.microsoft.com/devcontainers/go:1",
+  "containerEnv": {
+    "GOTOOLCHAIN": "auto"
+  },
+  "secrets": {
+    "BASHY_PAIR_CODE": { "description": "One-time pairing code from your cloudbox account (first start only)." },
+    "SHAPING_SATELLITE": { "description": "Your satellite to attach to (outpost satellite list)." },
+    "SITE_AI_KEY": { "description": "Key for the AI route in site.json (e.g. a GitHub token with models:read)." }
+  },
+  "postCreateCommand": "curl -fsSL https://dhnt.io/install.sh | sh -s -- --no-service",
+  "postStartCommand": "bash -lc 'bashy --bashsharp bin/shaping-host.bsh up && bashy --bashsharp bin/website.bsh serve . --name ${SITE_APP_NAME:-site}'"
+}
