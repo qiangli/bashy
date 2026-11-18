@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import tarfile
 import tempfile
+import threading
 import unittest
 from unittest.mock import patch
 import zipfile
@@ -57,8 +58,11 @@ class DistFixtures(unittest.TestCase):
             layouts, assets = packaging.package(self.source, self.outpost, self.stage,
                 self.root/'dist', 'v1.0.0-rc.38-dev', PLATFORMS, OTEL, 'nfpm', inspect=self.inspect)
         self.assertEqual(len(assets), 34)
+        self.assertEqual([asset['name'] for asset in assets], sorted(asset['name'] for asset in assets))
         directory = self.root/'dist/assets'
-        self.assertEqual(len((directory/'checksums.txt').read_text().splitlines()), 33)
+        lines = (directory/'checksums.txt').read_text().splitlines()
+        self.assertEqual(len(lines), 33)
+        self.assertEqual([line.split('  ', 1)[1] for line in lines], sorted(line.split('  ', 1)[1] for line in lines))
         with tarfile.open(directory/'bashy-linux-amd64.tar.gz') as archive:
             self.assertEqual(set(archive.getnames()), {'README.md','LICENSE','LICENSE.outpost','bashy','outpost','bash','sh','bash.real','sh.real'})
         with tarfile.open(directory/'bash-linux-amd64.tar.gz') as archive:
@@ -69,6 +73,43 @@ class DistFixtures(unittest.TestCase):
         for asset in assets:
             self.assertEqual(asset['sha256'], packaging.digest(directory/asset['name']))
         self.assertFalse((directory/'release-assets.json').exists())
+
+    def test_parallel_packaging_is_bounded_and_publishes_only_completed_files(self):
+        lock, overlap = threading.Lock(), threading.Event()
+        active, peak = 0, 0
+        real_archive = packaging.archive
+        def archive(destination, files):
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+                if active >= 2:
+                    overlap.set()
+            try:
+                if not overlap.wait(2):
+                    raise AssertionError('independent archives ran serially')
+                real_archive(destination, files)
+            finally:
+                with lock:
+                    active -= 1
+        def nfpm(command, check):
+            Path(command[-1]).write_bytes(b'complete package fixture')
+        with patch.object(packaging, 'archive', side_effect=archive), patch.object(packaging.subprocess, 'run', side_effect=nfpm):
+            _, assets = packaging.package(self.source, self.outpost, self.stage,
+                self.root/'parallel', 'v1.0.0-rc.38-dev', PLATFORMS, OTEL, 'nfpm', inspect=self.inspect)
+        self.assertGreaterEqual(peak, 2)
+        self.assertLessEqual(peak, 4)
+        self.assertEqual(active, 0)
+        self.assertEqual(len(assets), 34)
+        for asset in assets:
+            self.assertEqual(asset['sha256'], packaging.digest(self.root/'parallel/assets'/asset['name']))
+
+    def test_parallel_archive_failure_prevents_checksum_seal(self):
+        with patch.object(packaging, 'archive', side_effect=OSError('archive fixture failure')):
+            with self.assertRaisesRegex(OSError, 'archive fixture failure'):
+                packaging.package(self.source, self.outpost, self.stage,
+                    self.root/'failed', 'v1.0.0-rc.38-dev', PLATFORMS, OTEL, 'nfpm', inspect=self.inspect)
+        self.assertFalse((self.root/'failed/assets/checksums.txt').exists())
 
     def test_rejects_missing_swapped_and_merged_roles(self):
         stage = self.stage/'linux/amd64'

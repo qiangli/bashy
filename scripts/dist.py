@@ -16,7 +16,7 @@ import threading
 import time
 
 sys.dont_write_bytecode = True
-from dist_package import package, digest
+from dist_package import package, digest, PACKAGE_WORKERS
 
 ROOT = Path(__file__).resolve().parents[1]
 NFPM_VERSION = "v2.47.0"  # qiangli/goreleaser 7af3788/go.mod, same packaging library.
@@ -260,7 +260,7 @@ class Dist:
                   "tag": self.inputs["tag"], "sources": self.inputs["sources"],
                   "builder": {"version": self.lock["bashy_version"], "image": self.lock["image"], "digest": self.lock["image_digest"]},
                   "auxiliary_tool_receipt": self.tool_receipt,
-                  "jobs": self.jobs, "cpu_limit": 8, "cache": "persistent Go build/download caches; isolated mutable runner modules",
+                  "jobs": self.jobs, "package_workers": PACKAGE_WORKERS, "cpu_limit": 8, "cache": "persistent Go build/download caches; isolated mutable runner modules",
                   "elapsed_seconds": elapsed, "budget_seconds": self.budget, "budget_met": elapsed <= self.budget,
                   "signature_status": {"darwin/arm64": signing},
                   "runner_profiles": {target: "signed-embedded" if target in SIGNED_RUNNERS else "unavailable-no-embed" for target in self.platforms["platforms"]},

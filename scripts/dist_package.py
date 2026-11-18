@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Package completed, verified product bytes; never build or publish them."""
+from concurrent.futures import ThreadPoolExecutor
 import gzip
 import hashlib
 import json
@@ -9,6 +10,7 @@ import subprocess
 import tarfile
 import zipfile
 
+PACKAGE_WORKERS = 4
 ROLES = ("bashy", "outpost", "bash", "sh")
 MAIN = {"bashy": "github.com/qiangli/bashy/cmd/bashy",
         "outpost": "github.com/qiangli/outpost/cmd/outpost",
@@ -92,12 +94,10 @@ def package(root, outpost_root, staging, dist, tag, platforms, otel_platforms, n
     metadata = dist / "metadata"
     metadata.mkdir(exist_ok=True)
     base = tag.removesuffix("-dev")
-    layouts = {}
-    for target in platforms:
+    def package_target(target):
         goos, arch = target.split("/")
         stage = staging / goos / arch
         names = members(stage, goos, inspect, expected=expected, arch=arch)
-        layouts[target] = names
         docs = {"README.md": root / "README.md", "LICENSE": root / "LICENSE"}
         extension = "zip" if goos == "windows" else "tar.gz"
         archive(assets / f"bashy-{goos}-{arch}.{extension}",
@@ -119,12 +119,17 @@ def package(root, outpost_root, staging, dist, tag, platforms, otel_platforms, n
                     run("package-" + arch + "-" + fmt, command)
                 else:
                     subprocess.run(command, check=True)
-    for target in otel_platforms:
-        goos, arch = target.split("/")
-        suffix = ".exe" if goos == "windows" else ""
-        with (staging / goos / arch / ("otel" + suffix)).open("rb") as src:
-            with gzip.open(assets / f"otel-{goos}-{arch}.gz", "wb", compresslevel=6) as out:
-                shutil.copyfileobj(src, out)
+        if target in otel_platforms:
+            with (stage / ("otel" + suffix)).open("rb") as src:
+                with gzip.open(assets / f"otel-{goos}-{arch}.gz", "wb", compresslevel=6) as out:
+                    shutil.copyfileobj(src, out)
+        return target, names
+
+    # Each target owns distinct archive/config/package paths. Product files and
+    # signing are complete before this pool starts; readers/checksums follow it.
+    with ThreadPoolExecutor(max_workers=PACKAGE_WORKERS) as pool:
+        pending = [pool.submit(package_target, target) for target in platforms]
+        layouts = dict(future.result() for future in pending)
     (assets / "otel-blob-NOTICE.txt").write_text(
         "bashy otel blob — the embedded observability stack orchestrator\n"
         "(yoke/external/otel), built from source in this project.\n\n"

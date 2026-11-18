@@ -301,7 +301,8 @@ The source root and exact commit/tag inputs are explicit. No tags or publication
 `DIST_SOURCE_ROOT` contains clean `bashy`, `bash`, `outpost`, and `yoke` Git
 checkouts plus `dist-inputs.json`: `{"tag":"vX.Y.Z-rc.N-dev","sources":{...}}`,
 where each source name maps to `{"path":"relative-checkout","commit":"full-sha"}`.
-The default is two target jobs sharing eight CPUs and a 300-second wall budget.
+The default is two build target jobs and four independent packaging target
+workers sharing the same eight-CPU container and 300-second wall budget.
 Before entering the immutable image, run `scripts/prepare-dist-rpm.sh
 "$DIST_SOURCE_ROOT/build-tools"` on the Ubuntu 24.04 amd64 build host. The
 pinned RPM reader and runtime libraries stay outside the image; its receipt
