@@ -3,9 +3,11 @@ id: 85d6a32cacbc
 kind: refactor
 title: S1C Own the cert-base command catalog without upper-layer imports
 seq: 3241
-status: todo
+status: assigned
 priority: p0
 created: 2026-11-18T00:56:29.150374Z
+weave: 109
+assignee: muse-conductor
 sprint: 575
 sprint_id: 65ce85f5-87c0-5863-bf55-62de86f5df36
 sprint_title: 'Layer separation: Classic <- Bash# <- Yoke import-graph delineation'
