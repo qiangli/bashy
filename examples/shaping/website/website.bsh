@@ -206,11 +206,30 @@ cmd_enable() {
     echo "enabled: $dir — edit site.json and fields/*.md (they are private: keep this repo private), then: $PROG serve $dir --name NAME"
 }
 
+# Codespaces injects user secrets into the container's own startup and
+# terminals, but not into every session (an ssh session has none); read a
+# missing one from the shared secrets file. Values are never printed.
+load_codespace_secrets() {
+    f=/workspaces/.codespaces/shared/user-secrets-envs.json
+    [ -f "$f" ] || return 0
+    for v in "$@"; do
+        eval "cur=\${$v:-}"
+        [ -n "$cur" ] && continue
+        val=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "$f" "$v" 2>/dev/null) || continue
+        if [ -n "$val" ]; then
+            export "$v=$val"
+        fi
+    done
+}
+
+have_pkill() { command -v pkill >/dev/null 2>&1; }
+
 app_secret() {
     "$(outpost_bin)" apps secret "$1" 2>/dev/null || true
 }
 
 cmd_serve() {
+    load_codespace_secrets SITE_AI_KEY
     dir="$1"
     shift || true
     while [ $# -gt 0 ]; do
@@ -225,7 +244,17 @@ cmd_serve() {
     st=$(state_dir)
     run mkdir -p "$st" "$dir/.build"
     run env GOWORK=off CGO_ENABLED=0 "$(go_bin)" -C "$dir" build -trimpath -o .build/site-shaping .
-    run "$(outpost_bin)" apps add "$NAME" --port "$PORT" --trust-cloud-identity
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $(outpost_bin) apps add $NAME --port $PORT --trust-cloud-identity"
+    else
+        # The daemon may be restarting (an attach restarts it): retry briefly.
+        n=0
+        until "$(outpost_bin)" apps add "$NAME" --port "$PORT" --trust-cloud-identity; do
+            n=$((n + 1))
+            [ "$n" -lt 20 ] || fail "outpost did not accept the app (is the daemon running? outpost start)"
+            sleep 3
+        done
+    fi
     if [ "$DRY_RUN" = 1 ]; then
         echo "would run: $dir/.build/site-shaping -addr 127.0.0.1:$PORT (SITE_SSO_SECRET from outpost apps secret $NAME)"
         return 0
@@ -233,8 +262,9 @@ cmd_serve() {
     secret=$(app_secret "$NAME")
     [ -n "$secret" ] || echo "$PROG: warning: no SSO secret for $NAME; every visitor will be anonymous" >&2
     cmd_stop_quiet
-    SITE_SSO_SECRET="$secret" nohup "$dir/.build/site-shaping" -addr "127.0.0.1:$PORT" >"$st/$NAME.log" 2>&1 &
+    SITE_SSO_SECRET="$secret" nohup "$dir/.build/site-shaping" -addr "127.0.0.1:$PORT" >"$st/$NAME.log" 2>&1 </dev/null &
     echo $! >"$st/$NAME.pid"
+    echo "$PORT" >"$st/$NAME.port"
     echo "serving: $NAME on 127.0.0.1:$PORT (pid $(cat "$st/$NAME.pid"), log $st/$NAME.log)"
     echo "engine face: https://<cloudbox>/matrix/h/<this host>/app/$NAME/ — link it from the static site"
 }
@@ -244,6 +274,11 @@ cmd_stop_quiet() {
     if [ -f "$pidf" ]; then
         kill "$(cat "$pidf")" 2>/dev/null || true
         rm -f "$pidf"
+    fi
+    # The recorded pid may be a wrapper's: also stop whatever holds the port.
+    portf="$(state_dir)/$NAME.port"
+    if [ -f "$portf" ] && have_pkill; then
+        pkill -f "site-shaping -addr 127.0.0.1:$(cat "$portf")" 2>/dev/null || true
     fi
 }
 
@@ -288,7 +323,13 @@ cmd_status() {
     done
     pidf="$(state_dir)/$NAME.pid"
     running=no
-    if [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null; then running=yes; fi
+    # The pid may be a wrapper's; the server answering on its port is the truth.
+    portf="$(state_dir)/$NAME.port"
+    if [ -f "$portf" ] && curl -fs -m 5 -o /dev/null "http://127.0.0.1:$(cat "$portf")/_shaping/api/me"; then
+        running=yes
+    elif [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null; then
+        running=yes
+    fi
     secret=no
     if [ -n "$(app_secret "$NAME")" ]; then secret=yes; fi
     echo "{\"name\":\"$NAME\",\"server_running\":\"$running\",\"sso_secret\":\"$secret\",\"log\":\"$(state_dir)/$NAME.log\"}"

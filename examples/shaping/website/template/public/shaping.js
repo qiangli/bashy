@@ -40,6 +40,13 @@
     return node;
   }
 
+  // The cloudbox edge checks state-changing requests with a double-submit
+  // token: echo its readable csrf_token cookie in X-CSRF-Token.
+  function csrfHeaders() {
+    var m = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/);
+    return m ? { "X-CSRF-Token": decodeURIComponent(m[1]) } : {};
+  }
+
   function get(path) {
     return fetch(api + path, { credentials: "same-origin" }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
@@ -75,7 +82,7 @@
       vb.addEventListener("click", function () {
         vb.disabled = true;
         out.textContent = "Preparing " + v.title + "…";
-        fetch(api + "view?name=" + encodeURIComponent(v.name), { method: "POST", credentials: "same-origin" })
+        fetch(api + "view?name=" + encodeURIComponent(v.name), { method: "POST", credentials: "same-origin", headers: csrfHeaders() })
           .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
           .then(function (res) {
             if (!res.ok) { out.textContent = res.j.error || "Not available."; return; }

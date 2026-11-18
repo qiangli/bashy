@@ -111,7 +111,24 @@ attached() {
 
 running() {
     have "$(outpost_bin)" || return 1
-    "$(outpost_bin)" status --local-presence >/dev/null 2>&1
+    # --local-presence exits 0 either way; the answer is in the JSON.
+    "$(outpost_bin)" status --local-presence 2>/dev/null | LC_ALL=C grep -q '"running": *true'
+}
+
+# Codespaces injects user secrets into the container's own startup and
+# terminals, but not into every session (an ssh session has none); read a
+# missing one from the shared secrets file. Values are never printed.
+load_codespace_secrets() {
+    f=/workspaces/.codespaces/shared/user-secrets-envs.json
+    [ -f "$f" ] || return 0
+    for v in "$@"; do
+        eval "cur=\${$v:-}"
+        [ -n "$cur" ] && continue
+        val=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "$f" "$v" 2>/dev/null) || continue
+        if [ -n "$val" ]; then
+            export "$v=$val"
+        fi
+    done
 }
 
 yn() { if "$@"; then echo true; else echo false; fi; }
@@ -121,15 +138,18 @@ cmd_check() {
 }
 
 cmd_up() {
+    load_codespace_secrets BASHY_PAIR_CODE SHAPING_SATELLITE
     if [ -n "${SHAPING_OUTPOST_REF:-}" ]; then
         # A feature not yet released: build outpost at that ref. A clone, not
         # `go install pkg@ref`, because outpost's go.mod carries replaces.
         src="$HOME/.cache/shaping-host/outpost"
         if [ ! -d "$src/.git" ]; then
-            run git clone -q https://github.com/qiangli/outpost "$src"
+            run git clone https://github.com/qiangli/outpost "$src"
         fi
-        run git -C "$src" fetch -q origin
-        run git -C "$src" checkout -q "$SHAPING_OUTPOST_REF"
+        # No -q: inside bashy, git is the built-in pure-Go git, which
+        # rejects it for fetch and checkout.
+        run git -C "$src" fetch origin
+        run git -C "$src" checkout "$SHAPING_OUTPOST_REF"
         run mkdir -p "$HOME/.local/bin"
         run env GOWORK=off CGO_ENABLED=0 go -C "$src" build -tags fb_archives -o "$HOME/.local/bin/outpost" ./cmd/outpost
     elif ! have "$(outpost_bin)"; then
@@ -143,8 +163,15 @@ cmd_up() {
         if [ "$DRY_RUN" = 1 ]; then
             echo "would run: nohup $(outpost_bin) start &"
         else
-            nohup "$(outpost_bin)" start >"$HOME/.shaping-host-outpost.log" 2>&1 &
-            sleep 2
+            if have setsid; then
+                setsid nohup "$(outpost_bin)" start >"$HOME/.shaping-host-outpost.log" 2>&1 </dev/null &
+            else
+                nohup "$(outpost_bin)" start >"$HOME/.shaping-host-outpost.log" 2>&1 </dev/null &
+            fi
+            for _ in 1 2 3 4 5 6 7 8 9 10; do
+                running && break
+                sleep 1
+            done
         fi
     fi
     if ! paired; then
