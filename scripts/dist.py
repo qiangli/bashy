@@ -15,6 +15,7 @@ import tempfile
 import threading
 import time
 
+sys.dont_write_bytecode = True
 from dist_package import package, digest
 
 ROOT = Path(__file__).resolve().parents[1]

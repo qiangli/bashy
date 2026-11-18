@@ -3,6 +3,7 @@
 # DIST_SOURCE_ROOT contains immutable bashy/bash/outpost/yoke checkouts and
 # dist-inputs.json. This command never creates tags or calls GitHub.
 set -eu
+export PYTHONDONTWRITEBYTECODE=1
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 source_root=${DIST_SOURCE_ROOT:?set DIST_SOURCE_ROOT to the prepared immutable source root}
 [ -f "$source_root/dist-inputs.json" ] || { echo 'dist-inputs.json missing' >&2; exit 2; }
