@@ -3,9 +3,11 @@ id: 94d888e23283
 kind: refactor
 title: S4I Preserve real worker-envelope assertions at the product boundary
 seq: 3242
-status: todo
+status: assigned
 priority: p0
 created: 2026-11-18T01:03:26.688134Z
+weave: 110
+assignee: agy-gemini3.8-flash
 sprint: 575
 sprint_id: 65ce85f5-87c0-5863-bf55-62de86f5df36
 sprint_title: 'Layer separation: Classic <- Bash# <- Yoke import-graph delineation'
