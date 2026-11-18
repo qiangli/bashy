@@ -131,7 +131,8 @@ class Dist:
             raise ValueError("the locked previous-release builder is required")
         for role, source in self.sources.items():
             clean_source(source, self.inputs["sources"][role]["commit"])
-            self.run("download-" + role, ["go", "mod", "download"], cwd=source)
+            module = source / "external/otel" if role == "yoke" else source
+            self.run("download-" + role, ["go", "mod", "download"], cwd=module)
         self.run("meet-spa-check", ["/usr/bin/dash", "scripts/build-meet-spa.sh", "check"], self.sources["bashy"])
         self.mutable_yoke = Path(subprocess.check_output(
             ["go", "list", "-mod=readonly", "-m", "-f", "{{.Dir}}", "github.com/qiangli/yoke"],
