@@ -1,0 +1,22 @@
+{
+  "site_url": "https://example.com",
+  "title": "Example Person",
+  "contact": "mailto:owner@example.com?subject=Access%20request",
+  "sign_in": "/signin",
+  "ai": {
+    "base_url": "https://models.github.ai/inference",
+    "model": "openai/gpt-4.1-mini",
+    "key_env": "SITE_AI_KEY",
+    "daily_cap": 5,
+    "daily_max": 50,
+    "max_tokens": 900
+  },
+  "views": [
+    {
+      "name": "recruiter-summary",
+      "title": "Recruiter summary",
+      "prompt": "Write a one-page recruiter summary: a two-sentence headline, the strongest skills as bullets, the most relevant roles with years, and certifications. If contact details are among the facts, end with them; otherwise end with one line saying more details are shared on request.",
+      "audience": {"signed_in": true}
+    }
+  ]
+}

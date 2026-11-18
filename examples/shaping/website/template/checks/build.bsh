@@ -1,0 +1,4 @@
+set -eu
+test -s site.json
+test -s public/shaping.js
+grep -q '"site_url"' site.json
