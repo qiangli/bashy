@@ -35,7 +35,7 @@ WORK="$HOME/.cache/posix-parity-allshells"; rm -rf "$WORK"; mkdir -p "$WORK"
 echo "probes: $(wc -l < "$WORK/probes.tsv")"
 
 echo "building linux/$GOARCH candidates…" >&2
-( cd "$ROOT"       && GOOS=linux GOARCH=$GOARCH CGO_ENABLED=0 go build -o "$WORK/bashy" ./cmd/bash )
+( cd "$ROOT"       && GOOS=linux GOARCH=$GOARCH CGO_ENABLED=0 go build -o "$WORK/bashy" github.com/qiangli/bash/cmd/bash )
 ( cd "$ROOT/../sh" && GOOS=linux GOARCH=$GOARCH CGO_ENABLED=0 go build -o "$WORK/gosh"  ./cmd/gosh )
 
 cat > "$WORK/runner.sh" <<'RUNNER'

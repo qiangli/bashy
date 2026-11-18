@@ -60,7 +60,7 @@ bash53)
   HOST_GO="${HOST_GO:-$GO_CMD}" "$bashy_bin" dag test-bash-fixtures
   mkdir -p "$CTX/bin/bash-linux-$ARCH" "$CTX/bash53"
   log "building linux/$ARCH testee + bash53 harness…"
-  GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 "${go_cmd[@]}" build -trimpath -o "$CTX/bin/bash-linux-$ARCH/bash" ./cmd/bash
+  GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 "${go_cmd[@]}" build -trimpath -o "$CTX/bin/bash-linux-$ARCH/bash" github.com/qiangli/bash/cmd/bash
   GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 "${go_cmd[@]}" build -trimpath -o "$CTX/bin/bash53suite-linux-$ARCH" ./tools/bash53suite
   log "staging fixture tree (strip prebuilt helpers; keep support/*.c)…"
   # symlink on unix; a real dir on a Windows checkout (symlinks not preserved).
@@ -78,7 +78,7 @@ yash)
   [ -d "$YT/tests" ] || { echo "build-conformance-image: yash corpus missing — clone into $YT first (git clone --depth 1 https://github.com/magicant/yash.git $YT)" >&2; exit 2; }
   log "building linux/$ARCH testee + yashsuite runner…"
   mkdir -p "$CTX/bin/bash-linux-$ARCH"
-  GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 "${go_cmd[@]}" build -trimpath -o "$CTX/bin/bash-linux-$ARCH/bash" ./cmd/bash
+  GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 "${go_cmd[@]}" build -trimpath -o "$CTX/bin/bash-linux-$ARCH/bash" github.com/qiangli/bash/cmd/bash
   GOOS=linux GOARCH="$ARCH" CGO_ENABLED=0 GOWORK=off "${go_cmd[@]}" -C tools/yashsuite build -trimpath -o "$CTX/bin/yashsuite-linux-$ARCH" .
   log "staging yash tests/ and pruning to the manifest's shell-only -p fixtures…"
   cp -R "$YT/tests" "$CTX/yashtests"

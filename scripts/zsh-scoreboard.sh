@@ -43,7 +43,7 @@ ZSH_BIN=${ZSH_BIN:-$(command -v zsh || true)}
 echo "reference: $ZSH_BIN ($("$ZSH_BIN" --version))" >&2
 
 echo "building bin/bash…" >&2
-go build -o bin/bash ./cmd/bash || exit 2
+go build -o bin/bash github.com/qiangli/bash/cmd/bash || exit 2
 
 # shellcheck disable=SC2086
 run_arm() { # $1=label $2=shell-cmd

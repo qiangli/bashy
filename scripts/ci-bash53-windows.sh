@@ -59,7 +59,7 @@ fi
 
 mkdir -p bin
 echo "bash53-windows: building the pure drop-in, the fixture runner and the userland"
-CGO_ENABLED=0 go build -o bin/bash.exe ./cmd/bash || exit 2
+CGO_ENABLED=0 go build -o bin/bash.exe github.com/qiangli/bash/cmd/bash || exit 2
 go build -o bin/bash53suite.exe ./tools/bash53suite || exit 2
 # yoke = coreutils (the certified required set) + the yoke applets (hexdump,
 # …), one multicall binary, built at the yoke version bashy's go.mod pins, so

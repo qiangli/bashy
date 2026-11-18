@@ -8,7 +8,7 @@ scratch=$(mktemp -d "${TMPDIR:-/tmp}/bashy-container-mode.XXXXXX")
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM
 mkdir -p "$scratch/repo/scripts" "$scratch/fakebin"
 cp "$root/dag.md" "$scratch/repo/dag.md"
-printf '%s\n' 'replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v0.0.0-test' >"$scratch/repo/go.mod"
+printf '%s\n' 'require github.com/qiangli/bash v0.0.0-test' >"$scratch/repo/go.mod"
 cp "$root/scripts/test-bash-container.sh" "$root/scripts/test-lane-id.sh" "$scratch/repo/scripts/"
 
 cat >"$scratch/fakebin/bash" <<'EOF'

@@ -1060,6 +1060,10 @@ github.com/prometheus/statsd_exporter v0.29.0 h1:2iaiBLpAg/WcdW4nF0UTQfjCE2DXD+1
 github.com/prometheus/statsd_exporter v0.29.0/go.mod h1:3t+fT5ESGc0KBUfadCp43KOnVPFmbAF4c58Osotz3Zk=
 github.com/qiangli/bash v0.0.0-20261117235306-adb3b4e0c28d h1:258vyjik2h8js8Pn3UcL6DGb+00BneqqwFIRGmNB1N4=
 github.com/qiangli/bash v0.0.0-20261117235306-adb3b4e0c28d/go.mod h1:m9QaWxANAE+UmTTPCOQ9TRbyjaHfoHaHD6GPAUjBPoE=
+github.com/qiangli/bash v0.0.0-20261118061051-cdb1212b069f h1:/JN4BFT+QOB0eASMYsy7JsfP6tBrqOODrUPu+J6eD2I=
+github.com/qiangli/bash v0.0.0-20261118061051-cdb1212b069f/go.mod h1:m9QaWxANAE+UmTTPCOQ9TRbyjaHfoHaHD6GPAUjBPoE=
+github.com/qiangli/bash/cmd v0.0.0-20261118061051-cdb1212b069f h1:L55CUSVwXSPDOgOMhArwMrdNeiHEY7HQ07yIL3NOcQg=
+github.com/qiangli/bash/cmd v0.0.0-20261118061051-cdb1212b069f/go.mod h1:V3vTum7eyqQ1Az+x6rlwYuDErRrkwlkc5/Esc6n95N0=
 github.com/qiangli/bonsai v0.0.0-20261103194740-24dd0f47247e h1:eBMunh39EbYoU3fHCLU5BH2fUFuT+ibHNxyHFKSbJl0=
 github.com/qiangli/bonsai v0.0.0-20261103194740-24dd0f47247e/go.mod h1:XPDzA91wEz1K4qkkXyqGpkd41M+zDIY6wkz5Aird7Vs=
 github.com/qiangli/coreutils v0.0.0-20261112194059-6dd7a3ee1858 h1:RbyqJup4BM5fIz6BiAApT0mCF76q/ZUuuau0HucAr3M=
@@ -1104,6 +1108,8 @@ github.com/qiangli/yoke v0.0.0-20261117162732-c9057f1e2028 h1:IeM0McS84bznaeaplh
 github.com/qiangli/yoke v0.0.0-20261117162732-c9057f1e2028/go.mod h1:0x+UxFZ+6ttGsd6k1LGCFpdjzUyCWJ4PlK1Tk7t14ls=
 github.com/qiangli/yoke v0.0.0-20261118041247-79fe8f90bb05 h1:kI3Wxzztkal5f5c3teCA1EPvbRyIPllYhzXO5pDim/g=
 github.com/qiangli/yoke v0.0.0-20261118041247-79fe8f90bb05/go.mod h1:40OmUyWSEJuvaBt2+BZTNJD5QI1ECuWrbjnhVWB/IWY=
+github.com/qiangli/yoke v0.0.0-20261118052918-ec36645fbab6 h1:mQR2qxpGgBrkx0jshq6gvAcMUgbtwWCOcwHrQ/VdHFM=
+github.com/qiangli/yoke v0.0.0-20261118052918-ec36645fbab6/go.mod h1:40OmUyWSEJuvaBt2+BZTNJD5QI1ECuWrbjnhVWB/IWY=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f h1:aOhDxEjodWKHckz8+Bp49lmQXh80hK0ucSTtyJcj2NQ=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f/go.mod h1:Q0Q5T6VFoIzC2QCjcH2DnKhvD6lvneoJKxG0TYasq8E=
 github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9 h1:0pOjHOylgAWaCVmImyqwOBhA8xx5EZ/WxrddpBiVF+E=

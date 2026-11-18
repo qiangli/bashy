@@ -88,7 +88,7 @@ echo "yash-suite: building linux/$GOARCH bashy…" >&2
 # link glibc and the testee is "not found" inside the musl (Alpine) panel —
 # every case errors and the panel reports ~9%. The release archives are
 # static for the same reason.
-CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" "$BASHY_EXE" go build -o "$BIN" ./cmd/bash || exit 2
+CGO_ENABLED=0 GOOS=linux GOARCH="$GOARCH" "$BASHY_EXE" go build -o "$BIN" github.com/qiangli/bash/cmd/bash || exit 2
 trap 'rm -f "$BIN"' EXIT
 
 [ -n "$OUTDIR" ] && { mkdir -p "$OUTDIR"; OUTMOUNT="-v $OUTDIR:/out"; } || OUTMOUNT=""

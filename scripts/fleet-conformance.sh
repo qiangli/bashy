@@ -142,7 +142,7 @@ declare -A NEED_ARCH; for h in "${AVAIL[@]}"; do NEED_ARCH[${H_ARCH[$h]}]=1; don
 for arch in "${!NEED_ARCH[@]}"; do
   log "building linux/$arch testee + harness…"
   mkdir -p "$STAGE/bin/bash-linux-$arch"
-  GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -o "$STAGE/bin/bash-linux-$arch/bash" ./cmd/bash
+  GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -o "$STAGE/bin/bash-linux-$arch/bash" github.com/qiangli/bash/cmd/bash
   GOOS=linux GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -o "$STAGE/bin/bash53suite-linux-$arch" ./tools/bash53suite
 done
 FX="$(readlink external/bash-5.3)"; rm -rf "$STAGE/fx"; cp -R "$FX" "$STAGE/fx"

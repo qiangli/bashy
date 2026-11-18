@@ -24,11 +24,11 @@ if not tar:
     raise SystemExit("pinned Bash tarball SHA-256 not found")
 require = sorted(({"path": x["Path"], "version": x["Version"], "indirect": x.get("Indirect", False)} for x in mod["Require"]), key=lambda x: x["path"])
 replace = sorted(({"old": x["Old"], "new": x["New"]} for x in mod["Replace"]), key=lambda x: (x["old"]["Path"], x["old"].get("Version", "")))
-shell_runtime = next(x["new"]["Version"] for x in replace if x["old"]["Path"] == "mvdan.cc/sh/v3")
-stamp = ["-X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-dev",
-         "-X github.com/qiangli/bashy/internal/cli.buildID=" + source[:7],
-         "-X github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=" + shell_runtime,
-         "-X github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime="]
+shell_runtime = next(x["version"] for x in require if x["path"] == "github.com/qiangli/bash")
+stamp = ["-X github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-dev",
+         "-X github.com/bashsharp/bashsharp/cli.buildID=" + source[:7],
+         "-X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=" + shell_runtime,
+         "-X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime="]
 out = {
   "schema": "bashy.s561.baseline.v1",
   "source": {"repository": "github.com/qiangli/bashy", "commit": source,

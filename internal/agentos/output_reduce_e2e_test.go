@@ -38,7 +38,7 @@ func standaloneBashBinary(t *testing.T) string {
 		if runtime.GOOS == "windows" {
 			standaloneBashBin += ".exe"
 		}
-		cmd := exec.Command("go", "build", "-o", standaloneBashBin, "./cmd/bash")
+		cmd := exec.Command("go", "build", "-o", standaloneBashBin, "github.com/qiangli/bash/cmd/bash")
 		cmd.Dir = root
 		if out, err := cmd.CombinedOutput(); err != nil {
 			standaloneBashErr = fmt.Errorf("build cmd/bash: %w (%d diagnostic bytes)", err, len(out))

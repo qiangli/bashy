@@ -12,7 +12,7 @@ cd "$root"
 
 echo "==> Verifying dependency closure for cmd/bashy, cmd/bash, cmd/sh..."
 
-for target in ./cmd/bashy ./cmd/bash ./cmd/sh; do
+for target in ./cmd/bashy github.com/qiangli/bash/cmd/bash ./cmd/sh; do
   echo "Checking $target dependencies..."
   deps=$(go list -deps "$target")
 

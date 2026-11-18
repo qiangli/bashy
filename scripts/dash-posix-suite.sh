@@ -83,7 +83,7 @@ case "$ARCH" in aarch64|arm64) GOARCH=arm64;; x86_64|amd64) GOARCH=amd64;; *) ec
 BIN="$HERE/bin/.bashy-linux-dash"
 mkdir -p "$(dirname "$BIN")"
 echo "dash-suite: building linux/$GOARCH bashy…" >&2
-GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" ./cmd/bash || { echo "dash-suite: bashy build failed" >&2; exit 0; }
+GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" github.com/qiangli/bash/cmd/bash || { echo "dash-suite: bashy build failed" >&2; exit 0; }
 trap 'rm -f "$BIN"' EXIT
 
 # Run all shells in one container so they share one userland (busybox coreutils,

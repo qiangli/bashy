@@ -63,7 +63,7 @@ suite_json="$(mktemp)"
 trap 'rm -f "$suite_json"' EXIT
 image_id="$($OCI image inspect --format '{{.Id}}' "$IMAGE")"
 commit="$(git rev-parse HEAD)"
-sh_pin="$(awk '$1 == "replace" && $2 == "mvdan.cc/sh/v3" { print $5; exit }' go.mod)"
+sh_pin="$(sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)"
 [ -n "$sh_pin" ] || { echo 'test-bash-container: missing sh pin' >&2; exit 2; }
 host_os="$(uname -s)"
 # --tty supplies a controlling terminal for read/test/vredir. A fresh tmpfs

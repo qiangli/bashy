@@ -36,7 +36,7 @@ case " $* " in
 		echo 'fake go: intentional cmd/bashy compile failure' >&2
 		exit 73
 		;;
-	*' ./cmd/bash '*)
+	*' github.com/qiangli/bash/cmd/bash '*)
 		out=
 		want_out=false
 		for arg do

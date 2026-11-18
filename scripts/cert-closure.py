@@ -18,7 +18,7 @@ INPUT_FIELDS = (
 )
 ENV = dict(os.environ, GOWORK="off", GOOS="linux", GOARCH="amd64", GOAMD64="v1",
            CGO_ENABLED="0", GOFLAGS="", GOEXPERIMENT="", GOFIPS140="off")
-BUILDS = (("bash", "./cmd/bash", []),
+BUILDS = (("bash", "github.com/qiangli/bash/cmd/bash", []),
           ("bashy", "./cmd/bashy", ["bashy_cert_base"]))
 
 

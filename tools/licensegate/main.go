@@ -647,7 +647,7 @@ func RunGate(opts GateOptions, stdout, stderr io.Writer) (*GateReport, error) {
 	if len(opts.Targets) == 0 {
 		opts.Targets = []string{
 			"./cmd/bashy",
-			"./cmd/bash",
+			"github.com/qiangli/bash/cmd/bash",
 			"./cmd/sh",
 			"github.com/qiangli/outpost/cmd/outpost",
 		}

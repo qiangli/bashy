@@ -14,7 +14,7 @@ name="bashy-darwin-$arch.tar.gz"
 [[ ! -e "$outdir/$name" ]] || { echo "refusing to overwrite $outdir/$name" >&2; exit 1; }
 stage=$(mktemp -d "${TMPDIR:-/tmp}/bashy-darwin-release.XXXXXX")
 trap 'rm -rf "$stage"' EXIT
-shell_commit=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+shell_commit=$(sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
 [[ -n $shell_commit ]] || { echo "missing sh fork replace in go.mod" >&2; exit 1; }
 shell_time=
 source_commit=$(git rev-parse HEAD)
@@ -26,7 +26,7 @@ base=${tag#v}; base=${base%-dev}
 build_yoke_dir=$(GOWORK=off go list -m -f '{{.Dir}}' github.com/qiangli/yoke)
 [[ -f "$build_yoke_dir/external/ollama/runner_embed/ycode-runner.gz" && -f "$build_yoke_dir/external/ollama/runner_embed/ycode-runner.sigstore.json" ]] \
  || { echo "missing verified runner: run scripts/fetch-signed-runner.sh darwin $arch first" >&2; exit 1; }
-CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -tags embed_runner -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag' -X 'github.com/qiangli/bashy/internal/cli.buildID=$source_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
+CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -tags embed_runner -ldflags "-w -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-$tag' -X 'github.com/bashsharp/bashsharp/cli.buildID=$source_commit' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=$shell_commit' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=$shell_time'" -o "$stage/bashy" ./cmd/bashy
 ./scripts/verify-bashy-signal-artifact.sh "$stage/bashy"
 scripts/go-tool.sh bashysignalprobe "$stage/bashy"
 ./scripts/verify-meet-spa-release.sh "$stage/bashy" "darwin_$arch"
@@ -35,7 +35,8 @@ scripts/go-tool.sh bashysignalprobe "$stage/bashy"
 outpost_commit=${OUTPOST_COMMIT:-}
 [[ $outpost_commit =~ ^[0-9a-f]{40}$ ]] || { echo "missing OUTPOST_COMMIT (run scripts/resolve-pinned-siblings.sh)" >&2; exit 1; }
 for shell in bash sh; do
- CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$tag'" -o "$stage/$shell" "./cmd/$shell"
+ package=./cmd/$shell; [ "$shell" != bash ] || package=github.com/qiangli/bash/cmd/bash
+ CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" scripts/go-product.sh build -trimpath -ldflags "-s -w -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-$tag'" -o "$stage/$shell" "$package"
 done
 (cd ../outpost && CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath -tags fb_archives -ldflags "-s -w -X github.com/qiangli/outpost/internal/agent.releaseTag=$tag -X github.com/qiangli/outpost/internal/agent.ldCommit=$outpost_commit -X github.com/qiangli/outpost/internal/agent.ldDirty=false" -o "$stage/outpost" ./cmd/outpost)
 mkdir -p "$outdir/../signature-status"

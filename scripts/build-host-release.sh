@@ -17,7 +17,7 @@ scripts/build-meet-spa.sh check
 # The host serves the embedded Ollama engine. Keep Podman external: its linked
 # engine brings MPL-licensed dependencies into the release binary.
 scripts/go-product.sh build -trimpath -tags bashy_engines,embed_runner,bashy_host \
-  -ldflags "-w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-host-$source_sha'" \
+  -ldflags "-w -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-host-$source_sha'" \
   -o "$binary" ./cmd/bashy
 go version -m "$binary" > "$binary.go-version.txt"
 grep -Fq 'bashy_engines' "$binary.go-version.txt"

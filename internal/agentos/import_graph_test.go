@@ -25,7 +25,7 @@ func TestBinaryImportGraphsIsolateGfy(t *testing.T) {
 		return string(out)
 	}
 
-	bash := deps("github.com/qiangli/bashy/cmd/bash")
+	bash := deps("github.com/qiangli/bash/cmd/bash")
 	if strings.Contains(bash, "qiangli/gfy") {
 		t.Error("cmd/bash must not import gfy — the lean drop-in stays engine-free")
 	}
@@ -69,6 +69,8 @@ func TestBinaryImportGraphsIsolateGfy(t *testing.T) {
 // classicBashAllowlist freezes the banned packages cmd/bash imports today.
 // It may only shrink: a new banned import fails, and a stale entry fails.
 var classicBashAllowlist = map[string]bool{
+	// The same pure CLI moved from bashy's internal/cli into this exact package.
+	"github.com/bashsharp/bashsharp/cli": true,
 	// S3 be8e90559755 removes the bashsharp front-door edge from cmd/bash.
 	"github.com/bashsharp/bashsharp/front": true,
 	// S3 be8e90559755 removes the polyglot edge from cmd/bash.
@@ -76,7 +78,7 @@ var classicBashAllowlist = map[string]bool{
 }
 
 func TestClassicBashImportGraphRatchet(t *testing.T) {
-	out, err := exec.Command("go", "list", "-deps", "github.com/qiangli/bashy/cmd/bash").CombinedOutput()
+	out, err := exec.Command("go", "list", "-deps", "github.com/qiangli/bash/cmd/bash").CombinedOutput()
 	if err != nil {
 		t.Skipf("go list unavailable (%v): %s", err, out)
 	}

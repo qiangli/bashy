@@ -22,12 +22,12 @@ BUILD_ID ?= $(shell if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/
 			printf '%s' "$$id"; \
 		fi; \
 	fi)
-SHELL_RUNTIME_COMMIT ?= $(shell sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT ?= $(shell sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
 SHELL_RUNTIME_COMMIT_TIME ?=
 # Linux cmd/bashy must retain runtime.fwdSig in its ELF symbol table. The
 # Coreutils inherited-signal route reads it to preserve an execve caller's
 # signal dispositions. -w removes DWARF; -s also removes the required symbol.
-STAMP_LDFLAGS := -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-$(VERSION)' -X 'github.com/qiangli/bashy/internal/cli.buildID=$(BUILD_ID)' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommit=$(SHELL_RUNTIME_COMMIT)' -X 'github.com/qiangli/bashsharp/transpile.ShellRuntimeCommitTime=$(SHELL_RUNTIME_COMMIT_TIME)'
+STAMP_LDFLAGS := -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-$(VERSION)' -X 'github.com/bashsharp/bashsharp/cli.buildID=$(BUILD_ID)' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=$(SHELL_RUNTIME_COMMIT)' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=$(SHELL_RUNTIME_COMMIT_TIME)'
 LDFLAGS := -s -w $(STAMP_LDFLAGS)
 BASHY_LDFLAGS := -w $(STAMP_LDFLAGS)
 
@@ -49,7 +49,7 @@ PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 win
 #   BASHY_OBS=1      observability stack (bashy otel): ~193 MB of OpenTelemetry
 #                    Collector + VictoriaMetrics/Logs + Jaeger + Perses + k8s/aws.
 # `make build-host` turns on both.
-# The Go source front end behind `--source=go` (mvdan.cc/sh/v3/gosource) is NOT
+# The Go source front end behind `--source=go` (github.com/qiangli/bash/gosource) is NOT
 # one of these: it is a required part of the bashy binary and is always linked.
 # See docs/plan-source-go-dispatch.md.
 EMBED_DIR := ../yoke/external/podman/engine
@@ -94,7 +94,7 @@ build-bash:
 	@mkdir -p $(BIN_DIR)
 	@set -e; \
 	goos=$$(go env GOOS); out=$(BASHY); launcher=$$(scripts/launcher-wanted.sh build-bash); [ "$$launcher" = 1 ] && out=$(BASHY).real || rm -f $(BASHY).real; \
-	scripts/go-product.sh build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bash; \
+	scripts/go-product.sh build -trimpath -ldflags "$(LDFLAGS)" -o $$out github.com/qiangli/bash/cmd/bash; \
 	if [ "$$launcher" = 1 ]; then \
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
 	fi
@@ -174,7 +174,7 @@ build-fips:
 	@echo "building with the Go FIPS 140-3 module (GOFIPS140=$(GOFIPS140_VERSION)) ..."
 	@set -e; \
 	goos=$$(go env GOOS); out=$(BASHY); launcher=$$(scripts/launcher-wanted.sh build-bash); [ "$$launcher" = 1 ] && out=$(BASHY).real || rm -f $(BASHY).real; \
-	GOFIPS140=$(GOFIPS140_VERSION) scripts/go-product.sh build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/bash; \
+	GOFIPS140=$(GOFIPS140_VERSION) scripts/go-product.sh build -trimpath -ldflags "$(LDFLAGS)" -o $$out github.com/qiangli/bash/cmd/bash; \
 	if [ "$$launcher" = 1 ]; then \
 		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
 	fi
@@ -281,15 +281,16 @@ dist:
 		os=$${plat%/*}; arch=$${plat#*/}; \
 		ext=; [ "$$os" = windows ] && ext=.exe; \
 		for name in bash bashy; do \
+			package=./cmd/$$name; [ "$$name" != bash ] || package=github.com/qiangli/bash/cmd/bash; \
 			out=$(BIN_DIR)/dist/$$name-$$os-$$arch$$ext; \
 			rm -f "$$out"; \
 			tmp=$$(mktemp "$$out.pending.XXXXXX"); \
 			ldflags="$(LDFLAGS)"; [ "$$name" = bashy ] && ldflags="$(BASHY_LDFLAGS)"; \
 			echo "building $$out..."; \
 			if [ "$$name" = bashy ] && [ -n "$$bashy_tags" ]; then \
-				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch scripts/go-product.sh build -trimpath -tags "$$bashy_tags" -ldflags "$$ldflags" -o "$$tmp" ./cmd/$$name || exit 1; \
+				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch scripts/go-product.sh build -trimpath -tags "$$bashy_tags" -ldflags "$$ldflags" -o "$$tmp" "$$package" || exit 1; \
 			else \
-				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch scripts/go-product.sh build -trimpath -ldflags "$$ldflags" -o "$$tmp" ./cmd/$$name || exit 1; \
+				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch scripts/go-product.sh build -trimpath -ldflags "$$ldflags" -o "$$tmp" "$$package" || exit 1; \
 			fi; \
 			if [ "$$name" = bashy ]; then go run ./tools/elfaudit --bashy-signal "$$tmp" || exit 1; scripts/go-tool.sh releaseeligibility "$$tmp" || exit 1; fi; \
 			mv -f "$$tmp" "$$out" || exit 1; tmp=; \

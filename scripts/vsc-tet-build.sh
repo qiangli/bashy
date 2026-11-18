@@ -58,7 +58,7 @@ cp "$VSC_TARBALL" "$WORK/suite.tar.gz"
 
 # --- 1. SUT: cross-build bashy's `bash` drop-in as /usr/bin/sh ----------------
 echo ">>> building SUT: cmd/bash (linux/$GOARCH) as sh…" >&2
-( cd "$ROOT" && GOOS=linux GOARCH="$GOARCH" CGO_ENABLED=0 go build -o "$WORK/sh" ./cmd/bash )
+( cd "$ROOT" && GOOS=linux GOARCH="$GOARCH" CGO_ENABLED=0 go build -o "$WORK/sh" github.com/qiangli/bash/cmd/bash )
 
 # --- 2. Build TET3 + VSXgen + configure the scenario in a container -----------
 # glibc base (Debian) — VSC-PCTS assumes a conventional POSIX/Linux build host.

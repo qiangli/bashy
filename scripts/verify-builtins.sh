@@ -34,7 +34,7 @@ IMAGE=${IMAGE:-bash:5.3}
 
 # Cross-compile a linux ours for the container.
 OURS=$(mktemp -d)/ours
-( cd "$HERE" && GOOS=linux GOARCH="${GOARCH:-arm64}" go build -o "$OURS" ./cmd/bash ) || exit 2
+( cd "$HERE" && GOOS=linux GOARCH="${GOARCH:-arm64}" go build -o "$OURS" github.com/qiangli/bash/cmd/bash ) || exit 2
 
 CMDS=": . break continue eval exec exit export readonly return set shift times trap unset \
 cd getopts read pwd umask wait kill jobs fg bg alias unalias command false true type hash fc \

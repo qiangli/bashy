@@ -38,7 +38,7 @@ esac
   fi
   case "$(go env GOOS)" in windows) ;; *) echo 'probe: not a Windows build host' >&2; exit 2 ;; esac
   mkdir -p bin
-  CGO_ENABLED=0 go build -o bin/bash.exe ./cmd/bash
+  CGO_ENABLED=0 go build -o bin/bash.exe github.com/qiangli/bash/cmd/bash
   go build -o bin/bash53suite.exe ./tools/bash53suite
   (cd ../yoke && CGO_ENABLED=0 go build -o "$OLDPWD/bin/yoke.exe" ./cmd/yoke)
   if [ "$mode" = locale ]; then

@@ -19,7 +19,7 @@
 #
 # Claim: standalone binaries have a SMALLER SUPPLY-CHAIN SURFACE than
 # interpreter-based invocations because they import only the plain shell
-# runtime (mvdan.cc/sh/v3/lower/shellrt) and the Go standard library.
+# runtime (github.com/qiangli/bash/lower/shellrt) and the Go standard library.
 # They do NOT include a container engine or any external provider.
 # External providers NOT present in the standalone binary:
 #   podman, ollama, gh, loom, act, rclone, zot, seaweedfs, kopia, searxng

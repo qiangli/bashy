@@ -71,7 +71,7 @@ esac
 BIN="$PWD/bin/.bashy-linux-posixdiff-$$"
 mkdir -p "$(dirname "$BIN")"
 echo "posix-diff: building linux/$GOARCH bashy…" >&2
-GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" ./cmd/bash || { echo "posix-diff: bashy build failed" >&2; exit 2; }
+GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" github.com/qiangli/bash/cmd/bash || { echo "posix-diff: bashy build failed" >&2; exit 2; }
 trap 'rm -f "$BIN"' EXIT
 
 # Run the whole comparison inside the image: bashy (mounted) + native oracles,

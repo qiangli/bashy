@@ -21,9 +21,10 @@ import (
 type srcModulePin struct{ module, commit, replaces, subdir string }
 
 var srcModulePins = map[string]srcModulePin{
-	"yoke":        {"github.com/qiangli/yoke", "c9057f1e2028dc9ca15ce8bae7686323dff60652", "", ""},
-	"coreutils":   {"github.com/qiangli/coreutils", "6dd7a3ee1858352003e7cf05e9d2268ac5c76c26", "", ""},
-	"sh":          {"github.com/qiangli/sh/v3", "a4141771a3dc9b920f17864bcc37c75c69159701", "mvdan.cc/sh/v3", ""},
+	"yoke":      {"github.com/qiangli/yoke", "ec36645fbab6c589383ccaf169fb0c4ed0f3d7cf", "", ""},
+	"coreutils": {"github.com/qiangli/coreutils", "ababb9f1c79a5d20f77bbb687f52d9f3baf1d6af", "", ""},
+	// The existing src protocol names the shell repository "sh".
+	"sh":          {"github.com/qiangli/bash", "cdb1212b069f1536452b49f99bd7b063c64dbbd4", "", ""},
 	"filebrowser": {"github.com/qiangli/filebrowser-quantum/backend", "40f3c84d55a9bfac36a126246e794b8aec676f0f", "github.com/gtsteffaniak/filebrowser/backend", "backend"},
 }
 

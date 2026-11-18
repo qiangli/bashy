@@ -53,7 +53,7 @@ class ScratchImageReleaseContractTest(unittest.TestCase):
 
     def test_release_binaries_report_the_full_source_commit(self):
         config = (ROOT / ".goreleaser.yaml").read_text()
-        stamp = "github.com/qiangli/bashy/internal/cli.buildID={{ .FullCommit }}"
+        stamp = "github.com/bashsharp/bashsharp/cli.buildID={{ .FullCommit }}"
         self.assertGreaterEqual(config.count(stamp), 2)
         darwin = (ROOT / "scripts/build-native-darwin-release.sh").read_text()
         self.assertIn("source_commit=$(git rev-parse HEAD)", darwin)

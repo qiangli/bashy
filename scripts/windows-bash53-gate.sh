@@ -7,7 +7,7 @@
 # (which supplies bash 5.3 plus the Go coreutils userland in-process) and
 # uses exactly these external programs:
 #   go .................. host toolchain (Go 1.27): builds everything below
-#   bin/bash.exe ........ the pure drop-in under test (./cmd/bash, no coreutils)
+#   bin/bash.exe ........ the pure drop-in under test (github.com/qiangli/bash/cmd/bash, no coreutils)
 #   bin/bash53suite.exe . the ONE fixture runner (tools/bash53suite)
 #   bin/yoke.exe ........ fixture userland (coreutils + applets, BASHY_ROOT)
 #   bin/bash53locales.exe  provisions the corpus locale store before the run
@@ -82,7 +82,7 @@ fi
 echo "gate: preparing the testee and building the fixture runner"
 mkdir -p bin || exit 2
 if [ -z "${BASH53_RELEASE_DIR:-}" ]; then
-  CGO_ENABLED=0 go build -o bin/bash.exe ./cmd/bash || exit 2
+  CGO_ENABLED=0 go build -o bin/bash.exe github.com/qiangli/bash/cmd/bash || exit 2
 else
   echo "gate: published product pair: $BASH53_RELEASE_DIR (no product build)"
   # bashy's multicall --list interface is selected by the coreutils alias.

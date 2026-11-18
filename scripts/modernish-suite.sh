@@ -77,7 +77,7 @@ case "$ARCH" in
 esac
 BIN="$HERE/bin/.bashy-linux-modernish"
 echo "modernish-suite: building linux/$GOARCH bashy drop-in…" >&2
-GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" ./cmd/bash || { echo "modernish-suite: go build failed" >&2; exit 0; }
+GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" github.com/qiangli/bash/cmd/bash || { echo "modernish-suite: go build failed" >&2; exit 0; }
 trap 'rm -f "$BIN"' EXIT
 
 # bashy first (the shell-under-test), then the reference shells. Each entry is

@@ -12,7 +12,7 @@ import sys
 
 def prepare(source: str) -> str:
     replacements = {
-        'run shell-build bashy go build -o bin/bash.exe ./cmd/bash':
+        'run shell-build bashy go build -o bin/bash.exe github.com/qiangli/bash/cmd/bash':
             'mkdir -p "$ROOT/bashy/bin"\n'
             'cp "$ROOT/product/bash.exe" "$BASH_ENGINE_BIN" || exit 2',
         'run product-install bashy go build -o "$BASHY_BIN" ./cmd/bashy':

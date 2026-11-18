@@ -32,7 +32,7 @@ func TestGoSourceFrontEndIsLinkedByDefault(t *testing.T) {
 // observed fact so the next reader does not "fix" the comment back.
 func TestGoSourceFrontEndIsNotLinkedIntoClassicBash(t *testing.T) {
 	out, err := exec.Command("go", "list", "-deps",
-		"github.com/qiangli/bashy/cmd/bash").CombinedOutput()
+		"github.com/qiangli/bash/cmd/bash").CombinedOutput()
 	if err != nil {
 		t.Skipf("go list unavailable (%v): %s", err, out)
 	}

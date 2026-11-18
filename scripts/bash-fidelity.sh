@@ -72,7 +72,7 @@ esac
 BIN="$PWD/bin/.bash-linux-fidelity"
 mkdir -p "$(dirname "$BIN")"
 echo "bash-fidelity: building linux/$GOARCH bash…" >&2
-GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" ./cmd/bash || { echo "bash-fidelity: build failed" >&2; exit 2; }
+GOOS=linux GOARCH="$GOARCH" go build -o "$BIN" github.com/qiangli/bash/cmd/bash || { echo "bash-fidelity: build failed" >&2; exit 2; }
 trap 'rm -f "$BIN"; rm -rf "$CORPUS"' EXIT
 
 $OCI run --rm -i -v "$BIN:/ours:ro" -v "$CORPUS:/corpus:ro" "$IMAGE" bash -s <<'INCONTAINER'

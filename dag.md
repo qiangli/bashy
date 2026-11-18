@@ -82,9 +82,9 @@ if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fi
   fi
 fi
-SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT=$(sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
 SHELL_RUNTIME_COMMIT_TIME=
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+LDFLAGS="-s -w -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/bashsharp/bashsharp/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 BASHY_LDFLAGS=${LDFLAGS#-s }
 BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh "bin/bashy${ext}" "$BASHY_LDFLAGS" "bashy_engines bashy_obs"
 ```
@@ -314,9 +314,9 @@ if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     fi
   fi
 fi
-SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT=$(sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
 SHELL_RUNTIME_COMMIT_TIME=
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+LDFLAGS="-s -w -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-${VERSION}' -X 'github.com/bashsharp/bashsharp/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 BASHY_LDFLAGS=${LDFLAGS#-s }
 for plat in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
   os=${plat%/*}; arch=${plat#*/}; ext=""
@@ -325,7 +325,7 @@ for plat in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 wind
   bashy_out="bin/dist/bashy-${os}-${arch}${ext}"
   echo "building $bash_out..."
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" \
-    scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$bash_out" ./cmd/bash
+    scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$bash_out" github.com/qiangli/bash/cmd/bash
   echo "building $bashy_out..."
   CGO_ENABLED=0 GOOS="$os" GOARCH="$arch" BASHY_EXE="$BASHY_EXE" \
     "$BASHY_EXE" scripts/build-bashy-artifact.sh "$bashy_out" "$BASHY_LDFLAGS"
@@ -962,9 +962,9 @@ for host in "$@"; do
           fi
         fi
       fi
-      shell_runtime_commit=\$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+      shell_runtime_commit=\$(sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
       shell_runtime_commit_time=
-      LDFLAGS=\"-w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-\$ref -X github.com/qiangli/bashy/internal/cli.buildID=\$build_id -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=\$shell_runtime_commit -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=\$shell_runtime_commit_time\"
+      LDFLAGS=\"-w -X github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-\$ref -X github.com/bashsharp/bashsharp/cli.buildID=\$build_id -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=\$shell_runtime_commit -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=\$shell_runtime_commit_time\"
       ./scripts/build-bashy-artifact.sh \"bin/bashy\$ext\" \"\$LDFLAGS\"
       \"./bin/bashy\$ext\" dag build VERSION=\"\$ref\"
       fix_windows_ext
@@ -1192,7 +1192,7 @@ testee="${testee_dir}/bash"
 harness="bin/bash53suite-linux-${host_goarch}"
 [ -f "$testee_dir" ] && rm -f "$testee_dir"
 mkdir -p "$testee_dir"
-GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 scripts/go-product.sh build -trimpath -o "$testee" ./cmd/bash
+GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 scripts/go-product.sh build -trimpath -o "$testee" github.com/qiangli/bash/cmd/bash
 GOOS=linux GOARCH="$host_goarch" CGO_ENABLED=0 "$BASHY_EXE" go build -trimpath -o "$harness" ./tools/bash53suite
 oci="${BASH53_OCI:-$BASHY_EXE podman}"
 $oci info >/dev/null
@@ -1416,23 +1416,23 @@ if [ -z "$BUILD_ID" ] && [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-w
     fi
   fi
 fi
-SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT=$(sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
 SHELL_RUNTIME_COMMIT_TIME=
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+LDFLAGS="-s -w -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/bashsharp/bashsharp/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 out="$bin_dir/bash"
 if [ "$goos" = "$hostgoos" ] && [ "$goarch" = "$hostgoarch" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build-bash)" = 1 ]; then
   if [ -n "${GO:-}" ]; then
-    BASHY_EXE="" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" ./cmd/bash
+    BASHY_EXE="" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" github.com/qiangli/bash/cmd/bash
   else
-    BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" ./cmd/bash
+    BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out.real" github.com/qiangli/bash/cmd/bash
   fi
   cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o "$out" native/siglaunch.c.in
 else
   rm -f "$out.real"
   if [ -n "${GO:-}" ]; then
-    BASHY_EXE="" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" ./cmd/bash
+    BASHY_EXE="" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" github.com/qiangli/bash/cmd/bash
   else
-    BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" ./cmd/bash
+    BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -trimpath -ldflags "$LDFLAGS" -o "$out$ext" github.com/qiangli/bash/cmd/bash
   fi
 fi
 echo "built $out (pure drop-in)"
@@ -1463,9 +1463,9 @@ if [ -z "$BUILD_ID" ] && [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-w
     fi
   fi
 fi
-SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT=$(sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
 SHELL_RUNTIME_COMMIT_TIME=
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+LDFLAGS="-s -w -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/bashsharp/bashsharp/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 out="$bin_dir/sh"
 if [ "$goos" = "$hostgoos" ] && [ "$goarch" = "$hostgoarch" ] && [ "$(BASHY="$BASHY_EXE" "$BASHY_EXE" scripts/launcher-wanted.sh build-sh)" = 1 ]; then
   if [ -n "${GO:-}" ]; then
@@ -1511,9 +1511,9 @@ if [ -z "$BUILD_ID" ] && [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-w
     fi
   fi
 fi
-SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT=$(sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
 SHELL_RUNTIME_COMMIT_TIME=
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+LDFLAGS="-s -w -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/bashsharp/bashsharp/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 BASHY_LDFLAGS=${LDFLAGS#-s }
 tags="${BASHY_TAGS:-}"
 out="$bin_dir/bashy$ext"
@@ -1551,9 +1551,9 @@ if [ -z "$BUILD_ID" ] && [ -e .git ] && "$BASHY_EXE" git rev-parse --is-inside-w
     fi
   fi
 fi
-SHELL_RUNTIME_COMMIT=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
+SHELL_RUNTIME_COMMIT=$(sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
 SHELL_RUNTIME_COMMIT_TIME=
-LDFLAGS="-s -w -X 'github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/qiangli/bashy/internal/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
+LDFLAGS="-s -w -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-${VERSION:-dev}' -X 'github.com/bashsharp/bashsharp/cli.buildID=${BUILD_ID}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=${SHELL_RUNTIME_COMMIT}' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=${SHELL_RUNTIME_COMMIT_TIME}'"
 BASHY_LDFLAGS=${LDFLAGS#-s }
 if [ -n "${GO:-}" ]; then
   CGO_ENABLED=0 GOOS=linux GOARCH="$arch" BASHY_EXE="" "$BASHY_EXE" scripts/build-bashy-artifact.sh "$out" "$BASHY_LDFLAGS" "bashy_scratch"
@@ -1597,7 +1597,7 @@ mkdir -p bin
 BASHY_EXE="${BASHY:-bashy}"
 V="${GOFIPS140_VERSION:-v1.0.0}"
 echo "building with the Go FIPS 140-3 module (GOFIPS140=$V) ..."
-GOFIPS140="$V" scripts/go-product.sh build -trimpath -o bin/bash ./cmd/bash
+GOFIPS140="$V" scripts/go-product.sh build -trimpath -o bin/bash github.com/qiangli/bash/cmd/bash
 tags=""; [ -n "${BASHY_TAGS:-}" ] && tags=${BASHY_TAGS}
 GOFIPS140="$V" BASHY_EXE="$BASHY_EXE" "$BASHY_EXE" scripts/build-bashy-artifact.sh bin/bashy "-w" "$tags"
 echo "built bin/{bash,bashy} in FIPS mode"

@@ -34,8 +34,8 @@ outpost_commit=$(commit "$outpost" qiangli/outpost)
 yoke_commit=$(commit "$yoke" qiangli/yoke)
 [[ $yoke_commit =~ ^[0-9a-f]{40}$ ]] || { echo "resolve-pinned-siblings: no yoke commit" >&2; exit 1; }
 [[ $outpost_commit =~ ^[0-9a-f]{40}$ ]] || { echo "resolve-pinned-siblings: no outpost commit" >&2; exit 1; }
-shell_runtime=$(sed -n 's|^replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 ||p' go.mod)
-[[ -n $shell_runtime ]] || { echo "resolve-pinned-siblings: no sh fork replace in go.mod" >&2; exit 1; }
+shell_runtime=$(sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
+[[ -n $shell_runtime ]] || { echo "resolve-pinned-siblings: no Bash module requirement in go.mod" >&2; exit 1; }
 if [[ -e ../outpost && ! -L ../outpost ]]; then
   echo "resolve-pinned-siblings: ../outpost exists and is not a link; leaving it" >&2
 else
