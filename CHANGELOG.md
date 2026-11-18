@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- macOS Intel (darwin/amd64) is no longer supported. macOS releases support Apple Silicon (arm64).
+- Install Bashy, then use `bashy self image` to build the local FROM-scratch image from checksum-verified scratch binary assets; the public GHCR scratch image is no longer published.
+
 All notable changes to bashy are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [docs/release-roadmap-and-versioning.md](docs/release-roadmap-and-versioning.md).

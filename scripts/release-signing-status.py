@@ -19,8 +19,6 @@ def flag(name):
         raise SystemExit(f'{name}: signed must be a boolean')
     return value
 
-darwin = [flag(f'darwin-{arch}') for arch in ('amd64', 'arm64')]
-if len(set(darwin)) != 1:
-    raise SystemExit('Darwin signing status differs by architecture')
+darwin = flag('darwin-arm64')
 windows = flag('windows')
-print(f'Signing: darwin.signed={str(darwin[0]).lower()} windows.signed={str(windows).lower()}')
+print(f'Signing: darwin.signed={str(darwin).lower()} windows.signed={str(windows).lower()}')

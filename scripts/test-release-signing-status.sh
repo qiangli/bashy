@@ -3,12 +3,11 @@ set -euo pipefail
 root=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d "${TMPDIR:-/tmp}/bashy-signing-test.XXXXXX")
 trap 'rm -rf "$work"' EXIT
-printf '{"signed":false}\n' > "$work/darwin-amd64.json"
 printf '{"signed":false}\n' > "$work/darwin-arm64.json"
 printf '{"signed":false}\n' > "$work/windows.json"
 [[ $(python3 "$root/scripts/release-signing-status.py" "$work") == 'Signing: darwin.signed=false windows.signed=false' ]]
 printf '{"signed":true}\n' > "$work/darwin-arm64.json"
-if python3 "$root/scripts/release-signing-status.py" "$work" >/dev/null 2>&1; then echo 'mixed Darwin status accepted' >&2; exit 1; fi
+[[ $(python3 "$root/scripts/release-signing-status.py" "$work") == 'Signing: darwin.signed=true windows.signed=false' ]]
 printf 'Signing: darwin.signed=false windows.signed=false\n' > "$work/notes"
 [[ $(python3 "$root/scripts/release-signing-status.py" read-note "$work/notes" windows) == false ]]
 if python3 "$root/scripts/release-signing-status.py" read-note /dev/null darwin >/dev/null 2>&1; then echo 'missing release note accepted' >&2; exit 1; fi

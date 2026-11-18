@@ -123,7 +123,6 @@ Windows). If you choose a browser download, use the archive for your platform:
 | Windows x86-64 | `bashy-windows-amd64.zip` |
 | Windows arm64 | `bashy-windows-arm64.zip` |
 | macOS Apple Silicon | `bashy-darwin-arm64.tar.gz` |
-| macOS Intel | `bashy-darwin-amd64.tar.gz` |
 | Linux x86-64 | `bashy-linux-amd64.tar.gz` |
 | Linux arm64 | `bashy-linux-arm64.tar.gz` |
 

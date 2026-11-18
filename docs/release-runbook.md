@@ -1,5 +1,45 @@
 # Bashy release runbook
 
+## Frozen local security evidence
+
+Release security checks run once on the committed frozen candidate in the
+locked official build image through `scripts/local-release-gate.sh`, with
+`GOWORK=off`. License and reachable-vulnerability failures block the receipt;
+report-only mode is disabled. The receipt includes the exact source commit,
+root module locks and builder lock, resolved transitive module graphs and
+module lock digests, retained report digests, and the scanner's actual database
+modification time. The vulnerability database must be at most seven days old.
+
+After reviewing the passing reports, the release manager records the receipt
+as a Git note keyed by the candidate's exact commit:
+
+```sh
+git notes --ref=refs/notes/bashy-local-gates add -F bin/local-release-gate/evidence.json "$COMMIT"
+git push origin refs/notes/bashy-local-gates
+git rev-parse refs/notes/bashy-local-gates
+```
+
+Dispatch `release.yml` on the exact candidate tag with `evidence_commit` set to
+that reviewed notes commit. This immutable approval input prevents a later or
+untrusted update to the floating notes ref from becoming release authority.
+Keeping evidence outside the source commit avoids a self-referential commit hash.
+GitHub's publish-only preflight fetches that ref once, requires the approved notes commit,
+and verifies the exact tagged source and receipt. GitHub does not rerun the
+license or vulnerability scans. A missing, stale, mismatched or failing receipt
+blocks publication. Upload the reviewed local distribution as a draft targeted
+to the full source commit before dispatch; include its `release-assets.json`
+manifest inside the receipt so preflight binds every uploaded asset digest.
+Artifact SBOM, signing, provenance and digest checks remain
+release requirements. Signing credentials are supplied only to the trusted local
+native signing steps; GitHub verifies the resulting bytes and declared signing
+status without rebuilding or re-signing them.
+
+macOS releases support Apple Silicon only. The public GHCR scratch image is no
+longer published or byte-promoted. Install Bashy and run `bashy self image` to
+create the local FROM-scratch image using checksum-verified
+`bashy-scratch-linux-{amd64,arm64}` release assets, which remain published.
+
+
 Before publishing release notes, apply the [public-claim checks](public-claims-evidence.md).
 Use the actual candidate tag from `bashy --version`, Bash compatibility 5.3,
 and the Go 1.27 / toolchain go1.27.2 build coordinate; never substitute a
@@ -24,7 +64,7 @@ Store Connect API key with notarization access. Set these GitHub Actions
 secrets: `APPLE_DEVELOPER_ID_P12_BASE64` (base64 of the `.p12`),
 `APPLE_DEVELOPER_ID_P12_PASSWORD`, `APPLE_NOTARY_KEY_ID`,
 `APPLE_NOTARY_ISSUER_ID`, and `APPLE_NOTARY_KEY_P8` (the private key text).
-The native macOS job imports the certificate into a temporary keychain, signs
+The local native macOS signing step imports the certificate into a temporary keychain, signs
 `bashy`, `outpost`, `bash`, and `sh` with hardened runtime and a timestamp,
 then submits a temporary ZIP through `xcrun notarytool submit --wait` before
 building the release tarballs. Bare Mach-O files cannot carry a stapled ticket;
@@ -47,20 +87,10 @@ for each candidate.
 ## Vulnerability gate
 
 `make govulncheck` (`scripts/govulncheck-release.sh`) is part of the release
-workflow: the `govulncheck` job runs it after resolving the pinned siblings,
-uploads the JSON reports, and prints the summary. Both build jobs need the
-completed check. It builds the pinned
-`golang.org/x/vuln/cmd/govulncheck` (v1.9.0) with the toolchain named in
-`go.mod`, then scans bashy, `../outpost` and `../yoke` in source mode, each
-with `GOWORK=off` so the scan sees the versions a release links.
-
-The release step is temporarily **report-only**: its
-`continue-on-error: true` setting lets the release proceed while the known
-reachable findings are removed by dependency bumps. To make the check
-blocking, change that one value in `.github/workflows/release.yml` to
-`false`. The checker itself always returns nonzero for reachable findings, so
-this switch does not hide or reinterpret the result. Package- and
-module-level findings are printed and retained too; nothing is waived.
+local gate: `scripts/govulncheck-release.sh` scans the pinned Bashy, Outpost and
+Yoke modules and release tag profiles. Its reachable-vulnerability result is
+blocking when producing the local security receipt. Package- and module-level
+findings remain in the retained reports.
 
 As measured on the **v1.0.0-rc.27** candidate
 (`9187e1f0b5d8294fd83d97d24437bc05eb840a8d`) there are **4** reachable
@@ -80,10 +110,9 @@ umbrella checkout before proposing a candidate tag.
 full shipped Go dependency graph (cmd/bashy, cmd/bash, cmd/sh, outpost) plus
 vendored/third_party directories contains only permissive licenses.
 
-The release check is **blocking**: native macOS and GoReleaser builds depend on
-the `license-gate` job in `.github/workflows/release.yml`. It runs
-`scripts/verify-license-gate.sh` over the pinned shipped graph and uploads its
-report artifact. `scripts/license-review.json` has zero exceptions; a new
+The release check is **blocking** in the local frozen-candidate gate.
+`scripts/verify-license-gate.sh` checks the pinned shipped graph; the receipt
+retains report digests and preflight verifies the reviewed evidence. `scripts/license-review.json` has zero exceptions; a new
 non-permissive or unknown code license fails the release before builds begin.
 
 ## Install-channel manifests (NOT SUPPORTED — future work, skipped)

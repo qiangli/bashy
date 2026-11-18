@@ -9,7 +9,7 @@
 # toolchain and its own source bootstrap, so its matrix is one runner per
 # platform. otel has none of those constraints: it is our own code
 # (yoke/external/otel), pure Go, CGO_ENABLED=0 — verified building for
-# darwin/{arm64,amd64}, linux/{amd64,arm64} and windows/amd64 from one host.
+# darwin/arm64, linux/{amd64,arm64} and windows/amd64 from one host.
 #
 # So it cross-compiles the whole matrix in a single job. Folding it into the
 # engine script would have inherited podman's runner matrix and its podman
@@ -40,7 +40,7 @@ STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
 
 # The platforms binmgr can ask for. Keep in step with binmgr.Platform().
-PLATFORMS="darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64"
+PLATFORMS="darwin/arm64 linux/amd64 linux/arm64 windows/amd64"
 
 for p in $PLATFORMS; do
   goos="${p%/*}"; goarch="${p#*/}"

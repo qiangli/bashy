@@ -1,17 +1,17 @@
 # promote — the PROD gate of the tag-driven pipeline (bashy).
 #
-# release.yml builds a PRE-RELEASE from a `vX.Y.Z-dev` tag (GoReleaser marks a
-# -dev semver tag as a prerelease automatically). Per-OS QA pollers then test those
+# release.yml publishes locally built PRE-RELEASE bytes on a `vX.Y.Z-dev` tag.
+# Per-OS QA pollers then test those
 # exact bytes on the real target OS and, on pass, create `refs/qa/<version>/<os>`.
 # This workflow is the last step: once the CONFIGURED required-OS set is green, it
 # BYTE-PROMOTES the tested pre-release to the official `--latest` release — no
 # rebuild, so users download exactly what QA ran — and fires the fleet-notify
 # webhook to cloudbox.
-# The bytes already carry the promoted name: .goreleaser.yaml stamps the base
+# The bytes already carry the promoted name: the local dist builder stamps the base
 # tag (`-dev` trimmed) into `--version`, so no re-stamp happens here.
 #
 # bashy ships TWO archive families + a checksum sidecar (archive names are
-# UNVERSIONED — see .goreleaser.yaml `name_template: "bashy-{{ .Os }}-{{ .Arch }}"`):
+# UNVERSIONED — local dist names archives `bashy-<os>-<arch>`):
 #   bashy-<os>-<arch>.{tar.gz|zip}   (the AgentOS system shell)
 #   bash-<os>-<arch>.{tar.gz|zip}    (the pure Bash 5.3 drop-in)
 #   checksums.txt
@@ -58,7 +58,6 @@ jobs:
     permissions:
       contents: write # create the release + read/write refs (belt-and-suspenders over the workflow-level grant)
       attestations: read
-      packages: write # add the stable tag to the already-attested scratch manifest
     steps:
       - uses: actions/checkout@v7
       - name: normalize version
@@ -179,46 +178,7 @@ jobs:
         run: |
           ./scripts/verify-release-asset-set.sh dist
           ./scripts/verify-release-provenance.sh dist/checksums.txt
-          ./scripts/verify-release-provenance.sh dist/bashy-darwin-amd64.tar.gz
           ./scripts/verify-release-provenance.sh dist/bashy-darwin-arm64.tar.gz
-
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Byte-promote the public scratch manifest to the stable tag
-        shell: bash
-        env:
-          IMAGE: ghcr.io/qiangli/bashy-scratch
-          COMMIT: ${{ steps.src.outputs.commit }}
-          DEV: ${{ steps.v.outputs.dev }}
-          VER: ${{ steps.v.outputs.ver }}
-        run: |
-          set -euo pipefail
-          commit8=${COMMIT:0:8}
-          anon=$(mktemp -d)
-          trap 'rm -rf "$anon"' EXIT
-
-          # The candidate workflow published both names for one signed manifest.
-          # Read them without registry credentials before adding the stable name.
-          source_raw=$(DOCKER_CONFIG="$anon" docker buildx imagetools inspect --raw "$IMAGE:$commit8")
-          candidate_raw=$(DOCKER_CONFIG="$anon" docker buildx imagetools inspect --raw "$IMAGE:$DEV")
-          test "$candidate_raw" = "$source_raw" || {
-            echo "::error::$IMAGE:$DEV differs from $IMAGE:$commit8"
-            exit 1
-          }
-
-          # Promotion is a retag of the tested manifest, never an image rebuild.
-          docker buildx imagetools create --tag "$IMAGE:$VER" "$IMAGE:$commit8"
-          stable_raw=$(DOCKER_CONFIG="$anon" docker buildx imagetools inspect --raw "$IMAGE:$VER")
-          test "$stable_raw" = "$source_raw" || {
-            echo "::error::$IMAGE:$VER differs from $IMAGE:$commit8"
-            exit 1
-          }
-          DOCKER_CONFIG="$anon" docker pull --platform linux/amd64 "$IMAGE:$VER"
-          echo "anonymous scratch-image promotion gate: PASS $IMAGE:$VER"
 
       - name: generate install channel manifests from verified archives
         env:

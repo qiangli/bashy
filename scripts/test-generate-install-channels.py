@@ -28,7 +28,6 @@ class GenerateInstallChannelsTest(unittest.TestCase):
         # Create dummy artifacts and checksums.txt
         self.archives = [
             "bashy-darwin-arm64.tar.gz",
-            "bashy-darwin-amd64.tar.gz",
             "bashy-linux-arm64.tar.gz",
             "bashy-linux-amd64.tar.gz",
             "bashy-windows-arm64.zip",
@@ -112,11 +111,12 @@ class GenerateInstallChannelsTest(unittest.TestCase):
         formula_text = (self.out / "Formula" / "bashy.rb").read_text()
         for name in [
             "bashy-darwin-arm64.tar.gz",
-            "bashy-darwin-amd64.tar.gz",
             "bashy-linux-arm64.tar.gz",
             "bashy-linux-amd64.tar.gz",
         ]:
             self.assertIn(f'sha256 "{self.hashes[name]}"', formula_text)
+
+        self.assertIn('["bash.real", "sh.real"].each', formula_text)
 
         # Scoop hashes
         scoop_data = json.loads((self.out / "bucket" / "bashy.json").read_text())

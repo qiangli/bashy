@@ -28,14 +28,11 @@ managed download, writes the five-line Containerfile around it and builds
 through `bashy podman`. From a source checkout, `bashy dag build-image` images
 the candidate instead.
 
-Every release also publishes that exact FROM-scratch, bashy-only filesystem as
-the public multi-architecture image `ghcr.io/qiangli/bashy-scratch`, tagged with
-both the release tag and the first eight characters of the release binary's
-self-reported source commit. The commit tag is the zero-setup default used by
-bare `@sandbox()` islands; `BASHY_SANDBOX_IMAGE` remains the development and
-operator override. The `-dev` candidate workflow builds and attests the manifest;
-stable promotion adds the final release tag to those exact manifest bytes without
-rebuilding the image.
+Releases retain the checksum-verified scratch binary assets and no longer publish
+or promote a public GHCR scratch image. Install Bashy first, run `bashy self image`,
+and use the resulting local image reference for containers. Set
+`BASHY_SANDBOX_IMAGE` to that reference for sandbox consumers; registry publication
+is not a release prerequisite.
 
 `bashy podman` is the engine bashy provisions for itself — pinned upstream
 releases, sha256 committed in the source, fetched into `$BASHY_BIN_CACHE` and
@@ -45,7 +42,7 @@ exec'd as separate processes, never linked or bundled
 | host | what bashy fetches (pinned) | runs the image |
 |---|---|---|
 | Linux amd64 / arm64 | a complete static podman (podman + conmon + crun/runc + netavark/aardvark-dns, from `mgoltzsche/podman-static`) | natively, rootless or rootful |
-| macOS arm64 (amd64: podman 5.8) | the podman machine client + gvproxy + vfkit | inside the podman machine (a Linux VM podman initialises) |
+| macOS arm64 | the podman machine client + gvproxy + vfkit | inside the podman machine (a Linux VM podman initialises) |
 | Windows amd64 / arm64 | the podman machine client (gvproxy + win-sshproxy ship with it) | inside the podman machine on WSL2 — every Windows edition |
 
 A host podman already on `$PATH` is used instead (tier 3); `BASHY_OCI` names

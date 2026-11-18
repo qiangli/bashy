@@ -1,539 +1,74 @@
 name: release
 on:
-  push:
-    tags:
-      # Build + publish a PRE-RELEASE only for -dev tags. A bare vX.Y.Z tag is a
-      # PROMOTION of already-tested bytes (see .github/workflows/promote.yml) and
-      # must NOT rebuild from source — prod ships exactly what QA tested, byte for
-      # byte. GoReleaser marks a -dev semver tag as a prerelease automatically.
-      - 'v*-dev'
+  # Build locally first. The manager uploads the reviewed local dist as a draft,
+  # then dispatches this publish-only workflow on that exact -dev tag.
+  workflow_dispatch:
+    inputs:
+      evidence_commit:
+        description: Reviewed immutable refs/notes/bashy-local-gates commit
+        required: true
+        type: string
 
 permissions:
-  contents: write
+  contents: read
 
-# One tag can have only one producer. Pending retries wait rather than
-# canceling a build that may already have created its draft.
 concurrency:
   group: release-${{ github.repository }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   preflight:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Require unused release tag
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-        run: ./scripts/verify-release-tag-vacant.sh
-  # Release check: pinned govulncheck over bashy, outpost and yoke at the pinned
-  # sibling versions. It is report-only until the known third-party findings
-  # are cleared; docs/release-runbook.md documents the one-line blocking switch.
-  govulncheck:
-    needs: preflight
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
-        with:
-          go-version: 1.27.2
-      - name: Resolve pinned siblings (go.mod)
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/resolve-pinned-siblings.sh
-      - name: govulncheck (source mode; report-only)
-        # Blocking switch: set this one value to false.
-        continue-on-error: true
-        shell: bash
-        env:
-          GOVULNCHECK_OUT: ${{ runner.temp }}/govulncheck
-        run: make govulncheck | tee -a "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: govulncheck
-          path: ${{ runner.temp }}/govulncheck/*.json
-          if-no-files-found: ignore
-          retention-days: 7
-  # Release check: license gate over bashy, outpost and yoke at the pinned
-  # sibling versions. Every release build requires a zero-finding result.
-  license-gate:
-    needs: preflight
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v6
-        with:
-          go-version: 1.27.2
-      - name: Resolve pinned siblings (go.mod)
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/resolve-pinned-siblings.sh
-      - name: Shipped dependency license gate
-        shell: bash
-        env:
-          LICENSE_GATE_OUT: ${{ runner.temp }}/license-gate
-        run: ./scripts/verify-license-gate.sh | tee -a "$GITHUB_STEP_SUMMARY"
-      - name: Release SBOM matrix (bashy, engine build, outpost) + digest verify
-        shell: bash
-        run: ./scripts/release-sbom.sh "$RUNNER_TEMP/sbom-matrix"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: release-sbom-matrix
-          path: ${{ runner.temp }}/sbom-matrix/sbom/*
-          retention-days: 7
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: license-gate
-          path: ${{ runner.temp }}/license-gate/*
-          if-no-files-found: ignore
-          retention-days: 7
-  darwin:
-    needs: [preflight, govulncheck, license-gate]
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-    name: native Bashy ${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15-intel
-            arch: amd64
-          - runner: macos-15
-            arch: arm64
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v6
-        with:
-          go-version: 1.27.2
-      - name: Resolve pinned siblings (go.mod)
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/resolve-pinned-siblings.sh
-      - uses: actions/setup-go@v6
-        with:
-          go-version: 1.27.2
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.17.0
-          run_install: false
-      - name: Fetch signed Ollama runner
-        shell: bash
-        env:
-          ARCH: ${{ matrix.arch }}
-          # Authenticates the release-asset API fallback in fetch-signed-runner.sh.
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          # Verifies the Sigstore bundle + yoke pin before any build; a
-          # missing or unverified runner fails the job here, never ships.
-          ./scripts/fetch-signed-runner.sh darwin "$ARCH"
-      - name: Prefetch native build modules
-        shell: bash
-        run: |
-          # Match the product build's module mode and tags while network is
-          # available. The build itself must work from this cache alone.
-          GOWORK=off GOFLAGS=-mod=mod go mod download all
-          GOWORK=off GOFLAGS=-mod=mod CGO_ENABLED=0 go list -deps -tags embed_runner,bashy_runtime_snapshot ./cmd/bashy >/dev/null
-      - name: Build, audit and probe native one-file Bashy
-        shell: bash
-        env:
-          TAG: ${{ github.ref_name }}
-          ARCH: ${{ matrix.arch }}
-          APPLE_DEVELOPER_ID_P12_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_P12_BASE64 }}
-          APPLE_DEVELOPER_ID_P12_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_P12_PASSWORD }}
-          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
-          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
-          APPLE_NOTARY_KEY_P8: ${{ secrets.APPLE_NOTARY_KEY_P8 }}
-        run: |
-          # The binary embeds the SPA artifact committed at the pinned yoke;
-          # fail closed if that artifact is stale or the toolchain is missing.
-          ./scripts/build-meet-spa.sh check
-          ./scripts/build-native-darwin-release.sh "$TAG" "$ARCH" "$RUNNER_TEMP/native"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: signature-status-darwin-${{ matrix.arch }}
-          path: ${{ runner.temp }}/signature-status/darwin-${{ matrix.arch }}.json
-          if-no-files-found: error
-          retention-days: 3
-      - name: Sign native Bashy archive provenance
-        uses: actions/attest@v4
-        with:
-          subject-path: ${{ runner.temp }}/native/bashy-darwin-${{ matrix.arch }}.tar.gz
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bashy-darwin-${{ matrix.arch }}
-          path: ${{ runner.temp }}/native/*
-          if-no-files-found: error
-          retention-days: 3
-      - uses: actions/upload-artifact@v4
-        with:
-          name: sbom-bashy-darwin-${{ matrix.arch }}
-          path: ${{ runner.temp }}/darwin-sbom/*
-          if-no-files-found: ignore
-          retention-days: 7
-  goreleaser:
-    needs: [preflight, govulncheck, license-gate]
     outputs:
-      seed_summary: ${{ steps.seed-bands.outputs.summary }}
+      draft_id: ${{ steps.draft.outputs.id }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v6
-        with:
-          go-version: 1.27.2
-      - name: Resolve pinned siblings (go.mod)
+      - name: Verify frozen local security evidence and draft bytes
+        id: draft
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/resolve-pinned-siblings.sh
-      - name: Check seed bands for this release
-        id: seed-bands
-        shell: bash
-        env:
-          TAG: ${{ github.ref_name }}
-        run: |
-          summary=$(./scripts/check-seed-bands.sh "$TAG" --yoke ../yoke)
-          echo "summary=$summary" >> "$GITHUB_OUTPUT"
-          echo "$summary" >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/setup-go@v6
-        with:
-          go-version: 1.27.2
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
-      # package.json pins the same version. GoReleaser's required SPA hook runs
-      # the locked install/build and fails the release if this toolchain or its
-      # output is absent.
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.17.0
-          run_install: false
-      - name: Prefetch signed Ollama runners
-        shell: bash
-        env:
-          # Authenticates the release-asset API fallback in fetch-signed-runner.sh.
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          # Early fail-closed gate for every GoReleaser target: pins, network
-          # and verifier must work before the long build starts. Each target
-          # re-fetches its own runner in the build pre-hook below, because the
-          # embed slot holds one platform at a time.
-          set -euo pipefail
-          for target in linux/amd64 linux/arm64 windows/amd64; do
-            ./scripts/fetch-signed-runner.sh "${target%/*}" "${target#*/}"
-          done
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v7
-        with:
-          version: '~> v2'
-          # --parallelism 1: the bashy build embeds one platform's verified
-          # runner per target via a pre-hook that rewrites a shared slot;
-          # parallel target builds would embed each other's runner.
-          args: release --clean --parallelism 1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          BASHY_RELEASE_RUN_ID: ${{ github.run_id }}
-      - uses: actions/upload-artifact@v4
-        with:
-          name: bashy-release-sboms
-          path: dist/sbom/*
-          if-no-files-found: ignore
-          retention-days: 7
-      - name: List and verify Linux package contents
-        shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes rpm
-          ./scripts/verify-linux-packages.sh dist
-      - name: Start the packaged bashy on Alpine
-        shell: bash
-        run: |
-          docker run --rm -v "$PWD/dist:/pkg:ro" alpine:3 sh -euc '
-            apk add --allow-untrusted /pkg/bashy_*_linux_amd64.apk
-            /usr/lib/bashy/bin/bashy --version
-            /usr/lib/bashy/bin/bashy -c "echo apk-ok"
-            /usr/lib/bashy/bin/outpost --version'
-  scratch-image:
-    name: publish public FROM-scratch image
-    needs: [preflight, govulncheck, license-gate]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
-      attestations: write
-    outputs:
-      commit8: ${{ steps.identity.outputs.commit8 }}
-      digest: ${{ steps.push.outputs.digest }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-go@v6
-        with:
-          go-version: 1.27.2
-      - name: Resolve pinned siblings (go.mod)
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: ./scripts/resolve-pinned-siblings.sh
-      - name: Build both release scratch binaries and read their identity
-        id: identity
-        shell: bash
-        env:
-          TAG: ${{ github.ref_name }}
+          GH_TOKEN: ${{ github.token }}
           COMMIT: ${{ github.sha }}
+          TAG: ${{ github.ref_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          LOCAL_GATE_EVIDENCE_COMMIT: ${{ inputs.evidence_commit }}
+          LOCAL_GATE_EVIDENCE_OUT: ${{ runner.temp }}/local-security-evidence.json
         run: |
           set -euo pipefail
-          # Stamp the BASE tag: promote.yml re-tags this manifest to the bare
-          # version without a rebuild (same rule as the .goreleaser.yaml ldflags).
-          for arch in amd64 arm64; do
-            make --no-print-directory build-bashy-scratch \
-              BASHY_SCRATCH_GOARCH="$arch" \
-              BASHY_SCRATCH_ARTIFACT="bin/scratch/bashy-linux-$arch" \
-              VERSION="${TAG%-dev}" BUILD_ID="$COMMIT"
-          done
-          banner=$(bin/scratch/bashy-linux-amd64 --version)
-          reported=$(sed -n 's/.*(\([0-9a-f]\{40\}\)).*/\1/p' <<<"$banner")
-          test "$reported" = "$COMMIT" || {
-            echo "::error::scratch binary reports '${reported:-no commit}', want $COMMIT"
-            exit 1
-          }
-          commit8=${reported:0:8}
-          {
-            echo "commit=$reported"
-            echo "commit8=$commit8"
-            echo "version=$TAG"
-          } >> "$GITHUB_OUTPUT"
-          echo "Publishing ghcr.io/qiangli/bashy-scratch:$commit8 and :$TAG"
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push the amd64+arm64 manifest
-        id: push
-        uses: docker/build-push-action@v6
-        with:
-          context: bin/scratch
-          file: tools/bashy-scratch/Containerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ghcr.io/qiangli/bashy-scratch:${{ steps.identity.outputs.commit8 }}
-            ghcr.io/qiangli/bashy-scratch:${{ github.ref_name }}
-          build-args: |
-            BASHY_COMMIT=${{ steps.identity.outputs.commit }}
-            BASHY_VERSION=${{ github.ref_name }}
-      - name: Attest the published manifest
-        uses: actions/attest@v4
-        with:
-          subject-name: ghcr.io/qiangli/bashy-scratch
-          subject-digest: ${{ steps.push.outputs.digest }}
-          push-to-registry: true
-      - name: Anonymous pull and multi-architecture release gate
-        shell: bash
-        env:
-          IMAGE: ghcr.io/qiangli/bashy-scratch
-          COMMIT8: ${{ steps.identity.outputs.commit8 }}
-        run: |
-          set -euo pipefail
-          anon=$(mktemp -d)
-          trap 'rm -rf "$anon"' EXIT
-          raw=$(DOCKER_CONFIG="$anon" docker buildx imagetools inspect --raw "$IMAGE:$COMMIT8")
-          jq -e '
-            [.manifests[].platform | select(.os == "linux") | (.os + "/" + .architecture)]
-            | contains(["linux/amd64", "linux/arm64"])
-          ' <<<"$raw" >/dev/null
-          DOCKER_CONFIG="$anon" docker pull --platform linux/amd64 "$IMAGE:$COMMIT8"
-          test "$(docker run --rm --network=none "$IMAGE:$COMMIT8" uname)" = Linux
-          echo "anonymous pull gate: PASS $IMAGE:$COMMIT8 (${{ steps.push.outputs.digest }})"
-  windows-sign:
-    needs: [goreleaser]
-    runs-on: windows-2025
-    permissions:
-      contents: write
-      id-token: write
-    steps:
-      - uses: actions/checkout@v7
-      - name: Check Azure signing configuration
-        id: signing
-        shell: bash
-        env:
-          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-          AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-          ARTIFACT_SIGNING_ENDPOINT: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
-          ARTIFACT_SIGNING_ACCOUNT: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
-          ARTIFACT_SIGNING_PROFILE: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
-        run: ./scripts/check-windows-signing-config.sh windows.json
-      - name: Download draft Windows assets and stage executables
-        if: steps.signing.outputs.signed == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          mkdir -p windows-dist
-          gh release download "$TAG" -D windows-dist --pattern 'bashy-windows-*' --pattern 'bash-windows-*' --pattern 'outpost-*-windows-*.exe'
-          python scripts/sign-windows-release.py prepare windows-dist windows-stage
-      - name: Azure login using federated OIDC
-        if: steps.signing.outputs.signed == 'true'
-        uses: azure/login@v3
-        with:
-          client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
-      - name: Sign Windows executables
-        if: steps.signing.outputs.signed == 'true'
-        uses: azure/artifact-signing-action@v2
-        with:
-          endpoint: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
-          signing-account-name: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
-          certificate-profile-name: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
-          files-folder: ${{ github.workspace }}\windows-stage
-          files-folder-filter: exe
-          files-folder-recurse: true
-          file-digest: SHA256
-          timestamp-rfc3161: http://timestamp.acs.microsoft.com
-          timestamp-digest: SHA256
-      - name: Package and replace draft Windows assets
-        if: steps.signing.outputs.signed == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-        run: |
-          python scripts/sign-windows-release.py finish windows-dist windows-stage
-          pwsh -NoProfile -File scripts/verify-signatures.ps1 -Dist windows-dist -Signed true
-          gh release upload "$TAG" windows-dist/* --clobber
-          printf '{"signed":true}\n' > windows.json
+          test "$REF_TYPE" = tag
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?-dev$ ]]
+          ./scripts/verify-local-release-gate.sh
+          gh release view "$TAG" --json databaseId,isDraft,isPrerelease,targetCommitish,body > "$RUNNER_TEMP/draft.json"
+          python3 - "$RUNNER_TEMP/draft.json" "$COMMIT" <<'PY'
+          import json, sys
+          draft = json.load(open(sys.argv[1]))
+          if not draft['isDraft'] or not draft['isPrerelease'] or draft['targetCommitish'] != sys.argv[2]:
+              raise SystemExit('draft is not the exact reviewed candidate')
+          open('candidate-notes.md', 'w').write(draft['body'])
+          with open(__import__('os').environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('id=' + str(draft['databaseId']) + '\n')
+          PY
+          mkdir release-dist
+          gh release download "$TAG" -D release-dist
+          ./scripts/verify-release-asset-set.sh release-dist
+          python3 scripts/local-release-evidence.py verify "$RUNNER_TEMP/local-security-evidence.json" --commit "$COMMIT" --dist release-dist
+          python3 scripts/release-signing-status.py read-note candidate-notes.md darwin
+          python3 scripts/release-signing-status.py read-note candidate-notes.md windows
+          cp "$RUNNER_TEMP/local-security-evidence.json" local-security-evidence.json
       - uses: actions/upload-artifact@v4
         with:
-          name: signature-status-windows
-          path: windows.json
+          name: reviewed-local-release
+          path: |
+            release-dist/
+            candidate-notes.md
+            local-security-evidence.json
           if-no-files-found: error
           retention-days: 3
 
-  # The otel stack orchestrator blob, built HERE — not in engine-blobs.yml.
-  # engine-blobs.yml listens on `release: published`, but that event never
-  # fires for our releases: the draft is created by the GoReleaser step below
-  # and published by publish-complete-dev-release.sh, both authenticated with
-  # GITHUB_TOKEN, and GitHub does not start workflow runs for events created
-  # with GITHUB_TOKEN. So every release since the trigger was introduced
-  # shipped without otel-<goos>-<goarch>.gz and `bashy otel serve` failed on a
-  # fresh host with "binmgr: otel: no prebuilt blob".
-  #
-  # This job runs after the draft exists (needs goreleaser) and before publish
-  # finalizes it, so the blobs land in the candidate, its checksums.txt and
-  # the asset-set QA below. One ubuntu runner cross-compiles every platform
-  # (pure Go, CGO_ENABLED=0) — decoupled from the macOS build matrix, so a
-  # slow or failed native/podman build cannot block or be blocked by it.
-  # scripts/publish-otel-blob.sh stays the single implementation; the otel job
-  # in engine-blobs.yml remains as the manual-backfill path (workflow_dispatch).
-  otel:
-    needs: [goreleaser]
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-      - name: Clone the pinned yoke
-        shell: bash
-        run: |
-          # The pinned yoke source (embed scripts write into its tree): the
-          # commit bashy's go.mod requires.
-          rev=$(sed -n 's|^[[:space:]]*github.com/qiangli/yoke v[^ ]*-\([0-9a-f]\{12\}\)$|\1|p' go.mod)
-          test -n "$rev"
-          git clone --quiet --filter=blob:none https://github.com/qiangli/yoke.git ../yoke
-          git -C ../yoke checkout --quiet "$rev"
-      - uses: actions/setup-go@v6
-        with:
-          go-version: 1.27.2
-      - name: Build + publish otel blobs to this candidate
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-        run: ./scripts/publish-otel-blob.sh "$TAG"
-  publish:
-    permissions:
-      contents: write
-      id-token: write
-      attestations: write
-    name: verify complete draft and publish candidate
-    needs: [darwin, goreleaser, windows-sign, otel, scratch-image]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: bashy-darwin-*
-          # Not native/: that directory is tracked source (siglaunch).
-          path: release-native
-          merge-multiple: true
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: signature-status-*
-          path: signature-status
-          merge-multiple: true
-      - name: Verify native provenance and prepare complete signed manifest
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-          COMMIT: ${{ github.sha }}
-          RUN_ID: ${{ github.run_id }}
-          SEED_SUMMARY: ${{ needs.goreleaser.outputs.seed_summary }}
-        run: ./scripts/publish-complete-dev-release.sh prepare
-      - name: Sign complete artifact manifest
-        uses: actions/attest@v4
-        with:
-          subject-path: release-dist/checksums.txt
-      - name: Attach audited assets and publish candidate
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-          COMMIT: ${{ github.sha }}
-          RUN_ID: ${{ github.run_id }}
-          SEED_SUMMARY: ${{ needs.goreleaser.outputs.seed_summary }}
-        run: ./scripts/publish-complete-dev-release.sh publish
-      - name: register development product release
-        env:
-          REPO: ${{ github.repository }}
-          TAG: ${{ github.ref_name }}
-          PRERELEASE: "true"
-          DIST: published-dist
-          URL: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_URL }}
-          SECRET: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_SECRET }}
-        run: ./scripts/register-product-release.sh
+  # Verify the already-built/signed bytes on their native OS. These jobs do not
+  # compile, link, fetch source dependencies, or alter the reviewed assets.
   signature-qa:
-    name: published signature QA / ${{ matrix.platform }}
-    needs: publish
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -543,35 +78,74 @@ jobs:
           - platform: windows
             runner: windows-2025
     runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
     steps:
       - uses: actions/checkout@v7
-      - name: Download published bytes and verify declared signing status
+      - uses: actions/download-artifact@v4
+        with:
+          name: reviewed-local-release
+      - name: Verify declared native signing status
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          signed=$(python3 scripts/release-signing-status.py read-note candidate-notes.md "$PLATFORM")
+          ./scripts/verify-signatures.sh release-dist "$PLATFORM" "$signed"
+
+  provenance:
+    needs: preflight
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: reviewed-local-release
+      - uses: actions/attest@v4
+        with:
+          subject-path: |
+            release-dist/checksums.txt
+            release-dist/bashy-darwin-arm64.tar.gz
+
+  publish:
+    name: publish the reviewed local candidate without rebuilding
+    needs: [preflight, signature-qa, provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v4
+        with:
+          name: reviewed-local-release
+      - name: Verify provenance and publish the existing draft
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
-          PLATFORM: ${{ matrix.platform }}
-        run: |
-          mkdir -p qa-dist
-          gh release download "$TAG" -D qa-dist --pattern "bashy-$PLATFORM-*" --pattern "bash-$PLATFORM-*" --pattern "outpost-v*-$PLATFORM-*"
-          gh release view "$TAG" --json body --jq .body > qa-notes.txt
-          signed=$(python3 scripts/release-signing-status.py read-note qa-notes.txt "$PLATFORM")
-          ./scripts/verify-signatures.sh qa-dist "$PLATFORM" "$signed"
-  cleanup:
-    name: remove incomplete draft from this run
-    if: ${{ always() && needs.preflight.result == 'success' && (needs.darwin.result != 'success' || needs.goreleaser.result != 'success' || needs.publish.result != 'success') }}
-    needs: [preflight, darwin, goreleaser, publish]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      - name: Delete only this run's incomplete draft
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
           TAG: ${{ github.ref_name }}
           COMMIT: ${{ github.sha }}
-          RUN_ID: ${{ github.run_id }}
-        run: ./scripts/cleanup-incomplete-dev-release.sh
+          DRAFT_ID: ${{ needs.preflight.outputs.draft_id }}
+        run: |
+          set -euo pipefail
+          ./scripts/verify-release-asset-set.sh release-dist
+          ./scripts/verify-release-provenance.sh release-dist/checksums.txt
+          ./scripts/verify-release-provenance.sh release-dist/bashy-darwin-arm64.tar.gz
+          # One server-side digest listing replaces downloading every draft
+          # asset again immediately before publication.
+          gh api "repos/$REPO/releases/$DRAFT_ID/assets?per_page=100" > "$RUNNER_TEMP/remote-assets.json"
+          python3 scripts/verify-release-remote-assets.py "$RUNNER_TEMP/remote-assets.json" release-dist
+          # The draft's bytes were uploaded once by the local release manager.
+          # This workflow changes only visibility, never tags or artifact bytes.
+          gh release edit "$TAG" --draft=false --prerelease
+      - name: register development product release
+        env:
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: "true"
+          DIST: release-dist
+          URL: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_URL }}
+          SECRET: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_SECRET }}
+        run: ./scripts/register-product-release.sh

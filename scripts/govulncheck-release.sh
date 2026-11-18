@@ -45,7 +45,15 @@ for dir in "$@"; do
   tag_args=()
   [[ -z $tags ]] || tag_args=(-tags "$tags")
   # govulncheck exits 3 when it finds anything; the verdict is rendered below.
-  (cd "$dir" && "$bin/govulncheck" -format json "${tag_args[@]}" "$target") >"$report" || true
+  scan_status=0
+  (cd "$dir" && "$bin/govulncheck" -format json "${tag_args[@]}" "$target") >"$report" || scan_status=$?
+  # Exit 3 carries findings; every other nonzero exit is a scanner failure,
+  # even when it emitted a config header before failing to load packages.
+  if ((scan_status != 0 && scan_status != 3)); then
+    echo "$mod: govulncheck failed (exit $scan_status, report: $report)" >&2
+    status=1
+    continue
+  fi
   # One line per OSV at its most precise level: REACHABLE (a called symbol),
   # package (imported, vulnerable code not called) or module (required only).
   # Exit 2 means the stream carries no govulncheck config, i.e. no report.

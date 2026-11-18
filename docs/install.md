@@ -57,7 +57,7 @@ tar -xzf "$asset"
 ```
 
 Starting with v1.0, Linux releases also publish `.deb`, `.rpm`, and `.apk`
-packages alongside the tarballs. macOS and Windows archive names are `bashy-darwin-{amd64,arm64}.tar.gz`
+packages alongside the tarballs. macOS and Windows archive names are `bashy-darwin-arm64.tar.gz`
 and `bashy-windows-{amd64,arm64}.zip`.
 
 `latest` always names the current stable release ([releases/latest](https://github.com/qiangli/bashy/releases/latest)). A candidate prerelease (a

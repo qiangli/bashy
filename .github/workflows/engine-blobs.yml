@@ -27,7 +27,6 @@ jobs:
       matrix:
         include:
           - runner: macos-14   # darwin/arm64 — proven
-          - runner: macos-13   # darwin/amd64
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4

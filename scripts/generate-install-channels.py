@@ -42,12 +42,15 @@ formula = ['class Bashy < Formula', '  desc "Bashy userland and outpost service"
 for os_name, block in [('darwin', 'on_macos'), ('linux', 'on_linux')]:
     formula.append(f'  {block} do')
     for arch, cpu in [('arm64', 'on_arm'), ('amd64', 'on_intel')]:
+        if os_name == 'darwin' and arch == 'amd64':
+            continue
         url, sha = artifact(os_name, arch)
         formula += [f'    {cpu} do', f'      url "{url}"', f'      sha256 "{sha}"', '    end']
     formula.append('  end')
 formula += ['  def install', '    bin.install "bashy", "outpost"',
             '    # bash and sh stay off PATH so they never shadow Homebrew bash or /bin/sh.',
-            '    libexec.install "bash", "sh"', '  end',
+            '    libexec.install "bash", "sh"',
+            '    ["bash.real", "sh.real"].each { |payload| libexec.install payload if File.exist?(payload) }', '  end',
             '  service do', '    run [opt_bin/"outpost", "supervisord"]', '    keep_alive true', '  end',
             '  test do', '    require "json"',
             '    shell = shell_output("#{bin}/bashy --version 2>&1")[/bashy-(v?[0-9]+\\.[0-9]+\\.[0-9]+(?:-rc\\.[0-9]+)?(?:-dev)?)/, 1]',

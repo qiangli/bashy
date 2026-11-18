@@ -20,7 +20,7 @@ ref_type=$(jq -r .type <<<"$ref")
 ref_sha=$(jq -r .sha <<<"$ref")
 if [[ $ref_type == tag ]]; then ref_sha=$(gh api "repos/$REPO/git/tags/$ref_sha" --jq '.object.sha'); fi
 [[ $ref_sha == "$COMMIT" ]] || { echo "tag commit $ref_sha != workflow commit $COMMIT" >&2; exit 1; }
-for arch in amd64 arm64; do
+for arch in arm64; do
  archive="release-native/bashy-darwin-$arch.tar.gz"
  [[ -s $archive ]] || { echo "missing native Darwin $arch archive" >&2; exit 1; }
  tar -tzf "$archive" >/dev/null
@@ -29,7 +29,7 @@ done
 if [[ $phase == prepare ]]; then
  mkdir -p release-dist
  gh release download "$TAG" -R "$REPO" -D release-dist
- [[ ! -e release-dist/bashy-darwin-amd64.tar.gz && ! -e release-dist/bashy-darwin-arm64.tar.gz ]] || { echo "native archives already attached" >&2; exit 1; }
+ [[ ! -e release-dist/bashy-darwin-arm64.tar.gz ]] || { echo "native archives already attached" >&2; exit 1; }
  cp release-native/* release-dist/
  for binary in release-dist/outpost-*; do
   [[ $binary != *.sha256 ]] || continue
@@ -43,7 +43,7 @@ if [[ $phase == prepare ]]; then
  exit 0
 fi
 ./scripts/verify-release-asset-set.sh release-dist
-for arch in amd64 arm64; do cmp "release-native/bashy-darwin-$arch.tar.gz" "release-dist/bashy-darwin-$arch.tar.gz"; done
+for arch in arm64; do cmp "release-native/bashy-darwin-$arch.tar.gz" "release-dist/bashy-darwin-$arch.tar.gz"; done
 ./scripts/verify-release-provenance.sh release-dist/checksums.txt
 # Upload in a draft; a failed upload cannot expose an incomplete candidate.
 gh release upload "$TAG" -R "$REPO" release-native/* release-dist/outpost-*.sha256 --clobber
@@ -52,7 +52,7 @@ mkdir -p published-dist
 gh release download "$TAG" -R "$REPO" -D published-dist
 ./scripts/verify-release-asset-set.sh published-dist
 cmp release-dist/checksums.txt published-dist/checksums.txt
-for arch in amd64 arm64; do
+for arch in arm64; do
  cmp "release-native/bashy-darwin-$arch.tar.gz" "published-dist/bashy-darwin-$arch.tar.gz"
  ./scripts/verify-release-provenance.sh "published-dist/bashy-darwin-$arch.tar.gz"
 done
