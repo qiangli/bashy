@@ -12,10 +12,10 @@ import (
 	"strings"
 	"testing"
 
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/lower/shellrt"
-	"mvdan.cc/sh/v3/lower/shellrt/shellexec"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/lower/shellrt"
+	"github.com/qiangli/bash/lower/shellrt/shellexec"
+	"github.com/qiangli/bash/syntax"
 )
 
 // TestContractsAgenticBoundaryFixture runs the Sprint 203 fixture in-process,

@@ -18,7 +18,7 @@ import (
 	"sync"
 
 	"github.com/pkg/sftp"
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/yoke/pkg/sshclient"
 	"github.com/qiangli/yoke/pkg/sshserver"
 	"golang.org/x/crypto/ssh"

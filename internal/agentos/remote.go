@@ -20,7 +20,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/yoke/pkg/binmgr"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"

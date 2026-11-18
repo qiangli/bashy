@@ -9,7 +9,7 @@ import (
 	"github.com/qiangli/yoke/external/registry"
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/policy/advice"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 )
 
 // text_fences.go — bashy's side of the Bash# text fences (B30,

@@ -17,7 +17,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/yoke/pkg/chat"
 	"github.com/qiangli/yoke/pkg/handoff"

@@ -24,9 +24,9 @@ import (
 	"github.com/qiangli/coreutils/tool"
 
 	"github.com/qiangli/bashy/internal/agentos"
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/ycode/pkg/ycodecli"
-	"mvdan.cc/sh/v3/interp/ownedexec"
+	"github.com/qiangli/bash/interp/ownedexec"
 
 	// Embedded CA roots, used only when the system has none: the offline
 	// image is FROM scratch (no /etc/ssl), and bashy provisions its own

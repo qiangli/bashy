@@ -18,7 +18,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/yoke/pkg/binmgr"
 )
 

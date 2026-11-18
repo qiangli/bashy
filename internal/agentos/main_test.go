@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/bashy/internal/tmpl"
 )
 

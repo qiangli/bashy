@@ -5,7 +5,7 @@ import (
 	"runtime"
 	"strings"
 
-	"mvdan.cc/sh/v3/pathconv"
+	"github.com/qiangli/bash/pathconv"
 )
 
 // transpilePathArgs resolves filesystem operands from the shell's spelling to

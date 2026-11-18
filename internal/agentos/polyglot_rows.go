@@ -10,7 +10,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"mvdan.cc/sh/v3/polyglot"
+	"github.com/qiangli/bash/polyglot"
 )
 
 // polyglot_rows.go — the text fence rows whose processor is one of bashy's

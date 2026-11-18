@@ -12,7 +12,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	yokemcp "github.com/qiangli/yoke/mcp"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 )
 
 func mcpSessionClient(t *testing.T, limit int) (context.Context, *mcpsdk.ClientSession, *mcpShells, context.CancelFunc) {

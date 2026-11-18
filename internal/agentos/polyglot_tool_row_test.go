@@ -13,10 +13,10 @@ import (
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/llmbudget"
 	"github.com/qiangli/yoke/pkg/toolcmd"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/lower"
-	"mvdan.cc/sh/v3/polyglot"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/lower"
+	"github.com/qiangli/bash/polyglot"
+	"github.com/qiangli/bash/syntax"
 )
 
 // toolFenceEchoBinary is a portable echo: this test binary re-executed in the

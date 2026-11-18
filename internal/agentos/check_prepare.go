@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"mvdan.cc/sh/v3/polyglot"
+	"github.com/qiangli/bash/polyglot"
 )
 
 // islandToolsFor maps a fence language to the tool names its island asks the

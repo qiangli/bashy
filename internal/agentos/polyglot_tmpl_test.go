@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/polyglot"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/polyglot"
+	"github.com/qiangli/bash/syntax"
 )
 
 const tmplFixtureBody = "hello {{ upper .name }}"

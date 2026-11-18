@@ -72,7 +72,7 @@ var classicBashAllowlist = map[string]bool{
 	// S3 be8e90559755 removes the bashsharp front-door edge from cmd/bash.
 	"github.com/bashsharp/bashsharp/front": true,
 	// S3 be8e90559755 removes the polyglot edge from cmd/bash.
-	"mvdan.cc/sh/v3/polyglot": true,
+	"github.com/qiangli/bash/polyglot": true,
 }
 
 func TestClassicBashImportGraphRatchet(t *testing.T) {
@@ -84,7 +84,7 @@ func TestClassicBashImportGraphRatchet(t *testing.T) {
 		"github.com/qiangli/yoke",
 		"github.com/qiangli/coreutils",
 		"github.com/bashsharp/bashsharp",
-		"mvdan.cc/sh/v3/polyglot",
+		"github.com/qiangli/bash/polyglot",
 	}
 	seen := map[string]bool{}
 	for _, pkg := range strings.Fields(string(out)) {

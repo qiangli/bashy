@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 )
 
 // TestReaderPrefsBudget wires the launcher's BASHY_PREFS JSON budget_bytes

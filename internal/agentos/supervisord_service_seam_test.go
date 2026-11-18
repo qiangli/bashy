@@ -24,7 +24,7 @@ package agentos
 import (
 	"context"
 	"errors"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 	"testing"
 
 	"github.com/qiangli/yoke/pkg/service"

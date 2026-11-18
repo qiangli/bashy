@@ -14,8 +14,8 @@ import (
 	"time"
 
 	"github.com/qiangli/yoke/pkg/resources"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/syntax"
 )
 
 // Every test here keeps bashySelfPath() away from the test binary: a limit

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 
 	"github.com/qiangli/yoke/pkg/fleet"
 )

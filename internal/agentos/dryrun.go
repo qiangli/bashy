@@ -16,8 +16,8 @@ import (
 	"strings"
 	"sync"
 
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/expand"
+	"github.com/qiangli/bash/interp"
 
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	"github.com/qiangli/coreutils/tool"

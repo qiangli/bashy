@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/syntax"
 
 	"github.com/qiangli/yoke/pkg/policy/advice"
 	"github.com/qiangli/yoke/pkg/policy/audit"

@@ -15,9 +15,9 @@ import (
 	"github.com/qiangli/coreutils/shell"
 	"github.com/qiangli/coreutils/tool"
 	"github.com/qiangli/yoke/pkg/shape/boundary"
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/expand"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/syntax"
 )
 
 // appBoundaryMain enforces a shaped app's data boundary (S525.A5d). The

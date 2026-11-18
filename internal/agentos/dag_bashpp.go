@@ -36,11 +36,11 @@ import (
 	"strings"
 	"time"
 
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/expand"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/syntax"
 
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/yoke/pkg/dag"
 )
 

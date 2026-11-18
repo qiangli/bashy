@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mvdan.cc/sh/v3/pathconv"
+	"github.com/qiangli/bash/pathconv"
 )
 
 // Story 676: the shell publishes /c/... paths on Windows, and a normal Bashy

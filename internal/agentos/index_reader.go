@@ -7,7 +7,7 @@ import (
 	"github.com/qiangli/yoke/pkg/indexer"
 	"github.com/qiangli/yoke/pkg/kbmemory"
 	"github.com/qiangli/yoke/pkg/recall"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 	"os"
 	"path/filepath"
 	"sync"

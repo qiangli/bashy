@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 )
 
 func newTestNudger(t *testing.T, agent bool) (*nudger, *bytes.Buffer) {

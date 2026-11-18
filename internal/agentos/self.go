@@ -393,8 +393,8 @@ func buildSelfBinary(ctx context.Context, target, version string) error {
 	if err != nil || exe == "" {
 		return errors.New("cannot resolve current executable for managed Go build")
 	}
-	ldflags := "-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-" + version +
-		" -X github.com/qiangli/bashy/internal/cli.buildID=" + selfBuildID(ctx)
+	ldflags := "-s -w -X github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-" + version +
+		" -X github.com/bashsharp/bashsharp/cli.buildID=" + selfBuildID(ctx)
 	if version := selfShellRuntimeStamp(); version != "" {
 		ldflags += " -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=" + version
 	}

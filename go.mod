@@ -6,7 +6,7 @@ toolchain go1.27.2
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261112194148-386a8685bd7d
+	github.com/bashsharp/bashsharp v0.0.0-20261118040926-59ce327a5e01
 	github.com/benhoyt/goawk v1.31.0
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
@@ -17,10 +17,10 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261112194059-6dd7a3ee1858
-	github.com/qiangli/ycode v0.3.1-dev.0.20261116115352-32c57c76b180
+	github.com/qiangli/coreutils v0.0.0-20261118041055-ababb9f1c79a
+	github.com/qiangli/ycode v0.3.1-dev.0.20261118041524-e5be31355b48
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261117162732-c9057f1e2028
+	github.com/qiangli/yoke v0.0.0-20261118041247-79fe8f90bb05
 	github.com/qiangli/yoke/external/otel v0.0.0-20261115042953-d160182c8479
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
@@ -39,7 +39,6 @@ require (
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
 	k8s.io/client-go v0.35.0
-	mvdan.cc/sh/v3 v3.13.1
 )
 
 require (
@@ -544,7 +543,6 @@ require (
 // unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
 // dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
 // github.com/qiangli/sh next to this repo as ./sh.
-replace mvdan.cc/sh/v3 => github.com/qiangli/sh/v3 v3.0.0-20261112194059-a4141771a3dc
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
@@ -582,7 +580,7 @@ replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.
 
 replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261116115352-32c57c76b180
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261118041524-e5be31355b48
 
 tool github.com/qiangli/outpost/cmd/outpost
 
@@ -610,3 +608,5 @@ replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/externa
 // S407.6: all shell, utility, and background-job routes link the lazy MIT
 // fork so TUI-only width tables are built only when a width is queried.
 replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402
+
+require github.com/qiangli/bash v0.0.0-20261117235306-adb3b4e0c28d

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"mvdan.cc/sh/v3/pathconv"
+	"github.com/qiangli/bash/pathconv"
 )
 
 func TestKubectlPathAndEnvConversion(t *testing.T) {

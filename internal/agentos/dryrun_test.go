@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"mvdan.cc/sh/v3/expand"
+	"github.com/qiangli/bash/expand"
 )
 
 func TestAnalyzeDestroy(t *testing.T) {

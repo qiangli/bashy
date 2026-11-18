@@ -40,7 +40,7 @@ import (
 	"strings"
 	"sync"
 
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 
 	"github.com/qiangli/coreutils/tool"
 	"github.com/qiangli/yoke/pkg/recommend"

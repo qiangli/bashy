@@ -30,11 +30,11 @@ import (
 	"github.com/bashsharp/bashsharp/transpile"
 
 	"github.com/spf13/cobra"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/pathconv"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/pathconv"
 
 	"github.com/qiangli/bashy/internal/agentos/session"
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/bashy/internal/tmpl"
 	"github.com/qiangli/bashy/skills"
 

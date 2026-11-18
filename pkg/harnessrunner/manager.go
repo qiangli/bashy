@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/qiangli/bashy/internal/agentos"
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 )
 
 const supervisorRecordVersion = "bashy.harness.job/v1alpha1"

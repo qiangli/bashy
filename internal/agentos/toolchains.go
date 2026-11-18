@@ -16,8 +16,8 @@ import (
 	"github.com/qiangli/yoke/external/rust"
 	"github.com/qiangli/yoke/external/zigcc"
 	"github.com/qiangli/yoke/pkg/binmgr"
-	"mvdan.cc/sh/v3/pathconv"
-	"mvdan.cc/sh/v3/polyglot"
+	"github.com/qiangli/bash/pathconv"
+	"github.com/qiangli/bash/polyglot"
 )
 
 // islandToolchains is the table behind the fence rule — "a fence never

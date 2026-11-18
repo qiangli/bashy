@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 )
 
 func TestWarmSessionReturnsReducedOutputToRequestWriter(t *testing.T) {

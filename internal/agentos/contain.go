@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/qiangli/yoke/pkg/atlas"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 )
 
 // contain runs child programs with OS-enforced network isolation.

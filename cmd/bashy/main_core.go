@@ -15,12 +15,12 @@ import (
 	// The Bash# Go-source loader is part of the language base. It registers
 	// front.GoSourceLoad without importing the optional AgentOS graph.
 	_ "github.com/bashsharp/bashsharp/transpile"
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/bashy/internal/core"
 	_ "github.com/qiangli/coreutils/cmds/all"
 	"github.com/qiangli/coreutils/multicall"
 	_ "golang.org/x/crypto/x509roots/fallback"
-	"mvdan.cc/sh/v3/interp/ownedexec"
+	"github.com/qiangli/bash/interp/ownedexec"
 )
 
 // The base profile has no AgentOS execution handlers. Its dry-run request

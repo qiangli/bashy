@@ -14,7 +14,7 @@ import (
 	"sync"
 
 	"github.com/qiangli/yoke/pkg/atlas"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/syntax"
 )
 
 var environmentName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)

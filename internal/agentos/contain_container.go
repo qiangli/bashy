@@ -20,7 +20,7 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 )
 
 // Providers. builtin (the default) is bashy's own choice: native where the

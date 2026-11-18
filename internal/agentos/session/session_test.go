@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 )
 
 // TestRunSessionCommand exercises the warm-session runner directly: stdout

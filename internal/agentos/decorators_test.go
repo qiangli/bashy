@@ -29,10 +29,10 @@ import (
 	"go.opentelemetry.io/otel"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/lower/shellrt"
-	"mvdan.cc/sh/v3/lower/shellrt/shellexec"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/lower/shellrt"
+	"github.com/qiangli/bash/lower/shellrt/shellexec"
+	"github.com/qiangli/bash/syntax"
 
 	"github.com/qiangli/yoke/pkg/policy/audit"
 )

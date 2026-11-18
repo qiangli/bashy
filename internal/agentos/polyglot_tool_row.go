@@ -12,7 +12,7 @@ import (
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/toolcmd"
 	"gopkg.in/yaml.v3"
-	"mvdan.cc/sh/v3/polyglot"
+	"github.com/qiangli/bash/polyglot"
 )
 
 // A tool fence exposes the vendor commands already declared on a fleet tool.

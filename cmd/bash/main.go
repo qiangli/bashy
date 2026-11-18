@@ -12,8 +12,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/qiangli/bashy/internal/cli"
-	"mvdan.cc/sh/v3/interp/ownedexec"
+	"github.com/bashsharp/bashsharp/cli"
+	"github.com/qiangli/bash/interp/ownedexec"
 )
 
 func init() { cli.BashDropinShMode = true }

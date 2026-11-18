@@ -62,9 +62,9 @@ import (
 	"time"
 
 	dhntskills "github.com/dhnt/dhnt/skills"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/yoke/pkg/craft"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 )

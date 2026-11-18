@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	"mvdan.cc/sh/v3/interp/ownedexec"
+	"github.com/qiangli/bash/interp/ownedexec"
 )
 
 // This helper is compiled only by the focused owned-exec integration test.

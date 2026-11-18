@@ -1,6 +1,6 @@
 package agentos
 
-import "mvdan.cc/sh/v3/polyglot"
+import "github.com/qiangli/bash/polyglot"
 
 // manifest_rows.go — the manifest fences (Sprint 238): a script carries its
 // project manifest inline and drives the toolchain bashy provisions from the

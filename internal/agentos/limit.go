@@ -18,7 +18,7 @@ import (
 
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/resources"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 )
 
 // limit bounds what one action may consume, like a pod's resources.limits.

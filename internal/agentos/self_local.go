@@ -188,7 +188,7 @@ func buildBashyInDir(dir, target, version string) error {
 	if err != nil || exe == "" {
 		return fmt.Errorf("self build --local: cannot resolve current executable for managed Go build")
 	}
-	ldflags := "-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-" + version
+	ldflags := "-s -w -X github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-" + version
 	c := exec.Command(exe, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", target, "./cmd/bashy")
 	c.Dir = dir
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
@@ -231,7 +231,7 @@ func buildBashyWithReplace(root, module, replacement, target, version string) er
 	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	ldflags := "-s -w -X github.com/qiangli/bashy/internal/cli.bashVersion=5.3.0(1)-bashy-" + version
+	ldflags := "-s -w -X github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-" + version
 	build := exec.Command(exe, "go", "build", "-modfile="+altBase+".mod", "-trimpath", "-ldflags", ldflags, "-o", target, "./cmd/bashy")
 	build.Dir = root
 	build.Stdout, build.Stderr = os.Stdout, os.Stderr

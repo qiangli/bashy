@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/winmode"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/winmode"
 
 	"github.com/qiangli/bashy/internal/corpuslocales"
 )

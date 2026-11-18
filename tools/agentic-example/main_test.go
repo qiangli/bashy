@@ -16,9 +16,9 @@ import (
 
 	"github.com/qiangli/bashy/internal/agentos"
 	"github.com/qiangli/coreutils/tool"
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/expand"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/syntax"
 )
 
 type fixtureRunner struct {

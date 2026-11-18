@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/qiangli/bashy/internal/agentos"
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 )
 
 // SchemaVersion identifies the stable result envelope returned by this

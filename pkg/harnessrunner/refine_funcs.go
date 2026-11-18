@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/qiangli/yoke/pkg/atlas"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/syntax"
 )
 
 // Functions and their Bash# decorators. A call to a function defined in the

@@ -18,8 +18,8 @@ import (
 	"github.com/benhoyt/goawk/lexer"
 	"github.com/benhoyt/goawk/parser"
 	"github.com/qiangli/yoke/pkg/shape/boundary"
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/expand"
+	"github.com/qiangli/bash/interp"
 )
 
 // boundedAwk serves `awk` under an app boundary. awk is in-process in bashy

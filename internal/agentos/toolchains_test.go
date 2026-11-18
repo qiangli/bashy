@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"mvdan.cc/sh/v3/polyglot"
+	"github.com/qiangli/bash/polyglot"
 )
 
 // The table is the whole answer: a name with no row is refused with the

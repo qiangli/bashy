@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/qiangli/bashy/internal/agentos"
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 )
 
 func TestDefaultBuildWiresCompleteAgentOS(t *testing.T) {

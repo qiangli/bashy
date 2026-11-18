@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"mvdan.cc/sh/v3/polyglot"
+	"github.com/qiangli/bash/polyglot"
 )
 
 func TestTextRowsRegistered(t *testing.T) {

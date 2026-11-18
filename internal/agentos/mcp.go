@@ -18,7 +18,7 @@ import (
 	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/coreutils/tool"
 	dbcmd "github.com/qiangli/yoke/cmds/db"
 	yokemcp "github.com/qiangli/yoke/mcp"

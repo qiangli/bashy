@@ -41,7 +41,7 @@ func TestGoSourceFrontEndIsNotLinkedIntoClassicBash(t *testing.T) {
 		deps[strings.TrimSpace(line)] = true
 	}
 	for _, pkg := range []string{
-		"mvdan.cc/sh/v3/gosource",
+		"github.com/qiangli/bash/gosource",
 		"github.com/qiangli/bashy/internal/agentos",
 	} {
 		if deps[pkg] {

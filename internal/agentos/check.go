@@ -17,8 +17,8 @@ import (
 	"sort"
 	"strings"
 
-	"mvdan.cc/sh/v3/lower"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/lower"
+	"github.com/qiangli/bash/syntax"
 
 	"github.com/qiangli/coreutils/tool"
 )

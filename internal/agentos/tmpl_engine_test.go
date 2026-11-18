@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"mvdan.cc/sh/v3/polyglot"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/polyglot"
+	"github.com/qiangli/bash/syntax"
 
 	"github.com/qiangli/bashy/internal/tmpl"
 	"github.com/qiangli/yoke/pkg/fleet"

@@ -19,7 +19,7 @@ import (
 	"strings"
 	"text/template"
 
-	"mvdan.cc/sh/v3/polyglot"
+	"github.com/qiangli/bash/polyglot"
 )
 
 const usage = `usage: bashy tmpl render [--engine ENGINE] FILE [--data JSON|-] [--data-file PATH]

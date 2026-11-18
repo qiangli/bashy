@@ -40,7 +40,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"mvdan.cc/sh/v3/winmode"
+	"github.com/qiangli/bash/winmode"
 )
 
 // suiteLicense classifies how a suite's tests may be obtained — the load-bearing

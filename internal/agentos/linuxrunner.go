@@ -52,7 +52,7 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/yoke/pkg/binmgr"
 )
 

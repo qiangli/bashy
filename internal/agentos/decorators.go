@@ -44,8 +44,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/lower/shellrt"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/lower/shellrt"
 
 	"github.com/qiangli/yoke/pkg/autoretry"
 	"github.com/qiangli/yoke/pkg/policy/advice"

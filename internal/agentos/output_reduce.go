@@ -26,7 +26,7 @@ import (
 	"github.com/qiangli/yoke/pkg/reduce"
 	"github.com/qiangli/yoke/pkg/secrets"
 	"golang.org/x/term"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 )
 
 // optionalBool distinguishes an absent --reduce from --reduce=false.

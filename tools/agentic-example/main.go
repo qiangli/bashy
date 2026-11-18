@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/qiangli/bashy/internal/agentos"
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/coreutils/tool"
 	"github.com/qiangli/yoke/pkg/chat"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 )
 
 func main() {

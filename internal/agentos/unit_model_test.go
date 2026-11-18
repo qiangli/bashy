@@ -11,7 +11,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/syntax"
 
 	"github.com/qiangli/yoke/pkg/lexicon"
 	"github.com/qiangli/yoke/pkg/shape/verify"

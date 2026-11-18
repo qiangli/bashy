@@ -14,7 +14,7 @@ import (
 	"time"
 
 	. "github.com/qiangli/coreutils/pkg/weavecli"
-	"mvdan.cc/sh/v3/polyglot"
+	"github.com/qiangli/bash/polyglot"
 )
 
 // Sprint 221 B4 review correction (Story-ID af2e56930f08): a foreign-worker

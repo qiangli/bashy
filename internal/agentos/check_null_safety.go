@@ -6,7 +6,7 @@ package agentos
 import (
 	"errors"
 
-	"mvdan.cc/sh/v3/lower"
+	"github.com/qiangli/bash/lower"
 )
 
 // checkBashSharpDiagnostics projects the engine's one static-analysis result

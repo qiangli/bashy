@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 )
 
 // gnuMakeHandler hands `make` to the host's GNU make when the makefile in

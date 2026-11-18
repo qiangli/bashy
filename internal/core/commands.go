@@ -18,8 +18,8 @@ import (
 	"github.com/qiangli/coreutils/shell"
 	"github.com/qiangli/coreutils/tool"
 	"github.com/qiangli/yoke/pkg/fleet"
-	"mvdan.cc/sh/v3/expand"
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/expand"
+	"github.com/qiangli/bash/interp"
 )
 
 func certProfile() bool {

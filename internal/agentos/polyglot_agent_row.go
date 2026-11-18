@@ -15,7 +15,7 @@ import (
 	"github.com/qiangli/yoke/pkg/chat"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"gopkg.in/yaml.v3"
-	"mvdan.cc/sh/v3/polyglot"
+	"github.com/qiangli/bash/polyglot"
 )
 
 // The agent row delegates exclusively to the governed chat one-shot harness.

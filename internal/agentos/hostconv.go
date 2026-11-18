@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"slices"
 
-	"mvdan.cc/sh/v3/interp"
+	"github.com/qiangli/bash/interp"
 )
 
 // hostConvertersHandler hands the Windows path-spelling converters to the

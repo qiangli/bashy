@@ -16,8 +16,8 @@ import (
 	"github.com/qiangli/ycode/pkg/ycode"
 	"github.com/qiangli/ycode/pkg/ycodecli"
 	"github.com/qiangli/yoke/pkg/llmbudget"
-	"mvdan.cc/sh/v3/interp"
-	"mvdan.cc/sh/v3/syntax"
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/bash/syntax"
 )
 
 type yamlAgentFixtureProvider struct{ calls int }

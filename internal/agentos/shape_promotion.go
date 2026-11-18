@@ -8,7 +8,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/qiangli/bashy/internal/cli"
+	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/yoke/pkg/shape"
 	"github.com/qiangli/yoke/pkg/src"
 	"github.com/spf13/cobra"
