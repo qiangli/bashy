@@ -302,6 +302,10 @@ The source root and exact commit/tag inputs are explicit. No tags or publication
 checkouts plus `dist-inputs.json`: `{"tag":"vX.Y.Z-rc.N-dev","sources":{...}}`,
 where each source name maps to `{"path":"relative-checkout","commit":"full-sha"}`.
 The default is two target jobs sharing eight CPUs and a 300-second wall budget.
+Before entering the immutable image, run `scripts/prepare-dist-rpm.sh
+"$DIST_SOURCE_ROOT/build-tools"` on the Ubuntu 24.04 amd64 build host. The
+pinned RPM reader and runtime libraries stay outside the image; its receipt
+records versions and hashes. Reader availability is checked before compiling.
 Windows ARM64 retains the existing no-runner profile; other targets embed their
 own verified signed runner. Optional signing keeps the existing explicit unsigned
 status when credentials are absent. For native signing with credentials, run

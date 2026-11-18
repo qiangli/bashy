@@ -64,7 +64,7 @@ def archive(destination, files):
             for name, file in sorted(files.items()):
                 out.write(file, name)
     else:
-        with tarfile.open(destination, "w:gz") as out:
+        with tarfile.open(destination, "w:gz", compresslevel=6) as out:
             for name, file in sorted(files.items()):
                 out.add(file, arcname=name, recursive=False)
 
@@ -123,7 +123,7 @@ def package(root, outpost_root, staging, dist, tag, platforms, otel_platforms, n
         goos, arch = target.split("/")
         suffix = ".exe" if goos == "windows" else ""
         with (staging / goos / arch / ("otel" + suffix)).open("rb") as src:
-            with gzip.open(assets / f"otel-{goos}-{arch}.gz", "wb") as out:
+            with gzip.open(assets / f"otel-{goos}-{arch}.gz", "wb", compresslevel=6) as out:
                 shutil.copyfileobj(src, out)
     (assets / "otel-blob-NOTICE.txt").write_text(
         "bashy otel blob — the embedded observability stack orchestrator\n"

@@ -92,6 +92,14 @@ class Dist:
         self.env = os.environ.copy()
         self.env.update(GOWORK="off", GOTOOLCHAIN="local", CGO_ENABLED="0", GOFLAGS="-p=1",
                         GOMAXPROCS=str(max(1, 8 // jobs)), GOMEMLIMIT="2GiB", BASHY="/bashy")
+        self.tools = ROOT.parent / "build-tools"
+        if (self.tools / "bin").is_dir():
+            self.env["PATH"] = str(self.tools / "bin") + os.pathsep + self.env["PATH"]
+        self.tool_receipt = json.loads((self.tools / "tool-receipt.json").read_text()) if (self.tools / "tool-receipt.json").is_file() else None
+        if self.tool_receipt:
+            for name, expected in self.tool_receipt["hashes"].items():
+                if digest(self.tools / name) != expected:
+                    raise ValueError("qualified build-tool hash differs: " + name)
         self.cache = Path(os.environ["GOMODCACHE"])
         self.work = Path(tempfile.mkdtemp(prefix="dist-", dir=os.environ["GOTMPDIR"]))
         self.logs = destination / "logs"
@@ -129,6 +137,10 @@ class Dist:
     def prepare(self):
         if os.environ.get("BASHY_BUILD_RUN") != "1" or digest(Path("/bashy")) != self.lock["bashy_sha256"]:
             raise ValueError("the locked previous-release builder is required")
+        for name in ("rpm", "dpkg-deb", "tar"):
+            if not shutil.which(name, path=self.env["PATH"]):
+                raise ValueError("missing package reader " + name + "; stage scripts/prepare-dist-rpm.sh outside the builder image")
+        self.run("rpm-reader-version", ["rpm", "--version"])
         for role, source in self.sources.items():
             clean_source(source, self.inputs["sources"][role]["commit"])
             module = source / "external/otel" if role == "yoke" else source
@@ -247,6 +259,7 @@ class Dist:
         report = {"schema": "bashy-dist-v1", "source_sha": self.inputs["sources"]["bashy"]["commit"],
                   "tag": self.inputs["tag"], "sources": self.inputs["sources"],
                   "builder": {"version": self.lock["bashy_version"], "image": self.lock["image"], "digest": self.lock["image_digest"]},
+                  "auxiliary_tool_receipt": self.tool_receipt,
                   "jobs": self.jobs, "cpu_limit": 8, "cache": "persistent Go build/download caches; isolated mutable runner modules",
                   "elapsed_seconds": elapsed, "budget_seconds": self.budget, "budget_met": elapsed <= self.budget,
                   "signature_status": {"darwin/arm64": signing},

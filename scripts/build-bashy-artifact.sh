@@ -23,16 +23,16 @@ if [ -n "${BASHY_EXE:-}" ]; then
 	else
 		scripts/go-product.sh build -trimpath -ldflags "$ldflags" -o "$artifact_pending" ./cmd/bashy
 	fi
-	(unset GOOS GOARCH CGO_ENABLED; "$BASHY_EXE" go run ./tools/elfaudit --bashy-signal "$artifact_pending")
-	(unset GOOS GOARCH CGO_ENABLED; scripts/go-tool.sh releaseeligibility "$artifact_pending")
+	(unset GOOS GOARCH CGO_ENABLED; export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"; "$BASHY_EXE" go run ./tools/elfaudit --bashy-signal "$artifact_pending")
+	(unset GOOS GOARCH CGO_ENABLED; export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"; scripts/go-tool.sh releaseeligibility "$artifact_pending")
 else
 	if [ -n "$tags" ]; then
 		scripts/go-product.sh build -trimpath -tags "$tags" -ldflags "$ldflags" -o "$artifact_pending" ./cmd/bashy
 	else
 		scripts/go-product.sh build -trimpath -ldflags "$ldflags" -o "$artifact_pending" ./cmd/bashy
 	fi
-	(unset GOOS GOARCH CGO_ENABLED; go run ./tools/elfaudit --bashy-signal "$artifact_pending")
-	(unset GOOS GOARCH CGO_ENABLED; scripts/go-tool.sh releaseeligibility "$artifact_pending")
+	(unset GOOS GOARCH CGO_ENABLED; export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"; go run ./tools/elfaudit --bashy-signal "$artifact_pending")
+	(unset GOOS GOARCH CGO_ENABLED; export GOFLAGS="${GOFLAGS:+$GOFLAGS }-trimpath"; scripts/go-tool.sh releaseeligibility "$artifact_pending")
 fi
 
 mv -f "$artifact_pending" "$out"
