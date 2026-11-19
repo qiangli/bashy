@@ -210,6 +210,13 @@ func reservedCommandName(name string) (string, bool) {
 	if slices.Contains(registry.Names(), name) {
 		return "bin-managed external (bashy " + name + ")", true
 	}
+	// A steerable tool session (`bashy <tool>`, toolshortcut.go): the ring
+	// resolves before the shortcut, so a record here would silently swallow
+	// it. Refuse by holder instead. (The fleet tools catalog, not the
+	// commands ring, so the ring still cannot reserve names from itself.)
+	if _, ok := lookupSteerTool(name); ok {
+		return "steerable tool session (bashy " + name + ")", true
+	}
 	if e, ok := atlas.Lookup(name); ok {
 		if e.AliasOf != "" {
 			return "alias of " + e.AliasOf, true
