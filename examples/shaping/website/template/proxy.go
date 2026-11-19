@@ -82,9 +82,9 @@ func (u *upstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body := c.body
 	switch {
 	case strings.Contains(c.ctype, "text/html"):
-		body = injectPanel(rebase(body, prefix), prefix)
+		body = injectPanel(rebase(body, prefix, u.base), prefix)
 	case strings.Contains(c.ctype, "css"), strings.Contains(c.ctype, "javascript"):
-		body = rebase(body, prefix)
+		body = rebase(body, prefix, u.base)
 	}
 	if c.ctype != "" {
 		w.Header().Set("Content-Type", c.ctype)
@@ -97,21 +97,29 @@ func (u *upstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 var (
-	attrRoot = regexp.MustCompile(`((?:href|src|action|poster|content)=["'])/([^/])`)
-	urlRoot  = regexp.MustCompile(`url\((["']?)/([^/])`)
-	nextRoot = regexp.MustCompile(`(\\?["'])/_next/`)
+	headLink  = regexp.MustCompile(`(<link\b[^>]*?\shref=["'])/([^/])`)
+	linkRoot  = regexp.MustCompile(`((?:href|action)=["'])/([^/])`)
+	assetRoot = regexp.MustCompile(`((?:src|srcset|poster|content)=["'])/([^/])`)
+	urlRoot   = regexp.MustCompile(`url\((["']?)/([^/])`)
+	nextRoot  = regexp.MustCompile(`(\\?["'])/_next/`)
 )
 
-// rebase points root-absolute links at the mount prefix, so a page built for
-// "/" works under /matrix/h/<host>/app/<name>/. Protocol-relative links
-// ("//cdn…") are left alone.
-func rebase(b []byte, prefix string) []byte {
+// rebase makes a page built for "/" work under the engine's mount prefix
+// without routing its assets through the engine: assets (/_next/ bundles,
+// src, srcset, url(), content) load straight from the static host, where a
+// page's dozens of requests cost nothing, while page links and form actions
+// stay on the engine. A cloud edge rate-limits anonymous requests per app,
+// so proxying every asset broke the page on its first load.
+// Protocol-relative links ("//cdn…") are left alone.
+func rebase(b []byte, prefix, origin string) []byte {
 	if prefix == "" {
 		return b
 	}
-	b = attrRoot.ReplaceAll(b, []byte("${1}"+prefix+"/${2}"))
-	b = urlRoot.ReplaceAll(b, []byte("url(${1}"+prefix+"/${2}"))
-	b = nextRoot.ReplaceAll(b, []byte("${1}"+prefix+"/_next/"))
+	b = nextRoot.ReplaceAll(b, []byte("${1}"+origin+"/_next/"))
+	b = assetRoot.ReplaceAll(b, []byte("${1}"+origin+"/${2}"))
+	b = urlRoot.ReplaceAll(b, []byte("url(${1}"+origin+"/${2}"))
+	b = headLink.ReplaceAll(b, []byte("${1}"+origin+"/${2}")) // icons, manifest
+	b = linkRoot.ReplaceAll(b, []byte("${1}"+prefix+"/${2}"))
 	return b
 }
 

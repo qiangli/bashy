@@ -184,7 +184,7 @@ func TestAudienceFailsClosed(t *testing.T) {
 func TestProxyRebasesAndInjects(t *testing.T) {
 	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		io.WriteString(w, `<html><head><link href="/_next/static/a.css" rel="stylesheet"></head><body><a href="/about">x</a><img src="//cdn.example/i.png"><script>self.__next_f.push(["\"/_next/static/c.js\""])</script></body></html>`)
+		io.WriteString(w, `<html><head><link href="/_next/static/a.css" rel="stylesheet"><link rel="icon" href="/favicon.ico"></head><body><a href="/about">x</a><img src="//cdn.example/i.png"><script>self.__next_f.push(["\"/_next/static/c.js\""])</script></body></html>`)
 	}))
 	defer site.Close()
 	s := newTestServer(t, site.URL, "http://127.0.0.1:1", "")
@@ -194,10 +194,11 @@ func TestProxyRebasesAndInjects(t *testing.T) {
 	s.ServeHTTP(rec, req)
 	body := rec.Body.String()
 	for _, want := range []string{
-		`href="/matrix/h/host/app/site/_next/static/a.css"`,
+		`href="` + site.URL + `/_next/static/a.css"`,
 		`href="/matrix/h/host/app/site/about"`,
+		`<link rel="icon" href="` + site.URL + `/favicon.ico">`,
 		`src="//cdn.example/i.png"`,
-		`\"/matrix/h/host/app/site/_next/static/c.js\"`,
+		`\"` + site.URL + `/_next/static/c.js\"`,
 		`<script src="/matrix/h/host/app/site/_shaping/shaping.js" defer></script></body>`,
 	} {
 		if !strings.Contains(body, want) {
