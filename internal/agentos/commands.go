@@ -631,6 +631,7 @@ var verbSynopsis = map[string]string{
 	"member":             "Cloudbox account members: list, invite, accept, set circle, remove, and check",
 	"group":              "Cloudbox account groups: list, add members, remove members, and delete",
 	"superadmin":         "Cloudbox operator repair: list and remove any owner's hosts (step-up session only)",
+	"journey":            "Your journey on the Cloudbox desktop: status, next (the one invitation earned), shown, take, dismiss; same as desktop journey",
 	"desktop":            "Cloudbox desktop preferences: schema, get, catalog, set, wish, undo, history, allowance, shape-only, pages/invoke/result, and the allowance policy",
 	"suite":              "Cloudbox app suites: list, show, create, add, remove, delete, and share with circles",
 	"reproduce":          "dry-run what master metadata can recreate (reproduce --plan; read-only, no --apply)",
