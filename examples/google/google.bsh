@@ -64,8 +64,9 @@ SECRET_VIA_ARGV).
 - YouTube: youtube-upload <video-file> title=TEXT [description=TEXT] [privacy=unlisted|private|public] [tags=a,b] [--dry-run]
   Uploads to the channel of the signed-in account (default unlisted) and prints the
   watch URL and the privacy-friendly embed URL to link from an app or site. One-time
-  owner steps, named in the error when missing: grant the youtube.upload scope
-  (auth-login account=ADDR scopes=...,youtube.upload) and enable "YouTube Data API v3"
+  owner steps, named in the error when missing: grant youtube.upload in its own
+  credential slot (auth-login account=ADDR slot=youtube scopes=youtube.upload URL; Google
+  will not grant it together with Drive) and enable "YouTube Data API v3"
   in the OAuth client's project. gws has no YouTube service, so this verb calls the
   YouTube Data API directly with the account's own OAuth credentials.
 - Escape hatch: raw <service> <resource...>
@@ -390,6 +391,27 @@ def scope_login_args(scopes):
 def sanitize_account_dir(account):
     safe = "".join(c if (c.isalnum() or c in ("@", ".", "_", "-", "+")) else "_" for c in account.strip())
     return os.path.join(config_root(), safe)
+
+
+def missing_granted_scopes(credentials_file, wanted):
+    """Scopes in wanted that the stored credential was not granted. Best
+    effort: an unreachable token endpoint reports nothing missing."""
+    try:
+        import urllib.parse
+        import urllib.request
+        token = oauth_access_token(credentials_file)
+        with urllib.request.urlopen("https://oauth2.googleapis.com/tokeninfo?access_token=" + urllib.parse.quote(token), timeout=30) as resp:
+            granted = set(json.loads(resp.read()).get("scope", "").split())
+    except Exception:
+        return []
+    return [w for w in wanted if w.startswith("https://") and w not in granted]
+
+
+def credential_slot_dir(acct_dir, slot):
+    if not slot:
+        return acct_dir
+    safe = "".join(c if (c.isalnum() or c in ("_", "-")) else "_" for c in slot.strip())
+    return os.path.join(acct_dir, "slots", safe)
 
 
 def resolve_account(shaped, required=True):
@@ -749,7 +771,7 @@ def handle_auth_import(parsed):
     gws_bin = find_gws_bin()
     env = dict(os.environ)
     env["GOOGLE_WORKSPACE_CLI_CONFIG_DIR"] = acct_dir
-    apis = enable_apis(client_project(acct_dir, shaped.get("project")))
+    apis = enable_apis(client_project(acct_dir, shaped.get("project"))) if not slot else {"status": "skipped", "reason": "slot login; enable its API separately"}
     login_rc = run_gws_login(gws_bin + ["auth", "login"] + scope_login_args(scopes), env)
     if login_rc != 0:
         fail(
@@ -1028,7 +1050,18 @@ def handle_auth_login(parsed):
     shaped = parsed["shaped"]
     account = resolve_account(shaped, required=True)
     scopes = shaped.get("scopes", DEFAULT_SCOPES)
-    acct_dir = sanitize_account_dir(account)
+    main_dir = sanitize_account_dir(account)
+    # slot=NAME keeps a separate credential for scopes Google will not grant
+    # together with the main set (YouTube with Drive), same OAuth client.
+    slot = shaped.get("slot", "")
+    acct_dir = credential_slot_dir(main_dir, slot)
+    if slot:
+        os.makedirs(acct_dir, mode=0o700, exist_ok=True)
+        src = os.path.join(main_dir, "client_secret.json")
+        dst = os.path.join(acct_dir, "client_secret.json")
+        if os.path.isfile(src) and not os.path.isfile(dst):
+            shutil.copyfile(src, dst)
+            os.chmod(dst, 0o600)
     target_creds = os.path.join(acct_dir, "credentials.json")
     login_cmd = ["auth", "login"] + scope_login_args(scopes)
     if parsed["dry_run"]:
@@ -1040,6 +1073,7 @@ def handle_auth_login(parsed):
             "scopes": scopes,
             "planned_commands": [["gws"] + login_cmd, ["gws", "auth", "export", "--unmasked"]],
             "target_credentials_file": target_creds,
+            "slot": slot,
         })
         sys.exit(0)
     if not os.path.isfile(os.path.join(acct_dir, "client_secret.json")):
@@ -1064,6 +1098,13 @@ def handle_auth_login(parsed):
     stale = os.path.join(acct_dir, "token_cache.json")
     if os.path.exists(stale):
         os.replace(stale, stale + ".stale")
+    # Google's granular consent lets the user continue without ticking a
+    # sensitive scope; the login then "succeeds" without it. Say so loudly.
+    missing = missing_granted_scopes(target_creds, scope_login_args(scopes)[1].split(","))
+    if missing:
+        fail("SCOPE_NOT_GRANTED",
+             "Google did not grant: " + ", ".join(missing) + ". On the consent page tick the checkbox for each permission (granular consent), then run auth-login again.",
+             extra={"missing": missing, "retry": f"bashy google auth-login account={account}" + (f" slot={slot}" if slot else "") + f" scopes={scopes}"})
     emit_json({
         "ok": True,
         "verb": "auth-login",
@@ -1192,7 +1233,7 @@ YOUTUBE_PRIVACY = ("private", "unlisted", "public")
 def youtube_fix(account):
     """The two one-time owner steps a YouTube upload needs, as commands."""
     return {
-        "grant_scope": f"bashy google auth-login account={account} scopes=drive.file,gmail.readonly,gmail.compose,gmail.send,calendar.events,tasks,{YOUTUBE_UPLOAD_SCOPE}",
+        "grant_scope": f"bashy google auth-login account={account} slot=youtube scopes={YOUTUBE_UPLOAD_SCOPE}",
         "enable_api": "gcloud services enable youtube.googleapis.com --project PROJECT_ID (or enable \"YouTube Data API v3\" in the Cloud Console for your OAuth client's project)",
     }
 
@@ -1234,7 +1275,12 @@ def handle_youtube_upload(cred_info, positionals, shaped, dry_run):
         emit_json({"ok": True, "dry_run": True, "verb": "youtube-upload", "account": account, "file": path,
                    "bytes": size, "metadata": meta, "needs": youtube_fix(account)})
         sys.exit(0)
-    token = oauth_access_token(cred_info["credentials_file"])
+    # Google will not grant youtube.upload together with drive.file, so the
+    # upload uses the account's separate "youtube" credential slot.
+    slot_creds = os.path.join(credential_slot_dir(sanitize_account_dir(account), "youtube"), "credentials.json")
+    if not os.path.isfile(slot_creds):
+        fail("YOUTUBE_NOT_GRANTED", "no YouTube credential for this account yet", extra={"fix": youtube_fix(account)})
+    token = oauth_access_token(slot_creds)
     mime = mimetypes.guess_type(path)[0] or "video/*"
     start = urllib.request.Request(YOUTUBE_UPLOAD_URL, data=json.dumps(meta).encode(), method="POST", headers={
         "Authorization": "Bearer " + token, "Content-Type": "application/json; charset=UTF-8",

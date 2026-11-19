@@ -11,7 +11,7 @@ tags:
     - video
     - publish
 status: candidate
-evidence: 'Verb youtube-upload added to examples/google with a hermetic dry-run test; live consent and upload steps follow the same per-account OAuth setup as the Gmail runbook. Provider UI may change.'
+evidence: 'Live run: API enabled with gcloud, YouTube-only consent in a separate slot (the combined request was refused: drive.file and youtube.upload cannot be requested together; the first consent silently omitted the unticked YouTube checkbox), unlisted upload returned watch and embed URLs, linked from a shaped practice app. Provider UI may change.'
 created: "2026-11-19T04:33:22Z"
 updated: "2026-11-19T04:33:22Z"
 ---
@@ -21,7 +21,7 @@ Any agentic tool with shell access can publish a video for a bashy user to **tha
 1. **Set up the Google example command once** (see the Gmail runbook): `bashy src fetch bashy`, run `examples/google/register.sh`, then `bashy google auth-status account=ADDR`. If it is not ready, run the BYOP onboarding it prints (`auth-guide`, `auth-import`).
 2. **Plan first:** `bashy google youtube-upload VIDEO title='…' privacy=unlisted --dry-run account=ADDR`. It prints the metadata and the two one-time owner steps under `needs`.
 3. **One-time owner steps** (only the user can do these; hand them over, do not work around them):
-   - grant the upload permission: `bashy google auth-login account=ADDR scopes=<current scopes>,https://www.googleapis.com/auth/youtube.upload` opens Google's consent page in the user's browser;
+   - grant the upload permission in its **own credential slot**: `bashy google auth-login account=ADDR slot=youtube scopes=https://www.googleapis.com/auth/youtube.upload`. Google will not grant YouTube together with Drive, so it is never added to the main grant. The consent page shows "Manage your YouTube videos" as an **unticked checkbox** (granular consent): the user must tick it; otherwise auth-login stops with `SCOPE_NOT_GRANTED` and says so;
    - enable **YouTube Data API v3** in the OAuth client's Cloud project (`gcloud services enable youtube.googleapis.com --project PROJECT`, or the Cloud Console).
    If either is missing, the upload fails with `YOUTUBE_REFUSED` and `reason` `insufficient_scope` or `api_disabled`, plus the exact fix.
 4. **Upload:** `bashy google youtube-upload VIDEO title='…' description='…' privacy=unlisted tags=a,b account=ADDR`. It returns `url` (https://youtu.be/ID) and `embed` (https://www.youtube-nocookie.com/embed/ID). Default to **unlisted** unless the user asks for public.

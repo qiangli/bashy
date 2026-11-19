@@ -484,6 +484,8 @@ class GoogleWrapperTest(unittest.TestCase):
         self.assertEqual(plan["metadata"]["status"]["privacyStatus"], "unlisted")
         self.assertEqual(plan["metadata"]["snippet"]["tags"], ["shaping", "bashy"])
         self.assertIn("youtube.upload", plan["needs"]["grant_scope"])
+        self.assertIn("slot=youtube", plan["needs"]["grant_scope"])
+        self.assertNotIn("drive.file", plan["needs"]["grant_scope"])
         self.assertIn(plan["account"], plan["needs"]["grant_scope"])
         self.assertEqual(len(self.read_calls()), 0)
 
