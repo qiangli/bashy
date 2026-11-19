@@ -23,9 +23,9 @@ stdio server and the reverse `bashy acp` bot direction. It remains unverified
 until the manager records the live-host, MCP-team, reverse-ACP, and remote
 gates.
 
-`--force` is needed for a name that still belongs to a built-in entry. That
-applies to aider, cline, gemini, goose, hermes and openclaw until those
-built-in entries are retired.
+aider, cline, gemini, goose, hermes and openclaw were built-in seeds until
+2026-10-09; their retired built-in entries keep the names, and
+`bashy tool add` takes them over without `--force` (re-checked in Sprint 671).
 
 ## Layout
 
