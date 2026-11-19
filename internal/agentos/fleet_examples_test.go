@@ -215,8 +215,9 @@ func TestFleetExamplesHeadersAndSecretsGuard(t *testing.T) {
 	if err != nil || len(toolFiles) == 0 {
 		t.Fatalf("no tool files found under %s/tools: %v", fleetDir, err)
 	}
-	if len(toolFiles) != 17 {
-		t.Errorf("expected 17 tool files, found %d", len(toolFiles))
+	// 16 since Sprint 671 moved dsh into the built-in seeds.
+	if len(toolFiles) != 16 {
+		t.Errorf("expected 16 tool files, found %d", len(toolFiles))
 	}
 
 	modelFiles, err := filepath.Glob(filepath.Join(fleetDir, "models", "*.yaml"))
