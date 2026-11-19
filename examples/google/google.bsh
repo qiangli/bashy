@@ -61,6 +61,13 @@ SECRET_VIA_ARGV).
 - Drive: drive-list, drive-search, drive-get, drive-upload, drive-mkdir, drive-home [set id=FOLDER_ID]
   Uploads and new folders go to a "bashy" folder it creates on first use
   (GWS_DRIVE_HOME renames it; GWS_DRIVE_HOME=none means My Drive root) unless parent=FOLDER_ID.
+- YouTube: youtube-upload <video-file> title=TEXT [description=TEXT] [privacy=unlisted|private|public] [tags=a,b] [--dry-run]
+  Uploads to the channel of the signed-in account (default unlisted) and prints the
+  watch URL and the privacy-friendly embed URL to link from an app or site. One-time
+  owner steps, named in the error when missing: grant the youtube.upload scope
+  (auth-login account=ADDR scopes=...,youtube.upload) and enable "YouTube Data API v3"
+  in the OAuth client's project. gws has no YouTube service, so this verb calls the
+  YouTube Data API directly with the account's own OAuth credentials.
 - Escape hatch: raw <service> <resource...>
 
 ## Composed Multi-Service Workflows
@@ -581,6 +588,7 @@ def handle_contract():
                 "tasks-delete",
             ],
             "drive": ["drive-list", "drive-search", "drive-get", "drive-upload", "drive-mkdir", "drive-home"],
+            "youtube": ["youtube-upload"],
             "workflows": ["mail-to-task", "drive-share-mail", "agenda"],
             "escape_hatch": ["raw"],
         },
@@ -1176,6 +1184,86 @@ def apply_caller_env(env_map):
             os.environ.pop(k, None)
 
 
+YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload"
+YOUTUBE_UPLOAD_URL = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status"
+YOUTUBE_PRIVACY = ("private", "unlisted", "public")
+
+
+def youtube_fix(account):
+    """The two one-time owner steps a YouTube upload needs, as commands."""
+    return {
+        "grant_scope": f"bashy google auth-login account={account} scopes=drive.file,gmail.readonly,gmail.compose,gmail.send,calendar.events,tasks,{YOUTUBE_UPLOAD_SCOPE}",
+        "enable_api": "gcloud services enable youtube.googleapis.com --project PROJECT_ID (or enable \"YouTube Data API v3\" in the Cloud Console for your OAuth client's project)",
+    }
+
+
+def oauth_access_token(credentials_file):
+    """Exchange an authorized_user refresh token for an access token. The
+    token is held in memory only; nothing is printed or written."""
+    import urllib.parse
+    import urllib.request
+    with open(credentials_file, "r", encoding="utf-8") as fh:
+        c = json.load(fh)
+    if c.get("type") != "authorized_user":
+        fail("UNSUPPORTED_CREDENTIAL", "youtube-upload needs an authorized_user (OAuth) credential for the channel owner")
+    data = urllib.parse.urlencode({"client_id": c["client_id"], "client_secret": c["client_secret"],
+                                   "refresh_token": c["refresh_token"], "grant_type": "refresh_token"}).encode()
+    with urllib.request.urlopen("https://oauth2.googleapis.com/token", data=data, timeout=30) as resp:
+        return json.loads(resp.read())["access_token"]
+
+
+def handle_youtube_upload(cred_info, positionals, shaped, dry_run):
+    import urllib.error
+    import urllib.request
+    path = positionals[0] if positionals else shaped.pop("file", None)
+    if not path:
+        fail("USAGE", "youtube-upload requires <video-file> title=... [description=...] [privacy=unlisted|private|public] [tags=a,b]")
+    path = os.path.expanduser(path)
+    if not os.path.isfile(path):
+        fail("NOT_FOUND", f"no such file: {path}")
+    title = shaped.pop("title", "") or os.path.splitext(os.path.basename(path))[0]
+    privacy = shaped.pop("privacy", "unlisted").lower()
+    if privacy not in YOUTUBE_PRIVACY:
+        fail("USAGE", f"privacy must be one of {', '.join(YOUTUBE_PRIVACY)}")
+    tags = [t.strip() for t in str(shaped.pop("tags", "")).split(",") if t.strip()]
+    meta = {"snippet": {"title": title[:100], "description": shaped.pop("description", ""), "tags": tags},
+            "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False}}
+    size = os.path.getsize(path)
+    account = cred_info["account"]
+    if dry_run:
+        emit_json({"ok": True, "dry_run": True, "verb": "youtube-upload", "account": account, "file": path,
+                   "bytes": size, "metadata": meta, "needs": youtube_fix(account)})
+        sys.exit(0)
+    token = oauth_access_token(cred_info["credentials_file"])
+    mime = mimetypes.guess_type(path)[0] or "video/*"
+    start = urllib.request.Request(YOUTUBE_UPLOAD_URL, data=json.dumps(meta).encode(), method="POST", headers={
+        "Authorization": "Bearer " + token, "Content-Type": "application/json; charset=UTF-8",
+        "X-Upload-Content-Type": mime, "X-Upload-Content-Length": str(size)})
+    try:
+        with urllib.request.urlopen(start, timeout=60) as resp:
+            session = resp.headers.get("Location")
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", "replace")
+        reason = "insufficient_scope" if ("insufficient" in body.lower() or e.code == 403 and "scope" in body.lower()) else \
+            ("api_disabled" if ("has not been used" in body or "is disabled" in body or "accessNotConfigured" in body) else "http_%d" % e.code)
+        fail("YOUTUBE_REFUSED", f"YouTube refused the upload ({reason})", extra={"reason": reason, "fix": youtube_fix(account), "detail": body[-400:]})
+    if not session:
+        fail("YOUTUBE_REFUSED", "YouTube returned no upload session")
+    with open(path, "rb") as fh:
+        put = urllib.request.Request(session, data=fh.read(), method="PUT", headers={
+            "Authorization": "Bearer " + token, "Content-Type": mime})
+        try:
+            with urllib.request.urlopen(put, timeout=600) as resp:
+                video = json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            fail("YOUTUBE_UPLOAD_FAILED", f"upload failed (HTTP {e.code})", extra={"detail": e.read().decode("utf-8", "replace")[-400:]})
+    vid = video.get("id", "")
+    emit_json({"ok": True, "verb": "youtube-upload", "account": account, "id": vid, "privacy": privacy,
+               "url": f"https://youtu.be/{vid}", "embed": f"https://www.youtube-nocookie.com/embed/{vid}",
+               "title": meta["snippet"]["title"]})
+    sys.exit(0)
+
+
 def main(
     env_account="",
     env_cred="",
@@ -1247,6 +1335,10 @@ def main(
 
     # All service and workflow verbs require explicit account + credentials preflight
     cred_info = require_credentials(shaped)
+
+    # --- YouTube verbs ---
+    if verb == "youtube-upload":
+        handle_youtube_upload(cred_info, positionals, shaped, dry_run)
 
     # --- Gmail verbs ---
     if verb == "gmail-list":

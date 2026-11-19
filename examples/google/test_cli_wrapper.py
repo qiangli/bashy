@@ -470,6 +470,29 @@ class GoogleWrapperTest(unittest.TestCase):
         patch_body = json.loads(calls[1]["argv"][calls[1]["argv"].index("--json") + 1])
         self.assertEqual(patch_body, {"status": "completed"})
 
+    def test_youtube_upload_dry_run_plans_without_network(self):
+        video = os.path.join(self.root, "demo.mp4")
+        with open(video, "wb") as fh:
+            fh.write(b"\x00\x00\x00\x18ftypmp42")
+        res = self.run_wrapper(
+            ["youtube-upload", video, "title=Hello World demo", "privacy=unlisted", "tags=shaping,bashy", "--dry-run"],
+            env_overrides=self.auth_env(),
+        )
+        self.assertEqual(res.returncode, 0, res.stderr)
+        plan = json.loads(res.stdout)
+        self.assertTrue(plan["dry_run"])
+        self.assertEqual(plan["metadata"]["status"]["privacyStatus"], "unlisted")
+        self.assertEqual(plan["metadata"]["snippet"]["tags"], ["shaping", "bashy"])
+        self.assertIn("youtube.upload", plan["needs"]["grant_scope"])
+        self.assertIn(plan["account"], plan["needs"]["grant_scope"])
+        self.assertEqual(len(self.read_calls()), 0)
+
+        bad = self.run_wrapper(["youtube-upload", video, "privacy=everyone", "--dry-run"], env_overrides=self.auth_env())
+        self.assertEqual(bad.returncode, 2)
+        self.assertEqual(json.loads(next(l for l in bad.stderr.splitlines() if '"error"' in l))["error"]["code"], "USAGE")
+        missing = self.run_wrapper(["youtube-upload", os.path.join(self.root, "nope.mp4"), "--dry-run"], env_overrides=self.auth_env())
+        self.assertEqual(json.loads(next(l for l in missing.stderr.splitlines() if '"error"' in l))["error"]["code"], "NOT_FOUND")
+
     def test_drive_upload_validates_bounds_and_media_type(self):
         # 1. Unsupported extension/media type refused before spawning gws
         exe_path = os.path.join(self.root, "payload.bin")
