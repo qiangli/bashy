@@ -222,3 +222,31 @@ pinned to a commit can change under the gate and is not evidence.
 
 Because the workflow uses the candidate commit's release tools, a fix to the
 promote scripts only takes effect for candidates built after it lands.
+
+## Shaping lifecycle smoke (release gate)
+
+Every release candidate must pass the model-free Hello World shaping smoke
+against the **built candidate binary** (not a repo-local `go run`, not an older
+installed one). It blocks the release on failure:
+
+```sh
+bashy dag test-shaping-smoke test-shaping-smoke-regression   # BASHY_SMOKE_BIN=/path/to/candidate (default bin/bashy)
+```
+
+`test-shaping-smoke` (`scripts/test-shaping-hello-world.sh`) registers a temp
+copy of `examples/shaping/hello-world` in a disposable `HOME`/`BASHY_HOME`,
+starts a console of its own (`--bind lan --pair`, so the host needs a LAN
+address), pairs two principals and asserts, in order: `register.sh`,
+`shape wish --from` a prepared workspace, show, diff, verify (the app's real
+`checks/smoke.bsh`, evidence file checked), preview serving "Hello, Shaping!",
+approve, a second principal still seeing "Hello, World!", the browser
+checkpoint `TestDOMExternalShapeCheckpoint` (`-tags verifydom`, needs Chrome;
+`SHAPING_SMOKE_SKIP_DOM=1` skips it and is not a pass of that step), undo
+restoring "Hello, World!", and submit recording the candidate without
+activating it. `test-shaping-smoke-regression` makes the app's smoke check
+expect the old greeting and passes only if the smoke then fails.
+
+Part 2 (two-host promotion round trip: outgoing, push to an org remote,
+incoming/pull on a second host, undo, push upstream) runs on the fleet e2e
+harness and is required for releases that touch shaping, promotion or the shape
+CLI. Story 0a10de8d63f2; it is scheduled separately.

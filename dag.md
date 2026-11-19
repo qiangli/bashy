@@ -226,6 +226,40 @@ else
 fi
 ```
 
+### test-shaping-smoke
+Release gate: Hello World shaping lifecycle on the BUILT binary, model-free.
+Registers examples/shaping/hello-world in a disposable HOME/BASHY_HOME, then
+asserts wish --from, show, diff, verify (the app's real checks/smoke.bsh),
+preview, approve, a second principal unaffected, the browser checkpoint
+(TestDOMExternalShapeCheckpoint, -tags verifydom) against the console this run
+started, undo and submit. Set `BASHY_SMOKE_BIN` to the candidate binary
+(default `bin/bashy`; build it first). Needs Chrome unless
+`SHAPING_SMOKE_SKIP_DOM=1`. See docs/release-runbook.md.
+Effects: exec, net, read, write
+
+```bash
+set -e
+bin_dir="${BIN_DIR:-bin}"
+GOWORK=off scripts/test-shaping-hello-world.sh "${BASHY_SMOKE_BIN:-$bin_dir/bashy}"
+```
+
+### test-shaping-smoke-regression
+Proves test-shaping-smoke can fail: the app's smoke check is deliberately made to
+expect the old greeting, so verification must fail and the smoke must exit
+non-zero. Passes only when the smoke fails.
+Effects: exec, net, read, write
+
+```bash
+set -e
+bin_dir="${BIN_DIR:-bin}"
+if SHAPING_SMOKE_BREAK=greeting SHAPING_SMOKE_SKIP_DOM=1 \
+  scripts/test-shaping-hello-world.sh "${BASHY_SMOKE_BIN:-$bin_dir/bashy}" >/dev/null 2>&1; then
+  echo "test-shaping-smoke-regression: FAIL: the smoke passed with a broken step" >&2
+  exit 1
+fi
+echo "test-shaping-smoke-regression: ok (broken smoke check was refused)"
+```
+
 ### fmtcheck
 The formatting gate. **Reports; never rewrites** — and that is the whole
 design, not caution. gofmt changes doc-comment TEXT as well as whitespace:
