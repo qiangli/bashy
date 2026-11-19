@@ -22,6 +22,7 @@ const testSecret = "test-secret"
 var fixture = fstest.MapFS{
 	"site.json": {Data: []byte(`{"site_url":"https://example.com","title":"Example Person","contact":"mailto:owner@example.com",
 	  "ai":{"base_url":"http://127.0.0.1:1","model":"m","key_env":"SITE_AI_KEY","daily_cap":5,"daily_max":50},
+	  "shape_url":"/matrix/h/host/app/apps/shape/site-shaping/",
 	  "views":[{"name":"recruiter-summary","title":"Recruiter summary","prompt":"Summarize.","audience":{"signed_in":true}}]}`)},
 	"fields/contact.md":      {Data: []byte("---\nlabel: Contact\ncircles: recruiter\n---\nEmail: owner@example.com\n")},
 	"fields/certificates.md": {Data: []byte("---\nlabel: Certificates\ncircles: recruiter\n---\nExample Certified Professional\n")},
@@ -286,6 +287,17 @@ func TestStaticOnlyStripsFrameworkScripts(t *testing.T) {
 	for _, kept := range []string{`classList.add("dark")`, "<h1>Hi</h1>", "/p/_shaping/shaping.js"} {
 		if !strings.Contains(body, kept) {
 			t.Errorf("%s missing:\n%s", kept, body)
+		}
+	}
+}
+
+func TestShapeEntryIsOwnerOnly(t *testing.T) {
+	s := newTestServer(t, "http://127.0.0.1:1", "http://127.0.0.1:1", "k")
+	for _, w := range []who{owner, recruiter, stranger, nobody} {
+		_, me := do(t, s, "GET", "/_shaping/api/me", w)
+		got, _ := me["shape"].(string)
+		if (w.name == "owner") != (got != "") {
+			t.Errorf("%s: shape = %q", w.name, got)
 		}
 	}
 }

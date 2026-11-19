@@ -66,3 +66,15 @@
 #ss-panel-root .ss-fact p { margin: 2px 0 0; }
 #ss-panel-root .ss-output h3, #ss-panel-root .ss-output h4 { margin: 12px 0 4px; font-size: 15px; }
 #ss-panel-root .ss-output ul { padding-left: 18px; }
+#ss-panel-root .ss-shape {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--ss-accent);
+  color: #fff;
+  text-decoration: none;
+  font-weight: 600;
+}

@@ -123,6 +123,13 @@
     panel.appendChild(el("h2", null, "Shaped for you"));
     panel.appendChild(el("p", { class: "ss-tier" }, tierText[info.tier] || ""));
 
+    if (info.shape) {
+      var shape = el("a", { class: "ss-shape", href: new URL(info.shape, location.origin).href, target: "_blank", rel: "noopener" });
+      shape.appendChild(flowMark());
+      shape.appendChild(document.createTextNode(" Shape this site"));
+      panel.appendChild(shape);
+    }
+
     if (info.tier === "anonymous") {
       var p = el("p");
       var a = el("a", { href: new URL(info.sign_in, location.origin).href, target: "_blank", rel: "noopener" }, "Sign in");

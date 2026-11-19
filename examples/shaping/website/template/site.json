@@ -2,7 +2,7 @@
   "site_url": "https://example.com",
   "title": "Example Person",
   "contact": "mailto:owner@example.com?subject=Access%20request",
-  "sign_in": "/signin",
+  "sign_in": "/",
   "ai": {
     "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
     "model": "gemini-flash-lite-latest",

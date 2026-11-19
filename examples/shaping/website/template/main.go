@@ -31,14 +31,18 @@ type Config struct {
 	SiteURL string `json:"site_url"`
 	Title   string `json:"title"`
 	Contact string `json:"contact"` // where to ask for more (mailto: or a URL)
-	SignIn  string `json:"sign_in"` // cloudbox sign-in page, relative to the mount's origin
+	SignIn  string `json:"sign_in"` // sign-in page on the mount's origin; on a satellite that is "/"
 	// StaticOnly serves pages without the site's own scripts that load from
 	// it: a client-side router (Next.js, a Vite SPA) sees the engine's mount
 	// path, matches no route and renders its 404 over a pre-rendered page.
 	// Inline scripts that load nothing (a theme switch) are kept.
-	StaticOnly bool    `json:"static_only"`
-	AI         AIRoute `json:"ai"`
-	Views      []View  `json:"views"`
+	StaticOnly bool `json:"static_only"`
+	// ShapeURL is where the owner shapes this layer: the console's Shape page
+	// for the registered shaped app, relative to the mount's origin (e.g.
+	// /matrix/h/<host>/app/apps/shape/<app>/). Offered to the owner only.
+	ShapeURL string  `json:"shape_url,omitempty"`
+	AI       AIRoute `json:"ai"`
+	Views    []View  `json:"views"`
 }
 
 type server struct {
@@ -88,7 +92,7 @@ func newServerFrom(fsys fs.FS, getenv func(string) string) (*server, error) {
 		return nil, err
 	}
 	if cfg.SignIn == "" {
-		cfg.SignIn = "/signin"
+		cfg.SignIn = "/" // a satellite's sign-in is its root page (provider buttons)
 	}
 	fields, err := loadFields(fsys, "fields")
 	if err != nil {
@@ -186,7 +190,15 @@ func (s *server) me(w http.ResponseWriter, r *http.Request) {
 		"fields":  len(s.allowedFields(c)),
 		"more":    c.Tier != TierOwner && len(s.allowedFields(c)) < len(s.fields),
 		"views":   refs,
+		"shape":   ownerOnly(c, s.cfg.ShapeURL),
 	})
+}
+
+func ownerOnly(c Caller, v string) string {
+	if c.Tier != TierOwner {
+		return ""
+	}
+	return v
 }
 
 func (s *server) fieldsFor(w http.ResponseWriter, r *http.Request) {
