@@ -115,6 +115,10 @@
   };
 
   get("me").then(function (info) {
+    // Inside the console (the owner's shaping copy) visitors cannot be
+    // identified, so the visitor panel would only ask to sign in; the
+    // console's own wish button is the tool there.
+    if (info.public === false) return;
     var root = el("div", { id: "ss-panel-root" });
     var button = el("button", { type: "button", class: "ss-toggle", "aria-expanded": "false" });
     button.appendChild(flowMark());

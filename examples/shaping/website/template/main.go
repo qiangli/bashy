@@ -191,6 +191,9 @@ func (s *server) me(w http.ResponseWriter, r *http.Request) {
 		"more":    c.Tier != TierOwner && len(s.allowedFields(c)) < len(s.fields),
 		"views":   refs,
 		"shape":   ownerOnly(c, s.cfg.ShapeURL),
+		// Without the outpost secret nobody can be identified: this is the
+		// owner's shaping copy inside the console, not the visitors' engine.
+		"public": s.secret != "",
 	})
 }
 

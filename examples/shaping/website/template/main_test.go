@@ -301,3 +301,14 @@ func TestShapeEntryIsOwnerOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestMeSaysWhetherVisitorsAreIdentified(t *testing.T) {
+	s := newTestServer(t, "http://127.0.0.1:1", "http://127.0.0.1:1", "")
+	if _, me := do(t, s, "GET", "/_shaping/api/me", nobody); me["public"] != true {
+		t.Errorf("with a secret: public = %v", me["public"])
+	}
+	s.secret = ""
+	if _, me := do(t, s, "GET", "/_shaping/api/me", nobody); me["public"] != false {
+		t.Errorf("without a secret: public = %v", me["public"])
+	}
+}
