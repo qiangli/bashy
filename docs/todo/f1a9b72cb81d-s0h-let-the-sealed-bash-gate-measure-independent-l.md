@@ -5,6 +5,8 @@ title: S0H Let the sealed Bash gate measure independent layer artifacts
 seq: 3243
 status: todo
 priority: p0
+labels:
+    - superseded-plan
 created: 2026-11-18T01:26:31.650866Z
 sprint: 575
 sprint_id: 65ce85f5-87c0-5863-bf55-62de86f5df36
