@@ -757,7 +757,10 @@ func isFrontDoorInvocation(name string) bool {
 			}
 		}
 	}
-	return false
+	// `bashy <tool>`: a registered agent CLI as a steerable session. Checked
+	// last so every static surface keeps precedence (`bashy ycode` never
+	// reaches here — its own front-door case owns it).
+	return isToolShortcutName(name)
 }
 
 func dispatch() {
@@ -2130,6 +2133,13 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 			dispatchExit(coreskills.ExitCode(err))
 		}
 		dispatchExit(0)
+	}
+	// `bashy <tool>`: a registered agent CLI as a steerable session (see
+	// toolshortcut.go). After every shipped surface — coreutils, the managed
+	// registry, the operator ring, skill docs — so nothing that already
+	// resolves is shadowed; only the current 127 answers here.
+	if _, ok := lookupSteerTool(os.Args[1]); ok {
+		dispatchExit(dispatchToolShortcut(os.Args[1], os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
 	}
 	// Unknown first token — not a front-door verb, engine/obs command, or a
 	// registered coreutils tool. When it is a BARE command NAME (not an option,
