@@ -20,6 +20,9 @@
 #                                 expects the OLD greeting); the run MUST fail.
 #   SHAPING_SMOKE_SKIP_DOM=1      skip the browser checkpoint (no Chrome).
 #   SHAPING_SMOKE_KEEP=1          keep the temp tree for inspection.
+#   SHAPING_SMOKE_DOM_TEST=PATH   prebuilt browser checkpoint test binary
+#                                 (go test -c -tags verifydom ./pkg/webconsole
+#                                 in yoke); no Go needed on the test host.
 #   BASHY_E2E_BROWSER_WS          forwarded to the checkpoint (remote Chrome).
 set -euo pipefail
 
@@ -167,16 +170,22 @@ checkpoint() { # checkpoint PRINCIPAL GREETING ACTIVE
 	[ -z "${SHAPING_SMOKE_SKIP_DOM:-}" ] || return 0
 	(
 		cd "$root"
-		HOME=$real_home GOWORK=off \
+		export HOME=$real_home GOWORK=off \
 			BASHY_E2E_CONSOLE_URL=$base \
 			BASHY_E2E_COOKIE_FILE=$tmp/$1.cookie \
 			BASHY_E2E_ARTIFACT_DIR=$tmp/dom-$1 \
 			BASHY_E2E_APP=hello-world \
 			BASHY_E2E_PAGE_PATH=/hello-world/ \
 			BASHY_E2E_GREETING=$2 \
-			BASHY_E2E_ACTIVE=$3 \
+			BASHY_E2E_ACTIVE=$3
+		if [ -n "${SHAPING_SMOKE_DOM_TEST:-}" ]; then
+			# A prebuilt test binary (go test -c -tags verifydom) so a test
+			# host needs no Go toolchain or module downloads.
+			"$SHAPING_SMOKE_DOM_TEST" -test.run '^TestDOMExternalShapeCheckpoint$' -test.count=1 -test.v
+		else
 			go test github.com/qiangli/yoke/pkg/webconsole -tags verifydom \
-			-run '^TestDOMExternalShapeCheckpoint$' -count=1 -v
+				-run '^TestDOMExternalShapeCheckpoint$' -count=1 -v
+		fi
 	) >"$tmp/dom-$1.log" 2>&1 || { tail -n 40 "$tmp/dom-$1.log" >&2; fail "browser checkpoint for $1"; }
 	grep -q -- '--- PASS: TestDOMExternalShapeCheckpoint' "$tmp/dom-$1.log" ||
 		{ tail -n 20 "$tmp/dom-$1.log" >&2; fail "browser checkpoint for $1 did not pass (skipped?)"; }
