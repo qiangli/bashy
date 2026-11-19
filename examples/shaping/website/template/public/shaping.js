@@ -74,11 +74,10 @@
   //   data-shaping-contact         filled with the reader's contact-* fields
   function shapePage(info, fieldsReady) {
     Array.prototype.forEach.call(document.querySelectorAll("[data-shaping-hide-on-engine]"), function (n) { n.remove(); });
-    var signIn = new URL(info.sign_in, location.origin).href;
+    var signIn = signInHref(info);
     Array.prototype.forEach.call(document.querySelectorAll("a[data-shaping-signin]"), function (a) {
       a.setAttribute("href", signIn);
-      a.setAttribute("target", "_blank");
-      a.setAttribute("rel", "noopener");
+      a.removeAttribute("target");
     });
     var card = document.querySelector("[data-shaping-contact]");
     if (!card || info.tier === "anonymous") return;
@@ -98,6 +97,14 @@
         card.appendChild(p);
       });
     }).catch(function () {});
+  }
+
+  // Sign in, then come back to this very page: cloudbox's /cloud/signin
+  // remembers ?next= (same-origin path only) across the provider round trip.
+  function signInHref(info) {
+    var u = new URL(info.sign_in || "/cloud/signin", location.origin);
+    u.searchParams.set("next", location.pathname + location.search);
+    return u.href;
   }
 
   function get(path) {
@@ -136,9 +143,9 @@
 
     if (info.tier === "anonymous") {
       var p = el("p");
-      var a = el("a", { href: new URL(info.sign_in, location.origin).href, target: "_blank", rel: "noopener" }, "Sign in");
+      var a = el("a", { href: signInHref(info) }, "Sign in");
       p.appendChild(a);
-      p.appendChild(document.createTextNode(" to get a summary made for you, then reload this page."));
+      p.appendChild(document.createTextNode(" to get a summary made for you; you will come back to this page."));
       panel.appendChild(p);
     }
 

@@ -31,7 +31,7 @@ type Config struct {
 	SiteURL string `json:"site_url"`
 	Title   string `json:"title"`
 	Contact string `json:"contact"` // where to ask for more (mailto: or a URL)
-	SignIn  string `json:"sign_in"` // sign-in page on the mount's origin; on a satellite that is "/"
+	SignIn  string `json:"sign_in"` // sign-in entry on the mount's origin (default /cloud/signin; ?next= is added)
 	// StaticOnly serves pages without the site's own scripts that load from
 	// it: a client-side router (Next.js, a Vite SPA) sees the engine's mount
 	// path, matches no route and renders its 404 over a pre-rendered page.
@@ -92,7 +92,9 @@ func newServerFrom(fsys fs.FS, getenv func(string) string) (*server, error) {
 		return nil, err
 	}
 	if cfg.SignIn == "" {
-		cfg.SignIn = "/" // a satellite's sign-in is its root page (provider buttons)
+		// Cloudbox's sign-in entry; the panel adds ?next=<this page> so the
+		// visitor lands back here after signing in (also via a satellite).
+		cfg.SignIn = "/cloud/signin"
 	}
 	fields, err := loadFields(fsys, "fields")
 	if err != nil {

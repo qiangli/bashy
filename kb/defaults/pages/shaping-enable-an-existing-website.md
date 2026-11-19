@@ -25,7 +25,8 @@ The site stays where it is. A small **shaping layer** (its own shaped app, in a 
 5. Owner shaping: `website.bsh register DIR --name NAME` makes the layer a shaped app in the console; set `shape_url` so the panel offers the owner "Shape this site" (see the shaping-agent runbook).
 
 Pitfalls (each seen live):
-- **Sign-in is the satellite's root page** (`/`, provider buttons); `/signin` is a 404 there, and a session on the master does not carry to the satellite yet — sign in on the satellite.
+- **Sign in returns to the page:** link to `/cloud/signin?next=<same-origin path>` on the satellite (the panel does this for its own links and for `data-shaping-signin`); cloudbox keeps the path across the provider round trip and lands the visitor back on it. `/signin` is a 404 on a satellite, and a session on the master does not carry to the satellite yet — sign in on the satellite.
+- **The visitor must be an ACTIVE member:** an invitation not yet accepted leaves the membership inactive and the satellite refuses the sign-in ("account or satellite is not active"); the invitee accepts once.
 - **A signed-in non-member is anonymous on a satellite** today (admission is members-only). Members and the owner get their tiers.
 - **Never proxy a site's assets through the engine**: the edge rate-limits anonymous requests per app, and a page of bundles trips it (HTTP 429). The template loads assets from the static host and only pages through the engine.
 - **App-router sites (Next.js, SPAs) show their 404 on the engine face** after hydration (the mount path is not one of their routes): set `"static_only": true`; the panel then fills the page hooks.
