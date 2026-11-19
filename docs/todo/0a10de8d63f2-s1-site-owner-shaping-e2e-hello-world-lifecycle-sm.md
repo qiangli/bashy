@@ -52,3 +52,10 @@ Done when: part 1 passes on the test host against the release candidate binary a
 ## Worker rules (Sprint 670)
 
 Do part 1 only; the conductor schedules part 2 separately. Build with GOWORK=off. Use a bashy dag target, never make. Run only the new smoke and its focused Go tests locally: no full suites, no podman, ollama or VMs on the dev box. The conductor runs the gate on the test host. Commit with trailers Sprint: #670, Story: #3149, Story-ID: 0a10de8d63f2 and your Agent line; do not push tags or release.
+
+## Part 1 evidence (2026-11-19)
+
+Delivered: `scripts/test-shaping-hello-world.sh`, dag targets `test-shaping-smoke` and `test-shaping-smoke-regression`, and the release-runbook section (bashy 85c7d897, plus 7a944a04 for an optional prebuilt browser-checkpoint binary, so the venue needs no Go toolchain or module downloads).
+- Test host (by role), inside a Debian image with Chromium, git and curl, using a bashy binary built locally from the module cache (GOPROXY=off): **27/27 PASS**. Covered: register; candidate from a prepared change; show and diff; verify runs the app's real smoke.bsh with sealed evidence; preview; approve; alice sees the new greeting while bob still sees the original; the browser checkpoint for both principals; undo; submit without activating.
+- Deliberate break (`SHAPING_SMOKE_BREAK=greeting`): FAIL at verify, exit 1.
+- Remaining: part 2, the two-host promotion round trip.
