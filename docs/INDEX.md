@@ -1,5 +1,7 @@
 # bashy docs index
 
+- [Full POSIX Profile D runbook](kb/pages/full-profile-d-posix-runbook.md) — public kit application links, existing full-run baseline and procedure references, provider/evidence requirements, and annual renewal checklist; current setup limitations remain explicit.
+
 - [Sprint 634 text evidence](sprint-634-text-evidence.md) — recorded local film prose: shared Ollama client, scoped writes, fixture gate and Windows test-host live verification.
 - [Sprint 634 text plan](sprint-634-text-plan.md) — implementation and verification sequence for story #3232.
 
