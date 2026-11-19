@@ -228,6 +228,7 @@ success, 3 refusal with a reason, 1 other).
 | Wishes left today, or why they are unavailable | `desktop allowance --json` (`reason`) |
 | Live page actions | `desktop pages --json`, `desktop invoke PAGE ACTION [JSON]`, `desktop result ID` |
 | Set the daily wish allowance (superadmin; satellite owner) | `desktop policy ls\|set OWNER LIMIT\|unset OWNER` (signed-in session only) |
+| Set the wish route: URL, model, key (superadmin; satellite owner; CLI only, no web UI) | `desktop policy route get\|set --url URL --model M [--token-stdin] [--no-probe]\|unset\|test [--wish W]` (signed-in session only; the key only from stdin; applies to the next wish with no redeploy) |
 
 Walkthrough skill-script: `examples/desktop/desktop.bsh walkthrough`.
 
