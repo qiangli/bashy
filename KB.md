@@ -2,7 +2,7 @@
 
 Check these before you start — they may save you a failed approach:
 
-- [repo/page] Mock up a video before final production: animatic plus one proof slice — How to make a cheap, fast video draft (a mockup or animatic) that lets the owner approve the plan before paid or slow final production: full-length draft soundtrack, one small still per distinct shot with beat-locked cuts, subtitles and sh  (kb:mock-up-a-video-before-final-production-animatic-and-proof-slice)
+- [repo/page] Repeat full POSIX Profile D tests: kit application, baseline reuse and annual renewal — Public runbook for Bashy users obtaining The Open Group VSC-PCTS kit, repeating full Profile D Shell and Utilities tests, or preparing annual recertification; distinguishes shell-only, full engineering and formal evidence. Use this runbook when repeating Bashy  (kb:full-profile-d-posix-runbook)
 
 More: `bashy kb search <query>` (or `bashy kb show <slug>`).
 
