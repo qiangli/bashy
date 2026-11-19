@@ -238,7 +238,7 @@ func TestDeclaredNudgeRows(t *testing.T) {
 }
 
 func TestShimAgentEnvMarkers(t *testing.T) {
-	for agent, want := range map[string]string{"agy": "AGENT='agy'", "muse": "AGENT='muse'", "gemini": ""} {
+	for agent, want := range map[string]string{"agy": "AGENT='agy'", "muse": "AGENT='muse'", "plain-shim": ""} {
 		dir := t.TempDir()
 		t.Setenv("BASHY_SHIM_DIR", dir)
 		msg, err := shimInstaller(agent).install(filepath.Join(t.TempDir(), "bashy"), false)

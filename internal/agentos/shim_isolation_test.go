@@ -102,7 +102,7 @@ func TestShimWritesAreIsolatedFromRealHome(t *testing.T) {
 	if err := os.WriteFile(target, []byte("#!/bin/sh\necho hi\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	for _, agent := range []string{"gemini", "copilot", "agy"} {
+	for _, agent := range []string{"agy", "muse"} {
 		if _, err := shimInstaller(agent).install(target, false); err != nil {
 			t.Fatalf("shimInstaller(%q).install: %v", agent, err)
 		}

@@ -144,7 +144,7 @@ func TestConformListJSONCarriesVersionedEnvelope(t *testing.T) {
 func TestInstallAgentStatusJSONCarriesVersionedEnvelope(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	// The aider check runs `SHELL -i -c "echo ok"`; the default shell is this
+	// A shell probe runs `SHELL -c "echo ok"`; the default shell is this
 	// process, which under `go test` is the test binary — so name a real
 	// shell, as an operator with a relocated bashy would.
 	shell := "/bin/sh"

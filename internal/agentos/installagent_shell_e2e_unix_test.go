@@ -13,7 +13,7 @@ import (
 func TestE2EInstallAgentShimRecordsExecution(t *testing.T) {
 	bin := bashyBinary(t)
 	t.Setenv("HOME", t.TempDir())
-	for _, name := range []string{"codex", "agy", "gemini", "copilot"} {
+	for _, name := range []string{"codex", "agy", "muse"} {
 		t.Run(name, func(t *testing.T) {
 			ins := shimInstaller(name)
 			if name == "codex" {

@@ -1642,7 +1642,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// Hidden alias of `inspect audit` since 2026-09-12 (same body).
 		dispatchExit(dispatchInspect(append([]string{"audit"}, os.Args[2:]...)))
 	case "install-agent":
-		// Wire a coding agent (claude/opencode/aider/gemini/copilot) to use
+		// Wire a coding agent (claude/opencode/codex/agy/muse) to use
 		// bashy as its shell; --check verifies, --uninstall reverses. See
 		// docs/agent-adoption/matrix.md for per-agent verification status.
 		dispatchExit(dispatchInstallAgent(os.Args[2:]))

@@ -20,7 +20,7 @@ func TestInstallAgentShimPreservesAgentOSEntryPoint(t *testing.T) {
 	if err := os.WriteFile(target, []byte("#!/bin/sh\nprintf '%s\\n' \"$0\"\nprintf '%s\\n' \"$@\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	for _, agent := range []string{"agy", "gemini", "copilot", "codex"} {
+	for _, agent := range []string{"agy", "muse", "codex"} {
 		t.Run(agent, func(t *testing.T) {
 			ins := shimInstaller(agent)
 			if agent == "codex" {

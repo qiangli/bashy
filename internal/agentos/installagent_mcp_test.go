@@ -91,13 +91,13 @@ func TestInstallAgentMCPDryRunOpencode(t *testing.T) {
 }
 
 func TestInstallAgentMCPUnsupported(t *testing.T) {
-	for _, name := range []string{"aider", "gemini", "copilot", "agy", "antigravity"} {
+	for _, name := range []string{"agy", "antigravity", "muse"} {
 		if _, ok := mcpWriters()[name]; ok {
 			t.Fatalf("%s unexpectedly has an MCP config writer", name)
 		}
 	}
-	if got := dispatchInstallAgentMCP("aider", false, false, false, false, false); got != 1 {
-		t.Fatalf("dispatchInstallAgentMCP(aider) = %d, want 1", got)
+	if got := dispatchInstallAgentMCP("agy", false, false, false, false, false); got != 1 {
+		t.Fatalf("dispatchInstallAgentMCP(agy) = %d, want 1", got)
 	}
 }
 

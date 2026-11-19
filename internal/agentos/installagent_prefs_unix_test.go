@@ -19,7 +19,7 @@ func TestInstallAgentProjectsPrefsToShim(t *testing.T) {
 	if err := os.WriteFile(target, []byte("#!/bin/sh\nprintf '%s' \"$BASHY_PREFS\"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := shimInstaller("gemini").install(target, false); err != nil {
+	if _, err := shimInstaller("plain-shim").install(target, false); err != nil {
 		t.Fatal(err)
 	}
 	// Agent process starts without BASHY_PREFS; the shim must supply it.
@@ -45,7 +45,7 @@ func TestInstallAgentNoPrefsLeavesShimCanonical(t *testing.T) {
 	if err := os.WriteFile(target, []byte("#!/bin/sh\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := shimInstaller("gemini").install(target, false); err != nil {
+	if _, err := shimInstaller("plain-shim").install(target, false); err != nil {
 		t.Fatal(err)
 	}
 	b, _ := os.ReadFile(filepath.Join(shimDir(), "bash"))
