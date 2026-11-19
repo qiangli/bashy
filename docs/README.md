@@ -4,6 +4,10 @@ Start at [INDEX.md](INDEX.md), which has one entry per load-bearing doc.
 
 ## Abstracts
 
+- **[Moving the boxes](retro-s575-package-separation.md).** A Sprint 575 joke
+  about redesigning houses while hired to move boxes, with practical lessons
+  for keeping repository separation small and preserving existing behavior.
+
 - **[Sprint 627 M5 API rods](plan-s627-m5-api-rods.md).** Typed HTTP media binding,
   Replicate rods, fixture verification and the separate operator approved paid smoke.
 

@@ -1,5 +1,7 @@
 # bashy docs index
 
+- [Moving the boxes](retro-s575-package-separation.md) — the Sprint 575 package-separation anecdote and lessons on scope, build order, preserved baselines and concrete handoffs.
+
 - [Full POSIX Profile D runbook](kb/pages/full-profile-d-posix-runbook.md) — public kit application links, existing full-run baseline and procedure references, provider/evidence requirements, and annual renewal checklist; current setup limitations remain explicit.
 
 - [Sprint 634 text evidence](sprint-634-text-evidence.md) — recorded local film prose: shared Ollama client, scoped writes, fixture gate and Windows test-host live verification.
