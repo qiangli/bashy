@@ -93,3 +93,31 @@ func TestAttentionCommandPreservesMailboxAndApproval(t *testing.T) {
 		t.Fatal(gs)
 	}
 }
+
+func TestAttentionStatusUrgencyFloorAndMailboxProvenance(t *testing.T) {
+	for _, status := range []string{"blocked", "conflict", "question", "approval", "review", "completed"} {
+		t.Run(status, func(t *testing.T) {
+			body := `{"schema":"bashy-attention-notice-v1","kind":"notification","urgency":"routine"}`
+			gs := composeAttention([]mailboxItem{{ID: "mb:1", Source: "mb", From: "worker", Status: status, Body: body}}, nil, nil)
+			want := "pending"
+			if status == "blocked" || status == "conflict" {
+				want = "urgent"
+			}
+			if len(gs) != 1 || gs[0].Urgency != want {
+				t.Fatalf("status lost: %+v", gs)
+			}
+		})
+	}
+	r := ask.Request{ID: "canonical", Prompt: "Real question"}
+	gs := composeAttention([]mailboxItem{{ID: "mb:2", Source: "mb", From: "worker", Body: `{"schema":"bashy-attention-notice-v1","kind":"approval","summary":"Allow deployment"}`}}, []ask.Request{r}, nil)
+	for _, g := range gs {
+		for _, item := range g.Items {
+			if item.ID == "mb:2" && (item.Trust != "unverified mailbox claim" || item.Source != "mb" || item.From != "worker" || len(item.Next) != 0) {
+				t.Fatalf("mailbox impersonated canonical request: %+v", item)
+			}
+			if item.ID == "ask:canonical" && (item.Source != "ask" || item.Trust != "canonical request") {
+				t.Fatalf("canonical provenance lost: %+v", item)
+			}
+		}
+	}
+}

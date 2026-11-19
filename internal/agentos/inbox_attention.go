@@ -25,7 +25,10 @@ type attentionNotice struct {
 	Revision     string   `json:"revision,omitempty"`
 }
 type attentionItem struct {
-	ID string `json:"id"`
+	ID     string `json:"id"`
+	Source string `json:"source"`
+	From   string `json:"from,omitempty"`
+	Trust  string `json:"trust"`
 	attentionNotice
 	Ready   bool     `json:"review_ready"`
 	Missing []string `json:"missing,omitempty"`
@@ -132,6 +135,7 @@ func composeAttention(mail []mailboxItem, requests []ask.Request, prefs map[stri
 			n.Kind = "approval"
 			n.Urgency = "pending"
 		}
+		statusUrgency := n.Urgency
 		var explicit attentionNotice
 		if json.Unmarshal([]byte(m.Body), &explicit) == nil && explicit.Schema == "bashy-attention-notice-v1" {
 			if explicit.Initiative == "" {
@@ -152,7 +156,10 @@ func composeAttention(mail []mailboxItem, requests []ask.Request, prefs map[stri
 				n.Urgency = "pending"
 			}
 		}
-		add(attentionItem{ID: m.ID, attentionNotice: n})
+		if attentionRank(statusUrgency) < attentionRank(n.Urgency) {
+			n.Urgency = statusUrgency
+		}
+		add(attentionItem{ID: m.ID, attentionNotice: n, Source: m.Source, From: m.From, Trust: "unverified mailbox claim"})
 	}
 	for _, r := range requests {
 		n := attentionNotice{Initiative: "unassigned", Kind: "question", Urgency: "pending", Summary: r.Prompt, Decision: "Answer the question through ask answer", Consequences: r.Sink.Describe()}
@@ -170,7 +177,7 @@ func composeAttention(mail []mailboxItem, requests []ask.Request, prefs map[stri
 			n.Decision = "Allow or deny exact argv " + string(argv) + "; options: " + string(options)
 			next = []string{"bashy", "approve", "show", r.ID}
 		}
-		add(attentionItem{ID: "ask:" + r.ID, attentionNotice: n, Next: next})
+		add(attentionItem{ID: "ask:" + r.ID, attentionNotice: n, Source: "ask", Trust: "canonical request", Next: next})
 	}
 	out := make([]attentionGroup, 0, len(groups))
 	for _, g := range groups {
@@ -254,6 +261,7 @@ request before deciding. A preference never grants authority or settles a reques
 				fmt.Fprintf(cmd.OutOrStdout(), "\n%s / %s (%s)\n", g.Initiative, g.Urgency, g.Preference)
 				for _, i := range g.Items {
 					fmt.Fprintf(cmd.OutOrStdout(), "  %s [%s] %s\n", i.ID, i.Kind, i.Summary)
+					fmt.Fprintf(cmd.OutOrStdout(), "    Provenance: %s; source=%q; from=%q\n", i.Trust, i.Source, i.From)
 					if i.Decision != "" {
 						fmt.Fprintln(cmd.OutOrStdout(), "    Decision:", i.Decision)
 					}
