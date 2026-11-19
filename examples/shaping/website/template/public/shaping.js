@@ -47,6 +47,27 @@
     return m ? { "X-CSRF-Token": decodeURIComponent(m[1]) } : {};
   }
 
+  // The Software Shaping Flow mark (two opposed S curves), drawn with DOM
+  // nodes so the panel never parses markup.
+  var FLOW = "M43 85 C65 100 84 86 105 63 C124 42 143 29 169 29 C201 29 225 51 227 85 Q228 92 221 88 C189 65 159 77 137 96 C116 115 96 147 65 148 C35 149 20 122 30 99 Q38 81 43 85 Z";
+  function flowMark() {
+    var ns = "http://www.w3.org/2000/svg";
+    var svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 256 256");
+    svg.setAttribute("width", "16");
+    svg.setAttribute("height", "16");
+    svg.setAttribute("fill", "currentColor");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", "ss-flow");
+    [null, "rotate(180 128 128)"].forEach(function (t) {
+      var path = document.createElementNS(ns, "path");
+      path.setAttribute("d", FLOW);
+      if (t) path.setAttribute("transform", t);
+      svg.appendChild(path);
+    });
+    return svg;
+  }
+
   function get(path) {
     return fetch(api + path, { credentials: "same-origin" }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
@@ -63,7 +84,9 @@
 
   get("me").then(function (info) {
     var root = el("div", { id: "ss-panel-root" });
-    var button = el("button", { type: "button", class: "ss-toggle", "aria-expanded": "false" }, "✦ For you");
+    var button = el("button", { type: "button", class: "ss-toggle", "aria-expanded": "false" });
+    button.appendChild(flowMark());
+    button.appendChild(document.createTextNode(" For you"));
     var panel = el("section", { class: "ss-panel", hidden: "" });
     panel.appendChild(el("h2", null, "Shaped for you"));
     panel.appendChild(el("p", { class: "ss-tier" }, tierText[info.tier] || ""));
