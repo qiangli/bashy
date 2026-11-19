@@ -106,7 +106,7 @@ Same login-shell mechanism; the fallback chain differs (`get_shell_path` tries
 `which(bash/zsh)` before the hardcoded `/bin/*`), so a PATH shim can also win when
 the passwd shell type doesn't match. `chsh` remains the robust lever.
 
-## Cline / Cursor (deferred)
+## Cline (deferred; custom example)
 
 VS Code terminal profiles can point at bashy, but the shell-integration
 escape-sequence injection script is unverified against bashy — deferred

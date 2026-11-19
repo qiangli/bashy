@@ -42,7 +42,7 @@ can be kept in step.
 | Aider | `$SHELL` | `pexpect.spawn(shell, ["-i","-c",cmd])` under a PTY | **PTY-shape PASS** — exact spawn replayed via aider's own pexpect (PTY, `-i -c`), correct output + exit 0; live LLM session not exercised |
 | Codex CLI | **login shell** — reads `/etc/passwd` `pw_shell` (getpwuid_r), NOT `$SHELL`/PATH/config, and derives the shell TYPE from the filename stem, then runs `<shell> -lc` (verified from `codex-rs/shell-command/src/shell_detect.rs`) | `<login-shell> -lc 'cmd'` | **REACHABLE via `chsh`** (was "blocked") — set the login shell to a bash/zsh-named bashy shim; `bashy install-agent codex` writes the shim + prints the (invasive, global) `chsh` recipe. DYLD interposition blocked (SIP + hardened runtime) |
 | Gemini CLI / Copilot CLI / Antigravity (`agy`) | none (PATH shim on unix) | bare **`bash -c 'cmd'`** via PATH (`shell:false`; `gemini-cli/.../shell-utils.ts:698`, never reads `$SHELL`); interactive-PTY path → login shell | **shape PASS** + shim mechanism verified (`PATH=~/.bashy/shims` resolves bashy); `install-agent {gemini,copilot,agy}` |
-| Cline / Cursor | VS Code terminal profile | interactive + shell-integration escape injection | **deferred** — requires VS Code shell-integration script compat |
+| Cline (example) | VS Code terminal profile | interactive + shell-integration escape injection | **deferred** — requires VS Code shell-integration script compat |
 
 **Two layers now force bashy:**
 
@@ -142,4 +142,4 @@ moot.
 3. Windows: `CLAUDE_CODE_GIT_BASH_PATH` → `bash.exe` experiment on a
    Windows fleet host.
 4. Codex CLI on Linux (does it use bash there?).
-5. VS Code shell-integration injection script tolerance (gates Cline/Cursor).
+5. VS Code shell-integration injection script tolerance (gates Cline).
