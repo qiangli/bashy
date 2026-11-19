@@ -48,3 +48,7 @@ It also runs the existing browser checkpoint test (`TestDOMExternalShapeCheckpoi
 **Part 2: two-host promotion round trip.** outgoing → push to an org remote → incoming/pull on a second host → undo → push upstream (a PR or recorded ref) between two disposable hosts. It runs on the fleet e2e harness, and is required for releases that touch shaping, promotion or the shape CLI.
 
 Done when: part 1 passes on the test host against the release candidate binary and fails when a step is deliberately broken (for example a smoke check that expects the old greeting); part 2 passes once on the fleet harness with evidence; and both are written into the release procedures.
+
+## Worker rules (Sprint 670)
+
+Do part 1 only; the conductor schedules part 2 separately. Build with GOWORK=off. Use a bashy dag target, never make. Run only the new smoke and its focused Go tests locally: no full suites, no podman, ollama or VMs on the dev box. The conductor runs the gate on the test host. Commit with trailers Sprint: #670, Story: #3149, Story-ID: 0a10de8d63f2 and your Agent line; do not push tags or release.
