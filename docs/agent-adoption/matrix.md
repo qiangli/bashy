@@ -1,5 +1,12 @@
 # Agent adoption matrix — B0 verification results
 
+**2026-11-19 update (Sprint 671):** the officially supported agentic tools are
+ycode/genie, claude, codex, opencode, agy, muse, zcode, kimi and dsh, all
+built-in fleet seeds. aider, gemini-cli, copilot, cline, goose, hermes and
+openclaw are custom examples in `examples/fleet/tools/`, and `install-agent`
+no longer wires aider, gemini or copilot. Cursor is no longer tracked. Rows
+for the example tools below are kept as history.
+
 **2026-10-08 update:** [Sprint 379 proof](sprint-379-proof.md) records current
 Codex explicit-shell and Aider PTY `/run` execution-log evidence, AGY quota,
 Gemini eligibility and Copilot authentication blockers. The table below is

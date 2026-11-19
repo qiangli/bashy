@@ -11,7 +11,7 @@ One command wires a coding agent to run its shell commands through bashy:
 
 ```sh
 bashy install-agent            # status of every known agent
-bashy install-agent <agent>    # wire it (claude | opencode | aider | gemini | copilot | agy | codex)
+bashy install-agent <agent>    # wire it (claude | opencode | codex | agy | muse)
 bashy install-agent <agent> --check      # verify the wiring + the agent's exact invocation shape (free)
 bashy install-agent <agent> --probe      # verify LIVE: run the agent once, confirm bashy handled its shell
 bashy install-agent <agent> --uninstall  # reverse it
@@ -23,6 +23,15 @@ project-level config (claude: `.claude/settings.json`; opencode:
 `./opencode.json`) instead of user-level.
 
 Verification status for every recipe: `matrix.md`.
+
+**Officially supported agentic tools (Sprint 671):** ycode/genie, claude, codex,
+opencode, agy, muse, zcode, kimi and dsh — all built-in fleet seeds.
+`install-agent` wires claude, opencode, codex, agy and muse; zcode, kimi and
+dsh have no `install-agent` writer yet, so they get bashy as their shell when
+launched through bashy (the launcher injection above).
+aider, gemini-cli, copilot, cline, goose, hermes and openclaw are custom
+examples in `examples/fleet/tools/` (`bashy tool add examples/fleet/tools/<name>.yaml`);
+their recipes below are kept for anyone who adds them.
 
 ## Claude Code (E2E verified, unix)
 
@@ -51,7 +60,7 @@ matrix.md).
 Note the plain string — an object `{path, args}` form fails config
 validation (v1.17.10).
 
-## Aider (PTY `/run` verified)
+## Aider (custom example; PTY `/run` verified)
 
 Aider takes its shell from `$SHELL` (spawned as `shell -i -c <cmd>` under a
 PTY via pexpect):
@@ -60,22 +69,24 @@ PTY via pexpect):
 SHELL=/path/to/bashy aider
 ```
 
-`bashy install-agent aider --check` probes the `-i -c` shape. Aider 0.86.2's
+`install-agent` no longer wires aider (Sprint 671); export `SHELL` yourself. Aider 0.86.2's
 piped-stdin subprocess path ignores `$SHELL` and uses `/bin/sh`; use a PTY.
 See [the live proof and model-turn limits](sprint-379-proof.md).
 
-## Gemini CLI / Copilot CLI / Antigravity `agy` (shim mechanism verified)
+## Antigravity `agy` and Muse; Gemini CLI / Copilot CLI as examples (shim mechanism verified)
 
 The PATH recipe intercepts bare shell-name lookups on Unix. Live verification
 is version-dependent; see [current blockers](sprint-379-proof.md).
-`bashy install-agent gemini` (or `copilot`, or `agy`) writes
+`bashy install-agent agy` (or `muse`) writes
 `~/.bashy/shims/{bash,sh,zsh}` exec wrappers (preserving the bashy entry point); launch with the shim dir prepended:
 
 ```sh
 PATH="$HOME/.bashy/shims:$PATH" agy
 ```
 
-(The launcher does this automatically for `bashy meet`/`chat`/`weave`.)
+(The launcher does this automatically for `bashy meet`/`chat`/`weave`.) Gemini
+CLI and Copilot CLI are custom examples now; run `bashy install-agent agy` once
+to write the same shims, then launch them with the shim dir prepended.
 
 ## Codex CLI (reachable via the login shell — invasive)
 

@@ -120,7 +120,7 @@ bashy -c 'echo "$BASH_VERSION"' && bashy --posix -c 'echo posix ok' && bashy --b
 ## connect
 
 Step 3 (a). `NAME` is your tool as `bashy tools list` prints it (claude,
-codex, opencode, agy, kimi-cli, muse, …). Skill, MCP and shell take effect in
+codex, opencode, agy, muse, zcode, kimi, dsh, …). Skill, MCP and shell take effect in
 your **next** session; your own CLI's `mcp add` does the registration.
 
 ```bash
