@@ -15,7 +15,12 @@ passed; the owned test venue was retired after review. See the
 [S575 engineering baseline](s575-posix-engineering-baseline.md) for source and
 artifact hashes, retained result families, scope and cleanup evidence.
 
-## Current campaign: S561 evidence, S571 resolution
+The planned [Sprint 675 follow-up](https://github.com/dhnt/umbrella/blob/main/docs/plan-posix-certification-after-separation.md)
+reuses S571's seven unfinished story identities to investigate the current
+residuals and prepare authority/manual evidence and the readiness handoff.
+It has not started implementation, another full run or external submission.
+
+## Previous campaign: S561 evidence, S571 planning
 
 The final licensed run on 2026-11-04 measured frozen candidate bashy
 `f1bcd711`, sh `74586fde`, coreutils `211789fa` (harness `0b2b185d`):
@@ -30,7 +35,7 @@ not a clean pass. The earlier prose total of 62 was an arithmetic error.
 S561 closed engineering; both disposable hosts were retired and its freeze
 was lifted. Full certification readiness and official certification remain open.
 
-[Sprint 571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) owns the remaining decisions: S355 authority packets
+[Sprint 571](https://github.com/dhnt/umbrella/blob/main/docs/plan-s571-posix-certification-readiness.md) originally planned the remaining decisions, now carried forward in Sprint 675: S355 authority packets
 for 53 symlink setup results, `man:4` and four `more` failures remain unsent;
 nine INSPECT results (`stty` 7, `df` 1, `locale` 1) require supported S377
 manual decisions on this run's journal. Raw results stay intact; a ruling,
