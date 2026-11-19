@@ -263,3 +263,29 @@ func TestNoRouteNoViews(t *testing.T) {
 		t.Errorf("views offered without a key: %v", views)
 	}
 }
+
+func TestStaticOnlyStripsFrameworkScripts(t *testing.T) {
+	page := `<html><head><link rel="preload" as="script" href="/_next/static/chunks/a.js"><script>document.documentElement.classList.add("dark")</script></head><body><h1>Hi</h1><script src="/_next/static/chunks/main.js" async></script><script>self.__next_f.push([1,"x"])</script></body></html>`
+	site := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		io.WriteString(w, page)
+	}))
+	defer site.Close()
+	s := newTestServer(t, site.URL, "http://127.0.0.1:1", "")
+	s.site.staticOnly = true
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-Forwarded-Prefix", "/p")
+	rec := httptest.NewRecorder()
+	s.ServeHTTP(rec, req)
+	body := rec.Body.String()
+	for _, gone := range []string{"main.js", "__next_f", `as="script"`} {
+		if strings.Contains(body, gone) {
+			t.Errorf("%s survived:\n%s", gone, body)
+		}
+	}
+	for _, kept := range []string{`classList.add("dark")`, "<h1>Hi</h1>", "/p/_shaping/shaping.js"} {
+		if !strings.Contains(body, kept) {
+			t.Errorf("%s missing:\n%s", kept, body)
+		}
+	}
+}

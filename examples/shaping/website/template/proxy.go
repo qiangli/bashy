@@ -15,9 +15,10 @@ import (
 // cached briefly; HTML gets root-absolute links re-based under the mount
 // prefix and the shaping panel injected before </body>.
 type upstream struct {
-	base   string // e.g. https://example.com (no trailing slash)
-	client *http.Client
-	ttl    time.Duration
+	base       string // e.g. https://example.com (no trailing slash)
+	staticOnly bool   // strip the site's framework scripts (see Config.StaticOnly)
+	client     *http.Client
+	ttl        time.Duration
 
 	mu    sync.Mutex
 	cache map[string]cached
@@ -28,6 +29,12 @@ type cached struct {
 	ctype  string
 	body   []byte
 	at     time.Time
+}
+
+func newUpstreamFor(cfg Config) *upstream {
+	u := newUpstream(cfg.SiteURL)
+	u.staticOnly = cfg.StaticOnly
+	return u
 }
 
 func newUpstream(base string) *upstream {
@@ -82,6 +89,9 @@ func (u *upstream) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body := c.body
 	switch {
 	case strings.Contains(c.ctype, "text/html"):
+		if u.staticOnly {
+			body = stripFrameworkScripts(body)
+		}
 		body = injectPanel(rebase(body, prefix, u.base), prefix)
 	case strings.Contains(c.ctype, "css"), strings.Contains(c.ctype, "javascript"):
 		body = rebase(body, prefix, u.base)
@@ -121,6 +131,25 @@ func rebase(b []byte, prefix, origin string) []byte {
 	b = headLink.ReplaceAll(b, []byte("${1}"+origin+"/${2}")) // icons, manifest
 	b = linkRoot.ReplaceAll(b, []byte("${1}"+prefix+"/${2}"))
 	return b
+}
+
+var (
+	scriptBlock   = regexp.MustCompile(`(?is)<script\b[^>]*>.*?</script>`)
+	scriptSrc     = regexp.MustCompile(`(?is)^<script\b[^>]*\ssrc=`)
+	scriptPreload = regexp.MustCompile(`(?is)<link\b[^>]*\bas=["']script["'][^>]*>`)
+)
+
+// stripFrameworkScripts removes every script that loads code (src=) and
+// every inline script that boots a framework runtime (Next.js flight data,
+// webpack), plus script preloads. Other inline scripts stay.
+func stripFrameworkScripts(b []byte) []byte {
+	b = scriptPreload.ReplaceAll(b, nil)
+	return scriptBlock.ReplaceAllFunc(b, func(m []byte) []byte {
+		if scriptSrc.Match(m) || bytes.Contains(m, []byte("__next")) || bytes.Contains(m, []byte("webpack")) {
+			return nil
+		}
+		return m
+	})
 }
 
 func injectPanel(b []byte, prefix string) []byte {

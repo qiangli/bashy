@@ -28,12 +28,17 @@ var assets embed.FS
 
 // Config is site.json, shaped source like the rest of this app.
 type Config struct {
-	SiteURL string  `json:"site_url"`
-	Title   string  `json:"title"`
-	Contact string  `json:"contact"` // where to ask for more (mailto: or a URL)
-	SignIn  string  `json:"sign_in"` // cloudbox sign-in page, relative to the mount's origin
-	AI      AIRoute `json:"ai"`
-	Views   []View  `json:"views"`
+	SiteURL string `json:"site_url"`
+	Title   string `json:"title"`
+	Contact string `json:"contact"` // where to ask for more (mailto: or a URL)
+	SignIn  string `json:"sign_in"` // cloudbox sign-in page, relative to the mount's origin
+	// StaticOnly serves pages without the site's own scripts that load from
+	// it: a client-side router (Next.js, a Vite SPA) sees the engine's mount
+	// path, matches no route and renders its 404 over a pre-rendered page.
+	// Inline scripts that load nothing (a theme switch) are kept.
+	StaticOnly bool    `json:"static_only"`
+	AI         AIRoute `json:"ai"`
+	Views      []View  `json:"views"`
 }
 
 type server struct {
@@ -61,6 +66,7 @@ func main() {
 	if *siteURL != "" {
 		s.cfg.SiteURL = *siteURL
 		s.site = newUpstream(*siteURL)
+		s.site.staticOnly = s.cfg.StaticOnly
 	}
 	log.Printf("site-shaping: fronting %s on %s (identity verification %v, ai %v)", s.cfg.SiteURL, *addr, s.secret != "", s.key != "" || isLoopbackRoute(s.cfg.AI.BaseURL))
 	log.Fatal(http.ListenAndServe(*addr, s))
@@ -98,7 +104,7 @@ func newServerFrom(fsys fs.FS, getenv func(string) string) (*server, error) {
 		fields: fields,
 		secret: getenv("SITE_SSO_SECRET"),
 		key:    getenv(keyEnv),
-		site:   newUpstream(cfg.SiteURL),
+		site:   newUpstreamFor(cfg),
 		public: http.StripPrefix("/_shaping/", http.FileServer(http.FS(pub))),
 		client: &http.Client{Timeout: 90 * time.Second},
 		now:    time.Now,

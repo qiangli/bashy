@@ -68,6 +68,38 @@
     return svg;
   }
 
+  // The page's own hooks, honoured on the engine face only:
+  //   data-shaping-hide-on-engine  removed (e.g. a link to this very engine)
+  //   data-shaping-signin          pointed at the cloudbox sign-in
+  //   data-shaping-contact         filled with the reader's contact-* fields
+  function shapePage(info, fieldsReady) {
+    Array.prototype.forEach.call(document.querySelectorAll("[data-shaping-hide-on-engine]"), function (n) { n.remove(); });
+    var signIn = new URL(info.sign_in, location.origin).href;
+    Array.prototype.forEach.call(document.querySelectorAll("a[data-shaping-signin]"), function (a) {
+      a.setAttribute("href", signIn);
+      a.setAttribute("target", "_blank");
+      a.setAttribute("rel", "noopener");
+    });
+    var card = document.querySelector("[data-shaping-contact]");
+    if (!card || info.tier === "anonymous") return;
+    fieldsReady.then(function (fields) {
+      var rows = fields.filter(function (x) { return x.name.indexOf("contact-") === 0; });
+      if (!rows.length) return;
+      Array.prototype.forEach.call(card.querySelectorAll("[data-shaping-signin]"), function (a) {
+        var row = a.closest("p") || a;
+        row.remove();
+      });
+      rows.forEach(function (x) {
+        var p = el("p", { class: "ss-contact-row" });
+        var v = x.body.trim();
+        var href = /^https?:\/\//.test(v) ? v : (/^[^\s@]+@[^\s@]+$/.test(v) ? "mailto:" + v : null);
+        p.appendChild(el("strong", null, x.label + ": "));
+        p.appendChild(href ? el("a", { href: href, target: "_blank", rel: "noopener" }, v) : document.createTextNode(v));
+        card.appendChild(p);
+      });
+    }).catch(function () {});
+  }
+
   function get(path) {
     return fetch(api + path, { credentials: "same-origin" }).then(function (r) {
       if (!r.ok) throw new Error("HTTP " + r.status);
@@ -117,18 +149,19 @@
       panel.appendChild(vb);
     });
 
-    if (info.fields > 0) {
-      var facts = el("div", { class: "ss-facts" });
-      panel.appendChild(facts);
-      get("fields").then(function (f) {
-        f.fields.forEach(function (x) {
-          var d = el("div", { class: "ss-fact" });
-          d.appendChild(el("strong", null, x.label));
-          d.appendChild(el("p", null, x.body));
-          facts.appendChild(d);
-        });
+    var facts = el("div", { class: "ss-facts" });
+    panel.appendChild(facts);
+    var fieldsReady = info.fields > 0 ? get("fields").then(function (f) { return f.fields || []; }) : Promise.resolve([]);
+    fieldsReady.then(function (fields) {
+      fields.forEach(function (x) {
+        if (x.name.indexOf("contact-") === 0) return; // shown in the page's contact card
+        var d = el("div", { class: "ss-fact" });
+        d.appendChild(el("strong", null, x.label));
+        d.appendChild(el("p", null, x.body));
+        facts.appendChild(d);
       });
-    }
+    }).catch(function () {});
+    shapePage(info, fieldsReady);
     panel.appendChild(out);
 
     if (info.more && info.tier !== "anonymous" && info.contact) {
