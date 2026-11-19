@@ -4,6 +4,12 @@ Start at [INDEX.md](INDEX.md), which has one entry per load-bearing doc.
 
 ## Abstracts
 
+- **[S575 POSIX engineering baseline](s575-posix-engineering-baseline.md).**
+  Records the completed 9,337-result separated-source run, its exact source
+  and artifact identities, retained failures/manual dispositions, private
+  evidence integrity and disposal of the owned test venue. Engineering
+  baseline only; official certification remains open.
+
 - **[Moving the boxes](retro-s575-package-separation.md).** A Sprint 575 joke
   about redesigning houses while hired to move boxes, with practical lessons
   for keeping repository separation small and preserving existing behavior.

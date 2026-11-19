@@ -1,5 +1,20 @@
 # VSC-PCTS conformance run — status
 
+## Current measurement: S575 separated-source baseline, 2026-11-19
+
+The full unchanged Profile D run completed: **117 targets, 9,337 execution
+results, 9,270 PASS group, 4 FAIL, 54 UNRESOLVED, 9 INSPECT**, with zero
+UNINITIATED/UNREPORTED results and zero caps. The observed residual counts and
+families match the S561 baseline below; all 67 non-pass/manual results remain
+unwaived. This closes the measurement and evidence-retention task, not official
+certification or its outstanding authority/manual decisions.
+
+Source marker: `posix-baseline/s575-2026-11-19`, at the exact tested umbrella,
+Bash and Coreutils commits. Evidence retention and independent integrity checks
+passed; the owned test venue was retired after review. See the
+[S575 engineering baseline](s575-posix-engineering-baseline.md) for source and
+artifact hashes, retained result families, scope and cleanup evidence.
+
 ## Current campaign: S561 evidence, S571 resolution
 
 The final licensed run on 2026-11-04 measured frozen candidate bashy

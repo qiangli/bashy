@@ -1,5 +1,7 @@
 # bashy docs index
 
+- [S575 POSIX engineering baseline](s575-posix-engineering-baseline.md) — completed 117-target separated-source measurement, exact source/artifact marker, preserved residual results and verified evidence retention.
+
 - [Moving the boxes](retro-s575-package-separation.md) — the Sprint 575 package-separation anecdote and lessons on scope, build order, preserved baselines and concrete handoffs.
 
 - [Full POSIX Profile D runbook](kb/pages/full-profile-d-posix-runbook.md) — public kit application links, existing full-run baseline and procedure references, provider/evidence requirements, and annual renewal checklist; current setup limitations remain explicit.
