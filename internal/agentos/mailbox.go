@@ -29,8 +29,9 @@ type mailboxMark struct {
 	Status    string `json:"status,omitempty"`
 }
 type mailboxState struct {
-	Schema string                 `json:"schema"`
-	Marks  map[string]mailboxMark `json:"marks"`
+	Schema        string                 `json:"schema"`
+	Marks         map[string]mailboxMark `json:"marks"`
+	Participation map[string]string      `json:"participation,omitempty"`
 }
 type mailboxItem struct {
 	Schema       string              `json:"schema"`
@@ -641,7 +642,7 @@ List and search never consume. Read marks opened but remains pending. Only ack
 removes from the pending view; preserve reopens it. Agent inboxes have the same
 list/read/ack/preserve/organize model at ` + "`bashy inbox list`" + `. State is owned by the
 mailbox principal, so another authorized local agent sees the same human state.`, Args: cobra.NoArgs, RunE: func(cmd *cobra.Command, _ []string) error { return newMailboxListCmd(true).RunE(cmd, nil) }}
-	c.AddCommand(newMailboxListCmd(true), newMailboxReadCmd(true), newMailboxAckCmd(true), newMailboxPreserveCmd(true), newMailboxOrganizeCmd(true), newHumanSendCmd())
+	c.AddCommand(newMailboxListCmd(true), newMailboxReadCmd(true), newMailboxAckCmd(true), newMailboxPreserveCmd(true), newMailboxOrganizeCmd(true), newHumanSendCmd(), newAttentionCmd(true))
 	return c
 }
 

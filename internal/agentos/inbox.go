@@ -265,7 +265,7 @@ pretends such a session was adopted.`,
 	f.BoolVar(&watch, "watch", false, "follow all inbound sources until interrupted")
 	f.IntVarP(&limit, "limit", "n", 0, "show at most this many records per source (0 = no cap; the omitted tail stays unread, and --watch acknowledges only what it showed)")
 	f.BoolVar(&jsonOut, "json", false, "emit one "+unifiedInboxSchema+" object per line (NDJSON); a bounded read with no mail emits one envelope line with no events")
-	cmd.AddCommand(newMailboxListCmd(false), newMailboxReadCmd(false), newMailboxAckCmd(false), newMailboxPreserveCmd(false), newMailboxOrganizeCmd(false), newHumanMailboxCmd())
+	cmd.AddCommand(newMailboxListCmd(false), newMailboxReadCmd(false), newMailboxAckCmd(false), newMailboxPreserveCmd(false), newMailboxOrganizeCmd(false), newHumanMailboxCmd(), newAttentionCmd(false))
 	cmd.CompletionOptions.DisableDefaultCmd = true
 	return cmd
 }

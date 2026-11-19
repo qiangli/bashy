@@ -250,3 +250,43 @@ Bashy deliberately does not infer a PID or pretend to adopt it. Use
 `bashy inbox --as NAME` or `bashy inbox --as NAME --watch` explicitly.
 
 If you are that session, looking is your job.
+
+## Initiative attention
+
+`bashy inbox human attention` composes the durable human mailbox with pending
+local ask/approval metadata. `bashy inbox attention` uses only the caller's
+permission-filtered mailbox. Neither acknowledges messages, reaps asks, answers
+questions, nor grants permission. Urgent conflicts appear first, then pending
+questions, approvals and milestone reviews, grouped by initiative. No display cap
+or participation mode hides an old pending request. `--initiative ID` explicitly
+narrows the view; omit it to return to all pending initiatives.
+
+    bashy inbox human attention --json
+    bashy inbox human attention --initiative sprint:666 --participation review-milestones
+
+Preferences are `observe`, `answer-questions`, `review-milestones`, and
+`direct-work`. They record how the person wants to participate, alongside the
+mailbox's existing state; they do not assign work or alter authorization. Answers
+still go through `ask answer ID`; approvals through `approve show/allow/deny`.
+Mailbox requests remain until explicit `inbox human ack ID`; `preserve ID`
+reopens an acknowledged request. A read or an agent delivery does not settle one.
+
+For concrete review requests, send a JSON body through the existing mailbox send
+surface (the usual body-size limit applies), without appending a `--ref` suffix:
+
+    bashy inbox human send --project sprint:666 --status review '{"schema":"bashy-attention-notice-v1","initiative":"sprint:666","kind":"review","summary":"Milestone ready","artifacts":["git:abc123:report.diff"],"revision":"abc123","consequences":"Replaces the report","decision":"Accept this milestone?"}'
+
+Allowed attention kinds are question, approval, conflict and review; other
+messages remain notifications. Review cards expose artifact/diff references,
+revision, consequences and the exact decision. Missing review details are shown
+as missing, never filled in by a summary. References and prose are sender claims,
+not verification or authority. Changed candidates require the existing producer's
+fresh approval; this projection cannot transfer approval between revisions.
+
+The Meet room's action panel previews the concrete action, sprint, owner,
+dependencies and acceptance criteria before explicit adoption confirmation.
+Editing terms invalidates the preview. The server's existing authenticated-human
+check remains authoritative; a bare loopback browser cannot manufacture human
+authority. Adoption creates tracked work, not execution permission or milestone
+acceptance. The linked story and verified outcome remain in the existing room
+and story workflow.
