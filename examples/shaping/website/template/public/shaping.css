@@ -50,7 +50,7 @@
 }
 #ss-panel-root .ss-panel[hidden] { display: none; }
 #ss-panel-root h2 { margin: 0 0 4px; font-size: 16px; }
-#ss-panel-root .ss-tier, #ss-panel-root .ss-more { color: var(--ss-muted); margin: 0 0 12px; }
+#ss-panel-root .ss-tier, #ss-panel-root .ss-more, #ss-panel-root .ss-signout { color: var(--ss-muted); margin: 0 0 12px; }
 #ss-panel-root a { color: var(--ss-accent); }
 #ss-panel-root .ss-view {
   margin: 0 8px 8px 0;

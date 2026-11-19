@@ -141,6 +141,21 @@
       panel.appendChild(shape);
     }
 
+    if (info.tier !== "anonymous") {
+      var out_p = el("p", { class: "ss-signout" });
+      var so = el("a", { href: "#" }, "Sign out");
+      so.addEventListener("click", function (ev) {
+        ev.preventDefault();
+        // Ends the session on THIS origin (the satellite); then the page is
+        // public again. Signing out of the master does not do this yet.
+        fetch(new URL("/cloud/logout", location.origin).href, { method: "POST", credentials: "same-origin", headers: csrfHeaders() })
+          .catch(function () {})
+          .finally(function () { location.reload(); });
+      });
+      out_p.appendChild(so);
+      panel.appendChild(out_p);
+    }
+
     if (info.tier === "anonymous") {
       var p = el("p");
       var a = el("a", { href: signInHref(info) }, "Sign in");
