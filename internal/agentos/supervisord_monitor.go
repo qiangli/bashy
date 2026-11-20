@@ -37,6 +37,22 @@ import (
 // has not applied it): neither healthy nor a failure that counts.
 var errHealthPending = errors.New("service: health pending")
 
+// errUnavailable is a delegated provider's "the capability's backend
+// is absent on this host" (the owner rests the unit Inactive with an
+// unavailable reason, service.IsUnavailableReason): health must show
+// the reason — never "ok" — but absence is normal, so it never counts
+// as a failure and never earns a restart. The unit rests Inactive
+// while the probe chain keeps watching; the first ok probe (the
+// owner recovered) returns it to Active. Story 9deb591a.
+type errUnavailable struct{ reason string }
+
+func (e errUnavailable) Error() string { return e.reason }
+
+func isUnavailable(err error) bool {
+	var un errUnavailable
+	return errors.As(err, &un)
+}
+
 // unitRun is the monitor's record of one unit.
 type unitRun struct {
 	decl  fleet.Service
@@ -304,6 +320,7 @@ func (m *monitor) reload() error {
 		}
 		// A changed declaration is the operator's answer to whatever latched it.
 		u.latched = false
+		m.clearRestingUnavailable(u)
 		if d.Enabled && !wasEnabled {
 			u.held, u.limit.starts = false, nil
 		}
@@ -346,6 +363,19 @@ func (m *monitor) running(u *unitRun) bool {
 		return true
 	}
 	return false
+}
+
+// restingUnavailable: the unit sits Inactive because its backend is
+// absent. It is not running, but its probe chain stays alive so the
+// backend's return is noticed without a restart.
+func (m *monitor) restingUnavailable(u *unitRun) bool {
+	return u.st.State == service.Inactive && service.IsUnavailableReason(u.st.Reason)
+}
+
+func (m *monitor) clearRestingUnavailable(u *unitRun) {
+	if m.restingUnavailable(u) {
+		u.st.Reason, u.st.Health = "", ""
+	}
 }
 
 // depsOf are the dependencies the monitor orders on. Under `service run`, a
@@ -434,6 +464,12 @@ func (m *monitor) step(u *unitRun) bool {
 			m.transition(u, service.Inactive, "disabled")
 		}
 		return u.st.State != before
+	}
+	if m.restingUnavailable(u) {
+		// The delegation is already live and the owner is re-probing
+		// for an absent backend. Activating again would withdraw and
+		// recreate that delegation without making the backend appear.
+		return false
 	}
 	if m.stopping {
 		return false
@@ -587,7 +623,7 @@ func (m *monitor) tick(u *unitRun, first bool) {
 
 func (m *monitor) onProbe(v msgProbe) {
 	u := m.units[v.unit]
-	if u == nil || u.gen != v.gen || !m.running(u) {
+	if u == nil || u.gen != v.gen || (!m.running(u) && !m.restingUnavailable(u)) {
 		return // an incarnation that is gone: its probe chain ends here
 	}
 	if u.busy { // a live reconfigure is in flight: judge the next probe
@@ -602,6 +638,15 @@ func (m *monitor) onProbe(v msgProbe) {
 		}
 	case errors.Is(v.err, errHealthPending):
 		u.st.Health = "pending"
+	case isUnavailable(v.err):
+		// Backend absent: rest Inactive with the reason as the health
+		// verdict. fails stays 0 — no threshold, no deactivate, no
+		// restart ladder — and the chain keeps ticking (below), so
+		// the first ok probe after the owner recovers flips it back.
+		var un errUnavailable
+		errors.As(v.err, &un)
+		u.fails, u.st.Health = 0, un.reason
+		m.transition(u, service.Inactive, un.reason)
 	default:
 		u.st.Health = v.err.Error()
 		inStartPeriod := u.st.State == service.Starting && m.now().Sub(u.startedAt) < u.pol.startPeriod
@@ -624,11 +669,19 @@ func (m *monitor) onProbe(v msgProbe) {
 // exited, a capability that failed or reported in.
 func (m *monitor) onProvider(v msgProvider) {
 	u := m.units[v.unit]
-	if u == nil || u.gen != v.gen || !m.running(u) {
+	if u == nil || u.gen != v.gen || (!m.running(u) && !m.restingUnavailable(u)) {
 		return
 	}
 	switch v.ev.To {
 	case service.Inactive, service.Failed:
+		if v.ev.To == service.Inactive && service.IsUnavailableReason(v.ev.Reason) {
+			// The owner rests the unit because its backend is absent:
+			// record it visibly and let the probe chain watch for the
+			// backend's return — never the exit/restart path below.
+			u.fails, u.st.Health = 0, v.ev.Reason
+			m.transition(u, service.Inactive, v.ev.Reason)
+			return
+		}
 		ex := childExit{code: 1}
 		if st := u.prov.Status(u.decl.Name); st.LastExit != nil {
 			ex.code = *st.LastExit
@@ -643,7 +696,7 @@ func (m *monitor) onProvider(v msgProvider) {
 		// not a stop anyone asked for — then apply the restart policy.
 		m.deactivate(u, false, reason, func(u *unitRun) { m.afterExit(u, ex, reason) })
 	case service.Active:
-		if u.st.State == service.Starting && !u.pol.probe {
+		if (u.st.State == service.Starting || m.restingUnavailable(u)) && !u.pol.probe {
 			m.post(msgProbe{unit: u.decl.Name, gen: u.gen}) // the owner applied it
 		}
 	}
@@ -887,6 +940,7 @@ func (m *monitor) control(req ctlRequest) ctlResponse {
 			return resp
 		}
 		u.held, u.latched, u.waiting = false, false, false
+		m.clearRestingUnavailable(u)
 		u.adhoc = !u.decl.Enabled
 		u.limit.reset()
 		resp.Units = []service.Status{m.status(u)}
@@ -903,6 +957,7 @@ func (m *monitor) control(req ctlRequest) ctlResponse {
 			return resp
 		}
 		u.held, u.latched, u.waiting = false, false, false
+		m.clearRestingUnavailable(u)
 		u.limit.reset()
 		if m.running(u) && !u.busy {
 			m.deactivate(u, true, "restart requested", func(u *unitRun) {
