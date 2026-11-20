@@ -12,3 +12,5 @@ sprint_title: 'Fleet hardening after the tool-shortcut tests: steerable ycode/zc
 ---
 
 Failing at 845699ca and at 71649157 (same names): TestUnifiedTurnAdmissionAcknowledgesOnlyRenderedRoleAndBusRecords, TestUnifiedTurnAdmissionAcknowledgesMeetCopyWithItsMBOrigin, TestSkillHelpClassicSnapshots, TestSkillHelpGoldens. Pre-existing, not caused by the 11-20 merges. Root cause not yet recorded. Also: TestToolShortcutE2E/synergy tests use bin/bashy when present, so a stale bin/bashy runs old code (rebuild before go test).
+
+Root cause (2026-11-20, conductor): TEST defects from intentional yoke changes. TurnAdmission x2: yoke f4a1c2f2 per-turn cap (1 item + counter) — proven by reverting only the cap in current yoke; tests lift the cap (BASHY_CHAT_INBOX_MAX=100) and fix a ":1" vs ":10" id match. SkillHelp x2: sprint help gained await/directive/reject (S576 merges); goldens regenerated. Fixed in bashy 084a7f30; full internal/agentos green.
