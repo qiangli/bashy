@@ -209,11 +209,29 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 	if e != nil {
 		return fail(e)
 	}
+	publicURL := os.Getenv("CHART_PUBLIC_URL")
+	handoff := os.Getenv("CHART_ADDR") != "" || os.Getenv("CHART_DATA") != "" ||
+		(os.Getenv("BASHY_APP") == "chart" && (os.Getenv("BASHY_APP_ADDR") != "" || os.Getenv("BASHY_APP_DATA") != ""))
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "addr" || f.Name == "data" {
+			handoff = true
+		}
+	})
+	if !handoff {
+		info, err := kit.DiscoverAppRuntime("chart")
+		if err != nil {
+			return fail(fmt.Errorf("cannot discover chart: %w", err))
+		}
+		*addr = info.Addr
+		if publicURL == "" {
+			publicURL = info.URL
+		}
+	}
 	req, e := http.NewRequest("POST", "http://"+*addr+*prefix+"/api/action"+commonQuery(common.Fields), bytes.NewReader(raw))
 	if e != nil {
 		return fail(e)
 	}
-	if e := kit.SetPublicMount(req, os.Getenv("CHART_PUBLIC_URL")); e != nil {
+	if e := kit.SetPublicMount(req, publicURL); e != nil {
 		return fail(e)
 	}
 	req.Header.Set("Content-Type", "application/json")
