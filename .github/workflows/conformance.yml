@@ -68,10 +68,10 @@ jobs:
       # symlink pointing at the SAME upstream snapshot.
       - name: Fetch pinned bash-5.3 release source (for the fixture tree)
         shell: bash
-        run: make test-bash-fixtures
+        run: ./bashy dag test-bash-fixtures
       - name: Build the recho/zecho fixture helpers
         shell: bash
-        run: make test-bash-helpers
+        run: ./bashy dag test-bash-helpers
       # The fixtures exercise locale-dependent globbing, collation and multibyte
       # handling, and they name these seven locales explicitly. Without them,
       # glob-test/intl fail for want of a locale — an ENVIRONMENT failure that

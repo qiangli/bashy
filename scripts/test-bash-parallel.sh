@@ -3,11 +3,11 @@
 #
 # The 86 fixtures are independent (each runs bin/bash in its own TMPDIR with a
 # per-process scratch file), so they parallelize cleanly. This splits them
-# round-robin into JOBS groups and runs `make test-bash-run TESTS="<group>"`
-# for each group concurrently against the already-built bin/bash, then
+# round-robin into JOBS groups and runs `bashy dag test-bash-run` (TESTS=<group>)
+# for each group concurrently (via `bashy dag test-bash-run`) against the already-built bin/bash, then
 # aggregates the per-group Results lines into one total.
 #
-# Invoked by `make test-bash-parallel` (which builds bin/bash + helpers first).
+# Invoked by `bashy dag test-bash-parallel` (which builds bin/bash + helpers first).
 # JOBS defaults to min(cpu_count, memory_slots) — see the memory gate below.
 # Round-robin (not chunked) spreads the few slow fixtures across groups so wall
 # time is balanced. Heads-up: oversubscribing cores raises the chance a heavy
@@ -126,8 +126,8 @@ for g in $(seq 0 $((JOBS - 1))); do
   # or ~/.bashrc bleeds in — strictly more hermetic than the ambient HOME.
   mkdir -p "$OUT/home.$g"
   ( HOME="$OUT/home.$g" HISTFILE="$OUT/home.$g/.bash_history" \
-    make --no-print-directory test-bash-run \
-       TESTS="$grp" BASH_TEST_SKIP="${BASH_TEST_SKIP:-}" \
+    TESTS="$grp" BASH_TEST_SKIP="${BASH_TEST_SKIP:-}" \
+    "${BASHY:-bashy}" dag test-bash-run \
        >"$OUT/g$g.out" 2>&1 ) &
 done
 wait
@@ -136,8 +136,8 @@ wait
 if [ "${#SER_FIX[@]}" -gt 0 ]; then
   mkdir -p "$OUT/home.serial"
   HOME="$OUT/home.serial" HISTFILE="$OUT/home.serial/.bash_history" \
-    make --no-print-directory test-bash-run \
-       TESTS="${SER_FIX[*]}" BASH_TEST_SKIP="${BASH_TEST_SKIP:-}" \
+    TESTS="${SER_FIX[*]}" BASH_TEST_SKIP="${BASH_TEST_SKIP:-}" \
+    "${BASHY:-bashy}" dag test-bash-run \
        >"$OUT/gserial.out" 2>&1
 fi
 end=$(date +%s 2>/dev/null || echo 0)

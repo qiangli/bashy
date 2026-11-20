@@ -4,9 +4,9 @@
 #
 # Safe by construction:
 #   * ONE fixture (never test-bash-parallel — that OOM-crashed the box).
-#   * backgrounded + reaped: `make test-bash` hangs on exit after printing
+#   * backgrounded + reaped: the gate run can hang on exit after printing
 #     Results (stray per-fixture timers hold the pipe), so we poll for the
-#     verdict line and kill make rather than wait for it.
+#     verdict line and kill it rather than wait for it.
 #   * refuses coproc/jobs/trap: they infinite-loop and orphan runaway
 #     `trap9.sub` processes that escape the timeout — verify those on the
 #     dedicated remote host, not here.
@@ -21,7 +21,7 @@ cd "$(dirname "$0")/.." || exit 2
 
 log=$(mktemp)
 trap 'rm -f "$log"' EXIT
-make test-bash TESTS="$fix" >"$log" 2>&1 &
+TESTS="$fix" "${BASHY:-bashy}" dag test-bash >"$log" 2>&1 &
 mp=$!
 for _ in $(seq 1 150); do
   grep -qE "^  (PASS|FAIL|TIME|SKIP)  $fix\$" "$log" && break

@@ -39,7 +39,7 @@ jobs:
           go-version: 1.27.2
       - name: Build bashy
         shell: bash
-        run: make build
+        run: ./bashy dag build
       - name: Scrub the host engines off PATH (bashy must provision its own podman)
         shell: bash
         run: |

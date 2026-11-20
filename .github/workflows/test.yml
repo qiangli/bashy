@@ -125,7 +125,7 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         timeout-minutes: 10
-        run: make verify-bashy-scratch
+        run: ./bashy dag verify-bashy-scratch
       - name: DKS release evidence script tests
         if: runner.os != 'Windows'
         shell: bash
@@ -162,12 +162,12 @@ jobs:
           version: 11.17.0
           run_install: false
       # Hermetic regression first (no build), then the live real-SPA freshness
-      # gate — the same order make test uses, before anything could promote the
+      # gate — the same order the dag test pipeline uses, before anything could promote the
       # artifact.
       - name: meet SPA freshness regression (fixtures)
         shell: bash
-        run: make test-meet-spa-fresh-regression
+        run: ./bashy dag test-meet-spa-fresh-regression
       - name: meet SPA freshness gate (real build, non-mutating)
         shell: bash
         timeout-minutes: 10
-        run: make test-meet-spa-fresh
+        run: ./bashy dag test-meet-spa-fresh

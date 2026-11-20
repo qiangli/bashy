@@ -467,17 +467,21 @@ where bashy provides the Go toolchain and no system make is installed. Use
 `TESTS="comsub varenv"` for a subset, or `CHUNK=1/8` to run one manifest-pinned
 distributed shard. Use this lane when host OS behavior is part of the coverage;
 use `test-bash-container` / `test-bash-chunks-container` for heterogeneous fleet
-throughput.
+throughput. The run itself is the `test-bash-run` leaf below, which carries
+the old Makefile wrapper's guards (root refusal, terminal, timeout and memory
+defaults) so this gate measures exactly what `make test-bash` measured. The
+leaf is invoked from this target's body rather than listed in Requires: the
+leaf stays build-free for chunk fanout, and a Requires sibling could start
+concurrently with `build` under `-j N` and run the fixtures against a stale
+or missing bin/bash. The body runs only after build and test-bash-data
+complete, with this run's environment (TESTS, timeouts, skips) passed through.
 Requires: build, test-bash-data
 Effects: exec, net, write
 
 ```bash
 set -e
 BASHY_EXE="${BASHY:-bashy}"
-goos="$("$BASHY_EXE" go env GOOS)"
-ext=""
-[ "$goos" = windows ] && ext=.exe
-"$BASHY_EXE" go run ./tools/bash53suite -tests-dir external/bash-5.3/tests -bash "bin/bash${ext}"
+"$BASHY_EXE" dag test-bash-run
 ```
 
 ### test-bash-prepare
@@ -492,16 +496,45 @@ Effects: write
 ### test-bash-run
 Run the native Bash 5.3 harness against an already prepared checkout. This is
 the chunk worker leaf used by `test-bash-chunks`; it deliberately has no build
-dependency so fanout does not rebuild the same checkout concurrently.
+dependency so fanout does not rebuild the same checkout concurrently. Sprint
+660 R3 absorbed the old Makefile test-bash-run wrapper here so the dag gate
+measures exactly what make measured: the root refusal (several fixtures fail
+by design under root; BASH53_ALLOW_ROOT=1 overrides), the per-fixture and jobs
+timeout plus memory-cap defaults (BASH_TEST_TIMEOUT=60, BASH_TEST_TIMEOUT_JOBS=180,
+BASH_TEST_MEM_KB=4194304, each still overridable, with the equivalent
+BASH53_* settings winning), TESTS/BASH_TEST_SKIP selection, BASH_TESTS_DIR,
+and — off Windows, where the fixtures open /dev/tty — a script(1) terminal
+for headless runs, as CI does (Linux script takes -qefc; BSD/macOS takes the
+command).
 Effects: exec, net, write
 
 ```bash
 set -e
-BASHY_EXE="${BASHY:-bashy}"
+if [ "$(id -u 2>/dev/null)" = 0 ] && [ -z "${BASH53_ALLOW_ROOT:-}" ]; then
+  echo "test-bash: refusing to run as root: several Bash 5.3 fixtures (redir, test, ...) fail by design" >&2
+  echo "  under root, so the result would not be the conformance gate. Run the gate as a" >&2
+  echo "  non-root user, or use the sealed one: bashy dag test-bash-container (86/86 expected;" >&2
+  echo "  dialect-on: bashy dag test-bash-container-bashpp). BASH53_ALLOW_ROOT=1 overrides." >&2
+  exit 2
+fi
+export BASHY_EXE="${BASHY:-bashy}"
 goos="$("$BASHY_EXE" go env GOOS)"
 ext=""
 [ "$goos" = windows ] && ext=.exe
-"$BASHY_EXE" go run ./tools/bash53suite -tests-dir external/bash-5.3/tests -bash "bin/bash${ext}"
+export BASH53_TIMEOUT="${BASH53_TIMEOUT:-${BASH_TEST_TIMEOUT:-60}s}"
+export BASH53_JOBS_TIMEOUT="${BASH53_JOBS_TIMEOUT:-${BASH_TEST_TIMEOUT_JOBS:-180}s}"
+export BASH53_MEM_KB="${BASH53_MEM_KB:-${BASH_TEST_MEM_KB:-4194304}}"
+export SUITE_TESTS_DIR="${BASH_TESTS_DIR:-external/bash-5.3/tests}"
+export SUITE_BASH="bin/bash${ext}"
+export TESTS="${TESTS:-}" BASH_TEST_SKIP="${BASH_TEST_SKIP:-}"
+suite_cmd='"$BASHY_EXE" go run ./tools/bash53suite -tests-dir "$SUITE_TESTS_DIR" -bash "$SUITE_BASH" -tests "$TESTS" -skip "$BASH_TEST_SKIP"'
+if [ -t 0 ] || [ "$goos" = windows ]; then
+  "$BASHY_EXE" go run ./tools/bash53suite -tests-dir "$SUITE_TESTS_DIR" -bash "$SUITE_BASH" -tests "$TESTS" -skip "$BASH_TEST_SKIP"
+elif script -qefc true /dev/null >/dev/null 2>&1; then
+  script -qefc "$suite_cmd" /dev/null
+else
+  script -q /dev/null sh -c "$suite_cmd"
+fi
 ```
 
 ### test-bash-list
@@ -1881,4 +1914,345 @@ case "$ver" in *"$base"*) ;; *) echo "qa: version '$ver' missing '$base'" >&2; e
 curlout=$("$bin" curl --version 2>&1) || { echo "qa: curl --version failed" >&2; exit 1; }
 case "$curlout" in *curl*) ;; *) echo "qa: no curl line from curl --version" >&2; exit 1;; esac
 echo "Results: PASS qa $BASHY_TEST_VERSION $asset (version=$base, runtime-ok, curl ok)"
+```
+
+### build-bashy-oci
+Build the reusable Ubuntu/glibc Bashy base image. Override BASHY_OCI, BASHY_OCI_IMAGE,
+or BASHY_OCI_PLATFORM as needed.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+tools/bashy-oci/build-smoke.sh build
+```
+
+### smoke-bashy-oci
+Smoke the already-built Bashy base with no network, a read-only root, dropped
+capabilities, and temporary work directories.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+tools/bashy-oci/build-smoke.sh smoke
+```
+
+### test-bashy-oci-policy
+Offline structural checks for the OCI base contract.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+tools/bashy-oci/test-policy.sh
+```
+
+### check-seed-bands
+Apply the seed freshness rule to VERSION (for release builds).
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/check-seed-bands.sh "${VERSION:-dev}"
+```
+
+### govulncheck
+Release gate. Pinned govulncheck (v1.9.0, built with the go.mod toolchain) in source
+mode over bashy, ../outpost and ../yoke; a reachable finding fails, package/module-level
+findings are reported.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/govulncheck-release.sh
+```
+
+### license-gate
+Shipped Go dependency license gate (bashy, yoke, sh, outpost + vendored/third_party)
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/verify-license-gate.sh
+```
+
+### test-awd-installed-stress
+Stress repeat (25x by default, AWD_STRESS_RUNS) of the installed-binary awd
+concurrency e2e against a throwaway install dir — the repetition gate for the
+intermittent awd temp-dir race. The old recipe's recursive make install
+becomes a dag install into the same temp dir. Not part of test.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+set -eu
+install_dir=$(mktemp -d)
+trap 'rm -rf "$install_dir"' EXIT HUP INT TERM
+DHNT_BIN_DIR="$install_dir" "$BASHY" dag install
+race=''; case "$(go env GOOS)/$(go env GOARCH)" in
+  linux/amd64|linux/arm64|linux/ppc64le|darwin/amd64|darwin/arm64|freebsd/amd64|windows/amd64) race='-race' ;;
+esac
+BASHY_E2E_BIN="$install_dir/bashy" go test $race -tags e2e \
+  -run '^TestAwdE2EConcurrentFrontDoorIsolation$' -count=${AWD_STRESS_RUNS:-25} ./internal/agentos
+```
+
+### test-yash
+yash POSIX (-p) conformance scoreboard — the yash analogue of test-bash. Runs every
+shell-agnostic *-p.tst against bashy AND real bash in one container, per testcase, and
+lists the BASHY-SPECIFIC failures (bash passes, bashy fails) — the genuine bugs to fix.
+Job-control/signal suites excluded (goroutine ceiling). Output dir via YASH_OUT (default
+lane-specific /tmp/yash-scoreboard-*).
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/yash-scoreboard.sh ${YASH_OUT:-}
+```
+
+### test-yash-list
+print the current bashy-specific yash failure list (suite line desc).
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Requires: test-yash
+Effects: exec, net, write
+
+```bash
+lane=$(. scripts/test-lane-id.sh; bashy_test_lane "$PWD")
+cat "${YASH_OUT:-${TMPDIR:-/tmp}/yash-scoreboard-$lane}/failures.txt"
+```
+
+### smoke-chat
+drive `bashy chat` interactive under a real pty against an installed agent — asserts the
+governed-launcher contract (native launch · registry · steer · capture tee · teardown).
+INFO, never a gate: SKIPs cleanly without an agent or a pty (headless CI). Pass an agent
+as the first arg: make smoke-chat AGENT=codex-gpt-5.5.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/chat-smoke.sh ${AGENT:-}
+```
+
+### smoke-llm-local
+bashy local-model e2e (Sprint 379 Y2) — pull a tiny model, `llm up`, chat through the
+OpenAI + Anthropic paths, assert non-empty answers. INFO, never a gate: pulls ~1 GB and
+runs inference, so it runs on a real host (macOS / Windows / Linux), never headless CI.
+Override with E2E_MODEL=<name>, skip the pull with E2E_NO_PULL=1.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/e2e-llm-local.sh
+```
+
+### smoke-python-imports
+Explicit installed-product smoke for Sprint 183's unchanged nanochat and mini-SWE-agent
+checkouts (NANOCHAT_ROOT and MINISWEAGENT_ROOT name them). Not part of build/test.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/s183-python-import-smoke.sh
+```
+
+### smoke-dag-python
+Installed-product smoke for the examples/dag Python front doors (Sprint 185): `bashy awd
+ROOT -- bashy dag -f examples/dag/<repo>/dag.md` against pinned cache clones unless
+MINISWEAGENT_ROOT / NANOCHAT_ROOT name existing checkouts, fenced-Python smoke targets
+included. Not part of build/test.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/dag-python-examples-smoke.sh
+```
+
+### smoke-dag-typescript
+Installed-product smoke for the examples/dag TypeScript front doors (Sprint 186): `bashy
+awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md` against pinned cache clones unless
+OPENCODE_ROOT / OPENCLAW_ROOT / HERMESAGENT_ROOT name existing checkouts,
+fenced-TypeScript (and, for Hermes, Python + TypeScript) smoke targets included. Not
+part of build/test.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/dag-typescript-examples-smoke.sh
+```
+
+### smoke-dag-rust
+Installed-product smoke for the examples/dag Rust front doors (Sprint 194): `bashy awd
+ROOT -- bashy dag -f examples/dag/<repo>/dag.md` against pinned cache clones unless
+CODEX_ROOT / UV_ROOT / BUN_ROOT / MISE_ROOT name existing checkouts, fenced-Rust smoke
+AND launcher targets included (uv and Codex build their CLIs; Mise's cache clone runs
+its own build/unit-test front doors, while an explicit MISE_ROOT gets only a zero-env
+read-only smoke; RUST_TOOLCHAIN_BIN fronts a toolchain when the PATH cargo is below a
+workspace's MSRV). Not part of build/test.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/dag-rust-examples-smoke.sh
+```
+
+### smoke-dag-c
+Installed-product smoke for the examples/dag C and C++ front doors (Sprint 190): `bashy
+awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md` against unchanged FFmpeg / curl /
+git (C) and tesseract / llama.cpp / CMake (C++) checkouts — pinned and cloned by the
+gate into <user cache>/bashy/examples unless FFMPEG_ROOT / CURL_ROOT / GIT_ROOT /
+TESSERACT_ROOT / LLAMACPP_ROOT / CMAKE_ROOT name existing ones — fenced smoke AND
+launcher targets included (every graph builds its binary; CMAKE_BIN fronts a cmake, else
+the PATH one, else `bashy cmake`'s provisioned tree). Not part of `test`.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/dag-c-examples-smoke.sh
+```
+
+### smoke-dag-go
+Installed-product smoke for gh, Hugo, and Caddy Go front doors (Sprint 192). Pinned
+checkouts are cloned into <user cache>/bashy/examples unless GH_ROOT / HUGO_ROOT /
+CADDY_ROOT name existing ones. Each graph runs a focused test, imports the checkout
+from a go fence, builds, launches, and leaves git status unchanged. gh's smoke additionally proves
+the Sprint 216 (Story 541) contract path: the island call under @require/@ensure/@guard
+in an agentic function — exit 3/126/6, then 0 on resume — and its four receipts in the
+skills/craft ledger. Not part of `test`.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/dag-go-examples-smoke.sh
+```
+
+### smoke-dag-powershell
+Installed-product smoke for the examples/dag PowerShell front door (Sprint 358): `bashy
+awd DIR -- bashy dag -f examples/dag/powershell/dag.md` exercising Bash#-owned control
+flow (loops, conditionals, pipe command form, error binding) calling the fenced
+PowerShell guest language via pinned PowerShell 7.6.6. Not part of build/test.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/dag-powershell-examples-smoke.sh
+```
+
+### smoke-dag-csharp
+Installed-product smoke for the examples/dag C# front door (Sprint 358): `bashy awd DIR
+-- bashy dag -f examples/dag/csharp/dag.md` exercising Bash#-owned control flow (loops,
+conditionals, string joins, exception error binding) calling the fenced C# guest
+language compiled via Add-Type on the pinned PowerShell 7.6.6 runtime. Not part of
+build/test.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/dag-csharp-examples-smoke.sh
+```
+
+### smoke-dag-text
+Installed-product smoke for the Sprint 234 text fences (B30): the Caddy graph's `image`
+target (a ```bashpp body holding a ~~~dockerfile fence, built with the checkout's Linux
+build as a named build context and run from the image) and
+examples/quickstart/pipeline.bsh (a script carrying its own CI/CD as a ~~~dag island,
+targets as methods, Effects: enforced by @guard). Needs a running container engine;
+FAILS by name without one. The Caddy checkout is cloned into <user cache>/bashy/examples
+unless CADDY_ROOT names one. Not part of `test`.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/dag-text-examples-smoke.sh
+```
+
+### smoke-dag-manifests
+Installed-product smoke for the Sprint 238 manifest fences:
+examples/manifests/<tool>/build.bsh (cargo, pyproject, gomod, cmake, makefile, package)
+each run through `bashy awd` in a scratch copy of its directory, the expected line
+asserted and the copy byte-identical afterwards. Toolchains are what bashy provisions;
+none is needed on the host. Not part of `test`.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/manifest-examples-smoke.sh
+```
+
+### smoke-runners
+Installed-product smoke for the rod (Sprint 238): a language or toolchain bashy has
+never heard of added with a runner and nothing else — examples/runners/{awk,zig,env}.bsh
+(registered runner, inline func builder, inline shell runner) plus the refusal of an
+unregistered program. Not part of `test`.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/runner-examples-smoke.sh
+```
+
+### smoke-quickstart
+Three-mode process-level example check (Sprint 216, Story 540). (a) bashy + .bsh
+interpreted, no toolchain; (b) transpile --standalone: Bash# → Go binary, no bashy at
+runtime; (c) pre-prepared Python island via check --prepare. This is a fast host check,
+NOT the authoritative proof — the FROM-scratch images are proved by
+smoke-quickstart-container / the Linux CI job. Not part of `test`.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/quickstart-smoke.sh
+```
+
+### smoke-quickstart-container
+AUTHORITATIVE three-mode FROM-scratch gate (Sprint 216, Story 540). Builds and RUNS
+three real `FROM scratch` images from examples/quickstart/Containerfile (each with
+--network=none) and reports each image's compressed/uncompressed size + the standalone
+binary's `go version -m` SBOM line. SKIPs (exit 0) when no podman/docker engine is
+usable; with an engine present, any build/run failure fails. The required Linux CI job
+(.github/workflows/quickstart-scratch.yml) is the release gate. Not part of `test`.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/quickstart-container-smoke.sh
+```
+
+### smoke-airgap-container
+The airgap gate (Sprint 227): build the offline bashy image (build-image) and prove
+every row of docs/airgap-image.md under --network=none --read-only --cap-drop=ALL,
+through bashy podman. SKIPs (exit 0) without a usable engine; the doc's table must match
+what was measured (AIRGAP_WRITE_DOC=1 regenerates it). The Linux CI job
+(.github/workflows/airgap-image.yml, amd64 + arm64) is the release gate.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+scripts/airgap-container-smoke.sh
+```
+
+### test-self-container
+Run build/unit tests in an agent-owned Ubuntu OCI lane.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+BASHY_TEST_OCI="${BASHY_TEST_OCI:-bashy podman}" scripts/test-self-container.sh
+```
+
+### test-groups-check
+Drift guard for the test-group table in scripts/test-groups.sh: fails if a
+*_test.go package belongs to no group or a group pattern matches nothing.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+GOWORK=off scripts/test-groups.sh --check
+```
+
+### test-group
+Run named test groups as parallel local lanes, e.g. make test-group G="core agentos".
+e2e always runs fresh (-count=1); the other groups reuse Go's content-keyed test cache.
+Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
+Effects: exec, net, write
+
+```bash
+test -n "${G:-}" || { echo 'test-group: set G="core agentos frontend tooling examples e2e"' >&2; exit 2; }
+GOWORK=off scripts/test-groups.sh run $G
 ```

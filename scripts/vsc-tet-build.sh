@@ -46,7 +46,7 @@ fi
 
 # Gate: never start the licensed run from a red baseline (runbook precondition).
 echo ">>> pre-flight gate (must be green before spending the 12-month license)…" >&2
-( cd "$ROOT" && make test-bash ) | tail -1
+( cd "$ROOT" && "${BASHY:-bashy}" dag test-bash ) | tail -1
 ( cd "$ROOT" && scripts/posix-certdryrun.sh ) | grep -E "VERDICT" || true
 
 ARCH=$($OCI run --rm debian:trixie uname -m | tr -d '\r')

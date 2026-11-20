@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ci-bash53-gate.sh — the no-regression ratchet for the bash-5.3 fixture suite.
 #
-# WHY THIS EXISTS. `make test-bash` is the mandatory pre-release gate. This script
+# WHY THIS EXISTS. `bashy dag test-bash` is the mandatory pre-release gate. This script
 # puts it in CI as a RATCHET rather than an absolute "86/86 or fail" check, so a
 # red suite cannot block the very merges that would fix it:
 #
@@ -10,7 +10,7 @@
 #     its line, so the baseline only shrinks and never silently drifts stale.
 #   * baseline == actual -> pass.
 #
-# When the baseline reaches empty, replace this with a plain `make test-bash`.
+# When the baseline reaches empty, replace this with a plain `bashy dag test-bash`.
 #
 # 2026-07-12: this script used to run the suite in the BACKGROUND, poll a log file
 # for the "Results:" line, and give up on a 1200s deadline. All of that was a
@@ -40,7 +40,7 @@ BASELINE=test/bash53-known-failures.txt
   exit 2
 }
 
-out=$(make test-bash BASH_TEST_TIMEOUT="${CI_BASH_TEST_TIMEOUT:-60}" 2>&1)
+out=$(BASH53_TIMEOUT="${CI_BASH_TEST_TIMEOUT:-60}s" "${BASHY:-bashy}" dag test-bash 2>&1)
 printf '%s\n' "$out"
 
 # An INCOMPLETE run must never be scored: fixtures that never ran would look
@@ -96,8 +96,8 @@ fi
 # without LANG. The normal CI environment supplies a UTF-8 locale, so run
 # them again with the locale variables absent to keep that entry mode covered.
 if [ "$rc" -eq 0 ]; then
-  c_out=$(env -u LANG -u LC_ALL -u LC_CTYPE -u LANGUAGE make test-bash \
-    TESTS='exp-tests extglob new-exp' BASH_TEST_TIMEOUT="${CI_BASH_TEST_TIMEOUT:-60}" 2>&1)
+  c_out=$(env -u LANG -u LC_ALL -u LC_CTYPE -u LANGUAGE TESTS='exp-tests extglob new-exp' \
+    BASH53_TIMEOUT="${CI_BASH_TEST_TIMEOUT:-60}s" "${BASHY:-bashy}" dag test-bash 2>&1)
   c_rc=$?
   printf '%s\n' "$c_out"
   if [ "$c_rc" -ne 0 ] || ! printf '%s\n' "$c_out" | grep -q '^Results: 3 passed, 0 failed, 0 skipped, 0 timed out'; then
