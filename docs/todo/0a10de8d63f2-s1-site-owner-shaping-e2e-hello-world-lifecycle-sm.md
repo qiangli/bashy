@@ -3,15 +3,18 @@ id: 0a10de8d63f2
 kind: test
 title: 'S1 Site-owner shaping e2e: Hello World lifecycle smoke on the release binary (gate) + two-host promotion round trip'
 seq: 3149
-status: todo
+status: done
 priority: p0
 labels:
     - release
     - shaping
 created: 2026-11-06T21:50:00.33224Z
+assignee: s670-codex-manager
 sprint: 670
 sprint_id: 4b474d28-ab40-5a06-8d82-f14e76759a4a
 sprint_title: Desktop journey e2e regression gate, then ship v0.18.78 navigation
+closed: 2026-11-20T04:38:32.52316Z
+closed_by: s670-codex-manager
 ---
 
 Proves rc.25 is ready for shaping. On the dev host, use the installed frozen candidate (at the canonical installed path) to run the hello-world CLI lifecycle from examples/shaping/hello-world: shape wish -> verify -> approve -> undo -> restore.
@@ -59,3 +62,25 @@ Delivered: `scripts/test-shaping-hello-world.sh`, dag targets `test-shaping-smok
 - Test host (by role), inside a Debian image with Chromium, git and curl, using a bashy binary built locally from the module cache (GOPROXY=off): **27/27 PASS**. Covered: register; candidate from a prepared change; show and diff; verify runs the app's real smoke.bsh with sealed evidence; preview; approve; alice sees the new greeting while bob still sees the original; the browser checkpoint for both principals; undo; submit without activating.
 - Deliberate break (`SHAPING_SMOKE_BREAK=greeting`): FAIL at verify, exit 1.
 - Remaining: part 2, the two-host promotion round trip.
+
+## Delivery review (2026-11-20)
+
+Authoritative two-container test on the existing Linux test venue, using the retained S670 candidate, reproduced a product defect before promotion: `shape remote set org <scratch-git-url> --app hello-world --json` rejects the registered app as an unknown source repository. The two disposable hosts and real Git transport initialized successfully. Root cause: promotion configuration calls the source-acquisition allowlist in `src.SetTier`/`ConfiguredTier`/`ConfiguredUpstream`; existing promotion unit fixtures use the allowlisted name `yoke`, hiding the custom-app case. Repair scope is explicit registered-app promotion configuration while preserving source-fetch restrictions. Initial harness workdir and network-DNS failures were venue setup issues and are not product failures. No passing promotion result is claimed yet.
+
+
+## Final candidate verification (2026-11-20)
+
+The custom-app promotion defect is fixed in Yoke `79e1473d372a5dc6ea2c78a3f4244ae1178bdf1c`. Promotion gets explicit app configuration accessors; source-fetch allowlisting remains intact. Focused `pkg/src` and `pkg/shape` regression: 180 pass, three existing Windows-only cases skipped on the Linux lane. Independent review approved the boundary. Bashy consumes published module `v0.0.0-20261120041602-79e1473d372a`, verified with `GOWORK=off`; six promotion CLI tests and Linux amd64, Darwin arm64 and Windows amd64 builds pass in the locked Go 1.27.2 builder.
+
+The final Linux candidate SHA-256 is `4fd06d93d03ff85a570c4a6b01468a0f0297e5e6787a63fdd7c982e1692d50cd`.
+
+- Two isolated hosts using real Git transport: **23/23 pass**. Includes verified submission, outgoing exit 3, exact org proposal, incoming exit 3, side-slot pull without activation, unchanged trusted verifier/contract, receiving-host verification and approval, independent undo, and exact upstream recorded ref.
+- Negative control deletes the scratch org proposal: fails at incoming (exit 0 / pending 0 instead of required exit 3), proving a missing remote submission cannot pass.
+- Model-free lifecycle with browser checkpoints passes on the same final binary. Deliberately broken greeting fails at the app's actual verifier, exit 1.
+- Raw promotion evidence SHA-256: `794ea0650cc74a61e1bbcc7352d2115215018325233d9da4baa2f13a38a7e05d`. Raw records remain private because they contain venue addresses and temporary paths.
+
+Harness setup failures were investigated before repair: local-directory import does not preserve source Git identity (use the scratch remote for host B); macOS archive metadata introduced an unintended extra check (disable AppleDouble transfer metadata when packaging). Neither failure was bypassed or counted as passing. The committed harness retains failed-command evidence and fails on cleanup errors. DAG target and release-runbook requirements cover both lifecycle and promotion; no release was performed.
+
+Published Bashy implementation and promotion harness: `5a0a79be` (production file and module-lock hashes checked against the exact remote build inputs).
+
+The final lifecycle fixture (including direct server PID cleanup and dry-run agent preflight) also passes **27/27** with native browser checkpoints on the macOS candidate, SHA-256 `6a10b2d81a6706eacbcf774aa9d058ef62083d6357fcd6041679e56e465d8ce7`. This is fresh native evidence; the earlier Linux lifecycle evidence remains separately retained.
