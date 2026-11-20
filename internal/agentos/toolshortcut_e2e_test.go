@@ -39,6 +39,10 @@ func writeToolShortcutFake(t *testing.T, dir, tool, argvLog string) string {
 	body := "#!/bin/sh\n" +
 		"log=" + argvLog + "\n" +
 		"printf '%s\\n' \"$*\" >> \"$log\"\n" +
+		// Draw a prompt like a real TUI so bashy sees the session become ready
+		// and delivers queued steers at once (yoke 56346984/97b765a2) instead
+		// of after the bounded readiness timeout.
+		"printf '> '\n" +
 		"while IFS= read -r line; do\n" +
 		"  line=$(printf '%s' \"$line\" | tr -d '\\015')\n" +
 		"  printf '%s\\n' \"$line\"\n" +
@@ -235,7 +239,10 @@ func runToolShortcutPTY(t *testing.T, bin, work, tool string, toolArgs []string,
 	if steerCode != 0 {
 		t.Fatalf("chat steer %s PING exit=%d\nstderr=%s\ntranscript:\n%s", tool, steerCode, steerErr, snapshot())
 	}
-	if !strings.Contains(steerErr, "steered "+tool) {
+	// A steer to a session that is still starting is queued and delivered once
+	// it is ready (yoke 56346984), so either confirmation is valid; the echo
+	// check below proves the line actually arrived.
+	if !strings.Contains(steerErr, "steered "+tool) && !strings.Contains(steerErr, "steering queued for "+tool) {
 		t.Fatalf("chat steer did not confirm %q:\nstderr=%s", tool, steerErr)
 	}
 	waitForToolShortcut(t, "PING echo from "+tool, 20*time.Second, func() (string, bool) {
