@@ -29,12 +29,12 @@ import (
 
 	"github.com/bashsharp/bashsharp/transpile"
 
-	"github.com/spf13/cobra"
 	"github.com/qiangli/bash/interp"
 	"github.com/qiangli/bash/pathconv"
+	"github.com/spf13/cobra"
 
-	"github.com/qiangli/bashy/internal/agentos/session"
 	"github.com/bashsharp/bashsharp/cli"
+	"github.com/qiangli/bashy/internal/agentos/session"
 	"github.com/qiangli/bashy/internal/tmpl"
 	"github.com/qiangli/bashy/skills"
 
@@ -1372,8 +1372,10 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		}
 		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
-			fmt.Fprintf(os.Stderr, "bashy %s: %v\n", label, err)
-			dispatchExit(1)
+			if !inboxSilentExit(err) {
+				fmt.Fprintf(os.Stderr, "bashy %s: %v\n", label, err)
+			}
+			dispatchExit(inboxCommandExitCode(err))
 		}
 		dispatchExit(0)
 	case "stats":

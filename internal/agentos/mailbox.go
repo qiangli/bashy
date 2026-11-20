@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -179,10 +180,25 @@ func mailboxAccept(spec mailboxSpec, to string, broadcast bool) bool {
 	if broadcast {
 		return true
 	}
+	if spec.Kind == "agent" {
+		resolved := to
+		if topic, ok := bus.ResolveRole(to); ok {
+			resolved = topic
+		}
+		if (bus.Post{To: resolved}).Directed(spec.Address) {
+			return true
+		}
+	}
 	return strings.EqualFold(strings.TrimSpace(to), strings.TrimSpace(spec.Address))
 }
 
 func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
+	var conducted []conductedSprint
+	if spec.Kind == "agent" {
+		var restoreRoles func()
+		restoreRoles, conducted = memoizeHostRolesFor(spec.Address)
+		defer restoreRoles()
+	}
 	state, err := loadMailboxState(spec)
 	if err != nil {
 		return nil, state, err
@@ -209,13 +225,14 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 	if err != nil {
 		return nil, state, err
 	}
+	conductedRooms := conductedMeetRoomSet(conducted)
 	for _, r := range rooms {
 		// A seat is the Meet subscription for both live delivery and durable
 		// history. Sprint conductor rooms are chaired (not boards), so filtering
 		// on r.Board made their records disappear once the live manager advanced
 		// its native cursor. Membership plus HistoryRecords' recipient filtering
 		// keeps unrelated rooms and messages directed to another seat private.
-		if !stringMember(r.Members, spec.Address) {
+		if !stringMember(r.Members, spec.Address) && !conductedRooms[strings.ToLower(strings.TrimSpace(r.ID))] {
 			continue
 		}
 		// Read full history as the mailbox principal. HistoryRecords applies the
@@ -313,6 +330,8 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 
 type mailboxFilter struct {
 	source, topic, project, status, search, order string
+	matchRaw                                      string
+	matchRE                                       *regexp.Regexp
 	from, sinceRaw                                string
 	since                                         time.Time
 	all                                           bool
@@ -321,7 +340,7 @@ type mailboxFilter struct {
 	scope                                         *bus.SprintScope
 }
 
-// validate resolves --since once per command so a typo fails before any read.
+// validate resolves --since and --match once per command so a typo fails before any read.
 func (f *mailboxFilter) validate(now time.Time) error {
 	if f.sprint != "" {
 		scope, err := weave.ResolveSprintScopeByHandle(f.sprint)
@@ -329,6 +348,14 @@ func (f *mailboxFilter) validate(now time.Time) error {
 			return err
 		}
 		f.scope = &scope
+	}
+	f.matchRE = nil
+	if strings.TrimSpace(f.matchRaw) != "" {
+		re, err := regexp.Compile(f.matchRaw)
+		if err != nil {
+			return fmt.Errorf("inbox: invalid --match regex %q: %w", f.matchRaw, err)
+		}
+		f.matchRE = re
 	}
 	f.since = time.Time{}
 	if strings.TrimSpace(f.sinceRaw) == "" {
@@ -346,7 +373,7 @@ func (f *mailboxFilter) validate(now time.Time) error {
 // limit are not selection.
 func (f mailboxFilter) active() bool {
 	return f.source != "" || f.topic != "" || f.project != "" || f.status != "" ||
-		f.search != "" || f.from != "" || !f.since.IsZero() || f.scope != nil
+		f.search != "" || f.matchRaw != "" || f.from != "" || !f.since.IsZero() || f.scope != nil
 }
 
 func (f mailboxFilter) match(i mailboxItem) bool {
@@ -379,7 +406,13 @@ func (f mailboxFilter) match(i mailboxItem) bool {
 		}
 	}
 	haystack := strings.Join([]string{i.Body, inboxSenderText(i.From, i.FromParty, i.FromHandle), i.To, i.Topic, i.Project, i.Status, i.Room, i.Source}, " ")
-	return f.search == "" || strings.Contains(strings.ToLower(haystack), strings.ToLower(f.search))
+	if f.search != "" && !strings.Contains(strings.ToLower(haystack), strings.ToLower(f.search)) {
+		return false
+	}
+	if f.matchRE != nil && !f.matchRE.MatchString(haystack) {
+		return false
+	}
+	return true
 }
 
 func (f mailboxFilter) apply(in []mailboxItem) []mailboxItem {
@@ -416,6 +449,7 @@ func addMailboxFilterFlags(cmd *cobra.Command, f *mailboxFilter) {
 	p.StringVar(&f.project, "project", "", "filter by project")
 	p.StringVar(&f.status, "status", "", "filter by status")
 	p.StringVar(&f.search, "search", "", "search body/sender/recipient/topic/project/status/room/source")
+	p.StringVar(&f.matchRaw, "match", "", "filter by regular expression across body/sender/recipient/topic/project/status/room/source")
 	p.StringVar(&f.from, "from", "", "only messages whose sender contains this text")
 	p.StringVar(&f.sinceRaw, "since", "", "only messages at or after this time (duration like 2h or 3d, or RFC3339 / YYYY-MM-DD)")
 	p.StringVar(&f.order, "sort", "unread", "order: unread, newest, oldest, or source")
