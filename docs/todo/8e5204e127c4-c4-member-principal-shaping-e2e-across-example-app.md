@@ -12,3 +12,5 @@ sprint_title: Shaping-enable the example apps for consumers (viewer, session, fo
 ---
 
 Spec: umbrella docs/plan-s682-consumer-shaping-example-apps.md §C4. Consumer-first shaping (operator 2026-11-20); owner/producer side is Sprint 683.
+
+Closure requirement (operator 2026-11-20): the kb page must be written for ANY bashy user enabling their own app, not only the examples - see plan section "Closure: KB for general bashy users".
