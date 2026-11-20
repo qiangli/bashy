@@ -1098,6 +1098,8 @@ github.com/qiangli/yoke v0.0.0-20261120202843-1f1b6716786b h1:9aQv3Tpg8xsqUxm7NF
 github.com/qiangli/yoke v0.0.0-20261120202843-1f1b6716786b/go.mod h1:40OmUyWSEJuvaBt2+BZTNJD5QI1ECuWrbjnhVWB/IWY=
 github.com/qiangli/yoke v0.0.0-20261120212600-2d579e12f01c h1:FVxw/t37tH9D9PjyAEVn6czT4LMMSpiQ/0gZ4Qt4oss=
 github.com/qiangli/yoke v0.0.0-20261120212600-2d579e12f01c/go.mod h1:40OmUyWSEJuvaBt2+BZTNJD5QI1ECuWrbjnhVWB/IWY=
+github.com/qiangli/yoke v0.0.0-20261120214714-15f99cfee632 h1:10L6F+qkGpdw6lg6dPaVnlqOfOCdoLOyDoGw44OjEA0=
+github.com/qiangli/yoke v0.0.0-20261120214714-15f99cfee632/go.mod h1:40OmUyWSEJuvaBt2+BZTNJD5QI1ECuWrbjnhVWB/IWY=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f h1:aOhDxEjodWKHckz8+Bp49lmQXh80hK0ucSTtyJcj2NQ=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f/go.mod h1:Q0Q5T6VFoIzC2QCjcH2DnKhvD6lvneoJKxG0TYasq8E=
 github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9 h1:0pOjHOylgAWaCVmImyqwOBhA8xx5EZ/WxrddpBiVF+E=
