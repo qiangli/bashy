@@ -4,7 +4,7 @@ kind: bug
 title: weave pull --force exits 0 without merging and without a reason
 seq: 3255
 status: todo
-priority: p2
+priority: p1
 created: 2026-11-20T12:29:31.665162Z
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618

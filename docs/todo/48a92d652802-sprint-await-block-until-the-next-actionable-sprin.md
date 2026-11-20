@@ -3,15 +3,19 @@ id: 48a92d652802
 kind: feature
 title: 'sprint await: block until the next actionable sprint event'
 seq: 3102
-status: todo
+status: done
 priority: p0
 labels:
     - sprint
 created: 2026-11-06T17:08:01.641993Z
-assignee: claude-fable5.1
+assignee: claude-opus5.5
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
 sprint_title: 'Proactive sprint manager: wake, supervise, review'
+closed: 2026-11-20T18:12:02.228326Z
+closed_by: claude-opus5.5
 ---
 
 MVP: bashy sprint await ID [--timeout D] [--json] returns on the first typed event: run terminal/failed, story submitted, submission pending past SLA (default 30m), story assigned with no run activity past SLA (default 60m), mail to the seat, lease near expiry. Each event carries story/run ids and a suggested verb (accept|reject|assign|reassign). Builds on sprint wait (internal/agentos/sprint_wait.go); replace thread-text substring matching with structured queue/run state. Out of MVP: supervisor daemon, attach, vendor spread. Verification: unit test per event; scenario: worker run finishes while manager blocked -> returns within seconds. Baseline: S562 assessment (operator-started Codex manager: 0/69 self-initiated turns, 4-9.5h reaction lag, 18 submissions pending 29-38h, 0 rejects, 5 self-accepts, 10 planned stories grew to 41).
+
+Closed 2026-11-20 (S576 triage, conductor): Delivered: bashy aefcd254 + merge 1c33d778 (sprint await on typed submit events) with yoke producer 3ad1ec23/64921894 (run #78); on main, in rc.38 candidate. Merged-run evidence reused; no fresh tests.

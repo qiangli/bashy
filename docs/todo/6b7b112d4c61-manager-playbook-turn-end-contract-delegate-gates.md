@@ -4,7 +4,7 @@ kind: doc
 title: 'Manager playbook: turn-end contract, delegate gates, operator section'
 seq: 3120
 status: todo
-priority: p0
+priority: p1
 labels:
     - sprint
     - operator

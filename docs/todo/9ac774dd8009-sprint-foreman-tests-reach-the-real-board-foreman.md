@@ -4,7 +4,7 @@ kind: bug
 title: Sprint/foreman tests reach the real board, foreman and supervisor
 seq: 3128
 status: todo
-priority: p2
+priority: p1
 labels:
     - sprint
     - post-mvp

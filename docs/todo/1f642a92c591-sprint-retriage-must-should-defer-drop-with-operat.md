@@ -4,7 +4,7 @@ kind: feature
 title: 'sprint retriage: must/should/defer/drop with operator approval for deferral'
 seq: 3115
 status: todo
-priority: p1
+priority: p3
 labels:
     - sprint
     - triage

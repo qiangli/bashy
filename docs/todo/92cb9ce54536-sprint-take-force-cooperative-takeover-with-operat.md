@@ -4,7 +4,7 @@ kind: feature
 title: 'sprint take --force: cooperative takeover with operator approval and incumbent handoff'
 seq: 3121
 status: todo
-priority: p0
+priority: p3
 labels:
     - sprint
     - post-mvp
