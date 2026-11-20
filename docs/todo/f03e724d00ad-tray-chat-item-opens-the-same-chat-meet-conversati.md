@@ -6,9 +6,6 @@ seq: 3256
 status: todo
 priority: p2
 created: 2026-11-20T14:33:55.879887Z
-sprint: 680
-sprint_id: af559546-24b2-5355-8565-b4f41449486e
-sprint_title: 'Human-in-the-loop browser: ping-back and remote headless web-app testing'
 ---
 
 Operator 2026-11-20: add 'Chat' as one item in the tray (bashy examples/tray), opening the SAME conversation the browser extension's Shape posts into (yoke story a79cefd4 step 2: the agent joins the chat/meet room; the popup shows it). One conversation, many surfaces: TUI/chat, browser extension, tray.
