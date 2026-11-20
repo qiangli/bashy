@@ -3,9 +3,10 @@ id: 9b0e472160ac
 kind: feature
 title: 'Refuel/UPS for rate-limited workers: phase 1 automatic handoff on exhaustion; phase 2 opt-in metered/local fallback relaunch'
 seq: 3273
-status: todo
+status: wontfix
 priority: p2
 created: 2026-11-20T23:29:00.578867Z
+closed: 2026-11-20T23:38:35.675726Z
 ---
 
 Operator idea 2026-11-20; conductor advice recorded. Depends on 6254c3c6 (live session state detection).
