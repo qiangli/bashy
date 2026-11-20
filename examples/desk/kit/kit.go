@@ -285,6 +285,27 @@ func PublicBase(r *http.Request, base string) string {
 	return RequestOrigin(r) + mount + path
 }
 
+// SetPublicMount supplies the browser-facing mount for a CLI request to a
+// console-managed loopback listener. The API request still uses req.URL.
+func SetPublicMount(req *http.Request, mount string) error {
+	if mount == "" {
+		return nil
+	}
+	u, err := url.Parse(mount)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Hostname() == "" ||
+		u.User != nil || u.ForceQuery || u.RawQuery != "" || u.Fragment != "" {
+		return errors.New("expected an HTTP(S) console app URL with a mount path")
+	}
+	prefix := strings.TrimRight(u.EscapedPath(), "/")
+	if !forwardedPrefixRE.MatchString(prefix) {
+		return errors.New("expected an HTTP(S) console app URL with a mount path")
+	}
+	req.Header.Set("X-Forwarded-Host", u.Host)
+	req.Header.Set("X-Forwarded-Proto", u.Scheme)
+	req.Header.Set("X-Forwarded-Prefix", prefix)
+	return nil
+}
+
 // GuardPOST enforces the desk POST preconditions shared by every tool:
 // only GET/POST exist; POST requires a same-origin Origin (when present)
 // and refuses cross-site fetch metadata. It writes the refusal and

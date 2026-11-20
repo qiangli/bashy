@@ -190,9 +190,10 @@ func post(t *testing.T, client *http.Client, base, key string, p any) (int, map[
 }
 func TestCLIUsesShapedAddress(t *testing.T) {
 	_, srv := startServer(t)
-	t.Setenv("CHART_ADDR", "")
-	t.Setenv("BASHY_APP", "chart")
-	t.Setenv("BASHY_APP_ADDR", strings.TrimPrefix(srv.URL, "http://"))
+	t.Setenv("CHART_ADDR", strings.TrimPrefix(srv.URL, "http://"))
+	t.Setenv("CHART_PREFIX", "")
+	const publicURL = "https://console.example.test/apps/chart"
+	t.Setenv("CHART_PUBLIC_URL", publicURL)
 
 	for _, args := range [][]string{
 		{"add", "--id", "stats", "--input", "-", "--widget", "gauge"},
@@ -202,8 +203,8 @@ func TestCLIUsesShapedAddress(t *testing.T) {
 		if code := cli(args, strings.NewReader("[1,2]"), &out); code != 0 {
 			t.Fatalf("%v: exit %d: %s", args, code, out.String())
 		}
-		if args[0] == "open" && !strings.Contains(out.String(), srv.URL+"/?id=stats") {
-			t.Fatalf("open: want chart URL at %s, got %q", srv.URL, out.String())
+		if !strings.Contains(out.String(), publicURL+"/?id=stats") || strings.Contains(out.String(), srv.URL) {
+			t.Fatalf("%s: want console URL at %s, got %q", args[0], publicURL, out.String())
 		}
 	}
 }

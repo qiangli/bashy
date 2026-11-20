@@ -34,6 +34,7 @@ Common: --json --fields F --no-input --explain --dry-run --help=mcp`
 
 type cliOptions struct {
 	addr, dir, prefix, key, breakFlag string
+	publicURL                         string
 	title, body, file, template, data string
 	session, page, to, output         string
 	sprint                            int
@@ -45,15 +46,22 @@ type cliOptions struct {
 
 func parseCLI(raw []string) (*cliOptions, error) {
 	o := &cliOptions{addr: "127.0.0.1:18096", dir: kit.DefaultDataDir(tool), key: os.Getenv("VIEWER_KEY")}
+	if os.Getenv("BASHY_APP") == tool {
+		if v := os.Getenv("BASHY_APP_ADDR"); v != "" {
+			o.addr = v
+		}
+		if v := os.Getenv("BASHY_APP_DATA"); v != "" {
+			o.dir = v
+		}
+	}
 	if v := os.Getenv("VIEWER_ADDR"); v != "" {
-		o.addr = v
-	} else if v := os.Getenv("BASHY_APP_ADDR"); v != "" && os.Getenv("BASHY_APP") == tool {
 		o.addr = v
 	}
 	if v := os.Getenv("VIEWER_DATA"); v != "" {
 		o.dir = v
 	}
 	o.prefix = os.Getenv("VIEWER_PREFIX")
+	o.publicURL = os.Getenv("VIEWER_PUBLIC_URL")
 	var pos []string
 	for i := 0; i < len(raw); i++ {
 		arg := raw[i]
@@ -229,7 +237,15 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 		if len(o.args) < 2 {
 			return kit.UsageError(stdout, tool, o.asJSON, "viewer join ID INVITE")
 		}
-		fmt.Fprintln(stdout, "http://"+o.addr+o.prefix+"/?id="+url.QueryEscape(o.args[0])+"#invite="+o.args[1])
+		req := &http.Request{Header: make(http.Header)}
+		if err := kit.SetPublicMount(req, o.publicURL); err != nil {
+			return kit.UsageError(stdout, tool, o.asJSON, err.Error())
+		}
+		base := c.base()
+		if o.publicURL != "" {
+			base = strings.TrimRight(o.publicURL, "/") + o.prefix
+		}
+		fmt.Fprintln(stdout, base+"/?id="+url.QueryEscape(o.args[0])+"#invite="+o.args[1])
 		return 0
 	case "export":
 		id, ok := c.needID()
@@ -352,7 +368,13 @@ func (c *client) call(action string, payload map[string]any) (map[string]any, in
 	if c.fields != "" {
 		q = "?fields=" + url.QueryEscape(c.fields)
 	}
-	req, _ := http.NewRequest("POST", c.base()+"/api/action"+q, bytes.NewReader(raw))
+	req, err := http.NewRequest("POST", c.base()+"/api/action"+q, bytes.NewReader(raw))
+	if err != nil {
+		return nil, kit.UsageError(c.out, tool, c.o.asJSON, err.Error())
+	}
+	if err := kit.SetPublicMount(req, c.o.publicURL); err != nil {
+		return nil, kit.UsageError(c.out, tool, c.o.asJSON, err.Error())
+	}
 	req.Header.Set("Content-Type", "application/json")
 	if c.o.key != "" {
 		req.Header.Set("X-Facilitator-Key", c.o.key)
