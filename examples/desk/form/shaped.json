@@ -1,1 +1,10 @@
-{"server": {"main": "server", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA"]}}
+{
+  "server": {"main": "server", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA"]},
+  "genie": {
+    "examples": [
+      "Keep the Save and Submit bar visible while I scroll through a long questionnaire.",
+      "Group unanswered required fields at the top so I can see what is left.",
+      "Render multi-respondent poll results as horizontal bars instead of raw JSON."
+    ]
+  }
+}

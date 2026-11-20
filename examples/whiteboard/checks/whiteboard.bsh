@@ -6,6 +6,7 @@ test ! -d premium
 test ! -d enterprise
 test -s shaped.json
 test -s contract.bsh
+test -s go.mod
 test -s excalidraw-app/build/index.html
 test -s server/main.go
 test -s server/collab.go

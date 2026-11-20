@@ -12,6 +12,26 @@ import (
 	"testing"
 )
 
+// installWrappedForkSkip names shaped example apps whose verification checks
+// require a network `<app> install` step to clone and build upstream web
+// assets before `bashy src pr verify` can run. Every entry skips explicitly
+// with its reason and plan-appendix reference — never a silent omission.
+var installWrappedForkSkip = map[string]string{
+	"whiteboard": "network install required (`whiteboard install` clones and builds the pinned Excalidraw bundle checked by checks/whiteboard.bsh); see docs/plan-s682-consumer-shaping-example-apps.md#appendix-install-wrapped-example-apps",
+	"board":      "network install required (`board install` clones and builds the pinned Focalboard bundle embedded by board-console); see docs/plan-s682-consumer-shaping-example-apps.md#appendix-install-wrapped-example-apps",
+	"table":      "network install required and Linux-only (`table install` clones and builds the pinned Mathesar bundle); see docs/plan-s682-consumer-shaping-example-apps.md#appendix-install-wrapped-example-apps",
+}
+
+func TestInstallWrappedSkipReasonsAreExplicit(t *testing.T) {
+	for _, name := range []string{"whiteboard", "board", "table"} {
+		reason := installWrappedForkSkip[name]
+		if !strings.Contains(reason, "network install required") ||
+			!strings.Contains(reason, "docs/plan-s682-consumer-shaping-example-apps.md#appendix-install-wrapped-example-apps") {
+			t.Fatalf("%s skip reason %q must state network install requirement and plan appendix pointer", name, reason)
+		}
+	}
+}
+
 // TestDeskToolsForkAndRollback is the shaped fork proof per desk tool, driven
 // through the real CLI: a principal forks the tool, the verifier passes the
 // fork against the contract the tool ships, the gate activates it, and undo
@@ -28,9 +48,17 @@ func TestDeskToolsForkAndRollback(t *testing.T) {
 	if err != nil {
 		t.Skip("git is required to commit the fork")
 	}
-	bashy := productBashy(t)
+	for _, name := range []string{"board", "table"} {
+		t.Run(name, func(t *testing.T) {
+			t.Skip(installWrappedForkSkip[name])
+		})
+	}
 	for name, root := range shapedTools {
 		t.Run(name, func(t *testing.T) {
+			if reason, ok := installWrappedForkSkip[name]; ok {
+				t.Skip(reason)
+			}
+			bashy := productBashy(t)
 			t.Parallel()
 			src, err := filepath.Abs(root)
 			if err != nil {

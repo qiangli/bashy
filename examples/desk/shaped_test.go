@@ -29,8 +29,27 @@ var shapedTools = map[string]string{
 	"chart":      "chart",
 	"form":       "form",
 	"viewer":     "viewer",
-	"whiteboard": "../whiteboard/server",
+	"whiteboard": "../whiteboard",
 	"brainstorm": "../brainstorm/server",
+}
+
+func TestConsumerPolishedToolsDeclareGenieExamples(t *testing.T) {
+	for _, name := range []string{"form", "notepad", "whiteboard"} {
+		t.Run(name, func(t *testing.T) {
+			root := shapedTools[name]
+			b, err := os.ReadFile(filepath.Join(root, appserver.File))
+			if err != nil {
+				t.Fatalf("%s: read %s: %v", name, appserver.File, err)
+			}
+			m, err := appserver.Parse(b)
+			if err != nil {
+				t.Fatalf("%s: parse %s: %v", name, appserver.File, err)
+			}
+			if m.Genie == nil || len(m.Genie.Examples) < 2 {
+				t.Fatalf("%s: %s must declare at least 2 genie.examples; got %+v", name, appserver.File, m.Genie)
+			}
+		})
+	}
 }
 
 func TestDeskToolsShipShapedServer(t *testing.T) {

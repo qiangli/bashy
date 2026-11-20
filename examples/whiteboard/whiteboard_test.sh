@@ -29,7 +29,7 @@ if "$runner" --bashsharp "$here/whiteboard.bsh" source >"$tmp/source.out" 2>&1; 
   exit 1
 fi
 
-(cd "$here/server" && GOWORK=off CGO_ENABLED=0 go test -v ./...)
+(cd "$here" && GOWORK=off CGO_ENABLED=0 go test -v ./server/...)
 
 echo 'whiteboard command unit checks passed'
 
