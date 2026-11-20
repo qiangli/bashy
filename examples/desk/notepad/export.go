@@ -117,17 +117,7 @@ func printHTMLToPDF(title string, htmlBytes []byte) ([]byte, error) {
 	out := filepath.Join(tmp, "export.pdf")
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, browser,
-		"--headless=new",
-		"--disable-gpu",
-		"--no-sandbox",
-		"--no-first-run",
-		"--no-default-browser-check",
-		"--user-data-dir="+filepath.Join(tmp, "profile"),
-		"--no-pdf-header-footer",
-		"--print-to-pdf="+out,
-		"file://"+filepath.ToSlash(src),
-	)
+	cmd := exec.CommandContext(ctx, browser, browserPDFArgs(filepath.Join(tmp, "profile"), out, src)...)
 	if msg, err := cmd.CombinedOutput(); err != nil {
 		return nil, fmt.Errorf("browser print-to-pdf: %v: %s", err, msg)
 	}
@@ -136,6 +126,22 @@ func printHTMLToPDF(title string, htmlBytes []byte) ([]byte, error) {
 		return nil, errors.New("browser produced no PDF")
 	}
 	return data, nil
+}
+
+func browserPDFArgs(profileDir, outPath, htmlPath string) []string {
+	return []string{
+		"--headless=new",
+		"--disable-gpu",
+		"--no-sandbox",
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--use-mock-keychain",
+		"--password-store=basic",
+		"--user-data-dir=" + profileDir,
+		"--no-pdf-header-footer",
+		"--print-to-pdf=" + outPath,
+		"file://" + filepath.ToSlash(htmlPath),
+	}
 }
 
 func findBrowser() string {

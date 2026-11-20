@@ -40,9 +40,7 @@ func printPDFBrowser(htmlBytes []byte, out string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, chrome, "--headless=new", "--disable-gpu", "--no-sandbox", "--no-first-run",
-		"--no-default-browser-check", "--user-data-dir="+filepath.Join(tmp, "profile"),
-		"--no-pdf-header-footer", "--print-to-pdf="+out, "file://"+filepath.ToSlash(src))
+	cmd := exec.CommandContext(ctx, chrome, chromePDFArgs(filepath.Join(tmp, "profile"), out, src)...)
 	if msg, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("chrome print-to-pdf: %v: %s", err, msg)
 	}
@@ -50,6 +48,22 @@ func printPDFBrowser(htmlBytes []byte, out string) error {
 		return fmt.Errorf("chrome produced no PDF")
 	}
 	return nil
+}
+
+func chromePDFArgs(profileDir, outPath, htmlPath string) []string {
+	return []string{
+		"--headless=new",
+		"--disable-gpu",
+		"--no-sandbox",
+		"--no-first-run",
+		"--no-default-browser-check",
+		"--use-mock-keychain",
+		"--password-store=basic",
+		"--user-data-dir=" + profileDir,
+		"--no-pdf-header-footer",
+		"--print-to-pdf=" + outPath,
+		"file://" + filepath.ToSlash(htmlPath),
+	}
 }
 
 var htmlStripRe = regexp.MustCompile(`(?s)<style[^>]*>.*?</style>|<script[^>]*>.*?</script>|<[^>]+>`)
