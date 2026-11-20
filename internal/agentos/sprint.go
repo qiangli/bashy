@@ -154,8 +154,11 @@ Delegation transfers execution, never accountability. While you hold it you must
 	    reminders continue every three minutes until the manager acknowledges it.
   - SUPERVISE workers proactively: monitor every run, and steer, interrupt,
     salvage, or reassign stalled / failed / no-op work instead of waiting on it.
-  - VERIFY independently: inspect and rerun the gates yourself; never trust a
-    worker's prose or exit status ("submitted" and exit 0 are not "done").
+  - VERIFY independently: workers run gates; verify the verdict from bashy
+    evidence, never a worker's prose or exit status ("submitted" and exit 0
+    are not "done"); run the frozen-candidate final gate yourself. Return a
+    failing submission with ` + "`sprint reject ID STORY -m '<feedback>'`" + ` so the
+    decision is recorded and the story stays with its assignee.
   - INTEGRATE sequentially: serialize reviews and merges; push subproject commits
     and bump parent pins per repository policy, one gated step at a time.
   - LEAVE NOTHING DELIVERED BEHIND: on every checkpoint and before stop/end, run the
@@ -176,6 +179,12 @@ Delegation transfers execution, never accountability. While you hold it you must
     integration. NEVER delete, remove, reset, overwrite, or destroy work owned by
     another sprint/agent. A coordination reply is not deletion authority.
   - Keep CONTINUITY: checkpoint often so any handoff or crash resumes cleanly.
+    Record standing operator rules once with ` + "`sprint directive add ID '<rule>'`" + `
+    instead of re-pasting them into every brief.
+  - TURN-END CONTRACT: every manager turn ends with a dispatched action or a
+    blocking ` + "`sprint await`" + ` (one typed event — submission, run
+    submitted/failed/stalled, or manager mail — with a suggested verb), never
+    a promise to check later. A turn that ends in narration is a stalled sprint.
 
 Do not wait passively while actionable work remains. Cleanup and deletion
 authority is bounded by the assignment and the safety policy — it does not extend

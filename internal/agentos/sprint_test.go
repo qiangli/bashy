@@ -44,7 +44,11 @@ func TestSprintHelpCarriesOwnerAccountability(t *testing.T) {
 		"SUPERVISE",       // proactive worker supervision
 		"reassign",        // steer / interrupt / salvage / reassign
 		"salvage",         //
-		"rerun the gates", // independent gate inspection/rerun
+		"workers run gates",          // delegate gates; verify from bashy evidence
+		"frozen-candidate final gate", // the one gate the manager runs personally
+		"TURN-END CONTRACT",           // dispatched action or blocking sprint await
+		"sprint reject",               // recorded rejection path
+		"sprint directive",            // standing rules recorded once
 		"exit status",     // never trust worker prose or exit status
 		"sequentially",    // serialize reviews and merges
 		"pins",            // push subproject commits + parent pins

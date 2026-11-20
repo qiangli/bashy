@@ -89,6 +89,31 @@ with delivery evidence, then the current manager runs `sprint accept` with the
 verification it independently checked. Generic `todo done` never closes a
 sprint story.
 
+Dispatch runs in lanes: `bashy sprint assign` starts one weave run per story in
+its own isolated workspace, and the manager reviews each submission — accept,
+or `bashy sprint reject ID STORY -m "feedback"`, which records the decision and
+returns the story to doing with its assignee. For an operator-started,
+steerable session outside the sprint lanes, `bashy <tool>` opens one directly;
+it joins the same room, so `bashy chat sessions` and `bashy chat steer` reach it.
+
+Turn-end contract: every manager turn ends with a dispatched action or a
+blocking `bashy sprint await` — one typed event (submission, run
+submitted/failed/stalled, manager mail) with a suggested verb — never a
+promise to check later.
+
+## Operator quick map
+
+| Operator intent | Command |
+|---|---|
+| Status | `bashy sprint show ID` |
+| Nudge / redirect | `bashy sprint instruct ID --instruction TEXT` |
+| Standing rule or pre-approval | `bashy sprint directive add ID "RULE" [--preapprove RULE]` |
+| Change scope | `bashy sprint edit ID …` plus `bashy todo add/edit --sprint ID` (unlink with `--sprint 0`); `sprint retriage` is deferred and does not exist yet |
+| Take over the seat | `bashy sprint take ID --owner NAME --force --watch`, then record the operator approval as a sprint comment (`bashy sprint comment ID "…" --kind decision`) |
+
+Directives are appended to every manager payload and weave brief, so a rule
+recorded once reaches every lane.
+
 Stop and report the command error if launch or instruction delivery fails. Do
 not claim that work was dispatched unless Bashy confirms it.
 
