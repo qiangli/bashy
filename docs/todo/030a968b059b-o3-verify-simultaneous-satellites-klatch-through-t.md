@@ -3,7 +3,7 @@ id: 030a968b059b
 kind: test
 title: 'O3 Verify simultaneous satellites: Klatch through two satellites on macOS, Linux and native Windows'
 seq: 3060
-status: todo
+status: wontfix
 priority: p0
 labels:
     - outpost
@@ -11,6 +11,7 @@ created: 2026-11-04T06:51:51.034687Z
 sprint: 585
 sprint_id: 73032105-b38f-5cd7-8f47-a732dfee103f
 sprint_title: Klatch v1.2.7 rebuild and end-to-end tests
+closed: 2026-11-20T03:49:27.273392Z
 ---
 
 Depends on O2. Main outpost paired with zoo and a second instance with zoo-aws on the same host. Klatch is reachable through both satellites; a member of each satellite signs in with SSO and both chat in the same team topic; down on the second instance leaves the main one working; after a reboot of the Windows test host both instances and the publication come back. Run on macOS (the dev box), a Linux test host and native Windows (elephant, claim it first). Keep raw logs and the exact Bashy, outpost and Klatch identities. Satellite-side gaps become support tickets. KISS/MVP: reuse existing code and harnesses; smallest causal change. Record exact source, build and artifact identities. Managers verify evidence before acceptance. Delivery commits carry Sprint, Story and Story-ID trailers.
@@ -28,3 +29,7 @@ Depends on O2. Main outpost paired with zoo and a second instance with zoo-aws o
 - macOS dev box and native Windows: live runs above (Klatch through both satellites, owner and member, down leaves the main instance working).
 - Linux: the Sprint 565 O4 sandbox e2e (two satellites, one host, Klatch, fake example.test accounts; self-hosted, exit 0) on the Linux test host.
 - Not run: the Windows test host reboot check. Moved to todo 92fbe9c4; not claimed here. Acceptance (sprint accept) waits for the next manager of Sprint 585.
+
+## Closure review (2026-11-20)
+
+Closed as superseded following the operator's relevance review request, not as a fresh test pass. Sprint 606 story 1c1e91f0b235 (done) replaced separately paired Outpost instances with one host identity and multiple satellite attachments. Sprint 630 stories 5fb420f2c224 and dd91ed52ca2b (both done) record the host migration, retirement of legacy profile instances, and attachment/cleanup validation. The old two-instance acceptance topology no longer describes the deployed design. Historical evidence above remains unchanged; no new live tests, reboot, deployment or cleanup were performed. The separately tracked reboot follow-up 92fbe9c4f4fb is outside this sprint and is not claimed passing.
