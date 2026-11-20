@@ -3,9 +3,10 @@ id: c00eb6a73a34
 kind: bug
 title: chat steer to a codex 0.171.0 TUI types the line but does not submit it (and steer --enter did not submit either)
 seq: 3262
-status: todo
+status: assigned
 priority: p1
 created: 2026-11-20T20:12:12.428242Z
+assignee: agy-gemini4-carbon
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
 sprint_title: 'Proactive sprint manager: wake, supervise, review'
