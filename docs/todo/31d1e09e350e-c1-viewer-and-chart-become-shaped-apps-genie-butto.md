@@ -3,9 +3,10 @@ id: 31d1e09e350e
 kind: feature
 title: C1 viewer and chart become shaped apps (Genie button, CLI follows console address)
 seq: 3258
-status: todo
+status: assigned
 priority: p1
 created: 2026-11-20T19:14:04.014111Z
+assignee: codex-gpt6.2-sol
 sprint: 682
 sprint_id: 623586bb-742f-570e-87c9-9af0c101bac1
 sprint_title: Shaping-enable the example apps for consumers (viewer, session, form, board/whiteboard/table/hello-world, notepad/chart)

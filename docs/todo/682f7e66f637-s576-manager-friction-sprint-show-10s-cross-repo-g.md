@@ -3,11 +3,12 @@ id: 682f7e66f637
 kind: enhancement
 title: 'S576 manager friction: sprint show <10s; cross-repo goal add --story; conductor docs/todo edits do not trip weave isolation'
 seq: 3251
-status: todo
+status: assigned
 priority: p1
 labels:
     - agents
 created: 2026-11-20T04:15:28.182674Z
+assignee: agy-gemini4-carbon
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
 sprint_title: 'Proactive sprint manager: wake, supervise, review'
