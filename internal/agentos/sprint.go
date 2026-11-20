@@ -37,10 +37,10 @@ func newSprintCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newSprintInboxAckCmd())
 	cmd.AddCommand(newSprintMonitorCmd())
-	cmd.AddCommand(newSprintWaitCmd())
+	cmd.AddCommand(newSprintWaitCmd(), newSprintAwaitCmd())
 	// LAST, after every edit above. yoke installed its own three reporters
 	// while it built this tree; attachSprintWatch replaced two RunEs and the
-	// three AddCommands arrived afterwards, so those paths have no reporter at
+	// added commands arrived afterwards, so those paths have no reporter at
 	// all and the tree's SilenceErrors swallowed them. See sprint_errors.go.
 	installSprintErrorReporting(cmd)
 	return cmd
