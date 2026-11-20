@@ -226,7 +226,7 @@ func addShapePromotionCmds(cmd *cobra.Command, o *shapeCLIOptions) {
 		}
 		env := shapePromotionEnvelope{Verb: "remote", App: app, Remotes: map[string]string{}}
 		for _, t := range []string{"org", "upstream"} {
-			u, err := src.ConfiguredTier(src.Home(), app, t)
+			u, err := src.PromotionTier(src.Home(), app, t)
 			if err != nil && t == "org" {
 				return err
 			}
@@ -243,7 +243,10 @@ func addShapePromotionCmds(cmd *cobra.Command, o *shapeCLIOptions) {
 		if err := shapeTierCheck(args[0]); err != nil {
 			return err
 		}
-		if err := src.SetTier(src.Home(), app, args[0], args[1]); err != nil {
+		if _, err := shapeAppLookup(app); err != nil {
+			return err
+		}
+		if err := src.SetPromotionTier(src.Home(), app, args[0], args[1]); err != nil {
 			return err
 		}
 		return showRemotes(c, nil)

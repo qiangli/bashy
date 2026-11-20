@@ -3,6 +3,7 @@ package agentos
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,6 +91,29 @@ func TestPromotionRemoteSetShowJSON(t *testing.T) {
 	}
 	if code, _, _ := runPromotion(t, "remote", "set", "mars", bare); code != 1 {
 		t.Fatalf("bad tier exit %d", code)
+	}
+}
+
+func TestPromotionRemoteForRegisteredCustomApp(t *testing.T) {
+	bare := promotionFixture(t)
+	shapeAppLookup = func(name string) (shape.App, error) {
+		if name != "hello-world" {
+			return shape.App{}, fmt.Errorf("app %q is not registered", name)
+		}
+		return shape.App{Name: name}, nil
+	}
+	for _, tier := range []string{"org", "upstream"} {
+		code, out, errs := runPromotion(t, "remote", "set", tier, bare, "--app", "hello-world", "--json")
+		if code != 0 {
+			t.Fatalf("set %s exit %d: %s", tier, code, errs)
+		}
+		var env shapePromotionEnvelope
+		if err := json.Unmarshal([]byte(out), &env); err != nil || env.Remotes[tier] != bare {
+			t.Fatalf("set %s: %s, %v", tier, out, err)
+		}
+	}
+	if code, _, _ := runPromotion(t, "remote", "set", "org", bare, "--app", "unregistered"); code == 0 {
+		t.Fatal("configured promotion for an unregistered app")
 	}
 }
 
