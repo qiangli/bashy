@@ -265,6 +265,7 @@ func TestSprintWatchObservationNeverBlocksUnreadReminderAndJoins(t *testing.T) {
 	}
 }
 func TestSprintMonitorNativeHookIsScopedAndCancellable(t *testing.T) {
+	sprintWatchIsolate(t)
 	if foreman.ObserveSession == nil {
 		t.Fatal("native observation hook missing")
 	}

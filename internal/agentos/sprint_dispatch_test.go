@@ -20,6 +20,7 @@ import (
 // These drive the exact dispatch shape bashy ships.
 
 func TestSprintDispatchNeverExitsSilently(t *testing.T) {
+	sprintWatchIsolate(t)
 	cases := []struct {
 		name string
 		args []string
@@ -55,6 +56,7 @@ func TestSprintDispatchNeverExitsSilently(t *testing.T) {
 // Exactly once: a path yoke already reported must not be printed a second time
 // by the host.
 func TestSprintDispatchReportsEachErrorExactlyOnce(t *testing.T) {
+	sprintWatchIsolate(t)
 	var out, errOut bytes.Buffer
 	code := runSprintDispatch([]string{"inbox-ack", "notanumber"}, &out, &errOut)
 	if code == 0 {
@@ -95,6 +97,7 @@ func TestSprintDispatchDoesNotDoubleTheCommandPrefix(t *testing.T) {
 // and the silence never showed — but the exit code was still thrown away,
 // turning every weave usage failure into an indistinguishable `exit 1`.
 func TestWeaveDispatchReportsOnceAndKeepsTheSubverbExitCode(t *testing.T) {
+	sprintWatchIsolate(t)
 	var out, errOut bytes.Buffer
 	code := runWeaveDispatch([]string{"no-such-weave-subverb-xyz"}, &out, &errOut)
 	if code != 2 {

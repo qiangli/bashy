@@ -15,7 +15,6 @@ import (
 	"github.com/qiangli/yoke/pkg/bus"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/fleet/fleettest"
-	"github.com/qiangli/yoke/pkg/llmbudget"
 	"github.com/qiangli/yoke/pkg/meet"
 	"github.com/qiangli/yoke/pkg/room"
 	"github.com/qiangli/yoke/pkg/weave"
@@ -66,46 +65,17 @@ func TestInboxAggregatesBoardAndBusWithoutConsumingOnPeek(t *testing.T) {
 }
 
 func isolateUnifiedInbox(t *testing.T) {
-	// No relay in tests, ever: the real seam would derive a session from THIS
-	// checkout's origin and reach the operator's cloudbox.
-	prevDeliver := deliverSessionMail
-	deliverSessionMail = func(context.Context, string, string) (weave.DeliveryReport, error) {
-		return weave.DeliveryReport{Skipped: "test"}, nil
-	}
-	t.Cleanup(func() { deliverSessionMail = prevDeliver })
 	t.Helper()
-	t.Cleanup(llmbudget.SetDefault(llmbudget.New(llmbudget.Config{StatePath: filepath.Join(t.TempDir(), "budget.json")})))
-	t.Setenv("BASHY_MB_DIR", t.TempDir())
-	t.Setenv("BASHY_MAILBOX_DIR", t.TempDir())
-	t.Setenv("BASHY_ROOM_DIR", t.TempDir())
-	t.Setenv("BASHY_COORD_DIR", t.TempDir())
+	// Root HOME, BASHY_HOME, sprint, foreman, bus, room, meet, supervisor, and
+	// stage-announcement defaults inside one isolated temp HOME, with cloudbox
+	// mail delivery and detached foreman launches stubbed off.
+	home := isolateSprintForemanTest(t)
 	// The peer these tests talk to ("claude-opus5") used to ship in the
 	// embedded fleet baseline; that ring is tools-only now, so the test ring
 	// supplies the binding the same way an operator's overlay would.
 	fleettest.Ring(t)
-	fleetDir := t.TempDir()
+	fleetDir := filepath.Join(home, ".config", "bashy")
 	t.Setenv("BASHY_FLEET_DIR", fleetDir)
-	t.Setenv("BASHY_INSTANCES_DIR", t.TempDir())
-	t.Setenv("BASHY_INSTANCE", "")
-	t.Setenv("BASHY_MEET_DIR", t.TempDir())
-	// THE SPRINT STORE IS PART OF THE INBOX PATH, AND FORGETTING IT WAS NOT
-	// HARMLESS. runUnifiedInbox opens by recording that this reader checked
-	// its mail (weave.RefreshSprintOwnerActivity), which WRITES a sprint lease
-	// held by that name. Unisolated, the suite reached into the operator's own
-	// board and renewed a live conductor lease for another full TTL on every
-	// run -- so a seat nobody was sitting in kept reporting healthy, and the
-	// only thing propping it up was `go test`.
-	//
-	// BASHY_HOME as well as BASHY_SPRINT_DIR on purpose: the store resolves
-	// BASHY_SPRINT_DIR, then BASHY_HOME, then the real home directory. Setting
-	// only the specific variable isolates the store we happen to know about
-	// today and leaves the next one reachable; setting the root closes the
-	// path itself. Four named stores above were not enough exactly once, and
-	// once was enough.
-	home := t.TempDir()
-	t.Setenv("BASHY_HOME", home)
-	t.Setenv("BASHY_SPRINT_DIR", filepath.Join(home, "sprint"))
-	t.Setenv("BASHY_PRINCIPAL", "")
 	t.Setenv("USER", "tester")
 	registerTestInboxAgent(t, fleetDir, inboxTestReader)
 }

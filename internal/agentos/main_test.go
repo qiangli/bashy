@@ -1,6 +1,7 @@
 package agentos
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -119,12 +120,29 @@ func TestMain(m *testing.M) {
 		if home, herr := os.UserHomeDir(); herr == nil {
 			testRealHome, testRealHomeSet = home, true
 		}
-		if b, berr := os.MkdirTemp("/tmp", "bashy-agentos-"); berr == nil {
+		b, berr := os.MkdirTemp("/tmp", "bashy-agentos-")
+		if berr != nil {
+			b, berr = os.MkdirTemp("", "bashy-agentos-")
+		}
+		if berr == nil {
 			shimBase = b
 			testIsolatedBase = b
 			testIsolatedShimDir = filepath.Join(b, "shims")
 			_ = os.MkdirAll(testIsolatedShimDir, 0o755)
 			_ = os.Setenv("BASHY_SHIM_DIR", testIsolatedShimDir)
+			// Redirect coordination, sprint, message-board and foreman stores
+			// away from ~/.bashy and default stage announcements off so an
+			// unisolated test in this package can never post to the real board
+			// or register a managed session in the host foreman/supervisor.
+			for _, store := range []string{
+				"MB", "ROOM", "MEET", "MAILBOX", "COORD",
+				"SPRINT", "FOREMAN", "RESOURCES", "HANDOFF", "TODO",
+			} {
+				p := filepath.Join(b, strings.ToLower(store))
+				_ = os.MkdirAll(p, 0o700)
+				_ = os.Setenv("BASHY_"+store+"_DIR", p)
+			}
+			_ = os.Setenv("BASHY_SPRINT_ANNOUNCE", "0")
 		}
 	}
 
@@ -141,8 +159,12 @@ func TestMain(m *testing.M) {
 	os.Setenv("BASHY_SERVICES_PATH", "")
 	os.Setenv("BASHY_SUPERVISORD_SOCKET", filepath.Join(dir, "supervisord.sock"))
 	// The self path is this test binary: a real ensure would re-run the whole
-	// suite as `<test> podman info`.
+	// suite as `<test> podman info`, and an unstubbed sprint-owner launch would
+	// register a detached `<test> foreman start --detach` session.
 	ensurePodmanMachineHook = func(string) error { return nil }
+	runSprintOwnerCommand = func(_ context.Context, path string, args []string, _ string, _ []string) ([]byte, error) {
+		return nil, fmt.Errorf("refusing unstubbed sprint-owner launch in test: %s %s", path, strings.Join(args, " "))
+	}
 	code := m.Run()
 	os.RemoveAll(dir)
 	if shimBase != "" {

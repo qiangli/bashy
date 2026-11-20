@@ -17,6 +17,7 @@ import (
 
 func isolateSprintOwnerHostSeams(t *testing.T) {
 	t.Helper()
+	isolateSprintForemanTest(t)
 	oldRun, oldLoad, oldTell, oldStop := runSprintOwnerForeman, loadSprintOwnerState, sendSprintOwnerTell, stopSprintOwnerForeman
 	oldControl, oldTransport := waitSprintOwnerControl, waitSprintOwnerTransport
 	oldSupported := sprintOwnerControlSupported
@@ -145,7 +146,7 @@ func TestWaitForSprintOwnerControlRequiresAListeningSocket(t *testing.T) {
 	if !foreman.ControlSupported() {
 		t.Skip("managed control sockets are not supported")
 	}
-	t.Setenv("BASHY_FOREMAN_DIR", t.TempDir())
+	isolateSprintForemanTest(t)
 	id := sprintOwnerSessionID(15)
 	store := foreman.NewStore("", id)
 	if err := store.Ensure(); err != nil {
@@ -184,7 +185,6 @@ func TestWaitForSprintOwnerControlRequiresAListeningSocket(t *testing.T) {
 
 func TestStopSprintOwnerTreatsMissingOrStaleControlSocketAsAlreadyStopped(t *testing.T) {
 	isolateSprintOwnerHostSeams(t)
-	t.Setenv("BASHY_FOREMAN_DIR", t.TempDir())
 	loadSprintOwnerState = func(string) (foreman.State, error) { return foreman.State{Agent: "manager"}, nil }
 	called := 0
 	stopSprintOwnerForeman = func(string) error {
@@ -217,8 +217,6 @@ func TestStopSprintOwnerTreatsMissingOrStaleControlSocketAsAlreadyStopped(t *tes
 
 func TestStopSprintOwnerRefusesMissingSocketWhileExactManagerCardIsLive(t *testing.T) {
 	isolateSprintOwnerHostSeams(t)
-	t.Setenv("BASHY_FOREMAN_DIR", t.TempDir())
-	t.Setenv("BASHY_ROOM_DIR", t.TempDir())
 	const owner = "manager"
 	id := sprintOwnerSessionID(14)
 	loadSprintOwnerState = func(string) (foreman.State, error) {
@@ -364,7 +362,6 @@ func TestStartSprintOwnerRefusesUnsupportedControlBeforeLaunch(t *testing.T) {
 
 func TestWaitSprintOwnerTransportRequiresThisForemanSession(t *testing.T) {
 	isolateSprintOwnerHostSeams(t)
-	t.Setenv("BASHY_ROOM_DIR", t.TempDir())
 	const owner = "manager"
 	card := room.Card{ID: room.AgentClaimID(owner), Nick: owner, Mode: "chat", Task: "other", PID: os.Getpid(), Caps: []string{room.CapInboxDelivery}}
 	if err := room.Join(card); err != nil {

@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qiangli/yoke/pkg/llmbudget"
 	"github.com/qiangli/yoke/pkg/room"
 	"github.com/qiangli/yoke/pkg/weave"
 )
@@ -235,23 +234,7 @@ func TestDefaultSprintWatchRuntimeReleasesTheSeat(t *testing.T) {
 // rooted in this test's HOME rather than inheriting the operator's stores.
 func sprintWatchIsolate(t testing.TB) string {
 	t.Helper()
-	t.Cleanup(llmbudget.SetDefault(llmbudget.New(llmbudget.Config{StatePath: filepath.Join(t.TempDir(), "budget.json")})))
-	for _, entry := range os.Environ() {
-		key, _, _ := strings.Cut(entry, "=")
-		if strings.HasPrefix(key, "BASHY_") {
-			t.Setenv(key, "")
-		}
-	}
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	t.Setenv("USERPROFILE", home)
-	for _, store := range []string{"ROOM", "MB", "MEET", "SPRINT", "FLEET"} {
-		path := filepath.Join(home, strings.ToLower(store))
-		if err := os.MkdirAll(path, 0700); err != nil {
-			t.Fatal(err)
-		}
-		t.Setenv("BASHY_"+store+"_DIR", path)
-	}
+	isolateSprintForemanTest(t)
 	return filepath.Join(room.Dir(), "timeline.jsonl")
 }
 func sprintWatchWriteEvents(t testing.TB, path string, events ...room.Event) {
