@@ -249,4 +249,12 @@ expect the old greeting and passes only if the smoke then fails.
 Part 2 (two-host promotion round trip: outgoing, push to an org remote,
 incoming/pull on a second host, undo, push upstream) runs on the fleet e2e
 harness and is required for releases that touch shaping, promotion or the shape
-CLI. Story 0a10de8d63f2; it is scheduled separately.
+CLI. Run `bashy dag test-shaping-promotion` with `BASHY_SMOKE_BIN` naming the
+candidate, `SHAPING_PROMOTION_IMAGE` naming an already cached Linux image,
+and `SHAPING_PROMOTION_EVIDENCE` naming a new private JSON evidence file.
+The runner uses two disposable containers with separate state and actual Git
+transport, verifies the pulled side-slot candidate before approval, checks undo,
+and checks the exact proposal ref on the upstream remote. Retain binary/image
+identities and command results. First qualification also runs the runner with
+`--break-check org-ref`; this must fail rather than count as passing coverage.
+

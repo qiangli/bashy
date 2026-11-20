@@ -260,6 +260,24 @@ fi
 echo "test-shaping-smoke-regression: ok (broken smoke check was refused)"
 ```
 
+### test-shaping-promotion
+Two disposable hosts exercise real org/upstream Git transport and gated shaping
+pull, local verification, approval and undo. Run only on a claimed OCI test host.
+Set `BASHY_SMOKE_BIN` to the built Linux candidate, `SHAPING_PROMOTION_IMAGE` to
+an already cached image with bash/git/python3, and `SHAPING_PROMOTION_EVIDENCE`
+to a new evidence JSON path. No images or binaries are downloaded or built.
+The runner uses `bashy oci` by default; `SHAPING_PROMOTION_OCI` selects the
+established venue's OCI command. Source and binary mounts are read-only;
+disposable homes, catalogs, repositories and network are removed on exit.
+Effects: exec, net, read, write
+
+```bash
+set -eu
+python3 tests/shaping-promotion/run.py \
+  --binary "${BASHY_SMOKE_BIN:-bin/bashy}" \
+  --evidence "${SHAPING_PROMOTION_EVIDENCE:?set a new evidence JSON path}"
+```
+
 ### fmtcheck
 The formatting gate. **Reports; never rewrites** — and that is the whole
 design, not caution. gofmt changes doc-comment TEXT as well as whitespace:
