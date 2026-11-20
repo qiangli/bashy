@@ -3,12 +3,13 @@ id: 9ac774dd8009
 kind: bug
 title: Sprint/foreman tests reach the real board, foreman and supervisor
 seq: 3128
-status: todo
+status: assigned
 priority: p1
 labels:
     - sprint
     - post-mvp
 created: 2026-11-06T18:45:04.540533Z
+assignee: agy-gemini4-carbon
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
 sprint_title: 'Proactive sprint manager: wake, supervise, review'
