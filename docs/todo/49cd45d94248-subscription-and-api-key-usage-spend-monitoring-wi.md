@@ -34,3 +34,18 @@ Rules:
 
 Tests: the prompt is sent once per crossing, skipped when the flag is off,
 and the receipt is surfaced.
+
+## Operator correction (2026-11-20): window limit, not exhaustion
+
+muse's 429 says "Subscription quota exhausted", but it was a SHORT-WINDOW rate
+limit. Right after the reset the operator read 3% used of the current window
+and 47% of the weekly limit. So the classifier and the watermarks must:
+- classify by window: derive it from how far away the reset is, as codex's
+  5h-vs-week usage_signals do. Never take the vendor's wording at face value.
+- track at least two measured levels per subscription: current window % and
+  weekly %.
+
+Today muse's /status shows only cumulative session tokens, and bashy's
+account monitor has no muse source ("0 accounts, 4 unknown"). Find where the
+current-window and weekly % are measurable (a vendor usage view or endpoint)
+before designing the source. Never guess.
