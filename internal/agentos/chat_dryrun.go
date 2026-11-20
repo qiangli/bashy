@@ -27,6 +27,11 @@ func runChatCmd(args []string, stdout, stderr io.Writer) int {
 		return 0
 	}
 	fmt.Fprintln(stderr, "Error:", err)
+	// `bashy chat command` refusals (undeclared command, caller's own
+	// session) carry their own exit code; everything else stays 1.
+	if code := chat.ExitCode(err); code > 1 {
+		return code
+	}
 	return 1
 }
 
