@@ -3,14 +3,17 @@ id: 96ff25a316fb
 kind: feature
 title: 'bashy <tool> shortcut: one command for a human to launch a steerable session (bashy codex, bashy agy, bashy claude, ...)'
 seq: 3248
-status: todo
+status: done
 priority: p2
 labels:
     - agents
 created: 2026-11-19T22:00:59.676054Z
+assignee: claude-opus5.5-s676
 sprint: 676
 sprint_id: cc17f40d-d5ff-5d27-bbed-b8563759cde6
 sprint_title: 'Fleet hardening after the tool-shortcut tests: steerable ycode/zcode/dsh + pre-existing test failures'
+closed: 2026-11-20T16:01:36.947217Z
+closed_by: claude-opus5.5-s676
 ---
 
 Operator request 2026-11-19. Today a human needs: bashy chat --agent codex-gpt6.1-sol -i --yolo --cwd DIR, plus BASHY_CHAT_INBOX=off to avoid the mb backlog flood (yoke todo 5e01de0e), plus knowing the session id mangles dots (codex-gpt6.1-sol -> codex-gpt6-1-sol). 'bashy codex' / 'bashy agy' are currently 'command not found', so the names are free.
