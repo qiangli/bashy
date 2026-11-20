@@ -20,7 +20,7 @@ func TestDeskRegisterScriptsUsePublicShapedAppPath(t *testing.T) {
 		t.Skip("git is required for a revision round trip")
 	}
 	bin := productBashy(t)
-	for _, name := range []string{"notepad", "form"} {
+	for _, name := range []string{"notepad", "form", "viewer", "chart"} {
 		t.Run(name, func(t *testing.T) {
 			root, err := filepath.Abs(name)
 			if err != nil {

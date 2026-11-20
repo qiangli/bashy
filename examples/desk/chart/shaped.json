@@ -1,1 +1,9 @@
-{"server": {"main": ".", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA"]}}
+{
+  "server": {"main": ".", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA"]},
+  "genie": {
+    "examples": [
+      "Show the minimum, maximum and average above the line chart.",
+      "Add a high-contrast color palette for charts I share in presentations."
+    ]
+  }
+}

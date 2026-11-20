@@ -132,6 +132,27 @@ func TestViewOnlyVerbsRefused(t *testing.T) {
 	}
 }
 
+func TestCLIUsesShapedAddress(t *testing.T) {
+	base, _ := startServer(t, "")
+	t.Setenv("VIEWER_ADDR", "")
+	t.Setenv("BASHY_APP", "viewer")
+	t.Setenv("BASHY_APP_ADDR", strings.TrimPrefix(base, "http://"))
+
+	for _, args := range [][]string{
+		{"add", "report", "--body", "# First page"},
+		{"append", "report", "--body", "# Second page"},
+		{"open", "report"},
+	} {
+		var out bytes.Buffer
+		if code := runCLI(args, strings.NewReader(""), &out); code != 0 {
+			t.Fatalf("%v: exit %d: %s", args, code, out.String())
+		}
+		if args[0] == "open" && !strings.Contains(out.String(), base+"/?id=report") {
+			t.Fatalf("open: want viewer URL at %s, got %q", base, out.String())
+		}
+	}
+}
+
 func TestOpenPrintsIDURLStatusOnly(t *testing.T) {
 	base, dir := startServer(t, "")
 	cli := cliFor(base, dir)

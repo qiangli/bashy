@@ -47,6 +47,8 @@ func parseCLI(raw []string) (*cliOptions, error) {
 	o := &cliOptions{addr: "127.0.0.1:18096", dir: kit.DefaultDataDir(tool), key: os.Getenv("VIEWER_KEY")}
 	if v := os.Getenv("VIEWER_ADDR"); v != "" {
 		o.addr = v
+	} else if v := os.Getenv("BASHY_APP_ADDR"); v != "" && os.Getenv("BASHY_APP") == tool {
+		o.addr = v
 	}
 	if v := os.Getenv("VIEWER_DATA"); v != "" {
 		o.dir = v

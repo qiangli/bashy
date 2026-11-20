@@ -8,7 +8,8 @@ metadata:
 ---
 # Chart
 
-Start `bashy chart serve` in one terminal. Create with
+For a standalone listener, start `bashy chart serve`. For a console-managed
+listener, use `--addr HOST:PORT` or `CHART_ADDR` from a separate shell. Create with
 `bashy chart add --input metrics.json --widget auto --json` (or pipe to
 `add --input -`). Keep the returned ownerKey private; use CHART_KEY for
 show/set/share/close. `open ID --json` returns only id, URL and status.

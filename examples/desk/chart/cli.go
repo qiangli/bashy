@@ -74,7 +74,14 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 
 	fs := flag.NewFlagSet("chart", flag.ContinueOnError)
 	fs.SetOutput(stdout)
-	addr := fs.String("addr", "127.0.0.1:18098", "loopback server address")
+	defaultAddr := os.Getenv("CHART_ADDR")
+	if defaultAddr == "" && os.Getenv("BASHY_APP") == "chart" {
+		defaultAddr = os.Getenv("BASHY_APP_ADDR")
+	}
+	if defaultAddr == "" {
+		defaultAddr = "127.0.0.1:18098"
+	}
+	addr := fs.String("addr", defaultAddr, "loopback server address")
 	data := fs.String("data", kit.DefaultDataDir("chart"), "server storage directory")
 	prefix := fs.String("prefix", "", "URL path prefix")
 	asJSON := fs.Bool("json", common.JSON, "JSON output")
