@@ -259,6 +259,21 @@ func dispatchYcode(args []string) int {
 		fmt.Fprintln(os.Stderr, "bashy ycode:", err)
 		return 2
 	}
+	// The bare open is the interactive TUI: without a terminal it exits at
+	// once, so refuse with the shortcut's guidance here — before config
+	// discovery, the bundle build, or the steer delegation below — instead
+	// of depending on which of those this layout can reach. A message, an
+	// entry word, --session, --pull, or any other flag stays on the raw
+	// path, so piped-prompt use keeps working; the steered session's own
+	// child must stay raw and never refuse.
+	if !pull && os.Getenv(ycodeSteerChildEnv) == "" {
+		if _, bare := ycodeBareOpenArgs(args); bare {
+			if terr := checkToolShortcutTTY("ycode", os.Stdin); terr != nil {
+				fmt.Fprintln(os.Stderr, terr)
+				return 1
+			}
+		}
+	}
 	if YcodeHasExplicitConfig == nil {
 		fmt.Fprintln(os.Stderr, "bashy ycode: config discovery is not wired in this build")
 		return 2

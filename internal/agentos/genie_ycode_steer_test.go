@@ -49,6 +49,40 @@ func TestDispatchYcodeBareRefusesWithoutTTY(t *testing.T) {
 	}
 }
 
+// The bare-open refusal precedes config discovery and the bundle build:
+// even an explicit YCODE_CONFIG, a local agent.yaml, and a failing build
+// must not divert it onto the raw recipe path (where the bundle would run
+// and report `genie: the piped message is empty` instead of refusing).
+func TestDispatchYcodeBareRefusalPrecedesConfigAndBuild(t *testing.T) {
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		t.Skip("needs non-TTY stdin: the refusal only triggers off-terminal")
+	}
+	stubYcodeConfigSelection(t)
+	home := noGenieSideEffects(t)
+	t.Setenv("YCODE_CONFIG", filepath.Join(home, "explicit-agent.yaml"))
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("agent.yaml", []byte("kind: local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	saved := YcodeMain
+	t.Cleanup(func() { YcodeMain = saved })
+	called := false
+	YcodeMain = func(args []string) int { called = true; return 0 }
+	var code int
+	errText := captureStderr(t, func() { code = dispatchYcode(nil) })
+	if called {
+		t.Error("bare bashy ycode reached the raw engine; the refusal must come first")
+	}
+	if code == 0 {
+		t.Error("bare bashy ycode without a TTY exited 0, want refusal")
+	}
+	for _, want := range []string{"not a TTY", "bashy chat --agent ycode"} {
+		if !strings.Contains(errText, want) {
+			t.Errorf("refusal lacks %q:\nstderr=%s", want, errText)
+		}
+	}
+}
+
 // Only the bare open (plus -m/--model) joins the steerable session: a
 // message, an entry word, --session, --, or any other flag stays on the raw
 // path the steer template cannot carry.

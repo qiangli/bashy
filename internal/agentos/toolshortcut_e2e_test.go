@@ -36,6 +36,10 @@ func writeToolShortcutFake(t *testing.T, dir, tool, argvLog string) string {
 	path := filepath.Join(dir, tool)
 	// tr -d '\015' strips a trailing CR: steer frames arrive as text + CR LF
 	// over the PTY, and read keeps the CR without it.
+	// The leading ❯ emulates a vendor TUI's input prompt: `chat steer`
+	// queues through the session inbox relay, which types queued lines only
+	// once the screen shows a prompt (❯/›/>). Without it a steer is accepted
+	// ("steering queued for ...") but never delivered.
 	body := "#!/bin/sh\n" +
 		"log=" + argvLog + "\n" +
 		"printf '%s\\n' \"$*\" >> \"$log\"\n" +
@@ -123,6 +127,17 @@ func waitForToolShortcut(t *testing.T, what string, timeout time.Duration, fn fu
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
+}
+
+// toolShortcutSteerConfirmed reports whether a `chat steer` stderr confirms
+// receipt for the session: yoke delivers directly ("steered <id>") when the
+// session has no inbox, and queues through the inbox relay ("steering queued
+// for <id>") when it does — the shortcut leaves the relay on, so the latter
+// is the usual path. Either confirms the steer reached the session; delivery
+// itself is proven by the echo waits below.
+func toolShortcutSteerConfirmed(stderr, tool string) bool {
+	return strings.Contains(stderr, "steered "+tool) ||
+		strings.Contains(stderr, "steering queued for "+tool)
 }
 
 // runToolShortcutPTY starts `bashy <tool> [toolArgs...]` under a real PTY,
@@ -239,10 +254,7 @@ func runToolShortcutPTY(t *testing.T, bin, work, tool string, toolArgs []string,
 	if steerCode != 0 {
 		t.Fatalf("chat steer %s PING exit=%d\nstderr=%s\ntranscript:\n%s", tool, steerCode, steerErr, snapshot())
 	}
-	// A steer to a session that is still starting is queued and delivered once
-	// it is ready (yoke 56346984), so either confirmation is valid; the echo
-	// check below proves the line actually arrived.
-	if !strings.Contains(steerErr, "steered "+tool) && !strings.Contains(steerErr, "steering queued for "+tool) {
+	if !toolShortcutSteerConfirmed(steerErr, tool) {
 		t.Fatalf("chat steer did not confirm %q:\nstderr=%s", tool, steerErr)
 	}
 	waitForToolShortcut(t, "PING echo from "+tool, 20*time.Second, func() (string, bool) {
@@ -369,8 +381,17 @@ func TestToolShortcutE2E(t *testing.T) {
 
 	// (5) non-TTY launch refuses with guidance instead of starting a TUI that
 	// exits at once. Stdin here is a pipe, never a terminal. ycode joins the
-	// same path: the pre-existing `bashy ycode` verb delegates its
-	// interactive open here, so it refuses identically (Sprint 676).
+	// same path: the pre-existing `bashy ycode` verb refuses identically
+	// (Sprint 676). The ycode refusal must precede config discovery and the
+	// bundle build, so plant both diversions a layout could offer — an
+	// explicit YCODE_CONFIG and a local agent.yaml, either of which used to
+	// divert the bare open onto the raw recipe path (bundle build, then
+	// `genie: the piped message is empty`) — and require that no genie
+	// bundle was built along the way.
+	t.Setenv("YCODE_CONFIG", filepath.Join(home, "explicit-agent.yaml"))
+	if err := os.WriteFile(filepath.Join(work, "agent.yaml"), []byte("kind: local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	for _, tool := range []string{"agy", "codex", "ycode"} {
 		_, stderr, code := runToolShortcutBin(t, bin, work, "", 30*time.Second, tool)
 		if code == 0 {
@@ -381,6 +402,15 @@ func TestToolShortcutE2E(t *testing.T) {
 				t.Fatalf("bashy %s non-TTY refusal lacks %q:\nstderr=%s", tool, want, stderr)
 			}
 		}
+	}
+	if _, err := os.Stat(filepath.Join(home, "bashy-home", "genie")); !os.IsNotExist(err) {
+		t.Fatalf("ycode non-TTY refusal built genie state under BASHY_HOME: %v", err)
+	}
+	// Scope the diversions to the refusal loop above: the --help and raw
+	// passthrough legs below run in the pristine layout, as before.
+	t.Setenv("YCODE_CONFIG", "")
+	if err := os.Remove(filepath.Join(work, "agent.yaml")); err != nil {
+		t.Fatal(err)
 	}
 
 	// (7) `bashy ycode --help` shows the steer command for the session the
