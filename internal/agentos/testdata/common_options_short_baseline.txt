@@ -465,6 +465,7 @@ kb memory	-f	--file
 kb note add	-f	--file
 kb supersede	-f	--file
 kb update	-f	--file
+kb workflow	-f	--file
 kill	-V	--version
 kill	-h	--help
 lens	-V	--version
@@ -580,6 +581,7 @@ md5sum	-h	--help
 md5sum	-t	--text
 md5sum	-w	--warn
 md5sum	-z	--zero
+meet brief	-n	--limit
 meet observe	-f	--follow
 meet read	-n	--limit
 mesg	-V	--version
