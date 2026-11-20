@@ -41,3 +41,6 @@
 {"op":"add","slug":"mock-up-a-video-before-final-production-animatic-and-proof-slice","id":"01a1d53d-ca01-7914-8d97-f38a497b5c27","tool":"claude","at":"2026-11-13T14:09:18.850852Z"}
 {"op":"add","slug":"full-profile-d-posix-runbook","id":"01a1f354-acf3-7bac-8aec-c8fb98f6ba80","tool":"s575-codex-manager","episode":"ep-59d096ca4a0010fe","at":"2026-11-19T10:22:55.221078Z"}
 {"op":"update","slug":"full-profile-d-posix-runbook","id":"01a1f354-acf3-7bac-8aec-c8fb98f6ba80","tool":"s575-codex-manager","episode":"ep-13ffd7b0c20d4d2c","at":"2026-11-19T10:23:23.622754Z"}
+{"op":"update","slug":"full-profile-d-posix-runbook","id":"01a1f354-acf3-7bac-8aec-c8fb98f6ba80","tool":"s575-codex-manager","episode":"ep-2b8f173f371d7e8c","at":"2026-11-20T10:42:50.450231Z"}
+{"op":"validate","slug":"full-profile-d-posix-runbook","id":"01a1f354-acf3-7bac-8aec-c8fb98f6ba80","tool":"s575-codex-manager","episode":"ep-d8b8fa41c60ec111","at":"2026-11-20T10:42:50.547013Z"}
+{"op":"update","slug":"full-profile-d-posix-runbook","id":"01a1f354-acf3-7bac-8aec-c8fb98f6ba80","tool":"s575-codex-manager","episode":"ep-634b7825ce022ced","at":"2026-11-20T10:43:41.877439Z"}

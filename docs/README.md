@@ -4,6 +4,13 @@ Start at [INDEX.md](INDEX.md), which has one entry per load-bearing doc.
 
 ## Abstracts
 
+- **[Full POSIX Profile D playbook](kb/pages/full-profile-d-posix-runbook.md).**
+  Public instructions for obtaining the licensed kit and repeating the proven
+  S575 engineering procedure: exact source/artifact qualification, isolated
+  native preparation, Go-only runtime routes, full launch, verified retention
+  and owned venue cleanup. Includes annual renewal references and explicit
+  certification limits; private configuration and licensed materials stay private.
+
 - **[S575 POSIX engineering baseline](s575-posix-engineering-baseline.md).**
   Records the completed 9,337-result separated-source run, its exact source
   and artifact identities, retained failures/manual dispositions, private
