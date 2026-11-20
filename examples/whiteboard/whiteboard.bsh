@@ -106,10 +106,10 @@ install() {
   mkdir -p "$scratch/source/checks" "$scratch/source/server"
   cp "$here/checks/whiteboard.bsh" "$scratch/source/checks/whiteboard.bsh"
   cp "$here/server/"*.go "$scratch/source/server/"
-  cp "$here/server/go.mod" "$scratch/source/server/"
+  cp "$here/go.mod" "$scratch/source/go.mod"
   printf '%s\n' "$pin" > "$scratch/source/.whiteboard-source-pin"
   "$git_bin" -C "$scratch/source" add -f excalidraw-app/build
-  "$git_bin" -C "$scratch/source" add .gitignore .yarnrc excalidraw-app/.yarnrc shaped.json contract.bsh \
+  "$git_bin" -C "$scratch/source" add .gitignore .yarnrc excalidraw-app/.yarnrc shaped.json contract.bsh go.mod \
     checks/whiteboard.bsh server/ .whiteboard-source-pin \
     .env.production excalidraw-app/vite.config.mts
   "$git_bin" -C "$scratch/source" -c user.name='Bashy Whiteboard' -c user.email='whiteboard@example.invalid' \

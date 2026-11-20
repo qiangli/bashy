@@ -1,1 +1,10 @@
-{"server": {"main": ".", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA"]}}
+{
+  "server": {"main": ".", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA"]},
+  "genie": {
+    "examples": [
+      "Add a clickable outline sidebar generated from the Markdown headings.",
+      "Show live word count and estimated reading time in the editor header.",
+      "Use a wider serif reading layout when I switch to View mode."
+    ]
+  }
+}
