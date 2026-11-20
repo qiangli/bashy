@@ -3,9 +3,10 @@ id: 1391d5686ba1
 kind: bug
 title: TestWeaveKilledRunResumeClearsStaleEvidenceAndPullsFreshSubmission fails on yoke main at weave_reconcile_test.go:497 (resume submission exit=1)
 seq: 3257
-status: todo
+status: assigned
 priority: p2
 created: 2026-11-20T18:47:01.685995Z
+assignee: muse-wonder-full
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
 sprint_title: 'Proactive sprint manager: wake, supervise, review'

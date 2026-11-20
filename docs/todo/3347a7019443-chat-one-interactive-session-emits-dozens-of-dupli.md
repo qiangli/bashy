@@ -3,9 +3,10 @@ id: 3347a7019443
 kind: bug
 title: 'chat: one interactive session emits dozens of duplicate join events'
 seq: 3253
-status: todo
+status: assigned
 priority: p2
 created: 2026-11-20T11:16:44.372357Z
+assignee: muse-wonder-full
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
 sprint_title: 'Proactive sprint manager: wake, supervise, review'
