@@ -14,6 +14,10 @@ import (
 )
 
 func TestUnifiedTurnAdmissionAcknowledgesOnlyRenderedRoleAndBusRecords(t *testing.T) {
+	// These tests cover the byte-budget admission and provenance, not the
+	// per-turn item cap (yoke bus turn_cap_test.go); lift the cap so every
+	// admitted record is rendered (default: 1 item + a counter, yoke f4a1c2f2).
+	t.Setenv("BASHY_CHAT_INBOX_MAX", "100")
 	isolateUnifiedInbox(t)
 	wireMessageBoard()
 	const roleTopic = "conductor.408"
@@ -67,7 +71,7 @@ func TestUnifiedTurnAdmissionAcknowledgesOnlyRenderedRoleAndBusRecords(t *testin
 		prefix := event.Source + ":" + strconv.FormatInt(event.Seq, 10)
 		shown := false
 		for _, line := range strings.Split(prepared.Text, "\n") {
-			if strings.HasPrefix(line, "- [P") && strings.Contains(line, prefix) {
+			if strings.HasPrefix(line, "- [P") && strings.Contains(line, prefix+" ") { // ":1 " must not match ":10"
 				shown = true
 			}
 		}
@@ -136,6 +140,10 @@ func TestSprintInboxAckCommitsRenderedRoleBatchOnly(t *testing.T) {
 }
 
 func TestUnifiedTurnAdmissionAcknowledgesMeetCopyWithItsMBOrigin(t *testing.T) {
+	// These tests cover the byte-budget admission and provenance, not the
+	// per-turn item cap (yoke bus turn_cap_test.go); lift the cap so every
+	// admitted record is rendered (default: 1 item + a counter, yoke f4a1c2f2).
+	t.Setenv("BASHY_CHAT_INBOX_MAX", "100")
 	isolateUnifiedInbox(t)
 	wireMessageBoard()
 	wireMeet()

@@ -208,6 +208,7 @@ Available Commands:
   advance       Close one iteration of a recurring sprint and open the next
   arena         Manage a sprint's loom arena
   assign        Schedule a fleet worker through the band ladder
+  await         Block until the next actionable sprint event and suggest a verb
   board         Show the sprint kanban (the conductor's epic/sprint board)
   capability    List impacted capability IDs and record their verdicts or waivers for the sprint end gate
   checkpoint    Update a sprint's continuity record + refresh the conductor lease
@@ -215,6 +216,7 @@ Available Commands:
   comment       Append to a sprint's history thread
   commit-msg    Validate mandatory Sprint/Story/Story-ID Git trailers
   conduct       Poll a joined shared session for host-side directives
+  directive     Manage standing operator rules and pre-approvals on a sprint card
   edit          Correct a sprint's title, primary goal, spec, acceptance, epic or owner — every change on the record
   end           Finish a sprint after workers, repositories, and gates are consistent
   estimate      Record blind L5 story estimates
@@ -239,6 +241,7 @@ Available Commands:
   plant         Queue a private planted review case
   prune         Report a sprint's clean state across its repos and this host — and reclaim what is redundant
   reassign      Reassign a story whose run reached its runtime cap
+  reject        Return a submitted story to doing with review feedback
   review        Schedule a fleet worker through the band ladder
   review-result Record a review outcome
   rm            Remove a sprint card (refuses while it holds a lease, linked runs, or an open column)

@@ -306,6 +306,7 @@ to unrelated repositories, branches, or resources.
   advance       Close one iteration of a recurring sprint and open the next
   arena         Manage a sprint's loom arena
   assign        Schedule a fleet worker through the band ladder
+  await         Block until the next actionable sprint event and suggest a verb
   board         Show the sprint kanban (the conductor's epic/sprint board)
   capability    List impacted capability IDs and record their verdicts or waivers for the sprint end gate
   checkpoint    Update a sprint's continuity record + refresh the conductor lease
@@ -313,6 +314,7 @@ to unrelated repositories, branches, or resources.
   comment       Append to a sprint's history thread
   commit-msg    Validate mandatory Sprint/Story/Story-ID Git trailers
   conduct       Poll a joined shared session for host-side directives
+  directive     Manage standing operator rules and pre-approvals on a sprint card
   edit          Correct a sprint's title, primary goal, spec, acceptance, epic or owner — every change on the record
   end           Finish a sprint after workers, repositories, and gates are consistent
   estimate      Record blind L5 story estimates
@@ -337,6 +339,7 @@ to unrelated repositories, branches, or resources.
   plant         Queue a private planted review case
   prune         Report a sprint's clean state across its repos and this host — and reclaim what is redundant
   reassign      Reassign a story whose run reached its runtime cap
+  reject        Return a submitted story to doing with review feedback
   review        Schedule a fleet worker through the band ladder
   review-result Record a review outcome
   rm            Remove a sprint card (refuses while it holds a lease, linked runs, or an open column)
@@ -384,7 +387,7 @@ Use "sprint [command] --help" for more information about a command.
     "idempotentHint": false,
     "readOnlyHint": false
   },
-  "description": "cross-repo plan/continuity board (peer to weave) — ; --announce (bool); --epic (string); --json (bool); --plain (bool); --quiet (bool); Command: sprint abort; Command: sprint accept; Command: sprint add; Command: sprint advance; Command: sprint arena; Command: sprint arena down; Command: sprint arena status; Command: sprint arena up; Command: sprint assign; Command: sprint board; Command: sprint capability; Command: sprint capability add; Command: sprint capability verdict; Command: sprint capability waive; Command: sprint checkpoint; Command: sprint claim; Command: sprint comment; Command: sprint commit-msg; Command: sprint conduct; Command: sprint edit; Command: sprint end; Command: sprint estimate; Command: sprint extend; Command: sprint fail; Command: sprint focus; Command: sprint goal; Command: sprint goal add; Command: sprint goal evidence; Command: sprint goal link; Command: sprint goal rm; Command: sprint grade; Command: sprint handoff; Command: sprint heat; Command: sprint hooks; Command: sprint hooks install; Command: sprint inbox-ack; Command: sprint instruct; Command: sprint link; Command: sprint merge; Command: sprint monitor; Command: sprint move; Command: sprint next; Command: sprint panel; Command: sprint ping; Command: sprint plant; Command: sprint prune; Command: sprint reassign; Command: sprint review; Command: sprint review-result; Command: sprint rm; Command: sprint session; Command: sprint session approve; Command: sprint session handoff; Command: sprint session join; Command: sprint session list; Command: sprint session note; Command: sprint session roster; Command: sprint session share; Command: sprint session shares; Command: sprint session status; Command: sprint session steer; Command: sprint session take; ... (summary truncated); Full per-path flag schemas: bashy help sprint --format=mcp (descriptive; invoke via args). Common options (argv; missing: bashy adapt --OPTION -- CMD): --json=supported --fields=missing --null=missing --dry-run=missing --no-input=mapped --explain=mapped --depth=missing --since=missing.",
+  "description": "cross-repo plan/continuity board (peer to weave) — ; --announce (bool); --epic (string); --json (bool); --plain (bool); --quiet (bool); Command: sprint abort; Command: sprint accept; Command: sprint add; Command: sprint advance; Command: sprint arena; Command: sprint arena down; Command: sprint arena status; Command: sprint arena up; Command: sprint assign; Command: sprint await; Command: sprint board; Command: sprint capability; Command: sprint capability add; Command: sprint capability verdict; Command: sprint capability waive; Command: sprint checkpoint; Command: sprint claim; Command: sprint comment; Command: sprint commit-msg; Command: sprint conduct; Command: sprint directive; Command: sprint directive add; Command: sprint directive list; Command: sprint directive rm; Command: sprint edit; Command: sprint end; Command: sprint estimate; Command: sprint extend; Command: sprint fail; Command: sprint focus; Command: sprint goal; Command: sprint goal add; Command: sprint goal evidence; Command: sprint goal link; Command: sprint goal rm; Command: sprint grade; Command: sprint handoff; Command: sprint heat; Command: sprint hooks; Command: sprint hooks install; Command: sprint inbox-ack; Command: sprint instruct; Command: sprint link; Command: sprint merge; Command: sprint monitor; Command: sprint move; Command: sprint next; Command: sprint panel; Command: sprint ping; Command: sprint plant; Command: sprint prune; Command: sprint reassign; Command: sprint reject; Command: sprint review; Command: sprint review-result; Command: sprint rm; Command: sprint session; Command: sprint session approve; Command: sprint session handoff; Command: sprint session join; Command: sprint session list; Command: sprint session note; Command: sprint session roster; ... (summary truncated); Full per-path flag schemas: bashy help sprint --format=mcp (descriptive; invoke via args). Common options (argv; missing: bashy adapt --OPTION -- CMD): --json=supported --fields=missing --null=missing --dry-run=missing --no-input=mapped --explain=mapped --depth=missing --since=missing.",
   "inputSchema": {
     "additionalProperties": false,
     "properties": {
