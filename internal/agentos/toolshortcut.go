@@ -157,6 +157,8 @@ func toolShortcutSessionID(agent string) string {
 type toolShortcutOpts struct {
 	model       string
 	yolo        bool
+	noYolo      bool // explicit --no-yolo: outranks containment and the env (agentlaunch DenyUnsafe)
+	yoloSet     bool
 	help        bool
 	explain     bool
 	dryRun      bool
@@ -211,10 +213,13 @@ func parseToolShortcutArgs(args []string) (toolShortcutOpts, error) {
 				return opts, fmt.Errorf("--model requires a value")
 			}
 			opts.model = args[i]
-		case "--yolo":
-			opts.yolo = true
-		case "--no-yolo":
-			opts.yolo = false
+		case "--yolo", "--no-yolo":
+			if opts.yoloSet {
+				return opts, fmt.Errorf("--yolo and --no-yolo are mutually exclusive")
+			}
+			opts.yoloSet = true
+			opts.yolo = args[i] == "--yolo"
+			opts.noYolo = !opts.yolo
 		case "--help", "-h":
 			opts.help = true
 		case "--explain":
@@ -268,9 +273,9 @@ Steer it: bashy chat steer %s "..."   (watch: bashy chat attach %s)
 // toolShortcutExplain resolves the steer launch exactly as the session would
 // run it (dry-run: no side effects) and prints the argv, for --explain and
 // --dry-run.
-func toolShortcutExplain(w io.Writer, agent string, yolo bool) error {
+func toolShortcutExplain(w io.Writer, agent string, yolo, noYolo bool) error {
 	l, err := agentlaunch.Resolve(agent, agentlaunch.Options{
-		Steer: true, Attended: true, AllowUnsafe: yolo, DryRun: true,
+		Steer: true, Attended: true, AllowUnsafe: yolo, DenyUnsafe: noYolo, DryRun: true,
 	})
 	if err != nil {
 		return err
@@ -337,7 +342,7 @@ func dispatchToolShortcut(toolName string, args []string, stdin *os.File, stdout
 	}
 	agent := toolShortcutAgentName(t.Name, opts.model)
 	if opts.explain || opts.dryRun {
-		if err := toolShortcutExplain(stdout, agent, opts.yolo); err != nil {
+		if err := toolShortcutExplain(stdout, agent, opts.yolo, opts.noYolo); err != nil {
 			fmt.Fprintf(stderr, "bashy %s: %v\n", t.Name, err)
 			return 1
 		}
@@ -371,8 +376,14 @@ func dispatchToolShortcut(toolName string, args []string, stdin *os.File, stdout
 	// (agentlaunch.FinalizeArgs codexDefaultYolo), so --no-yolo alone does not
 	// restore codex's prompts — same as `bashy chat -i --agent codex`.
 	chatArgs := []string{"-i", "--agent", agent}
-	if opts.yolo {
+	switch {
+	case opts.yolo:
 		chatArgs = append(chatArgs, "--yolo")
+	case opts.noYolo:
+		// The command-line flag is the most specific setting: it must beat
+		// containment and $BASHY_ALLOW_UNSAFE_AGENT_LAUNCH, so pass it on
+		// explicitly rather than merely omitting --yolo.
+		chatArgs = append(chatArgs, "--no-yolo")
 	}
 	// The session is always interactive (-i above): positional words are its
 	// opening instruction, delivered after the TUI settles. The -- separator
