@@ -53,13 +53,6 @@ func TestHungSprintOwnerServeHelper(t *testing.T) {
 
 func TestStopSprintOwnerTerminatesAProvenOwnedHungManager(t *testing.T) {
 	isolateSprintOwnerHostSeams(t)
-	foremanDir, err := os.MkdirTemp("", "s467fm") // short: a unix socket path is capped near 104 bytes
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(foremanDir) })
-	t.Setenv("BASHY_FOREMAN_DIR", foremanDir)
-	t.Setenv("BASHY_ROOM_DIR", t.TempDir())
 	const owner = "fixture-manager"
 	id := sprintOwnerSessionID(457)
 	store := foreman.NewStore("", id)

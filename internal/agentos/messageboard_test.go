@@ -216,7 +216,14 @@ func TestWireWebConsole_ConnectsBothTheRoomAndTheBoard(t *testing.T) {
 // LiveSprintManagers accepts) without coupling to any sprint CLI behavior.
 func seedSprintBoard(t *testing.T, stories []map[string]any) {
 	t.Helper()
-	dir := t.TempDir()
+	dir := os.Getenv("BASHY_SPRINT_DIR")
+	if dir == "" {
+		dir = t.TempDir()
+		t.Setenv("BASHY_SPRINT_DIR", dir)
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	b, err := json.Marshal(map[string]any{"next_id": 1, "next_story_id": len(stories) + 1, "stories": stories})
 	if err != nil {
 		t.Fatal(err)
@@ -224,7 +231,6 @@ func seedSprintBoard(t *testing.T, stories []map[string]any) {
 	if err := os.WriteFile(filepath.Join(dir, "queue.json"), b, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv("BASHY_SPRINT_DIR", dir)
 }
 
 func seededStory(id int, holder string, at time.Time) map[string]any {
@@ -242,6 +248,7 @@ func seededStory(id int, holder string, at time.Time) map[string]any {
 // function) must address exactly the seated managers and refuse what it
 // cannot honestly answer.
 func TestFleetSelectAnswersRoleFromTheSprintRecords(t *testing.T) {
+	isolateSprintForemanTest(t)
 	fresh := time.Now().UTC()
 	stale := fresh.Add(-weave.SprintLeaseTTL - time.Minute)
 	seedSprintBoard(t, []map[string]any{
@@ -385,9 +392,7 @@ func TestStageAnnouncementResolutionFailurePreservesTransition(t *testing.T) {
 
 func isolateStageBoard(t *testing.T) {
 	t.Helper()
-	for _, variable := range []string{"BASHY_HOME", "BASHY_MB_DIR", "BASHY_ROOM_DIR", "BASHY_FLEET_DIR", "BASHY_MEET_DIR"} {
-		t.Setenv(variable, t.TempDir())
-	}
+	isolateSprintForemanTest(t)
 	for _, variable := range []string{"BASHY_AGENTS_DIR", "BASHY_PEOPLE_DIR", "BASHY_AGENTS_PATH", "BASHY_PEOPLE_PATH"} {
 		t.Setenv(variable, "")
 	}

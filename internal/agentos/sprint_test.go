@@ -134,7 +134,6 @@ func (w *watchUntil) String() string {
 
 func TestExternalSprintTakeWatchClaimsThenStreamsInbox(t *testing.T) {
 	isolateUnifiedInbox(t)
-	t.Setenv("BASHY_SPRINT_DIR", t.TempDir())
 	const owner = "external-sprint-manager"
 	if err := fleet.New().SaveAgent(fleet.Agent{Name: owner, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
 		t.Fatal(err)
@@ -177,7 +176,6 @@ func TestExternalSprintTakeWatchClaimsThenStreamsInbox(t *testing.T) {
 
 func TestExternalSprintStartWatchClaimsActiveSprintThenStreamsInbox(t *testing.T) {
 	isolateUnifiedInbox(t)
-	t.Setenv("BASHY_SPRINT_DIR", t.TempDir())
 	const owner = "external-start-manager"
 	if err := fleet.New().SaveAgent(fleet.Agent{Name: owner, Tool: "codex", Model: "gpt5.6-sol"}); err != nil {
 		t.Fatal(err)

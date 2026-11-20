@@ -100,11 +100,8 @@ func TestSprintAwaitBaselineAndTimeout(t *testing.T) {
 }
 
 func TestSprintAwaitReadsLinkedRunTransition(t *testing.T) {
-	sprintDir, stateHome := t.TempDir(), t.TempDir()
-	t.Setenv("BASHY_SPRINT_DIR", sprintDir)
-	t.Setenv("HOME", stateHome)
-	t.Setenv("USERPROFILE", stateHome)
-	t.Setenv("BASHY_HOME", t.TempDir())
+	stateHome := isolateSprintForemanTest(t)
+	sprintDir := os.Getenv("BASHY_SPRINT_DIR")
 	born := time.Now().UTC()
 	const tag = "demo-123"
 	card := sprintWaitStory{ID: 42, Created: born, Runs: []agentsSprintRun{
@@ -163,7 +160,7 @@ func TestSprintAwaitReadsLinkedRunTransition(t *testing.T) {
 }
 
 func TestSprintAwaitMailIsDirectedAndUnread(t *testing.T) {
-	t.Setenv("BASHY_MB_DIR", t.TempDir())
+	isolateSprintForemanTest(t)
 	const owner = "fixture-manager"
 	for _, p := range []bus.Post{
 		{From: "worker", To: owner, Body: "reply to the manager"},
