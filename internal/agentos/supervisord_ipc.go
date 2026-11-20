@@ -224,6 +224,11 @@ func (d *delegatedInternal) Health(_ context.Context, unit string) error {
 		return fmt.Errorf("service: %s is not active", unit)
 	case !u.reported:
 		return errHealthPending
+	case u.status.State == service.Inactive && service.IsUnavailableReason(u.status.Reason):
+		// The owner rests the unit because the capability's backend
+		// is absent: a distinct verdict, so the monitor shows the
+		// reason without counting it as a health failure.
+		return errUnavailable{reason: u.status.Reason}
 	case u.status.State.Exposed():
 		return nil
 	}

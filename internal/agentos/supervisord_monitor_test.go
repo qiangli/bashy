@@ -350,6 +350,78 @@ func TestMonitorHealthFailureRestartsWithProbe(t *testing.T) {
 	}
 }
 
+// Story 9deb591a: an owner-reported Inactive with an unavailable
+// reason (the capability's backend is absent — no podman socket)
+// must rest VISIBLE in status (health carries the reason, never
+// "ok") with zero restart attempts: absence on a healthy host is
+// normal, so it must neither cycle the restart ladder nor latch
+// Failed. It recovers when the owner next reports Active.
+func TestMonitorUnavailableInternalUnitRestsWithoutRestart(t *testing.T) {
+	u := fleet.Service{Name: "podman", Kind: fleet.KindService, Provider: fleet.ServiceProviderInternal,
+		Capability: "outpost.podman", Owner: "outpost", Enabled: true,
+		Restart: fleet.ServiceRestart{Backoff: fleet.ServiceBackoff{Min: "1ms", Max: "4ms", HealthyAfter: "1h"},
+			StartLimit: fleet.ServiceStartLim{Burst: 50, Interval: "1m"}},
+		Health: fleet.ServiceHealth{Interval: "10ms", Failures: 2}}
+	set := &unitSet{units: map[string]fleet.Service{u.Name: u}}
+	d := newDelegatedInternal()
+	m := newMonitor()
+	m.checkPorts = nil
+	m.providers = service.Providers{fleet.ServiceProviderInternal: d}
+	el := runMonitor(t, m, set, d)
+
+	waitState(t, m, "podman", service.Starting) // delegated, awaiting owner
+	deadline := time.Now().Add(2 * time.Second)
+	for !d.wants("podman") && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if !d.wants("podman") {
+		t.Fatal("delegated provider never activated podman")
+	}
+	reason := service.UnavailableReason("podman: unavailable: no podman socket detected (tried /run/podman.sock)")
+	if r := ctl(t, m, ctlRequest{Op: "report", Status: service.Status{Unit: "podman", State: service.Inactive, Reason: reason}}); r.Error != "" {
+		t.Fatalf("report: %s", r.Error)
+	}
+
+	st := waitState(t, m, "podman", service.Inactive)
+	if !strings.Contains(st.Health, "no podman socket detected") || st.Health == "ok" {
+		t.Fatalf("health = %q, want the unavailable reason shown", st.Health)
+	}
+	if !service.IsUnavailableReason(st.Reason) {
+		t.Fatalf("reason = %q, want unavailable", st.Reason)
+	}
+
+	// Many probe intervals pass: still resting, never restarted,
+	// never failed, delegation never withdrawn.
+	time.Sleep(200 * time.Millisecond)
+	st = unitStatus(t, m, "podman")
+	if st.State != service.Inactive || st.Restarts != 0 {
+		t.Fatalf("resting unit moved: %+v", st)
+	}
+	if !d.wants("podman") {
+		t.Fatal("delegation withdrawn while resting unavailable (restart cycle)")
+	}
+	for _, k := range el.kinds("podman") {
+		if k == "service.failed" {
+			t.Fatalf("unavailable must never fail the unit: events=%v", el.kinds("podman"))
+		}
+	}
+	el.mu.Lock()
+	notified := len(el.notified)
+	el.mu.Unlock()
+	if notified != 0 {
+		t.Fatalf("unavailable must not notify as failure, got %d", notified)
+	}
+
+	// The backend appears; the owner's next report recovers the unit.
+	if r := ctl(t, m, ctlRequest{Op: "report", Status: service.Status{Unit: "podman", State: service.Active}}); r.Error != "" {
+		t.Fatalf("recovery report: %s", r.Error)
+	}
+	st = waitState(t, m, "podman", service.Active)
+	if st.Health != "ok" || st.Restarts != 0 {
+		t.Fatalf("after recovery: %+v", st)
+	}
+}
+
 // runMonitor starts an already-built monitor (so a test can set fields first).
 func runMonitor(t *testing.T, m *monitor, set *unitSet, prov service.Provider) *eventLog {
 	t.Helper()
