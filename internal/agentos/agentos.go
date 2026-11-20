@@ -2101,6 +2101,14 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		}
 		dispatchExit(0)
 	}
+	// `bashy make` in a directory with no makefile but a dag.md forwards
+	// to `bashy dag` (dagmake.go); with a makefile present — and in every
+	// case it declines — the coreutils applet below runs untouched.
+	if os.Args[1] == "make" {
+		if code, handled := tryDagMakeFrontDoor(os.Args[2:], os.Stdin, os.Stdout, os.Stderr); handled {
+			dispatchExit(code)
+		}
+	}
 	if tool.Lookup(os.Args[1]) != nil {
 		dispatchExit(dispatchCoreutilsTool(os.Args[1], os.Args[2:], tool.Stdio{
 			In:  os.Stdin,
@@ -2541,7 +2549,7 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	}
 	// The ring answers `type` / `command -v` too, on both branches: what
 	// dispatch runs, introspection must see (registered.go, registeredResolver).
-	opts = append(opts, interp.CommandResolver(registeredResolver))
+	opts = append(opts, interp.CommandResolver(commandResolverFor(posix)))
 	// The pure-Go userland (coreutilsshell.Handler below) serves its applets
 	// by name: never hash them, or the second `jq` runs the host's /usr/bin/jq
 	// (or fails on a host with none) instead of bashy's own.
@@ -2667,7 +2675,7 @@ func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Rea
 	// is re-executed isolated and inside @limit under `bashy limit`, which
 	// wraps the contained command so its guard watches that whole tree. In
 	// agent mode the host floors (limit.go) judge the command first.
-	mws = append(mws, outputMW, autofix.Handler(), recommend.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), gnuMakeHandler(), hostConvertersHandler(), coreutilsshell.Handler(), registeredHandler())
+	mws = append(mws, outputMW, autofix.Handler(), recommend.Handler(), confirmHandler(), dryRunHandler(r), defineSessionHandler(), gnuMakeHandler(), dagMakeHandler(), hostConvertersHandler(), coreutilsshell.Handler(), registeredHandler())
 	if agentModeForEnv(env) {
 		mws = append(mws, hostFloorHandler())
 	}
