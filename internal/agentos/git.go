@@ -566,6 +566,7 @@ func gitLogCmd(external *bool) *cobra.Command {
 func gitPushCmd() *cobra.Command {
 	var (
 		force    bool
+		quiet    bool
 		username string
 		password string
 		sshKey   string
@@ -600,11 +601,14 @@ func gitPushCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			if !quiet {
+				fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&force, "force", "f", false, "Force push (replaces remote history)")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress the result line")
 	cmd.Flags().StringVar(&username, "username", "", "Username for HTTPS basic auth")
 	cmd.Flags().StringVar(&password, "password", "", "Password/token for HTTPS basic auth")
 	cmd.Flags().StringVar(&sshKey, "ssh-key", "", "Path to SSH private key (ssh:// remotes)")
@@ -613,6 +617,7 @@ func gitPushCmd() *cobra.Command {
 
 func gitPullCmd() *cobra.Command {
 	var (
+		quiet    bool
 		username string
 		password string
 		sshKey   string
@@ -644,10 +649,13 @@ func gitPullCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			if !quiet {
+				fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			}
 			return nil
 		},
 	}
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress the result line")
 	cmd.Flags().StringVar(&username, "username", "", "Username for HTTPS basic auth")
 	cmd.Flags().StringVar(&password, "password", "", "Password/token for HTTPS basic auth")
 	cmd.Flags().StringVar(&sshKey, "ssh-key", "", "Path to SSH private key (ssh:// remotes)")
@@ -656,6 +664,7 @@ func gitPullCmd() *cobra.Command {
 
 func gitFetchCmd() *cobra.Command {
 	var (
+		quiet    bool
 		username string
 		password string
 		sshKey   string
@@ -690,10 +699,13 @@ func gitFetchCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			if !quiet {
+				fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			}
 			return nil
 		},
 	}
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress the result line")
 	cmd.Flags().StringVar(&username, "username", "", "Username for HTTPS basic auth")
 	cmd.Flags().StringVar(&password, "password", "", "Password/token for HTTPS basic auth")
 	cmd.Flags().StringVar(&sshKey, "ssh-key", "", "Path to SSH private key (ssh:// remotes)")
@@ -708,7 +720,7 @@ func gitBranchCmd(external *bool) *cobra.Command {
 }
 
 func gitCheckoutCmd() *cobra.Command {
-	var create, force bool
+	var create, force, quiet, detach bool
 	cmd := &cobra.Command{
 		Use:   "checkout <branch>",
 		Short: "Switch to a branch, create/reset it, or detach to a revision",
@@ -716,10 +728,23 @@ func gitCheckoutCmd() *cobra.Command {
 		Example: `  bashy git checkout main
   bashy git checkout -b feature-x      # create and switch
   bashy git checkout -B feature-x      # create/reset and switch
-  bashy git checkout <commit-sha>      # detached HEAD`,
+  bashy git checkout <commit-sha>      # detached HEAD
+  bashy git checkout -q --detach <rev> # detached, no output`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if create && force {
 				return fmt.Errorf("checkout: -b and -B are mutually exclusive")
+			}
+			if detach && (create || force) {
+				return fmt.Errorf("checkout: --detach cannot combine with -b/-B")
+			}
+			if detach {
+				// Detaching at a revision is the existing bare-rev
+				// path. Detaching at a branch NAME would silently
+				// switch attached instead — the native checkout has
+				// no detach-at-branch form, so refuse by name.
+				if res, err := outgit.Exec(cmd.Context(), ".", []string{"rev-parse", "--verify", "refs/heads/" + args[0]}); err == nil && res.ExitCode == 0 {
+					return fmt.Errorf("checkout: --detach at branch %q is not served by the native checkout (detach at a revision, or use a host git)", args[0])
+				}
 			}
 			result, err := outgit.Checkout(outgit.CheckoutOptions{
 				Branch: args[0],
@@ -729,12 +754,16 @@ func gitCheckoutCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			if !quiet {
+				fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().BoolVarP(&create, "branch", "b", false, "Create the branch before switching")
 	cmd.Flags().BoolVarP(&force, "force-branch", "B", false, "Create or reset the branch before switching")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress the result line")
+	cmd.Flags().BoolVar(&detach, "detach", false, "Detach HEAD at a revision (branch names refused: no native detach-at-branch)")
 	return cmd
 }
 
