@@ -15,6 +15,7 @@ package agentos
 import (
 	"bytes"
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -140,6 +141,86 @@ func toolShortcutSteerConfirmed(stderr, tool string) bool {
 		strings.Contains(stderr, "steering queued for "+tool)
 }
 
+// killToolShortcutSession ends a PTY session child and everything it
+// spawned. A PTY child leads its own process group (pty.Start sets Setsid),
+// so killing only the leader orphans the vendor fake it launched — the leak
+// in 91f04d61, where a mid-leg test failure left `bashy <tool>` + fake pairs
+// running under pid 1. The bounded wait reaps the leader via the caller's
+// exit watcher; an already-exited session is a no-op.
+func killToolShortcutSession(cmd *exec.Cmd, exitDone <-chan struct{}) {
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	_ = killProcessGroup(cmd.Process)
+	select {
+	case <-exitDone:
+	case <-time.After(5 * time.Second):
+	}
+}
+
+func toolShortcutPidAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	return exec.CommandContext(ctx, "ps", "-p", strconv.Itoa(pid)).Run() == nil
+}
+
+// TestToolShortcutCleanupKillsProcessGroup is the 91f04d61 regression: a
+// PTY session whose leader spawned a grandchild must leave NOTHING behind
+// after the cleanup — killing only the leader (the old quit-timeout path)
+// orphaned the grandchild.
+func TestToolShortcutCleanupKillsProcessGroup(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("POSIX sh child")
+	}
+	dir := t.TempDir()
+	pidFile := filepath.Join(dir, "grandchild.pid")
+	// The grandchild ignores SIGHUP, so merely killing the leader (whose
+	// death HUPs its group) cannot pass this test by accident — only a
+	// process-group kill reaps it, which is the semantics under test.
+	// /bin/sh explicitly: the vendor fakes run under their #!/bin/sh
+	// shebang, and an ambient `sh` here can resolve to bashy's own shell,
+	// whose job handling masks the distinction.
+	cmd := exec.Command("/bin/sh", "-c", "(trap '' HUP; exec sleep 60) & echo $! > "+pidFile+"; wait")
+	ptmx, err := pty.Start(cmd)
+	if err != nil {
+		t.Skipf("no PTY on this host: %v", err)
+	}
+	defer ptmx.Close()
+	go func() { _, _ = io.Copy(io.Discard, ptmx) }()
+	exitDone := make(chan struct{})
+	go func() { _ = cmd.Wait(); close(exitDone) }()
+
+	var grandchild int
+	waitForToolShortcut(t, "grandchild pid file", 10*time.Second, func() (string, bool) {
+		b, err := os.ReadFile(pidFile)
+		if err != nil {
+			return err.Error(), false
+		}
+		grandchild, err = strconv.Atoi(strings.TrimSpace(string(b)))
+		return string(b), err == nil && grandchild > 0
+	})
+	leader := cmd.Process.Pid
+	if !toolShortcutPidAlive(leader) || !toolShortcutPidAlive(grandchild) {
+		t.Fatalf("fixture not alive before cleanup: leader=%d grandchild=%d", leader, grandchild)
+	}
+
+	killToolShortcutSession(cmd, exitDone)
+
+	waitForToolShortcut(t, "session process group to be gone", 10*time.Second, func() (string, bool) {
+		alive := []string{}
+		if toolShortcutPidAlive(leader) {
+			alive = append(alive, "leader "+strconv.Itoa(leader))
+		}
+		if toolShortcutPidAlive(grandchild) {
+			alive = append(alive, "grandchild "+strconv.Itoa(grandchild))
+		}
+		return "still alive: " + strings.Join(alive, ", "), len(alive) == 0
+	})
+}
+
 // runToolShortcutPTY starts `bashy <tool> [toolArgs...]` under a real PTY,
 // waits for the chat session, steers PING into it, observes the echo, then
 // quits the fake. It returns the full PTY transcript and the fake's argv
@@ -166,6 +247,11 @@ func runToolShortcutPTY(t *testing.T, bin, work, tool string, toolArgs []string,
 	var exitErr error
 	exitDone := make(chan struct{})
 	go func() { exitErr = cmd.Wait(); close(exitDone) }()
+	// Whatever fails below — a session wait, a steer, an assertion — the
+	// session process group must not outlive the test (91f04d61: orphaned
+	// `bashy <tool>` + fake pairs accumulated under pid 1). On the happy
+	// path the fake has already quit and this is a no-op.
+	t.Cleanup(func() { killToolShortcutSession(cmd, exitDone) })
 	exited := func() (error, bool) {
 		select {
 		case <-exitDone:
@@ -294,8 +380,7 @@ func runToolShortcutPTY(t *testing.T, bin, work, tool string, toolArgs []string,
 			}
 		}
 	case <-time.After(25 * time.Second):
-		_ = cmd.Process.Kill()
-		<-exitDone // reap before the deferred Close; avoids a zombie
+		killToolShortcutSession(cmd, exitDone) // whole group, then reaped via exitDone
 		t.Fatalf("bashy %s did not exit after quit\ntranscript:\n%s", tool, snapshot())
 	}
 	<-done
