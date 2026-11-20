@@ -3,9 +3,10 @@ id: 4c60ebe893cd
 kind: bug
 title: 'bashy''s in-process git applet rejects common worker forms: commit -q, commit --allow-empty, some -c forms'
 seq: 3267
-status: todo
+status: assigned
 priority: p1
 created: 2026-11-20T21:02:51.300239Z
+assignee: muse-wonder-full
 sprint: 576
 sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
 sprint_title: 'Proactive sprint manager: wake, supervise, review'
