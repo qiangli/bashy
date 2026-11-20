@@ -15,3 +15,5 @@ sprint_title: 'Proactive sprint manager: wake, supervise, review'
 ---
 
 Observed 2026-11-06 managing S576: (1) the same coordination-overflow notice (mb 12987-12988, identical content_digest) was injected into the manager session dozens of times within minutes until the items were acked with bashy inbox; an unchanged overflow digest should be surfaced once. (2) a weave worker's unit tests (run bashy#27, story 561bac1b) posted 'sprint #1 Test sprint directive — created in backlog' from 'conductor' to the real message board twice (mb:12986, mb:12990): the test sprint store was isolated but the stage announcement was not. Sprint test helpers should default announce off / isolate the bus.
+
+2026-11-19: the overflow-redelivery half is FIXED (yoke f4a1c2f2, todo 5e01de0e: per-turn prepend capped to 1 item + counter; a shown counter advances the watermarks). The remaining half (worker tests announce to the real board) overlaps 9ac774dd and is tracked there.
