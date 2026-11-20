@@ -5,43 +5,6 @@ go 1.27.0
 toolchain go1.27.2
 
 require (
-	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261119110900-4141cc07cfdc
-	github.com/benhoyt/goawk v1.31.0
-	github.com/creack/pty/v2 v2.0.1
-	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
-	github.com/ergochat/readline v0.1.3
-	github.com/fatih/color v1.18.0
-	github.com/go-git/go-git/v5 v5.19.3
-	github.com/itchyny/gojq v0.12.19
-	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
-	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/coreutils v0.0.0-20261119135715-c656935287fa
-	github.com/qiangli/ycode v0.3.1-dev.0.20261118041524-e5be31355b48
-	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261119200549-732dc3b43538
-	github.com/qiangli/yoke/external/otel v0.0.0-20261115042953-d160182c8479
-	github.com/rjeczalik/notify v0.9.3
-	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
-	go.opentelemetry.io/otel v1.45.0
-	go.opentelemetry.io/otel/sdk v1.45.0
-	go.opentelemetry.io/otel/trace v1.45.0
-	golang.org/x/crypto v0.58.0
-	golang.org/x/crypto/x509roots/fallback v0.0.0-20260921070245-7a4a4d6beae2
-	golang.org/x/mod v0.41.0
-	golang.org/x/net v0.62.0
-	golang.org/x/sys v0.49.0
-	golang.org/x/term v0.47.0
-	golang.org/x/text v0.43.0
-	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.35.0
-	k8s.io/apimachinery v0.35.0
-	k8s.io/client-go v0.35.0
-)
-
-require (
 	charm.land/bubbles/v2 v2.2.1 // indirect
 	charm.land/bubbletea/v2 v2.0.9 // indirect
 	charm.land/lipgloss/v2 v2.0.6 // indirect
@@ -609,6 +572,41 @@ replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/externa
 // fork so TUI-only width tables are built only when a width is queried.
 replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402
 
-require github.com/qiangli/bash v0.0.0-20261119111345-7855c2f038f2
-
-require github.com/qiangli/bash/cmd v0.0.0-20261119111345-7855c2f038f2
+require (
+	github.com/aymanbagabas/go-pty v0.2.3
+	github.com/bashsharp/bashsharp v0.0.0-20261119110900-4141cc07cfdc
+	github.com/benhoyt/goawk v1.31.0
+	github.com/creack/pty/v2 v2.0.1
+	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
+	github.com/ergochat/readline v0.1.3
+	github.com/fatih/color v1.18.0
+	github.com/go-git/go-git/v5 v5.19.3
+	github.com/itchyny/gojq v0.12.19
+	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
+	github.com/pkg/sftp v1.13.10
+	github.com/qiangli/bash v0.0.0-20261119111345-7855c2f038f2
+	github.com/qiangli/bash/cmd v0.0.0-20261119111345-7855c2f038f2
+	github.com/qiangli/coreutils v0.0.0-20261119135715-c656935287fa
+	github.com/qiangli/ycode v0.3.1-dev.0.20261118041524-e5be31355b48
+	github.com/qiangli/ycode/examples/genie v0.0.0
+	github.com/qiangli/yoke v0.0.0-20261120034042-ae960eeee2c9
+	github.com/qiangli/yoke/external/otel v0.0.0-20261115042953-d160182c8479
+	github.com/rjeczalik/notify v0.9.3
+	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.10
+	go.opentelemetry.io/otel v1.45.0
+	go.opentelemetry.io/otel/sdk v1.45.0
+	go.opentelemetry.io/otel/trace v1.45.0
+	golang.org/x/crypto v0.58.0
+	golang.org/x/crypto/x509roots/fallback v0.0.0-20260921070245-7a4a4d6beae2
+	golang.org/x/mod v0.41.0
+	golang.org/x/net v0.62.0
+	golang.org/x/sys v0.49.0
+	golang.org/x/term v0.47.0
+	golang.org/x/text v0.43.0
+	gopkg.in/yaml.v3 v3.0.1
+	k8s.io/api v0.35.0
+	k8s.io/apimachinery v0.35.0
+	k8s.io/client-go v0.35.0
+)
