@@ -63,7 +63,7 @@ func isolateSprintForemanTest(t testing.TB) string {
 
 	for _, entry := range os.Environ() {
 		key, _, _ := strings.Cut(entry, "=")
-		if key == isolationSentinel {
+		if key == isolationSentinel || key == "BASHY_CHAT_INBOX_MAX" {
 			continue
 		}
 		if strings.HasPrefix(key, "BASHY_") || strings.HasPrefix(key, "WEAVE_") {

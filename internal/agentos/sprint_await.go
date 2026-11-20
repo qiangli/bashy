@@ -222,11 +222,16 @@ func readSprintAwaitMail(owner, roomID string) ([]sprintAwaitCandidate, error) {
 	if owner == "" {
 		return nil, nil
 	}
-	restoreRoles := memoizeHostRoles()
-	posts, _, _, err := bus.Unseen(owner, 0)
+	restoreRoles, _ := memoizeHostRolesFor(owner)
+	posts, other, _, err := bus.Unseen(owner, 0)
 	restoreRoles()
 	if err != nil {
 		return nil, err
+	}
+	for _, p := range other {
+		if p.Audience != nil && strings.EqualFold(strings.TrimSpace(p.Audience.Role), "conductor") {
+			posts = append(posts, p)
+		}
 	}
 	var events []sprintAwaitCandidate
 	add := func(source string, seq int64, from, body string, at time.Time) {

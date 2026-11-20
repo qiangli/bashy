@@ -43,18 +43,21 @@ const inboxWatcherMode = "inbox"
 var inboxMeetRooms = meet.Rooms
 
 type unifiedInboxEvent struct {
-	Schema     string              `json:"schema"`
-	Source     string              `json:"source"`
-	Seq        int64               `json:"seq"`
-	At         string              `json:"at,omitempty"`
-	From       string              `json:"from,omitempty"`
-	FromParty  *bus.Party          `json:"from_party,omitempty"`
-	FromHandle string              `json:"from_handle,omitempty"`
-	To         string              `json:"to,omitempty"`
-	Topic      string              `json:"topic,omitempty"`
-	Room       string              `json:"room,omitempty"`
-	Body       string              `json:"body"`
-	Origin     *unifiedInboxOrigin `json:"origin,omitempty"`
+	Schema        string              `json:"schema"`
+	Source        string              `json:"source"`
+	Seq           int64               `json:"seq"`
+	At            string              `json:"at,omitempty"`
+	From          string              `json:"from,omitempty"`
+	FromParty     *bus.Party          `json:"from_party,omitempty"`
+	FromHandle    string              `json:"from_handle,omitempty"`
+	To            string              `json:"to,omitempty"`
+	Topic         string              `json:"topic,omitempty"`
+	Room          string              `json:"room,omitempty"`
+	EventType     string              `json:"event_type,omitempty"`
+	StoryID       string              `json:"story_id,omitempty"`
+	SuggestedVerb string              `json:"suggested_verb,omitempty"`
+	Body          string              `json:"body"`
+	Origin        *unifiedInboxOrigin `json:"origin,omitempty"`
 }
 
 type unifiedInboxOrigin struct {
@@ -78,7 +81,7 @@ func newUnifiedInboxCmd() *cobra.Command {
 	var as string
 	var wait time.Duration
 	var peek, jsonOut, watch bool
-	var limit int
+	var limit, untilCount int
 	var filter mailboxFilter
 	cmd := &cobra.Command{
 		Use:   "inbox",
@@ -198,19 +201,29 @@ pretends such a session was adopted.`,
 			if limit < 0 {
 				return fmt.Errorf("inbox: --limit must not be negative")
 			}
+			if untilCount < 0 {
+				return fmt.Errorf("inbox: --until-count must not be negative")
+			}
+			if limit > 0 && untilCount > limit {
+				return fmt.Errorf("inbox: --until-count (%d) cannot exceed --limit (%d)", untilCount, limit)
+			}
 			if watch && peek {
 				return fmt.Errorf("inbox: --watch cannot be combined with --peek (the same unread batch would repeat forever)")
 			}
 			if err := filter.validate(time.Now()); err != nil {
 				return err
 			}
-			if watch && filter.active() {
+			if watch && untilCount == 0 && filter.active() {
 				return fmt.Errorf("inbox: --watch cannot be combined with --from/--search/--since (delivery acknowledges records the filter would hide)")
 			}
 			reader, err := resolveInboxReader(as)
 			if err != nil {
 				return err
 			}
+			// READING YOUR MAIL IS THE HEARTBEAT: refresh every active sprint lease
+			// held by reader on entry so one-shot and short-wait inbox polls keep the
+			// conductor seat live, matching runUnifiedInbox.
+			refreshSprintOwnerActivity(reader)
 			// A peek that names an agent seat in an attended session (same
 			// CLAUDE_CODE_SESSION_ID / session key) satisfies a later
 			// `bashy mb send --as SEAT` from the same session. The watch path
@@ -250,8 +263,10 @@ pretends such a session was adopted.`,
 				poll.snapshot = filteredInboxSnapshot(poll.snapshot, filter, limit)
 			}
 			// Only a watch consumes: it keeps following, so a peek-only batch
-			// would repeat forever. Every other read just prints.
-			return runUnifiedInboxWithPoll(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), reader, limit, peek || !watch, jsonOut, watch, wait, poll)
+			// would repeat forever. Filtered --watch --until-count N preserves
+			// cursors so hidden records are never acknowledged.
+			effectivePeek := peek || !watch || filter.active()
+			return runUnifiedInboxWithOptions(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), reader, limit, untilCount, effectivePeek, jsonOut, watch, wait, poll)
 		},
 	}
 	f := cmd.Flags()
@@ -260,9 +275,11 @@ pretends such a session was adopted.`,
 	f.BoolVar(&peek, "peek", false, "read without advancing any source cursor (the default; only --watch consumes)")
 	f.StringVar(&filter.from, "from", "", "only messages whose sender contains this text")
 	f.StringVar(&filter.search, "search", "", "only messages containing this text (body/sender/recipient/topic/room/source)")
+	f.StringVar(&filter.matchRaw, "match", "", "only messages matching this regular expression (body/sender/recipient/topic/room/source)")
 	f.StringVar(&filter.sinceRaw, "since", "", "only messages at or after this time (duration like 2h or 3d, or RFC3339 / YYYY-MM-DD)")
 	f.StringVar(&filter.sprint, "sprint", "", "show only records about this sprint number or UUID without advancing any cursor")
 	f.BoolVar(&watch, "watch", false, "follow all inbound sources until interrupted")
+	f.IntVar(&untilCount, "until-count", 0, "wait until at least N matching messages arrive and exit 0 (exits 3 on --wait timeout)")
 	f.IntVarP(&limit, "limit", "n", 0, "show at most this many records per source (0 = no cap; the omitted tail stays unread, and --watch acknowledges only what it showed)")
 	f.BoolVar(&jsonOut, "json", false, "emit one "+unifiedInboxSchema+" object per line (NDJSON); a bounded read with no mail emits one envelope line with no events")
 	cmd.AddCommand(newMailboxListCmd(false), newMailboxReadCmd(false), newMailboxAckCmd(false), newMailboxPreserveCmd(false), newMailboxOrganizeCmd(false), newHumanMailboxCmd(), newAttentionCmd(false))
@@ -690,6 +707,32 @@ func runUnifiedInbox(ctx context.Context, out, errOut io.Writer, reader string, 
 }
 
 func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader string, limit int, peek, jsonOut, watch bool, bound time.Duration, poll inboxPollRuntime) error {
+	return runUnifiedInboxWithOptions(ctx, out, errOut, reader, limit, 0, peek, jsonOut, watch, bound, poll)
+}
+
+func emitUntilCountTimeout(out, errOut io.Writer, partial inboxBatch, have, want int, emitPartial, jsonOut, watch bool) error {
+	if emitPartial && len(partial.events) > 0 {
+		if err := renderInboxBatch(out, errOut, partial, jsonOut); err != nil {
+			return err
+		}
+	} else if have == 0 && !watch && jsonOut {
+		if err := writeInboxEmptyEnvelope(out); err != nil {
+			return err
+		}
+	}
+	if have == 0 {
+		fmt.Fprintf(errOut, "EMPTY (timeout: matched 0/%d)\n", want)
+	} else {
+		fmt.Fprintf(errOut, "TIMEOUT (matched %d/%d)\n", have, want)
+	}
+	return &inboxExitError{
+		code:   inboxExitTimeout,
+		err:    fmt.Errorf("inbox: timeout waiting for %d matching message(s) (matched %d)", want, have),
+		silent: true,
+	}
+}
+
+func runUnifiedInboxWithOptions(ctx context.Context, out, errOut io.Writer, reader string, limit, untilCount int, peek, jsonOut, watch bool, bound time.Duration, poll inboxPollRuntime) error {
 	if poll.close != nil {
 		defer poll.close()
 	}
@@ -722,6 +765,8 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 	// sprint 105 was opened to fix.
 	lastBeat := poll.now()
 	beatEvery := weave.SprintLeaseTTL / 3
+	delivered := 0
+	var lastBatch inboxBatch
 	for {
 		// BEFORE the read, not after it. Rendering is what advances a cursor,
 		// so a watcher whose owning session has exited must discover that
@@ -756,7 +801,15 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 				return err
 			}
 			gate.commit(sum, sampled, now)
-			if len(batch.events) > 0 {
+			lastBatch = batch
+			if untilCount > 0 && peek {
+				if len(batch.events) >= untilCount {
+					return renderInboxBatch(out, errOut, batch, jsonOut)
+				}
+				if !watch && bound == 0 {
+					return emitUntilCountTimeout(out, errOut, batch, len(batch.events), untilCount, true, jsonOut, false)
+				}
+			} else if len(batch.events) > 0 {
 				if err := renderInboxBatch(out, errOut, batch, jsonOut); err != nil {
 					return err
 				}
@@ -765,7 +818,11 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 						return err
 					}
 				}
+				delivered += len(batch.events)
 				interval = poll.min
+				if untilCount > 0 && delivered >= untilCount {
+					return nil
+				}
 				if !watch {
 					return nil
 				}
@@ -801,19 +858,24 @@ func runUnifiedInboxWithPoll(ctx context.Context, out, errOut io.Writer, reader 
 			}
 		}
 		now = poll.now()
-		if !watch && !deadline.IsZero() && !now.Before(deadline) {
-			// Bounded --wait with --json that saw nothing: same empty
-			// envelope as the immediate empty read, so the probe and the
-			// skill's one-batch-wait loop both get one JSON document.
-			if jsonOut {
-				if err := writeInboxEmptyEnvelope(out); err != nil {
-					return err
+		if !deadline.IsZero() && !now.Before(deadline) {
+			if untilCount > 0 {
+				if peek {
+					return emitUntilCountTimeout(out, errOut, lastBatch, len(lastBatch.events), untilCount, true, jsonOut, watch)
 				}
+				return emitUntilCountTimeout(out, errOut, inboxBatch{}, delivered, untilCount, false, jsonOut, watch)
 			}
-			fmt.Fprintln(errOut, "EMPTY (timeout)")
-			return nil
-		}
-		if watch && !deadline.IsZero() && !now.Before(deadline) {
+			if !watch {
+				// Bounded --wait with --json that saw nothing: same empty
+				// envelope as the immediate empty read, so the probe and the
+				// skill's one-batch-wait loop both get one JSON document.
+				if jsonOut {
+					if err := writeInboxEmptyEnvelope(out); err != nil {
+						return err
+					}
+				}
+				fmt.Fprintln(errOut, "EMPTY (timeout)")
+			}
 			return nil
 		}
 		pause := interval
@@ -874,22 +936,8 @@ var snapshotRolesMu sync.Mutex
 // semantics at constant cost. The previous table is restored afterwards, so
 // the next snapshot (watch tick, next command) still sees fresh roles.
 func memoizeHostRoles() func() {
-	snapshotRolesMu.Lock()
-	prev := bus.HostRoles
-	if prev == nil {
-		snapshotRolesMu.Unlock()
-		return func() {}
-	}
-	var once sync.Once
-	var roles []bus.HostRole
-	bus.HostRoles = func() []bus.HostRole {
-		once.Do(func() { roles = prev() })
-		return roles
-	}
-	return func() {
-		bus.HostRoles = prev
-		snapshotRolesMu.Unlock()
-	}
+	restore, _ := memoizeHostRolesFor("")
+	return restore
 }
 
 // snapshotInbox is snapshotUnifiedInbox with the relay delivery pass optional:
@@ -900,7 +948,7 @@ func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBat
 }
 
 func snapshotInboxWithHint(reader string, limit int, includeBus, deliver, hint bool) (inboxBatch, error) {
-	restoreRoles := memoizeHostRoles()
+	restoreRoles, conducted := memoizeHostRolesFor(reader)
 	defer restoreRoles()
 	var batch inboxBatch
 	state, err := loadMailboxState(mailboxSpec{Key: "agent:" + reader, Address: reader, Kind: "agent"})
@@ -1010,7 +1058,7 @@ func snapshotInboxWithHint(reader string, limit int, includeBus, deliver, hint b
 		if p.Seq > mbHigh {
 			mbHigh = p.Seq
 		}
-		mbEvents = append(mbEvents, unifiedInboxEvent{Schema: unifiedInboxSchema, Source: "mb", Seq: p.Seq, At: p.At, From: p.From, FromParty: p.FromParty, To: bus.RoleLabelFor(p.To), Topic: p.Topic, Body: p.Body})
+		mbEvents = append(mbEvents, unifiedInboxEvent{Schema: unifiedInboxSchema, Source: "mb", Seq: p.Seq, At: p.At, From: p.From, FromParty: p.FromParty, To: mbInboxTo(p), Topic: p.Topic, Body: p.Body})
 	}
 	appendLimited("mb", mbEvents, func() error { return bus.MarkSeen(reader, mbHigh) })
 
@@ -1027,8 +1075,9 @@ func snapshotInboxWithHint(reader string, limit int, includeBus, deliver, hint b
 	if err != nil {
 		return batch, fmt.Errorf("meet rooms: %w", err)
 	}
+	conductedRooms := conductedMeetRoomSet(conducted)
 	for _, room := range rooms {
-		if !stringMember(room.Members, reader) {
+		if !stringMember(room.Members, reader) && !conductedRooms[strings.ToLower(strings.TrimSpace(room.ID))] {
 			continue
 		}
 		seen := meet.SeenSeq(room.ID, reader)
@@ -1085,6 +1134,7 @@ func snapshotInboxWithHint(reader string, limit int, includeBus, deliver, hint b
 	for i := range batch.events {
 		event := &batch.events[i]
 		event.FromParty, event.FromHandle = inboxSenderIdentity(event.From, event.FromParty)
+		event.EventType, event.StoryID, event.SuggestedVerb = classifyInboxEvent(event.Body, event.To)
 	}
 	batch.rawEvents = append([]unifiedInboxEvent(nil), batch.events...)
 	batch.events = collapseProvenanceDuplicates(batch.events)
