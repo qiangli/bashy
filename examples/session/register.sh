@@ -28,6 +28,7 @@ trap 'rm -rf "$tmp"' EXIT
 printf '%s\n' "$guide" > "$tmp/SKILL.md"
 "$runner" --bashsharp "$here/session.bsh" --contract > "$tmp/skill.dhnt"
 "$runner" skill add "$tmp" --force
-"$runner" app add session --port 18093 --label Session --icon "🎓" \
+# Register through the public shaped-app path used by external apps.
+"$runner" app add session --type shaped --source "$here" --label Session --icon "🎓" \
   --tip 'Timeboxed group, meeting and solo sessions' --force
 echo 'Registered session: one Bash# body, command and skill.'

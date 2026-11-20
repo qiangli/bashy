@@ -1,0 +1,12 @@
+# Required check: the module builds and its own tests pass.
+set -eu
+# The verifier sets HOME and TMPDIR to the clone root. Go ignores a go.mod in
+# the temp root, and a toolchain provisioned under HOME would land inside
+# ./..., so both move to a dot directory the go tool skips. The trusted
+# interpreter goes on PATH as bashy: the tests shell out to it.
+scratch="$(mktemp -d "$PWD/.check.XXXXXX")"
+mkdir "$scratch/bin"
+ln -s "$BASH" "$scratch/bin/bashy"
+export HOME="$scratch" TMPDIR="$scratch" PATH="$scratch/bin:$PATH"
+bashy go build -o "$scratch/out/" ./...
+bashy go test ./...

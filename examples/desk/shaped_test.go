@@ -31,6 +31,7 @@ var shapedTools = map[string]string{
 	"viewer":     "viewer",
 	"whiteboard": "../whiteboard",
 	"brainstorm": "../brainstorm/server",
+	"session":    "../session",
 }
 
 func TestConsumerPolishedToolsDeclareGenieExamples(t *testing.T) {

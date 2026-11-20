@@ -10,7 +10,7 @@ exe=$cache/session-server
 [[ ${OS:-} == Windows_NT ]] && exe=$exe.exe
 if [[ -n ${SESSION_SERVER_BIN:-} ]]; then
   exe=$SESSION_SERVER_BIN
-elif [[ ! -x $exe || -n $(find "$here" -maxdepth 1 \( -name '*.go' -o -name go.mod \) -newer "$exe" 2>/dev/null) ]]; then
+elif [[ ! -x $exe || -n $(find "$here" -maxdepth 1 -name '*.go' -newer "$exe" 2>/dev/null) || "$here/../go.mod" -nt "$exe" || "$here/../go.sum" -nt "$exe" ]]; then
   mkdir -p "$cache"
   gocmd=(go)
   command -v go >/dev/null 2>&1 || gocmd=("${BASHY:-bashy}" go)
