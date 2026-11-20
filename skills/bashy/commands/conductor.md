@@ -40,17 +40,18 @@ only truth.** A worker's prose or commit message is a lead until the gate
 reproduces it. Echo measured numbers verbatim; never accept "submitted" as
 "done" — re-measure against the goal.
 
-**Run the gate YOURSELF, and read the verdict from bashy — never from the
-worker's output.** The primitive is `bashy gate --command '<gate>' --json`: it
-*runs* the gate and emits a `bashy-gate-v1` verdict (`"passed": true/false`),
-which a worker cannot fake. Do NOT grep the agent's stdout/log for the result —
+**Workers run gates; read the verdict from bashy evidence — never from the
+worker's output — and run only the frozen-candidate final gate yourself.** The
+final-gate primitive is `bashy gate --command '<gate>' --json`: it *runs* the
+gate and emits a `bashy-gate-v1` verdict (`"passed": true/false`), which a
+worker cannot fake. Do NOT grep the agent's stdout/log for a result —
 a worker echoes your brief, and your brief names the success string, so its log
 will contain `[gate] PASS` (or your equivalent) as *text the agent quoted*, not
 as a gate that ran. That exact false-positive fires a "converged" on a worker
-that changed nothing. The verdict must come from a command you ran, not a string
-you found. (This is the runtime face of the fleet-evidence-invariant: a success
-state must be reached by evidence you produced, never by the absence — or the
-echo — of the worker's.)
+that changed nothing. The verdict must come from bashy-recorded evidence or the
+final gate you ran, not a string you found. (This is the runtime face of the
+fleet-evidence-invariant: a success state must be reached by evidence, never by
+the absence — or the echo — of the worker's.)
 
 This file is the actionable checklist. The full narrative — the four isolation
 traps in depth, convergence details, and two worked campaigns — lives in the
@@ -375,11 +376,13 @@ after it, which is why it is an order and not a checklist.
 4. **MONITOR PROGRESS, NOT LIVENESS.** A worker can be alive and stuck. Look at
    what changed since last tick; step in, unblock, or reassign. A run that has
    produced nothing across two ticks is a decision, not a wait.
-5. **INTEGRATE.** Run the gate YOURSELF and read the verdict from bashy, never
-   from the worker's prose. Then review, merge, push, bump pins forward, and
-   clean up only what this sprint owns — its branches, worktrees and weave
-   workspaces. Finish with the drift check; a tick that merged without pinning
-   has not integrated.
+5. **INTEGRATE.** Workers run gates; verify the verdict from bashy evidence,
+   never from the worker's prose, and run only the frozen-candidate final gate
+   yourself. Then review (`sprint reject ID STORY -m '<feedback>'` returns a
+   failing submission to its assignee with the decision recorded), merge, push,
+   bump pins forward, and clean up only what this sprint owns — its branches,
+   worktrees and weave workspaces. Finish with the drift check; a tick that
+   merged without pinning has not integrated.
 6. **CHECKPOINT.** `bashy sprint checkpoint <id> -m '<where it stands>'`. Your
    context does not survive; the brief is the only thing that reaches the next
    manager, and it may be a different tool entirely.
@@ -409,6 +412,18 @@ the assignment it may include reviewing and merging submissions, reclaiming work
 monitoring an external run, steering or reassigning workers, running gates, and refreshing
 continuity. Do not impose those examples as a universal Sprint/Scrum sequence. End each
 turn by refreshing the TODO from observed evidence.
+
+Turn-end contract: **every manager turn ends with a dispatched action or a
+blocking `bashy sprint await`, never a promise to check later.** `await` returns
+one typed event — a submission, a linked run submitted/failed/stalled (an hour
+without recorded progress), or manager mail — with a suggested verb; act on it
+in the next turn. For mail-driven wakes between turns, the bounded form is
+`bashy inbox --as <you> --wait 30m --until-count 1 --match '^DONE'`: it does not
+consume mail, and an unmet count at the deadline exits **3** — that is "loop
+again", not an error (plain `--wait` exits 0). Recording a standing operator
+rule once with `bashy sprint directive add ID '<rule>'` (optionally
+`--preapprove`) puts it on the card and into every manager payload and weave
+brief; do not re-paste rules per brief.
 
 1. **PLAN** — assemble the bounded repo + host context for each story before
    decomposing or staffing it:
@@ -573,6 +588,10 @@ cleanly.
      emits nothing or instant-exits is dead weight.
   4. **Capability rating** — the carry-forward report card + prior-sprint
      outcomes; rates *what a tool can do*, not a title.
+- **Vendor subagents vs weave runs** — a completed Codex collaboration subagent
+  cannot be resumed by message alone; continuing it takes a `followup_task`.
+  Across vendors, prefer bashy-registered weave runs (`sprint assign` lanes):
+  they resume, steer and report through one surface regardless of vendor.
 - **Going dark — checkpoint, then tell the steward.** Track your own budget;
   provider APIs don't expose remaining-quota, so frequent checkpoints are the
   only mitigation. At a stable point before you run out, `bashy sprint checkpoint`
@@ -734,6 +753,17 @@ bashy weave wait --issue N --timeout 50m &
   after confirming the block is live, a child in a TTY wait, not stale scrollback.)
 - NEVER measure the suite on the host while agents compile — load makes per-test
   timeouts flake into phantom regressions.
+- **Steer live sessions with `bashy chat steer`** — every launch path (weave
+  lanes, `bashy <tool>` operator sessions) joins the same room, so
+  `bashy chat sessions` lists what you can steer. The receipt tells you where the
+  line went: steered now, *queued* (a starting session — typed at its first
+  ready prompt, not lost), or *queued headless* (retained for the worker's
+  resume). "Steered" is a claim to verify: confirm on `bashy chat timeline` /
+  `--attach` that the line landed; a TUI that left it unsent in its input box
+  takes `bashy chat steer <id> --enter`. Vendor slash-commands go through
+  `bashy chat command <session> <name>` and only when the session *declares*
+  them (clear/exit/resume/rename/compact/status…) — an undeclared command is
+  refused (exit 2), never typed blind.
 
 ### 9. Converge — sequential gated merge on a review branch
 For a managed sprint, use `sprint review`, `sprint grade` and `sprint merge`;
