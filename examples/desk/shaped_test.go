@@ -31,6 +31,7 @@ var shapedTools = map[string]string{
 	"viewer":     "viewer",
 	"whiteboard": "../whiteboard/server",
 	"brainstorm": "../brainstorm/server",
+	"session":    "../session",
 }
 
 func TestDeskToolsShipShapedServer(t *testing.T) {

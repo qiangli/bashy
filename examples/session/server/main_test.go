@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	kit "desk-kit"
 )
@@ -24,7 +25,10 @@ func TestMain(m *testing.M) {
 		f, _ := os.OpenFile(filepath.Join(d, "calls.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		fmt.Fprintln(f, strings.Join(args, " "))
 		f.Close()
-		if len(args) > 1 && args[1] == "status" {
+		if len(args) > 0 && args[0] == "app" {
+			b, _ := os.ReadFile(filepath.Join(d, "runtime.json"))
+			os.Stdout.Write(b)
+		} else if len(args) > 1 && args[1] == "status" {
 			b, _ := os.ReadFile(filepath.Join(d, "status.json"))
 			os.Stdout.Write(b)
 		} else {
@@ -388,4 +392,193 @@ func TestParticipantSlugs(t *testing.T) {
 	if _, ok := s.personOf("nobody"); ok {
 		t.Fatal("unknown slug resolved")
 	}
+}
+
+func TestResolveConsole(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake bashy re-exec test is unix-only here")
+	}
+	dir := t.TempDir()
+	t.Setenv("FAKE_SESSION_DIR", dir)
+	t.Setenv("SESSION_ADDR", "")
+	t.Setenv("SESSION_DATA", "")
+	t.Setenv("SESSION_APP_URL", "")
+	exe, _ := os.Executable()
+
+	var rt struct {
+		Addr string `json:"addr"`
+		Data string `json:"data"`
+		URL  string `json:"url"`
+	}
+	rt.Addr, rt.Data, rt.URL = "127.0.0.1:19093", dir, "https://console.invalid/session"
+	b, _ := json.Marshal(rt)
+	if err := os.WriteFile(filepath.Join(dir, "runtime.json"), b, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	addr, data, appURL, err := resolveConsole(exe)
+	if err != nil || addr != rt.Addr || data != rt.Data || appURL != rt.URL {
+		t.Fatalf("runtime discovery = %q, %q, %q, %v", addr, data, appURL, err)
+	}
+
+	// An explicit handoff wins over discovery.
+	t.Setenv("SESSION_ADDR", "127.0.0.1:20000")
+	t.Setenv("SESSION_DATA", "/handoff")
+	t.Setenv("SESSION_APP_URL", "https://handoff.invalid")
+	addr, data, appURL, err = resolveConsole(exe)
+	if err != nil || addr != "127.0.0.1:20000" || data != "/handoff" || appURL != "https://handoff.invalid" {
+		t.Fatalf("handoff discovery = %q, %q, %q, %v", addr, data, appURL, err)
+	}
+
+	// A runtime record with no deployment is one actionable failure,
+	// never an implicit fixed-port fallback.
+	t.Setenv("SESSION_ADDR", "")
+	t.Setenv("SESSION_DATA", "")
+	t.Setenv("SESSION_APP_URL", "")
+	if err := os.WriteFile(filepath.Join(dir, "runtime.json"), []byte(`{"ok":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, _, err := resolveConsole(exe); err == nil || !strings.Contains(err.Error(), "SESSION_ADDR and SESSION_DATA") {
+		t.Fatalf("empty runtime discovery error = %v", err)
+	}
+}
+
+func hostDo(t *testing.T, ts *httptest.Server, method, path, key string) (int, string) {
+	t.Helper()
+	req, _ := http.NewRequest(method, ts.URL+path, strings.NewReader("{}"))
+	if key != "" {
+		req.Header.Set("X-Facilitator-Key", key)
+	}
+	if method == http.MethodPost {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(b)
+}
+
+func hostWait(t *testing.T, ts *httptest.Server, path string, want int) string {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		code, body := hostDo(t, ts, http.MethodGet, path, "")
+		if code == want {
+			return body
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	code, body := hostDo(t, ts, http.MethodGet, path, "")
+	t.Fatalf("GET %s = %d, want %d: %s", path, code, want, body)
+	return ""
+}
+
+func readTokenFile(t *testing.T, path string) tokenFile {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tok tokenFile
+	if err := json.Unmarshal(b, &tok); err != nil {
+		t.Fatal(err)
+	}
+	return tok
+}
+
+func TestHostScansMountsAndRetiresSprints(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake bashy re-exec test is unix-only here")
+	}
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "status.json"), []byte(canned), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FAKE_SESSION_DIR", dir)
+	exe, _ := os.Executable()
+	for _, n := range []int{7, 8} {
+		if err := registerSprint(n, exe, dir, "http://console.invalid", true); err != nil {
+			t.Fatalf("register sprint %d: %v", n, err)
+		}
+		tok := readTokenFile(t, tokenPath(dir, n))
+		if tok.Prefix != fmt.Sprintf("/%d", n) || tok.Participants["alice"] == "" {
+			t.Fatalf("registered token file for %d = %+v", n, tok)
+		}
+	}
+
+	h := &host{bin: exe, data: dir, poll: time.Hour, live: map[int]*hostInst{}}
+	ts := httptest.NewServer(h.handler())
+	t.Cleanup(func() {
+		ts.Close()
+		h.mu.Lock()
+		for n := range h.live {
+			h.dropLocked(n)
+		}
+		h.mu.Unlock()
+	})
+	h.addr = strings.TrimPrefix(ts.URL, "http://")
+	h.scan()
+
+	if code, _ := hostDo(t, ts, http.MethodGet, "/healthz", ""); code != http.StatusOK {
+		t.Fatalf("host healthz = %d", code)
+	}
+	for _, n := range []int{7, 8} {
+		body := hostWait(t, ts, fmt.Sprintf("/%d/api/display", n), http.StatusOK)
+		if !strings.Contains(body, "Build it") {
+			t.Fatalf("sprint %d display = %s", n, body)
+		}
+		// The instance's first save stamps the host address; waiting
+		// for it also synchronizes the test with its refresh goroutine.
+		deadline := time.Now().Add(5 * time.Second)
+		for readTokenFile(t, tokenPath(dir, n)).Addr != h.addr && time.Now().Before(deadline) {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	tok7 := readTokenFile(t, tokenPath(dir, 7))
+	_, index := hostDo(t, ts, http.MethodGet, "/", "")
+	if !strings.Contains(index, `href="/7/"`) || !strings.Contains(index, `href="/8/"`) {
+		t.Fatalf("host index lacks sprint links: %s", index)
+	}
+	for _, secret := range []string{tok7.Owner, tok7.Participants["alice"], tok7.Participants["bob"]} {
+		if strings.Contains(index, secret) {
+			t.Fatalf("host index leaks %q", secret)
+		}
+	}
+	if code, _ := hostDo(t, ts, http.MethodGet, "/7/s/alice", ""); code != http.StatusOK {
+		t.Fatalf("participant page = %d", code)
+	}
+	if code, _ := hostDo(t, ts, http.MethodGet, "/9/api/display", ""); code != http.StatusNotFound {
+		t.Fatalf("unknown sprint = %d", code)
+	}
+
+	// Owner stop retires only sprint 7, including its registration.
+	if code, body := hostDo(t, ts, http.MethodPost, "/7/api/owner/stop", tok7.Owner); code != http.StatusOK {
+		t.Fatalf("owner stop = %d: %s", code, body)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(tokenPath(dir, 7)); os.IsNotExist(err) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if _, err := os.Stat(tokenPath(dir, 7)); !os.IsNotExist(err) {
+		t.Fatalf("owner stop left token file: %v", err)
+	}
+	hostWait(t, ts, "/7/api/display", http.StatusNotFound)
+	hostWait(t, ts, "/8/api/display", http.StatusOK)
+
+	// Console stop is registration removal; a rescan drops sprint 8.
+	t.Setenv("SESSION_ADDR", h.addr)
+	t.Setenv("SESSION_DATA", dir)
+	if err := cmdStop([]string{"8", "-console"}); err != nil {
+		t.Fatalf("console stop: %v", err)
+	}
+	if _, err := os.Stat(tokenPath(dir, 8)); !os.IsNotExist(err) {
+		t.Fatalf("console stop left token file: %v", err)
+	}
+	h.scan()
+	hostWait(t, ts, "/8/api/display", http.StatusNotFound)
 }

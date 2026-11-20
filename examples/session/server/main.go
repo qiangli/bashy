@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -668,6 +670,127 @@ func lanHost(addr string) string {
 	return "127.0.0.1"
 }
 
+func sprintArg(pos string) (int, error) {
+	var n int
+	if _, err := fmt.Sscanf(pos, "%d", &n); err != nil || n <= 0 || fmt.Sprint(n) != pos {
+		return 0, errors.New("usage: session serve N [--addr A] [--prefix P]")
+	}
+	return n, nil
+}
+
+// resolveConsole finds the console-managed deployment of this app: the
+// SESSION_ADDR/SESSION_DATA handoff (set by a caller that already ran
+// discovery) wins; otherwise it asks the console through
+// `bashy app show session --runtime --json` (Sprint 682 C1b contract:
+// addr, data, console app URL). Failure is one actionable error — the
+// caller never falls back to a fixed port or its own server.
+func resolveConsole(bin string) (addr, data, appURL string, err error) {
+	addr, data, appURL = os.Getenv("SESSION_ADDR"), os.Getenv("SESSION_DATA"), os.Getenv("SESSION_APP_URL")
+	if addr != "" && data != "" {
+		return addr, data, appURL, nil
+	}
+	fail := func(why string) (string, string, string, error) {
+		return "", "", "", fmt.Errorf("no console-managed session app found (%s): open the session app once in the console, or set SESSION_ADDR and SESSION_DATA", why)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, "app", "show", "session", "--runtime", "--json")
+	cmd.Env = append(os.Environ(), "BASHY_HINTS=off")
+	var out, errb bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &errb
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(errb.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return fail("app show --runtime: " + msg)
+	}
+	var rt map[string]any
+	if err := json.Unmarshal(out.Bytes(), &rt); err != nil {
+		return fail("unreadable runtime record")
+	}
+	// The record may carry the deployment at top level or nested
+	// under "runtime"; normalize keys before looking anything up.
+	norm := map[string]any{}
+	var merge func(map[string]any)
+	merge = func(m map[string]any) {
+		for k, v := range m {
+			lk := strings.ToLower(k)
+			if lk == "runtime" {
+				if inner, ok := v.(map[string]any); ok {
+					merge(inner)
+				}
+				continue
+			}
+			norm[lk] = v
+		}
+	}
+	merge(rt)
+	get := func(keys ...string) string {
+		for _, k := range keys {
+			if v, ok := norm[k].(string); ok && v != "" {
+				return v
+			}
+		}
+		return ""
+	}
+	addr, data = get("addr", "address"), get("data", "data_dir")
+	appURL = get("url", "app_url", "console_url")
+	if addr == "" || data == "" {
+		return fail("the runtime record carries no addr/data yet")
+	}
+	return addr, data, appURL, nil
+}
+
+// printLinks prints the display, owner and per-person join links under
+// origin (which already excludes the sprint prefix; s.prefix adds it).
+func printLinks(s *server, origin string, asJSON bool) {
+	s.mu.Lock()
+	names := make([]string, 0, len(s.tok.Participants))
+	links := map[string]string{}
+	slugs := slugsLocked(s.tok.Participants)
+	for k := range s.tok.Participants {
+		names = append(names, k)
+		links[k] = origin + s.prefix + "/s/" + slugs[k]
+	}
+	s.mu.Unlock()
+	sort.Strings(names)
+	display, owner := origin+s.prefix+"/", origin+s.prefix+"/t/"+s.tok.Owner
+	if asJSON {
+		b, _ := json.Marshal(map[string]any{"sprint": s.n, "display": display, "owner": owner, "participants": links})
+		fmt.Println(string(b))
+	} else {
+		fmt.Printf("Display: %s\n%s (keep private): %s\n", display, s.roleTitle(true, ""), owner)
+		for _, k := range names {
+			fmt.Printf("Join %s: %s\n", k, links[k])
+		}
+	}
+	os.Stdout.Sync()
+}
+
+// registerSprint writes (or refreshes) sprint N's token file in data
+// and prints its links, without serving: the console host picks the
+// file up and mounts the sprint at /<N>.
+func registerSprint(n int, bin, data, origin string, asJSON bool) error {
+	if err := os.MkdirAll(data, 0o700); err != nil {
+		return err
+	}
+	s := newServer(n, bin, fmt.Sprintf("/%d", n), filepath.Join(data, fmt.Sprintf("%d-serve.json", n)))
+	s.tok.Sprint, s.tok.Prefix = n, s.prefix
+	s.refresh()
+	s.mu.Lock()
+	if s.st == nil {
+		fmt.Fprintln(os.Stderr, "session: warning: no status yet:", s.lastErr)
+	}
+	err := s.saveLocked()
+	s.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	printLinks(s, strings.TrimRight(origin, "/"), asJSON)
+	return nil
+}
+
 func cmdServe(args []string) error {
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	addr := fs.String("addr", defaultAddr, "listen address")
@@ -675,17 +798,66 @@ func cmdServe(args []string) error {
 	poll := fs.Duration("poll", 3*time.Second, "status poll interval")
 	data := fs.String("data", dataDir(), "data directory")
 	asJSON := fs.Bool("json", false, "print links as JSON")
+	console := fs.Bool("console", false, "register sprint N with the console-managed host instead of serving")
+	registerOnly := fs.Bool("register-only", false, "write sprint N's token file and print links, without serving")
+	originOpt := fs.String("origin", "", "link origin override (e.g. the console app URL)")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
 	}
-	var n int
-	if _, err := fmt.Sscanf(pos, "%d", &n); err != nil || n <= 0 || fmt.Sprint(n) != pos {
-		return errors.New("usage: session serve N [--addr A] [--prefix P]")
-	}
 	bin := os.Getenv("BASHY_BIN")
 	if bin == "" {
 		bin = "bashy"
+	}
+	visited := map[string]bool{}
+	fs.Visit(func(f *flag.Flag) { visited[f.Name] = true })
+	if *console {
+		for _, name := range []string{"addr", "data", "prefix"} {
+			if visited[name] {
+				return fmt.Errorf("session serve -console resolves address and data from the console; --%s does not apply", name)
+			}
+		}
+		n, err := sprintArg(pos)
+		if err != nil {
+			return err
+		}
+		caddr, cdata, appURL, err := resolveConsole(bin)
+		if err != nil {
+			return err
+		}
+		origin := strings.TrimRight(*originOpt, "/")
+		if origin == "" {
+			origin = strings.TrimRight(appURL, "/")
+		}
+		if origin == "" {
+			origin = "http://" + caddr
+		}
+		return registerSprint(n, bin, cdata, origin, *asJSON)
+	}
+	if pos == "" {
+		if *registerOnly {
+			return errors.New("usage: session serve N --register-only")
+		}
+		if visited["prefix"] || visited["origin"] {
+			return errors.New("session host mounts each sprint at /<N>; --prefix and --origin do not apply")
+		}
+		// No sprint: host mode — one console process serving every
+		// sprint registered in the data directory (see cmdHost).
+		return cmdHost(*addr, *data, *poll, bin)
+	}
+	n, err := sprintArg(pos)
+	if err != nil {
+		return err
+	}
+	if *registerOnly {
+		if visited["prefix"] {
+			return errors.New("session serve --register-only mounts the sprint at /<N>; --prefix does not apply")
+		}
+		origin := strings.TrimRight(*originOpt, "/")
+		if origin == "" {
+			origin = "http://" + net.JoinHostPort(lanHost(*addr), portOf(*addr))
+		}
+		return registerSprint(n, bin, *data, origin, *asJSON)
 	}
 	if err := os.MkdirAll(*data, 0o700); err != nil {
 		return err
@@ -706,28 +878,11 @@ func cmdServe(args []string) error {
 	if err != nil {
 		return err
 	}
-	origin := "http://" + net.JoinHostPort(lanHost(ln.Addr().String()), fmt.Sprint(ln.Addr().(*net.TCPAddr).Port))
-	s.mu.Lock()
-	names := make([]string, 0, len(s.tok.Participants))
-	links := map[string]string{}
-	slugs := slugsLocked(s.tok.Participants)
-	for k := range s.tok.Participants {
-		names = append(names, k)
-		links[k] = origin + s.prefix + "/s/" + slugs[k]
+	origin := strings.TrimRight(*originOpt, "/")
+	if origin == "" {
+		origin = "http://" + net.JoinHostPort(lanHost(ln.Addr().String()), fmt.Sprint(ln.Addr().(*net.TCPAddr).Port))
 	}
-	s.mu.Unlock()
-	sort.Strings(names)
-	display, owner := origin+s.prefix+"/", origin+s.prefix+"/t/"+s.tok.Owner
-	if *asJSON {
-		b, _ := json.Marshal(map[string]any{"sprint": n, "display": display, "owner": owner, "participants": links})
-		fmt.Println(string(b))
-	} else {
-		fmt.Printf("Display: %s\n%s (keep private): %s\n", display, s.roleTitle(true, ""), owner)
-		for _, k := range names {
-			fmt.Printf("Join %s: %s\n", k, links[k])
-		}
-	}
-	os.Stdout.Sync()
+	printLinks(s, origin, *asJSON)
 
 	srv := &http.Server{Handler: s.handler(), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
@@ -748,6 +903,193 @@ func cmdServe(args []string) error {
 		defer c()
 		srv.Shutdown(ctx)
 	}()
+	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		return err
+	}
+	return nil
+}
+
+func portOf(addr string) string {
+	_, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		return "18093"
+	}
+	return port
+}
+
+// ---- console host ----------------------------------------------------------
+//
+// The console runs one server process per principal (shaped.json:
+// serve -addr $ADDR -data $DATA, no sprint argument). The host mounts
+// the existing per-sprint handler at /<N> for every sprint with a
+// token file in the data directory — `session serve N` (console mode)
+// writes that file, `session stop N` removes it, and the host picks
+// both up on its scan cadence. The standalone serve N path is
+// unchanged for go/demo and direct use.
+
+type hostInst struct {
+	s       *server
+	handler http.Handler
+	stop    chan struct{}
+	once    sync.Once
+}
+
+type host struct {
+	bin, data, addr string
+	poll            time.Duration
+	mu              sync.Mutex
+	live            map[int]*hostInst
+}
+
+func tokenPath(data string, n int) string {
+	return filepath.Join(data, fmt.Sprintf("%d-serve.json", n))
+}
+
+func (h *host) scan() {
+	ents, _ := filepath.Glob(filepath.Join(h.data, "*-serve.json"))
+	want := map[int]bool{}
+	for _, e := range ents {
+		base := filepath.Base(e)
+		n, err := strconv.Atoi(strings.TrimSuffix(base, "-serve.json"))
+		if err == nil && n > 0 && fmt.Sprintf("%d-serve.json", n) == base {
+			want[n] = true
+		}
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for n := range h.live {
+		if !want[n] {
+			h.dropLocked(n)
+		}
+	}
+	for n := range want {
+		if _, ok := h.live[n]; ok {
+			continue
+		}
+		s := newServer(n, h.bin, fmt.Sprintf("/%d", n), tokenPath(h.data, n))
+		s.tok.Sprint, s.tok.Addr, s.tok.Prefix = n, h.addr, s.prefix
+		inst := &hostInst{s: s, handler: s.handler(), stop: make(chan struct{})}
+		h.live[n] = inst
+		go h.serveInst(n, inst)
+	}
+}
+
+func (h *host) dropLocked(n int) {
+	inst, ok := h.live[n]
+	if !ok {
+		return
+	}
+	delete(h.live, n)
+	inst.once.Do(func() { close(inst.stop) })
+}
+
+// serveInst polls one sprint's status until the instance is dropped
+// (token file gone) or its owner stops it from the owner page, which
+// in host mode retires just that sprint — token file included, so a
+// rescan does not resurrect it.
+func (h *host) serveInst(n int, inst *hostInst) {
+	inst.s.refresh()
+	inst.s.mu.Lock()
+	_ = inst.s.saveLocked()
+	inst.s.mu.Unlock()
+	t := time.NewTicker(h.poll)
+	defer t.Stop()
+	for {
+		select {
+		case <-t.C:
+			inst.s.refresh()
+		case <-inst.stop:
+			return
+		case <-inst.s.quit:
+			h.mu.Lock()
+			h.dropLocked(n)
+			h.mu.Unlock()
+			_ = os.Remove(tokenPath(h.data, n))
+			return
+		}
+	}
+}
+
+func (h *host) handler() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if path == "/healthz" && r.Method == http.MethodGet {
+			kit.ApplySecurityHeaders(w)
+			kit.WriteJSON(w, map[string]bool{"ok": true})
+			return
+		}
+		seg := strings.SplitN(strings.TrimPrefix(path, "/"), "/", 2)[0]
+		if n, err := strconv.Atoi(seg); err == nil && n > 0 {
+			h.mu.Lock()
+			inst := h.live[n]
+			h.mu.Unlock()
+			if inst == nil {
+				kit.ApplySecurityHeaders(w)
+				kit.Fail(w, 404, "no such session")
+				return
+			}
+			inst.handler.ServeHTTP(w, r)
+			return
+		}
+		if path == "/" && r.Method == http.MethodGet {
+			h.index(w, r)
+			return
+		}
+		kit.ApplySecurityHeaders(w)
+		kit.Fail(w, 404, "not found")
+	})
+}
+
+// index lists the live sessions with their (public) display links. It
+// never carries owner keys or participant links.
+func (h *host) index(w http.ResponseWriter, r *http.Request) {
+	h.mu.Lock()
+	ns := make([]int, 0, len(h.live))
+	insts := make(map[int]*hostInst, len(h.live))
+	for n, inst := range h.live {
+		ns = append(ns, n)
+		insts[n] = inst
+	}
+	h.mu.Unlock()
+	sort.Ints(ns)
+	var b strings.Builder
+	b.WriteString(`<main class="desk-main"><h1 class="desk-h1">Sessions</h1>`)
+	if len(ns) == 0 {
+		b.WriteString(`<p class="desk-muted">No live sessions. Start one with <code>bashy session serve N</code>.</p>`)
+	}
+	for _, n := range ns {
+		title := fmt.Sprintf("Sprint %d", n)
+		if st, _ := insts[n].s.snapshot(); st != nil && st.Title != "" {
+			title = st.Title
+		}
+		fmt.Fprintf(&b, `<p><a href="%s/%d/">%s</a></p>`, kit.PublicPrefix(r, ""), n, html.EscapeString(title))
+	}
+	b.WriteString(`</main>`)
+	kit.ApplySecurityHeaders(w)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write(kit.Page("session", "Sessions", kit.AppBar("session", "", "", "")+b.String()))
+}
+
+func cmdHost(addr, data string, poll time.Duration, bin string) error {
+	if err := os.MkdirAll(data, 0o700); err != nil {
+		return err
+	}
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+	h := &host{bin: bin, data: data, addr: ln.Addr().String(), poll: poll, live: map[int]*hostInst{}}
+	h.scan()
+	go func() {
+		t := time.NewTicker(poll)
+		defer t.Stop()
+		for range t.C {
+			h.scan()
+		}
+	}()
+	fmt.Printf("session host: serving on %s (data %s)\n", ln.Addr(), data)
+	os.Stdout.Sync()
+	srv := &http.Server{Handler: h.handler(), ReadHeaderTimeout: 10 * time.Second}
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
@@ -816,6 +1158,7 @@ func cmdStop(args []string) error {
 	fs := flag.NewFlagSet("stop", flag.ContinueOnError)
 	data := fs.String("data", dataDir(), "data directory")
 	asJSON := fs.Bool("json", false, "print JSON")
+	console := fs.Bool("console", false, "unregister sprint N from the console-managed host")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -823,6 +1166,30 @@ func cmdStop(args []string) error {
 	var n int
 	if _, err := fmt.Sscanf(pos, "%d", &n); err != nil || n <= 0 {
 		return errors.New("usage: session stop N")
+	}
+	if *console {
+		// The console owns the process; stopping a sprint is removing
+		// its registration so the host drops the mount.
+		bin := os.Getenv("BASHY_BIN")
+		if bin == "" {
+			bin = "bashy"
+		}
+		_, cdata, _, err := resolveConsole(bin)
+		if err != nil {
+			return err
+		}
+		if err := os.Remove(tokenPath(cdata, n)); err != nil {
+			if os.IsNotExist(err) {
+				return fmt.Errorf("no session registered for sprint %d", n)
+			}
+			return err
+		}
+		if *asJSON {
+			fmt.Printf("{\"sprint\":%d,\"stopped\":true}\n", n)
+		} else {
+			fmt.Printf("stopped session for sprint %d\n", n)
+		}
+		return nil
 	}
 	b, err := os.ReadFile(filepath.Join(*data, fmt.Sprintf("%d-serve.json", n)))
 	if err != nil {

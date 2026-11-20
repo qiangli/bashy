@@ -1,0 +1,10 @@
+{
+  "server": {"main": "server", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA"]},
+  "genie": {
+    "examples": [
+      "Make the current step and time left readable across the room",
+      "Show who is overdue first",
+      "Use bigger text and higher contrast on the display page"
+    ]
+  }
+}

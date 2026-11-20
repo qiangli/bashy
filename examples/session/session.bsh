@@ -53,8 +53,10 @@ through the registered command. No default sprint is silently selected.
   dag.md. When a user says "start a session for <goal> with alice and bob",
   run `bashy session go "<goal>" --people alice,bob`; for "show me a demo" run
   `bashy session demo`.
-- `bashy session serve N` / `join URL` / `stop` run the display and per-participant
-  pages. `bashy session prep DIR [--from PATH]` shapes a content dir before a session.
+- `bashy session serve N` registers sprint N with the console session app and
+  prints the display, owner and per-participant links (the console hosts the
+  pages); `stop N` unregisters it. `join URL` opens a participant link.
+  `bashy session prep DIR [--from PATH]` shapes a content dir before a session.
 
 Compose, don't couple: `status --line` is one plain line any other tool can carry.
 Formats are editable Markdown (`formats/session.md`); copy one to make your own
@@ -136,11 +138,17 @@ demo|go)
   fi
   exec "${BASHY:-bashy}" dag --plain "$here/dag.md" "$verb" "SESSION_DIR=$here" "${params[@]}"
   ;;
-serve|stop)                   exec bash "$here/server/run.sh" "$@" ;;
+serve) exec bash "$here/server/run.sh" "$@" -console ;;
+stop)
+  # Console-managed stop unregisters the sprint from the host. If no
+  # console deployment resolves, a standalone server may be running
+  # (session go/demo) — stop that instead.
+  bash "$here/server/run.sh" "$@" -console 2>/dev/null || exec bash "$here/server/run.sh" "$@"
+  ;;
 test)
   cd "$here"
   python3 -m unittest discover -s tests -t . -v
-  if [[ -f server/go.mod ]]; then (cd server && GOWORK=off go test -race ./...); fi
+  if [[ -f go.mod ]]; then GOWORK=off go test -race ./...; fi
   ;;
 *) echo "$usage" >&2; exit 2 ;;
 esac
