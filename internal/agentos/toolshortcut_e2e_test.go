@@ -368,8 +368,10 @@ func TestToolShortcutE2E(t *testing.T) {
 	_, _ = runToolShortcutPTY(t, bin, work, "codex", nil, argvCodex)
 
 	// (5) non-TTY launch refuses with guidance instead of starting a TUI that
-	// exits at once. Stdin here is a pipe, never a terminal.
-	for _, tool := range []string{"agy", "codex"} {
+	// exits at once. Stdin here is a pipe, never a terminal. ycode joins the
+	// same path: the pre-existing `bashy ycode` verb delegates its
+	// interactive open here, so it refuses identically (Sprint 676).
+	for _, tool := range []string{"agy", "codex", "ycode"} {
 		_, stderr, code := runToolShortcutBin(t, bin, work, "", 30*time.Second, tool)
 		if code == 0 {
 			t.Fatalf("bashy %s without a TTY exited 0, want refusal", tool)
@@ -378,6 +380,22 @@ func TestToolShortcutE2E(t *testing.T) {
 			if !strings.Contains(stderr, want) {
 				t.Fatalf("bashy %s non-TTY refusal lacks %q:\nstderr=%s", tool, want, stderr)
 			}
+		}
+	}
+
+	// (7) `bashy ycode --help` shows the steer command for the session the
+	// bare open joins (Sprint 676). ycode has no `--` vendor passthrough —
+	// `--` starts a literal message on the raw recipe path — so only the
+	// help contract is asserted here; the PTY launch legs above cannot run
+	// for ycode either (its steer child is bashy itself, not a fakeable
+	// vendor CLI).
+	out, _, code := runToolShortcutBin(t, bin, work, "", 30*time.Second, "ycode", "--help")
+	if code != 0 {
+		t.Fatalf("bashy ycode --help exit=%d, want 0\n%s", code, out)
+	}
+	for _, want := range []string{"bashy chat steer ycode", "bashy chat attach ycode"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("bashy ycode --help lacks %q:\n%s", want, out)
 		}
 	}
 

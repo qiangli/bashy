@@ -250,7 +250,7 @@ func dispatchYcode(args []string) int {
 		// compiled document: no genie recipe, no builtin config written
 		// under the home, no model (E1 F8). bashy's flags come off first;
 		// ycode knows --session.
-		fmt.Fprintln(os.Stdout, "bashy ycode [-m MODEL] [--effort LEVEL] [--yolo] [--pull] [--session ID] [COMMAND ...]  the builtin genie on a model picked for this host (bashy genie --help); ycode's own help follows.")
+		fmt.Fprint(os.Stdout, ycodeHelpPreamble())
 		fmt.Fprintln(os.Stdout)
 		return YcodeMain(ycodeStripBashyFlags(args))
 	}
@@ -267,9 +267,31 @@ func dispatchYcode(args []string) int {
 	if !yoloSet && !explicit && unattendedAgentContext() {
 		yolo = true
 	}
+	// A steered session's child takes its yolo default from the delegation:
+	// the fixed steer template (`bashy ycode -m {model}`) has no argv slot
+	// for --yolo, and ycode reads yolo as the harness profile below, so an
+	// env channel is the only way the shortcut's yolo default reaches the
+	// TUI. BASHY_YCODE_STEER_YOLO=0 is the explicit opt-out; anything else
+	// (including unset) keeps the default on.
+	if os.Getenv(ycodeSteerChildEnv) != "" && !explicit && !yoloSet {
+		yolo = os.Getenv(ycodeSteerYoloEnv) != "0"
+	}
 	if yolo && explicit {
 		fmt.Fprintln(os.Stderr, "bashy ycode: --yolo cannot be combined with --file, YCODE_CONFIG, or a local agent.yaml; select your custom YOLO file with --file")
 		return 2
+	}
+	// The interactive open joins as a steerable chat session named ycode
+	// (Sprint 676): the same `bashy <tool>` machinery as every other tool —
+	// session id ycode, yolo default, capped inbox, non-TTY refusal — instead
+	// of the raw engine, which no `bashy chat steer` could reach. Anything the
+	// steer template cannot carry (a message, an entry word, --session,
+	// --pull, an explicit config) stays on the raw path below.
+	if !explicit && !pull && os.Getenv(ycodeSteerChildEnv) == "" {
+		if _, ok := lookupSteerTool("ycode"); ok {
+			if model, bare := ycodeBareOpenArgs(args); bare {
+				return dispatchYcodeSteerable(model, yolo, yoloSet)
+			}
+		}
 	}
 	if !explicit {
 		previous, hadPrevious := os.LookupEnv("GENIE_HARNESS_CONFIG")
@@ -312,6 +334,96 @@ func dispatchYcode(args []string) int {
 		}
 	}
 	return YcodeMain(args)
+}
+
+// ycodeSteerChildEnv marks the `bashy ycode` child a steerable chat session
+// already owns: it runs the raw engine instead of delegating back into the
+// chat path. Without it the launch would recurse — the outer open delegates
+// to chat, chat spawns `bashy ycode -m {model}`, and the inner open would
+// delegate again. The marker is set only around the delegated call, so only
+// the session's own child sees it.
+const ycodeSteerChildEnv = "BASHY_YCODE_STEER_CHILD"
+
+// ycodeSteerYoloEnv carries the delegation's yolo decision to the steered
+// child (see dispatchYcodeSteerable): "0" keeps the vendor's approval
+// prompts, anything else keeps permission bypass on.
+const ycodeSteerYoloEnv = "BASHY_YCODE_STEER_YOLO"
+
+// ycodeHelpPreamble is bashy's own header over ycode's compiled help: what
+// bare `bashy ycode` opens (a steerable session, id ycode) and the exact
+// steer/attach commands that reach it.
+func ycodeHelpPreamble() string {
+	return "bashy ycode [-m MODEL] [--effort LEVEL] [--yolo] [--pull] [--session ID] [COMMAND ...]  the builtin genie on a model picked for this host (bashy genie --help); ycode's own help follows.\n" +
+		"A bare `bashy ycode` opens the TUI as a steerable session (id ycode) under the `bashy <tool>` conventions (yolo on, capped inbox); steer it: bashy chat steer ycode \"...\"   (watch: bashy chat attach ycode)\n"
+}
+
+// ycodeBareOpenArgs reports whether args open the bare interactive TUI: no
+// entry word, no message, no --session and no other flag — only -m/--model
+// with its value, the one launch knob the steerable chat template
+// (`bashy ycode -m {model}`) can carry. --yolo/--pull/--effort were already
+// scanned off upstream. Anything else stays on the raw YcodeMain path, as
+// does a -m missing its value (the raw path owns that error).
+func ycodeBareOpenArgs(args []string) (string, bool) {
+	model := ""
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "-m" || a == "--model":
+			if i+1 >= len(args) || strings.TrimSpace(args[i+1]) == "" || strings.HasPrefix(args[i+1], "-") {
+				return "", false
+			}
+			model = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--model="):
+			if strings.TrimSpace(strings.TrimPrefix(a, "--model=")) == "" {
+				return "", false
+			}
+			model = strings.TrimPrefix(a, "--model=")
+		default:
+			return "", false
+		}
+	}
+	return model, true
+}
+
+// dispatchYcodeSteerable opens the bare TUI through the `bashy <tool>`
+// shortcut: the session id is ycode, so `bashy chat steer ycode "..."`
+// reaches it from another terminal, with the capped host-inbox relay on.
+func dispatchYcodeSteerable(model string, yolo, yoloSet bool) int {
+	shortcutArgs := []string{}
+	if strings.TrimSpace(model) != "" {
+		shortcutArgs = append(shortcutArgs, "--model", model)
+	}
+	// The shortcut defaults yolo on (operator decision); an explicit
+	// --yolo=false is the only opt-out. --yolo passes through explicitly so
+	// the intent stays visible in process listings, like every other tool.
+	// The same decision rides to the steered child on ycodeSteerYoloEnv: the
+	// chat layer cannot carry it in argv (the fixed steer template has no
+	// --yolo slot), and the child reads yolo as its harness profile.
+	steerYolo := "1"
+	if yoloSet && !yolo {
+		shortcutArgs = append(shortcutArgs, "--no-yolo")
+		steerYolo = "0"
+	} else {
+		shortcutArgs = append(shortcutArgs, "--yolo")
+	}
+	previous, had := os.LookupEnv(ycodeSteerChildEnv)
+	previousYolo, hadYolo := os.LookupEnv(ycodeSteerYoloEnv)
+	_ = os.Setenv(ycodeSteerChildEnv, "1")
+	_ = os.Setenv(ycodeSteerYoloEnv, steerYolo)
+	defer func() {
+		if had {
+			_ = os.Setenv(ycodeSteerChildEnv, previous)
+		} else {
+			_ = os.Unsetenv(ycodeSteerChildEnv)
+		}
+		if hadYolo {
+			_ = os.Setenv(ycodeSteerYoloEnv, previousYolo)
+		} else {
+			_ = os.Unsetenv(ycodeSteerYoloEnv)
+		}
+	}()
+	return dispatchToolShortcut("ycode", shortcutArgs, os.Stdin, os.Stdout, os.Stderr)
 }
 
 // ycodeCommandWord is a word that names a bashy ycode entry (ycode's own

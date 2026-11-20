@@ -438,8 +438,12 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 		name, mode, model string
 		args              []string
 	}{
-		{"bare", "chat", "", nil},
-		{"model", "chat", "s387-local-model", []string{"-m", "s387-local-model"}},
+		// bare, -m MODEL and --yolo bare opens are NOT here: since Sprint 676
+		// (Story #3248) the interactive open joins as a steerable chat
+		// session named ycode instead of running the recipe in-process, so
+		// it never reaches the self stub below. That contract lives in
+		// genie_ycode_steer_test.go (refusal off-terminal, steered-child
+		// profile, raw-path boundaries).
 		{"web", "web", "", []string{"web"}},
 		{"web-leading-model", "web", "s387-local-model", []string{"-m", "s387-local-model", "web"}},
 		{"web-trailing-model", "web", "s387-local-model", []string{"web", "-m", "s387-local-model"}},
@@ -456,7 +460,6 @@ func TestYcodeHumanEntryUsesGenieRecipe(t *testing.T) {
 		{"session-prompt", "prompt", "", []string{"--session", "s387-session", "prompt", "hello"}},
 		{"session-positional", "chat", "", []string{"--session=s387-session", "hello"}},
 		{"acp", "acp", "s387-local-model", []string{"-m", "s387-local-model", "acp"}},
-		{"yolo", "chat", "", []string{"--yolo"}},
 		{"yolo-web", "web", "s387-local-model", []string{"web", "--yolo", "-m", "s387-local-model"}},
 		{"yolo-session", "prompt", "", []string{"--yolo", "--session", "s387-session", "prompt", "hello"}},
 	} {
