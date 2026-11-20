@@ -278,6 +278,22 @@ python3 tests/shaping-promotion/run.py \
   --evidence "${SHAPING_PROMOTION_EVIDENCE:?set a new evidence JSON path}"
 ```
 
+### test-shaping-real-agent
+Opt-in pre-release Hello World lifecycle through the real shaping delegate.
+Requires `BASHY_REAL_AGENT_E2E=1`, `SHAPING_SMOKE_AGENT=TOOL:MODEL`, and
+`SHAPING_SMOKE_BUDGET_NOTE`; one generation, bounded by
+`SHAPING_SMOKE_AGENT_SECONDS` (default 600). Browser checks are mandatory.
+Use a claimed test host with private provider-login references. See
+examples/shaping/hello-world/e2e-matrix.md for setup and evidence.
+Effects: exec, net, read, write, spend
+
+```bash
+set -eu
+: "${SHAPING_SMOKE_AGENT:?select one probed working agent}"
+BASHY_BIN="${BASHY_SMOKE_BIN:-${BIN_DIR:-bin}/bashy}" \
+  bash examples/shaping/hello-world/e2e-agent.sh --release-gate "$SHAPING_SMOKE_AGENT"
+```
+
 ### fmtcheck
 The formatting gate. **Reports; never rewrites** — and that is the whole
 design, not caution. gofmt changes doc-comment TEXT as well as whitespace:

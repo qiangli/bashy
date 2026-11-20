@@ -156,3 +156,65 @@ authentication/scope, timeout/interruption and retry cases remain separate
 required H7 evidence; the happy-path task alone does not close the story.
 Review/sanitize private raw logs before publishing. Clean up only the cell's
 own processes, browser profiles and disposable resources.
+
+## H7a release gate: one real production delegate
+
+The bounded release slice uses the same lifecycle/browser assertions as the
+model-free release smoke, but `shape wish --agent TOOL:MODEL` invokes the real
+`BashyDelegate`. It never imports a prepared edit with `--from`. This tests the
+shaping brief, actual model edit, delegate identity, verifier, preview, approval,
+principal isolation, undo and submission. It refuses browser skips and checks
+that the agent preserved the app's verifier and contract.
+
+On a claimed test host with the frozen candidate, its matching prebuilt external
+browser checkpoint binary, Chromium, Git, curl and GNU `timeout` (or `gtimeout` on macOS):
+
+```sh
+BASHY_BIN=/private/candidate/bashy \
+BASHY_REAL_AGENT_E2E=1 \
+SHAPING_SMOKE_BUDGET_NOTE='Selected probed agent; billing mode; one invocation, 600 seconds, no retries' \
+SHAPING_SMOKE_AGENT_SECONDS=600 \
+SHAPING_SMOKE_KEEP=1 \
+SHAPING_SMOKE_DOM_TEST=/private/candidate/webconsole.test \
+SHAPING_SMOKE_AGENT_PROFILE=/private/run/provider-profile \
+bash examples/shaping/hello-world/e2e-agent.sh --release-gate TOOL:MODEL
+```
+
+Select the cheapest working agent from a fresh fleet probe; record its actual
+executable version and billing mode in the release packet. The profile directory
+is an optional HOME overlay prepared for this run only. Put any required
+run-scoped catalog under `.config/bashy`. Production delegation relocates the
+provider HOME again through its subscription-worker contract. Reference only
+the existing credential files by symlink under `.bashy/workers/TOOL/config`
+(for Codex), or under `.bashy/workers/agy/config/.gemini` (for agy).
+Keep session directories local to the run; do not link a whole shared provider,
+tracking or catalog directory. Do not populate the overlay's top-level `.codex`
+or `.gemini`: those are credential-seeding sources and the production worker
+would copy their login files into its worker directory. Never copy credentials
+into the profile or evidence. Use supported `tool set --binary` in the private
+catalog to select a frozen, already installed executable; PATH alone does not
+override managed-tool resolution. The driver records a delegate dry-run before
+starting the browser or spending a model call. This checks resolution, not
+provider authentication or launch admission. On a native test host, use the
+provider's sandbox and documented safe headless mode through a private
+`tool set --exec` override when required (for agy, sandboxed Auto mode permits
+workspace edits and commands; accept-edits can stop at read-only Git commands); do not disable the production containment guard or use
+blanket permission-bypass flags. Production delegation deliberately
+filters environment variables, so authentication that exists only as an ambient
+API-key environment variable is not a valid preflight for this gate.
+
+The driver makes exactly one generation call, with a 600-second default wall
+limit (configurable from 1 to 1200 seconds), then terminates the process group
+on timeout. It retains a private evidence tree when KEEP is set: binary digest,
+selected agent and budget note, candidate/delegate identity, verifier evidence,
+and distinct browser checkpoints before, in preview, after approval, for the
+other principal and after undo. Review those artifacts independently; never
+publish cookie jars, provider links or raw private paths. Retain the exact
+source SHA/fixture digest alongside the transcript when running from an archive.
+
+Before each Bashy release this opt-in gate must have a recorded pass against
+that release candidate. Failure, timeout or missing authentication blocks the
+release unless the operator explicitly records an override and reason in its
+release packet. No automatic retry, model substitution, skip-as-pass or release
+is performed by this command. This is one H7a CLI cell; the full H7 matrix remains
+separate.

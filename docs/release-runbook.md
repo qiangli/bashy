@@ -258,3 +258,17 @@ and checks the exact proposal ref on the upstream remote. Retain binary/image
 identities and command results. First qualification also runs the runner with
 `--break-check org-ref`; this must fail rather than count as passing coverage.
 
+Before each release, also run `bashy dag test-shaping-real-agent` once on a
+claimed test host against that candidate. Opt in with `BASHY_REAL_AGENT_E2E=1`,
+select the cheapest probed working agent in `SHAPING_SMOKE_AGENT=TOOL:MODEL`,
+and record billing mode and cap in `SHAPING_SMOKE_BUDGET_NOTE`. The default
+generation timeout is 600 seconds; there are no automatic retries. This gate
+uses the production delegate rather than a prepared source edit, the real app
+verifier, browser checks, second-principal isolation and undo. Preserve the
+private artifacts with `SHAPING_SMOKE_KEEP=1` and record their references and
+candidate digest in the release packet. Setup is documented in
+`examples/shaping/hello-world/e2e-matrix.md`.
+
+A missing, failed or timed-out real-agent run blocks release unless the operator
+records an explicit override and reason in that release packet. An agent exit
+status alone, a browser skip or a passing run on an older binary is insufficient.

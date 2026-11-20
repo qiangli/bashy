@@ -3,6 +3,14 @@
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 runner=${BASHY_BIN:-bashy}
+# H7a is a deterministic driver around the real production BashyDelegate.
+# The historical stdin launcher below remains the broader interactive H7 matrix.
+if [ "${1:-}" = --release-gate ]; then
+  [ "$#" -eq 2 ] || { echo 'Usage: e2e-agent.sh --release-gate TOOL:MODEL' >&2; exit 2; }
+  export SHAPING_SMOKE_AGENT=$2
+  root=$(cd "$here/../../.." && pwd)
+  exec "$BASH" "$root/scripts/test-shaping-hello-world.sh" "$runner"
+fi
 scenario=${E2E_SCENARIO:-hello-world}
 interface=${E2E_INTERFACE:-cli}
 case "$scenario" in
