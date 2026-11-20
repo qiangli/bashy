@@ -228,6 +228,138 @@ func TestGitCommitWorkerForms(t *testing.T) {
 	}
 }
 
+// TestGitQuietWorkerForms is the regression for story 39669b0d: the
+// cobra-typed checkout/push/pull/fetch verbs must serve the -q forms
+// scripts actually use (ycode/scripts/ci-remote.sh: `fetch -q`,
+// `checkout -q --detach <rev>`), quiet meaning no result line.
+// --detach is honored for revision args (the existing detached-HEAD
+// path) and refused loudly for branch names, where native detach is
+// not implemented — never silently switch attached instead.
+func TestGitQuietWorkerForms(t *testing.T) {
+	rootDir := t.TempDir()
+	origin := filepath.Join(rootDir, "origin")
+	clone := filepath.Join(rootDir, "clone")
+	run := func(t *testing.T, cwd string, args ...string) (string, error) {
+		t.Helper()
+		prev, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		if cwd != "" {
+			if err := os.Chdir(cwd); err != nil {
+				t.Fatalf("chdir %s: %v", cwd, err)
+			}
+		}
+		defer func() { _ = os.Chdir(prev) }()
+		root := gitCmd()
+		buf := &bytes.Buffer{}
+		root.SetOut(buf)
+		root.SetErr(buf)
+		root.SetArgs(args)
+		err = root.Execute()
+		return buf.String(), err
+	}
+	quietOK := func(t *testing.T, what string, out string, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("%s: %v\n%s", what, err, out)
+		}
+		if strings.TrimSpace(out) != "" {
+			t.Errorf("%s output = %q, want quiet", what, out)
+		}
+	}
+	commitFile := func(t *testing.T, cwd, name, body, msg string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(cwd, name), []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		if out, err := run(t, cwd, "add", "-A"); err != nil {
+			t.Fatalf("add -A: %v\n%s", err, out)
+		}
+		if out, err := run(t, cwd, "commit", "-qm", msg, "--author-name", "T", "--author-email", "t@e"); err != nil {
+			t.Fatalf("commit %q: %v\n%s", msg, err, out)
+		}
+	}
+
+	if out, err := run(t, "", "init", origin); err != nil {
+		t.Fatalf("init origin: %v\n%s", err, out)
+	}
+	commitFile(t, origin, "README.md", "seed\n", "seed")
+	if out, err := run(t, "", "clone", origin, clone); err != nil {
+		t.Fatalf("clone: %v\n%s", err, out)
+	}
+	branchOut, err := run(t, clone, "branch")
+	if err != nil {
+		t.Fatalf("branch: %v\n%s", err, branchOut)
+	}
+	base := ""
+	for _, line := range strings.Split(branchOut, "\n") {
+		if strings.HasPrefix(line, "* ") {
+			base = strings.TrimSpace(strings.TrimPrefix(line, "* "))
+		}
+	}
+	if base == "" {
+		t.Fatalf("no current branch in clone:\n%s", branchOut)
+	}
+
+	// checkout -q: branch switch succeeds silently; without -q the
+	// result line still prints (quiet is the only change).
+	out, err := run(t, clone, "checkout", "-q", "-b", "qtest")
+	quietOK(t, "checkout -q -b qtest", out, err)
+	out, err = run(t, clone, "checkout", base)
+	if err != nil {
+		t.Fatalf("checkout %s: %v\n%s", base, err, out)
+	}
+	if !strings.Contains(out, "Switched to branch") {
+		t.Errorf("non-quiet checkout output = %q, want result line", out)
+	}
+	out, err = run(t, clone, "checkout", "--quiet", "qtest")
+	quietOK(t, "checkout --quiet qtest", out, err)
+
+	// The surveyed ci-remote form: -q --detach at a revision.
+	sha, err := run(t, clone, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("rev-parse HEAD: %v\n%s", err, sha)
+	}
+	out, err = run(t, clone, "checkout", "-q", "--detach", strings.TrimSpace(sha))
+	quietOK(t, "checkout -q --detach <sha>", out, err)
+	// --detach on a branch name is refused loudly, HEAD untouched.
+	out, err = run(t, clone, "checkout", "--detach", base)
+	if err == nil {
+		t.Fatalf("checkout --detach %s (branch) succeeded:\n%s", base, out)
+	}
+	if !strings.Contains(err.Error(), "--detach") {
+		t.Errorf("detach-branch error = %v, want it to name --detach", err)
+	}
+	out, err = run(t, clone, "checkout", "-q", "qtest")
+	quietOK(t, "checkout -q qtest (reattach)", out, err)
+
+	// push -q publishes the new branch to the local origin silently.
+	commitFile(t, clone, "q.txt", "q\n", "q work")
+	out, err = run(t, clone, "push", "-q", "origin", "qtest")
+	quietOK(t, "push -q origin qtest", out, err)
+	out, err = run(t, origin, "branch")
+	if err != nil {
+		t.Fatalf("origin branch: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "qtest") {
+		t.Fatalf("push -q did not publish qtest to origin:\n%s", out)
+	}
+
+	// fetch -q, then pull -q fast-forwards silently.
+	if out, err := run(t, origin, "checkout", "-q", "qtest"); err != nil {
+		t.Fatalf("origin checkout qtest: %v\n%s", err, out)
+	}
+	commitFile(t, origin, "q2.txt", "q2\n", "q2 work")
+	out, err = run(t, clone, "fetch", "-q", "origin")
+	quietOK(t, "fetch -q origin", out, err)
+	out, err = run(t, clone, "pull", "-q", "origin", "qtest")
+	quietOK(t, "pull -q origin qtest", out, err)
+	if body, err := os.ReadFile(filepath.Join(clone, "q2.txt")); err != nil || string(body) != "q2\n" {
+		t.Fatalf("pull -q did not integrate q2.txt: body=%q err=%v", body, err)
+	}
+}
+
 // TestGitAddRequiresPathOrAllFlag verifies that `bashy git add` with
 // no args and no -A errors out cleanly instead of silently doing
 // nothing.
