@@ -351,8 +351,12 @@ func gitCommitCmd() *cobra.Command {
 		message     string
 		amend       bool
 		all         bool
+		quiet       bool
+		allowEmpty  bool
+		noVerify    bool
 		authorName  string
 		authorEmail string
+		configPairs []string
 	)
 	cmd := &cobra.Command{
 		Use:   "commit [message]",
@@ -360,9 +364,34 @@ func gitCommitCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		Example: `  bashy git commit -m "Initial commit"
   bashy git commit -a -m "Fix bug"        # stage tracked + commit
+  bashy git commit -qm "Quiet"            # no summary output
+  bashy git commit --allow-empty -m "Marker"
   bashy git commit --amend -m "Reword"
   bashy git commit --author-name "Alice" --author-email "alice@example.com" -m "..."`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Host git takes `-c name=value` before the verb; cobra
+			// hands those tokens to this subcommand's flagset. The
+			// forms agents use are the identity overrides — honor
+			// them (explicit --author-* still wins) and refuse any
+			// other key loudly instead of silently dropping it.
+			for _, pair := range configPairs {
+				key, value, ok := strings.Cut(pair, "=")
+				if !ok {
+					return fmt.Errorf("git commit: -c %q is not of the form name=value", pair)
+				}
+				switch key {
+				case "user.name":
+					if authorName == "" {
+						authorName = value
+					}
+				case "user.email":
+					if authorEmail == "" {
+						authorEmail = value
+					}
+				default:
+					return fmt.Errorf("git commit: -c %s=... is not served by the native commit path (only user.name/user.email identity overrides are); use a host git for this form", key)
+				}
+			}
 			if message == "" && len(args) > 0 {
 				message = args[0]
 			}
@@ -370,19 +399,28 @@ func gitCommitCmd() *cobra.Command {
 				Message:     message,
 				Amend:       amend,
 				All:         all,
+				AllowEmpty:  allowEmpty,
 				AuthorName:  authorName,
 				AuthorEmail: authorEmail,
 			})
 			if err != nil {
 				return err
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			// noVerify needs no wiring: go-git never runs hooks, so
+			// skipping them is exactly what already happens.
+			if !quiet {
+				fmt.Fprintln(cmd.OutOrStdout(), result.Message)
+			}
 			return nil
 		},
 	}
 	cmd.Flags().StringVarP(&message, "message", "m", "", "Commit message")
 	cmd.Flags().BoolVar(&amend, "amend", false, "Amend the previous commit")
 	cmd.Flags().BoolVarP(&all, "all", "a", false, "Stage tracked-and-modified files before committing")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress commit summary output")
+	cmd.Flags().BoolVar(&allowEmpty, "allow-empty", false, "Allow a commit whose tree matches its parent")
+	cmd.Flags().BoolVarP(&noVerify, "no-verify", "n", false, "Skip pre-commit and commit-msg hooks (never run here)")
+	cmd.Flags().StringArrayVarP(&configPairs, "config", "c", nil, "Set config name=value for this command (user.name/user.email identity overrides)")
 	cmd.Flags().StringVar(&authorName, "author-name", "", "Override author name (otherwise read from repo/global config)")
 	cmd.Flags().StringVar(&authorEmail, "author-email", "", "Override author email")
 	return cmd

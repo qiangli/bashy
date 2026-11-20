@@ -139,6 +139,95 @@ func TestGitCommandWiring(t *testing.T) {
 	}
 }
 
+// TestGitCommitWorkerForms is the regression for story 4c60ebe8: the
+// commit forms agents actually type in weave worker scripts
+// (commit -q / -qm / --quiet, --allow-empty, --no-verify, and the
+// -c identity prefix) must not die on unknown flags — they must
+// behave like host git, including refusing an empty commit that
+// does not pass --allow-empty.
+func TestGitCommitWorkerForms(t *testing.T) {
+	dir := t.TempDir()
+	run := func(t *testing.T, args ...string) (string, error) {
+		t.Helper()
+		root := gitCmd()
+		buf := &bytes.Buffer{}
+		root.SetOut(buf)
+		root.SetErr(buf)
+		root.SetArgs(args)
+		err := root.Execute()
+		return buf.String(), err
+	}
+	author := []string{"--author-name", "T U", "--author-email", "tu@example.com"}
+	withAuthor := func(args ...string) []string { return append(args, author...) }
+
+	if out, err := run(t, "init", dir); err != nil {
+		t.Fatalf("init: %v\n%s", err, out)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("a\n"), 0o644); err != nil {
+		t.Fatalf("write a.txt: %v", err)
+	}
+	prev, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prev) })
+	if out, err := run(t, "add", "a.txt"); err != nil {
+		t.Fatalf("add: %v\n%s", err, out)
+	}
+
+	// -qm cluster: quiet means no result line on stdout.
+	if out, err := run(t, withAuthor("commit", "-qm", "first")...); err != nil {
+		t.Fatalf("commit -qm: %v\n%s", err, out)
+	} else if strings.TrimSpace(out) != "" {
+		t.Errorf("commit -qm output = %q, want quiet", out)
+	}
+	// --allow-empty on the now-clean tree; --no-verify accepted.
+	if out, err := run(t, withAuthor("commit", "--allow-empty", "--no-verify", "-m", "empty one")...); err != nil {
+		t.Fatalf("commit --allow-empty --no-verify: %v\n%s", err, out)
+	}
+	// The full -c worker form (engine door) also lands.
+	if out, err := run(t, "-c", "user.email=w@example.invalid", "-c", "user.name=worker",
+		"commit", "-q", "--allow-empty", "-m", "via -c"); err != nil {
+		t.Fatalf("-c commit -q --allow-empty: %v\n%s", err, out)
+	} else if strings.TrimSpace(out) != "" {
+		t.Errorf("-c commit -q output = %q, want quiet", out)
+	}
+	// The -c identity must be the commit's author, not dropped.
+	if out, err := run(t, "show"); err != nil {
+		t.Fatalf("show: %v\n%s", err, out)
+	} else if !strings.Contains(out, "Author: worker <w@example.invalid>") {
+		t.Errorf("-c identity not honored as author:\n%s", out)
+	}
+	// A non-identity -c key fails loudly, never silently dropped.
+	if out, err := run(t, "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "must refuse -c"); err == nil {
+		t.Fatalf("commit with unsupported -c key succeeded:\n%s", out)
+	} else if !strings.Contains(err.Error(), "commit.gpgsign") {
+		t.Errorf("unsupported -c error = %v, want it to name the key", err)
+	}
+	// Without --allow-empty a clean-tree commit still refuses.
+	if out, err := run(t, withAuthor("commit", "-m", "must refuse")...); err == nil {
+		t.Fatalf("clean-tree commit without --allow-empty succeeded:\n%s", out)
+	}
+	// --quiet long form.
+	if out, err := run(t, withAuthor("commit", "--quiet", "--allow-empty", "-m", "long quiet")...); err != nil {
+		t.Fatalf("commit --quiet --allow-empty: %v\n%s", err, out)
+	} else if strings.TrimSpace(out) != "" {
+		t.Errorf("commit --quiet output = %q, want quiet", out)
+	}
+
+	out, err := run(t, "log", "--oneline")
+	if err != nil {
+		t.Fatalf("log --oneline: %v\n%s", err, out)
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 4 || !strings.Contains(lines[0], "long quiet") || !strings.Contains(lines[3], "first") {
+		t.Errorf("log = %q, want 4 commits newest-first ending at 'first'", out)
+	}
+}
+
 // TestGitAddRequiresPathOrAllFlag verifies that `bashy git add` with
 // no args and no -A errors out cleanly instead of silently doing
 // nothing.
