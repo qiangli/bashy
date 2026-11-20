@@ -47,7 +47,7 @@ if [[ "${1:-}" != "--force" && -f "$stamp" && "$(cat "$stamp" 2>/dev/null)" == "
 fi
 
 echo "refresh-bashy: building (bashy ${bashy_head:0:8} / coreutils ${core_head:0:8})…"
-GOTOOLCHAIN=auto make build
+GOTOOLCHAIN=auto "${BASHY:-bashy}" dag build
 
 echo "refresh-bashy: gate — go test ./internal/agentos (dispatch/atlas coverage)…"
 if ! GOTOOLCHAIN=auto go test ./internal/agentos >/dev/null 2>&1; then
