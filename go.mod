@@ -136,6 +136,7 @@ require (
 	github.com/emicklei/go-restful/v3 v3.12.2 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/emirpasic/gods/v2 v2.0.0-alpha // indirect
+	github.com/ergochat/readline v0.1.3 // indirect
 	github.com/evanoberholster/imagemeta v1.1.0 // indirect
 	github.com/fatedier/frp v0.68.1 // indirect
 	github.com/fatedier/golib v0.6.0 // indirect
@@ -578,7 +579,6 @@ require (
 	github.com/benhoyt/goawk v1.31.0
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
-	github.com/ergochat/readline v0.1.3
 	github.com/fatih/color v1.18.0
 	github.com/go-git/go-git/v5 v5.19.3
 	github.com/itchyny/gojq v0.12.19
@@ -590,7 +590,7 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261119135715-c656935287fa
 	github.com/qiangli/ycode v0.3.1-dev.0.20261118041524-e5be31355b48
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261120041602-79e1473d372a
+	github.com/qiangli/yoke v0.0.0-20261120090723-83a47bd17ffa
 	github.com/qiangli/yoke/external/otel v0.0.0-20261115042953-d160182c8479
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2

@@ -997,9 +997,11 @@ sprint accept	-m	--message
 sprint capability verdict	-m	--message
 sprint checkpoint	-m	--message
 sprint comment	-m	--message
+sprint directive rm	-m	--message
 sprint fail	-m	--message
 sprint goal evidence	-m	--message
 sprint handoff	-m	--message
+sprint reject	-m	--message
 sprint submit	-m	--message
 sprint yield	-m	--message
 src log	-n	--number

@@ -48,6 +48,7 @@ type agentsQueueItem struct {
 	Points      int               `json:"points,omitempty"`
 	Created     time.Time         `json:"created"`
 	StartedAt   time.Time         `json:"started_at"`
+	FinishedAt  time.Time         `json:"finished_at,omitempty"`
 	WrapperPID  int               `json:"wrapper_pid,omitempty"`
 	Stale       bool              `json:"stale,omitempty"`
 	Blocked     bool              `json:"blocked,omitempty"`
@@ -101,6 +102,7 @@ type agentsSprintRun struct {
 	ID    int64     `json:"id"`
 	Queue string    `json:"queue,omitempty"`
 	Born  time.Time `json:"born,omitempty"`
+	Story string    `json:"story,omitempty"`
 }
 
 type agentsSprintBox struct {
@@ -788,11 +790,15 @@ func agentStoreRoots(home string) ([]string, string) {
 	if configured := strings.TrimSpace(os.Getenv("BASHY_HOME")); configured != "" {
 		return []string{filepath.Join(configured, "weave")}, agentSprintRoot(configured, home)
 	}
+	return defaultAgentWeaveRoots(home), agentSprintRoot("", home)
+}
+
+func defaultAgentWeaveRoots(home string) []string {
 	return []string{
 		filepath.Join(home, ".bashy", "weave"),
 		filepath.Join(home, ".agents", "weave"),
 		filepath.Join(home, ".agents", "ycode", "weave"),
-	}, agentSprintRoot("", home)
+	}
 }
 
 func agentSprintRoot(configuredHome, home string) string {

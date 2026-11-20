@@ -14,6 +14,7 @@ import (
 
 	"github.com/qiangli/yoke/pkg/foreman"
 	"github.com/qiangli/yoke/pkg/resources"
+	"github.com/qiangli/yoke/pkg/role"
 	"github.com/qiangli/yoke/pkg/weave"
 	"github.com/spf13/cobra"
 )
@@ -35,21 +36,32 @@ type sprintWaitEvent struct {
 	Sprint        int64  `json:"sprint"`
 	Message       string `json:"message"`
 	At            string `json:"at,omitempty"`
+	SuggestedVerb string `json:"suggested_verb,omitempty"`
+	StoryID       string `json:"story_id,omitempty"`
+	EvidenceRef   string `json:"evidence_ref,omitempty"`
+	RunID         int64  `json:"run_id,omitempty"`
+	Repo          string `json:"repo,omitempty"`
+	Queue         string `json:"queue,omitempty"`
+	From          string `json:"from,omitempty"`
 }
 
 type sprintWaitSnapshot struct {
-	Column   string
-	Thread   []weaveCommentView
-	Idle     bool
-	IdleInfo string
-	DiskLow  bool
-	DiskInfo string
+	Column     string
+	Thread     []weaveCommentView
+	Idle       bool
+	IdleInfo   string
+	DiskLow    bool
+	DiskInfo   string
+	Actionable []sprintAwaitCandidate
 }
 
 type weaveCommentView struct {
-	Kind string    `json:"kind"`
-	Body string    `json:"body"`
-	At   time.Time `json:"at"`
+	Kind        string    `json:"kind"`
+	Body        string    `json:"body"`
+	At          time.Time `json:"at"`
+	Author      string    `json:"author,omitempty"`
+	StoryID     string    `json:"story_id,omitempty"`
+	EvidenceRef string    `json:"evidence_ref,omitempty"`
 }
 
 // sprintWaitRuntime allows injection for tests.
@@ -77,9 +89,14 @@ type sprintWaitQueue struct {
 	Stories []*sprintWaitStory `json:"stories"`
 }
 type sprintWaitStory struct {
-	ID     int64              `json:"id"`
-	Column string             `json:"column"`
-	Thread []weaveCommentView `json:"thread,omitempty"`
+	ID      int64              `json:"id"`
+	Column  string             `json:"column"`
+	Thread  []weaveCommentView `json:"thread,omitempty"`
+	Created time.Time          `json:"created"`
+	Owner   string             `json:"owner,omitempty"`
+	Lease   *agentsSprintLease `json:"lease,omitempty"`
+	Contact *role.Contact      `json:"contact,omitempty"`
+	Runs    []agentsSprintRun  `json:"runs,omitempty"`
 }
 
 func loadSprintWaitQueue(dir string) (*sprintWaitQueue, error) {
@@ -99,7 +116,7 @@ func loadSprintWaitQueue(dir string) (*sprintWaitQueue, error) {
 
 func findSprintWaitStory(q *sprintWaitQueue, id int64) *sprintWaitStory {
 	for _, s := range q.Stories {
-		if s.ID == id {
+		if s != nil && s.ID == id {
 			return s
 		}
 	}
@@ -281,6 +298,11 @@ Timeout exits non-zero. No daemon, no config, no subscription state.`,
 }
 
 func runSprintWait(ctx context.Context, out io.Writer, sprintID int64, timeout time.Duration, jsonOut bool, rt sprintWaitRuntime) error {
+	return runSprintEvent(ctx, out, sprintID, timeout, jsonOut, rt, detectSprintWaitEvent)
+}
+
+func runSprintEvent(ctx context.Context, out io.Writer, sprintID int64, timeout time.Duration, jsonOut bool,
+	rt sprintWaitRuntime, detect func(prev, cur *sprintWaitSnapshot, id int64) *sprintWaitEvent) error {
 	if rt.now == nil {
 		rt.now = time.Now
 	}
@@ -293,70 +315,57 @@ func runSprintWait(ctx context.Context, out io.Writer, sprintID int64, timeout t
 	if rt.read == nil {
 		rt.read = readSprintWaitSnapshot
 	}
-	// baseline
+	var deadline time.Time
+	if timeout > 0 {
+		deadline = rt.now().Add(timeout)
+	}
+	check := func() error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if !deadline.IsZero() && !rt.now().Before(deadline) {
+			return fmt.Errorf("timeout after %s: %w", timeout, context.DeadlineExceeded)
+		}
+		return nil
+	}
+	if err := check(); err != nil {
+		return err
+	}
 	prev, err := rt.read(sprintID)
 	if err != nil {
 		return err
 	}
-	deadline := time.Time{}
-	if timeout > 0 {
-		deadline = rt.now().Add(timeout)
-	}
-	// immediate check for level-triggered conditions (disk/idle) at baseline?
-	// Treat baseline idle/disk as already an event? Spec says block until next event,
-	// so baseline itself is not an event; we wait for a change. But for level triggers,
-	// if already low/idle, the next poll will report it immediately (one poll delay).
-	// To avoid missing immediate idle/disk, check prev vs cur after first poll.
 	for {
-		if ctx.Err() != nil {
-			return ctx.Err()
+		if err := check(); err != nil {
+			return err
 		}
-		if !deadline.IsZero() && !rt.now().Before(deadline) {
-			return fmt.Errorf("sprint wait: timeout after %s", timeout)
-		}
-		// sleep until next poll (first iteration also sleeps, so caller has time to start)
-		remaining := rt.pollEvery
+		delay := rt.pollEvery
 		if !deadline.IsZero() {
-			if d := time.Until(deadline); d < remaining && d > 0 {
-				remaining = d
-			}
-			if d := deadline.Sub(rt.now()); d <= 0 {
-				return fmt.Errorf("sprint wait: timeout after %s", timeout)
-			}
+			delay = min(delay, deadline.Sub(rt.now()))
 		}
-		if err := rt.sleep(ctx, remaining); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			// context canceled via timeout
-			if !deadline.IsZero() && !rt.now().Before(deadline) {
-				return fmt.Errorf("sprint wait: timeout after %s", timeout)
-			}
-			return nil
+		if err := rt.sleep(ctx, delay); err != nil {
+			return err
 		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		if !deadline.IsZero() && !rt.now().Before(deadline) {
-			return fmt.Errorf("sprint wait: timeout after %s", timeout)
+		if err := check(); err != nil {
+			return err
 		}
 		cur, err := rt.read(sprintID)
 		if err != nil {
 			return err
 		}
-		if ev := detectSprintWaitEvent(prev, cur, sprintID); ev != nil {
+		if err := check(); err != nil {
+			return err
+		}
+		if ev := detect(prev, cur, sprintID); ev != nil {
 			if jsonOut {
-				b, _ := json.Marshal(ev)
-				fmt.Fprintln(out, string(b))
-			} else {
-				// one line: type + message
-				fmt.Fprintf(out, "%s: %s\n", ev.Type, ev.Message)
+				return json.NewEncoder(out).Encode(ev)
 			}
-			return nil
+			if ev.SuggestedVerb != "" {
+				return writeSprintAwaitEvent(out, ev)
+			}
+			_, err := fmt.Fprintf(out, "%s: %s\n", ev.Type, ev.Message)
+			return err
 		}
 		prev = cur
 	}
 }
-
-// loadWeaveQueue and findWeaveStory are defined in weave package; we delegate.
-// For test isolation we need SprintStoreDir to respect BASHY_SPRINT_DIR env.
