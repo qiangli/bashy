@@ -174,6 +174,10 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 		fmt.Fprintln(os.Stderr, "bashy genie: opening `bashy ycode`")
 		return runSelf(append(yoloArgs(yolo, "ycode"), modelArgs(model)...), os.Stdin, os.Stdout, os.Stderr)
 	}
+	if msg := genieLocalModelRefusal("bashy genie", model); msg != "" {
+		fmt.Fprint(os.Stderr, msg)
+		return 2
+	}
 	bundle, err := genieBundle()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy genie:", err)
@@ -304,6 +308,10 @@ func dispatchYcode(args []string) int {
 	if !explicit && !pull && os.Getenv(ycodeSteerChildEnv) == "" {
 		if _, ok := lookupSteerTool("ycode"); ok {
 			if model, bare := ycodeBareOpenArgs(args); bare {
+				if msg := genieLocalModelRefusal("bashy ycode", model); msg != "" {
+					fmt.Fprint(os.Stderr, msg)
+					return 2
+				}
 				return dispatchYcodeSteerable(model, yolo, yoloSet)
 			}
 		}
@@ -350,6 +358,34 @@ func dispatchYcode(args []string) int {
 	}
 	return YcodeMain(args)
 }
+
+// genieLocalModelRefusal explains, up front, why a genie run cannot start on
+// this binary: the lean build has no embedded ollama engine, so the recipe's
+// local model (its host auto-pick, or a local tag) can never be served — it
+// used to start a model pull and then fail inside the recipe with only the
+// engine's message. A hosted model (an API model or a door grant, or
+// GENIE_EXTERNAL_MODEL) needs no engine and is never refused. Empty means go.
+func genieLocalModelRefusal(verb, model string) string {
+	if genieOllamaBuild() != "lean" || strings.TrimSpace(os.Getenv("GENIE_EXTERNAL_MODEL")) != "" {
+		return ""
+	}
+	if model == "" {
+		model = strings.TrimSpace(os.Getenv("GENIE_MODEL_ID"))
+	}
+	what := "a local model (none was chosen, so genie would pick one for this host)"
+	if model != "" {
+		if _, hosted, _ := resolveGenieExternal(model); hosted {
+			return "" // a resolution error is reported by the run itself
+		}
+		what = "the local model " + model
+	}
+	return fmt.Sprintf("%s: this bashy is the lean build, with no local model engine, so it cannot run %s.\n"+
+		"  use a hosted model: %s -m MODEL   (API models: bashy model list; a door grant also works)\n"+
+		"  or run local models with the engines build of bashy (bashy dag build-host)\n", verb, what, verb)
+}
+
+// genieOllamaBuild is probeOllamaEngine's build kind, a variable for tests.
+var genieOllamaBuild = func() string { return probeOllamaEngine().Build }
 
 // ycodeSteerChildEnv marks the `bashy ycode` child a steerable chat session
 // already owns: it runs the raw engine instead of delegating back into the
