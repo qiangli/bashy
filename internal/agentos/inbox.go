@@ -73,9 +73,10 @@ type inboxBatch struct {
 	hintIncomplete bool
 	// before provenance collapse, for exact turn acknowledgements of seeded
 	// Meet copies that share one rendered MB record.
-	rawEvents []unifiedInboxEvent
-	acks      []func() error
-	warns     []string
+	rawEvents  []unifiedInboxEvent
+	roleTopics map[string]string
+	acks       []func() error
+	warns      []string
 }
 
 func newUnifiedInboxCmd() *cobra.Command {
@@ -847,19 +848,7 @@ func runUnifiedInboxWithOptions(ctx context.Context, out, errOut io.Writer, read
 			gate.commit(sum, sampled, now)
 			lastBatch = batch
 			if !peek && len(batch.events) > 0 {
-				claimed := batch.events[:0]
-				for _, e := range batch.events {
-					if e.Source == "mb" && e.HuntGroup {
-						if !bus.ReaderHasLiveSession(reader, e.To) {
-							continue
-						}
-						if holder, granted := bus.ClaimPost(e.Seq, reader); !granted && !bus.ClaimMatchesReader(holder, reader) {
-							continue
-						}
-					}
-					claimed = append(claimed, e)
-				}
-				batch.events = claimed
+				batch.events = claimAdmittedHuntEvents(reader, batch.events)
 				if len(batch.events) == 0 {
 					batch.acks = nil
 				}
@@ -1054,8 +1043,9 @@ func snapshotInboxWithOptions(reader string, limit int, includeBus, deliver, hin
 		}
 	}
 	var roleTopics map[string]string
-	if limit > 0 {
-		roleTopics = hostRoleTopics()
+	if limit > 0 || forTurn {
+		roleTopics = hostRoleTopicsLocked()
+		batch.roleTopics = roleTopics
 	}
 	appendLimited := func(source string, events []unifiedInboxEvent, ack func() error) {
 		// Explicit ack is per record, not a source high-water mark: advancing
@@ -1455,6 +1445,17 @@ func emptyAs(value, fallback string) string {
 	return value
 }
 
+func claimAdmittedHuntEvents(reader string, events []unifiedInboxEvent) []unifiedInboxEvent {
+	claimed := make([]unifiedInboxEvent, 0, len(events))
+	for _, e := range events {
+		if !claimHuntInboxEvent(reader, e) {
+			continue
+		}
+		claimed = append(claimed, e)
+	}
+	return claimed
+}
+
 // unifiedTurnPreamble is wired into coreutils/chat. Bus pending is already
 // drained by bus.TurnPreamble itself; this callback adds every other source in
 // one bounded block and acknowledges only after rendering that block in memory.
@@ -1464,6 +1465,7 @@ func unifiedTurnPreamble(agent string) bus.PreparedPreamble {
 		warning := fmt.Sprintf("[Bashy unified inbox warning]\nCould not read every inbound source: %v\nNo source cursor was advanced; run `bashy inbox --as %s`.", err, agent)
 		return bus.NewPreparedPreamble(warning, nil)
 	}
+	batch.events = claimAdmittedHuntEvents(agent, batch.events)
 	if len(batch.events) == 0 {
 		return bus.PreparedPreamble{}
 	}

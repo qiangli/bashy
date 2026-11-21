@@ -20,7 +20,10 @@ func unifiedTurnItems(reader string) ([]admission.Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	roleTopics := hostRoleTopics()
+	roleTopics := batch.roleTopics
+	if roleTopics == nil {
+		roleTopics = hostRoleTopics()
+	}
 	items := make([]admission.Item, 0, len(batch.events))
 	for _, event := range batch.events {
 		e := event
@@ -29,11 +32,16 @@ func unifiedTurnItems(reader string) ([]admission.Item, error) {
 		if e.To != "" {
 			priority = admission.PriorityDirected
 		}
+		var claimFn func() bool
+		if e.Source == "mb" && e.HuntGroup {
+			claimFn = func() bool { return claimHuntInboxEvent(reader, e) }
+		}
 		items = append(items, admission.Item{
 			Source: e.Source, ID: strconv.FormatInt(e.Seq, 10), Sequence: e.Seq, From: e.From,
 			To: e.To, Topic: e.Topic, Priority: priority, Body: e.Body,
 			ArtifactRef:   "bashy inbox read --as " + strconv.Quote(reader) + " " + strconv.Quote(id),
 			OverflowRef:   "bashy inbox --as " + strconv.Quote(reader) + " --peek",
+			Claim:         claimFn,
 			MarkDelivered: func() error { return deliverTurnInboxItem(reader, e, batch.rawEvents, roleTopics) },
 			Acknowledge:   func() error { return acknowledgeTurnInboxItem(reader, e, batch.rawEvents, roleTopics) },
 		})
@@ -42,6 +50,12 @@ func unifiedTurnItems(reader string) ([]admission.Item, error) {
 }
 
 func hostRoleTopics() map[string]string {
+	snapshotRolesMu.Lock()
+	defer snapshotRolesMu.Unlock()
+	return hostRoleTopicsLocked()
+}
+
+func hostRoleTopicsLocked() map[string]string {
 	roleTopics := map[string]string{}
 	if bus.HostRoles != nil {
 		for _, role := range bus.HostRoles() {
@@ -70,14 +84,20 @@ func turnInboxIDs(event unifiedInboxEvent, raw []unifiedInboxEvent) []string {
 	return ids
 }
 
+func claimHuntInboxEvent(reader string, event unifiedInboxEvent) bool {
+	if event.Source != "mb" || !event.HuntGroup {
+		return true
+	}
+	if !bus.ReaderHasLiveSession(reader, event.To) {
+		return false
+	}
+	holder, granted := bus.ClaimPost(event.Seq, reader)
+	return granted || bus.ClaimMatchesReader(holder, reader)
+}
+
 func deliverTurnInboxItem(reader string, event unifiedInboxEvent, raw []unifiedInboxEvent, roles map[string]string) error {
-	if event.Source == "mb" && event.HuntGroup {
-		if !bus.ReaderHasLiveSession(reader, event.To) {
-			return nil
-		}
-		if holder, granted := bus.ClaimPost(event.Seq, reader); !granted && !bus.ClaimMatchesReader(holder, reader) {
-			return nil
-		}
+	if !claimHuntInboxEvent(reader, event) {
+		return nil
 	}
 	ids := turnInboxIDs(event, raw)
 	spec := mailboxSpec{Key: "agent:" + reader, Address: reader, Kind: "agent"}
@@ -128,6 +148,9 @@ func deliverTurnInboxItem(reader string, event unifiedInboxEvent, raw []unifiedI
 }
 
 func acknowledgeTurnInboxItem(reader string, event unifiedInboxEvent, raw []unifiedInboxEvent, roles map[string]string) error {
+	if !claimHuntInboxEvent(reader, event) {
+		return nil
+	}
 	ids := turnInboxIDs(event, raw)
 	spec := mailboxSpec{Key: "agent:" + reader, Address: reader, Kind: "agent"}
 	if err := updateMailboxState(spec, func(state *mailboxState) error {
