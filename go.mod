@@ -346,6 +346,7 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
+	github.com/qiangli/bash/cmd v0.0.0-20261121101805-42efe30317c4 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261121101804-e25a870a0d4a // indirect
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261121105637-c643f4029e70 // indirect
@@ -546,7 +547,10 @@ replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128
 
 replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261121101805-4c6cee72ad8a
 
-tool github.com/qiangli/outpost/cmd/outpost
+tool (
+	github.com/qiangli/bash/cmd/bash
+	github.com/qiangli/outpost/cmd/outpost
+)
 
 // viper v1.4.0 (via the umbrella workspace) requires the pre-split monolithic
 // github.com/ugorji/go v1.1.4, which still contains the codec package that
