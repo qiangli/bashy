@@ -146,4 +146,34 @@ func TestStage0StatsAdapterEndToEndParity(t *testing.T) {
 	if todoCode != 0 || todoErr != "" || !strings.Contains(todoOut, "todo") {
 		t.Fatalf("todo --help: code=%d stderr=%q stdout=%q", todoCode, todoErr, todoOut)
 	}
+
+	// custom/ Group 1: binmgr-managed external CLIs
+	for _, verb := range []string{"gh", "kubectl", "helm"} {
+		out, errStr, code := run("", verb, "--explain")
+		if code != 0 || errStr != "" || !strings.Contains(out, "explain: "+verb+" (not executed)") {
+			t.Fatalf("%s --explain: code=%d stderr=%q stdout=%q", verb, code, errStr, out)
+		}
+	}
+
+	// custom/ Group 2: declarative registry CLIs
+	for _, verb := range []string{"aws", "gcloud", "doctl"} {
+		out, errStr, code := run("", verb, "--explain")
+		if code != 0 || errStr != "" || !strings.Contains(out, "explain: "+verb+" (not executed)") {
+			t.Fatalf("%s --explain: code=%d stderr=%q stdout=%q", verb, code, errStr, out)
+		}
+	}
+
+	// custom/ Group 3: lean otel
+	otelOut, otelErr, otelCode := run("", "otel", "--help")
+	if otelCode != 0 || otelErr != "" || !strings.Contains(otelOut, "serve") {
+		t.Fatalf("otel --help: code=%d stderr=%q stdout=%q", otelCode, otelErr, otelOut)
+	}
+
+	// custom/ Group 4: steerable agent CLIs
+	for _, tool := range []string{"claude", "codex", "agy"} {
+		out, errStr, code := run("", tool, "--help")
+		if code != 0 || errStr != "" || !strings.Contains(out, "session:  "+tool) {
+			t.Fatalf("%s --help: code=%d stderr=%q stdout=%q", tool, code, errStr, out)
+		}
+	}
 }

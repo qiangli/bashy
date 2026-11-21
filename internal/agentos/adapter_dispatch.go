@@ -242,6 +242,30 @@ func lookupAdaptedVerb(name string) (folder, entry string, ok bool) {
 	return fe[0], fe[1], true
 }
 
+// customAgentCLIEntries lists the shipped baseline steerable agent CLIs that
+// carry dedicated standalone adapters under bashy/custom/<tool>/. Any other
+// steerable tool dynamically added via $BASHY_TOOLS_PATH / ~/.config/bashy/tools
+// routes through bashy/custom/agent-cli/. Kept separate from adaptedVerbs so
+// steerable tool shortcuts preserve their exact lowest-precedence dispatch slot
+// after coreutils, registry, user-registered commands, and embedded skill docs.
+var customAgentCLIEntries = map[string]bool{
+	"claude":   true,
+	"codex":    true,
+	"agy":      true,
+	"aider":    true,
+	"dsh":      true,
+	"muse":     true,
+	"opencode": true,
+	"zcode":    true,
+}
+
+func customAgentCLIEntry(toolName string) string {
+	if customAgentCLIEntries[toolName] {
+		return toolName
+	}
+	return "agent-cli"
+}
+
 // runCommandAdapter routes a front-door command through its folder-organized
 // Bash# adapter (<folder>/<entry>/<entry>.bsh), passing argv, stdio, env, and
 // exit status through unchanged. If an active shaped CLI slot exists for the
