@@ -78,3 +78,13 @@ Links & subsumes delete-by-default checkout hygiene from `todo:bf2f149daa87`.
    - **Executed per story (fast dev-box unit tests + 3-OS build):** `pkg/policy/coord`, `pkg/prune/...`, `pkg/todo/...`, and targeted `pkg/weave` reclaim/grade/claim/cleanup unit tests + `darwin`/`linux`/`windows` builds (`CGO_ENABLED=0`). No live host backfill `--apply` executed during implementation.
    - **Deferred to `.bashy/gate.final` (milestone integration gate per Operator policy):** Full `yoke` suite (`go test -short ./...`), full `bashy` integration + Bash 5.3 `86/86` gate, gate-host lane execution, and browser/judge/e2e suites — deferred to final gate.
 
+### Pause / Stop Checkpoint (Operator Directive, 2026-11-21)
+
+Paused per Operator instruction ("pause all non-677 work until 677 completes; commit and push on branch, no merge, release claims"):
+- **Where stopped:** Implementation, manager review safeguards, skill docs, and targeted fast dev-box unit tests + 3-OS builds are complete and committed on isolated branches (no merge to `main`, no `go.mod` or umbrella pin bumps):
+  - `yoke` branch `agent/weave-issue-96` (`0dafbbff82df`, workspace `yoke#96` preserved in place)
+  - `bashy` branch `agent/weave-issue-128` (workspace `bashy#128` preserved in place)
+- **Remaining when resumed after Sprint 677:** Rebase `agent/weave-issue-96` and `agent/weave-issue-128` onto post-677 `origin/main` heads (or replay small patch onto fresh heads if rebase is nontrivial), rerun fast unit tests + build-only `.bashy/gate`, bump `bashy` -> `yoke` pin on merge, and close via manager review.
+- **Claims:** Sprint 652 story claim yielded/released; no resource or project claims held.
+
+
