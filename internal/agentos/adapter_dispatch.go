@@ -98,6 +98,28 @@ var adaptedVerbs = map[string][2]string{
 	"vdir":      {"optional", "vdir"},
 	"whoami":    {"optional", "whoami"},
 	"yes":       {"optional", "yes"},
+
+	// toolchain/ — self-provisioning third-party toolchains (Cluster 3).
+	"go":      {"toolchain", "go"},
+	"cmake":   {"toolchain", "cmake"},
+	"clang":   {"toolchain", "clang"},
+	"zig":     {"toolchain", "zig"},
+	"node":    {"toolchain", "node"},
+	"npm":     {"toolchain", "npm"},
+	"npx":     {"toolchain", "npx"},
+	"pnpm":    {"toolchain", "pnpm"},
+	"yarn":    {"toolchain", "yarn"},
+	"python":  {"toolchain", "python"},
+	"pip":     {"toolchain", "pip"},
+	"uv":      {"toolchain", "uv"},
+	"mise":    {"toolchain", "mise"},
+	"cargo":   {"toolchain", "cargo"},
+	"rustc":   {"toolchain", "rustc"},
+	"rustup":  {"toolchain", "rustup"},
+	"rust":    {"toolchain", "rust"},
+	"pwsh":    {"toolchain", "pwsh"},
+	"git-scm": {"toolchain", "git-scm"},
+	"curl":    {"toolchain", "curl"},
 }
 
 func isAdaptedVerb(name string) bool {

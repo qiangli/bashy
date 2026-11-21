@@ -131,4 +131,9 @@ func TestStage0StatsAdapterEndToEndParity(t *testing.T) {
 	if dirCode != 0 || dirErr != "" || !strings.Contains(dirHelp, "dir [OPTION]") {
 		t.Fatalf("dir --help: code=%d stderr=%q stdout=%q", dirCode, dirErr, dirHelp)
 	}
+
+	cmakeOut, cmakeErr, cmakeCode := run("", "cmake", "--explain")
+	if cmakeCode != 0 || cmakeErr != "" || !strings.Contains(cmakeOut, "explain: cmake (not executed)") {
+		t.Fatalf("cmake --explain: code=%d stderr=%q stdout=%q", cmakeCode, cmakeErr, cmakeOut)
+	}
 }

@@ -59,11 +59,7 @@ import (
 	_ "github.com/qiangli/yoke/cmds/foreman"
 	"github.com/qiangli/yoke/external/act"
 	"github.com/qiangli/yoke/external/actrunner"
-	"github.com/qiangli/yoke/external/clang"
-	"github.com/qiangli/yoke/external/cmake"
-	"github.com/qiangli/yoke/external/curlbin"
 	"github.com/qiangli/yoke/external/gh"
-	"github.com/qiangli/yoke/external/gitscm"
 	"github.com/qiangli/yoke/external/gotoolchain"
 	"github.com/qiangli/yoke/external/govulncheck"
 	"github.com/qiangli/yoke/external/grype"
@@ -72,18 +68,12 @@ import (
 	"github.com/qiangli/yoke/external/kubectl"
 	"github.com/qiangli/yoke/external/loom"
 	"github.com/qiangli/yoke/external/meshagent"
-	"github.com/qiangli/yoke/external/mise"
-	"github.com/qiangli/yoke/external/node"
 	"github.com/qiangli/yoke/external/osvscanner"
-	"github.com/qiangli/yoke/external/pwsh"
-	"github.com/qiangli/yoke/external/python"
 	"github.com/qiangli/yoke/external/rclone"
 	"github.com/qiangli/yoke/external/registry"
-	"github.com/qiangli/yoke/external/rust"
 	"github.com/qiangli/yoke/external/seaweedfs"
 	"github.com/qiangli/yoke/external/sphere"
 	"github.com/qiangli/yoke/external/tessaro"
-	"github.com/qiangli/yoke/external/zigcc"
 	"github.com/qiangli/yoke/external/zot"
 	"github.com/qiangli/yoke/pkg/accounts"
 	_ "github.com/qiangli/yoke/pkg/accounts/builtin"
@@ -1706,27 +1696,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 	case "git":
 		dispatchGit(os.Args[2:])
 	case "git-scm":
-		// Explicit real-git spelling: always the provisioned binary,
-		// never the pure-Go engine. --external is accepted and ignored
-		// here (stripped, not forwarded) so scripts can pass it
-		// uniformly to both spellings.
-		_, rest, splitErr := splitGitExternal(os.Args[2:])
-		if splitErr != nil {
-			fmt.Fprintln(os.Stderr, splitErr)
-			dispatchExit(1)
-		}
-		cmd := gitscm.NewGitSCMCmd()
-		cmd.SilenceErrors = true
-		setCobraArgs(cmd, rest)
-		if err := cmd.Execute(); err != nil {
-			var exit *exec.ExitError
-			if errors.As(err, &exit) {
-				dispatchExit(childExitStatus(err))
-			}
-			fmt.Fprintln(os.Stderr, err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+		dispatchExit(runCommandAdapter("toolchain", "git-scm", os.Args[1], os.Args[2:]))
 	case "remote":
 		cmd := remoteCmd()
 		setCobraArgs(cmd, os.Args[2:])
@@ -1741,135 +1711,23 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// them before PATH). --json for a structured catalog.
 		dispatchExit(dispatchCommands(os.Args[2:]))
 	case "go":
-		// Self-provisioning Go toolchain (check → download from go.dev →
-		// sha256-verify → cache → exec). No embedding, no system Go: this is
-		// what lets a bare node `bashy go build/test`. Pure-Go + cross-platform,
-		// so it stays in the shared switch (not engine-gated).
-		// Refresh the ALL_PROXY fallback here too: an interactive shell may
-		// export it after package initialization, immediately before `bashy go`.
-		applyAllProxyFallback()
-		cmd := gotoolchain.NewGoCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
+		// Bootstrap escape hatch: when an adapter script runs on a bare node
+		// with no host `go` on PATH, it invokes `BASHY_ADAPTER_INPROC=1 bashy go`
+		// so the toolchain provisioner runs in-process without recursing back
+		// into toolchain/go/go.bsh.
+		if os.Getenv(adapterInprocEnv) == "1" {
+			_ = os.Unsetenv(adapterInprocEnv)
+			applyAllProxyFallback()
+			cmd := gotoolchain.NewGoCmd()
+			setCobraArgs(cmd, os.Args[2:])
+			if err := cmd.Execute(); err != nil {
+				dispatchExit(1)
+			}
+			dispatchExit(0)
 		}
-		dispatchExit(0)
-	case "cmake":
-		// Self-provisioning CMake (binmgr download -> verify -> cache; no system
-		// CMake needed). Pure-Go fetch + cross-platform, same shape as bashy go.
-		cmd := cmake.NewCmakeCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "clang":
-		// Self-provisioning Clang toolchain: the standalone llvm-mingw on Windows
-		// (binmgr), the system clang on macOS/Linux. The compiler half of the
-		// self-contained cross-platform build userland (cmake is the other half).
-		cmd := clang.NewClangCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "zig":
-		// Self-provisioning Zig toolchain — the pinned release the C islands'
-		// `cc` already compiles with, fronted as a language of its own so a
-		// `~~~zig` fence's runner can name it.
-		cmd := zigcc.NewZigCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "node", "npm", "npx", "pnpm", "yarn":
-		// Self-provisioning Node.js ecosystem (binmgr download from nodejs.org →
-		// verify via SHASUMS256 → cache → exec; pnpm/yarn via the bundled corepack).
-		// Pure-Go fetch + cross-platform, same shape as bashy go — no system Node.
-		var cmd *cobra.Command
-		switch os.Args[1] {
-		case "node":
-			cmd = node.NewNodeCmd()
-		case "npm":
-			cmd = node.NewNpmCmd()
-		case "npx":
-			cmd = node.NewNpxCmd()
-		case "pnpm":
-			cmd = node.NewPnpmCmd()
-		case "yarn":
-			cmd = node.NewYarnCmd()
-		}
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "python", "pip", "uv":
-		// Self-provisioning Python ecosystem via astral-sh/uv (one verified binary
-		// that provisions CPython): python -> `uv run python`, pip -> `uv pip`.
-		// Download → sha256-verify → cache → exec; no system Python.
-		var cmd *cobra.Command
-		switch os.Args[1] {
-		case "python":
-			cmd = python.NewPythonCmd()
-		case "pip":
-			cmd = python.NewPipCmd()
-		case "uv":
-			cmd = python.NewUvCmd()
-		}
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "mise":
-		// Polyglot runtime/version manager (jdx/mise) — managed external binary,
-		// checksum-verified by binmgr. The power-user layer over the native
-		// provisioners (.tool-versions / mise.toml, the long tail of languages).
-		cmd := mise.NewMiseCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "cargo", "rustc", "rustup", "rust":
-		// Self-provisioning Rust via the official rustup-init (sha256 sidecar
-		// verified), into a bashy-owned CARGO_HOME/RUSTUP_HOME. No system Rust.
-		var cmd *cobra.Command
-		switch os.Args[1] {
-		case "cargo":
-			cmd = rust.NewCargoCmd()
-		case "rustc":
-			cmd = rust.NewRustcCmd()
-		case "rustup":
-			cmd = rust.NewRustupCmd()
-		case "rust":
-			cmd = rust.NewRustCmd()
-		}
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "pwsh":
-		// Optional direct front door over the exact runtime cache used by the
-		// powershell and csharp fence workers.
-		cmd := pwsh.NewCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "curl":
-		// Platform curl (built into Windows 10+, universal on unix); a pinned,
-		// checksum-verified curl.se/windows build on a bare Windows node.
-		cmd := curlbin.NewCurlCmd()
-		setCobraArgs(cmd, mapNullDevice(runtime.GOOS, os.Args[2:]))
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+		dispatchExit(runCommandAdapter("toolchain", "go", os.Args[1], os.Args[2:]))
+	case "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "curl":
+		dispatchExit(runCommandAdapter("toolchain", os.Args[1], os.Args[1], os.Args[2:]))
 	case "loom":
 		// Git forge: run Gitea as a managed external binary (binmgr
 		// downloads/verifies/caches it; not compiled in). bashy is the "OS of
