@@ -95,7 +95,8 @@ class ReceiptTests(unittest.TestCase):
         with self.assertRaises(ValueError): self.check()
 
     def test_undownloaded_module_verify_guards(self):
-        unfetched = {'path': 'example.org/pruned', 'version': 'v0.4.0', 'main': False, 'go_mod_downloaded': False}
+        unfetched = {'path': 'example.org/pruned', 'version': 'v0.4.0', 'main': False, 'go_mod_downloaded': False,
+                     'go_mod_sum': 'h1:pruned='}
         self.record['module_graphs'][0]['modules'].append(unfetched)
         self.record['module_graphs_sha256'] = hashlib.sha256(evidence.canonical(self.record['module_graphs'])).hexdigest()
         self.check()
@@ -103,14 +104,31 @@ class ReceiptTests(unittest.TestCase):
             dict(unfetched, main=True),
             dict(unfetched, go_mod_sha256='d' * 64),
             dict(unfetched, go_mod_downloaded='no'),
-            {'path': 'example.org/pruned', 'version': 'v0.4.0', 'go_mod_downloaded': None},
-            {'path': 'example.org/pruned', 'version': 'v0.4.0', 'go_mod_sha256': 'not-downloaded'},
-            {'path': 'example.org/pruned', 'version': 'v0.4.0', 'go_mod_sha256': None},
+            {'path': 'example.org/pruned', 'version': 'v0.4.0', 'go_mod_sum': 'h1:pruned=', 'go_mod_downloaded': None},
+            {'path': 'example.org/pruned', 'version': 'v0.4.0', 'go_mod_sum': 'h1:pruned=', 'go_mod_sha256': 'not-downloaded'},
+            {'path': 'example.org/pruned', 'version': 'v0.4.0', 'go_mod_sum': 'h1:pruned=', 'go_mod_sha256': None},
         ):
             with self.subTest(bad=bad):
                 self.record['module_graphs'][0]['modules'][-1] = bad
                 self.record['module_graphs_sha256'] = hashlib.sha256(evidence.canonical(self.record['module_graphs'])).hexdigest()
                 with self.assertRaises(ValueError): self.check()
+
+    def test_undownloaded_module_requires_h1_go_mod_sum(self):
+        row = {'path': 'example.org/pruned', 'version': 'v0.4.0', 'main': False, 'go_mod_downloaded': False}
+        self.record['module_graphs'][0]['modules'].append(row)
+        def reseal():
+            self.record['module_graphs_sha256'] = hashlib.sha256(evidence.canonical(self.record['module_graphs'])).hexdigest()
+        row['go_mod_sum'] = 'h1:pruned='
+        reseal()
+        self.check()
+        for bad in (None, '', 'h1:', 'sha256:abc', 'abc=', 7):
+            with self.subTest(go_mod_sum=bad):
+                row['go_mod_sum'] = bad
+                reseal()
+                with self.assertRaises(ValueError): self.check()
+        del row['go_mod_sum']
+        reseal()
+        with self.assertRaises(ValueError): self.check()
 
     def test_collect_records_undownloaded_modules_honestly(self):
         work = pathlib.Path(tempfile.mkdtemp())
@@ -150,8 +168,8 @@ entries = [
     {'Path': mod_line, 'Main': True, 'Dir': str(cwd), 'GoMod': str(cwd / 'go.mod')},
     {'Path': 'example.org/downloaded', 'Version': 'v1.2.0', 'GoMod': os.environ['FAKE_CACHED_MOD'],
      'Sum': 'h1:dl=', 'GoModSum': 'h1:dlmod='},
-    {'Path': 'example.org/pruned', 'Version': 'v0.4.0', 'Indirect': True},
-    {'Path': 'example.org/replaced', 'Version': 'v0.1.0', 'Indirect': True,
+    {'Path': 'example.org/pruned', 'Version': 'v0.4.0', 'Indirect': True, 'GoModSum': 'h1:prunedmod='},
+    {'Path': 'example.org/replaced', 'Version': 'v0.1.0', 'Indirect': True, 'GoModSum': 'h1:replacedmod=',
      'Replace': {'Path': 'example.org/fork', 'Version': 'v0.1.1'}},
 ]
 for entry in entries:

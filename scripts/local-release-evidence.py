@@ -78,6 +78,9 @@ def verify(record, root, commit, now=None):
                     raise ValueError('main module missing go.mod content digest')
                 if 'go_mod_sha256' in module:
                     raise ValueError('unexpected go.mod content digest for un-downloaded module')
+                sum_value = module.get('go_mod_sum')
+                if not isinstance(sum_value, str) or not sum_value.startswith('h1:') or len(sum_value) <= len('h1:'):
+                    raise ValueError('un-downloaded module missing h1: go.mod sum')
                 continue
             digest_value = module.get('go_mod_sha256', '')
             if not isinstance(digest_value, str) or not re.fullmatch('[0-9a-f]{64}', digest_value):
