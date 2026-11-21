@@ -124,7 +124,6 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
-	github.com/rjeczalik/notify v0.9.3 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 // indirect
@@ -181,8 +180,6 @@ require (
 	golang.org/x/mod v0.41.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
-	golang.org/x/term v0.47.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.16.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d // indirect
@@ -270,7 +267,10 @@ require (
 	github.com/bashsharp/bashsharp v0.0.0-20261121121200-5848aff449cd
 	github.com/qiangli/coreutils v0.0.0-20261121101804-c5832f99ccf6
 	github.com/qiangli/yoke v0.0.0-20261121110346-da4b02a4d244
+	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/net v0.62.0
+	golang.org/x/sys v0.49.0
+	golang.org/x/term v0.47.0
 )

@@ -1,0 +1,1470 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/qiangli/coreutils/pkg/lockfile"
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/meet"
+	"github.com/qiangli/yoke/pkg/policy/coord"
+	"github.com/qiangli/yoke/pkg/principal"
+	"github.com/qiangli/yoke/pkg/room"
+	"github.com/qiangli/yoke/pkg/weave"
+	"github.com/spf13/cobra"
+)
+
+const unifiedInboxSchema = "bashy-inbox-v1"
+
+// writeInboxEmptyEnvelope gives a bounded --json read a versioned envelope
+// when no event arrived: zero NDJSON lines is not a JSON document, so a
+// machine caller could not tell "no mail" from a broken pipe. Only bounded
+// reads with nothing to render take this path — non-empty bounded reads keep
+// their NDJSON lines, and watch streams stay pure NDJSON (an envelope line
+// would corrupt the stream).
+func writeInboxEmptyEnvelope(out io.Writer) error {
+	_, err := fmt.Fprintf(out, "{\"schema\":%q,\"events\":[]}\n", unifiedInboxSchema)
+	return err
+}
+
+const inboxWatcherMode = "inbox"
+
+var inboxMeetRooms = meet.Rooms
+
+type unifiedInboxEvent struct {
+	Schema        string              `json:"schema"`
+	Source        string              `json:"source"`
+	Seq           int64               `json:"seq"`
+	At            string              `json:"at,omitempty"`
+	From          string              `json:"from,omitempty"`
+	FromParty     *bus.Party          `json:"from_party,omitempty"`
+	FromHandle    string              `json:"from_handle,omitempty"`
+	To            string              `json:"to,omitempty"`
+	Topic         string              `json:"topic,omitempty"`
+	Room          string              `json:"room,omitempty"`
+	EventType     string              `json:"event_type,omitempty"`
+	StoryID       string              `json:"story_id,omitempty"`
+	SuggestedVerb string              `json:"suggested_verb,omitempty"`
+	Body          string              `json:"body"`
+	Origin        *unifiedInboxOrigin `json:"origin,omitempty"`
+}
+
+type unifiedInboxOrigin struct {
+	Source string `json:"source"`
+	Seq    int64  `json:"seq"`
+}
+
+type inboxBatch struct {
+	events []unifiedInboxEvent
+	// hintIncomplete means the bounded per-command MB probe may have older
+	// unread records. Explicit inbox reads never set this flag.
+	hintIncomplete bool
+	// before provenance collapse, for exact turn acknowledgements of seeded
+	// Meet copies that share one rendered MB record.
+	rawEvents []unifiedInboxEvent
+	acks      []func() error
+	warns     []string
+}
+
+func newUnifiedInboxCmd() *cobra.Command {
+	var as string
+	var wait time.Duration
+	var peek, jsonOut, watch bool
+	var limit, untilCount int
+	var filter mailboxFilter
+	cmd := &cobra.Command{
+		Use:   "inbox",
+		Short: "read or watch every inbound Bashy communication channel",
+		Long: `inbox is one read-through view over the existing message board, Meet
+boards, Bus pending buffers, and steward/conductor role addresses. It creates no
+message store and keeps each source's own cursor.
+
+Reading never consumes. Printing a record - to a terminal, a pipe, or --json -
+leaves every source cursor and mailbox read/ack state exactly as it was. One
+chronological stream, newest last; each record shows its time, source and sender.
+
+  bashy inbox                         what is waiting for you, oldest first
+  bashy inbox --from alice            only messages whose sender matches
+  bashy inbox --search profile        only messages containing this text
+  bashy inbox --since 2h              only messages from the last two hours
+  bashy inbox --sprint 418            only messages about sprint 418
+  bashy inbox --wait 15m              wait for one batch (still not consumed)
+  bashy inbox --watch                 follow new inputs; delivery acknowledges them
+  bashy inbox --watch --wait 15m      follow for at most 15 minutes
+
+Only an explicit acknowledgment changes state: 'bashy inbox ack ID' for a
+mailbox record, or --watch (and a Bashy-managed session's turn delivery), which
+advances a source cursor after the record was actually delivered. --from,
+--search and --since select what is shown, so they cannot be combined with
+--watch (it would acknowledge records you never saw). --peek is accepted and
+is the default.
+
+For a durable, searchable mailbox that never disappears into turn or console
+traffic, use the explicit mailbox operations. Listing and searching consume
+nothing; read keeps a record pending; only ack removes it from the pending view.
+
+  bashy inbox list --topic harness --search profile
+  bashy inbox read mb:42
+  bashy inbox ack mb:42
+  bashy inbox human list --topic posix-cert --project dhnt
+  bashy inbox human send --topic posix-cert --project dhnt --status blocked --ref docs/status.md "Profile D needs review"
+
+The human lane belongs to the current OS user and aggregates MB, Meet boards,
+Bus/ping notifications, and broadcasts with its own state. Agent reads cannot
+consume it; authorized local agents may query and organize that same state for
+the human. Keep status concise and put detail at a stable shared reference.
+
+For a Bashy-managed chat session, unified input is automatically injected through
+the session's real control transport and acknowledged only after delivery. An
+external sprint manager instead uses 'bashy sprint take/start --watch': the sprint
+command stays attached to its agent-harness parent and streams the same events.
+For other external orchestration that can retain and actively poll a process,
+run 'bashy inbox --as NAME --watch --json' and poll its output at every turn.
+Never detach and ignore it: rendered records advance NAME's cursors. While it
+runs, the watcher appears as active in 'bashy agent'; second watcher cannot claim
+the same NAME. If the external harness cannot retain and poll a process,
+repeat 'bashy inbox --as NAME --watch --wait 60s --json', process its streamed
+batches, and immediately re-enter. --watch makes every bounded run hold NAME's
+claim; one empty timeout does not end active monitoring.
+
+Assign a model-driven sentinel one distinct registered Bashy identity (verify
+with 'bashy agent show NAME'), invite it to assigned Meet boards, and
+route/subscribe its own inputs. Surface every request promptly;
+prioritize directed, BLOCKED, CONFLICT, ownership, baseline, and merge inputs.
+If action is not immediate, acknowledge receipt with owner, action, and ETA.
+Never read as another identity, silently consume, duplicate claimed work, or
+impersonate decision authority. A sentinel sees only sources routed to its own
+identity; invite/subscribe/address it explicitly. Its reply must say the
+sentinel routed the request and the supervisor has not read it. On expiry,
+handoff processed/outstanding counts and last source sequences. See
+'bashy skill show inbox'.
+
+NAME owns the address and cursor; NICK/aliases do not create another inbox.
+Never share one registered NAME between agents. Separate concurrent topic
+watchers need separate registered names. Keep messages short: request/decision,
+priority, owner/expected response, and a stable repo-relative + commit/issue/
+room/artifact reference; never send only an inaccessible temporary path.
+
+The live watcher card is also NAME's cooperative authored-message claim. MB,
+Meet, ping, notify, Bus publish, and human-mailbox send refuse an explicit --as
+NAME from a different live agent session and notify NAME of the refused attempt.
+A governed tool session uses a hashed session claim; tools without stable session
+metadata fall back to the watcher parent's process lineage. A seat nobody holds
+is taken by the first authored message from a process that declares the name
+(BASHY_AGENT=NAME in its environment — the same declaration that seats NAME@host
+on a repo session); an undeclared caller is refused and told so. BASHY_PRINCIPAL
+is attribution, not ownership proof. This is host-local collision prevention, not
+cryptographic identity.
+Inspect ownership with 'bashy whois agent:NAME' (TAKEN) and 'bashy agent'.
+
+MB post/send (including messaging ping), Bus publish, and every manual Meet tell
+accept at most 1024 UTF-8
+bytes per authored body and never truncate or auto-split. If no stable shared
+reference exists, manually number <=1024-byte parts with one correlation token;
+the receiver waits for END and reports missing parts.
+
+A watch registered to NAME stops itself once the agent session that started it
+is no longer its parent or ancestor. It stops BEFORE reading, so nothing is
+rendered or acknowledged, and releases NAME's card and claim so a live session
+can resume coverage. A recycled owner pid is not that session; where the process
+tree cannot be read the watch keeps running.
+
+A sentinel that exits must say monitoring ENDED, why/deadline, last processed
+provenance, outstanding status, and who resumes coverage. It must never promise
+continued monitoring after its process or assignment ends.
+
+Bashy-owned agent sessions receive the same view once at each real turn
+boundary. A session started outside Bashy has no authenticated control channel
+to steer; use this command (or --watch) explicitly. Bashy never guesses a PID or
+pretends such a session was adopted.`,
+		Args:          cobra.NoArgs,
+		SilenceUsage:  true,
+		SilenceErrors: true,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if watch && filter.sprint != "" {
+				return fmt.Errorf("inbox: --watch cannot be combined with --sprint (a scoped view must preserve every cursor)")
+			}
+			if wait < 0 {
+				return fmt.Errorf("inbox: --wait must not be negative")
+			}
+			if limit < 0 {
+				return fmt.Errorf("inbox: --limit must not be negative")
+			}
+			if untilCount < 0 {
+				return fmt.Errorf("inbox: --until-count must not be negative")
+			}
+			if limit > 0 && untilCount > limit {
+				return fmt.Errorf("inbox: --until-count (%d) cannot exceed --limit (%d)", untilCount, limit)
+			}
+			if watch && peek {
+				return fmt.Errorf("inbox: --watch cannot be combined with --peek (the same unread batch would repeat forever)")
+			}
+			if err := filter.validate(time.Now()); err != nil {
+				return err
+			}
+			if watch && untilCount == 0 && filter.active() {
+				return fmt.Errorf("inbox: --watch cannot be combined with --from/--search/--since (delivery acknowledges records the filter would hide)")
+			}
+			reader, err := resolveInboxReader(as)
+			if err != nil {
+				return err
+			}
+			// READING YOUR MAIL IS THE HEARTBEAT: refresh every active sprint lease
+			// held by reader on entry so one-shot and short-wait inbox polls keep the
+			// conductor seat live, matching runUnifiedInbox.
+			refreshSprintOwnerActivity(reader)
+			// A peek that names an agent seat in an attended session (same
+			// CLAUDE_CODE_SESSION_ID / session key) satisfies a later
+			// `bashy mb send --as SEAT` from the same session. The watch path
+			// already holds a live session claim; a bare peek held none, so
+			// the send was refused as "no matching live session claim" even
+			// after a synced peek. Record the peek claim for the session so
+			// the subsequent send finds a matching live claim without
+			// weakening the rule that a post must name a seat the session
+			// actually holds.
+			if peek && strings.TrimSpace(as) != "" {
+				_ = recordInboxPeekClaim(reader)
+			}
+			// A bare human watch belongs to the OS login and has no agent card.
+			// An explicit --as or authenticated agent watch must instead claim
+			// one registered, globally unique fleet identity.
+			principal := strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL"))
+			var claim inboxWatcherClaim
+			if watch && (strings.TrimSpace(as) != "" || strings.Contains(principal, "agent/")) {
+				registered, err := registerInboxWatcher(reader)
+				if err != nil {
+					return err
+				}
+				// The release runs on EVERY exit, the orphan exit included: a
+				// watcher that stops because its session died must hand the
+				// identity back, or the replacement it just told the fleet to
+				// start is refused by the corpse's own claim.
+				defer registered.leave()
+				claim = registered
+			}
+			// After the claim, never before it: the follow runtime arms native
+			// filesystem watches, and a refused claim must not leave them (and
+			// their goroutine) behind on a path that never reaches the loop
+			// that closes them.
+			poll := defaultInboxPollRuntime(watch || wait > 0)
+			poll.ownerLive = claim.ownerLive
+			if filter.active() {
+				poll.snapshot = filteredInboxSnapshot(poll.snapshot, filter, limit)
+			}
+			// Only a watch consumes: it keeps following, so a peek-only batch
+			// would repeat forever. Filtered --watch --until-count N preserves
+			// cursors so hidden records are never acknowledged.
+			effectivePeek := peek || !watch || filter.active()
+			return runUnifiedInboxWithOptions(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), reader, limit, untilCount, effectivePeek, jsonOut, watch, wait, poll)
+		},
+	}
+	f := cmd.Flags()
+	f.StringVar(&as, "as", "", "read as this identity (required when an external agent session cannot be attributed)")
+	f.DurationVar(&wait, "wait", 0, "wait up to this duration for input (with --watch: total watch bound)")
+	f.BoolVar(&peek, "peek", false, "read without advancing any source cursor (the default; only --watch consumes)")
+	f.StringVar(&filter.from, "from", "", "only messages whose sender contains this text")
+	f.StringVar(&filter.search, "search", "", "only messages containing this text (body/sender/recipient/topic/room/source)")
+	f.StringVar(&filter.matchRaw, "match", "", "only messages matching this regular expression (body/sender/recipient/topic/room/source)")
+	f.StringVar(&filter.sinceRaw, "since", "", "only messages at or after this time (duration like 2h or 3d, or RFC3339 / YYYY-MM-DD)")
+	f.StringVar(&filter.sprint, "sprint", "", "show only records about this sprint number or UUID without advancing any cursor")
+	f.BoolVar(&watch, "watch", false, "follow all inbound sources until interrupted")
+	f.IntVar(&untilCount, "until-count", 0, "wait until at least N matching messages arrive and exit 0 (exits 3 on --wait timeout)")
+	f.IntVarP(&limit, "limit", "n", 0, "show at most this many records per source (0 = no cap; the omitted tail stays unread, and --watch acknowledges only what it showed)")
+	f.BoolVar(&jsonOut, "json", false, "emit one "+unifiedInboxSchema+" object per line (NDJSON); a bounded read with no mail emits one envelope line with no events")
+	cmd.AddCommand(newMailboxListCmd(false), newMailboxReadCmd(false), newMailboxAckCmd(false), newMailboxPreserveCmd(false), newMailboxOrganizeCmd(false), newHumanMailboxCmd(), newAttentionCmd(false))
+	cmd.CompletionOptions.DisableDefaultCmd = true
+	return cmd
+}
+
+// resolveInboxReader prevents an authenticated Bashy agent from borrowing a
+// different identity's cursors. External sessions may name themselves, but the
+// name must resolve to a registered agent rather than minting an arbitrary
+// cursor by typo. Role backlog is reachable only through its current holder.
+func resolveInboxReader(as string) (string, error) {
+	if id, ok := principal.SelfInstanceUUID(); ok {
+		canonical, err := fleet.ParseInstanceUUID(id)
+		if err != nil {
+			return "", fmt.Errorf("inbox: invalid session instance: %w", err)
+		}
+		self := fleet.InstanceAddressPrefix + canonical
+		if strings.TrimSpace(as) != "" {
+			requested, explicit := bus.ExplicitInstanceID(as)
+			if !explicit || requested != canonical {
+				return "", fmt.Errorf("inbox: instance %q cannot read as %q; each instance owns its own mailbox. %s", self, as, inboxReaderHint)
+			}
+		}
+		return self, nil
+	}
+	principal := strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL"))
+	if strings.Contains(principal, "agent/") {
+		self, err := bus.BoardIdentity("")
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(as) == "" {
+			return self, nil
+		}
+		requested, err := bus.BoardIdentity(as)
+		if err != nil {
+			return "", err
+		}
+		if !strings.EqualFold(self, requested) {
+			return "", fmt.Errorf("inbox: authenticated agent %q cannot read as %q; each registered name owns its own cursors. %s", self, requested, inboxReaderHint)
+		}
+		return self, nil
+	}
+	if strings.TrimSpace(as) == "" {
+		return bus.BoardIdentity("")
+	}
+	// A PERSON owns a mailbox too. Restricting the reader to an agent left the
+	// operator with no inbox at all: mail addressed to them was written and
+	// nothing could read it, while `bashy app` showed the same rows to everyone
+	// as a third-person peek. `bus.TargetPerson` already existed and was simply
+	// refused here.
+	//
+	// The rule is by EXCLUSION, and only a role is excluded: it is an address
+	// that survives handover and has no cursor of its own to advance.
+	//
+	// Listing the allowed kinds instead was subtly wrong. A name that ALREADY
+	// holds a cursor resolves as bus.TargetReader — before the agent or person
+	// branches are reached — so the operator's own name, which had a cursor from
+	// every prior read, was refused while an alias of the same person passed.
+	// Someone who owns a cursor is by definition an inbox owner.
+	addr, kind, ok := bus.ResolveSendTarget(as)
+	if !ok {
+		// A registered agent owns its mailbox even while several live
+		// instances make its bare name ambiguous as a SEND target. Every
+		// concurrent conversation on a family opens its own instance, so a
+		// busy family otherwise lost its own inbox to "owns no mailbox here".
+		if name := registeredAgentName(as); name != "" {
+			addr, kind, ok = name, bus.TargetAgent, true
+		}
+	}
+	if !ok || kind == bus.TargetRole {
+		return "", fmt.Errorf("inbox: --as %q owns no mailbox here; establish an identity first — declare BASHY_AGENT=NAME (or register with `bashy agent add` / `bashy person add`), then choose an agent from `bashy agent list --all` or a person from `bashy person list` (`bashy whois %s` says what it resolves to). %s", as, as, inboxReaderHint)
+	}
+	return addr, nil
+}
+
+// registeredAgentName returns the roster name as names, after the board's own
+// name folding, or "" when it names no registered agent.
+func registeredAgentName(as string) string {
+	canon := fleetResolveAgentName(as)
+	for _, n := range fleetAgentNames() {
+		if strings.EqualFold(n, as) || (canon != "" && strings.EqualFold(n, canon)) {
+			return n
+		}
+	}
+	return ""
+}
+
+// inboxWatcherClaim is one registered watcher's hold on a fleet identity: how
+// it is released, and the condition under which it is still legitimate. The two
+// belong together — a claim whose owning session is gone must be released, and
+// the loop that discovers that is the one holding it.
+type inboxWatcherClaim struct {
+	leave func()
+	// ownerLive returns an error once the registered owner is provably no
+	// longer this process's parent or ancestor. It is nil-safe to call
+	// repeatedly and fails open where the process tree cannot be read.
+	ownerLive func() error
+}
+
+// registerInboxWatcher makes a persistent inbox reader visible through
+// `bashy agent` for exactly as long as its watch process is alive. The stable
+// card ID is also a claim: two processes may not consume one registered
+// identity's cursors concurrently.
+func registerInboxWatcher(reader string) (inboxWatcherClaim, error) {
+	return registerInboxWatcherAs(reader, inboxWatcherMode, "watching Bashy inbox", nil)
+}
+
+func registerInboxWatcherAs(reader, mode, task string, caps []string) (inboxWatcherClaim, error) {
+	id, err := resolveInboxWatcherIdentity(reader)
+	if err != nil {
+		return inboxWatcherClaim{}, err
+	}
+
+	// The attached-mode coord claim is the watcher lease. It closes the read-before-write
+	// race between two fresh processes and also refuses two watcher loops in
+	// one process, since both would otherwise advance the same source cursors.
+	// Keyed by owner identity name under kind "inbox".
+	//
+	// BASHY_CLAIM=0|off bypasses the ledger: a watcher must still start when the
+	// advisory ledger is unavailable or switched off. Exclusivity then rests on
+	// the in-process table (two loops in one process) and room.Join (two
+	// processes), which is what the lease only duplicated.
+	var (
+		grant coord.Grant
+		lock  *lockfile.Lock
+	)
+	if claimDisabled() {
+		if _, held := localInboxWatchers.LoadOrStore(id.claimID, struct{}{}); held {
+			return inboxWatcherClaim{}, errInboxWatcherLive(id)
+		}
+	} else {
+		var err error
+		grant, lock, err = coord.AcquireAttachedRef(context.Background(), coord.Request{
+			Ref:    coord.Ref{Kind: "inbox", Name: id.name},
+			Holder: principal.Ref{Name: id.name},
+			Intent: task,
+			Mode:   coord.ModeAttached,
+		})
+		if err != nil {
+			var conf *coord.Conflict
+			if errors.As(err, &conf) || errors.Is(err, lockfile.ErrHeld) {
+				return inboxWatcherClaim{}, errInboxWatcherLive(id)
+			}
+			return inboxWatcherClaim{}, fmt.Errorf("inbox: claim watcher identity %q: %w", id.name, err)
+		}
+	}
+	releaseLease := func() {
+		if lock == nil {
+			localInboxWatchers.Delete(id.claimID)
+			return
+		}
+		_ = coord.ReleaseAttached(coord.DefaultDir(), grant.Claim, lock)
+	}
+	cwd, _ := os.Getwd()
+	ownerPID := os.Getppid()
+	if ownerPID <= 1 {
+		// PID 1 is a common ancestor, never a session proof. Leave OwnerPID empty
+		// so the shared guard falls back to this watcher's live PID and fails
+		// closed for sibling commands when no stronger tool-session claim exists.
+		ownerPID = 0
+	}
+	card := room.Card{
+		// The registered name is the global identity claim. A parallel
+		// "inbox:NAME" card would let one identity occupy two live sessions.
+		ID:        id.claimID,
+		Principal: id.principal,
+		// SessionClaim is the AGENT-to-AGENT impersonation proof; it is empty for
+		// a person, whose OS login is the trust boundary (bus.ResolveAuthoredActor
+		// decides authored mail the same way). Tool/Model/Binding likewise stay
+		// empty for a person, who has no runnable agent binding to report.
+		SessionClaim: id.sessionClaim,
+		Tool:         id.tool,
+		Model:        id.model,
+		Binding:      id.binding,
+		Nick:         id.nick,
+		Mode:         mode,
+		Task:         task,
+		Caps:         caps,
+		PID:          os.Getpid(),
+		OwnerPID:     ownerPID,
+		Cwd:          cwd,
+	}
+	if err := room.Join(card); err != nil {
+		var live *room.ErrLive
+		if mode == inboxWatcherMode && lock != nil && errors.As(err, &live) {
+			// The identity is live under a card this watch did not write.
+			// A managed session holds its own name exactly this way, so a
+			// watch running inside that same session may share it. Anything
+			// else falls through to the refusal below, unchanged.
+			if adopted, ok := adoptManagedSessionWatch(id, releaseLease); ok {
+				return adopted, nil
+			}
+		}
+		releaseLease()
+		if lock == nil && errors.As(err, &live) {
+			return inboxWatcherClaim{}, errInboxWatcherLive(id)
+		}
+		return inboxWatcherClaim{}, fmt.Errorf("inbox: register watcher %q: %w", id.name, err)
+	}
+	anchor := inboxWatcherAnchor(card)
+	return inboxWatcherClaim{
+		leave: func() {
+			// Both halves, always. The room card is what `bashy agent` and the
+			// authored-identity guard read; the kernel claim is what the next
+			// watcher process must take. Releasing one and keeping the other
+			// leaves the identity half-held, which reads as available in one
+			// surface and taken in the other.
+			retireInboxWatcherCard(card)
+			releaseLease()
+		},
+		ownerLive: func() error {
+			if inboxOwnerRelation(os.Getpid(), anchor) == inboxOwnerGone {
+				return &inboxOwnerGoneError{agent: id.name, owner: anchor}
+			}
+			return nil
+		},
+	}, nil
+}
+
+// adoptManagedSessionWatch shares a managed session's own room identity with
+// an inbox watch running inside that same session, instead of refusing it as
+// a duplicate owner.
+//
+// A managed (foreman) session holds its singleton name card for its whole
+// lifetime, so `inbox --watch` could never register and no supported command
+// could drain that identity's overflow: bounded reads peek by design and
+// `sprint inbox-ack` needs an attached sprint watch the foreman is not.
+//
+// The adoption proves the session instead of taking the identity: the live
+// card must be this name's foreman-mode card, and this process must descend
+// from its holder (the inboxOwnerRelation proof — liveness alone is not
+// identity, a recycled pid must not satisfy it). Nothing is written to the
+// room: there is still exactly one card, still held by the foreman, so leave
+// releases only the kernel lease the watch acquired and never retires the
+// card. Single-consumer exclusion is unchanged — the caller holds the
+// exclusive attached lease, so a second concurrent watch is refused before it
+// gets here — and the claim is offered only while that lease is held
+// (BASHY_CLAIM=0 keeps the old refusal). Unknown ancestry fails closed.
+//
+// The adopted watch drains exactly like any other: the loop renders each
+// batch before its per-source watermarks advance, so no undisplayed record is
+// ever acknowledged, and the ownerLive guard below stops the watch (without
+// consuming) once the owning session is gone.
+func adoptManagedSessionWatch(id inboxWatcherIdentity, releaseLease func()) (inboxWatcherClaim, bool) {
+	incumbent, live, err := room.Find(id.claimID)
+	if err != nil || !live {
+		return inboxWatcherClaim{}, false
+	}
+	if m := strings.ToLower(strings.TrimSpace(incumbent.Mode)); m != "foreman" && m != "peek" {
+		return inboxWatcherClaim{}, false
+	}
+	// For a peek holder, also require the session digest to match — otherwise
+	// a stale peek from a different CLAUDE_CODE_SESSION_ID would be adopted.
+	if m := strings.ToLower(strings.TrimSpace(incumbent.Mode)); m == "peek" {
+		if id.sessionClaim != "" && incumbent.SessionClaim != "" && incumbent.SessionClaim != id.sessionClaim {
+			return inboxWatcherClaim{}, false
+		}
+		// Peek adoption is by session hash, not ancestry: the holder is a
+		// short-lived child, not the harness parent, so ancestry would fail
+		// even for the same CLAUDE_CODE_SESSION_ID. Hash match is sufficient.
+		if id.sessionClaim != "" && incumbent.SessionClaim == id.sessionClaim {
+			return inboxWatcherClaim{
+				leave:     releaseLease,
+				ownerLive: func() error { return nil },
+			}, true
+		}
+	}
+	anchor := inboxWatcherAnchor(incumbent)
+	if inboxOwnerRelation(os.Getpid(), anchor) != inboxOwnerLive {
+		return inboxWatcherClaim{}, false
+	}
+	return inboxWatcherClaim{
+		leave: releaseLease,
+		ownerLive: func() error {
+			if inboxOwnerRelation(os.Getpid(), anchor) == inboxOwnerGone {
+				return &inboxOwnerGoneError{agent: id.name, owner: anchor}
+			}
+			return nil
+		},
+	}, true
+}
+
+// localInboxWatchers holds the claim ids of this process's watchers while the
+// coord ledger is bypassed (BASHY_CLAIM=0|off).
+var localInboxWatchers sync.Map
+
+// errInboxWatcherLive refuses a SECOND watcher for one identity, and the
+// refusal has to say who the first one is.
+//
+// One registered name may have exactly one consuming reader, because two loops
+// advance the same source cursors. That rule is right; the message was not. It
+// named only the rule, so an external manager whose `sprint take --watch` was
+// refused could not tell whether a real sibling watch was running, or whether a
+// card from an earlier process in the SAME harness session was still on the
+// board holding the name — the shape Sprint 412 and 329 both hit, where the
+// holder is anchored to the harness parent PID and therefore looks live to
+// every check. Without the holder's pid and mode there is nothing to act on.
+//
+// So the holder is looked up and reported. The lookup is best-effort: the
+// refusal itself must never depend on the diagnostic succeeding, so a failed
+// read just omits the detail.
+func errInboxWatcherLive(id inboxWatcherIdentity) error {
+	detail := ""
+	if card, live, err := room.Find(id.claimID); err == nil && live {
+		mode := strings.TrimSpace(card.Mode)
+		if mode == "" {
+			mode = "unknown"
+		}
+		owner := ""
+		if anchor := inboxWatcherAnchor(card); anchor > 0 && anchor != card.PID {
+			owner = fmt.Sprintf(", owned by the session at pid %d", anchor)
+		}
+		detail = fmt.Sprintf(" (holder: pid %d%s, mode %q, task %q)", card.PID, owner, mode, strings.TrimSpace(card.Task))
+	}
+	return fmt.Errorf("inbox: %s %q already has a live inbox watcher%s; one identity may have only one consuming reader, because two would advance the same cursors.\n"+
+		"  see it:     `bashy agent list --all` (the watcher row for %[2]s) — nothing was consumed and no cursor moved\n"+
+		"  stop it:    end that process; its card is retired when it exits\n"+
+		"  one-shot:   `bashy inbox --as %[2]s --peek` reads without consuming and needs no watcher at all",
+		id.kind, id.name, detail)
+}
+
+// retireInboxWatcherCard removes exactly this watcher's own card.
+//
+// room.Leave cannot: it presents the watcher's PID, but a card carrying a
+// session digest is HELD by its OwnerPID (the agent session, which outlives
+// every watcher it starts), so Leave sees a live card held by someone else and
+// leaves it on the board — a restart in the same session is then refused until
+// the session exits. The watcher's lifetime ends here; the session's does not.
+// So retire as the card's actual holder, but only after confirming the card on
+// disk is still the one this watcher wrote (same writer PID and session
+// digest), so a stale exit never deletes a different holder's card.
+func retireInboxWatcherCard(card room.Card) {
+	cur, live, err := room.Find(card.ID)
+	if err != nil || !live || cur.ID != card.ID || cur.PID != card.PID || cur.SessionClaim != card.SessionClaim {
+		return
+	}
+	holder := cur.PID
+	if cur.OwnerPID != 0 && cur.SessionClaim != "" {
+		holder = cur.OwnerPID
+	}
+	room.LeavePID(cur.ID, holder)
+}
+
+// inboxWatcherIdentity is the resolved holder of one watcher lease. Two identity
+// kinds may hold it: a registered AGENT, whose card carries a tool-session proof
+// (SessionClaim) so one harness cannot claim another agent's name; and a
+// registered PERSON, who carries none. A person is not an agent identity to
+// impersonate — the guard SessionClaim defends is specifically AGENT-to-AGENT,
+// and for a person the OS login is the trust boundary, exactly as
+// bus.ResolveAuthoredActor already decides for authored mail. Everything else —
+// the per-identity lease and the owning-session anchor for orphan detection — is
+// generic and applies to both.
+type inboxWatcherIdentity struct {
+	kind         string // "registered agent" | "person", for the duplicate-watcher message
+	name         string // canonical name; the lease holder and card nick
+	claimID      string // room card id, namespaced so an agent and a person never share one
+	principal    string // BASHY_PRINCIPAL (agent) or dhnt:person/<handle>
+	sessionClaim string // empty for a person
+	tool         string // empty for a person
+	model        string // empty for a person
+	binding      string // empty for a person
+	nick         string
+}
+
+// inboxPersonClaimID namespaces a person's room card so it can never be mistaken
+// for an agent's singleton claim (room.AgentClaimID) — the authored-actor guard
+// looks agents up by that id, and a person must not answer to it.
+func inboxPersonClaimID(handle string) string {
+	return "person:" + room.AgentClaimID(handle)
+}
+
+// resolveInboxWatcherIdentity classifies a reader that resolveInboxReader has
+// already vouched for. It accepts a registered agent or a registered person and
+// refuses everything else: an arbitrary string, an observed-but-unregistered
+// cursor, or a role must not file a watcher card. The refusal names BOTH
+// registries so it never sends a human to a list they can never appear in.
+func resolveInboxWatcherIdentity(reader string) (inboxWatcherIdentity, error) {
+	cat := fleet.New()
+	if agent, ok := cat.Agent(reader); ok {
+		return inboxWatcherIdentity{
+			kind:         "registered agent",
+			name:         agent.Name,
+			claimID:      room.AgentClaimID(agent.Name),
+			principal:    strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL")),
+			sessionClaim: bus.HashSessionClaim(currentAgentSession(agent.Name)),
+			tool:         agent.Tool,
+			model:        agent.Model,
+			binding:      agent.MatrixKey(),
+			nick:         agent.Name,
+		}, nil
+	}
+	if person, ok := cat.Person(reader); ok {
+		return inboxWatcherIdentity{
+			kind:      "person",
+			name:      person.Handle,
+			claimID:   inboxPersonClaimID(person.Handle),
+			principal: principal.URN(principal.KindPerson, person.Handle, principal.LocalOwner),
+			nick:      person.Handle,
+		}, nil
+	}
+	return inboxWatcherIdentity{}, fmt.Errorf("inbox: watcher identity %q is not a registered Bashy agent or a known person; register an agent with `bashy agent add`, add a person with `bashy person add`, or choose one from `bashy agent list --all` / `bashy person list`", reader)
+}
+
+// refreshSprintOwnerActivity is the one refresher, behind a var so a test can
+// observe the watch's heartbeat without a sprint store on disk. Same shape as
+// meet's apiRunner and operableFn: one package-level var, overridden and
+// restored by the test that needs it.
+var refreshSprintOwnerActivity = weave.RefreshSprintOwnerActivity
+
+func emitUntilCountTimeout(out, errOut io.Writer, partial inboxBatch, have, want int, emitPartial, jsonOut, watch bool) error {
+	if emitPartial && len(partial.events) > 0 {
+		if err := renderInboxBatch(out, errOut, partial, jsonOut); err != nil {
+			return err
+		}
+	} else if have == 0 && !watch && jsonOut {
+		if err := writeInboxEmptyEnvelope(out); err != nil {
+			return err
+		}
+	}
+	if have == 0 {
+		fmt.Fprintf(errOut, "EMPTY (timeout: matched 0/%d)\n", want)
+	} else {
+		fmt.Fprintf(errOut, "TIMEOUT (matched %d/%d)\n", have, want)
+	}
+	return &inboxExitError{
+		code:   inboxExitTimeout,
+		err:    fmt.Errorf("inbox: timeout waiting for %d matching message(s) (matched %d)", want, have),
+		silent: true,
+	}
+}
+
+func runUnifiedInboxWithOptions(ctx context.Context, out, errOut io.Writer, reader string, limit, untilCount int, peek, jsonOut, watch bool, bound time.Duration, poll inboxPollRuntime) error {
+	if poll.close != nil {
+		defer poll.close()
+	}
+	deadline := time.Time{}
+	if bound > 0 {
+		deadline = poll.now().Add(bound)
+	}
+	// Reading every source is expensive enough that doing it on a fixed short
+	// timer saturates a core on an idle host; the gate follows native store
+	// notifications and periodically rescans as a correctness backstop. See
+	// inbox_poll.go.
+	gate := &inboxPollGate{reader: reader, fingerprint: poll.fingerprint, fullRescan: poll.fullRescan}
+	interval := poll.min
+	// THE WATCH MUST KEEP REFRESHING, not refresh once and drift.
+	//
+	// The refresh above runs before this loop, which was enough for a bounded
+	// read and wrong for a watch: measured on this sprint's own seat, a watch
+	// running 1h18m showed a lease STALE for 43m — the time since the last
+	// bounded command, not since the watch started. So an agent following the
+	// instruction the tool itself prints ("`--watch` to stay attached") still
+	// went stale, and that instruction is what REPLACED the reverted transport
+	// gate: "reading your inbox is what keeps the seat live". A watch that does
+	// not refresh does not hold up the thing it replaced.
+	//
+	// Rate-limited to the same cadence the attached sprint watch uses — a third
+	// of the TTL, so two consecutive misses still leave the seat live — because
+	// the poll tick can be a second and the sprint store is not something to
+	// rewrite at that rate. This is the SAME refresher on a schedule, never a
+	// second one: two liveness signals for one seat, disagreeing, is the defect
+	// sprint 105 was opened to fix.
+	lastBeat := poll.now()
+	beatEvery := weave.SprintLeaseTTL / 3
+	delivered := 0
+	var lastBatch inboxBatch
+	for {
+		// BEFORE the read, not after it. Rendering is what advances a cursor,
+		// so a watcher whose owning session has exited must discover that
+		// while the backlog is still intact — a record drained into a dead
+		// session's stdout is gone from every other reader's view too.
+		if poll.ownerLive != nil {
+			if err := poll.ownerLive(); err != nil {
+				return err
+			}
+		}
+		now := poll.now()
+		if now.Sub(lastBeat) >= beatEvery {
+			// Best-effort and silent, exactly as at entry: bookkeeping the
+			// caller did not ask for may never fail a read.
+			refreshSprintOwnerActivity(reader)
+			lastBeat = now
+		}
+		read, changed, sum, sampled := gate.due(now)
+		// A bounded wait must not report EMPTY on the strength of a notifier alone:
+		// a native event can be lost, and the periodic rescan is far longer than
+		// the bound. Read once more at the deadline before giving up.
+		if !deadline.IsZero() && !now.Before(deadline) {
+			read = true
+		}
+		if changed {
+			// Traffic just landed: stay responsive for whatever follows it.
+			interval = poll.min
+		}
+		if read {
+			batch, err := poll.snapshot(reader, limit, true)
+			if err != nil {
+				return err
+			}
+			gate.commit(sum, sampled, now)
+			lastBatch = batch
+			if untilCount > 0 && peek {
+				if len(batch.events) >= untilCount {
+					return renderInboxBatch(out, errOut, batch, jsonOut)
+				}
+				if !watch && bound == 0 {
+					return emitUntilCountTimeout(out, errOut, batch, len(batch.events), untilCount, true, jsonOut, false)
+				}
+			} else if len(batch.events) > 0 {
+				if err := renderInboxBatch(out, errOut, batch, jsonOut); err != nil {
+					return err
+				}
+				if !peek {
+					if err := acknowledgeInboxBatch(batch); err != nil {
+						return err
+					}
+				}
+				delivered += len(batch.events)
+				interval = poll.min
+				if untilCount > 0 && delivered >= untilCount {
+					return nil
+				}
+				if !watch {
+					return nil
+				}
+			} else {
+				// Some source records are deliberately not inbound — most notably
+				// this reader's own Meet posts. Their source cursor still has to
+				// pass them or every poll rediscovers the same outbound record, but
+				// they must not render, wake a wait, or end a bounded read.
+				if !peek && len(batch.acks) > 0 {
+					if err := acknowledgeInboxBatch(batch); err != nil {
+						return err
+					}
+				}
+				if !watch && bound == 0 {
+					// The sync stamp (and any relay warning) is the one thing an
+					// empty inbox must still say: "nothing new" from a host that
+					// could not reach the relay is not the same as nothing new.
+					// With --json the machine side gets the same answer as one
+					// versioned envelope line on stdout (v1.0 release bar: the
+					// `inbox --json` probe needs one JSON document, and zero
+					// NDJSON lines is not one).
+					if jsonOut {
+						if err := writeInboxEmptyEnvelope(out); err != nil {
+							return err
+						}
+					}
+					for _, warning := range batch.warns {
+						fmt.Fprintln(errOut, warning)
+					}
+					fmt.Fprintf(errOut, "nothing new in any channel for %s\n", reader)
+					return nil
+				}
+			}
+		}
+		now = poll.now()
+		if !deadline.IsZero() && !now.Before(deadline) {
+			if untilCount > 0 {
+				if peek {
+					return emitUntilCountTimeout(out, errOut, lastBatch, len(lastBatch.events), untilCount, true, jsonOut, watch)
+				}
+				return emitUntilCountTimeout(out, errOut, inboxBatch{}, delivered, untilCount, false, jsonOut, watch)
+			}
+			if !watch {
+				// Bounded --wait with --json that saw nothing: same empty
+				// envelope as the immediate empty read, so the probe and the
+				// skill's one-batch-wait loop both get one JSON document.
+				if jsonOut {
+					if err := writeInboxEmptyEnvelope(out); err != nil {
+						return err
+					}
+				}
+				fmt.Fprintln(errOut, "EMPTY (timeout)")
+			}
+			return nil
+		}
+		pause := interval
+		if !deadline.IsZero() && now.Add(pause).After(deadline) {
+			pause = deadline.Sub(now)
+		}
+		if err := poll.wait(ctx, pause); err != nil {
+			if watch {
+				return nil
+			}
+			return err
+		}
+		// Back off while nothing is arriving. Delivery latency stays bounded
+		// by inboxPollMax; an idle timeout only reads an atomic generation.
+		interval *= 2
+		if interval > poll.max {
+			interval = poll.max
+		}
+	}
+}
+
+func acknowledgeInboxBatch(batch inboxBatch) error {
+	for _, ack := range batch.acks {
+		if err := ack(); err != nil {
+			return fmt.Errorf("inbox: advance processed source cursor: %w", err)
+		}
+	}
+	return nil
+}
+
+// snapshotUnifiedInbox only READS. Its ack closures are called after the whole
+// rendered batch has reached stdout, so a broken pipe cannot silently consume a
+// message. A snapshot containing only filtered outbound records has no output to
+// fail and applies its closure silently. Each closure carries the exact
+// per-source high-water mark observed.
+// deliverSessionMail is the seam for the cross-host delivery pass; a test
+// replaces it. nil means "no delivery on this host".
+var deliverSessionMail = func(ctx context.Context, repoRoot, reader string) (weave.DeliveryReport, error) {
+	return weave.DeliverRemoteMail(ctx, repoRoot, reader)
+}
+
+func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch, error) {
+	return snapshotInbox(reader, limit, includeBus, true)
+}
+
+// snapshotRolesMu serializes the memoized role-table window below.
+// bus.HostRoles is a process-global func var that the board scan consults on
+// every directed post, so the swap must be exclusive. Snapshots never nest,
+// so one mutex is enough.
+var snapshotRolesMu sync.Mutex
+
+// snapshotInbox is snapshotUnifiedInbox with the relay delivery pass optional:
+// the per-command unread hint reads local stores only, so an ordinary command
+// never waits on the network or files relay mail as a side effect.
+func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBatch, error) {
+	return snapshotInboxWithHint(reader, limit, includeBus, deliver, false)
+}
+
+func snapshotInboxWithHint(reader string, limit int, includeBus, deliver, hint bool) (inboxBatch, error) {
+	restoreRoles, conducted := memoizeHostRolesFor(reader)
+	defer restoreRoles()
+	var batch inboxBatch
+	state, err := loadMailboxState(mailboxSpec{Key: "agent:" + reader, Address: reader, Kind: "agent"})
+	if err != nil {
+		return batch, err
+	}
+
+	// LOCAL DELIVERY FIRST (Sprint 217, the email model). Mail from another
+	// host sits on the repo session's feed until this pass files it into the
+	// reader's own board under its uuid; everything below then reads it as
+	// ordinary directed mb mail. Delivery is not reading: it runs on --peek
+	// too, never advances a read cursor, and a redelivery is a no-op. An
+	// unpaired host, or one outside any checkout, skips it silently — the
+	// inbox works exactly as before. A relay ERROR is reported as a warning,
+	// never as an empty inbox: absence of evidence is not "no mail".
+	if deliver && deliverSessionMail != nil {
+		if cwd, err := os.Getwd(); err == nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			rep, derr := deliverSessionMail(ctx, cwd, reader)
+			cancel()
+			switch {
+			case derr != nil:
+				batch.warns = append(batch.warns, fmt.Sprintf("session: not synced — %v (local mail unaffected)", derr))
+			case rep.Skipped != "":
+				// nothing to say: not a team checkout
+			default:
+				// "delivered 0" sat under a screenful of mail and read as a
+				// contradiction: it counts records newly FILED this pass, not
+				// records waiting. Say it only when something was filed.
+				stamp := fmt.Sprintf("session %s: synced as of %s · cursor %s",
+					shortSession(rep.Session), rep.AsOf.Format(time.RFC3339), shortSession(rep.Cursor))
+				if rep.Delivered > 0 {
+					stamp += fmt.Sprintf(" · delivered %d", rep.Delivered)
+				}
+				batch.warns = append(batch.warns, stamp)
+			}
+		}
+	}
+	var roleTopics map[string]string
+	if limit > 0 {
+		roleTopics = hostRoleTopics()
+	}
+	appendLimited := func(source string, events []unifiedInboxEvent, ack func() error) {
+		// Explicit ack is per record, not a source high-water mark: advancing
+		// a cursor here would hide earlier unacknowledged mail. Filter before
+		// limiting so acknowledged records cannot occupy the visible window.
+		pending := events[:0]
+		for _, event := range events {
+			idSource := event.Source
+			if event.Source == "meet" {
+				idSource += ":" + event.Room
+			}
+			if state.Marks[fmt.Sprintf("%s:%d", idSource, event.Seq)].AckedAt != "" {
+				continue
+			}
+			// A seeded Meet copy shares the original MB acknowledgment.
+			if event.Origin != nil && strings.EqualFold(event.Origin.Source, "mb") &&
+				state.Marks[fmt.Sprintf("mb:%d", event.Origin.Seq)].AckedAt != "" {
+				continue
+			}
+			pending = append(pending, event)
+		}
+		events = pending
+		shown := events
+		capped := limit > 0 && len(events) > limit
+		if capped {
+			shown = events[:limit]
+			batch.warns = append(batch.warns, fmt.Sprintf("%s: %d more record(s) remain unread because of --limit", source, len(events)-limit))
+		}
+		batch.events = append(batch.events, shown...)
+		if len(shown) == 0 || ack == nil {
+			return
+		}
+		if !capped {
+			batch.acks = append(batch.acks, ack)
+			return
+		}
+		// A capped source has no safe whole-source watermark: it would consume
+		// the omitted tail and any record that lands before the ack. Acknowledge
+		// exactly the rendered records; the source cursor advances only over
+		// their contiguous acknowledged prefix.
+		for _, event := range shown {
+			e := event
+			batch.acks = append(batch.acks, func() error {
+				return acknowledgeTurnInboxItem(reader, e, batch.rawEvents, roleTopics)
+			})
+		}
+	}
+
+	// Message board, including steward/conductor messages now addressed to the
+	// stable role rather than copied into a role-specific store.
+	var directed, other []bus.Post
+	var incomplete bool
+	if hint {
+		directed, other, incomplete, err = bus.HintUnseen(reader)
+		batch.hintIncomplete = incomplete
+	} else {
+		directed, other, _, err = bus.Unseen(reader, 0)
+	}
+	if err != nil {
+		return batch, fmt.Errorf("message board: %w", err)
+	}
+	posts := append(directed, other...)
+	mbEvents := make([]unifiedInboxEvent, 0, len(posts))
+	var mbHigh int64
+	for _, p := range posts {
+		if p.Seq > mbHigh {
+			mbHigh = p.Seq
+		}
+		mbEvents = append(mbEvents, unifiedInboxEvent{Schema: unifiedInboxSchema, Source: "mb", Seq: p.Seq, At: p.At, From: p.From, FromParty: p.FromParty, To: mbInboxTo(p), Topic: p.Topic, Body: p.Body})
+	}
+	appendLimited("mb", mbEvents, func() error { return bus.MarkSeen(reader, mbHigh) })
+
+	// Every Meet room a reader is SEATED in is a channel. Deliverability keys on
+	// the seat, never on the room's type: holding a seat IS a subscription to
+	// it. Chaired rooms keep deciding who holds the FLOOR — they stop deciding
+	// whether mail exists. The earlier `room.Board` gate was correct while a
+	// chaired meeting's participants were spawned processes that died at the end
+	// of their turn, so a transcript really was a record rather than an inbox;
+	// long-lived seats retired that premise, and the exclusion then silenced the
+	// one channel a sprint advertises to its own conductor. See
+	// docs/agent-inbox-unified-delivery.md sections 1-2 and 7 (P0-a).
+	rooms, err := inboxMeetRooms()
+	if err != nil {
+		return batch, fmt.Errorf("meet rooms: %w", err)
+	}
+	conductedRooms := conductedMeetRoomSet(conducted)
+	for _, room := range rooms {
+		if !stringMember(room.Members, reader) && !conductedRooms[strings.ToLower(strings.TrimSpace(room.ID))] {
+			continue
+		}
+		seen := meet.SeenSeq(room.ID, reader)
+		d, o, _, through, err := meet.UnreadRecords(room.ID, reader, 0)
+		if err != nil {
+			return batch, fmt.Errorf("meet room %s: %w", room.ID, err)
+		}
+		events := append(d, o...)
+		out := make([]unifiedInboxEvent, 0, len(events))
+		for _, record := range events {
+			e := record.Event
+			item := unifiedInboxEvent{Schema: unifiedInboxSchema, Source: "meet", Seq: record.Seq, At: e.TS.Format(time.RFC3339Nano), From: e.Speaker, To: e.To, Topic: e.Kind, Room: room.ID, Body: e.Text}
+			if e.Origin != nil {
+				item.Origin = &unifiedInboxOrigin{Source: e.Origin.Source, Seq: e.Origin.Seq}
+			}
+			out = append(out, item)
+		}
+		id := room.ID
+		appendLimited("meet:"+id, out, func() error { return meet.MarkSeenThrough(id, reader, through) })
+		if len(out) == 0 && through > seen {
+			// UnreadRecords intentionally filters records authored by reader.
+			// Carry their watermark as a silent acknowledgement: otherwise a
+			// watch either busy-loops on its own post or has to render it merely
+			// to move forward. runUnifiedInbox applies this ack without treating
+			// it as an inbound batch.
+			batch.acks = append(batch.acks, func() error { return meet.MarkSeenThrough(id, reader, through) })
+		}
+	}
+
+	if includeBus {
+		snapshot, err := bus.SnapshotInbox(reader)
+		if err != nil {
+			return batch, fmt.Errorf("bus notifications: %w", err)
+		}
+		appendLimited("bus", pendingEvents("bus", snapshot.Items), snapshot.Commit)
+	}
+
+	// Compatibility drain for pre-board role pings already durable in the old
+	// role buffers. New role messages arrive through MB above; no sixth store is
+	// created and this path can disappear after the retained backlog is empty.
+	if bus.HostRoles != nil {
+		for _, role := range bus.HostRoles() {
+			if !(bus.Post{To: role.Topic}).Directed(reader) {
+				continue
+			}
+			snapshot, err := bus.SnapshotInbox(role.Topic)
+			if err != nil {
+				return batch, fmt.Errorf("role %s: %w", role.Label, err)
+			}
+			out := pendingEvents("role:"+role.Label, snapshot.Items)
+			appendLimited("role:"+role.Label, out, snapshot.Commit)
+		}
+	}
+	for i := range batch.events {
+		event := &batch.events[i]
+		event.FromParty, event.FromHandle = inboxSenderIdentity(event.From, event.FromParty)
+		event.EventType, event.StoryID, event.SuggestedVerb = classifyInboxEvent(event.Body, event.To)
+	}
+	batch.rawEvents = append([]unifiedInboxEvent(nil), batch.events...)
+	batch.events = collapseProvenanceDuplicates(batch.events)
+	sortInboxEvents(batch.events)
+	return batch, nil
+}
+
+// parseInboxTime reads the timestamps the sources write (RFC3339, with or
+// without fractional seconds). ok is false for an empty or foreign format.
+func parseInboxTime(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339Nano, s)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
+}
+
+// parseInboxSince accepts a look-back duration (2h, 30m, 3d) or an absolute
+// RFC3339 / YYYY-MM-DD time.
+func parseInboxSince(raw string, now time.Time) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if strings.HasSuffix(raw, "d") {
+		var days int
+		if _, err := fmt.Sscanf(raw, "%dd", &days); err == nil && days >= 0 && fmt.Sprintf("%dd", days) == raw {
+			return now.Add(-time.Duration(days) * 24 * time.Hour), nil
+		}
+	}
+	if d, err := time.ParseDuration(raw); err == nil {
+		if d < 0 {
+			return time.Time{}, fmt.Errorf("inbox: --since %q must not be negative", raw)
+		}
+		return now.Add(-d), nil
+	}
+	if t, ok := parseInboxTime(raw); ok {
+		return t, nil
+	}
+	if t, err := time.ParseInLocation("2006-01-02", raw, now.Location()); err == nil {
+		return t, nil
+	}
+	return time.Time{}, fmt.Errorf("inbox: --since %q is not a duration (2h, 3d), RFC3339 time, or YYYY-MM-DD date", raw)
+}
+
+// sortInboxEvents makes the stream chronological, newest last, by PARSED time.
+// Sources format timestamps differently (fractional seconds, offsets), so a
+// string compare mis-orders them. Records with no parseable time sort first,
+// then ties break by source and sequence, so the order is deterministic.
+func sortInboxEvents(events []unifiedInboxEvent) {
+	sort.SliceStable(events, func(i, j int) bool {
+		ti, _ := parseInboxTime(events[i].At)
+		tj, _ := parseInboxTime(events[j].At)
+		if !ti.Equal(tj) {
+			return ti.Before(tj)
+		}
+		if events[i].Source != events[j].Source {
+			return events[i].Source < events[j].Source
+		}
+		return events[i].Seq < events[j].Seq
+	})
+}
+
+// inboxEventItem projects a record onto the mailbox item shape so the existing
+// mailboxFilter selects it; the role source is "role:LABEL" in the stream and
+// plain "role" to a filter.
+func inboxEventItem(e unifiedInboxEvent) mailboxItem {
+	source, _, _ := strings.Cut(e.Source, ":")
+	return mailboxItem{Schema: mailboxSchema, Source: source, Seq: e.Seq, At: e.At, From: e.From, FromParty: e.FromParty, FromHandle: e.FromHandle, To: e.To, Topic: e.Topic, Room: e.Room, Body: e.Body}
+}
+
+// filteredInboxSnapshot narrows a read-only snapshot. It drops the batch's
+// acknowledgements: a filtered view never moves a cursor past a record it hid.
+// The cap applies to the filtered stream and keeps the newest records.
+func filteredInboxSnapshot(next func(string, int, bool) (inboxBatch, error), f mailboxFilter, limit int) func(string, int, bool) (inboxBatch, error) {
+	f.all = true
+	return func(reader string, _ int, includeBus bool) (inboxBatch, error) {
+		batch, err := next(reader, 0, includeBus)
+		if err != nil {
+			return batch, err
+		}
+		kept := batch.events[:0:0]
+		for _, e := range batch.events {
+			if f.match(inboxEventItem(e)) {
+				kept = append(kept, e)
+			}
+		}
+		if limit > 0 && len(kept) > limit {
+			kept = kept[len(kept)-limit:]
+		}
+		batch.events = kept
+		batch.acks = nil
+		return batch, nil
+	}
+}
+
+// collapseProvenanceDuplicates removes only a Meet copy whose structured
+// origin names an MB record present in the same rendered batch. Rendered prose
+// is never a key: independently repeated text remains independently visible.
+// Source acknowledgements stay in the batch, so successful rendering advances
+// both the MB and Meet watermarks; a render failure advances neither.
+func collapseProvenanceDuplicates(events []unifiedInboxEvent) []unifiedInboxEvent {
+	mb := make(map[int64]struct{})
+	for _, event := range events {
+		if event.Source == "mb" {
+			mb[event.Seq] = struct{}{}
+		}
+	}
+	out := events[:0]
+	for _, event := range events {
+		if event.Source == "meet" && event.Origin != nil && strings.EqualFold(event.Origin.Source, "mb") {
+			if _, ok := mb[event.Origin.Seq]; ok {
+				continue
+			}
+		}
+		out = append(out, event)
+	}
+	return out
+}
+
+func pendingEvents(source string, items []bus.Pending) []unifiedInboxEvent {
+	out := make([]unifiedInboxEvent, 0, len(items))
+	for _, p := range items {
+		out = append(out, unifiedInboxEvent{Schema: unifiedInboxSchema, Source: source, Seq: p.Seq, At: p.TS, From: p.Principal, To: p.To, Topic: p.Topic, Room: p.Room, Body: p.Body})
+	}
+	return out
+}
+
+// Preserve send-time provenance. Older UUID-only records can recover their
+// frozen family from the instance store, but a reusable label is never looked
+// up as an identity. Handles are display metadata resolved only by UUID.
+func inboxSenderIdentity(from string, party *bus.Party) (*bus.Party, string) {
+	id, ok := bus.ExplicitInstanceID(from)
+	if party != nil {
+		id, ok = party.UUID, true
+	}
+	if !ok {
+		return party, ""
+	}
+	inst, err := bus.InstanceStoreFn().Get(id)
+	if err != nil {
+		return party, ""
+	}
+	if party == nil {
+		party = &bus.Party{UUID: inst.UUID, Label: inst.Label, FamilyID: inst.FamilyID,
+			Family: inst.Family, Policy: inst.Policy, Bindings: inst.Bindings}
+	}
+	return party, inst.Handle
+}
+
+// Both inbox views filter exactly the attribution that they display.
+func inboxSenderText(from string, party *bus.Party, handle string) string {
+	text := emptyAs(from, "unknown")
+	if party == nil {
+		return text
+	}
+	var details []string
+	if handle != "" {
+		details = append(details, "handle: "+handle)
+	} else if party.Label != "" && party.Label != from {
+		details = append(details, "label: "+party.Label)
+	}
+	details = append(details, "uuid: "+party.UUID)
+	if party.Family != "" {
+		details = append(details, "family: "+party.Family)
+	}
+	if len(party.Bindings) > 0 {
+		details = append(details, "bindings: "+strings.Join(party.Bindings, ", "))
+	}
+	if party.Selected != "" {
+		details = append(details, "selected: "+party.Selected)
+	}
+	return text + " (" + strings.Join(details, "; ") + ")"
+}
+
+func renderInboxBatch(out, errOut io.Writer, batch inboxBatch, jsonOut bool) error {
+	var rendered bytes.Buffer
+	if jsonOut {
+		enc := json.NewEncoder(&rendered)
+		for _, event := range batch.events {
+			if err := enc.Encode(event); err != nil {
+				return err
+			}
+		}
+	} else {
+		for _, event := range batch.events {
+			where := event.Source
+			if event.Room != "" {
+				where += "/" + event.Room
+			}
+			fmt.Fprintf(&rendered, "%s [%s:%d] %s → %s", emptyAs(event.At, "-"), where, event.Seq, inboxSenderText(event.From, event.FromParty, event.FromHandle), emptyAs(event.To, "all"))
+			if event.Topic != "" {
+				fmt.Fprintf(&rendered, " (%s)", event.Topic)
+			}
+			fmt.Fprintf(&rendered, "\n%s\n\n", event.Body)
+		}
+	}
+	n, err := out.Write(rendered.Bytes())
+	if err != nil {
+		return err
+	}
+	if n != rendered.Len() {
+		return io.ErrShortWrite
+	}
+	for _, warning := range batch.warns {
+		fmt.Fprintln(errOut, warning)
+	}
+	return nil
+}
+
+// shortSession abbreviates a uuid or cursor for the one-line sync stamp.
+func shortSession(id string) string {
+	if len(id) > 13 {
+		return id[:13]
+	}
+	if id == "" {
+		return "-"
+	}
+	return id
+}
+
+func stringMember(values []string, want string) bool {
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), strings.TrimSpace(want)) {
+			return true
+		}
+	}
+	return false
+}
+
+func emptyAs(value, fallback string) string {
+	if strings.TrimSpace(value) == "" {
+		return fallback
+	}
+	return value
+}
+
+// unifiedTurnPreamble is wired into coreutils/chat. Bus pending is already
+// drained by bus.TurnPreamble itself; this callback adds every other source in
+// one bounded block and acknowledges only after rendering that block in memory.
+func unifiedTurnPreamble(agent string) bus.PreparedPreamble {
+	batch, err := snapshotUnifiedInbox(agent, 0, false)
+	if err != nil {
+		warning := fmt.Sprintf("[Bashy unified inbox warning]\nCould not read every inbound source: %v\nNo source cursor was advanced; run `bashy inbox --as %s`.", err, agent)
+		return bus.NewPreparedPreamble(warning, nil)
+	}
+	if len(batch.events) == 0 {
+		return bus.PreparedPreamble{}
+	}
+	var out bytes.Buffer
+	if err := renderInboxBatch(&out, io.Discard, batch, false); err != nil {
+		return bus.PreparedPreamble{}
+	}
+	ack := func() error {
+		for _, ack := range batch.acks {
+			if err := ack(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	text := "[Bashy unified inbox — read before the instruction below]\n" + strings.TrimSpace(out.String())
+	return bus.NewPreparedPreamble(text, ack)
+}
+
+// recordInboxPeekClaim makes a peek act as a live-session claim for the
+// subsequent `bashy mb send --as SEAT` from the SAME tool session (same
+// CLAUDE_CODE_SESSION_ID / session key). The watch path already holds a live
+// claim; a bare peek held none, so the send was refused even after a synced
+// peek. The claim is the session digest that bus.ResolveAuthoredActor
+// compares (room.Card.SessionClaim == hash(currentAgentSession)) and is
+// anchored to the harness OwnerPID so it outlives the short-lived peek
+// command. Best-effort: a failed claim never fails the peek read itself.
+//
+// A peek may claim the seat ONLY when (a) nobody holds it, (b) the holder
+// is stale (not live), or (c) the holder is this same session (same digest).
+// It MUST never evict a LIVE incumbent held by a different session — that
+// would be a silent seat hijack. When a live foreign holder exists the peek
+// still reads but records no claim, and a subsequent mb send is refused with
+// the holder's identity so the operator knows to `bashy sprint take`.
+func recordInboxPeekClaim(reader string) error {
+	raw := currentAgentSession(reader)
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	agent, ok := fleet.New().Agent(reader)
+	if !ok {
+		return nil
+	}
+	tool, ok := fleet.New().Tool(agent.Tool)
+	if !ok {
+		return nil
+	}
+	_ = tool
+	hash := bus.HashSessionClaim(raw)
+	if hash == "" {
+		return nil
+	}
+	// If a LIVE holder from another session exists, do not evict.
+	// Claim only when empty, stale, or same-session digest.
+	if incumbent, live, err := room.Find(room.AgentClaimID(reader)); err == nil && live {
+		if incumbent.SessionClaim != "" && hash != "" && incumbent.SessionClaim != hash {
+			// Live foreign holder — never evict.
+			return nil
+		}
+		if incumbent.SessionClaim == "" && hash != "" {
+			// Live holder with no digest predates the contract — treat as
+			// foreign live as well; do not hijack.
+			return nil
+		}
+		// Same-session live holder is allowed to be refreshed; fall through
+		// to ClaimSession which will update the card in place. But if the
+		// incumbent is same session, we should still allow the claim to
+		// update holder PID. ClaimSession handles same-digest update without
+		// eviction, so no RemoveMember needed.
+	}
+	holderPID := peekClaimHolderPID(reader)
+	cwd, _ := os.Getwd()
+	card := room.Card{
+		ID:           room.AgentClaimID(reader),
+		Nick:         reader,
+		Principal:    strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL")),
+		SessionClaim: hash,
+		Tool:         agent.Tool,
+		Model:        agent.Model,
+		Binding:      agent.MatrixKey(),
+		Mode:         "peek",
+		Task:         "peek claim for authored send",
+		PID:          holderPID,
+		OwnerPID:     holderPID,
+		Cwd:          cwd,
+	}
+	if card.Principal == "" {
+		card.Principal = reader
+	}
+	if err := room.ClaimSession(card); err == nil {
+		return nil
+	}
+	// ClaimSession refused with ErrLive only when a live incumbent with a
+	// different digest exists — which we already screened above. Do not
+	// force-remove; leave the live foreign holder intact.
+	return nil
+}
+
+var (
+	peekHolderMu sync.Mutex
+	peekHolders  = map[string]*os.Process{}
+)
+
+func peekClaimHolderPID(reader string) int {
+	peekHolderMu.Lock()
+	defer peekHolderMu.Unlock()
+	if p, ok := peekHolders[reader]; ok {
+		if p.Pid > 0 {
+			return p.Pid
+		}
+	}
+	cmd := exec.Command("sleep", "300")
+	if err := cmd.Start(); err != nil {
+		return os.Getpid()
+	}
+	peekHolders[reader] = cmd.Process
+	return cmd.Process.Pid
+}

@@ -1,0 +1,231 @@
+package main
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/room"
+	"github.com/rjeczalik/notify"
+)
+
+// A unified snapshot reads every MB post, Meet room header/transcript, Bus
+// notification, and pending role buffer. On a busy host that can take longer
+// than the old fixed 100 ms poll and keep an idle watcher near one full core.
+// The watch loop therefore polls cheap file metadata, reads fully on change,
+// and backs the metadata poll off to this bounded ceiling.
+const (
+	inboxPollMin    = 100 * time.Millisecond
+	inboxPollMax    = time.Second
+	inboxFullRescan = 30 * time.Second
+)
+
+type inboxPollRuntime struct {
+	min, max, fullRescan time.Duration
+	now                  func() time.Time
+	wait                 func(context.Context, time.Duration) error
+	snapshot             func(string, int, bool) (inboxBatch, error)
+	fingerprint          func(string) (uint64, bool)
+	close                func()
+	// ownerLive is set only for a watch that registered a fleet identity. It is
+	// evaluated before every read, so an orphaned watcher stops instead of
+	// draining an identity nobody is reading. Nil means unguarded: a human
+	// watch and every bounded non-identity read behave exactly as before.
+	ownerLive func() error
+}
+
+func defaultInboxPollRuntime(follow bool) inboxPollRuntime {
+	if !follow {
+		return inboxPollRuntime{
+			min: inboxPollMin, max: inboxPollMax, fullRescan: inboxFullRescan,
+			now: time.Now, wait: waitInboxPoll,
+			snapshot:    snapshotUnifiedInbox,
+			fingerprint: func(string) (uint64, bool) { return 1, true },
+		}
+	}
+	changes := newInboxChangeNotifier()
+	return inboxPollRuntime{
+		min: inboxPollMin, max: inboxPollMax, fullRescan: inboxFullRescan,
+		now: time.Now, wait: changes.wait,
+		snapshot: snapshotUnifiedInbox, fingerprint: changes.fingerprint,
+		close: changes.close,
+	}
+}
+
+func waitInboxPoll(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+// inboxChangeNotifier turns native filesystem notifications into a constant-
+// cost generation fingerprint. The stores are durable, so the periodic full
+// rescan remains the correctness backstop for an unavailable watcher, an OS
+// queue overflow, or a platform-specific notification gap.
+//
+// Initialize missing store directories and watch them directly. notify shares a
+// process-wide watch tree: a nonrecursive ancestor can absorb a later recursive
+// child without upgrading its native Windows watch, and stopping that child
+// can disturb other subscribers. Watching an unrelated ancestor for an absent
+// store therefore silenced otherwise successfully registered inbox watches.
+// Failed registrations leave the fingerprint unavailable so reads fail open and
+// subsequent polls retry registration.
+type inboxChangeNotifier struct {
+	epoch  atomic.Uint64
+	closed atomic.Bool
+	ready  atomic.Bool
+	wake   chan struct{}
+	events chan notify.EventInfo
+	stop   chan struct{}
+	done   chan struct{}
+	once   sync.Once
+
+	mu    sync.Mutex
+	roots []string
+	armed map[string]struct{}
+}
+
+func newInboxChangeNotifier() *inboxChangeNotifier {
+	meetDir, _ := inboxMeetDir()
+	n := &inboxChangeNotifier{
+		wake: make(chan struct{}, 1), events: make(chan notify.EventInfo, 256),
+		stop: make(chan struct{}), done: make(chan struct{}),
+		roots: []string{bus.BoardDir(), room.Dir(), meetDir},
+		armed: make(map[string]struct{}),
+	}
+	n.epoch.Store(1)
+	n.armRoots()
+	go n.run()
+	return n
+}
+
+func (n *inboxChangeNotifier) fingerprint(string) (uint64, bool) {
+	if !n.ready.Load() {
+		n.armRoots()
+	}
+	return n.epoch.Load(), n.ready.Load()
+}
+
+func (n *inboxChangeNotifier) wait(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-n.wake:
+		return nil
+	case <-timer.C:
+		return nil
+	}
+}
+
+func (n *inboxChangeNotifier) run() {
+	defer close(n.done)
+	for {
+		select {
+		case <-n.stop:
+			return
+		case <-n.events:
+			n.epoch.Add(1)
+			select {
+			case n.wake <- struct{}{}:
+			default:
+			}
+			n.armRoots()
+		}
+	}
+}
+
+func (n *inboxChangeNotifier) armRoots() {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.closed.Load() {
+		return
+	}
+	ready := true
+	for _, root := range n.roots {
+		if root == "" {
+			ready = false
+			continue
+		}
+		target := filepath.Join(root, "...")
+		if _, ok := n.armed[target]; ok {
+			continue
+		}
+		if err := os.MkdirAll(root, 0o755); err != nil {
+			ready = false
+			continue
+		}
+		if err := notify.Watch(target, n.events, notify.All); err != nil {
+			ready = false
+			continue
+		}
+		n.armed[target] = struct{}{}
+	}
+	n.ready.Store(ready)
+}
+
+func (n *inboxChangeNotifier) close() {
+	n.once.Do(func() {
+		n.closed.Store(true)
+		close(n.stop)
+		n.mu.Lock()
+		notify.Stop(n.events)
+		n.mu.Unlock()
+		<-n.done
+	})
+}
+
+// inboxPollGate fails open: an incomplete metadata sample always causes a full
+// read. The fingerprint is sampled before that read and committed afterward;
+// an event appended during the read therefore changes the next sample and
+// cannot fall into the read/commit race.
+type inboxPollGate struct {
+	reader      string
+	fingerprint func(string) (uint64, bool)
+	fullRescan  time.Duration
+	sampled     bool
+	sum         uint64
+	lastFull    time.Time
+}
+
+func (g *inboxPollGate) due(now time.Time) (read, changed bool, sum uint64, ok bool) {
+	sum, ok = g.fingerprint(g.reader)
+	switch {
+	case !ok || !g.sampled:
+		return true, false, sum, ok
+	case sum != g.sum:
+		return true, true, sum, ok
+	case now.Sub(g.lastFull) >= g.fullRescan:
+		return true, false, sum, ok
+	default:
+		return false, false, sum, ok
+	}
+}
+
+func (g *inboxPollGate) commit(sum uint64, ok bool, now time.Time) {
+	g.sampled = ok
+	g.sum = sum
+	g.lastFull = now
+}
+
+func inboxMeetDir() (string, bool) {
+	if dir := strings.TrimSpace(os.Getenv("BASHY_MEET_DIR")); dir != "" {
+		return dir, true
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", false
+	}
+	return filepath.Join(home, ".bashy", "meet"), true
+}

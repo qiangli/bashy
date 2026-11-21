@@ -1,0 +1,20 @@
+#!/usr/bin/env -S bashy --bashsharp
+set -euo pipefail
+unset BASHY_ADAPTER_EXEC
+export BASHY_HINTS=off
+here=${BASH_SOURCE[0]%/*}; [[ $here == "${BASH_SOURCE[0]}" ]] && here=.
+gomod="$here/go.mod"; [[ -f "$gomod" ]] || gomod="$here/../go.mod"
+ext=; [[ ${OS:-} == Windows_NT || ${OSTYPE:-} == msys* || ${OSTYPE:-} == cygwin* ]] && ext=.exe
+bin="${BASHY_ADAPTER_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/bashy/adapters}/yoke/sprint$ext"
+# Multi-file package: any changed source file (not only main.go) rebuilds.
+stale=
+if [[ ! -x "$bin" || "$gomod" -nt "$bin" ]]; then stale=1; fi
+for src in "$here"/*.go; do
+  if [[ "$src" -nt "$bin" ]]; then stale=1; fi
+done
+if [[ -n "$stale" ]]; then
+  mkdir -p "${bin%/*}"
+  run_go() { if command -v go >/dev/null 2>&1; then go "$@"; else BASHY_ADAPTER_INPROC=1 "${BASHY_SELF:-bashy}" go "$@"; fi; }
+  (cd "$here" && GOWORK=off CGO_ENABLED=0 run_go build -trimpath -o "$bin.tmp.$$" . && { mv -f "$bin.tmp.$$" "$bin" || { rm -f "$bin.tmp.$$"; [[ -x "$bin" ]]; }; })
+fi
+exec "$bin" "$@"

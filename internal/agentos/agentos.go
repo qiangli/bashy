@@ -884,7 +884,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 	case "weave":
 		dispatchExit(runCommandAdapter("yoke", "weave", os.Args[1], os.Args[2:]))
 	case "sprint":
-		dispatchExit(runSprintDispatch(os.Args[2:], os.Stdout, os.Stderr))
+		dispatchExit(runCommandAdapter("yoke", "sprint", os.Args[1], os.Args[2:]))
 	case "llm", "share", "adapt", "adapter", "infra", "token", "fleet",
 		"satellite", "member", "group", "superadmin", "desktop", "journey",
 		"suite", "reproduce", "paired-host", "handoff", "resume":
@@ -1087,7 +1087,9 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		dispatchExit(0)
 	case "mb", "messages":
 		dispatchExit(runCommandAdapter("yoke", "mb", os.Args[1], os.Args[2:]))
-	case "inbox", "notify", "instance", "feed":
+	case "inbox":
+		dispatchExit(runCommandAdapter("yoke", "inbox", os.Args[1], os.Args[2:]))
+	case "notify", "instance", "feed":
 		// The host communication front doors all share pkg/bus's fleet seams:
 		// identity, role/name resolution, and fleet selection. Mounting the
 		// command without this wire-up makes the feature look present while

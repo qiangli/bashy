@@ -1,0 +1,191 @@
+package main
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"strconv"
+	"strings"
+	"syscall"
+
+	"github.com/qiangli/yoke/pkg/weave"
+	"github.com/spf13/cobra"
+)
+
+// newSprintCmd wraps weave.NewSprintCmd (the cross-repo plan/handoff board) and
+// makes the OWNER-ACCOUNTABILITY contract part of `bashy sprint --help` itself.
+//
+// The plan/handoff layer describes cards, leases, and continuity records — the
+// MECHANICS. Left at that, the help reads as though holding a sprint's conductor
+// lease were a passive claim: take the lease, checkpoint, done. It is not. An
+// appointed sprint owner/conductor is ACTIVE and accountable for the sprint
+// through verified completion, not a lease holder waiting to be pulled from. That
+// requirement is easy for a human to state once and lose; wiring it into the
+// command's own help makes it durable — every agent that reads `sprint --help`
+// sees the accountability contract next to the mechanics it is the point of.
+func newSprintCmd() *cobra.Command {
+	cmd := weave.NewSprintCmd(weave.WithSprintResources(sprintMonitorSummary))
+	cmd.Short = "Plan/handoff board AND the ACTIVE owner-accountability contract for a sprint"
+	if !strings.Contains(cmd.Long, ownerAccountabilityHelp) {
+		cmd.Long = strings.TrimRight(cmd.Long, "\n") + "\n\n" + ownerAccountabilityHelp
+	}
+	for _, child := range cmd.Commands() {
+		if child.Name() == "start" || child.Name() == "take" {
+			attachSprintWatch(child, child.Name() == "take")
+		}
+	}
+	cmd.AddCommand(newSprintInboxAckCmd())
+	cmd.AddCommand(newSprintMonitorCmd())
+	cmd.AddCommand(newSprintWaitCmd(), newSprintAwaitCmd())
+	// LAST, after every edit above. yoke installed its own three reporters
+	// while it built this tree; attachSprintWatch replaced two RunEs and the
+	// added commands arrived afterwards, so those paths have no reporter at
+	// all and the tree's SilenceErrors swallowed them. See sprint_errors.go.
+	installSprintErrorReporting(cmd)
+	return cmd
+}
+
+// attachSprintWatch lets an EXTERNAL agent harness own the conductor seat
+// without pretending Bashy can inject a turn into a process it did not launch.
+// The sprint command itself stays alive as the harness's foreground tool call;
+// its parent relationship and canonical room claim are the delivery proof.
+func attachSprintWatch(cmd *cobra.Command, takeover bool) {
+	var watch bool
+	cmd.Flags().BoolVar(&watch, "watch", false,
+		"after claiming, stay attached and stream unified inbox NDJSON (bashy inbox --as OWNER reads the same mail)")
+	original := cmd.RunE
+	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+		if !watch {
+			return original(cmd, args)
+		}
+		// AgentOS dispatch runs before shell signal handling. Turn an attached
+		// watch's termination signals into cancellation so lease and membership
+		// defers run while unread inbox cursors remain untouched.
+		parent := cmd.Context()
+		ctx, stop := signal.NotifyContext(parent, os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		cmd.SetContext(ctx)
+		defer cmd.SetContext(parent)
+		// Everything below this point used to be reported by NOBODY. These are
+		// bashy's own guards, installed on top of a tree whose every command
+		// sets SilenceErrors, and `--watch` is the only way to reach them —
+		// which is exactly why the bug looked like "--watch fails and start
+		// does not". sprint_errors.go now reports them; the classification
+		// here is what gives each one the right exit status.
+		id, err := strconv.ParseInt(args[0], 10, 64)
+		if err != nil {
+			return sprintUsagef("sprint must be an integer: %q", args[0])
+		}
+		explicit, _ := cmd.Flags().GetString("owner")
+		owner, err := weave.SprintClaimIdentity(id, explicit, takeover)
+		if err != nil {
+			return sprintUsage(err)
+		}
+		// BEFORE the claim, deliberately. A watch that cannot register its
+		// reader must fail with the seat untouched rather than take the lease
+		// and then die holding it.
+		claim, err := registerSprintInboxWatcher(owner)
+		if err != nil {
+			return sprintUsagef("--watch cannot attach an inbox stream for %s, so the seat was NOT claimed: %w\n"+
+				"  without --watch the same command claims the seat and exits; the seat then has no delivery path and goes stale, "+
+				"so fix the stream rather than dropping the flag", owner, err)
+		}
+		defer claim.leave()
+		if err := original(cmd, args); err != nil {
+			return err
+		}
+		fmt.Fprintf(cmd.ErrOrStderr(),
+			"sprint %s: attached inbox stream for %s (parent pid %d); retain and read this process until handoff\n",
+			cmd.Name(), owner, sprintWatchParentPID())
+		writeSprintWatchNextSteps(cmd.ErrOrStderr(), id, owner)
+		poll := defaultInboxPollRuntime(true)
+		poll.ownerLive = claim.ownerLive
+		rt := defaultSprintWatchRuntime()
+		rt.poll = poll
+		return runSprintInboxWatch(cmd.Context(), cmd.OutOrStdout(), cmd.ErrOrStderr(), id, owner, rt)
+	}
+}
+
+func sprintWatchParentPID() int { return os.Getppid() }
+
+// writeSprintWatchNextSteps points the agent at the standard procedure and
+// states only what is specific to an ATTACHED stream.
+//
+// It used to spell the whole loop out here in prose. That was a second copy of
+// something that already exists in the right format: `inbox` is the
+// skill for reading the unified inbox, and duplicating it in a banner means two
+// wordings to keep true. What is genuinely local to this stream is the ack and
+// the second-reader rule; everything else is the skill's job.
+//
+// No penalties are named because there are none: unacknowledged mail is never
+// consumed, so nothing is lost by getting this wrong.
+//
+// STDERR only — stdout carries the NDJSON, and a reader parsing it must not
+// have to skip prose.
+func writeSprintWatchNextSteps(w io.Writer, id int64, owner string) {
+	fmt.Fprintf(w, `NEXT STEPS — this stream is your inbox; read each NDJSON line as it arrives.
+  procedure:  bashy skill show inbox
+  ack what you handle:  bashy sprint inbox-ack %[1]d --as %[2]s
+    (unacked mail is never consumed; it stays unread and `+"`sprint show %[1]d`"+` says so)
+  do not run a second "bashy inbox --watch" for %[2]s at the same time:
+    two readers drain the same cursors.
+  if this stream ends, nothing is lost — `+"`bashy inbox --as %[2]s`"+` is the same mail.
+`, id, owner)
+}
+
+// ownerAccountabilityHelp is the active-owner contract appended to
+// `bashy sprint --help`. It is exported through the help of the command an agent
+// reads before driving a sprint, so the accountability requirement travels with
+// the tool rather than living only in a human's memory. The conductor skill
+// (`bashy skill show conductor`) carries the same checklist in depth.
+const ownerAccountabilityHelp = `OWNER ACCOUNTABILITY — an appointed owner/conductor is not a passive lease holder.
+
+Holding a sprint's conductor lease makes you ACCOUNTABLE for it through VERIFIED
+completion and delivery from START TO END — not merely the recorded claimant.
+Delegation transfers execution, never accountability. While you hold it you must:
+
+  - Stay REACHABLE with the OWNER IDENTITY: a takeover uses the existing sprint owner name for
+    mb/Meet/chat/ping, or explicitly updates ownership before using another name.
+    A Bashy-managed session receives input through its control transport. An external
+    Claude/Codex/OpenCode/ycode/agy harness must claim with ` + "`sprint take/start --owner NAME --watch`" + `
+    and retain/read that foreground process. After handling each delivered batch it must run
+	    ` + "`sprint inbox-ack ID --as OWNER`" + `. Unacknowledged input stays unread and
+	    reminders continue every three minutes until the manager acknowledges it.
+  - SUPERVISE workers proactively: monitor every run, and steer, interrupt,
+    salvage, or reassign stalled / failed / no-op work instead of waiting on it.
+  - VERIFY independently: workers run gates; verify the verdict from bashy
+    evidence, never a worker's prose or exit status ("submitted" and exit 0
+    are not "done"); run the frozen-candidate final gate yourself. Return a
+    failing submission with ` + "`sprint reject ID STORY -m '<feedback>'`" + ` so the
+    decision is recorded and the story stays with its assignee.
+  - INTEGRATE sequentially: serialize reviews and merges; push subproject commits
+    and bump parent pins per repository policy, one gated step at a time.
+  - LEAVE NOTHING DELIVERED BEHIND: on every checkpoint and before stop/end, run the
+    repository's read-only drift check and clear what this sprint owns (unpushed or
+    unmerged commits, unpulled submitted runs, lagging pins, uncommitted story files).
+    Pins move FORWARD only: never commit a checkout that is behind its pin.
+  - For workplace coordination, follow ` + "`bashy skill show collaborate`" + `.
+  - COORDINATE OWNERSHIP: before touching work held by another sprint manager,
+    contact that owner through mb/Meet/chat/ping and request sequencing or merge.
+  - CLAIM SHARED RESOURCES before use: a shared host, droplet, device, account or
+    other exclusive resource is registered once with ` + "`bashy resource add NAME --kind K …`" + `
+    and held with ` + "`bashy claim NAME`" + ` (or ` + "`kind:NAME`" + `); a refusal names the
+    holder and how to reach them. Wrap long runs as ` + "`bashy claim NAME -- CMD`" + ` or keep
+    the lease alive with ` + "`bashy claim refresh NAME`" + `; release when done and never
+    force another holder off without contacting them.
+  - PRESERVE + clean up within bounds: proactively reclaim branches, git worktrees,
+    weave workspaces, temp state, and disposable resources THIS sprint owns after
+    integration. NEVER delete, remove, reset, overwrite, or destroy work owned by
+    another sprint/agent. A coordination reply is not deletion authority.
+  - Keep CONTINUITY: checkpoint often so any handoff or crash resumes cleanly.
+    Record standing operator rules once with ` + "`sprint directive add ID '<rule>'`" + `
+    instead of re-pasting them into every brief.
+  - TURN-END CONTRACT: every manager turn ends with a dispatched action or a
+    blocking ` + "`sprint await`" + ` (one typed event — submission, run
+    submitted/failed/stalled, or manager mail — with a suggested verb), never
+    a promise to check later. A turn that ends in narration is a stalled sprint.
+
+Do not wait passively while actionable work remains. Cleanup and deletion
+authority is bounded by the assignment and the safety policy — it does not extend
+to unrelated repositories, branches, or resources.`

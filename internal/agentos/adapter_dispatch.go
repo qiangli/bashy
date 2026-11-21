@@ -135,6 +135,8 @@ var adaptedVerbs = map[string][2]string{
 	"mb":          {"yoke", "mb"},
 	"meet":        {"yoke", "meet"},
 	"messages":    {"yoke", "mb"},
+	"inbox":       {"yoke", "inbox"},
+	"sprint":      {"yoke", "sprint"},
 	"tokens":      {"yoke", "tokens"},
 	"llm":         {"yoke", "llm"},
 	"share":       {"yoke", "share"},
