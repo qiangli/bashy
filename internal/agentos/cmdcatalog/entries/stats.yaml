@@ -1,0 +1,8 @@
+name: stats
+synopsis: "resolve rates with clustered CIs, paired differences, pass^k and cost per solve over results JSONL"
+batch: pilot
+kind: cobra
+module: github.com/qiangli/yoke
+version: v0.0.0-20261121110346-da4b02a4d244
+package: github.com/qiangli/yoke/pkg/stats
+constructor: NewCmd
