@@ -17,6 +17,7 @@ import (
 
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/service"
+	"golang.org/x/sys/unix"
 )
 
 // The stash closes the reaper-vs-Wait race: what the reaper took for the main
@@ -49,6 +50,11 @@ func TestServiceMonitorReapsOrphansAsSubreaper(t *testing.T) {
 	if r == nil {
 		t.Skip("cannot become a child subreaper here")
 	}
+	// startReaper sets PR_SET_CHILD_SUBREAPER on the test binary itself, and
+	// the flag is process-wide: left set, later tests' orphans reparent here
+	// and linger as zombies nobody reaps, which ps-based cleanup checks
+	// still see. Clear it on cleanup.
+	t.Cleanup(func() { _ = unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 0, 0, 0, 0) })
 	defer r.stop()
 	pidFile := filepath.Join(t.TempDir(), "gc.pid")
 	t.Setenv("BASHY_SUPERVISORD_TEST_CHILD", "orphan:"+pidFile)
