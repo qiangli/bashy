@@ -96,3 +96,17 @@ Operator (typed): "make it work like office phone and extension" ... "go with (a
 - Delivery vs acknowledgement tracked separately (from the root-cause note): items withheld from an inline turn stay unread.
 
 Acceptance (unit/hermetic tests, no integration runs): two live instances NAME and NAME+2 plus NAME+3: direct mail to each extension is seen only there; a main-line message is claimed exactly once under concurrent readers; a main-line message with no live instance waits and is claimed when one joins; mail to an ended extension appears on the main line; a new session reusing +2 sees none of the old +2 mail; NAME+* reaches all live instances; mb send as self and --as NAME+N both attribute correctly; the '1 of 2 unread' withheld item stays retrievable.
+
+## Operator addition 2026-11-21: team-lead extensions for unregistered subagents (in scope now)
+
+Operator (typed): "we do not want to register each and every agent ... directly addressing the agent managed by the conductor (so subagents no need to register but reachable like all its subagents work in the same office and reachable by the team leader's number)".
+
+- A team lead (conductor, sprint manager, named seat) is registered once; that is the department number.
+- Subagents it starts (weave runs, headless workers, ephemeral clones) are NOT registered; each gets an extension under the lead, derived at launch from the parent lead + the run (e.g. `LEAD+run125`), living only as long as the run.
+- Caller ID for a subagent's posts is `LEAD/extension` (never the operator's name or 'anonymous'); it acts within the lead's authorization.
+- Mail to the lead's number is the lead's hunt group: the lead picks up or transfers to a member extension.
+- When a run ends, its extension's undelivered mail forwards to the lead's line; a later run reusing a number starts empty.
+
+Extra acceptance: a weave run started by a lead posts as `LEAD/<ext>` and receives mail sent to that extension; after the run ends that mail appears on the lead's line; no subagent registration step is required.
+
+Out of scope (filed separately as a todo, not planned): an owner-level company main number answered by any owner-authorized agent.
