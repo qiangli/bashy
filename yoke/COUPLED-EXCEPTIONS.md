@@ -8,3 +8,4 @@ Tracking the 10 coupled verbs: `todo`, `dag`, `mb`, `inbox`, `kb`, `chat`, `meet
 | `dag` | Converted | `yoke/dag` | Standalone deps and help verified; routed via `runCommandAdapter`. |
 | `mb` | Converted | `yoke/mb` | Standalone deps and help verified; routed via `runCommandAdapter`. |
 | `inbox` | Exception | (kept in internal/agentos) | No standalone pkg/inbox in yoke; implemented directly in internal/agentos coupled to in-process session relays and turn delivery. |
+| `kb` | Exception | (kept in internal/agentos) | In-process recall.Reader injection in kb context/ask couples to cmds/graph (violates standalone single-command package rule). |
