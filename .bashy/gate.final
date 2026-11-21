@@ -1,0 +1,6 @@
+# The final gate: run ONCE after all of a sprint's stories are delivered, and
+# before any release, on the gate host in the official image (never the dev box).
+#   Run these lines in order (a final-gate verb is tracked as a follow-up).
+"${BASHY:-bashy}" dag build
+"${BASHY:-bashy}" dag test
+"${BASHY:-bashy}" dag test-bash-gate

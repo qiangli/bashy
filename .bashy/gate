@@ -1,7 +1,8 @@
-# The gate: does bashy pass? One command per line; stops at the first failure.
+# The per-story gate: does the tree still build? One command per line; stops at
+# the first failure. Weave runs this on every story merge, so it stays fast.
 #
-# Make-free DAG release gate.
-# Conductor must dispatch on gatehost using locked official image / GO wrapper.
+# Operator rule 2026-11-21: long-running and judge tests (go test ./..., the
+# sealed Bash 5.3 86/86 gate, 3-OS e2e) do NOT run per story. Stories add their
+# own targeted tests; the full run happens ONCE at sprint end / release from
+# .bashy/gate.final, on the gate host in the official image.
 "${BASHY:-bashy}" dag build
-"${BASHY:-bashy}" dag test
-"${BASHY:-bashy}" dag test-bash-gate
