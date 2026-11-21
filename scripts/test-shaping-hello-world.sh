@@ -30,6 +30,10 @@
 #     containing only provider login references and run-scoped catalog entries.
 #     Use SHAPING_SMOKE_KEEP=1 to retain evidence privately for review.
 #   BASHY_E2E_BROWSER_WS          forwarded to the checkpoint (remote Chrome).
+#   BASHY_E2E_SCREENSHOT_TIMEOUT  bounded per-screenshot deadline (default 15s).
+#   BASHY_E2E_SCREENSHOT_REQUIRED 1 (default) fails on screenshot capture error;
+#                                 0 keeps DOM/revision checks authoritative while
+#                                 recording capture errors in checkpoint.json.
 set -euo pipefail
 umask 077
 
