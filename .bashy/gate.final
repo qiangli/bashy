@@ -1,6 +1,6 @@
-# The final gate: run ONCE after all of a sprint's stories are delivered, and
-# before any release, on the gate host in the official image (never the dev box).
-#   Run these lines in order (a final-gate verb is tracked as a follow-up).
+# Integration gate: run only when an epic, or a milestone of one, is complete
+# (and before a release), on the gate host in the official image; never per
+# story or per sprint, never on the dev box. Run these lines in order.
 "${BASHY:-bashy}" dag build
 "${BASHY:-bashy}" dag test
 "${BASHY:-bashy}" dag test-bash-gate

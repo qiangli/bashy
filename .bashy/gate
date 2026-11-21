@@ -1,8 +1,8 @@
 # The per-story gate: does the tree still build? One command per line; stops at
 # the first failure. Weave runs this on every story merge, so it stays fast.
 #
-# Operator rule 2026-11-21: long-running and judge tests (go test ./..., the
-# sealed Bash 5.3 86/86 gate, 3-OS e2e) do NOT run per story. Stories add their
-# own targeted tests; the full run happens ONCE at sprint end / release from
-# .bashy/gate.final, on the gate host in the official image.
+# Operator rule 2026-11-21: stories prove themselves with fast unit tests written
+# and run while building. Integration suites (go test ./..., the sealed Bash 5.3
+# 86/86 gate, 3-OS e2e, judge tests) run only when an epic or one of its
+# milestones is complete, from .bashy/gate.final, on the gate host.
 "${BASHY:-bashy}" dag build
