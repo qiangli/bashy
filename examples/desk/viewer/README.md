@@ -101,9 +101,13 @@ The console builds that server from each user's active revision and proxies
 the app shell (`X-Forwarded-Prefix`) gets `…/viewer/?…`, never the server's
 internal loopback address.
 
-For a separate CLI, first open the shaped app in the console as the intended
-principal. The trusted local operator supplies the address and data directory
-from that app server's launch arguments (`--addr` and `--dir`), plus the
+For the local operator, open the shaped app in the console once, then use
+`bashy viewer` as usual. The CLI reads the running instance through
+`bashy app show viewer --runtime --json`. If the console stopped the instance
+while idle, open the app again before calling the CLI.
+
+To override discovery, a trusted local operator can supply the address and
+data directory from that app server's launch arguments (`--addr` and `--dir`), plus the
 app URL from the browser. Pass the matching pair from the same server instance:
 
 ```bash
@@ -117,10 +121,12 @@ path. This keeps the request on the app listener and sends the browser link
 through the console. The same instance's `$DATA` is the principal's private
 `shape/<app>/<encoded-principal>/data` directory under the console's Bashy
 home. A standalone `viewer serve` uses the desk data default
-`desk/viewer` under its data home. Viewer also reads owner keys from the handed-over directory when appending or exporting a book.
+`desk/viewer` under its data home. Viewer reads owner keys from the supplied
+directory when appending or exporting a book.
 Refresh the handoff whenever the console replaces that app server, for example
 after a restart, an idle stop, or an active revision change.
-Automatic discovery through an authenticated console is a Sprint 683 follow-up.
+Idle-start from the CLI and discovery for other principals are Sprint 683
+follow-ups.
 
 A fork is activated only on a passing verdict. `contract.bsh` is the base
 contract `bashy src pr verify` freezes: its `@effects` line is the effect cap

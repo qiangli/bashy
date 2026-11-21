@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -132,7 +133,54 @@ func TestViewOnlyVerbsRefused(t *testing.T) {
 	}
 }
 
+func TestCLIDiscoversAppRuntime(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Bashy uses /bin/sh")
+	}
+	base, data := startServer(t, "")
+	for _, key := range []string{"VIEWER_ADDR", "VIEWER_DATA", "VIEWER_PREFIX", "VIEWER_PUBLIC_URL", "VIEWER_KEY", "BASHY_APP", "BASHY_APP_ADDR", "BASHY_APP_DATA"} {
+		t.Setenv(key, "")
+	}
+	const publicURL = "https://console.example.test/apps/viewer"
+	payload, err := json.Marshal(kit.AppRuntime{Addr: strings.TrimPrefix(base, "http://"), Data: data, URL: publicURL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := filepath.Join(t.TempDir(), "bashy")
+	script := "#!/bin/sh\n" +
+		"[ \"$*\" = 'app show viewer --runtime --json' ] || exit 1\n" +
+		"printf '%s\\n' \"$TEST_DESK_APP_RUNTIME\"\n"
+	if err := os.WriteFile(fake, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BASHY_BIN", fake)
+	t.Setenv("TEST_DESK_APP_RUNTIME", string(payload))
+	for _, args := range [][]string{
+		{"add", "report", "--body", "# First page"},
+		{"append", "report", "--body", "# Second page"},
+		{"open", "report"},
+	} {
+		var out bytes.Buffer
+		if code := runCLI(args, strings.NewReader(""), &out); code != 0 || !strings.Contains(out.String(), publicURL+"/?id=report") {
+			t.Fatalf("%v: exit %d: %s", args, code, out.String())
+		}
+	}
+
+	t.Setenv("BASHY_BIN", filepath.Join(t.TempDir(), "unexpected-discovery"))
+	var out bytes.Buffer
+	args := []string{"open", "report"}
+	if code := runCLI(args, strings.NewReader(""), &out); code == 0 || !strings.Contains(out.String(), "VIEWER_ADDR") {
+		t.Fatalf("missing discovery: exit %d: %s", code, out.String())
+	}
+	out.Reset()
+	args = append(args, "--addr", strings.TrimPrefix(base, "http://"), "--dir", data)
+	if code := runCLI(args, strings.NewReader(""), &out); code != 0 || !strings.Contains(out.String(), base+"/?id=report") {
+		t.Fatalf("explicit flags: exit %d: %s", code, out.String())
+	}
+}
+
 func TestCLIUsesShapedAddress(t *testing.T) {
+	t.Setenv("BASHY_BIN", filepath.Join(t.TempDir(), "unexpected-discovery"))
 	base, dir := startServer(t, "")
 	t.Setenv("BASHY_HOME", t.TempDir())
 	t.Setenv("VIEWER_ADDR", "")

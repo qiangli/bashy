@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -188,7 +189,54 @@ func post(t *testing.T, client *http.Client, base, key string, p any) (int, map[
 	}
 	return res.StatusCode, v
 }
+func TestCLIDiscoversAppRuntime(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Bashy uses /bin/sh")
+	}
+	a, srv := startServer(t)
+	base, data := srv.URL, a.dir
+	for _, key := range []string{"CHART_ADDR", "CHART_DATA", "CHART_PREFIX", "CHART_PUBLIC_URL", "CHART_KEY", "BASHY_APP", "BASHY_APP_ADDR", "BASHY_APP_DATA"} {
+		t.Setenv(key, "")
+	}
+	const publicURL = "https://console.example.test/apps/chart"
+	payload, err := json.Marshal(kit.AppRuntime{Addr: strings.TrimPrefix(base, "http://"), Data: data, URL: publicURL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := filepath.Join(t.TempDir(), "bashy")
+	script := "#!/bin/sh\n" +
+		"[ \"$*\" = 'app show chart --runtime --json' ] || exit 1\n" +
+		"printf '%s\\n' \"$TEST_DESK_APP_RUNTIME\"\n"
+	if err := os.WriteFile(fake, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BASHY_BIN", fake)
+	t.Setenv("TEST_DESK_APP_RUNTIME", string(payload))
+	for _, args := range [][]string{
+		{"add", "--id", "stats", "--input", "-", "--widget", "gauge"},
+		{"open", "stats"},
+	} {
+		var out bytes.Buffer
+		if code := cli(args, strings.NewReader("[1,2]"), &out); code != 0 || !strings.Contains(out.String(), publicURL+"/?id=stats") {
+			t.Fatalf("%v: exit %d: %s", args, code, out.String())
+		}
+	}
+
+	t.Setenv("BASHY_BIN", filepath.Join(t.TempDir(), "unexpected-discovery"))
+	var out bytes.Buffer
+	args := []string{"open", "stats"}
+	if code := cli(args, strings.NewReader("[1,2]"), &out); code == 0 || !strings.Contains(out.String(), "CHART_ADDR") {
+		t.Fatalf("missing discovery: exit %d: %s", code, out.String())
+	}
+	out.Reset()
+	args = append(args, "--addr", strings.TrimPrefix(base, "http://"), "--data", data)
+	if code := cli(args, strings.NewReader("[1,2]"), &out); code != 0 || !strings.Contains(out.String(), base+"/?id=stats") {
+		t.Fatalf("explicit flags: exit %d: %s", code, out.String())
+	}
+}
+
 func TestCLIUsesShapedAddress(t *testing.T) {
+	t.Setenv("BASHY_BIN", filepath.Join(t.TempDir(), "unexpected-discovery"))
 	_, srv := startServer(t)
 	t.Setenv("CHART_ADDR", strings.TrimPrefix(srv.URL, "http://"))
 	t.Setenv("CHART_PREFIX", "")

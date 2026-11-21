@@ -128,9 +128,13 @@ The console builds that server from each user's active revision and proxies
 the app shell (`X-Forwarded-Prefix`) gets `…/chart/?…`, never the server's
 internal loopback address.
 
-For a separate CLI, first open the shaped app in the console as the intended
-principal. The trusted local operator supplies the address and data directory
-from that app server's launch arguments (`-addr` and `-data`), plus the
+For the local operator, open the shaped app in the console once, then use
+`bashy chart` as usual. The CLI reads the running instance through
+`bashy app show chart --runtime --json`. If the console stopped the instance
+while idle, open the app again before calling the CLI.
+
+To override discovery, a trusted local operator can supply the address and
+data directory from that app server's launch arguments (`-addr` and `-data`), plus the
 app URL from the browser. Pass the matching pair from the same server instance:
 
 ```bash
@@ -147,7 +151,8 @@ home. A standalone `chart serve` uses the desk data default
 `desk/chart` under its data home. Chart client actions send writes to the selected server, which owns that directory.
 Refresh the handoff whenever the console replaces that app server, for example
 after a restart, an idle stop, or an active revision change.
-Automatic discovery through an authenticated console is a Sprint 683 follow-up.
+Idle-start from the CLI and discovery for other principals are Sprint 683
+follow-ups.
 
 A fork is activated only on a passing verdict. `contract.bsh` is the base
 contract `bashy src pr verify` freezes: its `@effects` line is the effect cap

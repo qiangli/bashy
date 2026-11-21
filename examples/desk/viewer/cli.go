@@ -39,6 +39,7 @@ type cliOptions struct {
 	session, page, to, output         string
 	sprint                            int
 	assets                            []string
+	handoff                           bool
 	asJSON                            bool
 	verb                              string
 	args                              []string
@@ -49,16 +50,20 @@ func parseCLI(raw []string) (*cliOptions, error) {
 	if os.Getenv("BASHY_APP") == tool {
 		if v := os.Getenv("BASHY_APP_ADDR"); v != "" {
 			o.addr = v
+			o.handoff = true
 		}
 		if v := os.Getenv("BASHY_APP_DATA"); v != "" {
 			o.dir = v
+			o.handoff = true
 		}
 	}
 	if v := os.Getenv("VIEWER_ADDR"); v != "" {
 		o.addr = v
+		o.handoff = true
 	}
 	if v := os.Getenv("VIEWER_DATA"); v != "" {
 		o.dir = v
+		o.handoff = true
 	}
 	o.prefix = os.Getenv("VIEWER_PREFIX")
 	o.publicURL = os.Getenv("VIEWER_PUBLIC_URL")
@@ -100,8 +105,10 @@ func parseCLI(raw []string) (*cliOptions, error) {
 		switch name {
 		case "addr":
 			o.addr = s
+			o.handoff = true
 		case "dir":
 			o.dir = s
+			o.handoff = true
 		case "prefix":
 			o.prefix = s
 		case "key":
@@ -180,6 +187,19 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 	if o.verb == "" {
 		fmt.Fprintln(stdout, usage)
 		return 2
+	}
+	if !o.handoff {
+		switch o.verb {
+		case "add", "append", "open", "show", "list", "share", "close", "join", "export":
+			info, err := kit.DiscoverAppRuntime(tool)
+			if err != nil {
+				return kit.UsageError(stdout, tool, o.asJSON, fmt.Sprintf("cannot discover viewer: %v", err))
+			}
+			o.addr, o.dir = info.Addr, info.Data
+			if o.publicURL == "" {
+				o.publicURL = info.URL
+			}
+		}
 	}
 	c := &client{o: o, out: stdout, fields: common.Fields}
 
