@@ -1,0 +1,10 @@
+{
+  "server": {"main": ".", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA"]},
+  "genie": {
+    "examples": [
+      "Highlight events starting within the next two hours at the top of my agenda.",
+      "Group the agenda by morning, afternoon, and evening in my selected time zone.",
+      "Hide cancelled events by default and add a toggle to show them."
+    ]
+  }
+}
