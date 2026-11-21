@@ -52,3 +52,26 @@ Today muse's /status shows only cumulative session tokens, and bashy's
 account monitor has no muse source ("0 accounts, 4 unknown"). Find where the
 current-window and weekly % are measurable (a vendor usage view or endpoint)
 before designing the source. Never guess.
+
+## Rescope (operator, 2026-11-21): credit admission, general for every user
+
+Design record: umbrella `docs/sprint-688-master-execution-plan.md` §2a.
+
+- Credit / API-key accounts get admission control, not only alerts: an opt-in
+  per-binding spend cap enforced by `llmbudget` `Reserve` before dispatch. The
+  constraints already express it (`daily_spend_micro_usd`,
+  `weekly_spend_micro_usd`); this story wires them to the alerts. Per-story,
+  sprint and band envelopes are e868c820.
+- Documented, free balance or usage reads (to verify at source per vendor,
+  never guessed) feed the existing cache as advisory input. They inform
+  watermarks and admission; they are never a "safe to run" verdict. Polling is
+  opt-in and keeps credentials local.
+- Watermarks and caps are user-configured per binding; nothing is specific to
+  one operator's accounts.
+
+## Shared alert contract
+
+Sprint 652 story `daa99f1f5a8e` owns the
+alert transition and delivery contract at `umbrella/docs/alert-transition-wire.md`.
+Adopt its producer inputs, stable transition ID and per-destination delivery
+key for watermark notices when this story resumes.
