@@ -346,7 +346,6 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
-	github.com/qiangli/bash/cmd v0.0.0-20261121101805-42efe30317c4 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261121101804-e25a870a0d4a // indirect
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261121105637-c643f4029e70 // indirect
@@ -576,7 +575,7 @@ replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewi
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261121101805-58fa3c439d06
+	github.com/bashsharp/bashsharp v0.0.0-20261121121200-5848aff449cd
 	github.com/benhoyt/goawk v1.31.0
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0

@@ -41,6 +41,9 @@ var shapeSlotHostApp = func(name string) bool {
 	return ok && app.Shaping != nil && (app.Shaping.Kind == "cli" || app.Shaping.Kind == "service")
 }
 var shapeSlotApp = func(name string) bool {
+	if isAdaptedVerb(name) {
+		return true
+	}
 	if _, ok := cmdcatalog.Lookup(name); ok {
 		return true
 	}

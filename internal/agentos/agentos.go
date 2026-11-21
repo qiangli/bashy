@@ -29,6 +29,7 @@ import (
 
 	"github.com/bashsharp/bashsharp/transpile"
 
+	"github.com/qiangli/bash/expand"
 	"github.com/qiangli/bash/interp"
 	"github.com/qiangli/bash/pathconv"
 	"github.com/spf13/cobra"
@@ -120,7 +121,6 @@ import (
 	"github.com/qiangli/yoke/pkg/secrets"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 	"github.com/qiangli/yoke/pkg/sota"
-	"github.com/qiangli/yoke/pkg/stats"
 	"github.com/qiangli/yoke/pkg/steward"
 	"github.com/qiangli/yoke/pkg/supervise"
 	"github.com/qiangli/yoke/pkg/telemetry"
@@ -845,13 +845,6 @@ func dispatchWithContext(ctx context.Context) {
 	// cannot steal the word from a verb that takes it as an operand; see
 	// dispatchMeta.
 	dispatchMeta(os.Args)
-	// Catalog-driven shape-slot dispatch (Sprint 677 P3): commands declared in
-	// internal/agentos/cmdcatalog build on demand into tree-hash cached side
-	// slots (yoke/pkg/shape/slot) and execute through the existing shape-slot
-	// path. Monolith/scratch builds and VSC_PROFILE=cert bypass this seam.
-	if code, handled := dispatchCatalogCommand(ctx, os.Args[1], os.Args[2:]); handled {
-		dispatchExit(code)
-	}
 	switch os.Args[1] {
 	case "help":
 		dispatchExit(dispatchHelp(os.Args[2:]))
@@ -1387,16 +1380,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		}
 		dispatchExit(0)
 	case "stats":
-		// Results JSONL → resolve rates with clustered CIs, paired
-		// differences, pass^k, cost per solve (yoke pkg/stats): the numbers
-		// behind every scoreboard row.
-		cmd := stats.NewCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy stats:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+		dispatchExit(runCommandAdapter("yoke", "stats", os.Args[1], os.Args[2:]))
 	case "leaderboard":
 		// The fleet's own run evidence, ranked. A TOP-LEVEL verb rather than
 		// `capability leaderboard` because it answers a different question:
@@ -2517,6 +2501,21 @@ func observingExecMiddlewares() []func(interp.ExecHandlerFunc) interp.ExecHandle
 }
 
 func wireExec(opts []interp.RunnerOption, posix bool, env []string, stdin io.Reader, stdout, stderr io.Writer, initialDryRun bool) []interp.RunnerOption {
+	if os.Getenv(adapterExecEnv) == "1" {
+		_ = os.Unsetenv(adapterExecEnv)
+		cleanEnv := env
+		if len(cleanEnv) == 0 {
+			cleanEnv = os.Environ()
+		}
+		cleanEnv = stripEnvKey(cleanEnv, adapterExecEnv)
+		return append(opts,
+			interp.Env(expand.ListEnviron(cleanEnv...)),
+			interp.StdIO(stdin, stdout, stderr),
+			interp.CommandResolver(commandResolverFor(posix)),
+			interp.ServedInProcess(func(name string) bool { return tool.Lookup(name) != nil }),
+			interp.ExecHandlers(coreutilsshell.Handler()),
+		)
+	}
 	// --dry-run (bashy-only, inert under --posix). The handlers are installed
 	// whenever NOT in posix mode (they no-op when dry-run is off) so the runtime
 	// `set -o dryrun` toggle works even without the flag. EnableDryRunOption
