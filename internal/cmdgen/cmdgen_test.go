@@ -311,3 +311,33 @@ func TestBuildCacheAndShapeSlotLifecycle(t *testing.T) {
 		t.Fatalf("Restore(release) = (%+v, %v), want v1 %s", st, err, v1.Digest)
 	}
 }
+
+func TestParseGoWorkResolvesRelativePaths(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	mod := filepath.Join(dir, "mod")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(mod, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "go.work"), []byte("go 1.27.0\n\nuse ./mod\nreplace example.com/x => ./mod\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWD) })
+	if err := os.Chdir(sub); err != nil {
+		t.Fatal(err)
+	}
+	uses, replaces := parseGoWork("../go.work")
+	if len(uses) != 1 || !filepath.IsAbs(uses[0]) {
+		t.Fatalf("uses = %v, want 1 absolute path", uses)
+	}
+	if len(replaces) != 1 || strings.Contains(replaces[0], "../") {
+		t.Fatalf("replaces = %v, want absolute path replace", replaces)
+	}
+}

@@ -483,6 +483,12 @@ func parseGoWorkHeader(workPath string) (goVer, toolchain string) {
 }
 
 func parseGoWork(workPath string) (uses []string, replaces []string) {
+	if abs, err := filepath.Abs(workPath); err == nil {
+		workPath = abs
+	}
+	if real, err := filepath.EvalSymlinks(workPath); err == nil {
+		workPath = real
+	}
 	b, err := os.ReadFile(workPath)
 	if err != nil {
 		return nil, nil
