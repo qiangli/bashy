@@ -24,3 +24,29 @@ Example shape (names illustrative):
 
 On host:dragon, `bashy podman machine start` or `go build ./...` (directly, through bashy dag, or from an agent shell) is refused with:
 "go-build is barred on this host (reason ...); use host:elephant", plus the operator-only logged override.
+
+## Design (operator-approved 2026-11-21): one gating tool, same design as @guard
+
+Operator: "it should be same design as the @guard so it is applicable not only to the top-level bash commands; it could be applied in bash# scripts and subscripts as one consistent gating tool."
+
+1. Rules = match -> action.
+   - Match facts: host (role/name/OS/free mem/disk), command/capability (atlas group, effects, caps such as podman, go-build), kind of work (tags declared on dag targets and skill-scripts: unit, integration, e2e, cert, parallel), who (agent, sprint, operator).
+   - Actions: allow | deny (barred, with reason) | route (host:elephant, droplet:posix-cert, aws:e2e-fleet) | queue (until resources free).
+2. Declarative rules first; Bash# predicates only for what rules cannot express, marked `@guard read` (pure, read-only, fast). Example policy skill-script:
+
+       # policy/venues.bsh - first match wins
+       rule cert        --kind cert        --route droplet:posix-cert
+       rule e2e-par     --kind e2e --parallel --route aws:e2e-fleet
+       rule integration --kind integration --route host:elephant
+       rule no-vm       --host dragon --cap podman --deny "no VMs on the dev box" --use host:elephant
+       rule unit        --kind unit        --allow
+       @guard read
+       fn heavy(ctx) { ctx.cap == "go-build" && ctx.host.role == "dev" && ctx.host.mem_free_gb < 4 }
+       rule low-mem --when heavy --queue
+
+3. ONE engine, enforced at every exec boundary, not just the front door: the bashy front door, the in-shell ExecHandler ring (every command a script runs, including subshells, sub-scripts and command substitutions), dag target bodies (alongside their Effects caps) and skill-scripts. The same rule therefore gates `go build` typed by a human, run by an agent, or run three scripts deep.
+4. Composes with @guard: host policy is the outer bound; a script's or function's @guard can only NARROW it, never widen it. A denial names the matching rule (policy file + rule name), the reason and the route.
+5. Policy lives in one versioned place: public rules in the umbrella; private host names in a local, git-ignored file. `bashy policy check <cmd>` explains which rule matched and why. `bashy claim bar host:X CAP --use host:Y` is shorthand that writes a rule.
+6. Operator-only logged override (guards need an escape hatch).
+
+Acceptance (unit tests): the same rule denies/routes a command at the front door, inside a Bash# script, inside a sub-script it calls, and in a dag target body; a @guard cannot widen a host denial; `bashy policy check` reports the matching rule; the override is logged.
