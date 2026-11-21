@@ -29,6 +29,28 @@ irm https://dhnt.io/install.ps1 | iex
 
 Both install scripts show no operating-system prompt.
 
+### Start Outpost at boot
+
+Add `--service` on macOS or Linux. Run as the intended service account and
+approve `sudo` for the registration step.
+
+```sh
+curl -fsSL https://dhnt.io/install.sh | sh -s -- --service
+```
+
+On Windows, use an elevated PowerShell under the intended service account.
+
+```powershell
+& ([scriptblock]::Create((irm https://dhnt.io/install.ps1))) -Service
+```
+
+With an extracted release archive, use `bashy self install --service`.
+After the supervisor starts, `outpost doctor` should show `service: boot` and a
+responding admin endpoint. The OS restarts the supervisor after a process exit
+and starts it after reboot without waiting for a login.
+
+### Other install sources
+
 **Package managers are not yet available.** Homebrew, Scoop and winget
 channels are **not supported** yet: there is no `dhnt/tap`
 formula, no `dhnt` Scoop bucket and no winget package to install from. Use an

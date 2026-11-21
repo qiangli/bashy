@@ -41,7 +41,7 @@ Technical tour (3:33): [youtu.be/2eRX3ZJuYeM](https://youtu.be/2eRX3ZJuYeM).*
 > asks you once, connects itself, and keeps working with you through bashy's tools.
 
 **Prefer the terminal?** Paste one line (checksum-verified, into `~/.local/bin`, no sudo).
-Add `--service` / `-Service` to also run outpost as an unpaired boot service (the installer leaves it dormant by default).
+Add `--service` / `-Service` to also run Outpost as an unpaired boot service. This uses `sudo` on macOS and Linux. On Windows, run the installer from an elevated PowerShell as the account that will run Outpost.
 
 ```sh
 curl -fsSL https://dhnt.io/install.sh | sh -s -- --no-service                          # macOS / Linux
@@ -109,8 +109,9 @@ report on the first non-zero exit.
 >
 > **b) bootstrap** *(optional)* — also register outpost as a boot service
 > (launchd / systemd / Task Scheduler), unpaired: it serves only its local
-> admin UI and joins no satellite. On Linux this masks the sleep/suspend
-> targets (sudo). Pair later with `outpost register`.
+> admin UI and joins no satellite. The OS starts the supervisor after a reboot
+> without a login. Registration requires administrator privileges. Pair later
+> with `outpost register`.
 >
 > Reply **a**, **a+b**, or **no**.
 
@@ -151,11 +152,16 @@ bashy install-agent "$NAME"
 
 ## bootstrap
 
-Step 4 (b only). Register the unpaired outpost supervisor.
+Step 4 (b only). Register the Outpost supervisor from the installed executable.
+On macOS and Linux, run as the intended service user and elevate registration.
 
 ```bash
-outpost service install && outpost status
+sudo -- "$(command -v outpost)" service install --system && outpost doctor
 ```
+
+On Windows, run `outpost service install --system` from an elevated PowerShell
+under the intended service account, then run `outpost doctor`.
+Confirm `service: boot` and that the daemon's admin endpoint responds.
 
 ## orient
 

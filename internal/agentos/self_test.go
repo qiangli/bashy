@@ -195,6 +195,30 @@ func TestSelfInstallServiceArgsRequireExpertFlag(t *testing.T) {
 	}
 }
 
+func TestSelfInstallServiceCommand(t *testing.T) {
+	outpost := filepath.Join("install dir", binmgr.BinaryName("outpost"))
+	for _, goos := range []string{"darwin", "linux", "windows"} {
+		t.Run(goos, func(t *testing.T) {
+			for _, systemMode := range []bool{false, true} {
+				args := selfInstallServiceArgs(true, false, systemMode)
+				name, argv := selfInstallServiceCommand(goos, outpost, args, false)
+				wantName, wantArgs := outpost, args
+				if goos != "windows" {
+					wantName, wantArgs = "sudo", append([]string{"--", outpost}, args...)
+				}
+				if name != wantName || !slices.Equal(argv, wantArgs) {
+					t.Fatalf("system mode flag %t: command = %q %q, want %q %q", systemMode, name, argv, wantName, wantArgs)
+				}
+			}
+			args := selfInstallServiceArgs(true, true, false)
+			name, argv := selfInstallServiceCommand(goos, outpost, args, true)
+			if name != outpost || !slices.Equal(argv, args) {
+				t.Fatalf("user mode: command = %q %q, want %q %q", name, argv, outpost, args)
+			}
+		})
+	}
+}
+
 func TestInstallProductStagesBeforeChangingAnyMember(t *testing.T) {
 	source, target := t.TempDir(), t.TempDir()
 	members := map[string]string{}

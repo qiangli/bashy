@@ -117,8 +117,9 @@ the bashy executable path.
 --source preserves the developer-only single-binary build/install workflow.
 
 The default install leaves outpost unconfigured: outpost installed, dormant until ` + "`bashy login`" + `.
---service is the expert option to register and start the service
-during installation.
+--service registers the Outpost supervisor to start at boot. On macOS and Linux
+only registration runs through sudo. On Windows, run as the intended service
+account in an elevated PowerShell. Pass --user to explicitly select user scope.
 
 On a first install (no source pin yet), the installed bashy sets up the
 default Bash# commands and kb pages from its release source pin (bashy src
@@ -228,7 +229,9 @@ the install still succeeds and prints the command to run later.
 			}
 		}
 		if serviceArgs := selfInstallServiceArgs(service, userMode, systemMode); serviceArgs != nil {
-			child := exec.CommandContext(cmd.Context(), filepath.Join(filepath.Dir(target), binmgr.BinaryName("outpost")), serviceArgs...)
+			outpost := filepath.Join(filepath.Dir(target), binmgr.BinaryName("outpost"))
+			name, args := selfInstallServiceCommand(runtime.GOOS, outpost, serviceArgs, userMode)
+			child := exec.CommandContext(cmd.Context(), name, args...)
 			child.Stdin, child.Stdout, child.Stderr = cmd.InOrStdin(), cmd.OutOrStdout(), cmd.ErrOrStderr()
 			if err := child.Run(); err != nil {
 				return fmt.Errorf("register service: %w", err)
@@ -250,7 +253,7 @@ the install still succeeds and prints the command to run later.
 	cmd.Flags().StringVar(&dir, "dir", "", "Install all product executables into this directory")
 	cmd.Flags().StringVar(&seed, "seed", "", "Import a verified offline tool seed before installation")
 	cmd.Flags().BoolVar(&source, "source", false, "Build only bashy from the current source checkout")
-	cmd.Flags().BoolVar(&service, "service", false, "Expert: register and start the installed outpost service (default leaves it dormant)")
+	cmd.Flags().BoolVar(&service, "service", false, "Register and start the Outpost boot service")
 	cmd.Flags().BoolVar(&userMode, "user", false, "Register a per-user service")
 	cmd.Flags().BoolVar(&systemMode, "system", false, "Register a system service")
 	cmd.Flags().BoolVar(&noDefaults, "no-defaults", false, "Skip setting up the default commands and kb pages from the release source pin")
@@ -323,6 +326,13 @@ func selfInstallServiceArgs(service, userMode, systemMode bool) []string {
 		args = append(args, "--system")
 	}
 	return args
+}
+
+func selfInstallServiceCommand(goos, outpost string, args []string, userMode bool) (string, []string) {
+	if !userMode && (goos == "darwin" || goos == "linux") {
+		return "sudo", append([]string{"--", outpost}, args...)
+	}
+	return outpost, args
 }
 
 // selfInstallEUID is a seam so the root refusal is testable unprivileged.
