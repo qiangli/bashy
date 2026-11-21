@@ -147,6 +147,11 @@ func TestStage0StatsAdapterEndToEndParity(t *testing.T) {
 		t.Fatalf("todo --help: code=%d stderr=%q stdout=%q", todoCode, todoErr, todoOut)
 	}
 
+	dagOut, dagErr, dagCode := run("", "dag", "--help")
+	if dagCode != 0 || dagErr != "" || !strings.Contains(dagOut, "dag") {
+		t.Fatalf("dag --help: code=%d stderr=%q stdout=%q", dagCode, dagErr, dagOut)
+	}
+
 	// custom/ Group 1: binmgr-managed external CLIs
 	for _, verb := range []string{"gh", "kubectl", "helm"} {
 		out, errStr, code := run("", verb, "--explain")

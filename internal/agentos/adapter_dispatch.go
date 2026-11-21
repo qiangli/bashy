@@ -124,6 +124,7 @@ var adaptedVerbs = map[string][2]string{
 	// yoke/ — standalone Yoke applets & direct-constructor verbs (Cluster 4A).
 	"ast":         {"yoke", "ast"},
 	"browser":     {"yoke", "browser"},
+	"dag":         {"yoke", "dag"},
 	"db":          {"yoke", "db"},
 	"fetch":       {"yoke", "fetch"},
 	"foreman":     {"yoke", "foreman"},
