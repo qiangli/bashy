@@ -70,7 +70,6 @@ require (
 	github.com/shirou/gopsutil/v4 v4.26.6 // indirect
 	github.com/skeema/knownhosts v1.3.2 // indirect
 	github.com/spf13/cobra v1.10.2 // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/stretchr/testify v1.12.1 // indirect
 	github.com/tiendc/go-deepcopy v1.7.2 // indirect
 	github.com/tklauser/go-sysconf v0.3.16 // indirect
@@ -181,4 +180,5 @@ replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewi
 require (
 	github.com/qiangli/coreutils v0.0.0-20261121101804-c5832f99ccf6
 	github.com/qiangli/yoke v0.0.0-20261121110346-da4b02a4d244
+	github.com/spf13/pflag v1.0.10
 )

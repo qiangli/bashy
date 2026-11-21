@@ -121,4 +121,14 @@ func TestStage0StatsAdapterEndToEndParity(t *testing.T) {
 	if calCode != 0 || calErr != "" || !strings.Contains(calOut, "2026") {
 		t.Fatalf("ncal 1 2026: code=%d stderr=%q stdout=%q", calCode, calErr, calOut)
 	}
+
+	b64Out, b64Err, b64Code := run("hello\n", "base64")
+	if b64Code != 0 || b64Err != "" || strings.TrimSpace(b64Out) != "aGVsbG8K" {
+		t.Fatalf("base64: code=%d stderr=%q stdout=%q", b64Code, b64Err, b64Out)
+	}
+
+	dirHelp, dirErr, dirCode := run("", "dir", "--help")
+	if dirCode != 0 || dirErr != "" || !strings.Contains(dirHelp, "dir [OPTION]") {
+		t.Fatalf("dir --help: code=%d stderr=%q stdout=%q", dirCode, dirErr, dirHelp)
+	}
 }

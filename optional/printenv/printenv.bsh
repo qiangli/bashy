@@ -1,0 +1,14 @@
+#!/usr/bin/env -S bashy --bashsharp
+set -euo pipefail
+unset BASHY_ADAPTER_EXEC
+export BASHY_HINTS=off
+here=${BASH_SOURCE[0]%/*}; [[ $here == "${BASH_SOURCE[0]}" ]] && here=.
+gomod="$here/go.mod"; [[ -f "$gomod" ]] || gomod="$here/../go.mod"
+ext=; [[ ${OS:-} == Windows_NT || ${OSTYPE:-} == msys* || ${OSTYPE:-} == cygwin* ]] && ext=.exe
+bin="${BASHY_ADAPTER_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/bashy/adapters}/optional/printenv$ext"
+if [[ ! -x "$bin" || "$here/main.go" -nt "$bin" || "$gomod" -nt "$bin" ]]; then
+  mkdir -p "${bin%/*}"
+  run_go() { if command -v go >/dev/null 2>&1; then go "$@"; else BASHY_ADAPTER_INPROC=1 "${BASHY_SELF:-bashy}" go "$@"; fi; }
+  (cd "$here" && GOWORK=off CGO_ENABLED=0 run_go build -trimpath -o "$bin.tmp.$$" . && { mv -f "$bin.tmp.$$" "$bin" || { rm -f "$bin.tmp.$$"; [[ -x "$bin" ]]; }; })
+fi
+exec "$bin" "$@"
