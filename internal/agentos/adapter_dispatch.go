@@ -195,6 +195,31 @@ var adaptedVerbs = map[string][2]string{
 	"osv-scanner": {"custom", "osv-scanner"},
 	"osvscanner":  {"custom", "osv-scanner"},
 	"grype":       {"custom", "grype"},
+
+	// custom/ — declarative registry CLIs (Cluster 5B).
+	"aws":           {"custom", "aws"},
+	"az":            {"custom", "az"},
+	"gcloud":        {"custom", "gcloud"},
+	"glab":          {"custom", "glab"},
+	"gws":           {"custom", "gws"},
+	"doctl":         {"custom", "doctl"},
+	"gitea":         {"custom", "gitea"},
+	"karmadactl":    {"custom", "karmadactl"},
+	"rg":            {"custom", "rg"},
+	"tofu":          {"custom", "tofu"},
+	"m365":          {"custom", "m365"},
+	"gam":           {"custom", "gam"},
+	"psql":          {"custom", "psql"},
+	"mongosh":       {"custom", "mongosh"},
+	"valkey-cli":    {"custom", "valkey-cli"},
+	"snow":          {"custom", "snow"},
+	"mosquitto":     {"custom", "mosquitto"},
+	"rabbitmqadmin": {"custom", "rabbitmqadmin"},
+	"kcat":          {"custom", "kcat"},
+	"sf":            {"custom", "sf"},
+	"stripe":        {"custom", "stripe"},
+	"twilio":        {"custom", "twilio"},
+	"slack":         {"custom", "slack"},
 }
 
 func isAdaptedVerb(name string) bool {
