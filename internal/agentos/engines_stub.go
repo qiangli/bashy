@@ -36,17 +36,7 @@ func dispatchEngine(arg string) {
 		}
 		dispatchOllamaEngine()
 	case "podman":
-		bin := resolveEngineBinary(name)
-		if bin == "" {
-			bin = provisionEngine(name)
-		}
-		if bin != "" {
-			applyPodmanHelperEnv()     // Windows: without this a machine start serves NO endpoint
-			applyManagedPodmanEnv(bin) // managed podman: its own conmon/crun/netavark (linux), gvproxy/vfkit (darwin)
-			dispatchExit(execEnginePassthrough(bin, os.Args[2:]))
-		}
-		fmt.Fprint(os.Stderr, engineNotFoundMessage(name))
-		dispatchExit(127)
+		dispatchExit(runCommandAdapter("custom", "podman", arg, os.Args[2:]))
 	case "dks":
 		if handled, code := handleDKSScope(os.Args[2:]); handled {
 			dispatchExit(code)

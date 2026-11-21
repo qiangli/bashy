@@ -220,6 +220,13 @@ var adaptedVerbs = map[string][2]string{
 	"stripe":        {"custom", "stripe"},
 	"twilio":        {"custom", "twilio"},
 	"slack":         {"custom", "slack"},
+
+	// custom/ — lean external engine & observability shims (Cluster 5C).
+	"podman":  {"custom", "podman"},
+	"oci":     {"custom", "podman"},
+	"sandbox": {"custom", "podman"},
+	"docker":  {"custom", "podman"},
+	"otel":    {"custom", "otel"},
 }
 
 func isAdaptedVerb(name string) bool {

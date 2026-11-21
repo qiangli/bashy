@@ -36,15 +36,7 @@ func dispatchObs(arg string) {
 	if arg != "otel" {
 		return
 	}
-	cmd := newOtelCmd()
-	cmd.SetArgs(os.Args[2:])
-	if err := cmd.Execute(); err != nil {
-		if !otelquery.ErrorAlreadyPrinted(err) {
-			fmt.Fprintln(os.Stderr, "bashy otel:", err)
-		}
-		dispatchExit(1)
-	}
-	dispatchExit(0)
+	dispatchExit(runCommandAdapter("custom", "otel", "otel", os.Args[2:]))
 }
 
 // resolveOtelBinary returns the provisioned single-binary otel stack, fetching
