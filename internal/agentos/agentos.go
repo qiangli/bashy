@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -56,22 +55,9 @@ import (
 	coreutilsshell "github.com/qiangli/coreutils/shell"
 	"github.com/qiangli/coreutils/tool"
 	_ "github.com/qiangli/yoke/cmds/foreman"
-	"github.com/qiangli/yoke/external/act"
-	"github.com/qiangli/yoke/external/actrunner"
-	"github.com/qiangli/yoke/external/gh"
 	"github.com/qiangli/yoke/external/gotoolchain"
-	"github.com/qiangli/yoke/external/govulncheck"
-	"github.com/qiangli/yoke/external/grype"
-	"github.com/qiangli/yoke/external/helm"
-	"github.com/qiangli/yoke/external/kopia"
-	"github.com/qiangli/yoke/external/kubectl"
-	"github.com/qiangli/yoke/external/loom"
 	"github.com/qiangli/yoke/external/meshagent"
-	"github.com/qiangli/yoke/external/osvscanner"
-	"github.com/qiangli/yoke/external/rclone"
 	"github.com/qiangli/yoke/external/registry"
-	"github.com/qiangli/yoke/external/seaweedfs"
-	"github.com/qiangli/yoke/external/zot"
 	_ "github.com/qiangli/yoke/pkg/accounts/builtin"
 	"github.com/qiangli/yoke/pkg/ask"
 	"github.com/qiangli/yoke/pkg/atlas"
@@ -1365,152 +1351,9 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		dispatchExit(runCommandAdapter("toolchain", "go", os.Args[1], os.Args[2:]))
 	case "cmake", "clang", "zig", "node", "npm", "npx", "pnpm", "yarn", "python", "pip", "uv", "mise", "cargo", "rustc", "rustup", "rust", "pwsh", "curl":
 		dispatchExit(runCommandAdapter("toolchain", os.Args[1], os.Args[1], os.Args[2:]))
-	case "loom":
-		// Git forge: run Gitea as a managed external binary (binmgr
-		// downloads/verifies/caches it; not compiled in). bashy is the "OS of
-		// binaries" host.
-		cmd := loom.NewLoomCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "zot":
-		// OCI registry (images + Ollama models): run Zot as a managed
-		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
-		cmd := zot.NewZotCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "seaweedfs":
-		// Object/blob store (S3 gateway): run SeaweedFS as a managed
-		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
-		cmd := seaweedfs.NewSeaweedfsCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "kopia":
-		// Snapshot-backup repository server: run Kopia as a managed
-		// external binary (binmgr — not compiled in). Same wrap pattern as loom.
-		cmd := kopia.NewKopiaCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "act":
-		// Run GitHub Actions locally via a binmgr-managed nektos/act (MIT, not
-		// compiled in) — test CI on a host node before pushing. Needs a container
-		// engine (bashy podman, unix host). Transparent passthrough.
-		cmd := act.NewActCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "act-runner":
-		// Gitea act_runner (MIT, binmgr-managed) — the PERSISTENT mesh CI daemon
-		// that registers against loom/Gitea and dials OUT (NAT-friendly), distinct
-		// from `bashy act` (nektos/act, one-shot local). `register --sandbox` +
-		// `daemon --docker-host <bashy podman sock>` gives the tier-3 sandbox
-		// executor: `runs-on: sandbox` jobs run in an OCI container.
-		cmd := actrunner.NewCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "gh":
-		// The GitHub CLI (cli/cli, MIT) via binmgr — open PRs, trigger/watch the
-		// real github runs, `gh api`. With act+go+git it closes the CI/CD loop.
-		cmd := gh.NewGhCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "rclone":
-		// Transparent passthrough to a binmgr-managed rclone (MIT) — the transfer
-		// engine + a NAS-style file server (`rclone serve …`). Not compiled in.
-		cmd := rclone.NewRcloneCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "kubectl":
-		// Kubernetes CLI (Apache-2.0) via binmgr (dl.k8s.io) — targets the DKS
-		// cluster by default (external/kube: KUBECONFIG → outpost's DKS kubeconfig).
-		if runtime.GOOS == "windows" {
-			adaptKubeEnvironment()
-		}
-		cmd := kubectl.NewKubectlCmd()
-		args := os.Args[2:]
-		if runtime.GOOS == "windows" {
-			args = pathconv.NativeArgs(args)
-		}
-		setCobraArgs(cmd, args)
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "helm":
-		// Helm — the kubernetes package manager (Apache-2.0) via binmgr
-		// (get.helm.sh) — installs charts onto the DKS cluster (same default
-		// kubeconfig as `bashy kubectl`).
-		if runtime.GOOS == "windows" {
-			adaptKubeEnvironment()
-		}
-		cmd := helm.NewHelmCmd()
-		args := os.Args[2:]
-		if runtime.GOOS == "windows" {
-			args = pathconv.NativeArgs(args)
-		}
-		setCobraArgs(cmd, args)
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "govulncheck":
-		// Go vulnerability checker (BSD-3-Clause) via binmgr.
-		cmd := govulncheck.NewGovulncheckCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			var exit *exec.ExitError
-			if errors.As(err, &exit) {
-				dispatchExit(childExitStatus(err))
-			}
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "osv-scanner", "osvscanner":
-		// google/osv-scanner (Apache-2.0) via binmgr.
-		cmd := osvscanner.NewOsvScannerCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			var exit *exec.ExitError
-			if errors.As(err, &exit) {
-				dispatchExit(childExitStatus(err))
-			}
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "grype":
-		// anchore/grype (Apache-2.0) via binmgr.
-		cmd := grype.NewGrypeCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			var exit *exec.ExitError
-			if errors.As(err, &exit) {
-				dispatchExit(childExitStatus(err))
-			}
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+	case "loom", "zot", "seaweedfs", "kopia", "act", "act-runner", "gh", "rclone", "kubectl", "helm", "govulncheck", "osv-scanner", "osvscanner", "grype":
+		folder, entry, _ := lookupAdaptedVerb(os.Args[1])
+		dispatchExit(runCommandAdapter(folder, entry, os.Args[1], os.Args[2:]))
 	case "vuln":
 		dispatchExit(dispatchVuln(os.Args[2:]))
 	case "connect":

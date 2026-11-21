@@ -179,6 +179,22 @@ var adaptedVerbs = map[string][2]string{
 	"tessaro":     {"yoke", "tessaro"},
 	"login":       {"yoke", "login"},
 	"mirror":      {"yoke", "mirror"},
+
+	// custom/ — binmgr-managed external CLIs (Cluster 5A).
+	"loom":        {"custom", "loom"},
+	"zot":         {"custom", "zot"},
+	"seaweedfs":   {"custom", "seaweedfs"},
+	"kopia":       {"custom", "kopia"},
+	"act":         {"custom", "act"},
+	"act-runner":  {"custom", "act-runner"},
+	"gh":          {"custom", "gh"},
+	"rclone":      {"custom", "rclone"},
+	"kubectl":     {"custom", "kubectl"},
+	"helm":        {"custom", "helm"},
+	"govulncheck": {"custom", "govulncheck"},
+	"osv-scanner": {"custom", "osv-scanner"},
+	"osvscanner":  {"custom", "osv-scanner"},
+	"grype":       {"custom", "grype"},
 }
 
 func isAdaptedVerb(name string) bool {
