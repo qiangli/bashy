@@ -22,4 +22,5 @@ func TestStatsStandaloneParity(t *testing.T) {
 	if !strings.Contains(out.String(), "\"bashy-stats-summary-v1\"") || !strings.Contains(out.String(), "\"a1\"") {
 		t.Fatalf("unexpected summary output: %s", out.String())
 	}
+	adapter.AssertStandaloneDeps(t, "stats")
 }

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/bashsharp/bashsharp/cli"
+	_ "github.com/qiangli/coreutils/cmds/all"
 	"github.com/qiangli/bashy/internal/tmpl"
 )
 
@@ -90,6 +91,16 @@ func TestMain(m *testing.M) {
 	// answers with os.Executable, which is the test binary here).
 	if os.Getenv(tmplTestChildEnv) != "" && len(os.Args) > 1 && os.Args[1] == "tmpl" {
 		os.Exit(tmpl.Main(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	}
+	// Front-door adapter trampolines (runCommandAdapter) re-exec bashySelfPath()
+	// — which resolves to this .test binary during in-process dispatch tests —
+	// with BASHY_ADAPTER_EXEC=1 and `--bashsharp <adapter.bsh> <args...>`.
+	if os.Getenv(adapterExecEnv) == "1" || os.Getenv(adapterInprocEnv) == "1" {
+		cli.AgentOSDispatch = Dispatch
+		cli.AgentOSWireExec = WireExec
+		cli.AgentOSBashPPDefault = true
+		cli.Main()
+		os.Exit(0)
 	}
 	// Any invocation that is not `go test` — the toolFenceEchoEnv echo mode and
 	// the generic foreignReExec backstop — echoes its arguments and exits 0

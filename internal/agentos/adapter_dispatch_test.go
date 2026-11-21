@@ -136,4 +136,14 @@ func TestStage0StatsAdapterEndToEndParity(t *testing.T) {
 	if cmakeCode != 0 || cmakeErr != "" || !strings.Contains(cmakeOut, "explain: cmake (not executed)") {
 		t.Fatalf("cmake --explain: code=%d stderr=%q stdout=%q", cmakeCode, cmakeErr, cmakeOut)
 	}
+
+	astOut, astErr, astCode := run("", "ast", "--help")
+	if astCode != 0 || astErr != "" || !strings.Contains(astOut, "ast") {
+		t.Fatalf("ast --help: code=%d stderr=%q stdout=%q", astCode, astErr, astOut)
+	}
+
+	todoOut, todoErr, todoCode := run("", "todo", "--help")
+	if todoCode != 0 || todoErr != "" || !strings.Contains(todoOut, "todo") {
+		t.Fatalf("todo --help: code=%d stderr=%q stdout=%q", todoCode, todoErr, todoOut)
+	}
 }

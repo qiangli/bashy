@@ -52,7 +52,6 @@ import (
 	// import cycle with pkg/dag's tests if listed in cmds/all. It is an AgentOS
 	// front-door verb like weave/dag/chat; reachable as `bashy foreman` through
 	// the tool-registry dispatch fallthrough.
-	"github.com/qiangli/coreutils/pkg/schedule"
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	coreutilsshell "github.com/qiangli/coreutils/shell"
 	"github.com/qiangli/coreutils/tool"
@@ -72,17 +71,12 @@ import (
 	"github.com/qiangli/yoke/external/rclone"
 	"github.com/qiangli/yoke/external/registry"
 	"github.com/qiangli/yoke/external/seaweedfs"
-	"github.com/qiangli/yoke/external/sphere"
-	"github.com/qiangli/yoke/external/tessaro"
 	"github.com/qiangli/yoke/external/zot"
-	"github.com/qiangli/yoke/pkg/accounts"
 	_ "github.com/qiangli/yoke/pkg/accounts/builtin"
-	"github.com/qiangli/yoke/pkg/adapt"
 	"github.com/qiangli/yoke/pkg/ask"
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/autofix"
 	"github.com/qiangli/yoke/pkg/board"
-	"github.com/qiangli/yoke/pkg/broker"
 	"github.com/qiangli/yoke/pkg/bus"
 	"github.com/qiangli/yoke/pkg/capability"
 	"github.com/qiangli/yoke/pkg/chat"
@@ -90,35 +84,22 @@ import (
 	"github.com/qiangli/yoke/pkg/dag"
 	"github.com/qiangli/yoke/pkg/feed"
 	"github.com/qiangli/yoke/pkg/fleet"
-	"github.com/qiangli/yoke/pkg/gate"
-	"github.com/qiangli/yoke/pkg/gomod"
 	"github.com/qiangli/yoke/pkg/handoff"
-	"github.com/qiangli/yoke/pkg/herald"
 	"github.com/qiangli/yoke/pkg/instance"
 	"github.com/qiangli/yoke/pkg/jobs"
-	"github.com/qiangli/yoke/pkg/judge"
 	"github.com/qiangli/yoke/pkg/lexicon"
 	"github.com/qiangli/yoke/pkg/meet"
-	"github.com/qiangli/yoke/pkg/mirror"
-	"github.com/qiangli/yoke/pkg/pair"
 	"github.com/qiangli/yoke/pkg/policy/coord"
 	"github.com/qiangli/yoke/pkg/principal"
 	"github.com/qiangli/yoke/pkg/recommend"
-	"github.com/qiangli/yoke/pkg/resources"
 	"github.com/qiangli/yoke/pkg/role/meetroom"
 	"github.com/qiangli/yoke/pkg/room"
-	"github.com/qiangli/yoke/pkg/sdlc"
-	"github.com/qiangli/yoke/pkg/secrets"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
-	"github.com/qiangli/yoke/pkg/sota"
 	"github.com/qiangli/yoke/pkg/steward"
-	"github.com/qiangli/yoke/pkg/supervise"
 	"github.com/qiangli/yoke/pkg/telemetry"
-	"github.com/qiangli/yoke/pkg/todo"
 	"github.com/qiangli/yoke/pkg/toolcmd"
 	"github.com/qiangli/yoke/pkg/weave"
 	"github.com/qiangli/yoke/pkg/webconsole"
-	"github.com/qiangli/yoke/pkg/webinspect"
 )
 
 // Preamble returns shell source defining AgentOS default functions, registered
@@ -917,123 +898,15 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		dispatchExit(dispatchAgentic(os.Args[2:]))
 	case "weave":
 		dispatchExit(runWeaveDispatch(os.Args[2:], os.Stdout, os.Stderr))
-	case "llm":
-		cmd := broker.NewCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy llm:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "share":
-		// Hand a link to another device (S604 C2): `share qr URL` prints the
-		// URL and a terminal QR code for ANY URL, from any bashy user.
-		// Publishes nothing; a bashy app URL opens as the owner's shapeable
-		// app page.
-		// S619: `share who HOST/APP` lists members admitted to a host app.
-		dispatchExit(dispatchShare(os.Args[2:]))
 	case "sprint":
-		// Plan/handoff layer (cross-repo), peer to `weave` (per-repo
-		// execution). Shares the AgentOS state root; user-global board.
-		// newSprintCmd wraps it so `sprint --help` also carries the ACTIVE
-		// owner-accountability contract, not only the plan/handoff mechanics.
 		dispatchExit(runSprintDispatch(os.Args[2:], os.Stdout, os.Stderr))
-	case "adapt":
-		cmd := adapt.NewCmd(adapt.PrepareJSONLens)
-		// adapt carries its own JSON-lens argv handling, so it skips the
-		// common-options pass — but the no-completion policy still applies.
-		disableCobraCompletion(cmd)
-		cmd.SetArgs(os.Args[2:])
-		dispatchExit(adapt.ExitCode(cmd.Execute()))
-	case "adapter":
-		cmd := fleet.NewAdaptersCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy adapter:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "infra":
-		// Provider access registration only: never provisions anything,
-		// never changes artifact sourcing, never touches satellite
-		// authorization. Distinct exit codes keep invalid-manifest and
-		// protocol-mismatch apart.
-		cmd := fleet.NewInfraCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy infra:", err)
-			dispatchExit(fleet.InfraExitCode(err))
-		}
-		dispatchExit(0)
-	case "token":
-		// Scoped coordination credentials (S490.15b): create mints an
-		// attenuated token into the vault (--to-secret) or, explicitly,
-		// stdout (--stdout); with nowhere safe to put the value, create
-		// refuses rather than printing it. list/revoke never carry values.
-		dispatchExit(dispatchToken(os.Args[2:]))
-	case "fleet":
-		// The coordination-credential verb (S490.15b): master-token
-		// save/mint writes the 0600 master-token file, never printing it.
-		dispatchExit(dispatchFleet(os.Args[2:]))
-	case "satellite":
-		// Satellite daily operations (S490, S598): list/show read operations,
-		// owner-scoped host pairing invites, and transfer.
-		dispatchExit(dispatchSatellite(os.Args[2:]))
-	case "member":
-		dispatchExit(dispatchMember(os.Args[2:]))
-	case "group":
-		dispatchExit(dispatchGroup(os.Args[2:]))
-	case "superadmin":
-		dispatchExit(dispatchSuperadmin(os.Args[2:]))
-	case "desktop":
-		dispatchExit(dispatchDesktop(os.Args[2:]))
-	case "journey":
-		// The same journey state the desktop shows: bashy desktop journey.
-		dispatchExit(dispatchDesktop(append([]string{"journey"}, os.Args[2:]...)))
-	case "suite":
-		dispatchExit(dispatchSuite(os.Args[2:]))
-	case "reproduce":
-		// Plan-only recreation dry-run (S490): reproduce --plan lists the
-		// recreate actions master metadata supports, plus the gaps it
-		// cannot serve. Read-only; there is no --apply in this run.
-		dispatchExit(dispatchReproduce(os.Args[2:]))
-	case "paired-host":
-		// Paired hosts from the master (S490, yoke NewPairedHostCmd):
-		// read-only `ls`. Spelled paired-host, not host, so the bare
-		// shim never shadows the platform DNS lookup (/usr/bin/host).
-		dispatchExit(dispatchPairedHost(os.Args[2:]))
+	case "llm", "share", "adapt", "adapter", "infra", "token", "fleet",
+		"satellite", "member", "group", "superadmin", "desktop", "journey",
+		"suite", "reproduce", "paired-host", "handoff", "resume":
+		folder, entry, _ := lookupAdaptedVerb(os.Args[1])
+		dispatchExit(runCommandAdapter(folder, entry, os.Args[1], os.Args[2:]))
 	case "resource", "resources":
-		cmd := resources.NewCommand()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy resource:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "handoff", "resume":
-		// Portable session handoff. Every agentic tool has a /resume, and every one
-		// of them is a prison: it reads that tool's private transcript store, on
-		// that machine, in that tool. bashy is the SHELL underneath all of them, so
-		// it is the one layer that can write a session record which OUTLIVES the
-		// tool that made it — and the record is an ARTIFACT (a self-contained diff +
-		// untracked files carried by content + the brief), never a pointer, so it
-		// travels: scp, mesh, an issue comment.
-		//
-		// The piece nothing else had is the IN-FLIGHT WORKING TREE. sprint handoff,
-		// weave baton and the cloudbox session lease all record PROSE, so a
-		// successor inherited a narrative, not a diff.
-		var hcmd *cobra.Command
-		if os.Args[1] == "handoff" {
-			hcmd = handoff.NewHandoffCmd()
-		} else {
-			hcmd = handoff.NewResumeCmd()
-		}
-		setCobraArgs(hcmd, os.Args[2:])
-		if err := hcmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy "+os.Args[1]+":", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+		dispatchExit(runCommandAdapter("yoke", "resource", os.Args[1], os.Args[2:]))
 	case "claim":
 		cmd := coord.NewClaimCmd(func() []string {
 			cwd, err := os.Getwd()
@@ -1089,20 +962,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		}
 		dispatchExit(0)
 	case "todo", "issue":
-		// THE task tracker. Auto-detected scope: inside a git repo → THAT repo's
-		// docs/todo/ (committed, the structured replacement for an ad-hoc TODO.md);
-		// otherwise the personal host list (~/.bashy/todo/<owner>/). --base-dir shows
-		// another repo's list without cd; --user forces the host list. It subsumes the
-		// old `issue` register (removed) as the single per-repo/per-host tracker;
-		// `weave add --from-todo` seeds a run from a repo todo. The record format (YAML-
-		// frontmatter markdown) is shared with the model in coreutils/pkg/issue.
-		tcmd := todo.NewTodoCmd()
-		setCobraArgs(tcmd, os.Args[2:])
-		if err := tcmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy todo:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+		dispatchExit(runCommandAdapter("yoke", "todo", os.Args[1], os.Args[2:]))
 	case "steward":
 		// Role namespace (front door for the steward role): bare `steward` and
 		// `steward skill` print the existing steward operating skill; `steward
@@ -1172,91 +1032,12 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 			dispatchExit(1)
 		}
 		dispatchExit(0)
-	case "pair":
-		// gate's SEMANTIC twin, and the successor to `judge`.
-		//
-		// judge could only TALK: it read a diff and returned approve/revise/reject. That
-		// ceiling is why it needed a PANEL -- three opinions voting, because one opinion
-		// is unreliable and nothing could check it.
-		//
-		// A pair ACTS. Give the second agent the keyboard and its finding stops being a
-		// claim and becomes a thing that RUNS:
-		//
-		//     "this breaks on empty input"          -> a claim. Someone must adjudicate it.
-		//     a test that FAILS on empty input      -> a proof. The gate reads it.
-		//
-		// The regress collapses. You do not need three models to vote on whether a bug is
-		// real when the bug is executable -- you need one exit code. That is why `pair`
-		// subsumes `judge` rather than sitting beside it, and why `judge`'s read-only
-		// shackle comes off: judge had to be read-only because it could APPROVE, and an
-		// agent that can both write and approve will fix the code and bless its own fix.
-		// A pair may never approve. Only the gate may. So it can safely have the keyboard.
-		pcmd := pair.NewPairCmd()
-		setCobraArgs(pcmd, os.Args[2:])
-		if err := pcmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy pair:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "judge":
-		// Kept as an alias so the steward skill, weave, and any script keep working. It
-		// maps to the one role that behaves the way judge did: prose, no keyboard, an
-		// unverified claim. Reach for `pair --role break` instead.
-		jcmd := judge.NewJudgeCmd()
-		setCobraArgs(jcmd, os.Args[2:])
-		if err := jcmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy judge:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "gate":
-		// THE Test verb. Before it, the Test stage was EMPTY -- not because nobody
-		// tested, but because the gate (the command that decides pass/fail) was
-		// spelled four incompatible ways across four packages: weave's suite-gate
-		// file, sdlc's healthcheck: key, supervise's :: string, and a dag target
-		// that happens to fail. All four mean the same thing -- run a command, let
-		// its exit status be the verdict. They never disagreed about semantics, only
-		// about where the command lives. This is the one place it lives.
-		gcmd := gate.NewGateCmd()
-		setCobraArgs(gcmd, os.Args[2:])
-		if err := gcmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy gate:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+	case "pair", "judge", "gate":
+		dispatchExit(runCommandAdapter("yoke", os.Args[1], os.Args[1], os.Args[2:]))
 	case "chat", "invoke":
-		// Invoke ONE agent, ONCE, on one instruction — the primitive that unifies
-		// the heterogeneous agent CLIs (resolve the tool, inject identity, force
-		// bashy as its shell). Every orchestrator is built on it: sdlc, foreman and
-		// meet all call it; only weave bypasses it (it drives a PTY).
-		//
-		// The original one-shot `chat` was renamed to `invoke` in 2026-07. Chat
-		// later grew a real governed interactive session plus sessions/steer/
-		// attach/interrupt/timeline, so `chat` is canonical again and `invoke`
-		// remains the hidden compatibility spelling for existing one-shot callers.
 		dispatchExit(runChatCmd(os.Args[2:], os.Stdout, os.Stderr))
-	case "coach":
-		// Run ONE agent under the LLM-free auto-coach: watch its tool.call stream
-		// and, when it loops, ESC it out and tell it to deliver. A report channel,
-		// never an author. See dhnt docs/live-agent-coaching-design.md (P0).
-		cmd := chat.NewCoachCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "delegate":
-		// The ergonomic front for handing a task to an agent — a DIFFERENT one, or
-		// YOURSELF (the same tool, run detached to stay responsive). The lightweight
-		// one-shot over the same primitive `invoke` uses; the steward's default verb.
-		// Heavier ISOLATED work routes to `weave`/the conductor. See
-		// bashy/docs/delegate-verb-design.md.
-		cmd := chat.NewDelegateCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+	case "coach", "delegate":
+		dispatchExit(runCommandAdapter("yoke", os.Args[1], os.Args[1], os.Args[2:]))
 	case "meet":
 		// Multi-participant deliberation session: agentic CLIs + a human take
 		// turns; a dedicated notes-only secretary keeps and files the minutes.
@@ -1302,38 +1083,8 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// running `bashy supervisord` monitor. Direct-only: bare `service`
 		// is the host's SysV/BSD service(8).
 		dispatchExit(dispatchServiceContext(ctx, os.Args[2:]))
-	case "supervise":
-		// Conductor-as-a-verb: one supervisor agent drives a fleet of workers
-		// against a goal decomposed into GATED tasks, in the current working
-		// tree (the in-place counterpart to `bashy weave`'s isolated
-		// workspaces). Each task's gate is a shell command the orchestrator runs
-		// itself — the verdict is objective, not the agent's claim. See
-		// dhnt/docs/agentic-design-pattern-gaps.md.
-		cmd := supervise.NewSuperviseCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy supervise:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	// `fanout` was removed 2026-07-12 by the Command Atlas SDLC ratchet, which
-	// asks every front-door verb: which stage do you serve that nothing else
-	// already does? fanout had no answer. It shipped with zero callers, zero
-	// skills, zero docs telling anyone to use it, and no atlas entry at all —
-	// and its own design doc conceded the collapse: "at which point this *is*
-	// weave with a shared seed, and the runner should delegate to weave."
-	// N agents deliberating over one shared context is `bashy meet`; N agents
-	// working in parallel is `bashy weave`. There was no third thing.
-	case "capability":
-		// The living agent (tool:model) × capability matrix behind
-		// capability-routed delegation — the routing table for `chat --capability`.
-		cmd := capability.NewCapabilityCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy capability:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+	case "supervise", "capability":
+		dispatchExit(runCommandAdapter("yoke", os.Args[1], os.Args[1], os.Args[2:]))
 	case "ping":
 		// The front door to the board, and to the classic command. Arity picks:
 		// no args reads, a target plus a message posts, a bare target is handed
@@ -1369,77 +1120,18 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 			dispatchExit(inboxCommandExitCode(err))
 		}
 		dispatchExit(0)
-	case "stats":
-		dispatchExit(runCommandAdapter("yoke", "stats", os.Args[1], os.Args[2:]))
-	case "leaderboard":
-		// The fleet's own run evidence, ranked. A TOP-LEVEL verb rather than
-		// `capability leaderboard` because it answers a different question:
-		// the matrix is a routing input ("who should take this"), this is an
-		// account ("what has actually happened, and how sure are we"). Folding
-		// them together would invite reading a routing estimate as a
-		// measurement.
-		cmd := capability.NewLeaderboardCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy leaderboard:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "sdlc":
-		// Workflow control plane: intake/deployment/approval boundary that
-		// delegates implementation planning and sprint execution to agents.
-		cmd := sdlc.NewSDLCCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "web":
-		cmd := webinspect.NewWebCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+	case "stats", "leaderboard", "sdlc", "web":
+		dispatchExit(runCommandAdapter("yoke", os.Args[1], os.Args[1], os.Args[2:]))
 	case "search":
-		// Web search (query → cited results) via a provider ladder — the
-		// find-things primitive `bashy sota` builds on. See
-		// dhnt docs/bashy-sota-research-design.md.
 		cmd := newProviderSearchCmd()
 		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
 			dispatchExit(1)
 		}
 		dispatchExit(0)
-	case "sota":
-		// Research the current state of the art: ground a synthesis agent in real
-		// `bashy search` sources and cite only those (anti-hallucination by
-		// construction), or --hitchhike on the agent's own web-search tool. See
-		// dhnt docs/bashy-sota-research-design.md.
-		cmd := sota.NewSotaCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "account":
-		cmd := accounts.NewAccountCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "secret", "secrets":
-		cmd := secrets.NewSecretsCmd()
-		cmd.Use = os.Args[1]
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			// The command silences cobra's own reporting; without this line a
-			// 403 or a missing token exits 1 saying nothing.
-			fmt.Fprintf(os.Stderr, "%s: %v\n", os.Args[1], err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+	case "sota", "account", "secret", "secrets":
+		folder, entry, _ := lookupAdaptedVerb(os.Args[1])
+		dispatchExit(runCommandAdapter(folder, entry, os.Args[1], os.Args[2:]))
 	case "bus":
 		// The agent notification bus — the PUSH half of how agents coordinate,
 		// where `bashy kb` is the durable PULL half. `bus publish` appends an
@@ -1459,55 +1151,11 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 			fmt.Fprintln(os.Stderr, "bashy bus:", err)
 		}
 		dispatchExit(bus.ExitCode(err))
-	case "herald", "a2a":
-		// Reach an agent that is NOT on this host, over A2A. Every other
-		// coordination verb resolves a participant to a binary HERE; herald is
-		// the path to a capability that cannot be installed here at all.
-		//
-		// `a2a` is a hidden alias: the protocol name is what an operator will
-		// reach for first, but it is not the verb's name — herald speaks more
-		// than one wire, and inetd is not called telnetd.
-		//
-		// The exit status is load-bearing and belongs to the GATE, not to the
-		// peer's self-reported task state: 0 only when the gate passed, 2 when
-		// the peer claimed completion and nothing verified it. That is what
-		// lets a remote agent compose with && like any other command.
-		dispatchExit(herald.Run(context.Background(), os.Args[2:]))
-	case "acp":
-		// `bashy acp` IS `bashy herald acp` — the same server, one token
-		// shorter. The spelling exists because an ACP host does not configure a
-		// verb tree, it configures ONE command string: Zed's agent_servers
-		// entry, a Codync bot's `command:`. A two-word command in that slot is
-		// a second thing to get wrong, and `herald` is a bashy word an ACP host
-		// operator has no reason to know — the protocol's name is the only
-		// handle they have.
-		//
-		// Prepending the subcommand (the doctor/context/audit idiom above) is
-		// deliberately the whole implementation: the permission relay, the gate,
-		// the session map and the EOF grace all stay in yoke's herald, so the
-		// alias cannot drift from the verb it aliases. `bashy acp --help` and
-		// `bashy herald acp --help` print the same text for the same reason.
-		dispatchExit(herald.Run(context.Background(), append([]string{"acp"}, os.Args[2:]...)))
-	case "ask":
-		// Ask the HUMAN for an ad-hoc value over a channel the calling program
-		// does not own (controlling terminal → GUI askpass → out-of-band
-		// rendezvous), and hand back a path rather than the value. Local-first:
-		// no network, no pairing — unlike `secrets`, which is the cloudbox vault.
-		cmd := ask.NewAskCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+	case "herald", "a2a", "acp", "ask":
+		folder, entry, _ := lookupAdaptedVerb(os.Args[1])
+		dispatchExit(runCommandAdapter(folder, entry, os.Args[1], os.Args[2:]))
 	case "approve":
-		// The one queue of decisions waiting for a human (yoke pkg/ask): a
-		// yielded @confirm, an ACP permission request, a chat grant. Direct
-		// front door only: bare `approve` is never shimmed.
 		cmd := ask.NewApproveCmd()
-		// M2b: the protected-edit form records a pkg/src ApprovalRecord,
-		// but only after a recorded human allow on the same queue — an
-		// agent cannot self-approve (see approve_src.go).
 		cmd.AddCommand(newApproveSrcCmd())
 		setCobraArgs(cmd, os.Args[2:])
 		if err := cmd.Execute(); err != nil {
@@ -1520,10 +1168,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		}
 		dispatchExit(0)
 	case "mod":
-		// The Bash# module contract (yoke pkg/gomod): sibling pins are go.mod
-		// versions in a go.work workspace. drift/sync/dir/tools/init compose
-		// the go command; gomod.Run returns the weavecli exit code.
-		dispatchExit(gomod.Run(os.Args[2:], os.Stdout, os.Stderr))
+		dispatchExit(runCommandAdapter("yoke", "mod", os.Args[1], os.Args[2:]))
 	case "dag":
 		// The agent-first DAG task runner: markdown-defined targets run as a
 		// dependency graph. dag.ExitCodeOf recovers the stable weavecli exit
@@ -1579,15 +1224,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// across all of them — plus hosts — and says how to reach it.
 		runFleet(os.Args[1], os.Args[2:])
 	case "schedule":
-		// Modern cron: run commands on a cron/interval/at schedule from a
-		// self-contained store + optional daemon, with an agentic prompt/context
-		// delivered to the fired command. The host cron/crontab are untouched.
-		cmd := schedule.NewScheduleCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+		dispatchExit(runCommandAdapter("yoke", "schedule", os.Args[1], os.Args[2:]))
 	case "run":
 		// Wrap a command and emit a structured result envelope (bashy-run-v1)
 		// bundling exit/signal/duration/cwd + the advisor's hints. Streams live
@@ -1880,55 +1517,9 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		dispatchExit(dispatchConnect(os.Args[2:]))
 	case "linux":
 		dispatchExit(dispatchLinux(os.Args[2:]))
-	case "outpost":
-		if err := meshagent.Exec(context.Background(), os.Args[2:]...); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			var exit *exec.ExitError
-			if errors.As(err, &exit) {
-				dispatchExit(exit.ExitCode())
-			}
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "peer", "sphere":
-		// Sphere tier (tier 4): peer-direct pooled p2p inference/compute. Thin
-		// front door to the paired outpost service executable. Service code
-		// stays behind this process boundary; bashy owns the userland shell.
-		cmd := sphere.NewSphereCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "tessaro":
-		// Account / front-door: sign in/out, status, open the portal. Execs the
-		// outpost agent at runtime (same exec-never-link discipline as sphere);
-		// `tessaro open` works even without it.
-		cmd := tessaro.NewTessaroCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "login":
-		// Shortcut for `bashy tessaro login` — pair this machine with Tessaro.
-		cmd := tessaro.NewLoginCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
-	case "mirror":
-		// Continuous one-way directory mirror (Syncthing's architecture, all
-		// permissive parts: rjeczalik/notify MIT recursive watch + rclone MIT
-		// transfer; our own orchestration). Node B keeps a live replica of a dir
-		// on node A — point --dest at the replica's exposed rclone.
-		cmd := mirror.NewMirrorCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+	case "outpost", "peer", "sphere", "tessaro", "login", "mirror":
+		folder, entry, _ := lookupAdaptedVerb(os.Args[1])
+		dispatchExit(runCommandAdapter(folder, entry, os.Args[1], os.Args[2:]))
 	case "jobs", "fg", "bg", "kill":
 		// Real-PID job control over detached background jobs (`foo &`). The
 		// in-shell fg/bg/jobs builtins can't own the controlling terminal
