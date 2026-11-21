@@ -582,9 +582,9 @@
     document.getElementById('cancelBtn').disabled = isClosed || data.status === 'cancelled';
     document.getElementById('closeBtn').disabled = isClosed;
 
+    membersList.textContent = '';
     if (Array.isArray(data.members) && data.members.length > 0) {
       membersBox.hidden = false;
-      membersList.textContent = '';
       for (const m of data.members) {
         const btn = document.createElement('button');
         btn.type = 'button';
