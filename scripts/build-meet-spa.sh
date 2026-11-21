@@ -122,6 +122,38 @@ if [ ! -f "$web_dir/package.json" ] || [ ! -f "$web_dir/pnpm-lock.yaml" ]; then
 	fi
 fi
 
+# Content-fingerprint helper over a directory tree, skipping build outputs and
+# node_modules. Avoids `find -exec` so it runs identically under bashy and GNU find.
+spa_tree_fingerprint() {
+	(
+		cd "$1" && find . \
+			\( -path './node_modules' -o -path './node_modules/*' -o -path './dist' -o -path './dist/*' \) -prune -o \
+			-type f -print | LC_ALL=C sort | while IFS= read -r f; do
+			printf '%s:' "$f"
+			cksum "$f"
+		done
+	) | cksum | awk '{print $1 "-" $2}'
+}
+
+if [ -z "$artifact_dir" ]; then
+	artifact_dir=$(cd "$web_dir/.." && pwd)/artifact
+fi
+stamp_file=$web_dir/dist/.bashy-spa-fresh.stamp
+
+# In optional mode, skip pnpm install + vite build when the tracked artifact is
+# already present, valid, and matches the last content-verified (web, artifact)
+# fingerprint. `required` and `check` modes always build fresh unconditionally.
+if [ "$mode" = optional ] && [ -s "$artifact_dir/index.html" ] &&
+	grep -Eiq '<(html|head)([[:space:]>])' "$artifact_dir/index.html" &&
+	[ -f "$stamp_file" ]; then
+	cur_stamp="$(spa_tree_fingerprint "$web_dir"):$(spa_tree_fingerprint "$artifact_dir")"
+	prev_stamp=$(cat "$stamp_file" 2>/dev/null || true)
+	if [ "$cur_stamp" = "$prev_stamp" ]; then
+		echo "meet SPA: artifact is content-fresh; skipping optional rebuild" >&2
+		exit 0
+	fi
+fi
+
 # BASHY BUILDS BASHY. The tiers below are ordered so a host with no system Node
 # still produces a COMPLETE binary, because the third tier provisions its own.
 #
@@ -232,4 +264,5 @@ fi
 rm -rf "$artifact_dir"
 mkdir -p "$artifact_dir"
 cp -R "$web_dir/dist/." "$artifact_dir/"
+printf '%s\n' "$(spa_tree_fingerprint "$web_dir"):$(spa_tree_fingerprint "$artifact_dir")" >"$stamp_file"
 echo "meet SPA: promoted $web_dir/dist -> $artifact_dir" >&2

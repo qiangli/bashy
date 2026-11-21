@@ -65,7 +65,7 @@ if ! sh "$script" compare "$dist" "$art" >"$tmp/1.out" 2>&1; then
 	cat "$tmp/1.out" >&2
 	fail "a fresh, matching artifact was rejected"
 fi
-echo "test-meet-spa-fresh: [1/6] fresh matching artifact accepted"
+echo "test-meet-spa-fresh: [1/7] fresh matching artifact accepted"
 
 # ---- 2a. stale rejected (byte mismatch) + artifact unchanged ----
 printf 'console.log("STALE — old build");\n' >"$art/assets/app-DEADBEEF.js"
@@ -78,7 +78,7 @@ grep -q 'STALE' "$tmp/2a.out" || fail "stale rejection lacked an actionable STAL
 after=$(fingerprint "$art")
 [ -n "$after" ] || fail "artifact fingerprint was empty after the byte-mismatch check"
 [ "$before" = "$after" ] || fail "the non-mutating check changed the artifact tree"
-echo "test-meet-spa-fresh: [2/6] stale (byte) artifact rejected and left unchanged"
+echo "test-meet-spa-fresh: [2/7] stale (byte) artifact rejected and left unchanged"
 
 # restore parity, then diverge the FILE SET
 cp -R "$dist/." "$art/"
@@ -91,7 +91,7 @@ fi
 after=$(fingerprint "$art")
 [ -n "$after" ] || fail "artifact fingerprint was empty after the file-set check"
 [ "$before" = "$after" ] || fail "the non-mutating check changed the artifact tree (file-set case)"
-echo "test-meet-spa-fresh: [3/6] stale (file-set) artifact rejected and left unchanged"
+echo "test-meet-spa-fresh: [3/7] stale (file-set) artifact rejected and left unchanged"
 
 # ---- 3. missing toolchain fails closed ----
 # A fake web_dir with a lockfile so the script reaches its toolchain probe, and a
@@ -120,7 +120,7 @@ grep -q 'requires node and pnpm' "$tmp/3.out" || {
 	cat "$tmp/3.out" >&2
 	fail "toolchain-missing check did not fail on the toolchain (env not scrubbed?)"
 }
-echo "test-meet-spa-fresh: [4/6] check with no toolchain failed closed"
+echo "test-meet-spa-fresh: [4/7] check with no toolchain failed closed"
 
 # A fake bashy implements only pnpm. With no node, pnpm or corepack on PATH,
 # check must select the provisioned tier and still reject a stale artifact.
@@ -145,7 +145,7 @@ if ! PATH="/bin:/usr/bin" BASHY_BIN="$tmp/fake-bashy" MEET_SPA_WEB_DIR="$fakeweb
 	fail "bashy-provisioned tier did not pass"
 fi
 grep -q 'using bashy-provisioned pnpm' "$tmp/bashy.out" || fail "bashy tier was not selected"
-echo "test-meet-spa-fresh: [5/6] bashy-provisioned pnpm selected without system Node"
+echo "test-meet-spa-fresh: [5/7] bashy-provisioned pnpm selected without system Node"
 
 # ---- 4. a standalone clone resolves the yoke module pin, not ../yoke ----
 # A tiny fake Go tool returns a fixture module directory. Fake node/pnpm build a
@@ -181,6 +181,57 @@ if ! (cd "$tmp/standalone/bashy" && PATH="$tmp/bin:/bin:/usr/bin" BASHY_BIN= /bi
 	fail "standalone check did not resolve yoke from the go.mod pin"
 fi
 grep -q 'using pinned yoke module' "$tmp/4.out" || fail "standalone check did not report its pinned-yoke fallback"
-echo "test-meet-spa-fresh: [6/6] standalone check resolves the pinned yoke module"
+echo "test-meet-spa-fresh: [6/7] standalone check resolves the pinned yoke module"
+
+# ---- 5. optional skips when content-fresh, rebuilds on edit; required never skips ----
+opt_root=$tmp/opt-case
+opt_web=$opt_root/web
+opt_art=$opt_root/artifact
+opt_bin=$tmp/opt-bin
+opt_count=$tmp/opt-pnpm-count
+mkdir -p "$opt_web/src" "$opt_bin"
+printf '{"name":"meet-web","packageManager":"pnpm@11.17.0"}\n' >"$opt_web/package.json"
+printf 'lockfileVersion: 9.0\n' >"$opt_web/pnpm-lock.yaml"
+printf 'export const v = 1;\n' >"$opt_web/src/app.ts"
+cat >"$opt_bin/node" <<'EOF'
+#!/bin/sh
+exit 0
+EOF
+cat >"$opt_bin/pnpm" <<EOF
+#!/bin/sh
+case "\$1" in
+install) exit 0 ;;
+build)
+	printf 'build\n' >>'$opt_count'
+	mkdir -p dist
+	cp -R '$dist/.' dist/
+	;;
+esac
+EOF
+chmod +x "$opt_bin/node" "$opt_bin/pnpm"
+: >"$opt_count"
+
+# First optional run builds (no stamp yet) and promotes artifact.
+PATH="$opt_bin:/bin:/usr/bin" BASHY_BIN= MEET_SPA_WEB_DIR="$opt_web" /bin/sh "$script" optional >"$tmp/5a.out" 2>&1 ||
+	fail "first optional build failed"
+[ "$(wc -l <"$opt_count" | tr -d ' ')" = 1 ] || fail "first optional run should build once"
+
+# Second optional run with unchanged inputs skips pnpm+vite.
+PATH="$opt_bin:/bin:/usr/bin" BASHY_BIN= MEET_SPA_WEB_DIR="$opt_web" /bin/sh "$script" optional >"$tmp/5b.out" 2>&1 ||
+	fail "warm optional build failed"
+grep -q 'content-fresh; skipping optional rebuild' "$tmp/5b.out" || fail "warm optional run did not skip"
+[ "$(wc -l <"$opt_count" | tr -d ' ')" = 1 ] || fail "warm optional run unexpectedly rebuilt"
+
+# Editing a web input invalidates freshness and triggers a rebuild.
+printf 'export const v = 2;\n' >"$opt_web/src/app.ts"
+PATH="$opt_bin:/bin:/usr/bin" BASHY_BIN= MEET_SPA_WEB_DIR="$opt_web" /bin/sh "$script" optional >"$tmp/5c.out" 2>&1 ||
+	fail "post-edit optional build failed"
+[ "$(wc -l <"$opt_count" | tr -d ' ')" = 2 ] || fail "post-edit optional run did not rebuild"
+
+# required mode always rebuilds even when content-fresh.
+PATH="$opt_bin:/bin:/usr/bin" BASHY_BIN= MEET_SPA_WEB_DIR="$opt_web" /bin/sh "$script" required >"$tmp/5d.out" 2>&1 ||
+	fail "required build failed"
+[ "$(wc -l <"$opt_count" | tr -d ' ')" = 3 ] || fail "required run unexpectedly skipped"
+echo "test-meet-spa-fresh: [7/7] optional skips when content-fresh, rebuilds on edit, required always builds"
 
 echo "test-meet-spa-fresh: PASS"

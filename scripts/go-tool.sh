@@ -16,11 +16,31 @@ root=$(CDPATH= cd -- "$(dirname -- "$self")/.." && pwd)
 gocmd() {
 	if [ -n "${BASHY_EXE:-}" ]; then GOWORK=off "$BASHY_EXE" go "$@"; else GOWORK=off go "$@"; fi
 }
-# Not "tmp": Windows inherits TMP case-insensitively (see build-bashy-artifact.sh).
-work=$(mktemp -d "${TMPDIR:-/tmp}/go-tool.XXXXXX")
-trap 'rm -rf "$work"' EXIT HUP INT TERM
-bin=$work/$name$(gocmd env GOEXE)
-gocmd -C "$root/tools/$name" build -o "$bin" .
+# Cache compiled tool binaries under bin/.tools/ keyed by Go toolchain + tool
+# source fingerprint so repeated invocations (e.g. releaseeligibility during
+# build-bashy-artifact.sh) avoid recompiling from scratch on every build.
+cache_dir=$root/bin/.tools
+mkdir -p "$cache_dir"
+go_meta=$(gocmd env GOEXE GOOS GOARCH GOVERSION)
+goexe=$(printf '%s\n' "$go_meta" | sed -n '1p')
+go_key=$(printf '%s\n' "$go_meta" | tr '\n' '|')
+tool_fp=$(
+	(
+		printf 'meta:%s\n' "$go_key"
+		cd "$root/tools/$name" && find . -type f | LC_ALL=C sort | while IFS= read -r f; do
+			printf '%s:' "$f"
+			cksum "$f"
+		done
+	) | cksum | awk '{print $1 "-" $2}'
+)
+bin=$cache_dir/$name-$tool_fp$goexe
+if [ ! -x "$bin" ]; then
+	tmpbin=$cache_dir/.$name.tmp.$$$goexe
+	trap 'rm -f "$tmpbin"' EXIT HUP INT TERM
+	gocmd -C "$root/tools/$name" build -o "$tmpbin" .
+	mv -f "$tmpbin" "$bin"
+	trap - EXIT HUP INT TERM
+fi
 set +e
 "$bin" "$@"
 status=$?

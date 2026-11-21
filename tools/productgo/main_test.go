@@ -186,3 +186,71 @@ func TestProductTrimpathContract(t *testing.T) {
 		}
 	}
 }
+
+func TestProductOverlayCacheDeterministicAndFailClosed(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("Unix runtime overlay")
+	}
+	cacheDir := t.TempDir()
+	t.Setenv("BASHY_PRODUCTGO_CACHE", cacheDir)
+
+	origBytes, err := os.ReadFile(filepath.Join(runtime.GOROOT(), "src", "runtime", "signal_unix.go"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	patched, err := patchRuntimeSource(origBytes)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	root1, overlay1, err := cachedOverlay(runtime.GOROOT(), filepath.Join(t.TempDir(), "unused-modcache"), toolchainVersion, patched)
+	if err != nil {
+		t.Fatalf("first cachedOverlay: %v", err)
+	}
+	st1, err := os.Stat(overlay1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root2, overlay2, err := cachedOverlay(runtime.GOROOT(), filepath.Join(t.TempDir(), "unused-modcache"), toolchainVersion, patched)
+	if err != nil {
+		t.Fatalf("second cachedOverlay: %v", err)
+	}
+	if root1 != root2 || overlay1 != overlay2 {
+		t.Fatalf("non-deterministic cache paths: (%q,%q) vs (%q,%q)", root1, overlay1, root2, overlay2)
+	}
+	st2, err := os.Stat(overlay2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st1.ModTime().Equal(st2.ModTime()) {
+		t.Fatalf("overlay.json rewritten unnecessarily on warm hit: %v vs %v", st1.ModTime(), st2.ModTime())
+	}
+
+	// Simulate a downloaded SDK under GOMODCACHE and verify tampering with the
+	// cached SDK's signal_unix.go fails closed.
+	modCache := filepath.Join(t.TempDir(), "modcache")
+	fakeSDK := filepath.Join(modCache, "sdk")
+	if err := os.MkdirAll(filepath.Join(fakeSDK, "src", "runtime"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fakeSDK, "src", "runtime", "signal_unix.go"), origBytes, 0600); err != nil {
+		t.Fatal(err)
+	}
+	sdkCacheDir := t.TempDir()
+	t.Setenv("BASHY_PRODUCTGO_CACHE", sdkCacheDir)
+	relocRoot, _, err := cachedOverlay(fakeSDK, modCache, toolchainVersion, patched)
+	if err != nil {
+		t.Fatalf("downloaded SDK cachedOverlay: %v", err)
+	}
+	// Tamper with the cached copy's signal_unix.go and confirm fail-closed.
+	tampered := filepath.Join(relocRoot, "src", "runtime", "signal_unix.go")
+	if err := os.Chmod(tampered, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tampered, []byte("tampered"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := cachedOverlay(fakeSDK, modCache, toolchainVersion, patched); err == nil {
+		t.Fatal("tampered cached SDK was accepted")
+	}
+}

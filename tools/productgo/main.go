@@ -3,12 +3,14 @@
 package main
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -115,33 +117,14 @@ func run() error {
 			return err
 		}
 
-		// Private per-invocation files avoid races with concurrent builds. Go's
-		// build cache still keys compiled runtime objects by their contents.
-		dir, err := os.MkdirTemp("", "bashy-runtime-overlay-")
+		// Deterministic content-addressed SDK/overlay cache keyed by
+		// (GOVERSION, sourceHash, patchHash, hostOS/hostArch) so Go's build
+		// cache stays warm across invocations and the ~500 MB downloaded SDK
+		// is copied at most once per toolchain version. Both the original and
+		// build-root signal_unix.go hashes are verified on every run.
+		var overlayPath string
+		buildRoot, overlayPath, err = cachedOverlay(cfg.GOROOT, cfg.GOMODCACHE, cfg.GOVERSION, patched)
 		if err != nil {
-			return err
-		}
-		defer os.RemoveAll(dir)
-		buildRoot, err = overlayRoot(cfg.GOROOT, cfg.GOMODCACHE, dir)
-		if err != nil {
-			return err
-		}
-		source = filepath.Join(buildRoot, "src", "runtime", "signal_unix.go")
-		// Verify the bytes actually used by the relocated build too.
-		copied, err := os.ReadFile(source)
-		if err != nil {
-			return err
-		}
-		if _, err := patchRuntimeSource(copied); err != nil {
-			return err
-		}
-		replacement := filepath.Join(dir, "signal_unix.go")
-		if err := os.WriteFile(replacement, []byte(patched), 0600); err != nil {
-			return err
-		}
-		overlay, _ := json.Marshal(map[string]any{"Replace": map[string]string{source: replacement}})
-		path := filepath.Join(dir, "overlay.json")
-		if err := os.WriteFile(path, overlay, 0600); err != nil {
 			return err
 		}
 		ldflags := ""
@@ -186,7 +169,7 @@ func run() error {
 			return fmt.Errorf("caller cannot override the product startup contract")
 		}
 		ldflags += " -X runtime.bashyInheritedIgnore=1"
-		args = append([]string{args[0], "-overlay=" + path, "-ldflags=" + ldflags, "-tags=" + tags}, remaining...)
+		args = append([]string{args[0], "-overlay=" + overlayPath, "-ldflags=" + ldflags, "-tags=" + tags}, remaining...)
 	}
 	cmd := goCommand(args...)
 	if buildRoot != "" {
@@ -215,6 +198,161 @@ func requireTrimpath(flags []string) error {
 		}
 	}
 	return nil
+}
+
+func overlayCacheKey(goversion, patched string) string {
+	patchSum := fmt.Sprintf("%x", sha256.Sum256([]byte(patched)))
+	h := sha256.Sum256([]byte(goversion + "\x00" + sourceHash + "\x00" + patchSum + "\x00" + runtime.GOOS + "/" + runtime.GOARCH))
+	return fmt.Sprintf("%x", h[:16])
+}
+
+func productCacheBase(modcache string) (string, error) {
+	base := strings.TrimSpace(os.Getenv("BASHY_PRODUCTGO_CACHE"))
+	if base == "" {
+		if ucd, err := os.UserCacheDir(); err == nil && ucd != "" {
+			base = filepath.Join(ucd, "bashy", "productgo")
+		} else {
+			base = filepath.Join(os.TempDir(), "bashy-productgo-cache")
+		}
+	}
+	if err := os.MkdirAll(base, 0700); err != nil {
+		return "", fmt.Errorf("create productgo cache dir: %w", err)
+	}
+	resolved, err := filepath.EvalSymlinks(base)
+	if err != nil {
+		return "", err
+	}
+	if modcache != "" {
+		if resolvedCache, err := filepath.EvalSymlinks(modcache); err == nil {
+			modcache = resolvedCache
+		}
+		rel, err := filepath.Rel(modcache, resolved)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", fmt.Errorf("productgo cache directory must be outside GOMODCACHE; set BASHY_PRODUCTGO_CACHE outside %s", modcache)
+		}
+	}
+	return resolved, nil
+}
+
+func isInsidePath(parent, child string) bool {
+	if parent == "" {
+		return false
+	}
+	rel, err := filepath.Rel(parent, child)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func writeFileIfChanged(path string, content []byte, perm os.FileMode) error {
+	if existing, err := os.ReadFile(path); err == nil && bytes.Equal(existing, content) {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	cleanup := true
+	defer func() {
+		if cleanup {
+			_ = os.Remove(tmpName)
+		}
+	}()
+	if err := tmp.Chmod(perm); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if _, err := tmp.Write(content); err != nil {
+		_ = tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpName, path); err != nil {
+		return err
+	}
+	cleanup = false
+	return nil
+}
+
+func cachedOverlay(goroot, modcache, goversion, patched string) (string, string, error) {
+	canonicalRoot, err := filepath.EvalSymlinks(goroot)
+	if err != nil {
+		return "", "", err
+	}
+	resolvedCache := modcache
+	if r, err := filepath.EvalSymlinks(modcache); err == nil {
+		resolvedCache = r
+	}
+	cacheBase, err := productCacheBase(resolvedCache)
+	if err != nil {
+		return "", "", err
+	}
+	key := overlayCacheKey(goversion, patched)
+	buildRoot := canonicalRoot
+	if isInsidePath(resolvedCache, canonicalRoot) {
+		sdkParent := filepath.Join(cacheBase, "sdk-"+key)
+		sdkDir := filepath.Join(sdkParent, "goroot")
+		if _, err := os.Stat(filepath.Join(sdkDir, "src", "runtime", "signal_unix.go")); err != nil {
+			stage, err := os.MkdirTemp(cacheBase, ".stage-sdk-*")
+			if err != nil {
+				return "", "", err
+			}
+			stagedRoot, err := overlayRoot(goroot, modcache, stage)
+			if err != nil {
+				_ = os.RemoveAll(stage)
+				return "", "", err
+			}
+			copied, err := os.ReadFile(filepath.Join(stagedRoot, "src", "runtime", "signal_unix.go"))
+			if err != nil {
+				_ = os.RemoveAll(stage)
+				return "", "", err
+			}
+			if _, err := patchRuntimeSource(copied); err != nil {
+				_ = os.RemoveAll(stage)
+				return "", "", err
+			}
+			if err := os.Rename(stage, sdkParent); err != nil {
+				_ = os.RemoveAll(stage)
+				// Another concurrent build may have published sdkParent first.
+				if _, statErr := os.Stat(filepath.Join(sdkDir, "src", "runtime", "signal_unix.go")); statErr != nil {
+					return "", "", fmt.Errorf("publish cached toolchain: %w", err)
+				}
+			}
+		}
+		buildRoot = sdkDir
+	}
+
+	// Verify the bytes actually used by the build root on every run (fail-closed).
+	source := filepath.Join(buildRoot, "src", "runtime", "signal_unix.go")
+	copied, err := os.ReadFile(source)
+	if err != nil {
+		return "", "", err
+	}
+	if _, err := patchRuntimeSource(copied); err != nil {
+		return "", "", fmt.Errorf("cached build root failed verification: %w", err)
+	}
+
+	overlayDir := filepath.Join(cacheBase, "overlay-"+key)
+	replacement := filepath.Join(overlayDir, "signal_unix.go")
+	if err := writeFileIfChanged(replacement, []byte(patched), 0600); err != nil {
+		return "", "", err
+	}
+	// Verify replacement bytes on disk match the verified patched source.
+	if got, err := os.ReadFile(replacement); err != nil || string(got) != patched {
+		return "", "", fmt.Errorf("cached overlay signal_unix.go verification failed")
+	}
+
+	rootTag := fmt.Sprintf("%x", sha256.Sum256([]byte(buildRoot)))[:16]
+	overlayBytes, _ := json.Marshal(map[string]any{"Replace": map[string]string{source: replacement}})
+	overlayPath := filepath.Join(overlayDir, "overlay-"+rootTag+".json")
+	if err := writeFileIfChanged(overlayPath, overlayBytes, 0600); err != nil {
+		return "", "", err
+	}
+	return buildRoot, overlayPath, nil
 }
 
 // Go rejects overlays anywhere beneath GOMODCACHE, including downloaded SDKs.
