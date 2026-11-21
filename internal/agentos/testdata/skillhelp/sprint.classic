@@ -92,10 +92,11 @@ this is an order rather than a checklist:
                     claim a shared host BEFORE assigning work to it.
   4 MONITOR         progress, not liveness — a worker can be alive and stuck.
                     Nothing across two ticks is a decision, not a wait.
-  5 INTEGRATE       run the gate YOURSELF, read the verdict from bashy and not
-                    from a worker's prose; review, merge, clean up what this
-                    sprint owns. Cheap gate per story; the expensive gate
-                    once per iteration, on a frozen candidate.
+  5 INTEGRATE       workers run gates; verify the verdict from bashy evidence,
+                    never a worker's prose; you run only the frozen-candidate
+                    final gate. Review, merge, clean up what this sprint
+                    owns. Cheap gate per story; the expensive gate once per
+                    iteration, on that candidate.
   6 CHECKPOINT      your context does not survive; the brief is what reaches
                     the next manager, who may be a different tool.
   7 REPEAT          until the sprint's acceptance gate passes — then stop and
@@ -170,8 +171,11 @@ Delegation transfers execution, never accountability. While you hold it you must
 	    reminders continue every three minutes until the manager acknowledges it.
   - SUPERVISE workers proactively: monitor every run, and steer, interrupt,
     salvage, or reassign stalled / failed / no-op work instead of waiting on it.
-  - VERIFY independently: inspect and rerun the gates yourself; never trust a
-    worker's prose or exit status ("submitted" and exit 0 are not "done").
+  - VERIFY independently: workers run gates; verify the verdict from bashy
+    evidence, never a worker's prose or exit status ("submitted" and exit 0
+    are not "done"); run the frozen-candidate final gate yourself. Return a
+    failing submission with `sprint reject ID STORY -m '<feedback>'` so the
+    decision is recorded and the story stays with its assignee.
   - INTEGRATE sequentially: serialize reviews and merges; push subproject commits
     and bump parent pins per repository policy, one gated step at a time.
   - LEAVE NOTHING DELIVERED BEHIND: on every checkpoint and before stop/end, run the
@@ -192,6 +196,12 @@ Delegation transfers execution, never accountability. While you hold it you must
     integration. NEVER delete, remove, reset, overwrite, or destroy work owned by
     another sprint/agent. A coordination reply is not deletion authority.
   - Keep CONTINUITY: checkpoint often so any handoff or crash resumes cleanly.
+    Record standing operator rules once with `sprint directive add ID '<rule>'`
+    instead of re-pasting them into every brief.
+  - TURN-END CONTRACT: every manager turn ends with a dispatched action or a
+    blocking `sprint await` (one typed event — submission, run
+    submitted/failed/stalled, or manager mail — with a suggested verb), never
+    a promise to check later. A turn that ends in narration is a stalled sprint.
 
 Do not wait passively while actionable work remains. Cleanup and deletion
 authority is bounded by the assignment and the safety policy — it does not extend
@@ -224,7 +234,7 @@ Available Commands:
   fail          Record a failed delivery and return its story to todo
   focus         Set current focus, enforcing priority-first execution
   goal          Manage the durable, derived sprint goal checklist
-  grade         Grade outside the booth or merge a graded attempt
+  grade         Grade a linked run's attempt outside the booth: run its gate, check protected tests against the base
   handoff       Graceful handoff: checkpoint continuity + release the conductor lease
   heat          Run a blind paired story heat
   help          Help about any command
@@ -232,7 +242,7 @@ Available Commands:
   inbox-ack     Confirm that an external sprint manager read its attached inbox batch
   instruct      Deliver one instruction to an active sprint's managed sprint manager
   link          Link a pointed weave run (repo + issue) to a sprint — runs are cross-repo
-  merge         Grade outside the booth or merge a graded attempt
+  merge         Merge a graded run attempt into a real repository checkout
   monitor       Observe shared host and account resources, including competing work
   move          Move a sprint to a kanban column
   next          Show the highest-priority runnable sprint story
@@ -242,7 +252,7 @@ Available Commands:
   prune         Report a sprint's clean state across its repos and this host — and reclaim what is redundant
   reassign      Reassign a story whose run reached its runtime cap
   reject        Return a submitted story to doing with review feedback
-  review        Schedule a fleet worker through the band ladder
+  review        Schedule a fleet reviewer for a story, band-selected against the attempt's author
   review-result Record a review outcome
   rm            Remove a sprint card (refuses while it holds a lease, linked runs, or an open column)
   session       Cloudbox shared sessions (live multi-host collaboration on a sprint)

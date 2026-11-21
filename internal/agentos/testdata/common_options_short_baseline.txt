@@ -191,6 +191,7 @@ dag	-f	--file
 dag	-j	--jobs
 dag	-k	--keep-going
 dag	-l	--list
+dag	-o	--output
 date	-I	--iso-8601
 date	-R	--rfc-email
 date	-V	--version
