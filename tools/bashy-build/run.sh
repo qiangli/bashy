@@ -57,4 +57,4 @@ exec $oci run --rm --init \
   ${BASHY_BUILD_CPUS:+--cpus "$BASHY_BUILD_CPUS" -e GOFLAGS=-p=$BASHY_BUILD_CPUS} \
   --entrypoint /usr/bin/dash \
   "$ref" -c '/bashy -c "$1"' dash \
-  'mkdir -p "$GOMODCACHE" "$GOCACHE" "$GOTMPDIR" && '"$*"
+  'mkdir -p "$GOMODCACHE" "$GOCACHE" "$GOTMPDIR" ${BASHY_ADAPTER_CACHE:+"$BASHY_ADAPTER_CACHE"} && '"$*"

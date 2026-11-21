@@ -133,6 +133,8 @@ github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPn
 github.com/bahlo/generic-list-go v0.2.0/go.mod h1:2KvAjgMlE5NNynlg/5iLrrCCZ2+5xWbdbCW3pNTGyYg=
 github.com/bashsharp/bashsharp v0.0.0-20261121121200-5848aff449cd h1:3B3ezZYKYEiqNDsdfiuvL9UBWUoJQTcRgKC2ObGz76Q=
 github.com/bashsharp/bashsharp v0.0.0-20261121121200-5848aff449cd/go.mod h1:lr4kQmENhJDSdSHlGK9Lv3pSO53A2Rrh9wqjR48/OLo=
+github.com/bashsharp/bashsharp v0.0.0-20261121160731-621e369d910d h1:LYVt0bu3eauAZdnMn8dBG3allUfzqHN/rhckAqIJM3E=
+github.com/bashsharp/bashsharp v0.0.0-20261121160731-621e369d910d/go.mod h1:lr4kQmENhJDSdSHlGK9Lv3pSO53A2Rrh9wqjR48/OLo=
 github.com/benbjohnson/clock v1.3.5 h1:VvXlSJBzZpA/zum6Sj74hxwYI2DIxRWuNIoXAzHZz5o=
 github.com/benbjohnson/clock v1.3.5/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=

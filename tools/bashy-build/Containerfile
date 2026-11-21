@@ -11,8 +11,8 @@ FROM ${BASE_IMAGE}
 
 ARG APT_SNAPSHOT=20260821T190000Z
 ARG GO_VERSION=1.27.4
-ARG GO_SHA256_AMD64=ecbadb99091a3f46e31f5f934b068b1864eafa7995211b39eaddf76996045fe5
-ARG GO_SHA256_ARM64=94f3e30b8e374bc285e7dadc11e0865726b9bc6e85b841ccceaabc0214c6b7c8
+ARG GO_SHA256_AMD64=7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840
+ARG GO_SHA256_ARM64=3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92
 ARG TARGETARCH
 ARG IMAGE_ID=unset
 
@@ -41,16 +41,25 @@ RUN set -eux; \
     /usr/local/go/bin/go version
 
 # Caches live on the runner and are mounted here (run.sh), never re-downloaded.
+# Point bashy's managed Go selector and binmgr tree cache at the checksum-locked
+# /usr/local/go SDK so `bashy go` uses GO_VERSION offline without re-downloading.
 ENV PATH=/usr/local/go/bin:/opt/bashy/bin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     GOTOOLCHAIN=local \
+    BASHY_GO_VERSION=${GO_VERSION} \
+    BASHY_ADAPTER_CACHE=/var/cache/bashy-build/adapters \
     GOPATH=/var/cache/bashy-build/go \
     GOMODCACHE=/var/cache/bashy-build/go/pkg/mod \
     GOCACHE=/var/cache/bashy-build/go-build \
     GOTMPDIR=/var/cache/bashy-build/tmp \
     BASHY_BUILD_IMAGE=${IMAGE_ID}
 
-RUN install -d -o 10001 -g 10001 /var/cache/bashy-build /var/cache/bashy-build/go \
-      /var/cache/bashy-build/go-build /var/cache/bashy-build/tmp /work
+RUN set -eux; \
+    install -d -o 10001 -g 10001 /var/cache/bashy-build /var/cache/bashy-build/go \
+      /var/cache/bashy-build/go-build /var/cache/bashy-build/tmp \
+      /var/cache/bashy-build/adapters /var/cache/bashy/bin/go/"${GO_VERSION}" /work; \
+    ln -s /usr/local/go /var/cache/bashy/bin/go/"${GO_VERSION}"/go; \
+    printf 'ok\n' > /var/cache/bashy/bin/go/"${GO_VERSION}"/.binmgr-tree-complete; \
+    chown 10001:10001 /var/cache/bashy/bin/go/"${GO_VERSION}"/.binmgr-tree-complete
 
 USER 10001:10001
 WORKDIR /work

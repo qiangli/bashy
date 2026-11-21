@@ -39,6 +39,8 @@ case "$mode" in
 esac
 
 go_version=$(get go_version)
+go_sha256_amd64=$(get go_sha256_amd64)
+go_sha256_arm64=$(get go_sha256_arm64)
 apt_snapshot=$(get apt_snapshot)
 base_image=localhost/bashy-base:$version
 image=localhost/bashy-build:$version-go$go_version
@@ -62,7 +64,35 @@ else
   [ -f "$sources/commits.txt" ] && build_id=$(sed -n 's/^bashy_commit=//p' "$sources/commits.txt" | cut -c1-7)
   # Released bashy never assumes GNU make to build itself: make is shadowed
   # by a stub that fails, so any make call in the self-build breaks loudly.
-  "$here/run.sh" "$sources" -- "mkdir -p /tmp/no-make && printf '#!/bin/sh\necho bashy self-build must not call make >&2\nexit 127\n' > /tmp/no-make/make && chmod +x /tmp/no-make/make && cp /tmp/no-make/make /tmp/no-make/gmake && export PATH=/tmp/no-make:\$PATH && cd bashy && CGO_ENABLED=0 VERSION=$version BUILD_ID=$build_id bashy dag build && test ! -e bin/bashy.real"
+  # When rolling across a go_version bump, the previous release's image carries
+  # the older Go SDK; stage the checksum-locked go_version SDK into binmgr's
+  # tree cache so `bashy go` inside the builder uses the locked target SDK.
+  go_dl_base=${BASHY_GO_DL_BASE:-https://go.dev/dl}
+  "$here/run.sh" "$sources" -- "set -eu
+mkdir -p /tmp/no-make
+printf '#!/bin/sh\necho bashy self-build must not call make >&2\nexit 127\n' > /tmp/no-make/make
+chmod +x /tmp/no-make/make
+cp /tmp/no-make/make /tmp/no-make/gmake
+go_cache=\${BASHY_BIN_CACHE:-/var/cache/bashy/bin}/go/$go_version
+if [ ! -x \"\$go_cache/go/bin/go\" ] || [ ! -f \"\$go_cache/.binmgr-tree-complete\" ]; then
+  case \"\$(uname -m)\" in
+    x86_64|amd64) arch=amd64; sum='$go_sha256_amd64' ;;
+    aarch64|arm64) arch=arm64; sum='$go_sha256_arm64' ;;
+    *) echo \"unsupported arch \$(uname -m)\" >&2; exit 1 ;;
+  esac
+  curl -fsSL -o /tmp/go-roll.tgz '$go_dl_base/go$go_version.linux-'\"\$arch\"'.tar.gz'
+  echo \"\$sum  /tmp/go-roll.tgz\" | sha256sum -c - >/dev/null
+  rm -rf \"\$go_cache\"
+  mkdir -p \"\$go_cache\"
+  tar -C \"\$go_cache\" -xzf /tmp/go-roll.tgz
+  rm -f /tmp/go-roll.tgz
+  printf 'ok\n' > \"\$go_cache/.binmgr-tree-complete\"
+fi
+export BASHY_GO_VERSION='$go_version'
+export PATH=\"\$go_cache/go/bin:/tmp/no-make:\$PATH\"
+cd bashy
+GOWORK=off CGO_ENABLED=0 VERSION='$version' BUILD_ID='$build_id' bashy dag build
+test ! -e bin/bashy.real"
   cp "$sources/bashy/bin/bashy" "$ctx/bashy"
   built_with=$previous_image@$previous_digest
 fi

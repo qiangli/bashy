@@ -267,7 +267,7 @@ replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/externa
 replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402
 
 require (
-	github.com/bashsharp/bashsharp v0.0.0-20261121121200-5848aff449cd
+	github.com/bashsharp/bashsharp v0.0.0-20261121160731-621e369d910d
 	github.com/qiangli/coreutils v0.0.0-20261121101804-c5832f99ccf6
 	github.com/qiangli/yoke v0.0.0-20261121163358-be872cc5a395
 	github.com/spf13/cobra v1.10.2
