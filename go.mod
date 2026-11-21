@@ -350,9 +350,9 @@ require (
 	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261120122929-931c696bd763 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261115042953-d160182c8479 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261115042953-d160182c8479 // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261115042953-d160182c8479 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261121000149-299a502de6c7 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261121000149-299a502de6c7 // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261121000149-299a502de6c7 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
@@ -590,8 +590,8 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261119135715-c656935287fa
 	github.com/qiangli/ycode v0.3.1-dev.0.20261118041524-e5be31355b48
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261120221737-324a31d189a4
-	github.com/qiangli/yoke/external/otel v0.0.0-20261115042953-d160182c8479
+	github.com/qiangli/yoke v0.0.0-20261121000149-299a502de6c7
+	github.com/qiangli/yoke/external/otel v0.0.0-20261121000149-299a502de6c7
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
