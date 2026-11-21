@@ -188,6 +188,27 @@ func post(t *testing.T, client *http.Client, base, key string, p any) (int, map[
 	}
 	return res.StatusCode, v
 }
+func TestCLIUsesShapedAddress(t *testing.T) {
+	_, srv := startServer(t)
+	t.Setenv("CHART_ADDR", strings.TrimPrefix(srv.URL, "http://"))
+	t.Setenv("CHART_PREFIX", "")
+	const publicURL = "https://console.example.test/apps/chart"
+	t.Setenv("CHART_PUBLIC_URL", publicURL)
+
+	for _, args := range [][]string{
+		{"add", "--id", "stats", "--input", "-", "--widget", "gauge"},
+		{"open", "stats"},
+	} {
+		var out bytes.Buffer
+		if code := cli(args, strings.NewReader("[1,2]"), &out); code != 0 {
+			t.Fatalf("%v: exit %d: %s", args, code, out.String())
+		}
+		if !strings.Contains(out.String(), publicURL+"/?id=stats") || strings.Contains(out.String(), srv.URL) {
+			t.Fatalf("%s: want console URL at %s, got %q", args[0], publicURL, out.String())
+		}
+	}
+}
+
 func TestCLIAndHTTPDuality(t *testing.T) {
 	_, s := startServer(t)
 	addr := strings.TrimPrefix(s.URL, "http://")

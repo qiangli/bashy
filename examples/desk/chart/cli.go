@@ -74,9 +74,24 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 
 	fs := flag.NewFlagSet("chart", flag.ContinueOnError)
 	fs.SetOutput(stdout)
-	addr := fs.String("addr", "127.0.0.1:18098", "loopback server address")
-	data := fs.String("data", kit.DefaultDataDir("chart"), "server storage directory")
-	prefix := fs.String("prefix", "", "URL path prefix")
+	defaultAddr, defaultData := "127.0.0.1:18098", kit.DefaultDataDir("chart")
+	if os.Getenv("BASHY_APP") == "chart" {
+		if v := os.Getenv("BASHY_APP_ADDR"); v != "" {
+			defaultAddr = v
+		}
+		if v := os.Getenv("BASHY_APP_DATA"); v != "" {
+			defaultData = v
+		}
+	}
+	if v := os.Getenv("CHART_ADDR"); v != "" {
+		defaultAddr = v
+	}
+	if v := os.Getenv("CHART_DATA"); v != "" {
+		defaultData = v
+	}
+	addr := fs.String("addr", defaultAddr, "loopback server address")
+	data := fs.String("data", defaultData, "server storage directory")
+	prefix := fs.String("prefix", os.Getenv("CHART_PREFIX"), "URL path prefix")
 	asJSON := fs.Bool("json", common.JSON, "JSON output")
 	title := fs.String("title", "", "chart title")
 	body := fs.String("body", "", "optional description")
@@ -196,6 +211,9 @@ func cli(args []string, stdin io.Reader, stdout io.Writer) int {
 	}
 	req, e := http.NewRequest("POST", "http://"+*addr+*prefix+"/api/action"+commonQuery(common.Fields), bytes.NewReader(raw))
 	if e != nil {
+		return fail(e)
+	}
+	if e := kit.SetPublicMount(req, os.Getenv("CHART_PUBLIC_URL")); e != nil {
 		return fail(e)
 	}
 	req.Header.Set("Content-Type", "application/json")

@@ -8,7 +8,6 @@ mkdir -p "$(dirname "$bin")"
 
 runner=${BASHY_BIN:-bashy}
 name=${1:-viewer}
-port=${VIEWER_PORT:-18096}
 
 # Register command for atlas entry and CLI invocation
 guide=$("$runner" --bashsharp "$here/viewer.bsh" --skill 2>/dev/null || cat << 'EOT'
@@ -53,7 +52,7 @@ printf '%s\n' "$guide" > "$tmp/SKILL.md"
 "$runner" --bashsharp "$here/viewer.bsh" --contract > "$tmp/skill.dhnt" 2>/dev/null || true
 "$runner" skill add "$tmp" --force 2>/dev/null || true
 
-# Register launcher tile via bashy app add
-"$runner" app add "$name" --port "$port" --label "Viewer" --icon "👁" --tip "Read agent reports, recaps and plans; page, compare, export" --force
+# Register through the public shaped-app path used by external apps.
+"$runner" app add "$name" --type shaped --source "$here" --label "Viewer" --icon "👁" --tip "Read agent reports, recaps and plans; page, compare, export" --force
 
-echo "Registered $name -> $bin on loopback port $port"
+echo "Registered $name -> $bin as a shaped app"

@@ -128,6 +128,27 @@ The console builds that server from each user's active revision and proxies
 the app shell (`X-Forwarded-Prefix`) gets `…/chart/?…`, never the server's
 internal loopback address.
 
+For a separate CLI, first open the shaped app in the console as the intended
+principal. The trusted local operator supplies the address and data directory
+from that app server's launch arguments (`-addr` and `-data`), plus the
+app URL from the browser. Pass the matching pair from the same server instance:
+
+```bash
+CHART_ADDR="$app_addr" CHART_DATA="$app_data" \
+  CHART_PUBLIC_URL="$console_mount_url" \
+  bashy chart add --input metrics.json
+```
+
+`$console_mount_url` is the full app URL, including the console's mount
+path. This keeps the request on the app listener and sends the browser link
+through the console. The same instance's `$DATA` is the principal's private
+`shape/<app>/<encoded-principal>/data` directory under the console's Bashy
+home. A standalone `chart serve` uses the desk data default
+`desk/chart` under its data home. Chart client actions send writes to the selected server, which owns that directory.
+Refresh the handoff whenever the console replaces that app server, for example
+after a restart, an idle stop, or an active revision change.
+Automatic discovery through an authenticated console is a Sprint 683 follow-up.
+
 A fork is activated only on a passing verdict. `contract.bsh` is the base
 contract `bashy src pr verify` freezes: its `@effects` line is the effect cap
 (read, write, exec, plus net to provision the Go toolchain in the clone), and

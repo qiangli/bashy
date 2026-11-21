@@ -25,6 +25,7 @@ plus the viewer link instead of pasting the full report.
 - `bashy viewer open ID` prints id, URL, status only — never content. `show ID [--page N]` reads Markdown + data.
 - `bashy viewer export ID [--page N] [--to html|pdf] [-o FILE]` writes self-contained HTML (PDF through headless Chrome; humans use Print / PDF on the page).
 - `bashy viewer list | share ID | close ID`; `bashy viewer serve` starts the loopback server (default 127.0.0.1:18096).
+- For a console-managed listener, set `VIEWER_ADDR`, `VIEWER_DATA` and `VIEWER_PUBLIC_URL` as described in the README.
 - The page shows first/prev/next/last (← →), an index, jump-to-page, and highlights blocks changed since the previous page.
 ~~~
 

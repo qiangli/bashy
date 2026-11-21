@@ -132,6 +132,39 @@ func TestViewOnlyVerbsRefused(t *testing.T) {
 	}
 }
 
+func TestCLIUsesShapedAddress(t *testing.T) {
+	base, dir := startServer(t, "")
+	t.Setenv("BASHY_HOME", t.TempDir())
+	t.Setenv("VIEWER_ADDR", "")
+	t.Setenv("VIEWER_DATA", "")
+	t.Setenv("VIEWER_KEY", "")
+	t.Setenv("VIEWER_PREFIX", "")
+	t.Setenv("BASHY_APP", "viewer")
+	t.Setenv("BASHY_APP_ADDR", strings.TrimPrefix(base, "http://"))
+	t.Setenv("BASHY_APP_DATA", dir)
+	const publicURL = "https://console.example.test/apps/viewer"
+	t.Setenv("VIEWER_PUBLIC_URL", publicURL+"/")
+
+	for _, args := range [][]string{
+		{"add", "report", "--body", "# First page"},
+		{"append", "report", "--body", "# Second page"},
+		{"open", "report"},
+		{"join", "report", "invite"},
+	} {
+		var out bytes.Buffer
+		if code := runCLI(args, strings.NewReader(""), &out); code != 0 {
+			t.Fatalf("%v: exit %d: %s", args, code, out.String())
+		}
+		if !strings.Contains(out.String(), publicURL+"/?id=report") || strings.Contains(out.String(), base) {
+			t.Fatalf("%s: want console URL at %s, got %q", args[0], publicURL, out.String())
+		}
+	}
+	book, err := readBook(dir, "report")
+	if err != nil || len(book.Pages) != 2 {
+		t.Fatalf("expected two pages in shaped data directory: %v, %v", book, err)
+	}
+}
+
 func TestOpenPrintsIDURLStatusOnly(t *testing.T) {
 	base, dir := startServer(t, "")
 	cli := cliFor(base, dir)

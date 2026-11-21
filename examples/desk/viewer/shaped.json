@@ -1,1 +1,9 @@
-{"server": {"main": ".", "args": ["serve", "--addr", "$ADDR", "--dir", "$DATA"]}}
+{
+  "server": {"main": ".", "args": ["serve", "--addr", "$ADDR", "--dir", "$DATA"]},
+  "genie": {
+    "examples": [
+      "Keep the page navigation visible while I scroll through a long report.",
+      "Add a toggle that shows only the text that changed since the previous page."
+    ]
+  }
+}
