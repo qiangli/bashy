@@ -55,7 +55,7 @@ Silence is not confirmation that it is free.
 
 Identify and register the resource if necessary, then claim before use:
 
-    bashy claim NAME --intent "<what> sprint N, ETA"
+    bashy claim NAME --intent "<what> sprint N, ETA" --story N/STORY_ID
 
 Prefer `bashy claim NAME -- cmd` to hold the resource for the command's lifetime.
 On refusal, contact the named holder and use
@@ -63,6 +63,34 @@ On refusal, contact the named holder and use
 claims refreshed with `bashy claim refresh NAME` and release when done.
 Use `--force` only after contact timeout AND operator notice; record the contact
 attempts, notice, reason, and outcome in the sprint story.
+
+## Claim modes and automatic lifecycle reclamation
+
+Three claim modes share `~/.bashy/coord`:
+
+- **`announce`** (e.g. `story:<sprint>/<id>` taken by `sprint claim`): advisory
+  exclusivity with **no TTL** so work stays visibly assigned across pauses.
+  Ordinary `claim prune` never expires an `announce` hold.
+- **`lease`** (project claims and detached `bashy claim NAME`): heartbeat-backed
+  (30m TTL). Pass `--story [SPRINT/]STORY_ID` (set automatically from
+  `$WEAVE_STORY` inside weave runs) when a lease serves one story.
+- **`attached`** (`bashy claim NAME -- cmd`): kernel-locked to the child process
+  lifetime; released automatically when the child exits and never force-evicted
+  while the kernel lock is live.
+
+**Who releases:**
+- During active work, the holder releases its own holds (`sprint yield`,
+  `sprint submit`, `bashy claim release [NAME]`).
+- **Close reclaims everything:** closing a story (`sprint accept`, `todo done`,
+  `todo status ID wontfix`, or moving it off a sprint with `todo edit ID --sprint`)
+  and ending a sprint (`sprint end`) automatically release every `story` claim on
+  that story (regardless of holder) and every non-attached claim whose `--story`
+  matches it, tear down settled weave workspaces and grade checkouts, and record
+  `reclaim` entries on `bashy events` naming the closing verb.
+- **Backfill:** `bashy claim prune --stories-closed` previews stale claims and
+  settled leftover run/grade copies of closed or provably missing stories
+  (skipping unrelated claims, unreadable stores, and any workspace with unique
+  unpushed commits); add `--apply` to remove the verified set.
 
 ### 4. Code freeze, build, or release cut
 
