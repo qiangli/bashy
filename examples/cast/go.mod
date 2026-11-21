@@ -2,7 +2,7 @@ module github.com/qiangli/bashy/examples/cast
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.4
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3

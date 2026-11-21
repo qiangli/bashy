@@ -13,6 +13,7 @@ import (
 	"strings"
 )
 
+const toolchainVersion = "go1.27.4"
 const sourceHash = "a9dd82ee8b8089ec69dc90cc8a2d3553839db41b3f01807311507c7fc117a3e0"
 const insertion = `
 	// Bashy's product entry preserves inherited ignores for ordinary async
@@ -99,8 +100,8 @@ func run() error {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return err
 	}
-	if cfg.GOVERSION != "go1.27.2" {
-		return fmt.Errorf("requires go1.27.2, found %s", cfg.GOVERSION)
+	if cfg.GOVERSION != toolchainVersion {
+		return fmt.Errorf("requires %s, found %s", toolchainVersion, cfg.GOVERSION)
 	}
 	buildRoot := ""
 	if cfg.GOOS == "linux" || cfg.GOOS == "darwin" {

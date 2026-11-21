@@ -190,7 +190,7 @@ jobs:
           architecture: ${{ matrix.python_arch }}
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.27.2'
+          go-version: '1.27.4'
 
       - name: Verify native toolchain and create evidence root
         shell: bash

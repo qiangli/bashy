@@ -35,7 +35,7 @@ jobs:
           architecture: ${{ endsWith(matrix.target, 'arm64') && 'arm64' || 'x64' }}
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.27.2'
+          go-version: '1.27.4'
       - name: Build native verifier in hosted runner
         shell: bash
         run: |

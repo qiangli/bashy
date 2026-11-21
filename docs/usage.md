@@ -73,7 +73,7 @@ Bash's own test suite.
 
 ## Development
 
-Builds require `go 1.27` and select `toolchain go1.27.2`, as recorded in
+Builds require `go 1.27` and select `toolchain go1.27.4`, as recorded in
 [`go.mod`](../go.mod). Product versions come from the release tag; use
 `bashy --version` to identify the installed build.
 

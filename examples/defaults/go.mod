@@ -2,4 +2,4 @@ module github.com/qiangli/bashy/examples/defaults
 
 go 1.27
 
-toolchain go1.27.2
+toolchain go1.27.4

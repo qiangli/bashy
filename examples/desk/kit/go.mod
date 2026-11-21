@@ -2,6 +2,8 @@ module desk-kit
 
 go 1.27
 
+toolchain go1.27.4
+
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0
 	github.com/microcosm-cc/bluemonday v1.0.27

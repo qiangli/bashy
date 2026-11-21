@@ -1,6 +1,6 @@
 module github.com/qiangli/bashy/examples/tray
 
-go 1.27.2
+go 1.27.4
 
 require (
 	fyne.io/systray v1.12.2

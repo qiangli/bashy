@@ -42,7 +42,7 @@ create the local FROM-scratch image using checksum-verified
 
 Before publishing release notes, apply the [public-claim checks](public-claims-evidence.md).
 Use the actual candidate tag from `bashy --version`, Bash compatibility 5.3,
-and the Go 1.27 / toolchain go1.27.2 build coordinate; never substitute a
+and the Go 1.27 / toolchain go1.27.4 build coordinate; never substitute a
 historical report's version or percentage.
 
 The candidate release is built once from a `vX.Y.Z-dev` tag. Promotion reuses

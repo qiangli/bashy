@@ -87,8 +87,8 @@ fi
     # Invoke the front door directly: PATH manipulation does not prevent Go
     # GOTOOLCHAIN switching from downloading into the module cache.
     GOTOOLCHAIN=local /work/bashy/bin/bashy-spa-check go version
-    test -x /cache/bashy/go/1.27.2/go/bin/go
-    test -f /cache/bashy/go/1.27.2/.binmgr-tree-complete
+    test -x /cache/bashy/go/1.27.4/go/bin/go
+    test -f /cache/bashy/go/1.27.4/.binmgr-tree-complete
     yoke_dir=$(go list -m -f "{{.Dir}}" github.com/qiangli/yoke)
     cp -a "$yoke_dir/pkg/meet/web" /work/web
     chmod -R u+w /work/web

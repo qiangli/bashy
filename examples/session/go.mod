@@ -2,6 +2,8 @@ module session-server
 
 go 1.27
 
+toolchain go1.27.4
+
 require desk-kit v0.0.0
 
 require (
