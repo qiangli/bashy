@@ -108,7 +108,7 @@ func bashyReleaseBaseURL(version string) string {
 
 func selfInstallCmd() *cobra.Command {
 	var version, dir, seed string
-	var source, service, userMode, systemMode, noDefaults bool
+	var source, service, userMode, systemMode, noDefaults, allowDowngrade bool
 	cmd := &cobra.Command{Use: "install [path]", Short: "Install bashy, bash, sh, and a dormant outpost", Long: `Install bashy, outpost, bash and sh together. By default, use the four files
 beside this executable (works offline). --version fetches a verified release.
 --dir selects the install directory (default $DHNT_BIN_DIR, else
@@ -224,6 +224,9 @@ the install still succeeds and prints the command to run later.
 					return err
 				}
 			}
+			if err := refuseSelfDowngrade(target, members[releaseBinaryName()], allowDowngrade); err != nil {
+				return err
+			}
 			if err := installProduct(cmd.Context(), members, target, cmd.OutOrStdout(), cmd.ErrOrStderr()); err != nil {
 				return err
 			}
@@ -256,6 +259,7 @@ the install still succeeds and prints the command to run later.
 	cmd.Flags().BoolVar(&service, "service", false, "Register and start the Outpost boot service")
 	cmd.Flags().BoolVar(&userMode, "user", false, "Register a per-user service")
 	cmd.Flags().BoolVar(&systemMode, "system", false, "Register a system service")
+	cmd.Flags().BoolVar(&allowDowngrade, "allow-downgrade", false, "Install even when the installed bashy is newer than the release")
 	cmd.Flags().BoolVar(&noDefaults, "no-defaults", false, "Skip setting up the default commands and kb pages from the release source pin")
 	return cmd
 }
