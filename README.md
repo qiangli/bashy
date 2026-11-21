@@ -1,6 +1,6 @@
 ---
 name: bashy
-description: Install bashy, connect the AI agent reading this page to it (skill + MCP), and continue the chat through bashy verbs. Pure-Go Bash 5.3 + coreutils (GNU-compatible, POSIX.1-2016) for Linux, macOS and Windows; Bash# (Go with bash, one file is both script and skill); Yoke, the agentic harness for shaping your own tools.
+description: Install bashy, connect the AI agent reading this page to it (skill + MCP), and continue the chat through bashy verbs. bashy is all you need for software shaping — one system (pure-Go GNU Bash 5.3 + POSIX coreutils on Linux, macOS and Windows), one language (Bash#, where one file is both script and skill), one app (software shaping), one agent (genie, the hub to claude, codex, agy, muse, opencode, … over A2A, ACP, MCP and HTTP).
 type: dag
 default: help
 ---
@@ -18,9 +18,17 @@ default: help
 should work, and get their own verified, reversible version, while everyone else
 keeps theirs.** Undo is one click. [What shaping is →](docs/software-shaping.md)
 
-bashy is the shell built for AI agents that makes this safe: a pure-Go Bash 5.3
-(86/86 on GNU Bash's own test suite) that speaks Bash#. Its core never changes, so
-every shaped change is verified, scoped to you, and reversible.
+bashy is the shell built for AI agents that makes this safe. Its core never
+changes, so every shaped change is verified, scoped to you, and reversible.
+**bashy is all you need:**
+
+| One… | is | what it means |
+|---|---|---|
+| **system** | **bash** | A pure-Go GNU Bash 5.3 and POSIX.1-2016 userland in one binary, the same on Windows, macOS and Linux. 86/86 on GNU Bash's own test suite; built for POSIX certification, not yet certified ([status](docs/vsc-pcts-run-status.md)). |
+| **language** | **Bash#** | Go with bash. One file is both script and skill: typed Go (structs, functions, imports) in shell text, plus fenced code blocks in Python, TypeScript, Rust, C/C++, C#, Go, Bash and PowerShell, each with a pinned, checksum-verified toolchain. |
+| **app** | **software shaping** | `shape wish` → verify → preview → approve → undo. You get your own version of a running tool, then promote it local → team → upstream. |
+| **agent** | **genie** | You make the wish; genie gets it granted. bashy's own agent runs on your models, and it is the hub to the rest: claude, codex, agy, muse, opencode, … Local agent CLIs are reached through `weave`, `delegate` and `chat`, remote agents over A2A (`herald`), editors over ACP (`bashy acp`), any agent's tools over MCP (`bashy mcp serve`), and every agent CLI over HTTP (`bashy llm`, OpenAI/Anthropic-compatible). |
+| **world** | **bashy** | All of the above in one install, from your laptop to your own peer mesh, cluster and cloud. |
 
 [![Software shaping with bashy: Ada changes her app, Brian keeps his (1:44)](https://img.youtube.com/vi/6HvKPzpCrNA/hqdefault.jpg)](https://youtu.be/6HvKPzpCrNA)
 
@@ -48,28 +56,41 @@ Tarballs, packages, from source, offline image: **[docs/install.md](docs/install
 - **Joining someone's satellite with your own machine?** `bashy onboard`, one resumable command ([docs/setup.md](docs/setup.md)).
 - **Running a satellite of your own?** `bashy satellite-provision plan|up|invite|share-llm|down` ([kb runbook](docs/kb/pages/provision-a-satellite-on-aws-lightsail.md)).
 
-## At a glance
+## How it fits together
 
-- **Software shaping.** `shape wish` → verify → preview → approve → undo, on the web console or the CLI: describe a change to a registered app or tool in plain words, get your own version, then promote it local → team → upstream (`shape push`). A broken change fails verification and can't be approved. [Try the hello-world example](examples/shaping/hello-world/README.md).
+Three words place any bashy feature ([overview](docs/overview.md#layers-tiers-and-the-o-zone)).
+A **layer** is what you write against, a **pillar** is a runtime service bashy
+manages for you, and a **tier** is where the work runs.
 
-What makes shaping safe ([the eight rules](docs/software-shaping.md#guidelines)), and what agents get along the way:
-
-- **One binary, every OS.** Bash 5.3 + `ls sed awk grep find jq git make tar …` in pure Go; the same script means the same thing on Windows.
-- **Bash#, Go with bash.** Typed Go in shell text; fenced Python/TS/Rust/C/C#/PowerShell islands with pinned, checksum-verified toolchains it fetches itself.
-- **Script = skill.** One file an agent *reads* as instructions and *runs* as automation — they never drift apart. This README is one.
-- **Contracts around models.** `agentic` blocks with `@require` / `@ensure`: a model's output is judged by ordinary commands, never trusted.
-- **Agent-native output.** `--json`, `--dry-run`, `--no-input` and exit codes 0/3/1 across bashy verbs; `bashy --dry-run script.sh` previews a whole script as JSON.
-- **Memory and messages.** `kb` (what this host already knows), `inbox` / `mb` / `meet` (agents and humans talking), `todo` / `sprint` (owed work).
-- **Agents managing agents.** `weave` runs claude, codex, opencode, agy, … each in an isolated git workspace, then verifies and merges.
-- **Grow it, don't work around it.** `commands add` registers a missing verb; every verb's `--help` is a skill plus an MCP tool definition; `mcp serve` exposes them all.
-- **Every tier, one tool.** `dag` (Markdown task graphs) · `oci` sandboxes · ollama local models · `sphere` peer mesh of your own machines · `kubectl` / `helm` · cloud CLIs.
-
+**Layers: bash → Bash# → Yoke.** Each one is cumulative, and a higher layer never weakens a lower one.
 
 | Layer | What it is | Evidence |
 |---|---|---|
-| **bash** | Pure-Go GNU Bash 5.3 + coreutils, one binary per platform; `sh` / `--posix` targets POSIX.1-2016 (IEEE 1003.1) | Bash 5.3 suite 86/86 · [POSIX status](docs/vsc-pcts-run-status.md) |
-| **Bash#** | Go with bash: typed Go, fenced Python/TS/Rust/C/C#/PowerShell islands, contracts, `agentic`. One file is a script *and* a skill — like this page | [bashsharp](https://github.com/bashsharp/bashsharp) · [tour](https://github.com/bashsharp/tour) |
-| **Yoke** | The agentic harness: `--json` everywhere, `dag`, `weave`, `sprint`, `inbox`, sandboxes, and **software shaping** — describe a change, verify, approve, undo | [shaping](examples/shaping/hello-world/README.md) |
+| **bash** | Pure-Go GNU Bash 5.3 + coreutils, one binary per platform; `sh` / `--posix` targets POSIX.1-2016 (IEEE 1003.1) | Bash 5.3 suite 86/86 · [POSIX status](docs/vsc-pcts-run-status.md) · [qiangli/bash](https://github.com/qiangli/bash) |
+| **Bash#** | Go with bash: typed Go, fenced Python/TS/Rust/C/C++/C#/Go/Bash/PowerShell islands, contracts, `agentic`. One file is a script *and* a skill, like this page | [bashsharp](https://github.com/bashsharp/bashsharp) · [tour](https://github.com/bashsharp/tour) |
+| **Yoke** | The agentic harness: `--json` everywhere, `dag`, `weave`, `sprint`, `inbox`, `genie`, and **software shaping** | [shaping](examples/shaping/hello-world/README.md) · [qiangli/yoke](https://github.com/qiangli/yoke) |
+
+**Pillars (O3): otel · ollama · oci.** **otel** traces and measures every run (`bashy otel`), **ollama** serves local models (`bashy ollama`), and **oci** runs sandboxes (`bashy oci`). bashy manages all three for you. It downloads and checksum-verifies podman and ollama on first use and never bundles them.
+
+**Tiers: userland → workplace → sandbox → sphere → cluster → cloud.**
+
+| Tier | Where the work runs | Front door |
+|---|---|---|
+| **userland** | this machine, natively | `bashy`, `sed`, `awk`, `jq`, `git` |
+| **workplace** | agents working together | `weave`, `dag`, `sprint`, `inbox`, `genie` |
+| **sandbox** | an OCI container | `bashy oci` |
+| **sphere** | a peer mesh of the machines you own (pooled and sharded LLMs) | `bashy sphere` |
+| **cluster** | Kubernetes on those same machines | `bashy kubectl`, `helm` |
+| **cloud** | hosted providers | `bashy aws`, `gcloud`, `doctl` |
+
+**What makes shaping safe** ([the eight rules](docs/software-shaping.md#guidelines)), and what agents get along the way:
+
+- **Script = skill.** One file an agent *reads* as instructions and *runs* as automation, so the two never drift apart. This README is one.
+- **Contracts around models.** `agentic` blocks with `@require` / `@ensure`: a model's output is judged by ordinary commands, never trusted.
+- **Agent-native output.** `--json`, `--dry-run`, `--no-input` and exit codes 0/3/1 across bashy verbs; `bashy --dry-run script.sh` previews a whole script as JSON.
+- **Memory and messages.** `kb` (what this host already knows), `inbox` / `mb` / `meet` (agents and humans talking), `todo` / `sprint` (owed work).
+- **Agents managing agents.** `weave` runs claude, codex, opencode, agy, muse, genie, … each in an isolated git workspace, then verifies and merges.
+- **Grow it, don't work around it.** `commands add` registers a missing verb; every verb's `--help` is a skill plus an MCP tool definition; `mcp serve` exposes them all.
 
 [Release candidate](https://github.com/qiangli/bashy/releases/latest) (v1.0.0-rc). Every number names its corpus: [claims](https://github.com/bashsharp/bashsharp/blob/main/docs/claims.md).
 
@@ -159,6 +180,8 @@ wants, and answer with bashy verbs. When the user says…
 | (you need a token or password from them) | `bashy ask` — they type it locally; the value never enters the chat |
 | "plan / track this" | `bashy todo add`, `bashy sprint` |
 | "get other agents on it" | `bashy weave`, `bashy mb`, `bashy inbox` (first, with consent: `bashy agent add <nick> --tool <tool> --model <model>`) |
+| "just do it, on my own model" | `bashy genie "<task>"` (genie, bashy's own agent) |
+| "ask an agent on another machine" | `bashy herald send` (A2A) |
 | "change how this tool works" | `bashy shape wish <tool> "<change>"` → verify → approve (undo) |
 | "automate these steps" | a Bash# file or a `dag.md`: `bashy dag FILE` |
 | "show me what bashy can do" | the tour: [bashsharp/tour](https://github.com/bashsharp/tour) |
@@ -179,4 +202,4 @@ bashy dag README.md --list
 [Overview](docs/overview.md) · [Why bashy](docs/why-bashy.md) · [Usage & flags](docs/usage.md) ·
 [Compatibility](docs/conformance-statement.md) · [Build from source](docs/install.md#from-source) ·
 [Changelog](CHANGELOG.md) · BSD-3-Clause, engine from
-[mvdan.cc/sh](https://github.com/mvdan/sh) via [qiangli/sh](https://github.com/qiangli/sh).
+[mvdan.cc/sh](https://github.com/mvdan/sh) via [qiangli/bash](https://github.com/qiangli/bash).

@@ -503,10 +503,10 @@ require (
 	tags.cncf.io/container-device-interface/specs-go v1.1.0 // indirect
 )
 
-// Bashy is built on the qiangli/sh fork of mvdan.cc/sh (the one carrying the
-// unmerged Bash 5.3 interp patches). Resolve it as a flat sibling: inside the
-// dhnt umbrella ../sh is the sh submodule; in a standalone clone, clone
-// github.com/qiangli/sh next to this repo as ./sh.
+// Bashy is built on github.com/qiangli/bash, the fork of mvdan.cc/sh carrying
+// the Bash 5.3, POSIX and Bash# interpreter patches (relocated from
+// github.com/qiangli/sh). It resolves as an ordinary versioned module; inside
+// the dhnt umbrella go.work selects the live ../bash sibling.
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
