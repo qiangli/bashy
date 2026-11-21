@@ -845,6 +845,13 @@ func dispatchWithContext(ctx context.Context) {
 	// cannot steal the word from a verb that takes it as an operand; see
 	// dispatchMeta.
 	dispatchMeta(os.Args)
+	// Catalog-driven shape-slot dispatch (Sprint 677 P3): commands declared in
+	// internal/agentos/cmdcatalog build on demand into tree-hash cached side
+	// slots (yoke/pkg/shape/slot) and execute through the existing shape-slot
+	// path. Monolith/scratch builds and VSC_PROFILE=cert bypass this seam.
+	if code, handled := dispatchCatalogCommand(ctx, os.Args[1], os.Args[2:]); handled {
+		dispatchExit(code)
+	}
 	switch os.Args[1] {
 	case "help":
 		dispatchExit(dispatchHelp(os.Args[2:]))

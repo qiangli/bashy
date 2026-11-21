@@ -9,6 +9,7 @@ import (
 	"runtime/debug"
 	"strings"
 
+	"github.com/qiangli/bashy/internal/agentos/cmdcatalog"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/shape/slot"
 	"github.com/qiangli/yoke/pkg/src"
@@ -40,6 +41,9 @@ var shapeSlotHostApp = func(name string) bool {
 	return ok && app.Shaping != nil && (app.Shaping.Kind == "cli" || app.Shaping.Kind == "service")
 }
 var shapeSlotApp = func(name string) bool {
+	if _, ok := cmdcatalog.Lookup(name); ok {
+		return true
+	}
 	app, ok := fleet.New().App(name)
 	return ok && app.Shaping != nil && app.Shaping.Kind == "cli"
 }
