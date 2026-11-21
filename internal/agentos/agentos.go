@@ -2103,6 +2103,9 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 			dispatchExit(code)
 		}
 	}
+	if folder, entry, ok := lookupAdaptedVerb(os.Args[1]); ok {
+		dispatchExit(runCommandAdapter(folder, entry, os.Args[1], os.Args[2:]))
+	}
 	if tool.Lookup(os.Args[1]) != nil {
 		dispatchExit(dispatchCoreutilsTool(os.Args[1], os.Args[2:], tool.Stdio{
 			In:  os.Stdin,

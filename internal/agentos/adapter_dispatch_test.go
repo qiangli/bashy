@@ -111,4 +111,14 @@ func TestStage0StatsAdapterEndToEndParity(t *testing.T) {
 	if fldCode != 2 || !strings.Contains(fldStderr, "--fields unsupported for stats summary") {
 		t.Fatalf("stats --fields=x summary: code=%d stderr=%q", fldCode, fldStderr)
 	}
+
+	jqOut, jqErr, jqCode := run("{\"x\":42}\n", "jq", "-r", ".x")
+	if jqCode != 0 || jqErr != "" || strings.TrimSpace(jqOut) != "42" {
+		t.Fatalf("jq -r .x: code=%d stderr=%q stdout=%q", jqCode, jqErr, jqOut)
+	}
+
+	calOut, calErr, calCode := run("", "ncal", "1", "2026")
+	if calCode != 0 || calErr != "" || !strings.Contains(calOut, "2026") {
+		t.Fatalf("ncal 1 2026: code=%d stderr=%q stdout=%q", calCode, calErr, calOut)
+	}
 }

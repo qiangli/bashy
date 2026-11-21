@@ -26,11 +26,42 @@ const (
 // folder and entry directory under the bashy repository.
 var adaptedVerbs = map[string][2]string{
 	"stats": {"yoke", "stats"},
+
+	// optional/ — non-POSIX classic Unix/utility commands (Cluster 1).
+	"atq":      {"optional", "atq"},
+	"atrm":     {"optional", "atrm"},
+	"cal":      {"optional", "cal"},
+	"ncal":     {"optional", "cal"},
+	"clip":     {"optional", "clip"},
+	"duration": {"optional", "duration"},
+	"gzip":     {"optional", "gzip"},
+	"gunzip":   {"optional", "gzip"},
+	"zcat":     {"optional", "gzip"},
+	"hexdump":  {"optional", "hexdump"},
+	"jq":       {"optional", "jq"},
+	"ntp":      {"optional", "ntp"},
+	"sntp":     {"optional", "ntp"},
+	"tar":      {"optional", "tar"},
+	"tree":     {"optional", "tree"},
+	"tz":       {"optional", "tz"},
+	"watch":    {"optional", "watch"},
+	"which":    {"optional", "which"},
+	"why":      {"optional", "why"},
+	"wslpath":  {"optional", "winpath"},
+	"cygpath":  {"optional", "winpath"},
 }
 
 func isAdaptedVerb(name string) bool {
 	_, ok := adaptedVerbs[name]
 	return ok
+}
+
+func lookupAdaptedVerb(name string) (folder, entry string, ok bool) {
+	fe, ok := adaptedVerbs[name]
+	if !ok {
+		return "", "", false
+	}
+	return fe[0], fe[1], true
 }
 
 // runCommandAdapter routes a front-door command through its folder-organized
