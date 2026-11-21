@@ -1,0 +1,22 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Standalone adapter for the transcribe-adapter example: builds its own Go module
+# (GOWORK=off) into the adapter cache on first use and runs it with argv, stdio,
+# env and exit status passed through unchanged. Nothing else is linked in.
+set -euo pipefail
+unset BASHY_ADAPTER_EXEC
+export BASHY_HINTS=off
+here=${BASH_SOURCE[0]%/*}; [[ $here == "${BASH_SOURCE[0]}" ]] && here=.
+root="$here/../../.."
+ext=; [[ ${OS:-} == Windows_NT || ${OSTYPE:-} == msys* || ${OSTYPE:-} == cygwin* ]] && ext=.exe
+bin="${BASHY_ADAPTER_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/bashy/adapters}/examples/transcribe-adapter$ext"
+stale=false
+[[ -x "$bin" ]] || stale=true
+for src in "$here"/*.go "$root/go.mod" "$root/go.sum"; do
+  [[ -e "$src" && "$src" -nt "$bin" ]] && stale=true
+done
+if [[ $stale == true ]]; then
+  mkdir -p "${bin%/*}"
+  run_go() { if command -v go >/dev/null 2>&1; then go "$@"; else BASHY_ADAPTER_INPROC=1 "${BASHY_SELF:-bashy}" go "$@"; fi; }
+  (cd "$root" && GOWORK=off CGO_ENABLED=0 run_go build -trimpath -o "$bin.tmp.$$" ./examples/transcribe/adapters && { mv -f "$bin.tmp.$$" "$bin" || { rm -f "$bin.tmp.$$"; [[ -x "$bin" ]]; }; })
+fi
+exec "$bin" "$@"
