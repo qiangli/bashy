@@ -605,7 +605,7 @@ func TestSaveAndLoadGitDirWithoutGit(t *testing.T) {
 			"--tz", "America/New_York",
 			"--body", "Body for "+id,
 			"--ref", "sprint:616",
-			"--audience", "qiangli"); code != 0 {
+			"--audience", "alice"); code != 0 {
 			t.Fatalf("add %s: exit %d: %s", id, code, out)
 		}
 	}

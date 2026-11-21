@@ -27,9 +27,13 @@ func TestDeskRegisterScriptsUsePublicShapedAppPath(t *testing.T) {
 		t.Skip("git is required for a revision round trip")
 	}
 	bin := productBashy(t)
-	for _, name := range []string{"notepad", "form", "viewer", "chart"} {
+	for _, name := range []string{"notepad", "form", "viewer", "chart", "calendar"} {
 		t.Run(name, func(t *testing.T) {
-			root, err := filepath.Abs(name)
+			rel := name
+			if v, ok := shapedTools[name]; ok {
+				rel = v
+			}
+			root, err := filepath.Abs(rel)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -52,7 +56,7 @@ func TestDeskRegisterScriptsUsePublicShapedAppPath(t *testing.T) {
 				t.Fatalf("app list lacks registered shaped app %s:\n%s", name, list)
 			}
 
-			if name == "viewer" || name == "chart" {
+			if name == "viewer" || name == "chart" || name == "calendar" {
 				assertRegisteredGenie(t, f, name)
 			}
 
