@@ -1026,16 +1026,11 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 	case "foreman":
 		dispatchExit(runCommandAdapter("yoke", "foreman", os.Args[1], os.Args[2:]))
 	case "meet":
-		// Multi-participant deliberation session: agentic CLIs + a human take
-		// turns; a dedicated notes-only secretary keeps and files the minutes.
-		wireMeet()
-		cmd := meet.NewMeetCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy meet:", err)
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+		// Multi-participant deliberation session (agentic CLIs + a human take
+		// turns; a notes-only secretary keeps the minutes): the standalone
+		// yoke/meet adapter, which carries its own copy of the steward
+		// activation hooks.
+		dispatchExit(runCommandAdapter("yoke", "meet", os.Args[1], os.Args[2:]))
 	case "app", "apps":
 		// The app launcher: ONE local surface with a start page of tiles and every
 		// other bashy web surface deep-linked beneath it — the shape
@@ -1191,18 +1186,12 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		}
 		dispatchExit(0)
 	case "kb":
-		// The host-shared knowledge base (coreutils/pkg/kb): the collective
-		// memory of all agents on this host across all repos — OKF-style
-		// wiki pages under ~/.bashy/kb. The loop: `search` before a task,
-		// `add` when nothing relevant exists, `retro` (update/supersede/
-		// validate) after the task completes.
-		cmd := schemaKBCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			fmt.Fprintln(os.Stderr, "bashy kb:", err)
-			dispatchExit(kbExitCode(err))
-		}
-		dispatchExit(0)
+		// The host-shared knowledge base (yoke/pkg/kb): the collective memory
+		// of all agents on this host across all repos. The loop: `search`
+		// before a task, `add` when nothing relevant exists, `retro` after.
+		// Runs as the standalone yoke/kb adapter, which carries its own
+		// recall reader wiring.
+		dispatchExit(runCommandAdapter("yoke", "kb", os.Args[1], os.Args[2:]))
 	case "tool", "tools", "model", "models", "agent", "agents", "person", "people", "whois":
 		// The fleet registry (coreutils/pkg/fleet) and the principal
 		// resolver over it (coreutils/pkg/principal). A `tool` is an
