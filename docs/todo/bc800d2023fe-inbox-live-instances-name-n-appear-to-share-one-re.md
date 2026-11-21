@@ -110,3 +110,16 @@ Operator (typed): "we do not want to register each and every agent ... directly 
 Extra acceptance: a weave run started by a lead posts as `LEAD/<ext>` and receives mail sent to that extension; after the run ends that mail appears on the lead's line; no subagent registration step is required.
 
 Out of scope (filed separately as a todo, not planned): an owner-level company main number answered by any owner-authorized agent.
+
+## Operator scope cut 2026-11-21 (supersedes the two additions above where they differ)
+
+Operator (typed): "for now agent+ext is direct and stands by itself."
+
+IN SCOPE (MVP):
+- `NAME+N` is a direct, self-standing address: its own mailbox, own read cursor, own caller ID (`from NAME+N`), keyed by instance UUID (a reused `+N` starts empty); `--as NAME+N` works for read and send.
+- `NAME` main line = hunt group (claimed exactly once by a live instance; waits when none is live).
+- Delivered vs acknowledged tracked separately (withheld items stay unread).
+
+DEFERRED (not now): forwarding an ended extension's mail to the main line or to a lead; team-lead extensions derived for unregistered subagents (LEAD+runN, LEAD/ext caller ID); NAME+* ring-all; the owner-level company number (todo 193d49d8).
+
+Acceptance (unit/hermetic): NAME, NAME+2, NAME+3 live: mail to each extension seen only there; main-line message claimed exactly once under concurrent readers and waits when nobody is live; reused +2 sees no old mail; mb send as self and --as NAME+N attribute correctly; withheld '1 of 2 unread' item stays retrievable.
