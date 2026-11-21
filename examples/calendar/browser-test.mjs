@@ -58,9 +58,14 @@ let browser, srv;
 try {
   const bin = await ensureBinary(dir);
   srv = await startServer(bin, dir);
+  const launchEnv = {...process.env};
+  delete launchEnv.DISPLAY;
+  delete launchEnv.WAYLAND_DISPLAY;
   browser = await chromium.launch({
     headless: true,
-    executablePath: process.env.CHROMIUM_PATH || undefined
+    executablePath: process.env.CHROMIUM_PATH || undefined,
+    env: launchEnv,
+    args: ['--use-gl=angle', '--use-angle=swiftshader', '--disable-dev-shm-usage']
   });
 
   // 1. Owner context: visit agenda root and verify Desk shell markers
