@@ -1,738 +1,426 @@
-.PHONY: dag build build-bash build-sh build-bashy build-bashy-scratch build-image verify-bashy-scratch build-bashy-oci smoke-bashy-oci test-bashy-oci-policy install test test-startup-linux test-awd-installed-stress test-meet-spa-fresh test-meet-spa-fresh-regression test-build-fail-closed test-isolated-lanes test-release-qa-lane test-self-container test-bash test-bash-run test-bash-parallel test-bash-container test-bash-container-bashpp test-bash-gate test-bash-list test-bash-fixtures test-bash-helpers smoke-python-imports smoke-dag-python smoke-dag-typescript smoke-dag-rust smoke-dag-c smoke-dag-go smoke-dag-powershell smoke-dag-csharp smoke-dag-text smoke-dag-manifests smoke-runners smoke-quickstart smoke-quickstart-container smoke-airgap-container dist check-seed-bands govulncheck license-gate tidy clean help
-
-BIN_DIR := bin
-BIN := $(BIN_DIR)/bashy
-BASHY_SCRATCH_ARTIFACT ?= $(BIN_DIR)/scratch/bashy-linux-amd64
-GO ?= go
-BASH_TESTS_DIR := external/bash-5.3/tests
-# The bash test fixtures invoke the shell as `bash` / via $BASH, so the
-# compliance harness drives a copy named `bin/bash`.
-BASHY := $(BIN_DIR)/bash
-SH := $(BIN_DIR)/sh
-
-# Stamp a real version onto release builds. Override on the command line, e.g.
-#   make build VERSION=v0.1.0
-VERSION ?= dev
-BUILD_ID ?= $(shell if [ -e .git ] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
-		id=$$(git describe --tags --exact-match HEAD 2>/dev/null || git rev-parse --short=7 HEAD 2>/dev/null); \
-		if [ -n "$$id" ]; then \
-			if ! git diff --quiet --ignore-submodules -- 2>/dev/null || ! git diff --cached --quiet --ignore-submodules -- 2>/dev/null; then \
-				id="$$id-dirty"; \
-			fi; \
-			printf '%s' "$$id"; \
-		fi; \
-	fi)
-SHELL_RUNTIME_COMMIT ?= $(shell sed -n -E 's|^[[:space:]]*(require[[:space:]]+)?github[.]com/qiangli/bash[[:space:]]+([^[:space:]]+).*|\2|p' go.mod)
-SHELL_RUNTIME_COMMIT_TIME ?=
-# Linux cmd/bashy must retain runtime.fwdSig in its ELF symbol table. The
-# Coreutils inherited-signal route reads it to preserve an execve caller's
-# signal dispositions. -w removes DWARF; -s also removes the required symbol.
-STAMP_LDFLAGS := -X 'github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-$(VERSION)' -X 'github.com/bashsharp/bashsharp/cli.buildID=$(BUILD_ID)' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=$(SHELL_RUNTIME_COMMIT)' -X 'github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommitTime=$(SHELL_RUNTIME_COMMIT_TIME)'
-LDFLAGS := -s -w $(STAMP_LDFLAGS)
-BASHY_LDFLAGS := -w $(STAMP_LDFLAGS)
-
-# The Go FIPS 140-3 module version selected by the build-fips target (see
-# `go tool` / go.dev/doc/security/fips140). v1.0.0 holds CMVP certificate #5247.
-GOFIPS140_VERSION ?= v1.0.0
-
-# Platforms for `make dist` (goreleaser handles real releases; this is a
-# local cross-compile sanity check).
-PLATFORMS := linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64
-
-# Build profile (cmd/bashy only — cmd/bash is always the pure drop-in). The
-# DEFAULT is the lean worker — shell + coreutils userland + git + dag + `bashy go`
-# — which cross-compiles to EVERY platform with CGO_ENABLED=0 (this is what gets
-# released). Two opt-in, unix-only, heavier host layers:
-#   BASHY_ENGINES=1  container/LLM engines (bashy podman/ollama) + their embedded
-#                    helper blobs when present (podman/vfkit/gvproxy .gz built by
-#                    coreutils/scripts/embed-*.sh). cgo, btrfs/MLX — unix only.
-#   BASHY_OBS=1      observability stack (bashy otel): ~193 MB of OpenTelemetry
-#                    Collector + VictoriaMetrics/Logs + Jaeger + Perses + k8s/aws.
-# `make build-host` turns on both.
-# The Go source front end behind `--source=go` (github.com/qiangli/bash/gosource) is NOT
-# one of these: it is a required part of the bashy binary and is always linked.
-# See docs/plan-source-go-dispatch.md.
-EMBED_DIR := ../yoke/external/podman/engine
-ENGINE_TAGS := $(if $(BASHY_ENGINES),bashy_engines \
-	$(if $(wildcard $(EMBED_DIR)/podman_embed/podman.gz),embed_podman) \
-	$(if $(wildcard $(EMBED_DIR)/vfkit_embed/vfkit.gz),embed_vfkit) \
-	$(if $(wildcard $(EMBED_DIR)/gvproxy_embed/gvproxy.gz),embed_gvproxy))
-BASHY_TAGS := $(strip $(ENGINE_TAGS) $(if $(BASHY_OBS),bashy_obs))
-
-## dag: Bootstrap/run the repo-local DAG runner. Pass ARGS="build", ARGS="test", etc.
-dag:
-	@./bashy dag $(if $(ARGS),$(ARGS),--list)
-
-## build: Build both independent binaries into bin/ (bash = pure drop-in from
-## cmd/bash; bashy = AgentOS shell from cmd/bashy). They share the cli core but
-## are separate compilations — bash's import graph never includes coreutils.
-## Default is the LEAN worker; use `make build-host` for the full unix host shell.
-build: build-bash build-bashy
-
-## build-host: Full unix host bashy — engines (bashy podman/ollama, + embed blobs
-## if present) and the observability stack (bashy otel). Not cross-platform.
-build-host:
-	$(MAKE) build BASHY_ENGINES=1 BASHY_OBS=1
-
-## build-bashy-oci: Build the reusable Ubuntu/glibc Bashy base image. Override
-## BASHY_OCI, BASHY_OCI_IMAGE, or BASHY_OCI_PLATFORM as needed.
-build-bashy-oci:
-	@tools/bashy-oci/build-smoke.sh build
-
-## smoke-bashy-oci: Smoke the already-built Bashy base with no network, a
-## read-only root, dropped capabilities, and temporary work directories.
-smoke-bashy-oci:
-	@tools/bashy-oci/build-smoke.sh smoke
-
-## test-bashy-oci-policy: Offline structural checks for the OCI base contract.
-test-bashy-oci-policy:
-	@tools/bashy-oci/test-policy.sh
-
-## build-bash: Build only the pure drop-in (cmd/bash -> bin/bash). This is all
-## the conformance harness needs; it skips the embed-heavy bin/bashy build.
-build-bash:
-	@mkdir -p $(BIN_DIR)
-	@set -e; \
-	goos=$$(go env GOOS); out=$(BASHY); launcher=$$(scripts/launcher-wanted.sh build-bash); [ "$$launcher" = 1 ] && out=$(BASHY).real || rm -f $(BASHY).real; \
-	scripts/go-product.sh build -trimpath -ldflags "$(LDFLAGS)" -o $$out github.com/qiangli/bash/cmd/bash; \
-	if [ "$$launcher" = 1 ]; then \
-		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
-	fi
-
-## build-sh: Build the pure strict POSIX sh for the opt-in shell conformance
-## gate. The regular build and release archives keep their GNU Bash binaries.
-build-sh:
-	@mkdir -p $(BIN_DIR)
-	@set -e; \
-	goos=$$(go env GOOS); out=$(SH); launcher=$$(scripts/launcher-wanted.sh build-sh); \
-	if [ "$$goos" = windows ]; then out=$(SH).exe; fi; \
-	[ "$$launcher" = 1 ] && out=$(SH).real || rm -f $(SH).real; \
-	scripts/go-product.sh build -trimpath -ldflags "$(LDFLAGS)" -o $$out ./cmd/sh; \
-	if [ "$$launcher" = 1 ]; then \
-		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(SH) native/siglaunch.c.in; \
-	fi
-
-## build-bashy: Build the AgentOS shell (cmd/bashy -> bin/bashy), embedding the
-## meet SPA when node/pnpm are available and podman blobs when present.
-build-bashy:
-	@mkdir -p $(BIN_DIR)
-	@set -e; \
-	scripts/build-meet-spa.sh optional >/dev/null; \
-	tags="$(BASHY_TAGS)"; \
-	echo "building bashy$${tags:+ with embeds: $$tags} ..."; \
-	out=$(BIN); \
-	tmp=$$(mktemp "$$out.pending.XXXXXX"); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
-	if [ -n "$$tags" ]; then \
-		scripts/go-product.sh build -trimpath -tags "$$tags" -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
-	else \
-		scripts/go-product.sh build -trimpath -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
-	fi; \
-	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
-	scripts/go-tool.sh releaseeligibility "$$tmp"; \
-	mv -f "$$tmp" "$$out"; \
-	rm -f $(BIN).real
-
-## build-bashy-scratch: Build the lean, static linux Bashy profile used by
-## Cloudbox and by the offline image (`bashy self image`). The stable amd64
-## artifact path is bin/scratch/bashy-linux-amd64; BASHY_SCRATCH_GOARCH=arm64
-## builds bin/scratch/bashy-linux-arm64 (override BASHY_SCRATCH_ARTIFACT to move it).
-BASHY_SCRATCH_GOARCH ?= amd64
-build-bashy-scratch: BASHY_SCRATCH_ARTIFACT := $(if $(filter amd64,$(BASHY_SCRATCH_GOARCH)),$(BASHY_SCRATCH_ARTIFACT),$(BIN_DIR)/scratch/bashy-linux-$(BASHY_SCRATCH_GOARCH))
-build-bashy-scratch:
-	@mkdir -p $$(dirname "$(BASHY_SCRATCH_ARTIFACT)")
-	@echo "building static linux/$(BASHY_SCRATCH_GOARCH) Bashy at $(BASHY_SCRATCH_ARTIFACT) ..."
-	@set -e; out="$(BASHY_SCRATCH_ARTIFACT)"; \
-	tmp=$$(mktemp "$$out.pending.XXXXXX"); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
-	CGO_ENABLED=0 GOOS=linux GOARCH=$(BASHY_SCRATCH_GOARCH) scripts/go-product.sh build -trimpath \
-		-tags bashy_scratch -ldflags "$(BASHY_LDFLAGS)" \
-		-o "$$tmp" ./cmd/bashy; \
-	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
-	scripts/go-tool.sh releaseeligibility "$$tmp"; \
-	mv -f "$$tmp" "$$out"
-
-## build-image: The offline bashy image from this checkout: build the static
-## scratch artifact for BASHY_IMAGE_ARCH (default: host arch) and wrap it FROM
-## scratch through `bashy self image` + bashy podman. Mirror of `dag build-image`.
-BASHY_IMAGE_ARCH ?= $(shell go env GOARCH)
-build-image:
-	@$(MAKE) --no-print-directory build-bashy-scratch BASHY_SCRATCH_GOARCH=$(BASHY_IMAGE_ARCH)
-	@BASHY_SCRATCH_BIN=$(BIN_DIR)/scratch/bashy-linux-$(BASHY_IMAGE_ARCH) $(BIN_DIR)/bashy self image --arch $(BASHY_IMAGE_ARCH) --version $(VERSION)
-
-## verify-bashy-scratch: Rebuild and fail closed unless the Cloudbox artifact is
-## static Linux amd64, purego-free, command-smoked, and scratch-runnable when an
-## OCI runtime is available.
-verify-bashy-scratch:
-	@BASHY_SCRATCH_ARTIFACT="$(BASHY_SCRATCH_ARTIFACT)" scripts/verify-bashy-scratch.sh
-
-## build-fips: Build both binaries against the Go FIPS 140-3 validated crypto
-## module (CMVP #5247). Run with GODEBUG=fips140=on for FedRAMP/CMMC/gov use.
-## Do NOT use fips140=only for a general shell — it rejects MD5 (breaks md5sum).
-## Go cryptography: no BoringCrypto or OpenSSL. Darwin releases use CGo for
-## the pre-Go inherited-signal constructor; see docs/public-claims-evidence.md.
-build-fips:
-	@mkdir -p $(BIN_DIR)
-	@echo "building with the Go FIPS 140-3 module (GOFIPS140=$(GOFIPS140_VERSION)) ..."
-	@set -e; \
-	goos=$$(go env GOOS); out=$(BASHY); launcher=$$(scripts/launcher-wanted.sh build-bash); [ "$$launcher" = 1 ] && out=$(BASHY).real || rm -f $(BASHY).real; \
-	GOFIPS140=$(GOFIPS140_VERSION) scripts/go-product.sh build -trimpath -ldflags "$(LDFLAGS)" -o $$out github.com/qiangli/bash/cmd/bash; \
-	if [ "$$launcher" = 1 ]; then \
-		cc -x c -std=c11 -O2 -Wall -Wextra -Werror -o $(BASHY) native/siglaunch.c.in; \
-	fi
-	@set -e; \
-	scripts/build-meet-spa.sh optional >/dev/null; \
-	tags="$(BASHY_TAGS)"; \
-	out=$(BIN); \
-	tmp=$$(mktemp "$$out.pending.XXXXXX"); trap 'rm -f "$$tmp"' EXIT HUP INT TERM; \
-	if [ -n "$$tags" ]; then \
-		GOFIPS140=$(GOFIPS140_VERSION) scripts/go-product.sh build -trimpath -tags "$$tags" -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
-	else \
-		GOFIPS140=$(GOFIPS140_VERSION) scripts/go-product.sh build -trimpath -ldflags "$(BASHY_LDFLAGS)" -o "$$tmp" ./cmd/bashy; \
-	fi; \
-	go run ./tools/elfaudit --bashy-signal "$$tmp"; \
-	scripts/go-tool.sh releaseeligibility "$$tmp"; \
-	mv -f "$$tmp" "$$out"; \
-	rm -f $(BIN).real
-
-## install: Build and atomically install both binaries into the shared dhnt user
-## bin ($$DHNT_BIN_DIR, default $$HOME/.local/bin). The installer refuses
-## binaries missing the core AgentOS command surface.
-install: build
-	go run ./tools/installbashy -bash $(BASHY) -bashy $(BIN)
-
-## test-awd-installed-stress: Install to a disposable bin, then repeat the
-## front-door concurrent awd regression.  Race instrumentation is used on Go
-## targets that support it; other targets still run the installed stress loop.
-AWD_STRESS_RUNS ?= 25
-test-awd-installed-stress:
-	@set -eu; \
-	install_dir=$$(mktemp -d); \
-	trap 'rm -rf "$$install_dir"' EXIT HUP INT TERM; \
-	DHNT_BIN_DIR="$$install_dir" $(MAKE) --no-print-directory install; \
-	race=''; case "$$(go env GOOS)/$$(go env GOARCH)" in \
-	  linux/amd64|linux/arm64|linux/ppc64le|darwin/amd64|darwin/arm64|freebsd/amd64|windows/amd64) race='-race' ;; \
-	esac; \
-	BASHY_E2E_BIN="$$install_dir/bashy" go test $$race -tags e2e \
-	  -run '^TestAwdE2EConcurrentFrontDoorIsolation$$' -count=$(AWD_STRESS_RUNS) ./internal/agentos
-
-## test: Run all Go tests
-# test-meet-spa-fresh(-regression) run FIRST, before any recipe that could
-# rebuild-and-promote the tracked meet SPA artifact and thereby mask a stale
-# bundle the freshness gate exists to catch.
-test: test-meet-spa-fresh-regression test-meet-spa-fresh test-build-fail-closed test-isolated-lanes test-release-qa-lane test-build-tag-matrix test-bash-container-mode verify-bashy-scratch test-startup-linux
-	go test ./...
-
-## test-startup-linux: Gate package initialization and 100 background jobs on Linux.
-test-startup-linux:
-	@if [ "$$(go env GOOS)" = linux ]; then \
-		mkdir -p $(BIN_DIR) && \
-		CGO_ENABLED=1 scripts/go-product.sh build -tags bashy_cert,bashy_cert_base,osusergo -ldflags=-w -o $(BIN_DIR)/bashy-startup-check ./cmd/bashy && \
-		scripts/test-startup-linux.sh $(BIN_DIR)/bashy-startup-check; \
-	else \
-		echo 'test-startup-linux: skipped (Linux only)'; \
-	fi
-
-## test-meet-spa-fresh: REQUIRED non-mutating gate — build a fresh meet SPA and
-## compare it against the tracked artifact WITHOUT promoting. Fails (and never
-## repairs) when the committed bundle is stale, or fails closed when no
-## node/pnpm toolchain is available. CI provisions Node/pnpm; see the
-## meet-spa-fresh job in .github/workflows/test.yml.
-test-meet-spa-fresh:
-	@mkdir -p $(BIN_DIR)
-	GOWORK=off go build -o $(BIN_DIR)/bashy-spa-check ./cmd/bashy
-	BASHY_BIN="$(CURDIR)/$(BIN_DIR)/bashy-spa-check" scripts/build-meet-spa.sh check
-
-## test-meet-spa-fresh-regression: Hermetic regression for the freshness gate —
-## proves fresh accepted, stale rejected and left unchanged, and missing
-## toolchain fails closed. No network, no real SPA build.
-test-meet-spa-fresh-regression:
-	scripts/test-meet-spa-fresh.sh
-
-
-## test-isolated-lanes: Verify concurrent test-lane naming and ownership wiring.
-test-isolated-lanes:
-	scripts/test-isolated-lanes.sh
-
-## test-release-qa-lane: Focused test for the release QA lane (xfail-card
-## rule + known-failing/skipped summary counts). Hermetic fixtures only.
-test-release-qa-lane:
-	scripts/test-release-qa-lane.sh
-
-## test-build-fail-closed: Prove a failed Go build cannot fall through to the
-## native launcher compiler or the installer and reuse stale binaries.
-test-build-fail-closed:
-	scripts/test-build-fail-closed.sh
-
-## test-build-tag-matrix: Type-check every combination of the two host build
-## layers. Only lean and build-host are ever compiled by hand, so a broken tag
-## pairing (engines without obs) can rot unnoticed for weeks.
-test-build-tag-matrix:
-	scripts/test-build-tag-matrix.sh
-
-## dist: Cross-compile static binaries for all release platforms into bin/dist/
-## (both bash and bashy; goreleaser handles real releases, this is a local
-## cross-compile sanity check).
-dist:
-	@if [ "$(VERSION)" != dev ]; then scripts/check-seed-bands.sh "$(VERSION)"; fi
-	@mkdir -p $(BIN_DIR)/dist
-	@scripts/build-meet-spa.sh optional >/dev/null; \
-	bashy_tags="$(BASHY_TAGS)"; \
-	tmp=; trap '[ -z "$$tmp" ] || rm -f "$$tmp"' EXIT HUP INT TERM; \
-	for plat in $(PLATFORMS); do \
-		os=$${plat%/*}; arch=$${plat#*/}; \
-		ext=; [ "$$os" = windows ] && ext=.exe; \
-		for name in bash bashy; do \
-			package=./cmd/$$name; [ "$$name" != bash ] || package=github.com/qiangli/bash/cmd/bash; \
-			out=$(BIN_DIR)/dist/$$name-$$os-$$arch$$ext; \
-			rm -f "$$out"; \
-			tmp=$$(mktemp "$$out.pending.XXXXXX"); \
-			ldflags="$(LDFLAGS)"; [ "$$name" = bashy ] && ldflags="$(BASHY_LDFLAGS)"; \
-			echo "building $$out..."; \
-			if [ "$$name" = bashy ] && [ -n "$$bashy_tags" ]; then \
-				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch scripts/go-product.sh build -trimpath -tags "$$bashy_tags" -ldflags "$$ldflags" -o "$$tmp" "$$package" || exit 1; \
-			else \
-				CGO_ENABLED=0 GOOS=$$os GOARCH=$$arch scripts/go-product.sh build -trimpath -ldflags "$$ldflags" -o "$$tmp" "$$package" || exit 1; \
-			fi; \
-			if [ "$$name" = bashy ]; then go run ./tools/elfaudit --bashy-signal "$$tmp" || exit 1; scripts/go-tool.sh releaseeligibility "$$tmp" || exit 1; fi; \
-			mv -f "$$tmp" "$$out" || exit 1; tmp=; \
-		done; \
-	done
-
-## check-seed-bands: Apply the seed freshness rule to VERSION (for release builds).
-check-seed-bands:
-	@scripts/check-seed-bands.sh "$(VERSION)"
-
-## govulncheck: Release gate. Pinned govulncheck (v1.9.0, built with the go.mod
-## toolchain) in source mode over bashy, ../outpost and ../yoke; a reachable
-## finding fails, package/module-level findings are reported.
-govulncheck:
-	@scripts/govulncheck-release.sh
-
-## license-gate: Shipped Go dependency license gate (bashy, yoke, sh, outpost + vendored/third_party)
-license-gate:
-	@scripts/verify-license-gate.sh
-
-BASH_TEST_TIMEOUT := 60
-# jobs runs a long sequence of real backgrounded sleeps (job-control timing);
-# it needs more than the default per-test cap even with working `kill` reaping.
-# Hosted runners can take just over two minutes, so leave scheduling headroom
-# while retaining a finite fixture-specific watchdog.
-BASH_TEST_TIMEOUT_JOBS := 180
-# Per-fixture memory cap (KB) enforced by scripts/memwatch.sh. macOS does NOT
-# honor `ulimit -v`, so an unbounded-allocation fixture (e.g. intl/unicode1.sub)
-# can balloon to 100+ GB before the wall-clock timeout fires. The watchdog
-# SIGKILLs the fixture's process group past this RSS, turning an OOM into a
-# graceful fixture failure. 4 GB is far above any legitimate fixture.
-BASH_TEST_MEM_KB := 4194304
-
-# NOTHING is skipped — the full bash-5.3 suite passes (86/86). Each fixture was
-# closed by matching bash 5.3 EXACTLY (inspect the reference before calling a
-# fixture a "ceiling"):
-# (coproc — coproc lifecycle: synthetic per-runner PID so wait/kill $COPROC_PID
-#  resolve, signal-death status, fd reuse/close→-1.)
-# (glob-test — byte-transparent per LC_CTYPE: $'\u' encodes in the locale charset
-#  (u32cconv), the lexer treats invalid/incomplete multibyte as opaque single
-#  bytes (MB_INVALIDCH→1, never errors), read/IFS split per MB_CUR_MAX.)
-# (trap — startup-ignored signals can't be re-trapped; SIGCHLD trap fires once
-#  per reaped child (jobs.c:waitchld).)
-# (execscript — exec exit codes 126/127, command_not_found_handle, exec/`.`-on-
-#  directory wording, EXIT-trap-in-subshell, BASH_SUBSHELL, expand_aliases.)
-# (jobs — real process-group job control on unix (setpgid + Wait4 WUNTRACED
-#  stopped-state + kill -STOP/-CONT + fg/bg + suspend messages), all in sh's
-#  *_unix.go; needs the longer BASH_TEST_TIMEOUT_JOBS above. Mirrors bash's own
-#  jobs.c (unix) / nojobs.c (elsewhere) split.)
-BASH_TEST_SKIP :=
-
-# Tests whose bash run-* helper strips lines starting with `expect ` from
-# the captured output before diffing against the .right file. The
-# convention is local to a handful of tests: most embed `expect` echoes
-# directly in the .right file (so filtering them would break the diff).
-BASH_TEST_FILTER_EXPECT := attr exp exp-tests extglob extglob2 invert invocation more-exp new-exp nquote nquote1 nquote2 nquote3 nquote5 posix2 varenv
-
-# Tests whose bash run-* helper pipes captured output through `cat -v` to
-# make control characters visible (NUL -> ^@, BEL -> ^G, ESC -> ^[, etc.)
-# before diffing against the .right file. Apply the same transform here
-# so raw control bytes don't trip the byte-for-byte diff.
-BASH_TEST_CAT_V := printf
-
-# The upstream test.tests fixture assumes /tmp allows setuid/setgid bits
-# and that fd 0 is a terminal. Normalize only those host-dependent lines
-# below so the fixture still checks bashy's test builtin behaviour.
-
-## test-yash: yash POSIX (-p) conformance scoreboard — the yash analogue of test-bash.
-## Runs every shell-agnostic *-p.tst against bashy AND real bash in one container,
-## per testcase, and lists the BASHY-SPECIFIC failures (bash passes, bashy fails) —
-## the genuine bugs to fix. Job-control/signal suites excluded (goroutine ceiling).
-## Output dir via YASH_OUT (default lane-specific /tmp/yash-scoreboard-*).
-test-yash:
-	@scripts/yash-scoreboard.sh $(YASH_OUT)
-
-## test-yash-list: print the current bashy-specific yash failure list (suite line desc).
-test-yash-list: test-yash
-	@lane=$$(. scripts/test-lane-id.sh; bashy_test_lane "$(CURDIR)"); \
-	 cat "$${YASH_OUT:-$${TMPDIR:-/tmp}/yash-scoreboard-$$lane}/failures.txt"
-
-## test-zsh: zsh-own-suite scoreboard (Tier 0 of the zsh ladder) — runs zsh 5.9's
-## Test/*.ztst (non-interactive classes A B C D E W Z) against bashy AND real zsh
-## through the same runner (tools/ztst); real zsh defines the valid denominator.
-## INFO metric, not a gate. Output dir via ZSH_OUT (default /tmp/zsh-scoreboard).
-test-zsh:
-	@scripts/zsh-scoreboard.sh $(ZSH_OUT)
-
-## test-zsh-list: print the current zsh-own-suite failure list (file:line desc).
-test-zsh-list: test-zsh
-	@cat $${ZSH_OUT:-/tmp/zsh-scoreboard}/failures.txt
-
-## test-uutils: uutils test-suite scoreboard — runs the MIT-licensed
-## uutils/coreutils test suite in a disposable, non-root OCI container with
-## network/read-only-rootfs/memory/PID/wall-time isolation. The tracked uutils
-## input and SUT are mounted read-only; known landmines remain quarantined.
-## Requires the dependency-only image from `make prepare-uutils-image`.
-## Output dir via UUTILS_OUT.
-test-uutils:
-	@scripts/uutils-scoreboard.sh $(UUTILS_OUT)
-
-## test-uutils-list: print the current uutils-suite failure list (module::case).
-test-uutils-list: test-uutils
-	@cat $${UUTILS_OUT:-/tmp/uutils-scoreboard}/failures.txt
-
-## test-uutils-safety: bounded synthetic/stub-OCI tests for containment command
-## construction and complete-scoreboard parsing; never runs cargo/uutils.
-test-uutils-safety:
-	@scripts/test-uutils-scoreboard.sh
-
-## prepare-uutils-image: build the local dependency-only OCI image used by
-## test-uutils. Fetches Cargo dependencies; never builds or runs foreign tests.
-prepare-uutils-image:
-	@scripts/uutils-prepare-image.sh
-
-## smoke-chat: drive `bashy chat` interactive under a real pty against an installed
-## agent — asserts the governed-launcher contract (native launch · registry · steer
-## · capture tee · teardown). INFO, never a gate: SKIPs cleanly without an agent or
-## a pty (headless CI). Pass an agent as the first arg: make smoke-chat AGENT=codex-gpt-5.5.
-smoke-chat:
-	@scripts/chat-smoke.sh $(AGENT)
-
-## smoke-llm-local: bashy local-model e2e (Sprint 379 Y2) — pull a tiny model,
-## `llm up`, chat through the OpenAI + Anthropic paths, assert non-empty answers.
-## INFO, never a gate: pulls ~1 GB and runs inference, so it runs on a real host
-## (macOS / Windows / Linux), never headless CI. Override with E2E_MODEL=<name>,
-## skip the pull with E2E_NO_PULL=1.
-smoke-llm-local:
-	@scripts/e2e-llm-local.sh
-
-## smoke-python-imports: Explicit installed-product smoke for Sprint 183's
-## unchanged nanochat and mini-SWE-agent checkouts (NANOCHAT_ROOT and
-## MINISWEAGENT_ROOT name them). Not part of build/test.
-smoke-python-imports:
-	@scripts/s183-python-import-smoke.sh
-
-## smoke-dag-python: Installed-product smoke for the examples/dag Python front
-## doors (Sprint 185): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
-## against pinned cache clones unless MINISWEAGENT_ROOT / NANOCHAT_ROOT name
-## existing checkouts, fenced-Python smoke targets included. Not part of build/test.
-smoke-dag-python:
-	@scripts/dag-python-examples-smoke.sh
-
-## smoke-dag-typescript: Installed-product smoke for the examples/dag TypeScript
-## front doors (Sprint 186): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
-## against pinned cache clones unless OPENCODE_ROOT / OPENCLAW_ROOT /
-## HERMESAGENT_ROOT name existing checkouts, fenced-TypeScript (and, for Hermes,
-## Python + TypeScript) smoke targets included. Not part of build/test.
-smoke-dag-typescript:
-	@scripts/dag-typescript-examples-smoke.sh
-
-## smoke-dag-rust: Installed-product smoke for the examples/dag Rust front doors
-## (Sprint 194): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
-## against pinned cache clones unless CODEX_ROOT / UV_ROOT / BUN_ROOT / MISE_ROOT
-## name existing checkouts, fenced-Rust smoke AND launcher targets included (uv
-## and Codex build their CLIs; Mise's cache clone runs its own build/unit-test
-## front doors, while an explicit MISE_ROOT gets only a zero-env read-only smoke;
-## RUST_TOOLCHAIN_BIN fronts a toolchain when the PATH cargo is below a
-## workspace's MSRV). Not part of build/test.
-smoke-dag-rust:
-	@scripts/dag-rust-examples-smoke.sh
-
-## smoke-dag-c: Installed-product smoke for the examples/dag C and C++ front doors
-## (Sprint 190): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md`
-## against unchanged FFmpeg / curl / git (C) and tesseract / llama.cpp / CMake
-## (C++) checkouts — pinned and cloned by the gate into <user cache>/bashy/examples
-## unless FFMPEG_ROOT / CURL_ROOT / GIT_ROOT / TESSERACT_ROOT / LLAMACPP_ROOT /
-## CMAKE_ROOT name existing ones — fenced smoke AND launcher targets included
-## (every graph builds its binary; CMAKE_BIN fronts a cmake, else the PATH one,
-## else `bashy cmake`'s provisioned tree). Not part of `test`.
-smoke-dag-c:
-	@scripts/dag-c-examples-smoke.sh
-
-## smoke-dag-go: Installed-product smoke for gh, Hugo, and Caddy Go front doors
-## (Sprint 192). Pinned checkouts are cloned into <user cache>/bashy/examples
-## unless GH_ROOT / HUGO_ROOT / CADDY_ROOT name existing ones. Each graph runs
-## a focused test, imports the checkout from ~~~go, builds, launches, and leaves
-## git status unchanged. gh's smoke additionally proves the Sprint 216 (Story
-## 541) contract path: the island call under @require/@ensure/@guard in an
-## agentic function — exit 3/126/6, then 0 on resume — and its four receipts in
-## the skills/craft ledger. Not part of `test`.
-smoke-dag-go:
-	@scripts/dag-go-examples-smoke.sh
-
-## smoke-dag-powershell: Installed-product smoke for the examples/dag PowerShell front
-## door (Sprint 358): `bashy awd DIR -- bashy dag -f examples/dag/powershell/dag.md`
-## exercising Bash#-owned control flow (loops, conditionals, pipe command form, error
-## binding) calling the fenced PowerShell guest language via pinned PowerShell 7.6.6.
-## Not part of build/test.
-smoke-dag-powershell:
-	@scripts/dag-powershell-examples-smoke.sh
-
-## smoke-dag-csharp: Installed-product smoke for the examples/dag C# front door
-## (Sprint 358): `bashy awd DIR -- bashy dag -f examples/dag/csharp/dag.md`
-## exercising Bash#-owned control flow (loops, conditionals, string joins, exception
-## error binding) calling the fenced C# guest language compiled via Add-Type on the
-## pinned PowerShell 7.6.6 runtime. Not part of build/test.
-smoke-dag-csharp:
-	@scripts/dag-csharp-examples-smoke.sh
-
-## smoke-dag-text: Installed-product smoke for the Sprint 234 text fences (B30):
-## the Caddy graph's `image` target (a ```bashpp body holding a ~~~dockerfile
-## fence, built with the checkout's Linux build as a named build context and
-## run from the image) and examples/quickstart/pipeline.bsh (a script carrying
-## its own CI/CD as a ~~~dag island, targets as methods, Effects: enforced by
-## @guard). Needs a running container engine; FAILS by name without one. The
-## Caddy checkout is cloned into <user cache>/bashy/examples unless CADDY_ROOT
-## names one. Not part of `test`.
-smoke-dag-text:
-	@scripts/dag-text-examples-smoke.sh
-
-## smoke-dag-manifests: Installed-product smoke for the Sprint 238 manifest fences:
-## examples/manifests/<tool>/build.bsh (cargo, pyproject, gomod, cmake, makefile,
-## package) each run through `bashy awd` in a scratch copy of its directory, the
-## expected line asserted and the copy byte-identical afterwards. Toolchains are
-## what bashy provisions; none is needed on the host. Not part of `test`.
-smoke-dag-manifests:
-	@scripts/manifest-examples-smoke.sh
-
-## smoke-runners: Installed-product smoke for the rod (Sprint 238): a language or
-## toolchain bashy has never heard of added with a runner and nothing else —
-## examples/runners/{awk,zig,env}.bsh (registered runner, inline func builder,
-## inline shell runner) plus the refusal of an unregistered program. Not part of `test`.
-smoke-runners:
-	@scripts/runner-examples-smoke.sh
-
-## smoke-quickstart: Three-mode process-level example check (Sprint 216, Story 540).
-## (a) bashy + .bsh interpreted, no toolchain; (b) transpile --standalone: Bash#
-## → Go binary, no bashy at runtime; (c) pre-prepared Python island via check
-## --prepare. This is a fast host check, NOT the authoritative proof — the
-## FROM-scratch images are proved by smoke-quickstart-container / the Linux CI
-## job. Not part of `test`.
-smoke-quickstart:
-	@scripts/quickstart-smoke.sh
-
-## smoke-quickstart-container: AUTHORITATIVE three-mode FROM-scratch gate (Sprint
-## 216, Story 540). Builds and RUNS three real `FROM scratch` images from
-## examples/quickstart/Containerfile (each with --network=none) and reports each
-## image's compressed/uncompressed size + the standalone binary's `go version -m`
-## SBOM line. SKIPs (exit 0) when no podman/docker engine is usable; with an
-## engine present, any build/run failure fails. The required Linux CI job
-## (.github/workflows/quickstart-scratch.yml) is the release gate. Not part of `test`.
-smoke-quickstart-container:
-	@scripts/quickstart-container-smoke.sh
-
-## smoke-airgap-container: The airgap gate (Sprint 227): build the offline bashy
-## image (build-image) and prove every row of docs/airgap-image.md under
-## --network=none --read-only --cap-drop=ALL, through bashy podman. SKIPs
-## (exit 0) without a usable engine; the doc's table must match what was
-## measured (AIRGAP_WRITE_DOC=1 regenerates it). The Linux CI job
-## (.github/workflows/airgap-image.yml, amd64 + arm64) is the release gate.
-smoke-airgap-container:
-	@scripts/airgap-container-smoke.sh
-
-## test-bash: Run bash 5.3 native test suite against bashy (with per-test timeout).
-## Builds only the lean bin/bash drop-in (not the 259MB embed-heavy bin/bashy).
-## Iterate fast on a subset with TESTS="name ...", e.g. make test-bash TESTS="comsub varenv".
-test-bash: build-bash test-bash-fixtures test-bash-helpers
-	@$(MAKE) --no-print-directory test-bash-run
-
-## test-bash-run: the fixture loop only (no build). Used by `test-bash` (which
-## builds first) and by scripts/test-bash-parallel.sh (builds once, then fans
-## the loop out over fixture groups). Honors TESTS="name ..." like test-bash.
-## Four fixtures (jobs, read, test, vredir) open /dev/tty, so a headless run
-## (agent, nohup, background job) goes through script(1) for a terminal, as CI
-## does (conformance.yml). Linux script takes -qefc; BSD/macOS takes the command.
-BASH53_RUN = BASH53_TIMEOUT=$(BASH_TEST_TIMEOUT)s \
-	 BASH53_JOBS_TIMEOUT=$(BASH_TEST_TIMEOUT_JOBS)s \
-	 BASH53_MEM_KB=$(BASH_TEST_MEM_KB) \
-	 $(BIN_DIR)/bash53suite -tests-dir $(BASH_TESTS_DIR) -bash $(BASHY) \
-	   -tests "$(TESTS)" -skip "$(BASH_TEST_SKIP)"
-test-bash-run: test-bash-fixtures $(BIN_DIR)/bash53suite
-	@if [ "$$(id -u 2>/dev/null)" = 0 ] && [ -z "$$BASH53_ALLOW_ROOT" ]; then \
-	  echo "test-bash: refusing to run as root: several Bash 5.3 fixtures (redir, test, ...) fail by design" >&2; \
-	  echo "  under root, so the result would not be the conformance gate. Run the gate as a" >&2; \
-	  echo "  non-root user, or use the sealed one: make test-bash-container (86/86 expected;" >&2; \
-	  echo "  dialect-on: make test-bash-container-bashpp). BASH53_ALLOW_ROOT=1 overrides." >&2; \
-	  exit 2; \
-	fi
-	@if [ -t 0 ]; then $(BASH53_RUN); \
-	 elif script -qefc true /dev/null >/dev/null 2>&1; then script -qefc '$(BASH53_RUN)' /dev/null; \
-	 else script -q /dev/null sh -c '$(BASH53_RUN)'; fi
-
-## bin/bash53suite: the ONE fixture runner. `bashy dag` drives the same binary,
-## so `make test-bash` and a chunked/distributed dag run are the same program —
-## which is what makes "chunked == serial" a checkable claim rather than a hope.
-$(BIN_DIR)/bash53suite: tools/bash53suite/*.go
-	@mkdir -p $(BIN_DIR)
-	@go build -o $@ ./tools/bash53suite
-
-# --- retired: the shell fixture loop -----------------------------------------
-# Until 2026-07-12 this file implemented a SECOND fixture runner in shell: a
-# per-fixture background job, a `sleep N && kill -KILL -- -$pid` watchdog, a
-# memwatch.sh sidecar, and the .right diffing. It is gone, and its guards live
-# in tools/bash53suite (skip list, 4GB memory cap, HOME isolation, the expect /
-# cat -v transforms, the whole-suite deadline).
-#
-# Why it had to go, not just be tidied:
-#
-#  1. Its watchdog was broken. `kill -KILL -- -$test_pid` targets a PROCESS
-#     GROUP that only exists if the testee honored BASH_SETPGRP, and the kill
-#     was `2>/dev/null`, so when that assumption failed the watchdog failed
-#     SILENTLY and `wait` blocked forever. That is the 20-minute CI hang. The Go
-#     harness sets Setpgid from the PARENT, so the testee's cooperation is
-#     irrelevant, and it always prints a Results line.
-#  2. Two runners meant "chunked vs serial" compared two different PROGRAMS, so
-#     the equality property that makes distributed conformance trustworthy was
-#     vacuous. A trap regression (86/86 -> 85/86) rode into main because the one
-#     gate that would have caught it was the one that hung.
-#
-# The old loop, for the record (do not resurrect):
-#   for runner in run-*; do ... & test_pid=$!; \
-#     ( sleep $per_test_timeout && kill -KILL -- -$test_pid 2>/dev/null ) & \
-#     sh scripts/memwatch.sh $test_pid $(BASH_TEST_MEM_KB) & \
-#     wait $test_pid; ... diff $BASH_TSTOUT $right_file ...
-# -----------------------------------------------------------------------------
-.PHONY: test-bash-run-legacy
-test-bash-run-legacy:
-	@echo "the shell fixture loop was retired 2026-07-12; use test-bash-run (see Makefile)" >&2
-	@exit 2
-
-## test-bash-parallel: Run the bash 5.3 suite in parallel fixture groups (builds
-## bin/bash once, then fans the loop out over JOBS groups). JOBS defaults to the
-## CPU count; on a big box use e.g. `make test-bash-parallel JOBS=20`.
-test-bash-parallel: build-bash test-bash-fixtures test-bash-helpers
-	@JOBS=$(JOBS) BASH_TESTS_DIR=$(BASH_TESTS_DIR) BASH_TEST_SKIP="$(BASH_TEST_SKIP)" /bin/bash scripts/test-bash-parallel.sh
-
-## test-bash-container: Run the authoritative 86-fixture Bash 5.3 gate in a
-## self-contained Linux image through bashy podman. The image bakes the testee,
-## runner, and pinned fixtures; the run has an isolated tmpfs, no network, a
-## read-only root, a non-root uid, and a PTY for fixtures that open /dev/tty.
-## Set BASH53_OCI or BASH53_IMAGE to override the container command/image.
-test-bash-container:
-	@BASH53_BASHPP=0 BASH53_OCI="$${BASH53_OCI:-bashy podman}" \
-	 scripts/test-bash-container.sh
-
-## test-bash-container-bashpp: Run the same hermetic 86-fixture gate with
-## Bash++ selected explicitly for each top-level testee process. The dedicated
-## gate transport avoids using the shell's invocation selector as harness state.
-test-bash-container-bashpp:
-	@BASH53_BASHPP=1 BASH53_OCI="$${BASH53_OCI:-bashy podman}" \
-	 scripts/test-bash-container.sh
-
-## test-bash-gate: Release gate, sealed 86/86 in both modes (off then on).
-## Writes bin/bash53-evidence-{0,1}.json; BASH53_BASELINE compares fixture names.
-test-bash-gate:
-	@BASH53_BASHPP=0 BASH53_GATE=1 scripts/test-bash-container.sh
-	@BASH53_BASHPP=1 BASH53_GATE=1 scripts/test-bash-container.sh
-
-## test-bash-container-mode: Prove requested container modes survive a helper
-## shell that consumes BASHY_BASHPP (fake OCI/build commands; no container).
-.PHONY: test-bash-container-mode
-test-bash-container-mode:
-	/bin/sh scripts/test-bash-container-mode.sh
-
-## test-self-container: Run build/unit tests in an agent-owned Ubuntu OCI lane.
-test-self-container:
-	@BASHY_TEST_OCI="$${BASHY_TEST_OCI:-bashy podman}" scripts/test-self-container.sh
-
-## test-groups-check: Fail closed unless every package of `go list ./...` has
-## exactly one test group in scripts/test-groups.txt.
-.PHONY: test-groups-check test-group
-test-groups-check:
-	GOWORK=off scripts/test-groups.sh --check
-
-## test-group: Run named test groups as parallel local lanes, e.g.
-## make test-group G="core agentos". e2e always runs fresh (-count=1); the
-## other groups reuse Go's content-keyed test cache.
-test-group:
-	@test -n "$(G)" || { echo 'test-group: set G="core agentos frontend tooling examples e2e"' >&2; exit 2; }
-	GOWORK=off scripts/test-groups.sh run $(G)
-
-## test-bash-list: List all available bash 5.3 tests
-test-bash-list: test-bash-fixtures $(BIN_DIR)/bash53suite
-	@$(BIN_DIR)/bash53suite -tests-dir $(BASH_TESTS_DIR) -list
-
-## test-bash-fixtures: Ensure the pinned GNU Bash 5.3 fixtures are present.
-## The default tree is SHA-256 verified, cached under the user cache directory,
-## and linked at external/bash-5.3. A custom BASH_TESTS_DIR is never downloaded.
-test-bash-fixtures:
-	@if [ "$(BASH_TESTS_DIR)" = "external/bash-5.3/tests" ]; then \
-		$(GO) run ./tools/bash53fixtures -root "$(CURDIR)" >/dev/null; \
-	elif [ ! -d "$(BASH_TESTS_DIR)" ]; then \
-		echo "test-bash-fixtures: custom BASH_TESTS_DIR is missing: $(BASH_TESTS_DIR)" >&2; \
-		exit 2; \
-	fi
-
-## test-bash-helpers: Build helper programs needed by bash tests
-# heredoc5.sub round-trips $(BUILD_DIR)/config.h (needs 4096 < size <
-# 65536) and version.h (512 < size < 4096) through here-documents. They
-# are bash build artifacts absent from the vendored source tree, so
-# generate deterministic stubs of the right sizes. Some trimmed fixture
-# copies also omit y.tab.c and examples/loadables/Makefile, which the
-# heredoc and glob-bracket tests read as source/build artifacts.
-test-bash-helpers: test-bash-fixtures
-	@cd $(BASH_TESTS_DIR) && \
-		[ -f recho ] || cc -o recho ../support/recho.c 2>/dev/null; \
-		[ -f zecho ] || cc -o zecho ../support/zecho.c 2>/dev/null; \
-		[ -f xcase ] || cc -o xcase ../support/xcase.c 2>/dev/null; \
-		[ -f ../config.h ] || for i in $$(seq 1 128); do \
-			printf '/* stub config.h line %03d for heredoc5.sub */\n' $$i; \
-		done > ../config.h; \
-		[ -f ../version.h ] || for i in $$(seq 1 16); do \
-			printf '/* stub version.h line %03d for heredoc5.sub */\n' $$i; \
-		done > ../version.h; \
-		[ -f ../y.tab.c ] || for i in $$(seq 1 2048); do \
-			printf '/* stub y.tab.c line %04d for heredoc5.sub */\n' $$i; \
-		done > ../y.tab.c; \
-		if [ ! -f ../examples/loadables/Makefile ]; then \
-			mkdir -p ../examples/loadables; \
-			{ \
-				echo 'CC = cc'; \
-				echo 'SHOBJ_STATUS = supported'; \
-				echo 'SHOBJ_CC = cc'; \
-				echo 'SHOBJ_CFLAGS = -fPIC'; \
-				echo 'SHOBJ_LD = cc'; \
-				case "$$(uname -s)" in \
-					Darwin) echo 'SHOBJ_LDFLAGS = -shared -undefined dynamic_lookup' ;; \
-					*) echo 'SHOBJ_LDFLAGS = -shared' ;; \
-				esac; \
-				echo 'SHOBJ_XLDFLAGS ='; \
-				echo 'SHOBJ_LIBS ='; \
-			} > ../examples/loadables/Makefile; \
-		fi; \
-		true
-
-## hooks: Install the committed git hooks (pre-push fmt + sibling pin drift gate)
-hooks:
-	git config core.hooksPath scripts/hooks
-	@echo "hooks: core.hooksPath -> scripts/hooks (bypass a hook with 'git push --no-verify')"
-
-## tidy: Run go mod tidy, gofmt, and go vet
-tidy:
-	go mod tidy
-	gofmt -s -w .
-	go vet ./...
-
-## clean: Remove built binaries
-clean:
-	rm -rf $(BIN_DIR)
-
-## help: Show this help message
-help:
-	@echo "Usage: make [target]"
-	@echo ""
-	@sed -n 's/^## //p' $(MAKEFILE_LIST) | column -t -s ':'
+###########################################################################
+##  GENERATED FILE — DO NOT EDIT.                                        ##
+##  Produced from dag.md by `bashy dag --makefile`. Edit dag.md instead, ##
+##  then regenerate; manual changes are overwritten and fail --check.    ##
+###########################################################################
+# Tasks live in dag.md (a bashy dag file); this Makefile only forwards.
+#   bashy dag <target>           run a target (its dependencies first)
+#   bashy dag --list             list targets
+#   bashy dag --dry-run <target> print the plan, run nothing
+#   bashy dag --skill DIR        export these tasks as an Agent Skill
+# Regenerate with: bashy dag --makefile  (verify: bashy dag --makefile --check)
+
+# List the dag targets, then how to run them natively.
+help: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag --list; echo "Run: bashy dag <target> | skill: bashy dag --skill DIR | more: bashy help"
+
+# Build both independent binaries into bin/ (bash = pure drop-in from cmd/bash; bashy = AgentOS shell from cmd/bashy).
+build: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag build
+
+# Build the full **unix host** bashy: the container/LLM engines (`bashy podman`/`ollama`, `-tags bashy_engines`, cgo + btrfs/MLX) and the observability stack (`b…
+build-host: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag build-host
+
+# Install the built pair into the shared dhnt user bin (`$DHNT_BIN_DIR`, default `~/.local/bin`).
+install: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag install
+
+# Run all test prerequisites matching the Makefile test contract, then all Go tests.
+test: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test
+
+# Hermetic regression for the freshness gate — proves fresh accepted, stale rejected and left unchanged, and missing toolchain fails closed.
+test-meet-spa-fresh-regression: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-meet-spa-fresh-regression
+
+# REQUIRED non-mutating gate — build a fresh meet SPA and compare it against the tracked artifact WITHOUT promoting.
+test-meet-spa-fresh: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-meet-spa-fresh
+
+# Prove a failed Go build cannot fall through to the native launcher compiler or the installer and reuse stale binaries.
+test-build-fail-closed: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-build-fail-closed
+
+# Verify concurrent test-lane naming and ownership wiring.
+test-isolated-lanes: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-isolated-lanes
+
+# Focused test for the release QA lane (xfail-card rule + known-failing/skipped summary counts).
+test-release-qa-lane: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-release-qa-lane
+
+# Type-check every combination of the two host build layers.
+test-build-tag-matrix: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-build-tag-matrix
+
+# Prove requested container modes survive a helper shell that consumes BASHY_BASHPP (fake OCI/build commands; no container).
+test-bash-container-mode: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-container-mode
+
+# Rebuild and fail closed unless the Cloudbox artifact is static Linux amd64, purego-free, command-smoked, and scratch-runnable when an OCI runtime is available.
+verify-bashy-scratch: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag verify-bashy-scratch
+
+# Gate package initialization and 100 background jobs on Linux.
+test-startup-linux: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-startup-linux
+
+# Release gate: Hello World shaping lifecycle on the BUILT binary, model-free.
+test-shaping-smoke: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-shaping-smoke
+
+# Proves test-shaping-smoke can fail: the app's smoke check is deliberately made to expect the old greeting, so verification must fail and the smoke must exit no…
+test-shaping-smoke-regression: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-shaping-smoke-regression
+
+# Two disposable hosts exercise real org/upstream Git transport and gated shaping pull, local verification, approval and undo.
+test-shaping-promotion: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-shaping-promotion
+
+# Opt-in pre-release Hello World lifecycle through the real shaping delegate.
+test-shaping-real-agent: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-shaping-real-agent
+
+# The formatting gate.
+fmtcheck: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag fmtcheck
+
+# Build a platform-appropriate bashy Podman engine binary and smoke-test the container path.
+test-podman: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-podman
+
+# Build independent source-owned release products in the locked previous-release image, with warm caches, bounded target parallelism and measured stages.
+dist: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag dist
+
+# Inspect the immutable-source/platform/budget inputs without building or publishing.
+dist-plan: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag dist-plan
+
+# Ensure the optional GNU Bash 5.3 fixture data is present.
+test-bash-data: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-data
+
+# **GNU Bash 5.3 baremetal compatibility test** — the canonical native host conformance gate.
+test-bash: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash
+
+# Prepare the native Bash 5.3 baremetal lane once per host for chunked fanout.
+test-bash-prepare: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-prepare
+
+# Run the native Bash 5.3 harness against an already prepared checkout.
+test-bash-run: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-run
+
+# List the GNU Bash 5.3 fixtures known to the bashy-native harness.
+test-bash-list: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-list
+
+# Run one GNU Bash 5.3 distributed chunk.
+test-bash-chunk: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-chunk
+
+# Run any DAG target as deterministic chunks and aggregate result lines.
+dag-fanout: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag dag-fanout
+
+# Run a generic fanout target repeatedly until chunking settles or `MAX_ROUNDS` is reached.
+dag-fanout-tune: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag dag-fanout-tune
+
+# Run the GNU Bash 5.3 suite through the generic DAG fanout target on the native host OS.
+test-bash-chunks: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-chunks
+
+# Check that the standard distributed Bash 5.3 test fleet is reachable and that each remote checkout exposes a usable bashy binary.
+test-bash-fleet-check: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-fleet-check
+
+# Prepare the standard distributed Bash 5.3 test fleet.
+test-bash-fleet-prepare: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-fleet-prepare
+
+# Run the GNU Bash 5.3 chunked suite through the standard development fleet using the container-normalized lane.
+test-bash-chunks-fleet: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-chunks-fleet
+
+# Tune GNU Bash 5.3 chunk assignments with bounded repeated fanout runs.
+test-bash-chunks-tune: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-chunks-tune
+
+# Run the authoritative 86-fixture Bash 5.3 gate in a self-contained Linux image through bashy podman (mode 0, BASH53_BASHPP=0).
+test-bash-container: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-container
+
+# Run the same hermetic 86-fixture gate with Bash++ selected explicitly for each top-level testee process (mode 1, BASH53_BASHPP=1).
+test-bash-container-bashpp: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-container-bashpp
+
+# Release gate, sealed 86/86 in both modes (off then on).
+test-bash-gate: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-gate
+
+# Run the licensed POSIX Profile B **shell-only** release gate, explicitly and only from a clean, pushed Bashy checkout at the supervisor-approved commit.
+test-posix-shell: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-posix-shell
+
+# The offline bashy image from this checkout (Sprint 227, "Bashy is all you need"): build the static `bashy_scratch` linux artifact for `BASHY_IMAGE_ARCH` (defau…
+build-image: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag build-image
+
+# The airgap gate (Sprint 227): build the offline image (`build-image`) and prove every row of `docs/airgap-image.md` — shell modes, every builtin, every coreuti…
+smoke-airgap: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-airgap
+
+# "Bashy is all you need" (Sprint 227), as one gate: from the PUBLISHED release archive of `SELF_TAG` (e.g.
+smoke-self-contained-image: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-self-contained-image
+
+# Prepare the GNU Bash 5.3 container-normalized lane once per host.
+test-bash-container-prepare: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-container-prepare
+
+# Run the GNU Bash 5.3 container harness against an already prepared checkout.
+test-bash-container-run: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-container-run
+
+# Run GNU Bash 5.3 compatibility chunks in the container-normalized lane.
+test-bash-chunks-container: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-chunks-container
+
+# Tune GNU Bash 5.3 container-normalized chunk assignments.
+test-bash-chunks-container-tune: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-chunks-container-tune
+
+# **yash POSIX (`-p`) conformance test** — the POSIX-conformance frontier metric (an INFO probe, not a 0/1 gate).
+yash: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag yash
+
+# List chunkable yash POSIX suite files.
+yash-list: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag yash-list
+
+# Run one chunk of the yash POSIX INFO suite.
+yash-chunk: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag yash-chunk
+
+# Run the yash POSIX INFO suite through generic DAG fanout.
+yash-chunks: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag yash-chunks
+
+# Tune yash POSIX INFO suite chunk assignments with bounded repeated fanout runs.
+yash-chunks-tune: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag yash-chunks-tune
+
+# go mod tidy + gofmt -s -w .
+tidy: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag tidy
+
+# Remove built binaries.
+clean: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag clean
+
+# Build ONLY `bin/bash` — the pure Bash 5.3 drop-in from cmd/bash (import graph never includes coreutils; ~5.7 MB).
+build-bash: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag build-bash
+
+# Build ONLY `bin/sh` — the pure strict POSIX sh for the opt-in shell conformance gate.
+build-sh: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag build-sh
+
+# Build ONLY `bin/bashy` — the AgentOS shell from cmd/bashy.
+build-bashy: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag build-bashy
+
+# Build the lean, static linux Bashy profile used by Cloudbox and by the offline image (`bashy self image`).
+build-bashy-scratch: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag build-bashy-scratch
+
+# Ensure the pinned GNU Bash 5.3 fixtures are present.
+test-bash-fixtures: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-fixtures
+
+# Build both binaries against the Go FIPS 140-3 Cryptographic Module (GOFIPS140=v1.0.0).
+build-fips: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag build-fips
+
+# Compile the recho/zecho/xcase C helpers the bash-5.3 suite needs (the only place `cc` is invoked — for test fixtures, not for bashy).
+test-bash-helpers: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-helpers
+
+# The **canonical 86/86 gate** — the bash-5.3 fixture suite fanned across cores via the single `tools/bash53suite` runner.
+test-bash-parallel: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bash-parallel
+
+# Contained uutils/coreutils suite vs the pure-Go multicall (INFO metric).
+test-uutils: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-uutils
+
+# Prepare the dependency-only OCI image.
+prepare-uutils-image: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag prepare-uutils-image
+
+# Bounded containment/parser regression tests using synthetic logs and a stub OCI runtime only.
+test-uutils-safety: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-uutils-safety
+
+# zsh-own-suite Tier-0 scoreboard (tools/ztst runner; INFO metric, not a gate).
+test-zsh: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-zsh
+
+# Install the git pre-push hook (pin-drift guard).
+hooks: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag hooks
+
+# Print the current uutils failure list (INFO; the -list companion to test-uutils).
+test-uutils-list: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-uutils-list
+
+# Print the current bashy-specific zsh failure list (INFO; companion to test-zsh).
+test-zsh-list: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-zsh-list
+
+# Submit the self-contained GNU Bash or yash conformance image as an Indexed DKS Job.
+dks-conformance-apply: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag dks-conformance-apply
+
+# Aggregate one completed DKS conformance Job.
+dks-conformance-result: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag dks-conformance-result
+
+# Submit one native-platform task to a real `vk-native` host.
+dks-native-apply: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag dks-native-apply
+
+# Validate one native-platform DKS Job from its bounded terminal RunRecord.
+dks-native-result: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag dks-native-result
+
+# Fail-closed pre-tag release gate over explicit completed DKS Jobs.
+dks-release-gate: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag dks-release-gate
+
+# Per-OS release smoke (the release gate): download the released `$BASHY_TEST_VERSION` asset for the host OS/arch, verify its sha256 against the published `check…
+qa: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag qa
+
+# Build the reusable Ubuntu/glibc Bashy base image.
+build-bashy-oci: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag build-bashy-oci
+
+# Smoke the already-built Bashy base with no network, a read-only root, dropped capabilities, and temporary work directories.
+smoke-bashy-oci: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-bashy-oci
+
+# Offline structural checks for the OCI base contract.
+test-bashy-oci-policy: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-bashy-oci-policy
+
+# Apply the seed freshness rule to VERSION (for release builds).
+check-seed-bands: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag check-seed-bands
+
+# Release gate.
+govulncheck: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag govulncheck
+
+# Shipped Go dependency license gate (bashy, yoke, sh, outpost + vendored/third_party) Ported from the Makefile in Sprint 660 R3; the body is the old recipe's co…
+license-gate: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag license-gate
+
+# Stress repeat (25x by default, AWD_STRESS_RUNS) of the installed-binary awd concurrency e2e against a throwaway install dir — the repetition gate for the inter…
+test-awd-installed-stress: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-awd-installed-stress
+
+# yash POSIX (-p) conformance scoreboard — the yash analogue of test-bash.
+test-yash: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-yash
+
+# print the current bashy-specific yash failure list (suite line desc).
+test-yash-list: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-yash-list
+
+# drive `bashy chat` interactive under a real pty against an installed agent — asserts the governed-launcher contract (native launch · registry · steer · capture…
+smoke-chat: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-chat
+
+# bashy local-model e2e (Sprint 379 Y2) — pull a tiny model, `llm up`, chat through the OpenAI + Anthropic paths, assert non-empty answers.
+smoke-llm-local: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-llm-local
+
+# Explicit installed-product smoke for Sprint 183's unchanged nanochat and mini-SWE-agent checkouts (NANOCHAT_ROOT and MINISWEAGENT_ROOT name them).
+smoke-python-imports: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-python-imports
+
+# Installed-product smoke for the examples/dag Python front doors (Sprint 185): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md` against pinned cache…
+smoke-dag-python: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-dag-python
+
+# Installed-product smoke for the examples/dag TypeScript front doors (Sprint 186): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md` against pinned ca…
+smoke-dag-typescript: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-dag-typescript
+
+# Installed-product smoke for the examples/dag Rust front doors (Sprint 194): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md` against pinned cache cl…
+smoke-dag-rust: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-dag-rust
+
+# Installed-product smoke for the examples/dag C and C++ front doors (Sprint 190): `bashy awd ROOT -- bashy dag -f examples/dag/<repo>/dag.md` against unchanged…
+smoke-dag-c: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-dag-c
+
+# Installed-product smoke for gh, Hugo, and Caddy Go front doors (Sprint 192).
+smoke-dag-go: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-dag-go
+
+# Installed-product smoke for the examples/dag PowerShell front door (Sprint 358): `bashy awd DIR -- bashy dag -f examples/dag/powershell/dag.md` exercising Bash…
+smoke-dag-powershell: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-dag-powershell
+
+# Installed-product smoke for the examples/dag C# front door (Sprint 358): `bashy awd DIR -- bashy dag -f examples/dag/csharp/dag.md` exercising Bash#-owned cont…
+smoke-dag-csharp: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-dag-csharp
+
+# Installed-product smoke for the Sprint 234 text fences (B30): the Caddy graph's `image` target (a ```bashpp body holding a ~~~dockerfile fence, built with the…
+smoke-dag-text: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-dag-text
+
+# Installed-product smoke for the Sprint 238 manifest fences: examples/manifests/<tool>/build.bsh (cargo, pyproject, gomod, cmake, makefile, package) each run th…
+smoke-dag-manifests: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-dag-manifests
+
+# Installed-product smoke for the rod (Sprint 238): a language or toolchain bashy has never heard of added with a runner and nothing else — examples/runners/{awk…
+smoke-runners: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-runners
+
+# Three-mode process-level example check (Sprint 216, Story 540).
+smoke-quickstart: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-quickstart
+
+# AUTHORITATIVE three-mode FROM-scratch gate (Sprint 216, Story 540).
+smoke-quickstart-container: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-quickstart-container
+
+# The airgap gate (Sprint 227): build the offline bashy image (build-image) and prove every row of docs/airgap-image.md under --network=none --read-only --cap-dr…
+smoke-airgap-container: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag smoke-airgap-container
+
+# Run build/unit tests in an agent-owned Ubuntu OCI lane.
+test-self-container: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-self-container
+
+# Drift guard for the test-group table in scripts/test-groups.sh: fails if a *_test.go package belongs to no group or a group pattern matches nothing.
+test-groups-check: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-groups-check
+
+# Run named test groups as parallel local lanes, e.g.
+test-group: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-group
+
+.DEFAULT: ; @command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag $@
+
+# FORCE names no file and has no recipe: as the one prerequisite it
+# keeps every forward running even when a file or directory on disk
+# shares a target's name. Dependency order stays in dag, not here.
+FORCE:

@@ -10,7 +10,7 @@ is not possible without moving ownership across repositories; committing it in
 coreutils would make source changes and generated output two facts that can
 drift.
 
-Developer builds are permissive. `make build`, `make build-fips`, `make dist`,
+Developer builds are permissive. `bashy dag build`, `bashy dag build-fips`, `bashy dag dist`,
 and the `./bashy` bootstrap run `scripts/build-meet-spa.sh optional`. When node
 and pnpm (or corepack) exist, the script runs:
 
@@ -35,7 +35,7 @@ fallback text, and requires the served HTML to contain the injected
 Useful local checks:
 
 ```sh
-make build-bashy
+bashy dag build-bashy
 scripts/verify-meet-spa-release.sh bin/bashy darwin_arm64
 
 # Required/release mode must fail when the frontend toolchain is absent.

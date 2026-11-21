@@ -6,16 +6,19 @@ type: dag
 
 # bashy — DAG task file
 
-The agent-first equivalent of this repo's `Makefile`, runnable with the
-`bashy dag` task runner this repo's AgentOS shell ships:
+This file is the ONLY build and test source for this repo, runnable with the
+`bashy dag` task runner this repo's AgentOS shell ships. The `Makefile` is a
+GENERATED, forward-only projection of these targets (`bashy dag --makefile`,
+checked by `fmtcheck`) kept so that an agent or a human who reaches for `make`
+is taught the native form — never edit it, and never add logic to it:
 
 ```bash
 ./bashy dag --list           # fresh checkout bootstrap: builds bin/bashy if needed
 ./bashy dag build            # build both binaries through bashy go
 ./bashy dag install          # install into $DHNT_BIN_DIR (default ~/.local/bin)
-make dag ARGS=build          # make-based bootstrap wrapper around ./bashy dag
 bashy dag test               # once installed/on PATH: bashy go test ./...
 bashy dag --json test        # machine-readable envelope for an agent
+bashy dag --makefile         # regenerate the forwarding Makefile from this file
 ```
 
 Chicken/egg note: `bashy dag ...` requires the operating system to find a
@@ -312,8 +315,15 @@ example.
 The body delegates to `scripts/fmtcheck.sh`, which is also what the CI ubuntu
 leg runs. One script, two callers. Tracked `.go` files only.
 
+It also checks that the generated `Makefile` still matches this file — the
+Makefile is a forward-only projection of these targets, so regenerate it with
+`bashy dag --makefile` instead of editing it.
+
 ```bash
+set -e
+BASHY_EXE="${BASHY:-bashy}"
 scripts/fmtcheck.sh
+"$BASHY_EXE" dag --makefile --check
 ```
 
 ### test-podman
@@ -2022,7 +2032,7 @@ cat "${YASH_OUT:-${TMPDIR:-/tmp}/yash-scoreboard-$lane}/failures.txt"
 drive `bashy chat` interactive under a real pty against an installed agent — asserts the
 governed-launcher contract (native launch · registry · steer · capture tee · teardown).
 INFO, never a gate: SKIPs cleanly without an agent or a pty (headless CI). Pass an agent
-as the first arg: make smoke-chat AGENT=codex-gpt-5.5.
+as the first arg: bashy dag smoke-chat AGENT=codex-gpt-5.5.
 Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
 Effects: exec, net, write
 
@@ -2247,7 +2257,7 @@ GOWORK=off scripts/test-groups.sh --check
 ```
 
 ### test-group
-Run named test groups as parallel local lanes, e.g. make test-group G="core agentos".
+Run named test groups as parallel local lanes, e.g. bashy dag test-group G="core agentos".
 e2e always runs fresh (-count=1); the other groups reuse Go's content-keyed test cache.
 Ported from the Makefile in Sprint 660 R3; the body is the old recipe's commands.
 Effects: exec, net, write

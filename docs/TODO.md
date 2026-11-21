@@ -24,7 +24,7 @@ No certification award or clean full-profile pass is claimed.
 **Interactive coverage refreshed**: 2026-10-08 (Sprint 379, Story 1511; see below). Historical fixture update: 2026-06-18 (array2 FLIPPED via the quoted-`@`-vs-IFS fix in sh/expand — `"${a[@]}"`/`"$@"` split to one word per element regardless of IFS; also dropped dollars 141→102 + exp-tests 61→52. glob-test 88→85 (bash-correct trailing-`\` literal + `?` leading-dot in sh/pattern, not yet a flip). Earlier: array/assoc/nameref/new-exp/coproc flipped; harness now measures the 8 formerly-silent skips — `<name>.tests` mapping mismatch — so the scoreboard finally covers every fixture instead of hiding 8):
   - Wired into the harness (name→file mappings, like `dirstack`→`dstack`): array2→array-at-star, dollars→dollar-at-star, exp-tests→exp.tests(+expect-filter), glob-test→glob.tests, histexpand→histexp.tests, input-test→`< input-line.sh`.
   - `run-minimal` excluded (a `run-all`-style meta-runner, no stable `.right`). `execscript` skipped with a reason (host-dependent: bash binary path + system error wording + exec/`.`-on-directory exit codes; needs `test`-style normalization to measure).
-  Reliable scoreboard = `make test-bash` under a clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; a shell wrapper in PATH shadows `sh` and false-fails). weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
+  Reliable scoreboard = `bashy dag test-bash` under a clean PATH (`PATH=/bin:/usr/bin:$(dirname $(which go))`; a shell wrapper in PATH shadows `sh` and false-fails). weave sandboxes need the external/bash-5.3 fixture symlink prepped (it's a gitignored symlink) or workers can't measure and gates false-pass.
 
 **Remaining failing fixtures: NONE.** (2026-06-18: dollars + exp-tests FLIPPED [claude]; glob-test FLIPPED [claude] via byte-transparency — bashy now follows GNU bash 5.3's LC_CTYPE/MB_CUR_MAX convention exactly (no UTF-8 hardcoding): `$'\u'` encodes in the locale charset (= u32cconv), the lexer treats invalid/incomplete multibyte as opaque single bytes (= MB_INVALIDCH→1, never errors), and read/IFS split per MB_CUR_MAX — so the zh_TW.big5 case matches bash. NOT a ceiling after all.)
 **trap FLIPPED 2026-06-18** [claude] — startup-ignored signals can't be re-trapped (`trap.c`: real SIG_IGN + `unix.Sigaction` snapshot); SIGCHLD trap fires once per reaped child (`jobs.c:waitchld`).
@@ -366,7 +366,7 @@ tilde2        type          vredir
 go test ./...
 
 # Run bash 5.3 test suite
-make test-bash
+bashy dag test-bash
 
 # Run single bash test
 cd external/bash-5.3/tests

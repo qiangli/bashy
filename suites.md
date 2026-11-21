@@ -37,13 +37,13 @@ cd ../sh && PATH=/bin:/usr/bin:$(dirname "$(command -v go)") go test ./interp/ .
 
 ### test-bash
 Bash 5.3 fixture suite (86 fixtures), parallelized across cores. Native local
-diagnostic only. **THE release gate** is `make test-bash-gate`: sealed Linux
+diagnostic only. **THE release gate** is `bashy dag test-bash-gate`: sealed Linux
 container, both Bash# modes (off then on), 86/86 each. It writes
 `bin/bash53-evidence-0.json` and `bin/bash53-evidence-1.json`; use
 `BASH53_EVIDENCE` to override a single run's path and `BASH53_BASELINE` for
 fixture-name NEW/RECOVERED/UNCHANGED comparison against matching mode evidence.
 ```bash
-make test-bash-parallel
+"${BASHY:-bashy}" dag test-bash-parallel
 ```
 
 ### parity
@@ -110,7 +110,7 @@ This task is OCI-only: it snapshots tracked uutils inputs, mounts the SUT
 read-only, disables networking, drops privileges/capabilities, and applies hard
 memory, PID, and wall-time bounds. It emits a scoreboard only after validating
 the terminal cargo summary against a preflight-listed denominator. Prepare its
-dependency-only offline image with `make prepare-uutils-image`. See
+dependency-only offline image with `bashy dag prepare-uutils-image`. See
 `docs/uutils-scoreboard.md`.
 Tools: go docker
 ```bash
@@ -123,7 +123,7 @@ a real pty against an installed agent and asserts the whole contract (native
 launch · live-sessions registry · mid-turn steer · capture tee · clean teardown).
 INFO, and deliberately OUTSIDE `all`: it needs an installed third-party agent and
 a real pty, so it SKIPs cleanly on a headless CI box. Run it on a dev machine with
-`make smoke-chat` (or `bashy dag suites.md chat-smoke`); override the agent with
+`bashy dag smoke-chat` (or `bashy dag suites.md chat-smoke`); override the agent with
 `AGENT=codex-gpt-5.5`.
 Tools: python3
 ```bash
@@ -137,7 +137,7 @@ once through the OpenAI-compatible path and once through the
 Anthropic-compatible path, asserting a non-empty answer each time.
 INFO, and deliberately OUTSIDE `all`: it pulls ~1 GB and runs inference,
 so it belongs on a real host (macOS / Windows / Linux), never headless CI.
-Run it with `make smoke-llm-local` (or `bashy dag suites.md llm-local-e2e`);
+Run it with `bashy dag smoke-llm-local` (or `bashy dag suites.md llm-local-e2e`);
 override the model with `E2E_MODEL=qwen3:8b`, skip the pull with `E2E_NO_PULL=1`.
 Tools: curl
 ```bash

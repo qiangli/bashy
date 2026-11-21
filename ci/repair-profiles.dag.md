@@ -76,7 +76,7 @@ esac
 ```
 
 ### bashy-linux
-The bashy profile on a Linux host: make test + make test-bash (86/86), plus
+The bashy profile on a Linux host: bashy dag test + bashy dag test-bash (86/86), plus
 the uutils landmine lane when the oci sandbox is available. Same runner as
 `profile`, an explicit lane for per-host dispatch.
 When: test "$(uname -s)" = Linux
@@ -92,7 +92,7 @@ else BASHY_EXE=bashy; fi
 ```
 
 ### bashy-darwin
-The bashy profile on a macOS host: make test + make test-bash (86/86), both
+The bashy profile on a macOS host: bashy dag test + bashy dag test-bash (86/86), both
 native; the uutils lane reports skipped (Linux-oci-only), never pass.
 When: test "$(uname -s)" = Darwin
 Effects: read, write, exec, net
@@ -107,8 +107,8 @@ else BASHY_EXE=bashy; fi
 ```
 
 ### bashy-windows
-The bashy profile on a Windows host: make test + make test-bash (86/86), both
-native (`make` and `go` resolve inside the bashy shell — the host needs no
+The bashy profile on a Windows host: bashy dag test + bashy dag test-bash (86/86), both
+native (`bashy dag` and `go` resolve inside the bashy shell — the host needs no
 make or go of its own);
 the uutils lane reports skipped (Linux-oci-only), never pass.
 When: test "$(uname -s)" = Windows_NT

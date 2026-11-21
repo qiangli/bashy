@@ -19,10 +19,18 @@ COPY readline/ readline/
 
 # Always use the repository build so the ELF signal-symbol gate runs before
 # the one-file Bashy payload is copied. CGO stays disabled for this image.
+#
+# The entry point is the `./bashy` bootstrap, not `make`: the Makefile is a
+# generated forwarder to `bashy dag` (Sprint 660) and this builder image has go
+# and make but no bashy. The bootstrap compiles bin/bashy with
+# scripts/go-product.sh and execs it, so `dag build-bashy` then produces the
+# correctly stamped artifact — one extra compile, and one build definition
+# (dag.md) instead of a copy of the stamping logic here. GO=go keeps the
+# image's own toolchain on the build, as the Makefile's `GO ?= go` did.
 RUN test "$TARGETOS" = linux && \
     cd /src/bashy && \
     CGO_ENABLED=0 GOOS=linux GOARCH="$TARGETARCH" \
-      make build-bashy VERSION="$VERSION" BUILD_ID="$BUILD_ID" && \
+      ./bashy dag build-bashy GO=go VERSION="$VERSION" BUILD_ID="$BUILD_ID" && \
     test -x bin/bashy && test ! -e bin/bashy.real
 
 FROM ${RUNTIME_IMAGE} AS runtime

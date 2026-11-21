@@ -79,6 +79,6 @@ Builds require `go 1.27` and select `toolchain go1.27.4`, as recorded in
 
 See [`CLAUDE.md`](../CLAUDE.md) for the development workflow and [`docs/`]()
 for the compliance roadmap and per-fixture analyses. The Bash 5.3 suite is
-driven by `make test-bash` (serial; needs a controlling terminal; `make
-test-bash-fixtures` fetches the pinned fixture tree). The language, its
+driven by `bashy dag test-bash` (serial; needs a controlling terminal; `bashy
+dag test-bash-fixtures` fetches the pinned fixture tree). The language, its
 roadmap and RFCs live in [bashsharp/bashsharp](https://github.com/bashsharp/bashsharp).

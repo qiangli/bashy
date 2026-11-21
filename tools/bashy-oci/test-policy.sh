@@ -6,7 +6,10 @@ set -eu
 repo=$(CDPATH= cd -P "$(dirname "$0")/../.." && pwd)
 recipe=$repo/tools/bashy-oci/Containerfile
 builder=$repo/tools/bashy-oci/build-smoke.sh
-makefile=$repo/Makefile
+# dag.md, not the Makefile: since Sprint 660 the Makefile is a generated
+# forwarder (`bashy dag --makefile`, drift-checked by the fmtcheck target), so
+# the targets are declared here.
+dagfile=$repo/dag.md
 
 fail() { echo "test-bashy-oci-policy: $*" >&2; exit 1; }
 has() { grep -Fq "$1" "$2" || fail "$2 lacks required policy: $1"; }
@@ -19,7 +22,7 @@ lacks() { ! grep -Fq "$1" "$2" || fail "$2 still references removed input: $1"; 
 has 'ubuntu@sha256:' "$recipe"
 has 'ARG APT_SNAPSHOT=20260821T190000Z' "$recipe"
 has 'apt-get update --snapshot "${APT_SNAPSHOT}"' "$recipe"
-has 'make build-bashy' "$recipe"
+has './bashy dag build-bashy' "$recipe"
 has 'COPY --from=builder --chown=0:0 /src/bashy/bin/bashy /bashy' "$recipe"
 has 'test -x bin/bashy && test ! -e bin/bashy.real' "$recipe"
 if grep -Fq 'COPY --from=builder --chown=0:0 /src/bashy/bin/bashy.real' "$recipe"; then
@@ -47,9 +50,9 @@ lacks 'filebrowser' "$recipe"
 has 'git ls-files --cached --others --exclude-standard -z' "$builder"
 has 'localhost/bashy-base:ubuntu24.04' "$builder"
 has 'platform=linux/$native_arch' "$builder"
-has 'test-bashy-oci-policy:' "$makefile"
-has 'build-bashy-oci:' "$makefile"
-has 'smoke-bashy-oci:' "$makefile"
+has '### test-bashy-oci-policy' "$dagfile"
+has '### build-bashy-oci' "$dagfile"
+has '### smoke-bashy-oci' "$dagfile"
 
 sh -n "$builder"
 sh -n "$repo/tools/bashy-oci/test-policy.sh"

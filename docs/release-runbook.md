@@ -86,7 +86,7 @@ for each candidate.
 
 ## Vulnerability gate
 
-`make govulncheck` (`scripts/govulncheck-release.sh`) is part of the release
+`bashy dag govulncheck` (`scripts/govulncheck-release.sh`) is part of the release
 local gate: `scripts/govulncheck-release.sh` scans the pinned Bashy, Outpost and
 Yoke modules and release tag profiles. Its reachable-vulnerability result is
 blocking when producing the local security receipt. Package- and module-level
@@ -120,7 +120,7 @@ upgrading the toolchain and dependencies.
 
 ## License gate
 
-`scripts/verify-license-gate.sh` (`make license-gate`) verifies that bashy's
+`scripts/verify-license-gate.sh` (`bashy dag license-gate`) verifies that bashy's
 full shipped Go dependency graph (cmd/bashy, cmd/bash, cmd/sh, outpost) plus
 vendored/third_party directories contains only permissive licenses.
 

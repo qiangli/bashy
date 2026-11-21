@@ -13,7 +13,7 @@ The steps below are a historical procedure, not permission to provision a host,
 rerun licensed tests, send correspondence or submit certification. At execution,
 use the private harness kit's supported approval and lifecycle commands, exact
 candidate/artifact identities, and current authority requirements. Use
-`make test-bash-container` for the authoritative public Bash 5.3 gate;
+`bashy dag test-bash-container` for the authoritative public Bash 5.3 gate;
 reuse unchanged evidence only under the [identity rule](s561/evidence-identity.md).
 
 Status: **historical handoff / rerun procedure.** The license and shell-scenario
@@ -29,7 +29,7 @@ separate.
 
 ```sh
 cd bashy
-make test-bash                      # 86/86, no regression
+bashy dag test-bash                      # 86/86, no regression
 scripts/posix-certdryrun.sh         # VERDICT: CLEAN (or clean-on-built + reasoned pending)
 ```
 
@@ -90,7 +90,7 @@ TET journals classify each assertion PASS / FAIL / UNSUPPORTED / UNTESTED / FIP
 (further-information-provided). For every non-PASS, sort into exactly one bucket:
 
 1. **Real bug** → fix in `../sh` (`interp`/`expand`/`syntax`), gated:
-   `cd ../sh && go test ./...` green **and** `cd bashy && make test-bash` still
+   `cd ../sh && go test ./...` green **and** `cd bashy && bashy dag test-bash` still
    **86/86** (no regression — the non-negotiable anchor), plus a new assertion in
    `posix-parity.sh` or the relevant corpus. Cherry-pick one fix at a time,
    re-measure the full suite, merge only if clean. Then bump `bashy/.sibling-pins`
@@ -113,7 +113,7 @@ summary.
 
 - Keep `scripts/posix-certdryrun.sh` at VERDICT: CLEAN — finish the PENDING
   free-suite harnesses (dash / modernish / austin) and triage each to 0.
-- Keep `make test-bash` at 86/86.
+- Keep `bashy dag test-bash` at 86/86.
 - Keep `conformance-statement.md`'s declared-limitations list final.
 
 The licensed run is the last mile; everything that can be verified for free

@@ -15,7 +15,7 @@
 #   GNU arm   →  $GNU_PREFIX/bin/<tool>
 #   bashy arm →  $BASHY_BIN <tool>   (cold spawn)  /  in-process tool.Run  /  warm `bashy serve`
 #
-# Build (from the repo root, after `cd bashy && make dist` produces bashy-linux-<arch>):
+# Build (from the repo root, after `cd bashy && bashy dag dist` produces bashy-linux-<arch>):
 #   cp bashy/dist/bashy-linux-arm64 bashy/eval/agent-shell/containers/
 #   podman build --build-arg TARGETARCH=arm64 \
 #     -f bashy/eval/agent-shell/containers/bench.Containerfile \

@@ -116,7 +116,7 @@ already installed:
 ```sh
 git clone https://github.com/qiangli/bashy
 cd bashy
-make build                         # -> bin/bash and bin/bashy
+bashy dag build                    # -> bin/bash and bin/bashy
 ```
 
 ## Containers — the offline image

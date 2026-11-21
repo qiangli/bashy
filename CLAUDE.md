@@ -43,7 +43,7 @@ exposes two no-op hook vars (`AgentOSDispatch`, `AgentOSWireExec`); `cmd/bashy`
 sets them to `internal/agentos.{Dispatch,WireExec}` only when invoked as
 `bashy`; its `sh` and `bash` aliases leave the defaults. `cmd/bashy` also
 registers Go coreutils applets and dispatches their alias names directly.
-`cmd/bash` never imports coreutils or AgentOS. `make build` produces the
+`cmd/bash` never imports coreutils or AgentOS. `bashy dag build` produces the
 optional `bin/bash` alongside `bin/bashy`; release archives build the single
 `bashy` payload directly from `cmd/bashy`.
 
@@ -57,7 +57,7 @@ expansion, startup files, version vars, the interactive loops, and the bash
 5.3 test-suite runner. The actual shell semantics (parameter expansion,
 arrays, namerefs, `[[ ]]`, arithmetic, builtins, …) live in `mvdan.cc/sh/v3`'s
 `interp`/`expand`/`syntax` packages. A feature that needs an interpreter
-change is edited in `../sh`; this repo measures it via `make test-bash`.
+change is edited in `../sh`; this repo measures it via `bashy dag test-bash`.
 
 ### Source layout
 
@@ -67,7 +67,7 @@ into the shared `internal/cli` core; `internal/agentos/` is the AgentOS wiring
 over `../yoke` + `../coreutils` (ExecHandler ring, front-door dispatch, learn
 middleware, contracts natives); `tools/bash53suite` is the ONE fixture runner;
 `skills/` is embedded; `native/` is the unix C launcher; `scripts/` holds the
-supply-chain and build-isolation lanes `make test` runs first.
+supply-chain and build-isolation lanes `bashy dag test` runs first.
 
 ## Name
 
@@ -200,7 +200,7 @@ stay in the root module. A nested module restates only the replaces it needs.
 go.mod pins** — the go.work hides it, and CI (no workspace) fails with
 `no required module provides package` for code that plainly exists. So
 `scripts/hooks/pre-push` resolves the standalone graph
-(`GOWORK=off go list -deps`) at push time; install it with `make hooks`. To
+(`GOWORK=off go list -deps`) at push time; install it with `bashy dag hooks`. To
 move pins: push the sibling first (a pin must name a pushed commit), then
 `bashy mod sync` (or `bashy dag sync` at the umbrella root), commit go.mod
 and go.sum with the change that needs them. `bashy mod drift` shows what
@@ -211,33 +211,45 @@ newer ycode.
 ## Build / test / lint
 
 ```sh
-make build              # -> bin/bash (pure drop-in, cmd/bash) + bin/bashy (AgentOS, cmd/bashy) — two independent binaries
-make build-bash         # only bin/bash — all the conformance harness needs (skips the embed-heavy bashy build)
-make build-host         # full unix host build (= BASHY_ENGINES=1 BASHY_OBS=1 + embed blobs)
-make install            # install to $DHNT_BIN_DIR (default ~/.local/bin) — installs the .real pair too
-make build-fips         # both binaries against the Go FIPS 140-3 module (GOFIPS140) — see docs/fips-140.md
-make test               # scripts/test-build-fail-closed.sh, then go test ./...
-make test-bash          # native non-root local diagnostic (serial)
-make test-bash-parallel # native host diagnostic, fanned out across cores
-make test-bash-gate     # THE release gate: sealed 86/86 in both Bash# modes
-make test-bash-container # one sealed mode (BASH53_BASHPP=0), writes evidence JSON
-make test-bash-list     # list available fixtures with per-fixture PASS/FAIL/TIME/SKIP
-make test-yash          # yash POSIX (-p) scoreboard — the headline conformance-frontier metric
-make test-yash-list     # print the current bashy-specific yash failure list
-make test-zsh           # zsh-own-suite Tier-0 scoreboard (tools/ztst runner; INFO metric, not a gate)
-make test-uutils        # REFUSES native host execution: use only the contained runner (OOM/root-walk landmines)
-make test-uutils-safety # the only bounded uutils harness validation that may run natively
-make dist               # cross-compile static binaries for all 6 platforms (pure Go, no siglaunch — see below)
-make smoke-chat AGENT=… # governed-launcher contract smoke (INFO, SKIPs without an agent or pty)
-make hooks              # install scripts/hooks/pre-push (gofmt + standalone module graph)
-make tidy               # go mod tidy + gofmt -s -w . + go vet ./...
-make help               # every target with its `## ` doc line
+bashy dag build              # -> bin/bash (pure drop-in, cmd/bash) + bin/bashy (AgentOS, cmd/bashy) — two independent binaries
+bashy dag build-bash         # only bin/bash — all the conformance harness needs (skips the embed-heavy bashy build)
+bashy dag build-host         # full unix host build (= BASHY_ENGINES=1 BASHY_OBS=1 + embed blobs)
+bashy dag install            # install to $DHNT_BIN_DIR (default ~/.local/bin) — installs the .real pair too
+bashy dag build-fips         # both binaries against the Go FIPS 140-3 module (GOFIPS140) — see docs/fips-140.md
+bashy dag test               # scripts/test-build-fail-closed.sh, then go test ./...
+bashy dag test-bash          # native non-root local diagnostic (serial)
+bashy dag test-bash-parallel # native host diagnostic, fanned out across cores
+bashy dag test-bash-gate     # THE release gate: sealed 86/86 in both Bash# modes
+bashy dag test-bash-container # one sealed mode (BASH53_BASHPP=0), writes evidence JSON
+bashy dag test-bash-list     # list available fixtures with per-fixture PASS/FAIL/TIME/SKIP
+bashy dag test-yash          # yash POSIX (-p) scoreboard — the headline conformance-frontier metric
+bashy dag test-yash-list     # print the current bashy-specific yash failure list
+bashy dag test-zsh           # zsh-own-suite Tier-0 scoreboard (tools/ztst runner; INFO metric, not a gate)
+bashy dag test-uutils        # REFUSES native host execution: use only the contained runner (OOM/root-walk landmines)
+bashy dag test-uutils-safety # the only bounded uutils harness validation that may run natively
+bashy dag dist               # cross-compile static binaries for all 6 platforms (pure Go, no siglaunch — see below)
+bashy dag smoke-chat AGENT=… # governed-launcher contract smoke (INFO, SKIPs without an agent or pty)
+bashy dag hooks              # install scripts/hooks/pre-push (gofmt + standalone module graph)
+bashy dag tidy               # go mod tidy + gofmt -s -w . + go vet ./...
+bashy dag --list             # every target with its doc line
+bashy dag --makefile         # regenerate the forwarding Makefile (verify: --makefile --check)
 ```
+
+**There is no hand-written Makefile.** `dag.md` is the only build and test
+source (Sprint 660); the committed `Makefile` is a GENERATED, forward-only
+projection of its targets — every recipe is `bashy dag <target>`, and
+`.DEFAULT` forwards anything else — kept so that an agent or a human who
+reaches for `make` is taught the native form. Never edit it: `bashy dag
+fmtcheck` fails when it drifts from `dag.md`, and `bashy dag --makefile`
+regenerates it. `make <target>` still works everywhere (under GNU make and
+under bashy's own POSIX make), and `VAR=value` operands pass through to the
+dag target either way.
 
 ### Product runtime startup contract
 
-Build shipped binaries through `scripts/go-product.sh build` (used by Make,
-DAG artifact builds and release configuration). It applies a source-hash-pinned
+Build shipped binaries through `scripts/go-product.sh build` (used by the dag
+build targets, DAG artifact builds and release configuration). It applies a
+source-hash-pinned
 Go 1.27.2 overlay so ordinary inherited asynchronous signal ignores survive
 before main. It never modifies the installed GOROOT. Plain upstream `go build`
 does not supply this early-startup contract. The wrapper is build-only; use
@@ -246,7 +258,7 @@ See `docs/plan-startup-signal-contract.md` for the precise scope and gates.
 
 ### The unix binaries are a C launcher over the Go binary
 
-On linux/darwin, `make build` / `build-bash` / `build-bashy` / `build-fips` /
+On linux/darwin, `bashy dag build` / `build-bash` / `build-bashy` / `build-fips` /
 `install` emit **two files per shell**: `bin/bash.real` (the Go program) and
 `bin/bash` (a small native C launcher compiled from `native/siglaunch.c.in` with
 `cc`, which execs it). Same for `bashy`/`bashy.real`. The launcher exists because
@@ -257,11 +269,11 @@ POSIX-cert startup-signal behavior — its regression test is
 `internal/cli/signal_tp714_fault_unix_test.go` (plus `native/siglaunch_test.go`).
 
 Consequences: `go build -o bin/bash ./cmd/bash` **overwrites the launcher with the
-Go binary** and silently loses the snapshot — always go through the Makefile. The
-harness, `make install`, and the installer all know about the `.real` pair.
-Windows and every `make dist` cross-compile are plain pure-Go binaries with no
-launcher (`CGO_ENABLED=0`), so this is a host-build shape, not a shipped-artifact
-one.
+Go binary** and silently loses the snapshot — always go through `bashy dag
+build` (or `make build`, which forwards to it). The harness, `bashy dag
+install`, and the installer all know about the `.real` pair. Windows and every
+`bashy dag dist` cross-compile are plain pure-Go binaries with no launcher
+(`CGO_ENABLED=0`), so this is a host-build shape, not a shipped-artifact one.
 
 The public 86-fixture Bash 5.3 gate is necessary but not the complete shell
 regression gate. On the licensed native host, the sibling proprietary harness
@@ -274,7 +286,7 @@ proprietary harness checkout.
 
 **dev-host delivery gate.** A verified Bashy change is not complete when tests
 pass or a commit is pushed. After the umbrella pin is bumped, rebuild on dev-host,
-install the canonical binary with `make install` (default
+install the canonical binary with `bashy dag install` (default
 `~/.local/bin/bashy`), and smoke-test the changed command surface through that
 installed PATH binary. Record the installed path and smoke result in the
 handoff. Do not substitute a repo-local binary for this final check.
@@ -292,8 +304,8 @@ landed.
 **Running a single test.** Two axes, depending on what you're iterating on:
 
 ```sh
-make test-bash TESTS="comsub varenv"      # only those bash-5.3 fixtures (also honored by test-bash-parallel)
-make test-bash-run TESTS="comsub"         # the fixture loop WITHOUT rebuilding bin/bash
+bashy dag test-bash TESTS="comsub varenv"      # only those bash-5.3 fixtures (also honored by test-bash-parallel)
+bashy dag test-bash-run TESTS="comsub"         # the fixture loop WITHOUT rebuilding bin/bash
 go test -run TestPromptExpand ./internal/cli   # one Go test
 go test -run TestDoctor -v ./internal/agentos
 ```
@@ -352,41 +364,41 @@ passed in `bashy-cert`, so that temporary skip is retired.
 uses a disposable, non-root OCI container with hard memory, PID, and wall-time
 limits, no network, and no host-root/home mount. Its permanent known-case
 quarantine has no override. A killed, truncated, or denominator-inconsistent
-cargo transcript emits no scoreboard. Run only `make test-uutils-safety` for
+cargo transcript emits no scoreboard. Run only `bashy dag test-uutils-safety` for
 bounded harness validation. See `docs/uutils-scoreboard.md` and
 `../docs/conformance-test-landmines.md`.
 
 Beyond the bash-5.3 fixture gate, the broader conformance matrix (engine
 unit tests, POSIX-mode parity, the XCU/Oils/Austin/multi-shell differentials,
 and the yash POSIX scoreboard) is driven via the `bashy dag` task runner — the
-agent-first dogfood of the Makefile:
+agent-first replacement for a hand-written Makefile:
 
 ```sh
 ./bashy dag build                   # fresh checkout bootstrap: builds bin/bashy if needed
 ./bashy dag install                 # install into $DHNT_BIN_DIR (default ~/.local/bin)
 bashy dag suites.md -j8 -k          # whole conformance matrix in parallel (-k: don't halt on first failure)
 bashy dag suites.md test-bash yash  # a subset of suites
-bashy dag --list                    # what `make help` shows, as DAG targets (see dag.md)
+bashy dag --list                    # every target with its doc line (what `make help` forwards to)
 bashy dag --json test               # machine-readable envelope for an agent
 ```
 
 `./bashy` (repo root) is a POSIX-sh bootstrap: it builds `bin/bashy` on first
 use (preferring an already-installed `bashy` to compile itself) and then execs
 it, so a fresh checkout can run `./bashy dag …` with nothing but Go on the box.
-Once `make install` has run, drop the `./` and use the PATH binary.
+Once `bashy dag install` has run, drop the `./` and use the PATH binary.
 
 `suites.md` and `dag.md` are literate task files: each `###` heading is a
 target with `Requires:`/`Sources:`/`Effects:` metadata, run in topological
 order through the in-process shell. `suites.md` is the conformance matrix
-(`test-bash` is a native diagnostic; the release gate is `make test-bash-gate`;
+(`test-bash` is a native diagnostic; the release gate is `bashy dag test-bash-gate`;
 the differentials are INFO probes);
 `ci.dag.md` is the shared CI graph for dhnt Go projects — other repos pull it in
 by pinned reference (`include: gh:qiangli/bashy@vX.Y.Z/ci.dag.md`) and override
 only the vars that differ, so a change here is cross-repo.
-`dag.md` mirrors the Makefile's build/test/lint targets and adds the chunked /
-fleet / container conformance lanes (`test-bash-chunks`, `test-bash-chunks-fleet`,
-`test-bash-chunks-container`, `yash-chunks`) that the Makefile has no equivalent
-for. **The file is `dag.md`, lowercase** — `DAG.md` only resolves on a
+`dag.md` carries the build/test/lint targets the Makefile used to hold, plus the
+chunked / fleet / container conformance lanes (`test-bash-chunks`,
+`test-bash-chunks-fleet`, `test-bash-chunks-container`, `yash-chunks`) the
+Makefile never had. **The file is `dag.md`, lowercase** — `DAG.md` only resolves on a
 case-insensitive filesystem (macOS) and breaks on Linux/CI.
 **Bodies run in the invoking cwd (make parity, Sprint 185)** — `-f` only picks
 the file; there is no `-C`: `bashy awd DIR -- bashy dag …` is the one
@@ -401,27 +413,27 @@ or `~~~csharp as cs … ~~~` fence and call
 (positional string args, stdout result, non-zero status error; never host bash);
 `examples/dag/{mini-swe-agent,nanochat}/dag.md` (Python, `make
 smoke-dag-python`), `examples/dag/{opencode,openclaw,hermes-agent}/dag.md`
-(TypeScript — Hermes has both fences in one body; `make smoke-dag-typescript`,
+(TypeScript — Hermes has both fences in one body; `bashy dag smoke-dag-typescript`,
 Sprint 186), `examples/dag/{uv,codex,bun}/dag.md` (Rust — `smoke` reads the
 workspace from a fence, `run` launches the `cargo build` output from one;
-`make smoke-dag-rust`, Sprint 188) and
+`bashy dag smoke-dag-rust`, Sprint 188) and
 `examples/dag/{ffmpeg,curl,git,tesseract,llama.cpp,cmake}/dag.md` (C and
 C++ — `smoke` includes the checkout's own self-contained header at compile
 time, `run` launches the `configure`+`make` / `cmake --build` / `bootstrap`
-output through `popen`; `make smoke-dag-c`, Sprint 190), and
+output through `popen`; `bashy dag smoke-dag-c`, Sprint 190), and
 `examples/dag/{gh,hugo,caddy}/dag.md` (Go — imports each checkout's package,
-then launches its `go build` output; `make smoke-dag-go`, Sprint 192) are the
+then launches its `go build` output; `bashy dag smoke-dag-go`, Sprint 192) are the
 worked examples, one real repo each — see `docs/dag.md` §Bash++ bodies. A
 body may also hold a TEXT fence (Sprint 234, B30): `~~~dockerfile as img` /
 `~~~tf as iac` / `~~~k8s` / `~~~helm` / `~~~skill` / `~~~dag`, whose alias
 exposes the processor's declared verbs with their effect atoms (`@guard`
 denies an excess verb with 126), or `~~~<type> as <alias> !<runner>` for a
 runner that declares its own `methods`; `examples/dag/caddy/dag.md` `image`
-and `examples/quickstart/pipeline.bsh` under `make smoke-dag-text`. The
+and `examples/quickstart/pipeline.bsh` under `bashy dag smoke-dag-text`. The
 MANIFEST fences (Sprint 238) — `~~~cargo`, `~~~pyproject`, `~~~gomod`,
 `~~~cmake`, `~~~makefile`, `~~~package` — carry a project manifest inline and
 drive the toolchain bashy provisions in the directory `awd` chose, the tree
-byte-identical (`examples/manifests/`, `make smoke-dag-manifests`); a
+byte-identical (`examples/manifests/`, `bashy dag smoke-dag-manifests`); a
 `~~~gomod` fence is the `~~~go` code fence's module. A dag body
 must not lean on bashy's `sed`/`grep`/`cut`/`sort`/`tr` for a check: they
 refuse the macOS default `LANG=en_US.UTF-8` (coreutils' ctype/collate locale
@@ -492,9 +504,9 @@ list. A todo needs no sprint to exist; sprint work is tracked as stories on
 the card, and the sprint card (spec-ref, acceptance, continuity) carries the
 request, plan and details. Delivery commits
 carry `Sprint:` / `Story:` / `Story-ID:` trailers. After a change:
-`go test ./...` and `make test-bash`, then commit.
+`go test ./...` and `bashy dag test-bash`, then commit.
 
-The goal is **PASS-count flips**: `make test-bash-list` prints per-fixture
+The goal is **PASS-count flips**: `bashy dag test-bash-list` prints per-fixture
 PASS/FAIL/TIME/SKIP, and the headline three-tuple at the top of `docs/TODO.md`
 is the scoreboard. As of 2026-06 the bash-5.3 fixture suite is at **86 passing,
 0 failing, 0 skipped (100% of 86 measured fixtures)** — so the active frontier
@@ -507,7 +519,7 @@ glue here. Always re-read the live headline in `docs/TODO.md` rather than
 trusting any count quoted here.
 
 **Scoreboard reliability.** There is exactly **one fixture runner**:
-`tools/bash53suite`. `make test-bash`, `make test-bash-parallel` and every
+`tools/bash53suite`. `bashy dag test-bash`, `bashy dag test-bash-parallel` and every
 `bashy dag` chunk target drive that same binary — which is what makes
 "chunked == serial" a checkable claim. (Until 2026-07-12 the Makefile
 implemented a *second* runner in shell whose watchdog silently failed to kill a
@@ -540,7 +552,7 @@ this gate failed before — `coproc`, `jobs` and `trap` were skipped *because th
 hung*, so CI stayed green while three fixtures went unmeasured. Nothing is skipped
 today; all 86 run.
 
-The authoritative release result is `make test-bash-gate`: it runs both
+The authoritative release result is `bashy dag test-bash-gate`: it runs both
 `BASH53_BASHPP=0` and `=1` through the sealed container, requiring 86/86 in
 each mode. Each mode writes `bin/bash53-evidence-<mode>.json` (override with
 `BASH53_EVIDENCE`). Set `BASH53_BASELINE` to previous evidence for the same
@@ -550,26 +562,39 @@ The sealed container bakes the
 testee, this runner, and the pinned fixture corpus into one Linux image, then
 runs non-root with an isolated tmpfs, no network, a read-only root, and a PTY.
 That prevents host `/tmp`, locale, permission, and controlling-terminal state
-from masquerading as shell regressions. Native `make test-bash` remains the
+from masquerading as shell regressions. Native `bashy dag test-bash` remains the
 fast host-integration lane; it is useful diagnostics, but its result is not a
 release verdict when the host cannot provide the fixture environment.
 
 ### Bash 5.3 fixtures (gitignored symlink)
 
-`external/bash-5.3` is a **gitignored symlink** into a Bash 5.3 fixture tree.
-`make test-bash`, `make test-bash-parallel`, `make test-bash-list`, and the
-helper target create it automatically when absent: the released Bash 5.3
-tarball is pinned by SHA-256, the required `tests/` and `support/` trees are
-extracted atomically under the user cache directory, and the checkout symlink
-points there. An existing local source-tree symlink remains valid. To provide
-one explicitly instead:
+`external/bash-5.3` is a **gitignored** Bash 5.3 fixture tree (a checkout or a
+symlink into one). It is external GPL test data, so bashy never vendors it;
+there are two hydration targets and they are NOT interchangeable:
+
+- **`test-bash-data`** — what `bashy dag test-bash`, `test-bash-parallel` and
+  `test-bash-list` actually require. It hard-codes no URL: name the source or it
+  **fails loudly** rather than measuring nothing. An existing tree (git checkout
+  or any directory with `tests/`) is accepted as-is.
+- **`test-bash-fixtures`** — the pinned-tarball route (`tools/bash53fixtures`):
+  SHA-256 verified, cached under the user cache directory, linked at
+  `external/bash-5.3`. A custom `BASH_TESTS_DIR` is never downloaded.
+
+```sh
+BASH53_TESTDATA_REPO=https://github.com/qiangli/bash53-testdata \
+  bashy dag test-bash            # clone on first use, --ff-only pull after
+BASH53_TESTDATA_REF=<tag-or-sha> # pin the immutable Bash 5.3 ref
+bashy dag test-bash-fixtures     # or hydrate from the SHA-256-pinned tarball
+```
+
+To provide a tree explicitly instead:
 
 ```sh
 mkdir -p external
 ln -s /path/to/bash-5.3 external/bash-5.3
 ```
 
-`make test-bash-helpers` compiles the `recho`/`zecho` C helpers the suite
+`bashy dag test-bash-helpers` compiles the `recho`/`zecho` C helpers the suite
 needs. Release binaries link no C; see [build evidence](docs/public-claims-evidence.md).
 
 ### Doc index
