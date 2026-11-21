@@ -6,6 +6,9 @@ seq: 3276
 status: todo
 priority: p2
 created: 2026-11-20T23:38:48.570104Z
+sprint: 688
+sprint_id: b6d0bf82-bf8a-5ba7-bbab-90b24be56deb
+sprint_title: 'Worker supervision round 2: session state, rate-limit handoff, spend watermarks, board performance'
 ---
 
 Operator request 2026-11-20. Build on what exists - no new store or transport: yoke pkg/llmbudget (SubscriptionHeadroom = measured remaining fraction of a vendor subscription, forecast, analyzer), 'bashy sprint monitor' (shared accounts and competing work; observe-only today, e.g. '12 accounts, 0 alerts, 15 unknown'), 'bashy llm usage' (gateway requests/tokens/cost by principal), 'bashy llm peer limit' (hard caps), and fleet usage_signals (vendor limit messages).

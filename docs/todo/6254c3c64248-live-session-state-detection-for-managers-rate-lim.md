@@ -6,9 +6,9 @@ seq: 3272
 status: todo
 priority: p1
 created: 2026-11-20T23:26:08.610507Z
-sprint: 576
-sprint_id: 0dcfdbeb-04ba-549f-96e0-a3febc9a6618
-sprint_title: 'Proactive sprint manager: wake, supervise, review'
+sprint: 688
+sprint_id: b6d0bf82-bf8a-5ba7-bbab-90b24be56deb
+sprint_title: 'Worker supervision round 2: session state, rate-limit handoff, spend watermarks, board performance'
 ---
 
 Operator request 2026-11-20 after watching three stalls the conductor could not see: (a) muse hit a 429/rate limit; (b) codex finished a turn with a recap and sat idle waiting for its next instruction (not a CR/LF problem); (c) agy sat with typed input waiting for Enter. The conductor's monitor only watches the board, so all three looked like 'working'.

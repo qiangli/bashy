@@ -3,9 +3,10 @@ id: e1b0b5ae8d15
 kind: bug
 title: 'Headless/automation Chrome launches hit the macOS keychain: every launch pops ''Chrome Safe Storage'' at the operator (dialog storm from tests)'
 seq: 3274
-status: todo
+status: assigned
 priority: p1
 created: 2026-11-20T23:38:23.28431Z
+assignee: agy-gemini4-carbon
 sprint: 682
 sprint_id: 623586bb-742f-570e-87c9-9af0c101bac1
 sprint_title: Shaping-enable the example apps for consumers (viewer, session, form, board/whiteboard/table/hello-world, notepad/chart)
