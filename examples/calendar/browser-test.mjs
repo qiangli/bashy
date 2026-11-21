@@ -86,9 +86,9 @@ try {
   await page.locator('#saveBtn').click();
   await page.locator('[data-desk-alert]').filter({hasText: 'Saved event'}).waitFor({timeout: 10000});
 
-  await page.waitForURL(/\?id=/, {timeout: 5000});
+  await page.waitForFunction(() => Boolean(new URL(window.location.href).searchParams.get('id')), null, {timeout: 5000});
   const evID = new URL(page.url()).searchParams.get('id');
-  assert.ok(evID, 'Saved event must populate ?id= in URL');
+  assert.ok(evID, 'Saved event must populate id in URL');
 
   // 3. Verify detail panel renders Markdown body and refs through /api/render (.desk-content)
   await page.locator('#detailBody.desk-content h1').filter({hasText: 'Agenda Notes'}).waitFor({timeout: 5000});
@@ -114,15 +114,16 @@ try {
   await memberPage.locator('[data-desk-alert]').filter({hasText: 'Joined shared event'}).waitFor({timeout: 10000});
   await memberPage.locator('#detailTitle').filter({hasText: 'Sprint 616 Review'}).waitFor({timeout: 5000});
 
-  // Reload owner view to see active members and revoke the joined member
+  // Reload owner view to see active members and revoke all member sessions
   await page.locator('#applyFilterBtn').click();
   await page.locator('.cal-revoke-btn').nth(1).waitFor({timeout: 5000});
-  // Revoke any member other than owner's own browser session, or revoke all and verify owner key keeps owner working
   const revokeBtns = page.locator('.cal-revoke-btn');
-  const btnCount = await revokeBtns.count();
-  for (let i = 0; i < btnCount; i++) {
+  let btnCount = await revokeBtns.count();
+  while (btnCount > 0) {
+    const nextExpected = btnCount - 1;
     await revokeBtns.first().click();
-    await page.locator('[data-desk-alert]').filter({hasText: 'Revoked member'}).waitFor({timeout: 5000});
+    await page.waitForFunction(n => document.querySelectorAll('.cal-revoke-btn').length === n, nextExpected, {timeout: 5000});
+    btnCount = nextExpected;
   }
 
   // Member reloads and now gets 404
