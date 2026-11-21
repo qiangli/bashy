@@ -104,6 +104,20 @@ standard-library finding is always fixed by raising the `toolchain` line
 across the umbrella, never by an exception. Run the check locally from an
 umbrella checkout before proposing a candidate tag.
 
+**Operator override.** When the operator decides to publish a pre-release
+despite reachable findings, the release manager sets both
+`RELEASE_VULN_OVERRIDE` (the reason) and `RELEASE_VULN_OVERRIDE_BY` (the
+approving role) for `scripts/local-release-gate.sh`. Setting only one is an
+error. Unwaived reachable findings are then written to `vuln-override.json`
+beside the scanner reports instead of failing the gate. The receipt records
+the override with its verdict `override`, approver, reason, the overridden ids
+per scan scope and the file digest. Scanner failures and the license gate are
+never overridden. The draft release notes must carry a `Vulnerability
+override` section listing the ids and the reason; `release.yml` refuses a
+receipt with an override when the notes lack it, and shows the override in the
+run summary. An override is temporary: the next candidate retires it by
+upgrading the toolchain and dependencies.
+
 ## License gate
 
 `scripts/verify-license-gate.sh` (`make license-gate`) verifies that bashy's

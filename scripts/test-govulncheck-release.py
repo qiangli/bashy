@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """A failed scanner must never become a passing local release receipt."""
+import json
 import os
 import pathlib
 import shutil
@@ -10,7 +11,7 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 class ScannerStatusTests(unittest.TestCase):
-    def run_scanner(self, code, finding=''):
+    def run_scanner(self, code, finding='', **extra):
         with tempfile.TemporaryDirectory() as work:
             work = pathlib.Path(work)
             toolchain = next(line.split()[1] for line in (ROOT / 'go.mod').read_text().splitlines() if line.startswith('toolchain '))
@@ -37,7 +38,13 @@ esac
             env = dict(os.environ, PATH=str(work) + os.pathsep + os.environ['PATH'],
                        FAKE_SCANNER=str(fake), FAKE_TOOLCHAIN=toolchain, FAKE_EXIT=str(code), FAKE_FINDING=finding,
                        GOVULNCHECK_OUT=str(work / 'reports'))
-            return subprocess.run(['bash', str(ROOT / 'scripts/govulncheck-release.sh'), str(work)], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            for key in ('RELEASE_VULN_OVERRIDE', 'RELEASE_VULN_OVERRIDE_BY'):
+                env.pop(key, None)
+            env.update(extra)
+            result = subprocess.run(['bash', str(ROOT / 'scripts/govulncheck-release.sh'), str(work)], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            override = work / 'vuln-override.json'
+            result.override = json.loads(override.read_text()) if override.exists() else None
+            return result
 
     def test_clean_scan_passes(self):
         result = self.run_scanner(0)
@@ -54,5 +61,30 @@ esac
         result = self.run_scanner(3, 'reachable')
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(b'REACHABLE', result.stdout)
+
+    def test_operator_override_records_reachable_findings(self):
+        result = self.run_scanner(3, 'reachable', RELEASE_VULN_OVERRIDE='ship rc with disclosed advisories', RELEASE_VULN_OVERRIDE_BY='operator')
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertIn(b'OVERRIDE by operator', result.stdout)
+        self.assertEqual(result.override, {'by': 'operator', 'reason': 'ship rc with disclosed advisories',
+                                           'overridden': {'outpost': ['GO-FIXTURE-1']}})
+
+    def test_override_needs_reason_and_approver(self):
+        for extra in ({'RELEASE_VULN_OVERRIDE': 'why'}, {'RELEASE_VULN_OVERRIDE_BY': 'operator'}):
+            with self.subTest(extra=extra):
+                result = self.run_scanner(3, 'reachable', **extra)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(b'must both be set', result.stderr)
+
+    def test_override_never_hides_scanner_failure(self):
+        result = self.run_scanner(1, '', RELEASE_VULN_OVERRIDE='why', RELEASE_VULN_OVERRIDE_BY='operator')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b'govulncheck failed', result.stderr)
+        self.assertIsNone(result.override)
+
+    def test_clean_scan_writes_no_override(self):
+        result = self.run_scanner(0, '', RELEASE_VULN_OVERRIDE='why', RELEASE_VULN_OVERRIDE_BY='operator')
+        self.assertEqual(result.returncode, 0, result.stderr.decode())
+        self.assertIsNone(result.override)
 
 if __name__ == '__main__': unittest.main()

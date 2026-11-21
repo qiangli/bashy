@@ -42,10 +42,13 @@ def verify(record, root, commit, now=None):
             raise ValueError('frozen source lock differs: ' + name)
     for gate in ('license', 'govulncheck'):
         result = record.get(gate, {})
-        if result.get('verdict') != 'pass' or not result.get('reports'):
+        verdicts = ('pass', 'override') if gate == 'govulncheck' else ('pass',)
+        if result.get('verdict') not in verdicts or not result.get('reports'):
             raise ValueError(gate + ' needs passing retained reports')
         if any(not re.fullmatch('[0-9a-f]{64}', v) for v in result['reports'].values()):
             raise ValueError('invalid report digest')
+    if record['govulncheck']['verdict'] == 'override':
+        verify_override(record['govulncheck'].get('override'))
     date = timestamp(record['govulncheck']['database_modified'])
     if date > now or now - date > dt.timedelta(days=7):
         raise ValueError('vulnerability database must be no older than seven days and not in the future')
@@ -69,6 +72,21 @@ def verify(record, root, commit, now=None):
             if not re.fullmatch('[0-9a-f]{64}', module.get('go_mod_sha256', '')):
                 raise ValueError('missing transitive go.mod content digest')
     return record
+
+def verify_override(override):
+    """An explicit operator override of reachable findings: who, why, which ids."""
+    if not isinstance(override, dict):
+        raise ValueError('vulnerability override record missing')
+    for key in ('reason', 'by'):
+        if not isinstance(override.get(key), str) or not override[key].strip():
+            raise ValueError('vulnerability override needs a non-empty ' + key)
+    ids = override.get('overridden')
+    if not isinstance(ids, dict) or not ids or not all(isinstance(v, list) and v for v in ids.values()):
+        raise ValueError('vulnerability override names no overridden findings')
+    if any(not isinstance(i, str) or not re.fullmatch(r'GO-\d{4}-\d+', i) for v in ids.values() for i in v):
+        raise ValueError('invalid overridden vulnerability id')
+    if not re.fullmatch('[0-9a-f]{64}', override.get('sha256', '')):
+        raise ValueError('vulnerability override digest missing')
 
 def collect(root, report_dir, scopes):
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
@@ -118,6 +136,10 @@ def collect(root, report_dir, scopes):
               'govulncheck': {'verdict': 'pass', 'database_modified': min(dates).isoformat(),
                              'reports': {p.name: digest(p) for p in reports}},
               'module_graphs': graphs, 'module_graphs_sha256': hashlib.sha256(canonical(graphs)).hexdigest()}
+    override = report_dir / 'vuln-override.json'
+    if override.is_file():
+        record['govulncheck']['verdict'] = 'override'
+        record['govulncheck']['override'] = dict(json.loads(override.read_text()), sha256=digest(override))
     return verify(record, root, commit, now)
 
 def verify_distribution(record, directory):
@@ -158,7 +180,13 @@ def main():
         record = verify(json.loads(a.receipt.read_text()), a.root, a.commit or '')
         if a.dist:
             verify_distribution(record, a.dist)
-    print('local release security receipt: PASS')
+    override = record['govulncheck'].get('override') if record['govulncheck'].get('verdict') == 'override' else None
+    if override:
+        ids = sorted({i for v in override['overridden'].values() for i in v})
+        print('local release security receipt: PASS with vulnerability OVERRIDE by ' + override['by'] + ': ' + override['reason'])
+        print('overridden: ' + ' '.join(ids))
+    else:
+        print('local release security receipt: PASS')
 
 if __name__ == '__main__':
     try:

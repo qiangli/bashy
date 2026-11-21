@@ -62,6 +62,22 @@ class ReceiptTests(unittest.TestCase):
                 else: self.record[key]['verdict'] = 'fail'
                 with self.assertRaises(ValueError): self.check()
 
+    def test_operator_vulnerability_override(self):
+        override = {'reason': 'disclosed advisories', 'by': 'operator', 'sha256': '1' * 64,
+                    'overridden': {'yoke': ['GO-2026-6859']}}
+        self.record['govulncheck'].update(verdict='override', override=override)
+        self.check()
+        for key, bad in (('reason', ' '), ('by', ''), ('overridden', {}), ('overridden', {'yoke': []}),
+                         ('overridden', {'yoke': ['CVE-1']}), ('sha256', '')):
+            with self.subTest(key=key, bad=bad):
+                self.record['govulncheck']['override'] = dict(override, **{key: bad})
+                with self.assertRaises(ValueError): self.check()
+        del self.record['govulncheck']['override']
+        with self.assertRaises(ValueError): self.check()
+        self.record['govulncheck']['override'] = override
+        self.record['license']['verdict'] = 'override'
+        with self.assertRaises(ValueError): self.check()
+
     def test_old_future_missing_database_date_fails(self):
         for date in (self.now - dt.timedelta(days=8), self.now + dt.timedelta(seconds=1)):
             self.record['govulncheck']['database_modified'] = date.isoformat()
