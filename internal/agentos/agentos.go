@@ -1089,7 +1089,9 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 			dispatchExit(1)
 		}
 		dispatchExit(0)
-	case "mb", "messages", "inbox", "notify", "instance", "feed":
+	case "mb", "messages":
+		dispatchExit(runCommandAdapter("yoke", "mb", os.Args[1], os.Args[2:]))
+	case "inbox", "notify", "instance", "feed":
 		// The host communication front doors all share pkg/bus's fleet seams:
 		// identity, role/name resolution, and fleet selection. Mounting the
 		// command without this wire-up makes the feature look present while

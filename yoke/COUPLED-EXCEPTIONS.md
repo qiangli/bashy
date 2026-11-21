@@ -6,3 +6,4 @@ Tracking the 10 coupled verbs: `todo`, `dag`, `mb`, `inbox`, `kb`, `chat`, `meet
 |---|---|---|---|
 | `todo` | Converted | `yoke/todo` | Landed in 62ee3c74; standalone deps and help verified. |
 | `dag` | Converted | `yoke/dag` | Standalone deps and help verified; routed via `runCommandAdapter`. |
+| `mb` | Converted | `yoke/mb` | Standalone deps and help verified; routed via `runCommandAdapter`. |

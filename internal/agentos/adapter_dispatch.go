@@ -131,6 +131,8 @@ var adaptedVerbs = map[string][2]string{
 	"graph":       {"yoke", "graph"},
 	"lens":        {"yoke", "lens"},
 	"lens-script": {"yoke", "lens"},
+	"mb":          {"yoke", "mb"},
+	"messages":    {"yoke", "mb"},
 	"tokens":      {"yoke", "tokens"},
 	"llm":         {"yoke", "llm"},
 	"share":       {"yoke", "share"},
