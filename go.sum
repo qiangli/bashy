@@ -133,6 +133,8 @@ github.com/bahlo/generic-list-go v0.2.0 h1:5sz/EEAK+ls5wF+NeqDpk5+iNdMDXrh3z3nPn
 github.com/bahlo/generic-list-go v0.2.0/go.mod h1:2KvAjgMlE5NNynlg/5iLrrCCZ2+5xWbdbCW3pNTGyYg=
 github.com/bashsharp/bashsharp v0.0.0-20261119110900-4141cc07cfdc h1:cEeaNzLPAew1qJ7Lnkwm49lv7HlsByXwiFP9AluFPB0=
 github.com/bashsharp/bashsharp v0.0.0-20261119110900-4141cc07cfdc/go.mod h1:/TAgABzeJKFH96zWeDEYet1kDysCEeCzE+oMUzJla6c=
+github.com/bashsharp/bashsharp v0.0.0-20261121101805-58fa3c439d06 h1:T9Flpld7RR8n8TvMbX4YocjWLMeGhjKFmsW6RIxiACQ=
+github.com/bashsharp/bashsharp v0.0.0-20261121101805-58fa3c439d06/go.mod h1:lr4kQmENhJDSdSHlGK9Lv3pSO53A2Rrh9wqjR48/OLo=
 github.com/benbjohnson/clock v1.3.5 h1:VvXlSJBzZpA/zum6Sj74hxwYI2DIxRWuNIoXAzHZz5o=
 github.com/benbjohnson/clock v1.3.5/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
@@ -1090,8 +1092,12 @@ github.com/qiangli/yamux/v5 v5.0.0 h1:c0Jbq9IkVOO0kD2n8cTlHHIRqKtyy5Gy08RR3uEoyU
 github.com/qiangli/yamux/v5 v5.0.0/go.mod h1:YmWeys9yLj7O+j3afOEuWqgda3tbg7NOLsLmBtvD//o=
 github.com/qiangli/ycode v0.3.1-dev.0.20261118041524-e5be31355b48 h1:vbTsxQOXON67a3nwh7D5VzcKjlmaGEGPxamN3QfIVhE=
 github.com/qiangli/ycode v0.3.1-dev.0.20261118041524-e5be31355b48/go.mod h1:jmZwyPxj2RXJom2vtHu1a3lva/n8Vl8Wvav4ne1rtzc=
+github.com/qiangli/ycode v0.3.1-dev.0.20261121101805-4c6cee72ad8a h1:wuhoSBMvSdqRNdd3fkFX9hYCcURz7vis926bb+VPSSU=
+github.com/qiangli/ycode v0.3.1-dev.0.20261121101805-4c6cee72ad8a/go.mod h1:rgEUN160+w2n1uLQ9q3DN953/rTIfDgSUEpID8JwANk=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261118041524-e5be31355b48 h1:qFPqUOFlXSe/yvZUelbrVNyVJRXtE5Ic9IQpif+4vms=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261118041524-e5be31355b48/go.mod h1:8zZX1wILuTSAuirL8c8uEHbmZblqHZPKcxe53fCLQMc=
+github.com/qiangli/ycode/examples/genie v0.0.0-20261121101805-4c6cee72ad8a h1:AZ87IZSSbZ1XyuGCBbA2ku+3+Xd3uXjTDC3u43bMS7Q=
+github.com/qiangli/ycode/examples/genie v0.0.0-20261121101805-4c6cee72ad8a/go.mod h1:x6GayEqdfjk/3fNlF26YJD4sAEZo7RIC8TAdqcntvu4=
 github.com/qiangli/yoke v0.0.0-20261121110346-da4b02a4d244 h1:62znVCNaWiHeTl6JNsV0u8EuuHfxUGH+Jwj0J5J5Rew=
 github.com/qiangli/yoke v0.0.0-20261121110346-da4b02a4d244/go.mod h1:QrJQPI6fsS1RT6+7ztWY6vmZifqEKw2Ppeg8Ktx3ZlU=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f h1:aOhDxEjodWKHckz8+Bp49lmQXh80hK0ucSTtyJcj2NQ=

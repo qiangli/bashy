@@ -545,7 +545,7 @@ replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.
 
 replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261118041524-e5be31355b48
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261121101805-4c6cee72ad8a
 
 tool github.com/qiangli/outpost/cmd/outpost
 
@@ -576,7 +576,7 @@ replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewi
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261119110900-4141cc07cfdc
+	github.com/bashsharp/bashsharp v0.0.0-20261121101805-58fa3c439d06
 	github.com/benhoyt/goawk v1.31.0
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
@@ -588,7 +588,7 @@ require (
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/bash v0.0.0-20261121101805-42efe30317c4
 	github.com/qiangli/coreutils v0.0.0-20261121101804-c5832f99ccf6
-	github.com/qiangli/ycode v0.3.1-dev.0.20261118041524-e5be31355b48
+	github.com/qiangli/ycode v0.3.1-dev.0.20261121101805-4c6cee72ad8a
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261121110346-da4b02a4d244
 	github.com/qiangli/yoke/external/otel v0.0.0-20261121110346-da4b02a4d244
