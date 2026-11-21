@@ -92,6 +92,7 @@ var Tools = []Tool{
 	{"brainstorm", "Brainstorm", "💡"},
 	{"form", "Form", "📋"},
 	{"chart", "Chart", "📊"},
+	{"calendar", "Calendar", "📅"},
 }
 
 // LookupTool returns the family entry for name; unknown names (fixtures,

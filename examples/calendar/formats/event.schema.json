@@ -1,0 +1,84 @@
+{
+  "type": "object",
+  "description": "Shared calendar event entity (items/<id>.json). Shaping hook: field limits and allowed values.",
+  "required": ["id", "title", "start", "end", "tz", "status", "source"],
+  "additionalProperties": true,
+  "properties": {
+    "id": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Stable event id matching ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+    },
+    "title": {
+      "type": "string",
+      "maxLength": 400
+    },
+    "start": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 64
+    },
+    "end": {
+      "type": "string",
+      "format": "date-time",
+      "maxLength": 64
+    },
+    "tz": {
+      "type": "string",
+      "maxLength": 128,
+      "description": "Explicit IANA timezone validated with time.LoadLocation"
+    },
+    "location": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "body": {
+      "type": "string",
+      "format": "markdown",
+      "maxLength": 65536
+    },
+    "refs": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "string",
+        "maxLength": 1024
+      }
+    },
+    "audience": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "type": "string",
+        "maxLength": 128
+      }
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "closed", "cancelled"]
+    },
+    "source": {
+      "type": "object",
+      "required": ["provider"],
+      "additionalProperties": false,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["local", "ics", "google"]
+        },
+        "uid": {
+          "type": "string",
+          "maxLength": 512
+        }
+      }
+    },
+    "created": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "updated": {
+      "type": "string",
+      "maxLength": 64
+    }
+  }
+}

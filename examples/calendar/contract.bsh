@@ -1,0 +1,5 @@
+# Shaping contract: the base effect cap `bashy src pr verify` runs checks/
+# under. A check builds and tests the module inside the isolated clone
+# (read, write, exec) and provisions the Go toolchain into its scratch HOME,
+# which the verifier's scrubbed environment does not carry (net).
+@effects("read,write,exec,net")

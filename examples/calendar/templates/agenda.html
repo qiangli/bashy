@@ -1,0 +1,755 @@
+<style>
+.cal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--desk-space-3);
+  align-items: flex-end;
+}
+.cal-toolbar .desk-field {
+  margin-bottom: 0;
+  min-width: 150px;
+  flex: 0 1 auto;
+}
+.cal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+  gap: var(--desk-space-4);
+  align-items: start;
+}
+.cal-grid .desk-panel {
+  margin-bottom: var(--desk-space-4);
+}
+.cal-day {
+  margin-bottom: var(--desk-space-4);
+}
+.cal-day:last-child {
+  margin-bottom: 0;
+}
+.cal-day-heading {
+  font-size: var(--desk-text-sm);
+  font-weight: var(--desk-weight-strong);
+  color: var(--desk-muted);
+  padding-bottom: var(--desk-space-1);
+  border-bottom: 1px solid var(--desk-line);
+  margin: 0 0 var(--desk-space-2);
+}
+.cal-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--desk-space-2);
+}
+.cal-item {
+  border: 1px solid var(--desk-line);
+  border-radius: var(--desk-radius-md);
+  padding: var(--desk-space-3);
+  background: var(--desk-panel);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: var(--desk-space-1);
+}
+.cal-item:hover {
+  background: var(--desk-subtle);
+}
+.cal-item[data-active="true"] {
+  border-color: var(--desk-accent);
+}
+.cal-item-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--desk-space-2);
+  flex-wrap: wrap;
+}
+.cal-time {
+  font-family: var(--desk-font-mono);
+  font-size: var(--desk-text-xs);
+  color: var(--desk-muted);
+}
+.cal-item-title {
+  font-weight: var(--desk-weight-strong);
+}
+.cal-item[data-status="cancelled"] .cal-item-title {
+  text-decoration: line-through;
+  color: var(--desk-muted);
+}
+.desk-badge[data-status="cancelled"] {
+  background: var(--desk-danger-bg);
+  color: var(--desk-danger-ink);
+}
+.cal-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--desk-space-1);
+}
+.cal-meta-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--desk-space-1) var(--desk-space-3);
+  font-size: var(--desk-text-sm);
+  margin: var(--desk-space-3) 0;
+}
+.cal-meta-dl dt {
+  color: var(--desk-muted);
+  font-weight: var(--desk-weight-strong);
+}
+.cal-meta-dl dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.cal-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--desk-space-3);
+}
+.cal-share-box {
+  background: var(--desk-subtle);
+  border: 1px solid var(--desk-line);
+  border-radius: var(--desk-radius-md);
+  padding: var(--desk-space-2) var(--desk-space-3);
+  margin-top: var(--desk-space-3);
+  font-size: var(--desk-text-sm);
+  overflow-wrap: anywhere;
+}
+</style>
+
+<main class="desk-main">
+  <div data-desk-alert class="desk-alert"></div>
+
+  <section class="desk-panel" aria-label="Agenda controls">
+    <div class="cal-toolbar">
+      <div class="desk-row" role="group" aria-label="Agenda range">
+        <button type="button" class="desk-btn secondary" id="viewAll">All</button>
+        <button type="button" class="desk-btn secondary" id="viewWeek">Week</button>
+        <button type="button" class="desk-btn secondary" id="viewDay">Day</button>
+      </div>
+      <div class="desk-field">
+        <label for="anchorDate">Anchor date</label>
+        <input type="date" id="anchorDate" name="anchor_date">
+      </div>
+      <div class="desk-field">
+        <label for="tzInput">Viewer time zone (IANA)</label>
+        <input type="text" id="tzInput" name="viewer_tz" list="tzPresets" placeholder="UTC">
+        <datalist id="tzPresets">
+          <option value="UTC"></option>
+          <option value="America/Los_Angeles"></option>
+          <option value="America/New_York"></option>
+          <option value="Europe/London"></option>
+          <option value="Europe/Berlin"></option>
+          <option value="Asia/Tokyo"></option>
+          <option value="Asia/Shanghai"></option>
+          <option value="Australia/Sydney"></option>
+        </datalist>
+      </div>
+      <div class="desk-field">
+        <label for="statusFilter">Status</label>
+        <select id="statusFilter" name="status_filter">
+          <option value="">All statuses</option>
+          <option value="pending">pending</option>
+          <option value="cancelled">cancelled</option>
+          <option value="closed">closed</option>
+        </select>
+      </div>
+      <div class="desk-row">
+        <button type="button" class="desk-btn secondary" id="applyFilterBtn">Refresh</button>
+        <button type="button" class="desk-btn" id="newBtn">New Event</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="cal-grid">
+    <section class="desk-panel" id="agendaPane">
+      <h2 class="desk-h2" id="agendaHeading">Agenda</h2>
+      <div id="agendaList"></div>
+    </section>
+
+    <div>
+      <section class="desk-panel" id="detailPane" hidden>
+        <div class="cal-item-top">
+          <h2 class="desk-h2" id="detailTitle">Event</h2>
+          <span id="detailBadge"></span>
+        </div>
+        <dl class="cal-meta-dl">
+          <dt>ID</dt><dd><code id="detailId"></code></dd>
+          <dt>When</dt><dd id="detailWhen"></dd>
+          <dt>Event TZ</dt><dd><code id="detailTz"></code></dd>
+          <dt>Location</dt><dd id="detailLocation"></dd>
+          <dt>Audience</dt><dd id="detailAudience"></dd>
+          <dt>Source</dt><dd><code id="detailSource"></code></dd>
+        </dl>
+
+        <h3 class="desk-h2">Notes</h3>
+        <div id="detailBody" class="desk-content"></div>
+
+        <div id="detailRefsWrap" hidden>
+          <h3 class="desk-h2">References</h3>
+          <div id="detailRefs" class="desk-content"></div>
+        </div>
+
+        <div class="desk-row" id="detailActions">
+          <button type="button" class="desk-btn secondary" id="editBtn">Edit</button>
+          <button type="button" class="desk-btn secondary" id="shareBtn">Share Invite</button>
+          <button type="button" class="desk-btn secondary" id="cancelBtn">Cancel Event</button>
+          <button type="button" class="desk-btn danger" id="closeBtn">Close Event</button>
+          <a class="desk-btn secondary" id="exportIcsLink" href="api/export">Export .ics</a>
+        </div>
+
+        <div id="shareBox" class="cal-share-box" hidden>
+          <div class="desk-muted">Single-use invite URL:</div>
+          <div class="desk-row">
+            <code id="shareUrlText"></code>
+            <button type="button" class="desk-copy secondary" id="copyInviteBtn" data-desk-copy data-copy="" data-copied="false">Copy invite</button>
+          </div>
+        </div>
+
+        <div id="membersBox" class="cal-share-box" hidden>
+          <div class="desk-muted">Active members:</div>
+          <div id="membersList" class="desk-row"></div>
+        </div>
+      </section>
+
+      <section class="desk-panel" id="editorPane">
+        <h2 class="desk-h2" id="editorHeading">Create Event</h2>
+        <form id="eventForm" onsubmit="return false">
+          <div class="desk-field">
+            <label for="fTitle">Title</label>
+            <input id="fTitle" name="title" placeholder="Sprint 616 Demo & Review">
+          </div>
+          <div class="cal-form-row">
+            <div class="desk-field">
+              <label for="fStart">Start (RFC 3339)</label>
+              <input id="fStart" name="start" placeholder="2026-11-21T09:00:00Z">
+            </div>
+            <div class="desk-field">
+              <label for="fEnd">End (RFC 3339)</label>
+              <input id="fEnd" name="end" placeholder="2026-11-21T10:00:00Z">
+            </div>
+          </div>
+          <div class="cal-form-row">
+            <div class="desk-field">
+              <label for="fTz">Event Time Zone (IANA)</label>
+              <input id="fTz" name="tz" list="tzPresets" value="UTC">
+            </div>
+            <div class="desk-field">
+              <label for="fLocation">Location</label>
+              <input id="fLocation" name="location" placeholder="Room 3A or meeting link">
+            </div>
+          </div>
+          <div class="cal-form-row">
+            <div class="desk-field">
+              <label for="fRefs">References <span class="desk-recommended">comma-separated</span></label>
+              <input id="fRefs" name="refs" placeholder="kb:slug, sprint:616, https://example.com">
+            </div>
+            <div class="desk-field">
+              <label for="fAudience">Audience (person IDs)</label>
+              <input id="fAudience" name="audience" placeholder="alice, bob">
+            </div>
+          </div>
+          <div class="desk-field">
+            <label for="fBody">Agenda / Description (Markdown) <span class="desk-recommended">recommended</span></label>
+            <textarea id="fBody" name="body" placeholder="# Agenda&#10;&#10;- Topic 1&#10;- Topic 2"></textarea>
+          </div>
+          <div class="desk-row">
+            <button type="button" class="desk-btn" id="saveBtn" data-desk-shortcut="save" title="Save (⌘/Ctrl+S)">Save Event</button>
+            <button type="button" class="desk-btn secondary" id="resetFormBtn">Reset</button>
+          </div>
+        </form>
+      </section>
+    </div>
+  </div>
+
+  <p class="desk-footer">Self-hosted desk calendar · loopback only · re-surface with <code id="footerCmd">calendar list</code>.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  const STORAGE_KEYS = 'calendar-owner-keys';
+  const alertBox = document.querySelector('[data-desk-alert]');
+  const tzInput = document.getElementById('tzInput');
+  const anchorDateInput = document.getElementById('anchorDate');
+  const statusFilter = document.getElementById('statusFilter');
+  const agendaList = document.getElementById('agendaList');
+  const agendaHeading = document.getElementById('agendaHeading');
+
+  const detailPane = document.getElementById('detailPane');
+  const detailTitle = document.getElementById('detailTitle');
+  const detailBadge = document.getElementById('detailBadge');
+  const detailId = document.getElementById('detailId');
+  const detailWhen = document.getElementById('detailWhen');
+  const detailTz = document.getElementById('detailTz');
+  const detailLocation = document.getElementById('detailLocation');
+  const detailAudience = document.getElementById('detailAudience');
+  const detailSource = document.getElementById('detailSource');
+  const detailBody = document.getElementById('detailBody');
+  const detailRefsWrap = document.getElementById('detailRefsWrap');
+  const detailRefs = document.getElementById('detailRefs');
+  const shareBox = document.getElementById('shareBox');
+  const shareUrlText = document.getElementById('shareUrlText');
+  const copyInviteBtn = document.getElementById('copyInviteBtn');
+  const membersBox = document.getElementById('membersBox');
+  const membersList = document.getElementById('membersList');
+  const exportIcsLink = document.getElementById('exportIcsLink');
+  const footerCmd = document.getElementById('footerCmd');
+
+  const editorHeading = document.getElementById('editorHeading');
+  const fTitle = document.getElementById('fTitle');
+  const fStart = document.getElementById('fStart');
+  const fEnd = document.getElementById('fEnd');
+  const fTz = document.getElementById('fTz');
+  const fLocation = document.getElementById('fLocation');
+  const fRefs = document.getElementById('fRefs');
+  const fAudience = document.getElementById('fAudience');
+  const fBody = document.getElementById('fBody');
+
+  const params = new URLSearchParams(window.location.search);
+  let selectedId = params.get('id') || '';
+  let editingId = '';
+  let viewMode = 'all';
+  let currentDetail = null;
+
+  function defaultBrowserTZ() {
+    try {
+      const z = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (z && z.includes('/')) return z;
+    } catch (e) {}
+    return 'UTC';
+  }
+
+  const initialTZ = params.get('tz') || defaultBrowserTZ();
+  tzInput.value = initialTZ;
+  fTz.value = initialTZ;
+  anchorDateInput.value = new Date().toISOString().slice(0, 10);
+
+  function loadOwnerKeys() {
+    try {
+      return JSON.parse(localStorage.getItem(STORAGE_KEYS) || '{}') || {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveOwnerKey(id, key) {
+    if (!id || !key) return;
+    try {
+      const map = loadOwnerKeys();
+      map[id] = key;
+      localStorage.setItem(STORAGE_KEYS, JSON.stringify(map));
+    } catch (e) {}
+  }
+
+  function ownerHeaderFor(id) {
+    const map = loadOwnerKeys();
+    if (id && map[id]) return {'X-Facilitator-Key': map[id]};
+    const all = Object.values(map).filter(Boolean);
+    if (all.length > 0) return {'X-Facilitator-Key': all.join(',')};
+    return {};
+  }
+
+  function showAlert(msg, isError) {
+    if (!alertBox) return;
+    alertBox.textContent = msg || '';
+    if (msg) {
+      alertBox.setAttribute('data-kind', isError ? 'error' : 'ok');
+      if (!isError && window.deskToast) window.deskToast(msg, 'ok');
+    }
+  }
+
+  async function callAction(payload, keyId) {
+    const res = await fetch('api/action', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', ...ownerHeaderFor(keyId || payload.id || '')},
+      body: JSON.stringify(payload)
+    });
+    const data = await res.json().catch(() => ({}));
+    return {ok: res.ok, status: res.status, data};
+  }
+
+  function addDaysISO(dateStr, days) {
+    const d = new Date(dateStr + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function setViewMode(mode) {
+    viewMode = mode;
+    document.getElementById('viewAll').disabled = (mode === 'all');
+    document.getElementById('viewWeek').disabled = (mode === 'week');
+    document.getElementById('viewDay').disabled = (mode === 'day');
+  }
+
+  function splitCSV(val) {
+    return String(val || '').split(',').map(s => s.trim()).filter(Boolean);
+  }
+
+  function refsToMarkdown(refs) {
+    if (!Array.isArray(refs) || refs.length === 0) return '';
+    return refs.map(r => {
+      const clean = String(r).trim();
+      if (/^https?:\/\//i.test(clean)) {
+        return '- [' + clean + '](' + clean + ')';
+      }
+      const slug = clean.replace(/[^A-Za-z0-9._:-]/g, '-');
+      return '- [' + clean + '](#ref-' + slug + ')';
+    }).join('\n');
+  }
+
+  function updateAppbarHeader(ev) {
+    const headerId = document.querySelector('.desk-item-header .desk-id');
+    const badgeEl = document.querySelector('.desk-item-header .desk-badge');
+    const shareLink = document.getElementById('deskShareLink');
+    if (ev && ev.id) {
+      if (headerId) headerId.textContent = ev.id;
+      if (badgeEl) {
+        badgeEl.setAttribute('data-status', ev.status || 'pending');
+        badgeEl.textContent = ev.status || 'pending';
+      }
+      if (shareLink && ev.url) shareLink.setAttribute('data-copy', ev.url);
+      if (footerCmd) footerCmd.textContent = 'calendar open ' + ev.id;
+    }
+  }
+
+  function syncURL(id, tz) {
+    const u = new URL(window.location.href);
+    if (id) u.searchParams.set('id', id);
+    else u.searchParams.delete('id');
+    if (tz) u.searchParams.set('tz', tz);
+    u.hash = '';
+    history.replaceState(null, '', u.toString());
+  }
+
+  async function refreshAgenda() {
+    const viewerTZ = tzInput.value.trim() || 'UTC';
+    const payload = {action: 'list', tz: viewerTZ};
+    if (statusFilter.value) payload.status = statusFilter.value;
+    const anchor = anchorDateInput.value || new Date().toISOString().slice(0, 10);
+    if (viewMode === 'day') {
+      payload.from = anchor;
+      payload.to = anchor;
+      agendaHeading.textContent = 'Day Agenda (' + anchor + ' · ' + viewerTZ + ')';
+    } else if (viewMode === 'week') {
+      const endDay = addDaysISO(anchor, 6);
+      payload.from = anchor;
+      payload.to = endDay;
+      agendaHeading.textContent = 'Week Agenda (' + anchor + ' to ' + endDay + ' · ' + viewerTZ + ')';
+    } else {
+      agendaHeading.textContent = 'Agenda (' + viewerTZ + ')';
+    }
+
+    const {ok, data} = await callAction(payload, '');
+    if (!ok) {
+      showAlert(data.error?.message || 'Could not load agenda', true);
+      return;
+    }
+    syncURL(selectedId, viewerTZ);
+    renderAgendaItems(Array.isArray(data.items) ? data.items : []);
+  }
+
+  function renderAgendaItems(items) {
+    agendaList.textContent = '';
+    if (items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'desk-state';
+      empty.setAttribute('data-state', 'empty');
+      const title = document.createElement('div');
+      title.className = 'desk-state-title';
+      title.textContent = 'No events in this view';
+      const hint = document.createElement('div');
+      hint.className = 'desk-muted';
+      hint.textContent = 'Create an event on the right or run calendar add from the CLI.';
+      empty.appendChild(title);
+      empty.appendChild(hint);
+      agendaList.appendChild(empty);
+      return;
+    }
+
+    const byDate = new Map();
+    for (const item of items) {
+      const d = item.date || String(item.display_start || item.start || '').slice(0, 10);
+      if (!byDate.has(d)) byDate.set(d, []);
+      byDate.get(d).push(item);
+    }
+
+    for (const [dateKey, dayItems] of byDate.entries()) {
+      const sec = document.createElement('section');
+      sec.className = 'cal-day';
+      sec.setAttribute('data-date', dateKey);
+
+      const h3 = document.createElement('h3');
+      h3.className = 'cal-day-heading';
+      h3.textContent = dateKey;
+      sec.appendChild(h3);
+
+      const ul = document.createElement('ul');
+      ul.className = 'cal-list';
+
+      for (const ev of dayItems) {
+        const li = document.createElement('li');
+        li.className = 'cal-item';
+        li.setAttribute('data-event-id', ev.id);
+        li.setAttribute('data-status', ev.status || 'pending');
+        if (ev.id === selectedId) li.setAttribute('data-active', 'true');
+
+        const top = document.createElement('div');
+        top.className = 'cal-item-top';
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'cal-time';
+        timeSpan.textContent = (ev.display_start || ev.start) + ' → ' + (ev.display_end || ev.end);
+        top.appendChild(timeSpan);
+        if (window.deskBadge) top.appendChild(window.deskBadge(ev.status || 'pending'));
+
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'cal-item-title';
+        titleDiv.textContent = ev.title || ev.id;
+
+        li.appendChild(top);
+        li.appendChild(titleDiv);
+
+        const pills = document.createElement('div');
+        pills.className = 'cal-pills';
+        if (ev.location) {
+          const p = document.createElement('span');
+          p.className = 'desk-pill';
+          p.textContent = ev.location;
+          pills.appendChild(p);
+        }
+        if (Array.isArray(ev.audience)) {
+          for (const person of ev.audience) {
+            const p = document.createElement('span');
+            p.className = 'desk-pill';
+            p.textContent = '@' + person;
+            pills.appendChild(p);
+          }
+        }
+        if (pills.childNodes.length > 0) li.appendChild(pills);
+
+        li.addEventListener('click', () => selectEvent(ev.id));
+        ul.appendChild(li);
+      }
+      sec.appendChild(ul);
+      agendaList.appendChild(sec);
+    }
+  }
+
+  async function selectEvent(id) {
+    if (!id) return;
+    const viewerTZ = tzInput.value.trim() || 'UTC';
+    const {ok, status, data} = await callAction({action: 'show', id, tz: viewerTZ}, id);
+    if (!ok) {
+      detailPane.hidden = true;
+      showAlert(status === 404 ? 'Event not found (404)' : (data.error?.message || 'Failed to load event'), true);
+      return;
+    }
+    selectedId = data.id;
+    currentDetail = data;
+    syncURL(selectedId, viewerTZ);
+    updateAppbarHeader(data);
+
+    detailPane.hidden = false;
+    shareBox.hidden = true;
+    detailTitle.textContent = data.title || data.id;
+    detailBadge.textContent = '';
+    if (window.deskBadge) detailBadge.appendChild(window.deskBadge(data.status || 'pending'));
+    detailId.textContent = data.id;
+    detailWhen.textContent = (data.display_start || data.start) + ' → ' + (data.display_end || data.end) + ' (' + (data.display_tz || data.tz) + ')';
+    detailTz.textContent = data.tz;
+    detailLocation.textContent = data.location || '—';
+    detailAudience.textContent = Array.isArray(data.audience) && data.audience.length > 0 ? data.audience.join(', ') : '—';
+    detailSource.textContent = (data.source?.provider || 'local') + (data.source?.uid ? ':' + data.source.uid : '');
+    exportIcsLink.setAttribute('href', 'api/export?id=' + encodeURIComponent(data.id) + '&to=ics');
+
+    if (window.deskRender) {
+      window.deskRender(detailBody, data.body || '_No description._');
+    } else {
+      detailBody.textContent = data.body || '';
+    }
+
+    const refsMD = refsToMarkdown(data.refs);
+    if (refsMD) {
+      detailRefsWrap.hidden = false;
+      if (window.deskRender) window.deskRender(detailRefs, refsMD);
+      else detailRefs.textContent = refsMD;
+    } else {
+      detailRefsWrap.hidden = true;
+      detailRefs.textContent = '';
+    }
+
+    const isClosed = data.status === 'closed';
+    document.getElementById('editBtn').disabled = isClosed;
+    document.getElementById('cancelBtn').disabled = isClosed || data.status === 'cancelled';
+    document.getElementById('closeBtn').disabled = isClosed;
+
+    if (Array.isArray(data.members) && data.members.length > 0) {
+      membersBox.hidden = false;
+      membersList.textContent = '';
+      for (const m of data.members) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'desk-btn secondary cal-revoke-btn';
+        btn.setAttribute('data-member', m);
+        btn.textContent = 'Revoke ' + m.slice(0, 8) + '…';
+        btn.addEventListener('click', async () => {
+          const r = await callAction({action: 'set', id: data.id, revoke: m}, data.id);
+          if (!r.ok) {
+            showAlert(r.data.error?.message || 'Revoke failed', true);
+            return;
+          }
+          showAlert('Revoked member ' + m.slice(0, 8), false);
+          await selectEvent(data.id);
+        });
+        membersList.appendChild(btn);
+      }
+    } else {
+      membersBox.hidden = true;
+    }
+
+    document.querySelectorAll('.cal-item').forEach(el => {
+      if (el.getAttribute('data-event-id') === selectedId) el.setAttribute('data-active', 'true');
+      else el.removeAttribute('data-active');
+    });
+  }
+
+  function resetEditor(forEvent) {
+    if (forEvent) {
+      editingId = forEvent.id;
+      editorHeading.textContent = 'Edit Event · ' + forEvent.id;
+      fTitle.value = forEvent.title || '';
+      fStart.value = forEvent.start || '';
+      fEnd.value = forEvent.end || '';
+      fTz.value = forEvent.tz || tzInput.value || 'UTC';
+      fLocation.value = forEvent.location || '';
+      fRefs.value = Array.isArray(forEvent.refs) ? forEvent.refs.join(', ') : '';
+      fAudience.value = Array.isArray(forEvent.audience) ? forEvent.audience.join(', ') : '';
+      fBody.value = forEvent.body || '';
+    } else {
+      editingId = '';
+      editorHeading.textContent = 'Create Event';
+      fTitle.value = '';
+      fStart.value = '';
+      fEnd.value = '';
+      fTz.value = tzInput.value.trim() || 'UTC';
+      fLocation.value = '';
+      fRefs.value = '';
+      fAudience.value = '';
+      fBody.value = '';
+    }
+  }
+
+  document.getElementById('saveBtn').addEventListener('click', async () => {
+    const action = editingId ? 'set' : 'add';
+    const payload = {
+      action,
+      title: fTitle.value,
+      location: fLocation.value,
+      body: fBody.value,
+      refs: splitCSV(fRefs.value),
+      audience: splitCSV(fAudience.value)
+    };
+    if (editingId) payload.id = editingId;
+    if (fTz.value.trim()) payload.tz = fTz.value.trim();
+    if (fStart.value.trim()) payload.start = fStart.value.trim();
+    if (fEnd.value.trim()) payload.end = fEnd.value.trim();
+
+    const {ok, data} = await callAction(payload, editingId);
+    if (!ok) {
+      showAlert(data.error?.message || 'Failed to save event', true);
+      return;
+    }
+    if (data.ownerKey) saveOwnerKey(data.id, data.ownerKey);
+    selectedId = data.id;
+    showAlert('Saved event: ' + data.id, false);
+    resetEditor(null);
+    await refreshAgenda();
+    await selectEvent(data.id);
+  });
+
+  document.getElementById('newBtn').addEventListener('click', () => {
+    resetEditor(null);
+    fTitle.focus();
+  });
+  document.getElementById('resetFormBtn').addEventListener('click', () => resetEditor(null));
+  document.getElementById('editBtn').addEventListener('click', () => {
+    if (currentDetail) {
+      resetEditor(currentDetail);
+      fTitle.focus();
+    }
+  });
+
+  document.getElementById('shareBtn').addEventListener('click', async () => {
+    if (!selectedId) return;
+    const {ok, data} = await callAction({action: 'share', id: selectedId}, selectedId);
+    if (!ok) {
+      showAlert(data.error?.message || 'Failed to mint invite', true);
+      return;
+    }
+    shareBox.hidden = false;
+    shareUrlText.textContent = data.inviteURL || data.invite || '';
+    copyInviteBtn.setAttribute('data-copy', data.inviteURL || data.invite || '');
+    showAlert('Single-use invite created', false);
+  });
+
+  document.getElementById('cancelBtn').addEventListener('click', async () => {
+    if (!selectedId) return;
+    const {ok, data} = await callAction({action: 'cancel', id: selectedId}, selectedId);
+    if (!ok) {
+      showAlert(data.error?.message || 'Failed to cancel event', true);
+      return;
+    }
+    showAlert('Cancelled event: ' + selectedId, false);
+    await refreshAgenda();
+    await selectEvent(selectedId);
+  });
+
+  document.getElementById('closeBtn').addEventListener('click', async () => {
+    if (!selectedId) return;
+    const {ok, data} = await callAction({action: 'close', id: selectedId}, selectedId);
+    if (!ok) {
+      showAlert(data.error?.message || 'Failed to close event', true);
+      return;
+    }
+    showAlert('Closed event: ' + selectedId, false);
+    await refreshAgenda();
+    await selectEvent(selectedId);
+  });
+
+  document.getElementById('viewAll').addEventListener('click', () => { setViewMode('all'); refreshAgenda(); });
+  document.getElementById('viewWeek').addEventListener('click', () => { setViewMode('week'); refreshAgenda(); });
+  document.getElementById('viewDay').addEventListener('click', () => { setViewMode('day'); refreshAgenda(); });
+  document.getElementById('applyFilterBtn').addEventListener('click', () => {
+    refreshAgenda();
+    if (selectedId) selectEvent(selectedId);
+  });
+  tzInput.addEventListener('change', () => {
+    refreshAgenda();
+    if (selectedId) selectEvent(selectedId);
+  });
+  statusFilter.addEventListener('change', () => refreshAgenda());
+  anchorDateInput.addEventListener('change', () => {
+    if (viewMode !== 'all') refreshAgenda();
+  });
+
+  async function boot() {
+    setViewMode('all');
+    const rawHash = window.location.hash.replace(/^#/, '');
+    const hashParams = new URLSearchParams(rawHash);
+    const inviteCode = hashParams.get('invite');
+    if (inviteCode && selectedId) {
+      const {ok, data} = await callAction({action: 'join', id: selectedId, invite: inviteCode}, '');
+      if (!ok) {
+        showAlert(data.error?.message || 'Invite invalid or already used', true);
+      } else {
+        showAlert('Joined shared event: ' + selectedId, false);
+      }
+    }
+    await refreshAgenda();
+    if (selectedId) {
+      await selectEvent(selectedId);
+    }
+  }
+
+  boot();
+})();
+</script>

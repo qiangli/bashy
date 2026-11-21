@@ -68,6 +68,7 @@
   --desk-accent-brainstorm: #b45309;
   --desk-accent-form: #047857;
   --desk-accent-chart: #6d28d9;
+  --desk-accent-calendar: #be123c;
   --desk-accent: var(--desk-primary);
   --desk-accent-ink: #ffffff;
   /* data palette: chart series and ```chart embeds (kit.DataPalette) */
@@ -106,6 +107,7 @@
     --desk-accent-brainstorm: #fbbf24;
     --desk-accent-form: #34d399;
     --desk-accent-chart: #a78bfa;
+    --desk-accent-calendar: #fb7185;
     --desk-accent-ink: #09090b;
     --desk-data-1: #60a5fa;
     --desk-data-2: #2dd4bf;
@@ -141,6 +143,7 @@
   --desk-accent-brainstorm: #fbbf24;
   --desk-accent-form: #34d399;
   --desk-accent-chart: #a78bfa;
+  --desk-accent-calendar: #fb7185;
   --desk-accent-ink: #09090b;
   --desk-data-1: #60a5fa;
   --desk-data-2: #2dd4bf;
@@ -160,6 +163,7 @@
 :root[data-desk-tool="brainstorm"] { --desk-accent: var(--desk-accent-brainstorm); }
 :root[data-desk-tool="form"] { --desk-accent: var(--desk-accent-form); }
 :root[data-desk-tool="chart"] { --desk-accent: var(--desk-accent-chart); }
+:root[data-desk-tool="calendar"] { --desk-accent: var(--desk-accent-calendar); }
 
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--desk-bg); color: var(--desk-ink); font: inherit; }
