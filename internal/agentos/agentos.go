@@ -1021,7 +1021,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 	case "pair", "judge", "gate":
 		dispatchExit(runCommandAdapter("yoke", os.Args[1], os.Args[1], os.Args[2:]))
 	case "chat", "invoke":
-		dispatchExit(runChatCmd(os.Args[2:], os.Stdout, os.Stderr))
+		dispatchExit(runCommandAdapter("yoke", "chat", os.Args[1], os.Args[2:]))
 	case "coach", "delegate":
 		dispatchExit(runCommandAdapter("yoke", os.Args[1], os.Args[1], os.Args[2:]))
 	case "meet":

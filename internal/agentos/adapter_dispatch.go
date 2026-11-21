@@ -163,6 +163,8 @@ var adaptedVerbs = map[string][2]string{
 	"delegate":    {"yoke", "delegate"},
 	"supervise":   {"yoke", "supervise"},
 	"capability":  {"yoke", "capability"},
+	"chat":        {"yoke", "chat"},
+	"invoke":      {"yoke", "chat"},
 	"leaderboard": {"yoke", "leaderboard"},
 	"sdlc":        {"yoke", "sdlc"},
 	"web":         {"yoke", "web"},
