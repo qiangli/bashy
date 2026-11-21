@@ -12,3 +12,4 @@ Tracking the 10 coupled verbs: `todo`, `dag`, `mb`, `inbox`, `kb`, `chat`, `meet
 | `chat` | Converted | `yoke/chat` | Standalone deps and help verified; routed via `runCommandAdapter`. |
 | `meet` | Exception | (kept in internal/agentos) | In-process wireMeet() callbacks couple to internal/agentos/steward.go for permanent role and secretary activation. |
 | `foreman` | Converted | `yoke/foreman` | Standalone deps and help verified; routed via `runCommandAdapter`; monolith cmds/foreman import removed. |
+| `weave` | Converted | `yoke/weave` | Standalone deps and help verified; routed via `runCommandAdapter`. |

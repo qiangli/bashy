@@ -882,7 +882,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 	case "agentic":
 		dispatchExit(dispatchAgentic(os.Args[2:]))
 	case "weave":
-		dispatchExit(runWeaveDispatch(os.Args[2:], os.Stdout, os.Stderr))
+		dispatchExit(runCommandAdapter("yoke", "weave", os.Args[1], os.Args[2:]))
 	case "sprint":
 		dispatchExit(runSprintDispatch(os.Args[2:], os.Stdout, os.Stderr))
 	case "llm", "share", "adapt", "adapter", "infra", "token", "fleet",
