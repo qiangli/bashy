@@ -54,7 +54,6 @@ import (
 	"github.com/qiangli/coreutils/pkg/weavecli"
 	coreutilsshell "github.com/qiangli/coreutils/shell"
 	"github.com/qiangli/coreutils/tool"
-	_ "github.com/qiangli/yoke/cmds/foreman"
 	"github.com/qiangli/yoke/external/gotoolchain"
 	"github.com/qiangli/yoke/external/meshagent"
 	"github.com/qiangli/yoke/external/registry"
@@ -1024,6 +1023,8 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		dispatchExit(runCommandAdapter("yoke", "chat", os.Args[1], os.Args[2:]))
 	case "coach", "delegate":
 		dispatchExit(runCommandAdapter("yoke", os.Args[1], os.Args[1], os.Args[2:]))
+	case "foreman":
+		dispatchExit(runCommandAdapter("yoke", "foreman", os.Args[1], os.Args[2:]))
 	case "meet":
 		// Multi-participant deliberation session: agentic CLIs + a human take
 		// turns; a dedicated notes-only secretary keeps and files the minutes.
