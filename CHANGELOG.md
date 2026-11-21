@@ -1,10 +1,5 @@
 # Changelog
 
-## Unreleased
-
-- macOS Intel (darwin/amd64) is no longer supported. macOS releases support Apple Silicon (arm64).
-- Install Bashy, then use `bashy self image` to build the local FROM-scratch image from checksum-verified scratch binary assets; the public GHCR scratch image is no longer published.
-
 All notable changes to bashy are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows
 [docs/release-roadmap-and-versioning.md](docs/release-roadmap-and-versioning.md).
@@ -35,6 +30,108 @@ conformance, signing and install-channel verification are re-measured on the
 frozen release candidate before the tag.
 
 ## [Unreleased]
+
+Draft notes for 1.0.0-rc.39: everything user-visible merged since
+`v1.0.0-rc.38-dev`, by theme. No changelog entries were cut for
+rc.28–rc.38; the sprint-coordination verbs that landed during the rc.38
+cycle are recorded here so the gap is not silent. Docs-only and test-only
+commits are omitted except where they change a public claim.
+
+### Added
+
+- **Sprint coordination for agent fleets** — `bashy sprint await` blocks on
+  typed submit events instead of polling; `sprint directive add|list|rm`
+  keeps standing operator rules that are injected into worker briefs;
+  `sprint reject` records a rejection across story and run. Messages can be
+  addressed to the `conductor:<sprint>` seat instead of an agent name, the
+  seat holder is stamped on the mail, and sender claims must match the
+  sending tool and model. The manager playbook in `bashy sprint --help`
+  and the conductor skill now describe this loop exactly as it runs.
+- **Waiting on your inbox** — `bashy inbox --wait` accepts
+  `--until-count N` and `--match TEXT`, returns as soon as the condition
+  holds, and exits 3 on timeout, so a script can block on coordination the
+  way it blocks on a process.
+- **Declared session commands** — `bashy chat command` runs the named
+  commands a live agent session declares for itself (its TUI's own verbs)
+  instead of typing blind keystrokes, with exit codes that say whether the
+  command was delivered. Steering a session through `bashy chat steer`
+  remains the free-text path.
+- **A bridge from `dag.md` to make** — `bashy dag --makefile` generates a
+  Makefile that forwards every target to `bashy dag`, headed by a
+  do-not-edit banner that teaches the reader what to edit instead
+  (`dag.md`) and how to regenerate. The make side carries no task graph of
+  its own, so the two can never disagree about what a target does.
+- **Consumer-shapeable example apps** — the desk viewer and chart and the
+  tutor session display are now shaped apps end to end: registered with
+  `bashy app add --type shaped`, served on the console-assigned address,
+  Genie injected through the console mount, and each ships concrete
+  example wishes (`genie.examples`), as do form, notepad, board,
+  whiteboard and table. A member-principal end-to-end script drives the
+  wish → verify → preview → approve → undo lifecycle across all of them,
+  and the KB runbook "Enable an app for consumer shaping"
+  (`bashy kb search "enable an app for shaping"`) distills the steps for
+  any app owner.
+- **Local runtime discovery** — `bashy app show NAME --runtime` reports
+  the live loopback address, data directory and console URL of a running
+  shaped app from the record the console publishes when the app becomes
+  ready. App CLIs (viewer, chart, session) resolve through it when no
+  explicit address handoff is given, and fail with one actionable error —
+  open the app, or pass the handoff — never by falling back to a fixed
+  development port or a second private server.
+
+### Changed
+
+- **Platforms and images** — macOS Intel (darwin/amd64) is no longer
+  supported; macOS releases support Apple Silicon (arm64). The public
+  GHCR scratch image is no longer published: install Bashy, then use
+  `bashy self image` to build the local FROM-scratch image from
+  checksum-verified scratch binary assets.
+- **`make` without a Makefile** — inside bashy, `make` in a directory with
+  no makefile but a `dag.md` now falls through to `bashy dag`, and
+  `type make` tells the truth about which implementation will run.
+  Bashy's own remaining Makefile-only targets were ported to `dag.md`
+  unchanged in what they measure, and the repo's scripts and CI call
+  `bashy dag` directly.
+- **Unavailable means unavailable** — a capability whose runtime is absent
+  (for example, no podman socket on the host) now rests in a visible
+  `unavailable: <reason>` state: health is not ok, the reason shows in
+  status, and no restart ladder spins against a machine that simply lacks
+  the runtime. It recovers on the next successful activation. Previously
+  such a capability could report active and healthy while doing nothing.
+- **`bashy sprint show` is fast** — rendering a sprint card no longer
+  scans unrelated stores; on a large board it completes in seconds, and
+  goal stories living in submodule checkouts resolve like local ones.
+
+### Fixed
+
+- **The git applet speaks worker** — the in-process `git` now serves the
+  forms scripts and agents actually use: `commit -q`, `--allow-empty` and
+  `-c user.name/-c user.email` identities, `-q`/`--quiet` on checkout,
+  push, pull and fetch, and `checkout --detach` for revisions. Forms it
+  cannot honor fail loudly; flags are never silently dropped.
+- **Steering a Codex session submits** — `bashy chat steer` to a Codex
+  TUI could type the text and stop at the input box; the message is now
+  submitted, and an explicit Enter cannot fire against a session whose
+  gate is not live.
+- **Headless Chrome stays out of your keychain** — ephemeral Chrome
+  launches (browser probes, desk PDF/export) run against isolated
+  profiles that never touch the OS keychain or your real browser profile,
+  so automated checks no longer interrupt you with system prompts.
+- **Coordination correctness** — `bashy weave pull` exits non-zero and
+  explains on stderr when nothing was merged instead of reporting
+  success; revising your own room card is an update, not a second join
+  event; `sprint review`, `grade` and `merge` grew their own `--help`
+  one-liners instead of borrowing another verb's; sprint and foreman
+  test runs are isolated from the host's real boards and queues.
+
+References (story ids, by theme): fleet coordination 48a92d652802,
+561bac1b3623, f8fed0a7bd83, 6b7b112d4c61, 188896bb1660, 1391d5686ba1,
+91f04d61150d, 3347a7019443; inbox waiting 1ee0c4e59988; session commands
+and steer 6254c3c64248, c00eb6a73a34; dag/make fa9fcc8de90d,
+d9bf47e9554b, a97acb748321; consumer shaping 31d1e09e350e, 22debb3fbad2,
+c97cad3dc8af, 98119d6d55a3, 8e5204e127c4; unavailable state 9deb591a820c;
+git applet 4c60ebe893cd, 39669b0dd32d; headless Chrome e1b0b5ae8d15;
+help texts 900e67575761.
 
 ## [1.0.0-rc.27] — 2026-11-07 (promoted)
 
