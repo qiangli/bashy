@@ -13,3 +13,4 @@ Tracking the 10 coupled verbs: `todo`, `dag`, `mb`, `inbox`, `kb`, `chat`, `meet
 | `meet` | Exception | (kept in internal/agentos) | In-process wireMeet() callbacks couple to internal/agentos/steward.go for permanent role and secretary activation. |
 | `foreman` | Converted | `yoke/foreman` | Standalone deps and help verified; routed via `runCommandAdapter`; monolith cmds/foreman import removed. |
 | `weave` | Converted | `yoke/weave` | Standalone deps and help verified; routed via `runCommandAdapter`. |
+| `sprint` | Exception | (kept in internal/agentos) | In-process active conductor loop composed with agentos sprint monitor, attachSprintWatch (inbox stream), inbox-ack, and await. |
