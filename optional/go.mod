@@ -59,8 +59,8 @@ require (
 	github.com/qiangli/bash v0.0.0-20261121101805-42efe30317c4 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261121101804-e25a870a0d4a // indirect
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261121110346-da4b02a4d244 // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261121110346-da4b02a4d244 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261121163358-be872cc5a395 // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261121163358-be872cc5a395 // indirect
 	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
@@ -179,6 +179,6 @@ replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewi
 
 require (
 	github.com/qiangli/coreutils v0.0.0-20261121101804-c5832f99ccf6
-	github.com/qiangli/yoke v0.0.0-20261121110346-da4b02a4d244
+	github.com/qiangli/yoke v0.0.0-20261121163358-be872cc5a395
 	github.com/spf13/pflag v1.0.10
 )

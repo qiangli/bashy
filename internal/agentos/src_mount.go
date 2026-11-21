@@ -21,7 +21,7 @@ import (
 type srcModulePin struct{ module, commit, replaces, subdir string }
 
 var srcModulePins = map[string]srcModulePin{
-	"yoke":      {"github.com/qiangli/yoke", "da4b02a4d2449763e60b1e6afbeda6342c0dfc8a", "", ""},
+	"yoke":      {"github.com/qiangli/yoke", "be872cc5a395632fb4c50cb8b7bb363fb1bbcfd6", "", ""},
 	"coreutils": {"github.com/qiangli/coreutils", "c5832f99ccf69ced4dc2e64caa85f0cab5d46632", "", ""},
 	// The existing src protocol names the shell repository "sh".
 	"sh":          {"github.com/qiangli/bash", "42efe30317c45a518cca04289414ad9a2b90d511", "", ""},
