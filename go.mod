@@ -346,13 +346,14 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
-	github.com/qiangli/bonsai v0.0.0-20261103194740-24dd0f47247e // indirect
-	github.com/qiangli/gfy v0.0.0-20261013004914-30d38f086034 // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261121003242-f066eaf07a08 // indirect
+	github.com/qiangli/bash/cmd v0.0.0-20261121101805-42efe30317c4 // indirect
+	github.com/qiangli/bonsai v0.0.0-20261121101804-e25a870a0d4a // indirect
+	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261121105637-c643f4029e70 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261121000149-299a502de6c7 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261121000149-299a502de6c7 // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261121000149-299a502de6c7 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261121110346-da4b02a4d244 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261121110346-da4b02a4d244 // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261121110346-da4b02a4d244 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/quic-go/webtransport-go v0.10.0 // indirect
@@ -510,13 +511,13 @@ require (
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261112194059-6dd7a3ee1858
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261121101804-c5832f99ccf6
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 
 replace github.com/perses/perses => github.com/qiangli/perses v0.0.0-20260426190059-de437951b5e6
 
-replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20261013004858-df59d4e258e4
+replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20261121101804-6ed12265d8dd
 
 replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab
 
@@ -540,7 +541,7 @@ replace github.com/gtsteffaniak/filebrowser/backend => github.com/qiangli/filebr
 // the transitive qiangli/gfy -> odvcencio imports, which a module-path rename
 // could not reach. Restated here because yoke's replace is not transitive.
 // Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
-replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261103194740-9471d547a17c
+replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261121101804-5522e72a297d
 
 replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
 
@@ -585,13 +586,12 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/bash v0.0.0-20261119111345-7855c2f038f2
-	github.com/qiangli/bash/cmd v0.0.0-20261119111345-7855c2f038f2
-	github.com/qiangli/coreutils v0.0.0-20261119135715-c656935287fa
+	github.com/qiangli/bash v0.0.0-20261121101805-42efe30317c4
+	github.com/qiangli/coreutils v0.0.0-20261121101804-c5832f99ccf6
 	github.com/qiangli/ycode v0.3.1-dev.0.20261118041524-e5be31355b48
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261121110346-da4b02a4d244
-	github.com/qiangli/yoke/external/otel v0.0.0-20261121000149-299a502de6c7
+	github.com/qiangli/yoke/external/otel v0.0.0-20261121110346-da4b02a4d244
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
