@@ -9,6 +9,11 @@ description: Change an application's behavior for a selected principal through i
 the app console. Local operations call the shared service directly. App source
 comes from the managed checkout imported by `bashy app add --type shaped`.
 
+To make your own app shapeable by its consumers — the `shaped.json`
+manifest, registration, CLI address handoff and Genie check — follow the
+KB runbook `enable-an-app-for-consumer-shaping`
+(`bashy kb search "enable an app for shaping"`).
+
 Choose the represented user with `--user` (`--principal` alias), or
 `BASHY_PRINCIPAL`. `--as` identifies the accountable caller and is checked by
 the existing session identity resolver. The generating `--agent tool:model`
