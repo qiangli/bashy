@@ -52,3 +52,10 @@ Today muse's /status shows only cumulative session tokens, and bashy's
 account monitor has no muse source ("0 accounts, 4 unknown"). Find where the
 current-window and weekly % are measurable (a vendor usage view or endpoint)
 before designing the source. Never guess.
+
+## Shared alert contract
+
+Sprint 652 story `daa99f1f5a8e` owns the
+alert transition and delivery contract at `umbrella/docs/alert-transition-wire.md`.
+Adopt its producer inputs, stable transition ID and per-destination delivery
+key for watermark notices when this story resumes.
