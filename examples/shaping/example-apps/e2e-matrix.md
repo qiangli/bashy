@@ -49,7 +49,12 @@ The wishes are duplicated in the script's case table;
    board, saved scene, ≥10-record table) and record it in the context file.
 4. Write the private `E2E_CONTEXT` file as in hello-world (resource
    references only — no cookie, token or credential values), including the
-   fixture identities from step 3 and the paired browser profiles.
+   fixture identities from step 3 and the paired browser profiles. For browser
+   helpers that require Node `ws` inside a tool child whose `PATH` resolves
+   Node 22 first, invoke them through `./run-node-ws.sh` (or set
+   `E2E_HOST_NODE` to the host Node 18 binary and run `./run-node-ws.sh --preflight`
+   in the same tool invocation context; optional `E2E_NODE_MAJOR`,
+   `E2E_NODE_PATH`, `E2E_NODE_CANDIDATES`).
 5. Set the shaping-agent provenance the wishes will carry, then run:
 
 ```sh
