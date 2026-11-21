@@ -48,7 +48,8 @@ commits are omitted except where they change a public claim.
   sending tool and model. The manager playbook in `bashy sprint --help`
   and the conductor skill now describe this loop exactly as it runs.
 - **Waiting on your inbox** — `bashy inbox --wait` accepts
-  `--until-count N` and `--match TEXT`, returns as soon as the condition
+  `--until-count N` and `--match REGEX` (a regular expression over body,
+  sender, recipient, topic, room and source), returns as soon as the condition
   holds, and exits 3 on timeout, so a script can block on coordination the
   way it blocks on a process.
 - **Declared session commands** — `bashy chat command` runs the named
@@ -78,6 +79,12 @@ commits are omitted except where they change a public claim.
   explicit address handoff is given, and fail with one actionable error —
   open the app, or pass the handoff — never by falling back to a fixed
   development port or a second private server.
+- **Podman machine autostart (outpost)** — opt in with
+  `settings.autostart_machine` and outpost starts an existing podman
+  machine again after a reboot, so a restarted host recovers its
+  containers without a login. It is off by default, starts only a machine
+  that already exists, and backs off instead of spinning when a start
+  fails.
 
 ### Changed
 
@@ -98,6 +105,9 @@ commits are omitted except where they change a public claim.
   status, and no restart ladder spins against a machine that simply lacks
   the runtime. It recovers on the next successful activation. Previously
   such a capability could report active and healthy while doing nothing.
+  Outpost's podman capability reports the same way: socket absent, machine
+  starting and start backoff are all `unavailable: <reason>`, never a
+  false healthy state, with no restart churn while it waits.
 - **`bashy sprint show` is fast** — rendering a sprint card no longer
   scans unrelated stores; on a large board it completes in seconds, and
   goal stories living in submodule checkouts resolve like local ones.
@@ -129,7 +139,8 @@ References (story ids, by theme): fleet coordination 48a92d652802,
 91f04d61150d, 3347a7019443; inbox waiting 1ee0c4e59988; session commands
 and steer 6254c3c64248, c00eb6a73a34; dag/make fa9fcc8de90d,
 d9bf47e9554b, a97acb748321; consumer shaping 31d1e09e350e, 22debb3fbad2,
-c97cad3dc8af, 98119d6d55a3, 8e5204e127c4; unavailable state 9deb591a820c;
+c97cad3dc8af, 98119d6d55a3, 8e5204e127c4; unavailable state and podman
+autostart 9deb591a820c, ab6b9b872ac1;
 git applet 4c60ebe893cd, 39669b0dd32d; headless Chrome e1b0b5ae8d15;
 help texts 900e67575761.
 
