@@ -67,6 +67,9 @@ func TestImageLockAndContainerfileConsistency(t *testing.T) {
 	if !strings.HasSuffix(kv["image"], "-"+shortDigest) {
 		t.Fatalf("image.lock image %q does not end with digest suffix -%s", kv["image"], shortDigest)
 	}
+	if !strings.Contains(kv["image"], "-go"+kv["go_version"]+"-") {
+		t.Fatalf("image.lock image %q does not carry -go%s-", kv["image"], kv["go_version"])
+	}
 
 	cfBytes, err := os.ReadFile("Containerfile")
 	if err != nil {
