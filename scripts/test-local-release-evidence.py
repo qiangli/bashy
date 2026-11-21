@@ -94,6 +94,92 @@ class ReceiptTests(unittest.TestCase):
         self.record['module_graphs_sha256'] = hashlib.sha256(evidence.canonical(self.record['module_graphs'])).hexdigest()
         with self.assertRaises(ValueError): self.check()
 
+    def test_undownloaded_module_verify_guards(self):
+        unfetched = {'path': 'example.org/pruned', 'version': 'v0.4.0', 'main': False, 'go_mod_downloaded': False}
+        self.record['module_graphs'][0]['modules'].append(unfetched)
+        self.record['module_graphs_sha256'] = hashlib.sha256(evidence.canonical(self.record['module_graphs'])).hexdigest()
+        self.check()
+        for bad in (
+            dict(unfetched, main=True),
+            dict(unfetched, go_mod_sha256='d' * 64),
+            dict(unfetched, go_mod_downloaded='no'),
+            {'path': 'example.org/pruned', 'version': 'v0.4.0', 'go_mod_downloaded': None},
+            {'path': 'example.org/pruned', 'version': 'v0.4.0', 'go_mod_sha256': 'not-downloaded'},
+            {'path': 'example.org/pruned', 'version': 'v0.4.0', 'go_mod_sha256': None},
+        ):
+            with self.subTest(bad=bad):
+                self.record['module_graphs'][0]['modules'][-1] = bad
+                self.record['module_graphs_sha256'] = hashlib.sha256(evidence.canonical(self.record['module_graphs'])).hexdigest()
+                with self.assertRaises(ValueError): self.check()
+
+    def test_collect_records_undownloaded_modules_honestly(self):
+        work = pathlib.Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, work)
+        cached_mod = work / 'modcache' / 'downloaded.mod'
+        cached_mod.parent.mkdir(parents=True)
+        cached_mod.write_text('module example.org/downloaded\n\ngo 1.27\n')
+        scopes = []
+        for name in ('bashy', 'outpost', 'yoke'):
+            scope = self.root if name == 'bashy' else work / 'siblings' / name
+            scope.mkdir(parents=True, exist_ok=True)
+            (scope / 'go.mod').write_text(f'module github.com/qiangli/{name}\n\ngo 1.27\n')
+            (scope / 'go.sum').write_text('example.org/downloaded v1.2.0/go.mod h1:test=\n')
+            scopes.append(scope)
+        env = dict(os.environ, GIT_AUTHOR_NAME='Fixture', GIT_AUTHOR_EMAIL='fixture@example.invalid',
+                   GIT_COMMITTER_NAME='Fixture', GIT_COMMITTER_EMAIL='fixture@example.invalid')
+        subprocess.run(['git', 'init', '-q', '-b', 'main'], cwd=self.root, env=env, check=True)
+        subprocess.run(['git', 'add', '.'], cwd=self.root, env=env, check=True)
+        subprocess.run(['git', 'commit', '-qm', 'frozen candidate'], cwd=self.root, env=env, check=True)
+        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=self.root, env=env, text=True).strip()
+        reports = work / 'reports'
+        (reports / 'govulncheck').mkdir(parents=True)
+        (reports / 'license').mkdir(parents=True)
+        (reports / 'govulncheck' / 'bashy.govulncheck.json').write_text(
+            json.dumps({'config': {'db_last_modified': (self.now - dt.timedelta(hours=2)).isoformat()}}) + '\n')
+        (reports / 'license' / 'license.json').write_text('{"status":"pass"}\n')
+        fake_go = work / 'bin' / 'go'
+        fake_go.parent.mkdir(parents=True)
+        fake_go.write_text('''#!/usr/bin/env python3
+import json, os, pathlib, sys
+assert sys.argv[1:] == ['list', '-mod=readonly', '-m', '-json', 'all'], sys.argv
+if os.environ.get('CHECK_GOWORK') == '1':
+    assert os.environ.get('GOWORK') == 'off', 'collect must isolate module graph from parent go.work'
+cwd = pathlib.Path.cwd()
+mod_line = (cwd / 'go.mod').read_text().splitlines()[0].split()[1]
+entries = [
+    {'Path': mod_line, 'Main': True, 'Dir': str(cwd), 'GoMod': str(cwd / 'go.mod')},
+    {'Path': 'example.org/downloaded', 'Version': 'v1.2.0', 'GoMod': os.environ['FAKE_CACHED_MOD'],
+     'Sum': 'h1:dl=', 'GoModSum': 'h1:dlmod='},
+    {'Path': 'example.org/pruned', 'Version': 'v0.4.0', 'Indirect': True},
+    {'Path': 'example.org/replaced', 'Version': 'v0.1.0', 'Indirect': True,
+     'Replace': {'Path': 'example.org/fork', 'Version': 'v0.1.1'}},
+]
+for entry in entries:
+    print(json.dumps(entry))
+''')
+        fake_go.chmod(0o755)
+        receipt = work / 'evidence.json'
+        run_env = dict(env, FAKE_CACHED_MOD=str(cached_mod), PATH=str(fake_go.parent) + os.pathsep + env['PATH'])
+        cmd = [sys.executable, str(ROOT / 'scripts/local-release-evidence.py'), 'collect', str(receipt),
+               '--root', str(self.root), '--reports', str(reports)]
+        for scope in scopes:
+            cmd.extend(['--scope', str(scope)])
+        subprocess.run(cmd, env=run_env, check=True, stdout=subprocess.DEVNULL)
+        subprocess.run(cmd, env=dict(run_env, CHECK_GOWORK='1', GOWORK='auto'), check=True, stdout=subprocess.DEVNULL)
+        subprocess.run([sys.executable, str(ROOT / 'scripts/local-release-evidence.py'), 'verify', str(receipt),
+                        '--root', str(self.root), '--commit', commit], env=run_env, check=True, stdout=subprocess.DEVNULL)
+        collected = json.loads(receipt.read_text())
+        for graph in collected['module_graphs']:
+            by_path = {m['path']: m for m in graph['modules']}
+            self.assertEqual(by_path['example.org/downloaded']['go_mod_sha256'], evidence.digest(cached_mod))
+            self.assertNotIn('go_mod_downloaded', by_path['example.org/downloaded'])
+            for name in ('example.org/pruned', 'example.org/replaced'):
+                self.assertIs(by_path[name].get('go_mod_downloaded'), False)
+                self.assertNotIn('go_mod_sha256', by_path[name])
+                self.assertNotIn('go_sum_sha256', by_path[name])
+            self.assertEqual(by_path['example.org/replaced']['replacement'],
+                             {'Path': 'example.org/fork', 'Version': 'v0.1.1'})
+
     def test_distribution_binds_exact_source_and_each_asset(self):
         asset = self.root / 'asset.bin'
         asset.write_bytes(b'reviewed artifact')

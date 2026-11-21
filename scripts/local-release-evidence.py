@@ -4,6 +4,7 @@ import argparse
 import datetime as dt
 import hashlib
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -69,7 +70,17 @@ def verify(record, root, commit, now=None):
         for module in graph['modules']:
             if not module.get('main') and not module.get('version') and not module.get('replacement'):
                 raise ValueError('unversioned dependency')
-            if not re.fullmatch('[0-9a-f]{64}', module.get('go_mod_sha256', '')):
+            downloaded = module.get('go_mod_downloaded', True)
+            if not isinstance(downloaded, bool):
+                raise ValueError('invalid go.mod download state')
+            if not downloaded:
+                if module.get('main'):
+                    raise ValueError('main module missing go.mod content digest')
+                if 'go_mod_sha256' in module:
+                    raise ValueError('unexpected go.mod content digest for un-downloaded module')
+                continue
+            digest_value = module.get('go_mod_sha256', '')
+            if not isinstance(digest_value, str) or not re.fullmatch('[0-9a-f]{64}', digest_value):
                 raise ValueError('missing transitive go.mod content digest')
     return record
 
@@ -93,19 +104,24 @@ def collect(root, report_dir, scopes):
     if subprocess.check_output(['git', 'status', '--porcelain', '--untracked-files=all'], cwd=root, text=True).strip():
         raise ValueError('candidate has uncommitted tracked source changes')
     graphs = []
+    go_env = dict(os.environ, GOWORK='off')
     for scope in scopes:
         scope = scope.resolve()
-        raw = subprocess.check_output(['go', 'list', '-mod=readonly', '-m', '-json', 'all'], cwd=scope, text=True)
+        raw = subprocess.check_output(['go', 'list', '-mod=readonly', '-m', '-json', 'all'], cwd=scope, env=go_env, text=True)
         modules, main = [], None
         for m in objects(raw):
             effective = m.get('Replace', m)
-            gomod = pathlib.Path(effective['GoMod'])
+            gomod_path = effective.get('GoMod')
+            gomod = pathlib.Path(gomod_path) if gomod_path else None
             item = {'path': m['Path'], 'version': m.get('Version', ''), 'main': m.get('Main', False),
-                    'sum': m.get('Sum', ''), 'go_mod_sum': m.get('GoModSum', ''),
-                    'go_mod_sha256': digest(gomod)}
-            module_sum = pathlib.Path(effective.get('Dir', gomod.parent)) / 'go.sum'
-            if module_sum.is_file():
-                item['go_sum_sha256'] = digest(module_sum)
+                    'sum': m.get('Sum', ''), 'go_mod_sum': m.get('GoModSum', '')}
+            if gomod is not None:
+                item['go_mod_sha256'] = digest(gomod)
+            else:
+                item['go_mod_downloaded'] = False
+            module_dir = pathlib.Path(effective['Dir']) if effective.get('Dir') else (gomod.parent if gomod is not None else None)
+            if module_dir is not None and (module_dir / 'go.sum').is_file():
+                item['go_sum_sha256'] = digest(module_dir / 'go.sum')
             if 'Replace' in m:
                 item['replacement'] = {k: effective[k] for k in ('Path', 'Version', 'Sum', 'GoModSum') if k in effective}
             if m.get('Main'):
