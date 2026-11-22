@@ -15,13 +15,7 @@ func TestSourceRoute(t *testing.T) {
 		bin += ".exe"
 	}
 	foreignSources := os.Getenv("BASHY_TEST_FOREIGN_SOURCES") == "1"
-	buildArgs := []string{"build"}
-	if !foreignSources {
-		// Keep the Go-only gate fast; foreign sources need the full product's
-		// AgentOS tool resolver to provision their language toolchains.
-		buildArgs = append(buildArgs, "-tags", "bashy_core")
-	}
-	buildArgs = append(buildArgs, "-o", bin, "./cmd/bashy")
+	buildArgs := []string{"build", "-o", bin, "./cmd/bashy"}
 	build := exec.Command("go", buildArgs...)
 	build.Dir = filepath.Join("..", "..")
 	if out, err := build.CombinedOutput(); err != nil {
@@ -90,6 +84,9 @@ func TestSourceRoute(t *testing.T) {
 			}
 			cmd := exec.Command(bin, tc.args...)
 			cmd.Dir = dir
+			// `go test` exports its own toolchain's GOROOT; the product's
+			// pinned Go toolchain must not inherit it (todo 54a667814e3c).
+			cmd.Env = withoutEnv(os.Environ(), "GOROOT")
 			cmd.Stdin = strings.NewReader("in\n")
 			out, err := cmd.CombinedOutput()
 			code := 0
@@ -125,4 +122,14 @@ func foreignSourceCase(args []string) bool {
 		}
 	}
 	return false
+}
+
+func withoutEnv(env []string, key string) []string {
+	out := env[:0:0]
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, key+"=") {
+			out = append(out, kv)
+		}
+	}
+	return out
 }

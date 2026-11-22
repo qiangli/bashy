@@ -1,5 +1,3 @@
-//go:build !bashy_core && !bashy_cert_base
-
 package main
 
 import (

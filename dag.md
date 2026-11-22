@@ -219,9 +219,9 @@ bin_dir="${BIN_DIR:-bin}"
 if [ "$($go_cmd env GOOS)" = linux ]; then
   mkdir -p "$bin_dir"
   if [ -n "${GO:-}" ]; then
-    CGO_ENABLED=1 BASHY_EXE="" scripts/go-product.sh build -tags bashy_cert,bashy_cert_base,osusergo -ldflags=-w -o "$bin_dir/bashy-startup-check" ./cmd/bashy
+    CGO_ENABLED=1 BASHY_EXE="" scripts/go-product.sh build -tags osusergo -ldflags=-w -o "$bin_dir/bashy-startup-check" ./cmd/bashy
   else
-    CGO_ENABLED=1 BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -tags bashy_cert,bashy_cert_base,osusergo -ldflags=-w -o "$bin_dir/bashy-startup-check" ./cmd/bashy
+    CGO_ENABLED=1 BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -tags osusergo -ldflags=-w -o "$bin_dir/bashy-startup-check" ./cmd/bashy
   fi
   scripts/test-startup-linux.sh "$bin_dir/bashy-startup-check"
 else
