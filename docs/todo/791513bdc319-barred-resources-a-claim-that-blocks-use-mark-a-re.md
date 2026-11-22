@@ -15,15 +15,15 @@ Operator 2026-11-21 (after the dev-box crash: a podman VM 8.6 GB and govulncheck
 The bar is per HOST + capability, with a redirect:
 - (a) podman on host:X is banned (any podman/VM machine start, init, run).
 - (b) go-build on host:X is banned (go build / go test / dag build targets, including those run by agents).
-- Each bar may name where to go instead, e.g. "use host:elephant".
+- Each bar may name where to go instead, e.g. "use host:<gate-host>".
 
 Example shape (names illustrative):
 
-    bashy claim bar host:dragon podman   --use host:elephant --reason "no VMs on the dev box"
-    bashy claim bar host:dragon go-build --use host:elephant --reason "heavy builds run on the gate host"
+    bashy claim bar host:<dev-box> podman   --use host:<gate-host> --reason "no VMs on the dev box"
+    bashy claim bar host:<dev-box> go-build --use host:<gate-host> --reason "heavy builds run on the gate host"
 
-On host:dragon, `bashy podman machine start` or `go build ./...` (directly, through bashy dag, or from an agent shell) is refused with:
-"go-build is barred on this host (reason ...); use host:elephant", plus the operator-only logged override.
+On host:<dev-box>, `bashy podman machine start` or `go build ./...` (directly, through bashy dag, or from an agent shell) is refused with:
+"go-build is barred on this host (reason ...); use host:<gate-host>", plus the operator-only logged override.
 
 ## Design (operator-approved 2026-11-21): one gating tool, same design as @guard
 
@@ -31,14 +31,14 @@ Operator: "it should be same design as the @guard so it is applicable not only t
 
 1. Rules = match -> action.
    - Match facts: host (role/name/OS/free mem/disk), command/capability (atlas group, effects, caps such as podman, go-build), kind of work (tags declared on dag targets and skill-scripts: unit, integration, e2e, cert, parallel), who (agent, sprint, operator).
-   - Actions: allow | deny (barred, with reason) | route (host:elephant, droplet:posix-cert, aws:e2e-fleet) | queue (until resources free).
+   - Actions: allow | deny (barred, with reason) | route (host:<gate-host>, droplet:posix-cert, aws:e2e-fleet) | queue (until resources free).
 2. Declarative rules first; Bash# predicates only for what rules cannot express, marked `@guard read` (pure, read-only, fast). Example policy skill-script:
 
        # policy/venues.bsh - first match wins
        rule cert        --kind cert        --route droplet:posix-cert
        rule e2e-par     --kind e2e --parallel --route aws:e2e-fleet
-       rule integration --kind integration --route host:elephant
-       rule no-vm       --host dragon --cap podman --deny "no VMs on the dev box" --use host:elephant
+       rule integration --kind integration --route host:<gate-host>
+       rule no-vm       --host the dev box --cap podman --deny "no VMs on the dev box" --use host:<gate-host>
        rule unit        --kind unit        --allow
        @guard read
        fn heavy(ctx) { ctx.cap == "go-build" && ctx.host.role == "dev" && ctx.host.mem_free_gb < 4 }
