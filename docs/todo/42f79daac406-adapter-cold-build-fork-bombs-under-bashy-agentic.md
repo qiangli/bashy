@@ -3,7 +3,7 @@ id: 42f79daac406
 kind: bug
 title: Adapter cold build fork-bombs under BASHY_AGENTIC=1
 seq: 3298
-status: assigned
+status: done
 priority: p0
 labels:
     - adapters
@@ -13,6 +13,9 @@ assignee: codex-gpt6-astra
 sprint: 692
 sprint_id: 58370405-625f-5802-b886-32f3bd57dece
 sprint_title: '677 closure: green integration (go test), WSL keep-alive, symbol strip, dependency bumps, retire switch'
+closed: 2026-11-22T14:02:36.248061Z
+resolution: fixed
+closed_by: codex-gpt6-astra-e
 ---
 
 RUN SCOPE (conductor 2026-11-22): this ONE run delivers three stories, one commit each, in this order: 42f79daa (fork bomb), 3dd8b4ec (GIT_DIR cold build), 3d47facb (install-agent shims exec the adapter binary instead of bashy). Claim 3dd8b4ec and 3d47facb on Sprint 692 as well before touching them; put the matching Story/Story-ID trailers on each commit.
