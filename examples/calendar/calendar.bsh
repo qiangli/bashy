@@ -48,7 +48,7 @@ build() {
   done
   if [[ $stale == true ]]; then
     mkdir -p "$here/.desk-build" "$cache"
-    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/calendar$exe" . && { mv -f ".desk-build/calendar$exe" "$bin" || [[ -f "$bin" ]]; })
+    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -buildvcs=false -trimpath -o ".desk-build/calendar$exe" . && { mv -f ".desk-build/calendar$exe" "$bin" || [[ -f "$bin" ]]; })
   fi
 }
 

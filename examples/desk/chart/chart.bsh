@@ -38,7 +38,7 @@ build() {
  done
  if [[ $stale == true ]]; then
   mkdir -p "$here/.desk-build" "$cache"
-  (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/chart$exe" . && { mv -f ".desk-build/chart$exe" "$bin" || [[ -f "$bin" ]]; })
+  (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -buildvcs=false -trimpath -o ".desk-build/chart$exe" . && { mv -f ".desk-build/chart$exe" "$bin" || [[ -f "$bin" ]]; })
  fi
 }
 case ${1:-} in

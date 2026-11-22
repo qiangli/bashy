@@ -7,7 +7,7 @@ case "${1:-help}" in
   build)
     mkdir -p .build
     output=".build/demo-queue$(go env GOEXE)"
-    GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$output" .
+    GOWORK=off CGO_ENABLED=0 go build -buildvcs=false -trimpath -o "$output" .
     printf 'Built %s\n' "$output"
     ;;
   test)

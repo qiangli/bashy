@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -20,13 +21,14 @@ import (
 // Exercise the shipped bootstrap with a tiny, dependency-free adapter payload.
 // Count and cap every shell process launch BEFORE exec, so a regression cannot
 // fork-bomb the test host. Compiler subprocesses are owned by the single go build.
-func runColdAdapterBootstrap(t *testing.T, folder, entry string) int32 {
+func runColdAdapterBootstrap(t *testing.T, folder, entry string, prepare func(string)) int32 {
 	t.Helper()
 	goBin, err := exec.LookPath("go")
 	if err != nil {
 		t.Skip("Go unavailable")
 	}
-	root, ok := findBashySourceRoot(".")
+	_, source, _, _ := runtime.Caller(0)
+	root, ok := findBashySourceRoot(filepath.Dir(source))
 	if !ok {
 		t.Fatal("source root unavailable")
 	}
@@ -34,7 +36,10 @@ func runColdAdapterBootstrap(t *testing.T, folder, entry string) int32 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := t.TempDir()
+	dir := filepath.Join(t.TempDir(), "adapter")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
 	script := filepath.Join(dir, entry+".bsh")
 	for name, body := range map[string]string{
 		entry + ".bsh": string(raw),
@@ -44,6 +49,9 @@ func runColdAdapterBootstrap(t *testing.T, folder, entry string) int32 {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0600); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if prepare != nil {
+		prepare(dir)
 	}
 	t.Setenv("BASHY_AGENTIC", "1")
 	t.Setenv(adapterExecEnv, "1")
@@ -89,11 +97,34 @@ func runColdAdapterBootstrap(t *testing.T, folder, entry string) int32 {
 func TestAgentModeColdAdapterBuildBounded(t *testing.T) {
 	for _, adapter := range [][2]string{{"yoke", "judge"}, {"toolchain", "go"}} {
 		t.Run(adapter[1], func(t *testing.T) {
-			n := runColdAdapterBootstrap(t, adapter[0], adapter[1])
+			n := runColdAdapterBootstrap(t, adapter[0], adapter[1], nil)
 			if n < 2 || n > 8 {
 				t.Fatalf("process launches = %d, want 2..8", n)
 			}
 			t.Logf("cold bootstrap completed with %d shell process launches", n)
 		})
 	}
+}
+
+// Git hooks export repository-relative GIT_DIR values. Once the adapter cds
+// into its own source tree that path addresses a different (or absent) repo.
+func TestColdAdapterBuildWithForeignGitDir(t *testing.T) {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git unavailable")
+	}
+	foreign := t.TempDir()
+	if out, err := exec.Command(git, "init", filepath.Join(foreign, ".hook-repo")).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, out)
+	}
+	t.Chdir(foreign)
+	t.Setenv("GIT_DIR", ".hook-repo/.git")
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(foreign, ".hook-repo", ".git", "index"))
+	runColdAdapterBootstrap(t, "yoke", "judge", func(dir string) {
+		cmd := exec.Command(git, "init", filepath.Dir(dir))
+		cmd.Env = stripEnvKey(stripEnvKey(os.Environ(), "GIT_DIR"), "GIT_INDEX_FILE")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("adapter git init: %v: %s", err, out)
+		}
+	})
 }
