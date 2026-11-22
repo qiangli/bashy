@@ -3,7 +3,7 @@ id: 160f5356fa2f
 kind: feature
 title: Prepare presenters and automate timed handoffs
 seq: 3294
-status: assigned
+status: done
 priority: p1
 labels:
     - demo-queue
@@ -12,6 +12,8 @@ assignee: s690-codex-manager
 sprint: 690
 sprint_id: 3462c15d-bc37-505c-849d-64a3453232d7
 sprint_title: Demo Queue — LAN screen sharing for team demos
+closed: 2026-11-22T09:58:24.995906Z
+closed_by: s690-codex-manager
 ---
 
 Build on the Outpost media story in this sprint. Joining adds a roster entry. Prepare to present opens the picker, shows a private local preview, and checks browser encoding support, a live capture source, and a bounded synthetic upload over the media path. On success, queue presenters in ready order and show a green Ready status to the organizer. Show a retry action on failure. Use session heartbeats and capture-track events to clear readiness on disconnect, withdrawal, or stopped capture. Reconnection keeps roster identity and requires preparation checks before reentry.
