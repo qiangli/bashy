@@ -104,12 +104,26 @@ func TestAgenticExampleProductEntries(t *testing.T) {
 	// which never reaches this fixture and blocks on auth/network. The override
 	// is the launcher's own explicit-binary path, so it stays governed.
 	t.Setenv("BASHY_TOOL_BINARY_CODEX", filepath.Join(bin, "codex"))
+	// Adapter dispatch re-execs the bashy self path with `--bashsharp
+	// <adapter>.bsh`; route that self-exec through the fixture launcher
+	// too, or it reaches the raw test binary, which is not a bashy CLI.
+	t.Setenv("BASHY_SELF", filepath.Join(bin, "bashy"))
 	quote := func(s string) string { return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'" }
 	launcher := "#!/bin/sh\nexec " + quote(exe) + " -test.run=TestAgenticExampleCLIHelper -- \"$@\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "bashy"), []byte(launcher), 0700); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// Warm the chat adapter before the timed cases: the first `bashy chat`
+	// cold-builds its adapter binary, which can exceed a subtest's 15 s
+	// deadline in a capped container for a venue reason, not a product one.
+	warmCtx, warmCancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	warm := exec.CommandContext(warmCtx, exe, "-test.run=TestAgenticExampleCLIHelper", "--", "-c", "bashy chat --help >/dev/null 2>&1; true")
+	warm.Dir = root
+	if err := warm.Run(); err != nil {
+		t.Fatalf("warm chat adapter: %v", err)
+	}
+	warmCancel()
 	examples, err := filepath.Abs("../../examples/agentic")
 	if err != nil {
 		t.Fatal(err)
