@@ -3,13 +3,14 @@ id: de8e2cc0d87b
 kind: bug
 title: yoke/dag adapter lost the sprint capacity services that runDagDispatch mounted in-process (P4 parity gap)
 seq: 3303
-status: todo
+status: assigned
 priority: p1
 labels:
     - bashy
     - yoke
     - adapter
 created: 2026-11-22T14:32:53.82794Z
+assignee: codex-gpt6-astra
 sprint: 692
 ---
 

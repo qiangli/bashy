@@ -3,13 +3,15 @@ id: 46669697bbbd
 kind: bug
 title: test-startup-linux must measure bsh, not the full bashy product (P5 removed the bashy_cert_base profile it used to build)
 seq: 3302
-status: todo
+status: assigned
 priority: p1
 labels:
     - bashy
     - dag
     - release
 created: 2026-11-22T14:32:53.683499Z
+weave: 136
+assignee: codex-gpt6-astra
 sprint: 692
 ---
 

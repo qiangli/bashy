@@ -3,13 +3,14 @@ id: 744d93b6177e
 kind: bug
 title: custom/kubectl adapter lost adaptKubeEnvironment (Windows KUBECONFIG path conversion) (P4 parity gap)
 seq: 3304
-status: todo
+status: assigned
 priority: p1
 labels:
     - bashy
     - windows
     - adapter
 created: 2026-11-22T14:32:53.973317Z
+assignee: codex-gpt6-astra
 sprint: 692
 ---
 
