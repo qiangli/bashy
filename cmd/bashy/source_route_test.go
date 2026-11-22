@@ -84,9 +84,10 @@ func TestSourceRoute(t *testing.T) {
 			}
 			cmd := exec.Command(bin, tc.args...)
 			cmd.Dir = dir
-			// `go test` exports its own toolchain's GOROOT; the product's
-			// pinned Go toolchain must not inherit it (todo 54a667814e3c).
-			cmd.Env = withoutEnv(os.Environ(), "GOROOT")
+			// `go test` exports its own toolchain's GOROOT, and the child
+			// deliberately inherits it: the managed toolchain must pin
+			// GOROOT to itself (gotoolchain.PinGOROOT, todo 54a667814e3c)
+			// rather than this test hiding the foreign value.
 			cmd.Stdin = strings.NewReader("in\n")
 			out, err := cmd.CombinedOutput()
 			code := 0
@@ -122,14 +123,4 @@ func foreignSourceCase(args []string) bool {
 		}
 	}
 	return false
-}
-
-func withoutEnv(env []string, key string) []string {
-	out := env[:0:0]
-	for _, kv := range env {
-		if !strings.HasPrefix(kv, key+"=") {
-			out = append(out, kv)
-		}
-	}
-	return out
 }

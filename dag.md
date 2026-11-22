@@ -119,7 +119,11 @@ Effects: cred, exec, net, read, write
 set -e
 BASHY_EXE="${BASHY:-bashy}"
 go_cmd="${GO:-$BASHY_EXE go}"
-$go_cmd test ./...
+# -timeout 30m: internal/agentos alone carries ~1500 tests and exceeded the
+# default 10m package timeout under the official image's 8-CPU cap with no
+# individual failure (story 389edc3a9dc8). Test-infra budget only; no test
+# is skipped or split away.
+$go_cmd test -timeout 30m ./...
 ```
 
 ### test-meet-spa-fresh-regression

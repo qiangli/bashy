@@ -664,6 +664,12 @@ func repairHermeticEnv(t *testing.T) []string {
 	if cache := os.Getenv("BASHY_BIN_CACHE"); cache != "" {
 		env = append(env, "BASHY_BIN_CACHE="+cache)
 	}
+	// The SDK cache alone does not name its version: without BASHY_GO_VERSION
+	// the child's `bashy go` falls back to gotoolchain.DefaultVersion and can
+	// miss the pre-seeded cache the lane provisioned (story 389edc3a9dc8).
+	if v := os.Getenv("BASHY_GO_VERSION"); v != "" {
+		env = append(env, "BASHY_GO_VERSION="+v)
+	}
 	if runtime.GOOS == "windows" {
 		for _, k := range []string{"SYSTEMROOT", "SYSTEMDRIVE", "COMSPEC", "USERPROFILE", "LOCALAPPDATA"} {
 			if v, ok := os.LookupEnv(k); ok {

@@ -6,6 +6,7 @@ package agentos
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -13,6 +14,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -129,17 +131,55 @@ func makeTreeWritable(root string) {
 	})
 }
 
+// acpSharedHome is the one HOME both process-level ACP tests run against:
+// the first `bashy acp` in a fresh HOME cold-builds the yoke/chat adapter
+// (over 120 s on an 8-CPU-capped venue, which blew both tests' warm-path
+// contexts in story 389edc3a9dc8), so it is warmed exactly once here with an
+// explicit cold budget instead of each test paying it alone. The dir is
+// left in the temp root for the OS to reap: registering t.Cleanup on the
+// first test would delete it before the second test runs.
+var (
+	acpSharedOnce sync.Once
+	acpSharedDir  string
+	acpSharedErr  error
+)
+
+func acpSharedHome(t *testing.T, bin string) string {
+	t.Helper()
+	acpSharedOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "bashy-acp-shared-")
+		if err != nil {
+			acpSharedErr = err
+			return
+		}
+		acpSharedDir = dir
+		env := acpEnvFor(dir)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, bin, "acp", "--help")
+		cmd.Env = env
+		cmd.Stdin = strings.NewReader("")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			acpSharedErr = fmt.Errorf("warm chat adapter (`bashy acp --help`): %v: %s", err, out)
+		}
+	})
+	if acpSharedErr != nil {
+		t.Fatalf("acp shared-home warm-up: %v", acpSharedErr)
+	}
+	return acpSharedDir
+}
+
 // acpTestEnv isolates the server from the invoking agent's own identity and
 // stores, and keeps it offline: a help render and a refused turn must touch
 // neither the operator's fleet nor the network.
 func acpTestEnv(t *testing.T) []string {
 	t.Helper()
-	home := t.TempDir()
-	t.Cleanup(func() { makeTreeWritable(home) })
+	return acpEnvFor(acpSharedHome(t, acpTestBinary(t)))
+}
+
+func acpEnvFor(home string) []string {
 	tmp := filepath.Join(home, "tmp")
-	if err := os.MkdirAll(tmp, 0o755); err != nil {
-		t.Fatal(err)
-	}
+	_ = os.MkdirAll(tmp, 0o755)
 	return []string{
 		"PATH=" + os.Getenv("PATH"),
 		"HOME=" + home,
