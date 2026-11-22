@@ -208,7 +208,7 @@ BASHY_SCRATCH_ARTIFACT="${BASHY_SCRATCH_ARTIFACT:-}" scripts/verify-bashy-scratc
 ```
 
 ### test-startup-linux
-Gate package initialization and 100 background jobs on Linux.
+Gate certified bsh package initialization and 100 background jobs on Linux.
 Effects: exec, net, read, write
 
 ```bash
@@ -218,12 +218,15 @@ go_cmd="${GO:-$BASHY_EXE go}"
 bin_dir="${BIN_DIR:-bin}"
 if [ "$($go_cmd env GOOS)" = linux ]; then
   mkdir -p "$bin_dir"
-  if [ -n "${GO:-}" ]; then
-    CGO_ENABLED=1 BASHY_EXE="" scripts/go-product.sh build -tags osusergo -ldflags=-w -o "$bin_dir/bashy-startup-check" ./cmd/bashy
-  else
-    CGO_ENABLED=1 BASHY_EXE="$BASHY_EXE" scripts/go-product.sh build -tags osusergo -ldflags=-w -o "$bin_dir/bashy-startup-check" ./cmd/bashy
-  fi
-  scripts/test-startup-linux.sh "$bin_dir/bashy-startup-check"
+  # cmd/bsh is a nested module, excluded from the parent module zip.
+  # Resolve it at our pinned bashsharp revision and build with its own graph.
+  bsh_version=$(GOWORK=off $go_cmd list -m -f '{{.Version}}' github.com/bashsharp/bashsharp)
+  bsh_module="github.com/bashsharp/bashsharp/cmd/bsh@$bsh_version"
+  GOWORK=off $go_cmd mod download "$bsh_module"
+  bsh_dir=$(GOWORK=off $go_cmd list -m -f '{{.Dir}}' "$bsh_module")
+  out="$(cd "$bin_dir" && pwd)/bsh-startup-check"
+  GOWORK=off CGO_ENABLED=1 $go_cmd -C "$bsh_dir" build -mod=readonly -trimpath -tags osusergo -ldflags=-w -o "$out" .
+  scripts/test-startup-linux.sh "$out"
 else
   echo "test-startup-linux: skipped (Linux only)"
 fi
