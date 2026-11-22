@@ -1,20 +1,20 @@
 #!/usr/bin/env -S bashy --bashsharp
 set -euo pipefail
 here=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+cd "$here"
+
 case "${1:-help}" in
-  host|join|test) ;;
+  build)
+    mkdir -p .build
+    output=".build/demo-queue$(go env GOEXE)"
+    GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$output" .
+    printf 'Built %s\n' "$output"
+    ;;
+  test)
+    GOWORK=off go test -race ./...
+    ;;
   help|-h|--help)
-    printf '%s\n' 'Usage: demo-queue.bsh host | join [--name NAME] | test'
-    exit 0
+    printf '%s\n' 'Usage: demo-queue.bsh build | test'
     ;;
   *) printf '%s\n' 'Unknown command. Run demo-queue.bsh --help.' >&2; exit 2 ;;
 esac
-if [[ $1 == test ]]; then
-  cd "$here"
-  GOWORK=off go test -race ./...
-  exit
-fi
-build_dir=$(mktemp -d "${TMPDIR:-/tmp}/demo-queue.XXXXXXXX")
-trap 'rm -rf -- "$build_dir"' EXIT
-(cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$build_dir/demo-queue.exe" .)
-"$build_dir/demo-queue.exe" "$@"

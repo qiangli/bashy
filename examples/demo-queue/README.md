@@ -14,10 +14,17 @@ and check that the organizer and presenters appear with a direct connection in
 `outpost mesh status`. The source works under the repository's BSD-3-Clause
 license and has zero third-party library dependencies.
 
-From this directory, on the organizer’s device:
+Build once on each device from this directory:
 
 ```sh
-bashy --bashsharp ./demo-queue.bsh host
+bashy --bashsharp ./demo-queue.bsh build
+```
+
+Run the native binary from your terminal so it receives Ctrl-C and can close
+its Outpost forwards. Use `.build/demo-queue.exe` on Windows.
+
+```sh
+./.build/demo-queue host
 ```
 
 1. Open the printed organizer URL privately. Open the printed projector URL in a
@@ -28,7 +35,7 @@ bashy --bashsharp ./demo-queue.bsh host
    prompt. Keep the command running during the session.
 
    ```sh
-   bashy --bashsharp ./demo-queue.bsh join --name "Presenter"
+   ./.build/demo-queue join --name "Presenter"
    ```
 
 3. The presenter opens the printed local URL and clicks **Prepare to present**.
