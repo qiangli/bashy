@@ -3,7 +3,7 @@ id: 8e5204e127c4
 kind: feature
 title: C4 member-principal shaping e2e across example apps + 'Enable an app for consumer shaping' runbook
 seq: 3261
-status: assigned
+status: todo
 priority: p1
 created: 2026-11-20T19:14:04.928857Z
 assignee: agy-gemini4-hydrogen

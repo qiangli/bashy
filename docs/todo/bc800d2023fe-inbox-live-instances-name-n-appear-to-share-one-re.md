@@ -3,10 +3,9 @@ id: bc800d2023fe
 kind: bug
 title: 'inbox: live instances name+N appear to share one read cursor (claude+2 mail is acked/consumed by another claude session); name+N is not a registered sender'
 seq: 3285
-status: assigned
+status: todo
 priority: p1
 created: 2026-11-21T10:29:53.513924Z
-weave: 127
 assignee: agy-gemini4-carbon-w127
 sprint: 652
 sprint_id: 48a699fb-076f-5442-995a-b12987a45bea

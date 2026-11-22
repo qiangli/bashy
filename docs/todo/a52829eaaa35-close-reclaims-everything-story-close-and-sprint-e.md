@@ -6,7 +6,6 @@ seq: 3286
 status: todo
 priority: p0
 created: 2026-11-21T11:29:39.28621Z
-weave: 128
 sprint: 652
 sprint_id: 48a699fb-076f-5442-995a-b12987a45bea
 sprint_title: Outpost reliability and host-offline alerting on cloudbox
