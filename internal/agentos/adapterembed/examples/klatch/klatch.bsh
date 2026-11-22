@@ -1,0 +1,228 @@
+#!/usr/bin/env -S bashy --bashsharp
+# Primary Klatch participant command. Verb routing, input shaping and composed
+# workflows live here; the Node helper only does protocol, crypto, sessions, files.
+~~~skill as guide
+---
+name: klatch
+description: Bootstrap and provision a running Klatch chat server, and drive it as a participant (auth, contacts, conversations, members, messages, attachments, watch) through the Klatch CLI.
+metadata:
+  requires: "has=bashy"
+---
+# Klatch
+
+Run `bashy klatch setup CONFIG.json` against a running Klatch server reachable
+at the `base_url` of the config. It bootstraps the admin password if needed, sets
+closed access with no federation domain (the server refuses external contacts),
+then provisions accounts, mutual contacts between group owner and members and
+groups. `provision` skips the admin steps; `status` reports reachability, account
+count and groups. Output is JSON handles to guids and group keys to ids. Reruns
+create no duplicates. Passwords are vault references via `bashy secret show REF`;
+never put one in the config or on a command line. `sync HOST [--app klatch]
+CONFIG.json [--dry-run]` reads `bashy share who HOST/APP --json` (the cloudbox
+host grant roster: owner plus admitted member emails) and PUTs `{"owner",
+"emails"}` to the server's `/admin/sso/roster` with the admin password; the
+server creates, enables and disables SSO-linked accounts to match. Idempotent;
+`--dry-run` prints the roster without sending; `BASHY_KLATCH_WHO_CMD` overrides
+the who command (tests).
+
+Every other verb is the participant command, routed by this script to the
+Klatch Node helper (Node >=22, required) for protocol, crypto, sessions and
+files: auth-login|auth-status|auth-logout,
+seal-unlock, contacts-list|invite|accept, conversations-list|show|create|rename|leave,
+members-list|add|remove, messages-list|show|send|edit|delete,
+attachments-upload|download, and watch. JSON input arrives on stdin (default) or
+`--input FILE|-`; `--session FILE` and `--json` are accepted. Output is
+`{"ok":true,"result":...}` or `{"ok":false,"error":{"code":...}}` on stderr;
+`watch` emits JSONL. Outgoing assistant text is prefixed `[Assistant: NAME]` by
+the CLI. Shaping: fields may be given as `key=value` (string) or `key:=JSON` arguments
+instead of stdin (secrets are refused in argv); `KLATCH_ASSISTANT` supplies the
+default `assistant`. Workflow `post-file`: messages-send then attachments-upload
+of `path` onto the new topic, one result. Locate the helper with `KLATCH_HELPER`
+(a `dist/main.js` run with `node`, or an executable); otherwise `klatch-helper`
+on PATH is used. `KLATCH_ASSISTANT` also defaults `assistant` in stdin/`--input` JSON.
+See `examples/klatch/README.md`.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ ${1:-} == --skill ]]; then
+  inside=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then inside=true; continue; fi
+    if [[ $inside == true && $line == '~~~' ]]; then break; fi
+    if [[ $inside == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  exit
+fi
+if [[ ${1:-} == --contract ]]; then
+  echo 'sokilili meitorikusu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini'
+  exit
+fi
+
+usage_text='Usage: klatch setup|provision|status CONFIG.json | sync HOST [--app klatch] CONFIG.json [--dry-run] | VERB [key=value|key:=JSON ...] [--input FILE|-] [--session FILE] [--json] | post-file ...'
+usage() {
+  printf '{"ok":false,"error":{"code":"USAGE","message":"%s"}}\n' "$usage_text" >&2
+  exit 2
+}
+fail() { # fail CODE STATUS
+  printf '{"ok":false,"error":{"code":"%s"}}\n' "$1" >&2
+  exit "$2"
+}
+
+secret_key() { # credential-like field name (case-insensitive, any depth)
+  local lk=${1,,}
+  [[ $lk == sealed ]] && return 1   # nonsecret boolean flag, not the seal password
+  [[ $lk == @(code|mfa|otp|totp|pin) || $lk == *code || $lk == *@(mfa|totp|passw|passphrase|token|secret|privatekey|private_key|authorization|credential|apikey|api_key|cookie|bearer|recovery|seal|verification)* ]]
+}
+
+jstr() { # raw string -> JSON string literal (bashy jq has no --arg / -R)
+  local s=$1
+  s=${s//\\/\\\\}; s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}; s=${s//$'\t'/\\t}; s=${s//$'\r'/\\r}
+  if [[ $s =~ [[:cntrl:]] ]]; then fail INVALID_INPUT 2; fi
+  printf '"%s"' "$s"
+}
+
+helper_cmd() { # sets helper=(...) or fails
+  local cli=${KLATCH_HELPER:-}
+  if [[ -z $cli ]]; then
+    cli=$(command -v klatch-helper 2>/dev/null) || fail CLI_NOT_FOUND 1
+  fi
+  case $cli in
+    *.js|*.mjs|*.cjs)
+      command -v node >/dev/null 2>&1 || fail NODE_REQUIRED 1
+      helper=(node "$cli") ;;
+    *) helper=("$cli") ;;
+  esac
+}
+
+verbs=' auth-login auth-status auth-logout seal-unlock contacts-list contacts-invite contacts-accept conversations-list conversations-show conversations-create conversations-rename conversations-leave members-list members-add members-remove messages-list messages-show messages-send messages-edit messages-delete attachments-upload attachments-download watch '
+verb=${1:-}
+case $verb in
+  setup|provision|status)
+    if (( $# != 2 )); then
+      echo 'Usage: klatch setup|provision|status CONFIG.json' >&2
+      exit 2
+    fi
+    exec python3 "$here/provision.py" "$1" "$2" ;;
+  sync)
+    host=; app=klatch; cfg=; dry=false
+    shift
+    while (( $# )); do
+      case $1 in
+        --app) (( $# >= 2 )) || usage; app=$2; shift 2 ;;
+        --dry-run) dry=true; shift ;;
+        -*) usage ;;
+        *)
+          if [[ -z $host ]]; then host=$1
+          elif [[ -z $cfg ]]; then cfg=$1
+          else usage; fi
+          shift ;;
+      esac
+    done
+    [[ -n $host && -n $cfg ]] || usage
+    args=(sync "$host" "$app" "$cfg")
+    [[ $dry == true ]] && args+=(--dry-run)
+    exec python3 "$here/provision.py" "${args[@]}" ;;
+  --help|help)
+    if [[ -n ${KLATCH_HELPER:-} ]] || command -v klatch-helper >/dev/null 2>&1; then
+      helper_cmd
+      exec "${helper[@]}" --help
+    fi
+    echo "$usage_text"
+    echo "Verbs:$verbs"
+    echo 'Participant verbs need the Klatch Node helper (KLATCH_HELPER or klatch-helper on PATH).'
+    exit 0 ;;
+  post-file) ;;
+  '') usage ;;
+  *) [[ $verbs == *" $verb "* ]] || usage ;;
+esac
+shift
+
+# Parse the shaping surface: key=value / key:=JSON fields plus helper flags.
+json='{}'; shaped=false; session=(); passthru=(); have_input=false; input_path=-
+re='^([A-Za-z][A-Za-z0-9_]*)(:?=)(.*)$'
+while (( $# )); do
+  case $1 in
+    --input|--session)
+      (( $# >= 2 )) || usage
+      if [[ $1 == --input ]]; then have_input=true; input_path=$2; fi
+      [[ $1 == --session ]] && session=(--session "$2")
+      passthru+=("$1" "$2"); shift 2 ;;
+    --json) passthru+=(--json); shift ;;
+    *)
+      [[ $1 =~ $re ]] || usage
+      k=${BASH_REMATCH[1]} op=${BASH_REMATCH[2]} v=${BASH_REMATCH[3]}
+      # credential-like names (also nested in :=JSON): refuse before they reach process args
+      if secret_key "$k"; then fail SECRET_VIA_ARGV 2; fi   # secrets only via private JSON input
+      if [[ $op == ':=' ]]; then
+        vj=$(jq -c 'if length == 1 then .[0] else error("one value") end' <<<"[$v]" 2>/dev/null) || fail INVALID_INPUT 2
+        nested=$(jq -r '.. | objects | keys[]' <<<"$vj" 2>/dev/null) || nested=
+        while IFS= read -r nk; do
+          if [[ -n $nk ]] && secret_key "$nk"; then fail SECRET_VIA_ARGV 2; fi
+        done <<<"$nested"
+      else
+        vj=$(jstr "$v")
+      fi
+      json=$(jq -c ".$k = $vj" <<<"$json")
+      shaped=true; shift ;;
+  esac
+done
+if [[ $shaped == true && $have_input == true ]]; then fail INVALID_INPUT 2; fi
+assistant_verb=false
+case $verb in messages-send|messages-edit|attachments-upload|post-file) assistant_verb=true ;; esac
+if [[ $assistant_verb == true && -n ${KLATCH_ASSISTANT:-} ]]; then
+  if [[ $shaped == false ]]; then
+    # Default the assistant inside stdin / --input JSON too.
+    [[ $verb != post-file && $input_path == - && -t 0 ]] && fail JSON_INPUT_REQUIRED 2
+    if [[ $input_path == - ]]; then json=$(head -c 1048577) || true
+    else json=$(head -c 1048577 -- "$input_path" 2>/dev/null) || fail INVALID_INPUT 2; fi
+    jq -e 'type == "object"' <<<"$json" >/dev/null 2>&1 || fail INVALID_JSON 2
+    shaped=true; passthru=(); have_input=false
+    [[ ${#session[@]} -gt 0 ]] && passthru+=("${session[@]}")
+    passthru+=(--json)
+  fi
+  json=$(jq -c ".assistant //= $(jstr "$KLATCH_ASSISTANT")" <<<"$json")
+fi
+
+helper_cmd
+sflags=(--json "${session[@]}")
+
+if [[ $verb != post-file ]]; then
+  if [[ $shaped == true ]]; then
+    printf '%s' "$json" | "${helper[@]}" "$verb" "${sflags[@]}"
+    exit "${PIPESTATUS[1]}"
+  fi
+  exec "${helper[@]}" "$verb" "${passthru[@]}"
+fi
+
+# Workflow: post-file = messages-send, then attachments-upload onto that topic.
+if [[ $shaped == false ]]; then
+  if [[ $have_input == true ]]; then fail INVALID_INPUT 2; fi
+  [[ -t 0 ]] && fail JSON_INPUT_REQUIRED 2
+  json=$(head -c 1048577) || true
+  jq -e 'type == "object"' <<<"$json" >/dev/null 2>&1 || fail INVALID_JSON 2
+fi
+jq -e '(.path|type=="string") and (.channelId!=null) and (.text|type=="string") and (.assistant|type=="string")' \
+  <<<"$json" >/dev/null || fail INVALID_INPUT 2
+sent=$(jq -c 'del(.path)' <<<"$json" | "${helper[@]}" messages-send "${sflags[@]}") || exit $?
+jq -e '.ok == true' <<<"$sent" >/dev/null 2>&1 || fail INVALID_RESPONSE 1
+topic=$(jq -r '.result | (.id // .topicId // empty)' <<<"$sent" 2>/dev/null) || true
+if [[ -z $topic ]]; then
+  # The text was posted but its id is unknown: the outcome is partial and not recoverable here.
+  printf '{"ok":false,"error":{"code":"SEND_ID_MISSING","partial":true,"message":"message sent; no topic id returned, attachment not uploaded"}}\n' >&2
+  exit 1
+fi
+errf=$(mktemp); trap 'rm -f "$errf"' EXIT
+if up=$(jq -c ".topicId = $(jstr "$topic")" <<<"$json" | "${helper[@]}" attachments-upload "${sflags[@]}" 2>"$errf") \
+   && jq -e '.ok == true' <<<"$up" >/dev/null 2>&1; then
+  jq -c "{ok:true,result:{topicId:$(jstr "$topic"),upload:.result}}" <<<"$up"
+  exit
+fi
+# The text was already posted; report the topic so the caller can recover (no retry).
+cause=$(jq -c '.error // empty' <<<"$up" 2>/dev/null || true)
+[[ -n $cause ]] || cause=$(jq -c '.error // empty' "$errf" 2>/dev/null || true)
+[[ -n $cause ]] || cause=null
+printf '{"ok":false,"error":{"code":"UPLOAD_FAILED","topicId":%s,"partial":true,"cause":%s}}\n' "$(jstr "$topic")" "$cause" >&2
+exit 1

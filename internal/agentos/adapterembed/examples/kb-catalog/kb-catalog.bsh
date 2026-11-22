@@ -1,0 +1,430 @@
+#!/usr/bin/env -S bashy --bashsharp
+# kb-catalog: render the EXISTING KB ring as one browsable Viewer book and
+# hand its link to a Klatch conversation. Pure composition of `bashy kb`,
+# `bashy viewer` and `bashy klatch`; the KB record stays the original.
+~~~skill as guide
+---
+name: kb-catalog
+description: Render the existing KB ring (short notes + their refs) as one browsable Viewer book, filtered by kind/tag/ring/query, and post the catalog link into a Klatch conversation. Use when a human should browse KB records in a page or from chat; the KB page stays the original (bashy kb show REF).
+metadata:
+  requires: "has=bashy"
+  step-porota: 'bashy kb-catalog select --json'
+  check-tests: 'bashy kb-catalog select --json'
+---
+# kb-catalog
+
+One Bash# body composing existing verbs; no second store, no new link syntax.
+
+- `bashy kb-catalog build [TERM...] [--kind K] [--tag T]... [--ring repo|host|agent | --dir D | --base-dir ROOT] [--book ID] [--json] [--dry-run [--out DIR]]`
+  selects records with `bashy kb search --json` (terms given) or `bashy kb list --json`
+  (no terms), reads each with `bashy kb show --json` + `bashy kb backlinks --json`,
+  renders one Markdown page per record from `templates/entry.md`, and appends an
+  index page plus the entry pages to ONE Viewer book (`bashy viewer add` once,
+  then `bashy viewer append`). Pages are append-only: a rebuild adds a new
+  index + pages after the old ones, so the book's history stays intact.
+- `bashy kb-catalog select ...` prints the selection JSON only (same filters, no viewer call).
+- `bashy kb-catalog open [--book ID] [--json]` is `bashy viewer open ID` (id, URL, status; never content).
+- `bashy kb-catalog share --klatch CONVERSATION [--book ID] [--text T] [--json] [--dry-run]`
+  reads the URL with `bashy viewer open --json` and posts it with
+  `bashy klatch messages-send channelId=CONVERSATION text=...`.
+- `--dry-run` prints the plan (selection + every viewer/klatch argv) and runs no
+  write verb; `--out DIR` also writes the rendered pages there for inspection.
+
+Each entry page carries: title, `kb:` ref, kind/status/tags, the description,
+the `bashy kb show REF` line, its references as links (`[[slug]]`/`kind:id`
+refs, URLs, repo file paths) and its backlinks (`bashy kb backlinks`). Refs to
+records in the same build link to their catalog page; everything else links to
+the original (CLI line or URL). Output JSON: `{"ok":true,"book","url","index_page","count","entries":[{ref,title,page}]}`;
+errors are `{"ok":false,"error":{"code","message"}}` on stderr (`USAGE` 2, else 1).
+
+Shaping hook: `templates/entry.md` and `templates/index.md` (page layout,
+`{{placeholder}}` substitution) and `catalog.json` (default book, ring, kind,
+tags, query, k, exclude_status, share_text). `--config FILE` / `KB_CATALOG_CONFIG`
+select another config; `--template FILE` another layout. `KB_CATALOG_KB`,
+`KB_CATALOG_VIEWER`, `KB_CATALOG_KLATCH` replace the composed commands
+(default `bashy kb`, `bashy viewer`, `bashy klatch`). See `examples/kb-catalog/README.md`.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+shopt -u patsub_replacement 2>/dev/null || true
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+if [[ ${1:-} == --skill ]]; then
+  inside=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then inside=true; continue; fi
+    if [[ $inside == true && $line == '~~~' ]]; then break; fi
+    if [[ $inside == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  exit
+fi
+if [[ ${1:-} == --contract ]]; then
+  echo 'sokilili kabukatarogu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini'
+  exit
+fi
+
+usage_text='Usage: kb-catalog build|select [TERM...] [--kind K] [--tag T]... [--ring repo|host|agent|--dir D|--base-dir ROOT] [--book ID] [--title T] [--config F] [--template F] [--k N] [--json] [--dry-run [--out DIR]] | open [--book ID] [--json] | share --klatch CONVERSATION [--book ID] [--text T] [--json] [--dry-run]'
+
+jstr() { # raw string -> JSON string literal (bashy jq has no --arg / -R)
+  local s=$1
+  s=${s//\\/\\\\}; s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}; s=${s//$'\t'/\\t}; s=${s//$'\r'/\\r}
+  printf '"%s"' "$s"
+}
+fail() { # fail CODE STATUS MESSAGE
+  printf '{"ok":false,"error":{"code":"%s","message":%s}}\n' "$1" "$(jstr "$3")" >&2
+  exit "$2"
+}
+usage() { fail USAGE 2 "$usage_text"; }
+
+# The composed commands: shaping/test seams, defaults are the registered verbs.
+read -ra kb <<<"${KB_CATALOG_KB:-bashy kb}"
+read -ra viewer <<<"${KB_CATALOG_VIEWER:-bashy viewer}"
+read -ra klatch <<<"${KB_CATALOG_KLATCH:-bashy klatch}"
+
+verb=${1:-}
+case $verb in
+  build|select|open|share) shift ;;
+  -h|--help|help)
+    echo "$usage_text"
+    echo 'Verbs: build (KB -> one Viewer book), select (selection JSON only), open (viewer open), share (post link via klatch).'
+    echo "Shaping: $here/templates/entry.md, $here/templates/index.md, $here/catalog.json (--config FILE)."
+    exit 0 ;;
+  '') usage ;;
+  *) usage ;;
+esac
+
+# ---- options -----------------------------------------------------------
+config=${KB_CATALOG_CONFIG:-$here/catalog.json}
+kind= ring= dir= base_dir= book= title= template= index_template= k= out= klatch_conv= text=
+tags=() terms=() as_json=false dry_run=false
+need() { (( $# >= 2 )) || usage; }
+while (( $# )); do
+  case $1 in
+    --kind|--type) need "$@"; kind=$2; shift 2 ;;
+    --tag|--tags) need "$@"; tags+=("$2"); shift 2 ;;
+    --ring) need "$@"; ring=$2; shift 2 ;;
+    --dir) need "$@"; dir=$2; shift 2 ;;
+    --base-dir) need "$@"; base_dir=$2; shift 2 ;;
+    --book) need "$@"; book=$2; shift 2 ;;
+    --title) need "$@"; title=$2; shift 2 ;;
+    --config) need "$@"; config=$2; shift 2 ;;
+    --template) need "$@"; template=$2; shift 2 ;;
+    --index-template) need "$@"; index_template=$2; shift 2 ;;
+    --k) need "$@"; k=$2; shift 2 ;;
+    --out) need "$@"; out=$2; shift 2 ;;
+    --klatch) need "$@"; klatch_conv=$2; shift 2 ;;
+    --text) need "$@"; text=$2; shift 2 ;;
+    --json) as_json=true; shift ;;
+    --dry-run) dry_run=true; shift ;;
+    --*) usage ;;
+    *) terms+=("$1"); shift ;;
+  esac
+done
+
+[[ -f $config ]] || fail CONFIG_NOT_FOUND 2 "config $config not found"
+cfg() { jq -r "$1" "$config" 2>/dev/null || true; }
+[[ -n $book ]] || book=$(cfg '.book // "kb-catalog"')
+[[ -n $title ]] || title=$(cfg '.title // "KB catalog"')
+[[ -n $kind ]] || kind=$(cfg '.kind // ""')
+[[ -n $ring ]] || ring=$(cfg '.ring // ""')
+[[ -n $k ]] || k=$(cfg '.k // 50')
+if (( ${#tags[@]} == 0 )); then
+  while IFS= read -r t; do [[ -n $t ]] && tags+=("$t"); done < <(cfg '.tags // [] | .[]')
+fi
+if (( ${#terms[@]} == 0 )); then
+  while IFS= read -r t; do [[ -n $t ]] && terms+=("$t"); done < <(cfg '.query // [] | .[]')
+fi
+exclude_status=$(cfg '.exclude_status // ["superseded"] | map(.) | join(" ")')
+share_text=$(cfg '.share_text // "KB catalog: {{url}}"')
+resolve_tpl() { # resolve_tpl PATH-OR-RELATIVE
+  local p=$1
+  [[ $p == /* ]] || p=$here/$p
+  [[ -f $p ]] || fail TEMPLATE_NOT_FOUND 2 "template $p not found"
+  printf '%s' "$p"
+}
+template=$(resolve_tpl "${template:-$(cfg '.template // "templates/entry.md"')}")
+index_template=$(resolve_tpl "${index_template:-$(cfg '.index_template // "templates/index.md"')}")
+[[ $book =~ ^[A-Za-z0-9_-]{1,64}$ ]] || fail USAGE 2 "book id: use 1-64 letters, digits, - or _"
+[[ $ring == '' || $ring == repo || $ring == host || $ring == agent ]] || fail USAGE 2 "--ring wants repo|host|agent"
+[[ $k =~ ^[0-9]+$ ]] || fail USAGE 2 "--k wants a number"
+
+# KB scope: --dir wins, then --base-dir, then --ring; nothing = kb's own detection.
+scope=()
+if [[ -n $dir ]]; then scope=(--dir "$dir"); scope_name="dir:$dir"
+elif [[ -n $base_dir ]]; then scope=(--base-dir "$base_dir"); scope_name="base-dir:$base_dir"
+elif [[ -n $ring ]]; then scope=(--ring "$ring"); scope_name=$ring
+else scope_name=auto; fi
+
+kbq() { "${kb[@]}" "${scope[@]}" "$@"; }
+
+# ---- selection ---------------------------------------------------------
+tag_filter='true'
+if (( ${#tags[@]} )); then
+  tag_filter='((.tags // []) | map('
+  sep=
+  for t in "${tags[@]}"; do tag_filter+="$sep. == $(jstr "$t")"; sep=' or '; done
+  tag_filter+=') | any)'
+fi
+status_filter='true'
+if [[ -n $exclude_status ]]; then
+  status_filter='(.status as $s | ['
+  sep=
+  for s in $exclude_status; do status_filter+="$sep\$s == $(jstr "$s")"; sep=' or '; done
+  status_filter+='] | any | not)'
+fi
+select_entries() { # -> compact JSON array of {slug,ref,id,seq,type,status,title,description,tags}
+  local raw
+  if (( ${#terms[@]} )); then
+    local a=(search "${terms[@]}" --json --k "$k")
+    [[ -n $kind ]] && a+=(--type "$kind")
+    (( ${#tags[@]} )) && a+=(--tags "$(IFS=,; echo "${tags[*]}")")
+    raw=$(kbq "${a[@]}") || fail KB_FAILED 1 "bashy kb search failed"
+  else
+    local a=(list --json)
+    [[ -n $kind ]] && a+=(--type "$kind")
+    raw=$(kbq "${a[@]}") || fail KB_FAILED 1 "bashy kb list failed"
+  fi
+  jq -c "[(.pages // [])[] | select($tag_filter and $status_filter)
+          | {slug,ref,id,seq,type,status,title,description,tags:(.tags // [])}]" <<<"$raw" \
+    || fail KB_FAILED 1 "unexpected kb JSON"
+}
+
+filters_desc() {
+  local d=()
+  [[ -n $kind ]] && d+=("kind=$kind")
+  (( ${#tags[@]} )) && d+=("tags=$(IFS=,; echo "${tags[*]}")")
+  (( ${#terms[@]} )) && d+=("query=${terms[*]}")
+  (( ${#d[@]} )) && printf '%s' "${d[*]}"
+  return 0
+}
+
+if [[ $verb == select ]]; then
+  entries=$(select_entries)
+  if [[ $as_json == true ]]; then
+    jq -c "{ok:true,scope:$(jstr "$scope_name"),filters:$(jstr "$(filters_desc)"),count:length,entries:.}" <<<"$entries"
+  else
+    jq -r '.[] | "\(.ref)\t\(.type)\t\(.status)\t\(.title)"' <<<"$entries"
+  fi
+  exit
+fi
+
+# ---- viewer / klatch doors --------------------------------------------
+viewer_open() { # -> JSON {id,url,status,pages} or fails
+  local o
+  o=$("${viewer[@]}" open "$book" --json 2>&1) || fail VIEWER_FAILED 1 "bashy viewer open $book: $(jq -r '.error.message // .' <<<"$o" 2>/dev/null || echo "$o")"
+  jq -e '.url' <<<"$o" >/dev/null 2>&1 || fail VIEWER_FAILED 1 "bashy viewer open $book returned no url: $o"
+  printf '%s' "$o"
+}
+
+if [[ $verb == open ]]; then
+  a=(open "$book"); [[ $as_json == true ]] && a+=(--json)
+  exec "${viewer[@]}" "${a[@]}"
+fi
+
+if [[ $verb == share ]]; then
+  [[ -n $klatch_conv ]] || fail USAGE 2 "share needs --klatch CONVERSATION"
+  url="?id=$book"; count=
+  if o=$("${viewer[@]}" open "$book" --json 2>/dev/null) && u=$(jq -r '.url // empty' <<<"$o" 2>/dev/null) && [[ -n $u ]]; then
+    url=$u; count=$(jq -r '.pages // empty' <<<"$o")
+  elif [[ $dry_run != true ]]; then
+    fail VIEWER_FAILED 1 "bashy viewer open $book failed (build the catalog first, or start the viewer: bashy viewer serve)"
+  fi
+  if [[ -z $text ]]; then
+    text=$share_text
+    text=${text//"{{url}}"/"$url"}; text=${text//"{{book}}"/"$book"}
+    text=${text//"{{count}}"/"${count:-?}"}; text=${text//"{{title}}"/"$title"}
+  fi
+  cmd=("${klatch[@]}" messages-send "channelId=$klatch_conv" "text=$text")
+  if [[ $dry_run == true ]]; then
+    plan='['; sep=
+    for c in "${cmd[@]}"; do plan+="$sep$(jstr "$c")"; sep=,; done; plan+=']'
+    printf '{"ok":true,"dry_run":true,"book":%s,"url":%s,"conversation":%s,"text":%s,"commands":[%s]}\n' \
+      "$(jstr "$book")" "$(jstr "$url")" "$(jstr "$klatch_conv")" "$(jstr "$text")" "$plan"
+    exit
+  fi
+  out_json=$("${cmd[@]}") || exit $?
+  if [[ $as_json == true ]]; then
+    jq -c ". + {book:$(jstr "$book"),url:$(jstr "$url"),conversation:$(jstr "$klatch_conv")}" <<<"$out_json" 2>/dev/null || printf '%s\n' "$out_json"
+  else
+    echo "shared $book $url -> klatch $klatch_conv"
+  fi
+  exit
+fi
+
+# ---- build -------------------------------------------------------------
+entries=$(select_entries)
+count=$(jq -r 'length' <<<"$entries")
+(( count > 0 )) || fail NO_ENTRIES 1 "no KB records match (scope $scope_name, filters: $(filters_desc))"
+
+tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
+pages_dir=$tmp/pages; mkdir -p "$pages_dir"
+
+# Book first: add is idempotent here (an existing book just gets more pages).
+plan=()
+record() { # record CMD... -> appends a JSON argv array to plan
+  local j='[' sep=
+  for c in "$@"; do j+="$sep$(jstr "$c")"; sep=,; done
+  plan+=("$j]")
+}
+url="?id=$book"; existing=0
+add_cmd=("${viewer[@]}" add "$book" --title "$title" --json)
+record "${add_cmd[@]}"
+if [[ $dry_run != true ]]; then
+  if ! o=$("${add_cmd[@]}" 2>&1); then
+    [[ $o == *"already exists"* ]] || fail VIEWER_FAILED 1 "bashy viewer add $book: $(jq -r '.error.message // .' <<<"$o" 2>/dev/null || echo "$o")"
+  fi
+  o=$(viewer_open)
+  url=$(jq -r '.url' <<<"$o"); existing=$(jq -r '.pages // 0' <<<"$o")
+fi
+index_page=$(( existing + 1 ))
+page_url() { printf '%s&page=%s' "$url" "$1"; }
+
+# slug -> page number for refs/backlinks inside this build.
+declare -A page_of title_of
+i=0
+while IFS=$'\t' read -r slug t; do
+  i=$((i+1)); page_of[$slug]=$(( index_page + i )); title_of[$slug]=$t
+done < <(jq -r '.[] | "\(.slug)\t\(.title)"' <<<"$entries")
+
+extract() { # extract REGEX GROUP TEXT -> one match per line
+  local re=$1 g=$2 s=$3
+  while [[ $s =~ $re ]]; do
+    printf '%s\n' "${BASH_REMATCH[$g]}"
+    s=${s#*"${BASH_REMATCH[0]}"}
+  done
+}
+render_refs() { # render_refs BODY -> Markdown bullets (deduped) or "none"
+  local body=$1 s out= seen=' ' r slug trimmed
+  # URLs first, then blank them so path/ref patterns never see them.
+  while IFS= read -r r; do
+    [[ -n $r ]] || continue
+    trimmed=$r; while [[ $trimmed == *[.,\;:] ]]; do trimmed=${trimmed%?}; done
+    body=${body//"$r"/ }
+    [[ $seen == *" $trimmed "* ]] && continue; seen+="$trimmed "
+    out+="- [$trimmed]($trimmed)"$'\n'
+  done < <(extract '(https?://[^][()<>"'"'"' ]+)' 1 "$1")
+  # [[slug]], [[kb:slug]], [[kb:repo/slug]] wiki refs (existing KB syntax).
+  while IFS= read -r r; do
+    [[ -n $r ]] || continue
+    r=${r%%|*}; slug=${r#kb:}; slug=${slug##*/}
+    [[ $seen == *" kb:${r#kb:} "* ]] && continue; seen+="kb:${r#kb:} "
+    if [[ -n ${page_of[$slug]:-} ]]; then
+      out+="- kb:$slug — [${title_of[$slug]}]($(page_url "${page_of[$slug]}")) · \`bashy kb show kb:$slug\`"$'\n'
+    else
+      out+="- kb:${r#kb:} — \`bashy kb show kb:${r#kb:}\`"$'\n'
+    fi
+  done < <(extract '\[\[([^]|[]+)(\|[^]]*)?\]\]' 1 "$body")
+  body=${body//\[\[/ }; body=${body//\]\]/ }
+  # kind:id refs the atlas grammar knows (bashy define / kb show resolve them).
+  while IFS= read -r r; do
+    [[ -n $r ]] || continue
+    trimmed=$r; while [[ $trimmed == *[.,\;:] ]]; do trimmed=${trimmed%?}; done
+    [[ $seen == *" $trimmed "* ]] && continue; seen+="$trimmed "
+    if [[ $trimmed == kb:* ]]; then
+      slug=${trimmed#kb:}; slug=${slug##*/}
+      if [[ -n ${page_of[$slug]:-} ]]; then
+        out+="- $trimmed — [${title_of[$slug]}]($(page_url "${page_of[$slug]}")) · \`bashy kb show $trimmed\`"$'\n'
+      else
+        out+="- $trimmed — \`bashy kb show $trimmed\`"$'\n'
+      fi
+    else
+      out+="- $trimmed — \`bashy define $trimmed\`"$'\n'
+    fi
+  done < <(extract '(^|[^A-Za-z0-9_:/])((kb|sprint|todo|issue|skill|episode|out|session):[A-Za-z0-9_./#-]+)' 2 "$body")
+  # Repo file paths: the original lives in the owning repo.
+  while IFS= read -r r; do
+    [[ -n $r ]] || continue
+    [[ $seen == *" $r "* ]] && continue; seen+="$r "
+    out+="- \`$r\` — file in the owning repo (\`bashy lens -t md $r\`)"$'\n'
+  done < <(extract '(^|[ `(])((\.{0,2}/)?[A-Za-z0-9_.-]+(/[A-Za-z0-9_.-]+)+\.[A-Za-z0-9]+)' 2 "$body")
+  [[ -n $out ]] && printf '%s' "${out%$'\n'}" || printf 'none'
+}
+render_backlinks() { # render_backlinks SLUG -> Markdown bullets or "none"
+  local raw out= ref t rel slug
+  raw=$(kbq backlinks "$1" --json 2>/dev/null) || raw='{"backlinks":[]}'
+  while IFS=$'\t' read -r ref t rel; do
+    [[ -n $ref ]] || continue
+    slug=${ref#kb:}; slug=${slug##*/}
+    if [[ $ref == kb:* && -n ${page_of[$slug]:-} ]]; then
+      out+="- $ref — [$t]($(page_url "${page_of[$slug]}")) ($rel) · \`bashy kb show $ref\`"$'\n'
+    elif [[ $ref == kb:* ]]; then
+      out+="- $ref — $t ($rel) · \`bashy kb show $ref\`"$'\n'
+    else
+      out+="- $ref — $t ($rel) · \`bashy define $ref\`"$'\n'
+    fi
+  done < <(jq -r '(.backlinks // [])[] | "\(.ref)\t\(.title // "")\t\(.relation // "link")"' <<<"$raw")
+  [[ -n $out ]] && printf '%s' "${out%$'\n'}" || printf 'none'
+}
+fill() { # fill TEMPLATE-TEXT KEY VALUE ... -> text (quoted replacement: no & expansion)
+  local t=$1; shift
+  while (( $# >= 2 )); do t=${t//"{{$1}}"/"$2"}; shift 2; done
+  printf '%s' "$t"
+}
+
+tpl=$(<"$template"); itpl=$(<"$index_template")
+rows= results= sep=
+i=0
+while IFS= read -r e; do
+  i=$((i+1)); n=$(( index_page + i ))
+  slug=$(jq -r '.slug' <<<"$e"); ref=$(jq -r '.ref' <<<"$e"); t=$(jq -r '.title' <<<"$e")
+  typ=$(jq -r '.type // ""' <<<"$e"); st=$(jq -r '.status // ""' <<<"$e")
+  desc=$(jq -r '.description // ""' <<<"$e"); tg=$(jq -r '.tags | join(", ")' <<<"$e")
+  seq=$(jq -r '.seq // ""' <<<"$e"); uid=$(jq -r '.id // ""' <<<"$e")
+  shown=$(kbq show "$slug" --json 2>/dev/null) || shown='{}'
+  content=$(jq -r '.content // ""' <<<"$shown")
+  body=$content
+  if [[ $content == ---* ]]; then body=${content#---}; body=${body#*$'\n---'}; body=${body#$'\n'}; fi
+  refs=$(render_refs "$body"); backs=$(render_backlinks "$slug")
+  tags_line=; [[ -n $tg ]] && tags_line=" · tags: $tg"
+  scope_line=; [[ $scope_name != auto ]] && scope_line=" (ring: $scope_name)"
+  page=$(fill "$tpl" title "$t" ref "$ref" slug "$slug" id "$uid" seq "$seq" kind "$typ" status "$st" \
+    tags "$tg" tags_line "$tags_line" summary "${desc:-_(no description)_}" scope "$scope_name" scope_line "$scope_line" \
+    refs "$refs" backlinks "$backs" body "$body" page "$n" url "$(page_url "$n")")
+  printf '%s\n' "$page" > "$pages_dir/$(printf '%03d' "$i")-$slug.md"
+  rows+="| [$t]($(page_url "$n")) | $typ | $st | $tg | \`bashy kb show $ref\` |"$'\n'
+  results+="$sep{\"ref\":$(jstr "$ref"),\"slug\":$(jstr "$slug"),\"title\":$(jstr "$t"),\"page\":$n}"; sep=,
+done < <(jq -c '.[]' <<<"$entries")
+
+filters_line=; f=$(filters_desc); [[ -n $f ]] && filters_line=" ($f)"
+rebuild="bashy kb-catalog build"; [[ -n $kind ]] && rebuild+=" --kind $kind"
+for t in "${tags[@]+"${tags[@]}"}"; do rebuild+=" --tag $t"; done
+[[ -n $ring ]] && rebuild+=" --ring $ring"; [[ -n $dir ]] && rebuild+=" --dir $dir"
+(( ${#terms[@]} )) && rebuild+=" ${terms[*]}"
+index=$(fill "$itpl" title "$title" count "$count" scope "$scope_name" filters_line "$filters_line" \
+  built "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date)" entries "${rows%$'\n'}" rebuild "$rebuild" book "$book")
+printf '%s\n' "$index" > "$pages_dir/000-index.md"
+
+# Append: index page first, then one page per record (append-only, history intact).
+got=
+append() { # append TITLE FILE -> sets got to the page number ('' when dry-run)
+  local cmd=("${viewer[@]}" append "$book" --title "$1" -f "$2" --json) o
+  record "${cmd[@]}"
+  got=
+  [[ $dry_run == true ]] && return 0
+  o=$("${cmd[@]}" 2>&1) || fail VIEWER_FAILED 1 "bashy viewer append $book: $(jq -r '.error.message // .' <<<"$o" 2>/dev/null || echo "$o")"
+  got=$(jq -r '.page // empty' <<<"$o" 2>/dev/null || true)
+}
+append "$title" "$pages_dir/000-index.md"
+[[ -z $got || $got == "$index_page" ]] || fail VIEWER_FAILED 1 "index landed on page $got, expected $index_page (book changed under us; rebuild)"
+for f in "$pages_dir"/[0-9][0-9][1-9]-*.md "$pages_dir"/[0-9][1-9][0-9]-*.md "$pages_dir"/[1-9][0-9][0-9]-*.md; do
+  [[ -f $f ]] || continue
+  t=$(head -n 1 "$f"); t=${t#\# }
+  append "$t" "$f"
+done
+
+if [[ -n $out ]]; then mkdir -p "$out" && cp "$pages_dir"/*.md "$out"/; fi
+cmds=$(IFS=,; echo "${plan[*]}")
+if [[ $dry_run == true ]]; then
+  printf '{"ok":true,"dry_run":true,"book":%s,"url":%s,"scope":%s,"index_page":%s,"count":%s,"entries":[%s],"commands":[%s]%s}\n' \
+    "$(jstr "$book")" "$(jstr "$url")" "$(jstr "$scope_name")" "$index_page" "$count" "$results" "$cmds" \
+    "$([[ -n $out ]] && printf ',"out":%s' "$(jstr "$out")")"
+  exit
+fi
+if [[ $as_json == true ]]; then
+  printf '{"ok":true,"book":%s,"url":%s,"index_url":%s,"scope":%s,"index_page":%s,"count":%s,"entries":[%s]}\n' \
+    "$(jstr "$book")" "$(jstr "$url")" "$(jstr "$(page_url "$index_page")")" "$(jstr "$scope_name")" "$index_page" "$count" "$results"
+else
+  echo "$book $(page_url "$index_page") ($count entries, scope $scope_name)"
+fi

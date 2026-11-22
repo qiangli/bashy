@@ -1,0 +1,1168 @@
+#!/usr/bin/env -S bashy --bashsharp
+# media — images to PDF, PDF to slides, slides and terminal steps to a narrated
+# MP4, plus assembly: cards, bilingual subtitles and beat cuts for film work.
+# The same files and the same result on macOS, Windows and Linux.
+#
+#   media doctor
+#   media pdf IMG... -o OUT.pdf [--title T] [--author A]
+#   media combine A.pdf B.pdf... -o OUT.pdf
+#   media slides IN.pdf DIR
+#   media voice PROJECT [--energy 0.7] [--reference FILE] [--force]
+#   media narrate PROJECT --own | --voice NAME|default
+#   media cards CARD.txt... -o OUT.mp4 [--secs N] [--size WxH]
+#   media subs TIMING.srt [LANG2.srt] -o OUT.ass [--video IN.mp4 --burn OUT.mp4]
+#   media cut CLIP... --beats BEATS.txt -o OUT.mp4 [--size WxH]
+#   media build PROJECT
+#
+# Every verb works alone on plain files and prints only the paths it wrote.
+# PDF work is done by the pinned pdfcraft-cli (MIT OR Apache-2.0), downloaded
+# and SHA-256 verified into the bashy cache; video work by examples/video.
+# ffmpeg, agg and the OS voice are the person's own installs (never fetched).
+
+~~~skill as guide
+---
+name: media
+description: Make a PDF from images, merge PDFs, turn a PDF into slide PNGs, and build a narrated MP4 from a storyboard, identically on macOS, Windows and Linux. Use when a task asks for a PDF deliverable, a slide deck video, a demo video or a voice-over. Run `media doctor` first; it prints the exact install line for anything missing.
+metadata:
+  requires: "has=bashy"
+---
+# media — PDF and video, same result on every OS
+
+Run it yourself. Each verb takes plain files and prints only output paths, so
+it composes: `media combine "$(media pdf a.png b.png -o a.pdf)" b.pdf -o all.pdf`.
+
+    media doctor                                   # tools present? else the install line
+    media pdf cover.png page2.png -o deck.pdf --title "Plan" --author "Owner"
+    media combine deck.pdf appendix.pdf -o all.pdf
+    media slides all.pdf slides/                   # slides/01.png, 02.png ... for the video
+    media voice my-demo                            # optional: expressive local neural voice -> voice/NN.wav
+    media narrate my-demo --own                    # voice track from voice/NN.* takes
+    media cards title.txt end.txt -o cards.mp4 --secs 4
+    media subs timing.srt timing.es.srt -o subs.ass --video base.mp4 --burn out.mp4
+    media cut a.mp4 b.mp4 --beats beats.txt -o cut.mp4
+    media build my-demo                            # my-demo/build/demo.mp4
+
+- `doctor` first. It downloads the pinned pdfcraft-cli once, checks ffmpeg
+  (an H.264 encoder and the `overlay` filter), ffprobe, agg, a screen
+  recorder and a voice tool, and exits non-zero printing the install command
+  (brew, winget or apt) for each missing one. Run what it prints, then rerun.
+- A project is a folder: `storyboard.txt` (card / slide / step / camera /
+  pair lines, see examples/video), `narration.txt` (line N is spoken over
+  segment N), `slides/*.png`, `cards/*.txt`, `steps/*.sh`, `camera/*.mp4`.
+  Paths inside are relative. CRLF or LF is accepted; the files are rewritten
+  as LF.
+- Narration: `narrate PROJECT --own` is the real path. Write the lines in
+  `narration.txt`; if `PROJECT/voice/NN.*` takes are missing it prints the
+  `record audio --script ... --out ...` command for each, the person records
+  them, and you rerun. Each take is fitted to its segment (sped up only if
+  it does not fit, padded with silence) and loudness-normalised to -16 LUFS.
+  `--voice NAME` uses the computer's own voice as a DRAFT to check timing
+  (macOS `say`, Windows System.Speech, Linux espeak-ng); never ship it as
+  the final voice.
+- Expressive voice: `voice PROJECT` writes `voice/NN.wav` with a LOCAL
+  neural model (Chatterbox, MIT), so `narrate --own` uses it like recorded
+  takes. It reads `narration-spoken.txt` when present (same lines, respelled
+  for pronunciation, e.g. a product name or initials), else `narration.txt`.
+  `--energy` 0.3 (calm) to 1.0 (very animated), default 0.7. The default
+  speaker is synthetic (Kokoro `am_fenrir`, Apache-2.0; `--kokoro-voice` picks
+  another); `--reference FILE` conditions on a voice sample instead, which
+  must be the person's own recording or a synthetic voice, never someone
+  else's voice. Existing takes are kept unless `--force`. First run needs
+  `uv` (doctor prints the install line) and downloads pinned packages and
+  model weights (a few GB) into the bashy cache; runs on CUDA, Apple MPS or
+  CPU. Disclose synthetic narration in the video (a caption line).
+- `camera NAME` segments read `camera/NAME.mp4|mov|webm`, as made by
+  `record video`. `step NAME` runs `steps/NAME.sh` under bashy and records it
+  with `cast record` when present, else asciinema.
+- Assembly for film work: `cards` renders card text files (first line is the
+  bold title, like `cards/NAME.txt`) into one MP4; `subs` pairs a timing track
+  with its translation into one bilingual `.ass` (Primary + Secondary styles)
+  and, with `--video IN --burn OUT`, burns the cues in and muxes the `.ass`
+  as a soft track; `cut` lays clips end to end on a beat grid (`beats.txt`
+  holds one time in seconds per line, `#` comments allowed; the first beat
+  anchors output 0, so cuts land at `beat - first`), looping short clips
+  and trimming long ones. Text is rasterised through agg with the
+  bundled IBM Plex Mono, and cuts/muxes through ffmpeg only, so the pixels
+  match on macOS, Windows and Linux with a stock ffmpeg (no libass or
+  drawtext build needed). Non-Latin scripts fall back to the host's system
+  fonts for the burned pixels; the `.ass` text itself is always exact.
+- Order: `narrate` first measures the segments (it runs a silent build when
+  none exists), writes `PROJECT/narration.m4a`, then `build` mixes it in.
+- No browser is involved anywhere in media.
+~~~
+
+~~~powershell as ps
+function Speak {
+    [OutputType([string])]
+    param([string]$voice, [string]$text, [string]$out)
+    Add-Type -AssemblyName System.Speech
+    $s = [System.Speech.Synthesis.SpeechSynthesizer]::new()
+    try {
+        if ($voice -ne 'default') { $s.SelectVoice($voice) }
+        $s.SetOutputToWaveFile($out)
+        $s.Speak($text)
+        return $out
+    } finally { $s.Dispose() }
+}
+
+function ExpandZip {
+    [OutputType([string])]
+    param([string]$archive, [string]$destination)
+    Expand-Archive -LiteralPath $archive -DestinationPath $destination -Force
+    return $destination
+}
+~~~
+
+set -eu
+
+# A native Windows path (C:\x\y.bsh) has backslashes dirname cannot split.
+src=${BASH_SOURCE[0]//\\//}
+here=$(cd "$(dirname "$src")" && pwd)
+PDFCRAFT_VERSION=0.20.0
+PDFCRAFT_URL=https://github.com/storytold/pdfcraft/releases/download/v$PDFCRAFT_VERSION
+video_sh=${MEDIA_VIDEO_SH:-$here/../video/video.sh}
+BASHY_RUNNER=$(command -v bashy)
+
+die() { echo "media: $*" >&2; exit 1; }
+note() { echo "media: $*" >&2; }
+
+# The command registry passes typed flags as --name=value; accept both forms.
+args=()
+for a in "$@"; do
+	case $a in
+	--*=*) args+=("${a%%=*}" "${a#*=}") ;;
+	*) args+=("$a") ;;
+	esac
+done
+set -- "${args[@]}"
+
+usage() { sed -n '2,14p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+
+# ---- platform ---------------------------------------------------------------
+
+os_name() {
+	case $(uname -s) in
+	Darwin) echo darwin ;;
+	Linux) echo linux ;;
+	MINGW* | MSYS* | CYGWIN* | Windows*) echo windows ;;
+	*) echo "$(uname -s)" ;;
+	esac
+}
+
+arch_name() {
+	case $(uname -m) in
+	arm64 | aarch64) echo arm64 ;;
+	x86_64 | amd64 | AMD64) echo amd64 ;;
+	*) uname -m ;;
+	esac
+}
+
+# pin_for: prints "ASSET SHA256" for this OS/arch (SHA-256 of the release asset).
+# macOS ships one universal zip; Windows ships the portable zip, which holds
+# pdfcraft-cli.exe next to the GUI.
+pin_for() {
+	local v=$PDFCRAFT_VERSION
+	case "$(os_name)/$(arch_name)" in
+	darwin/*) echo "pdfcraft-cli-$v-macos-universal.zip dd10f837318c3fce81f893a988de13efd7ba4be95e281f277cd7c23247aaa122" ;;
+	linux/amd64) echo "pdfcraft-cli-$v-linux-x86_64.tar.gz a5b2967d057a12091f8ddaf5e247a608b16628ee0c9752c9c1fac286107dc238" ;;
+	linux/arm64) echo "pdfcraft-cli-$v-linux-aarch64.tar.gz 8ae1196679f8da60c6bec7c61caf92904e6da2fd0a159147dd53f74805993d36" ;;
+	windows/amd64) echo "pdfcraft-$v-windows-x64-portable.zip efb636a8c5c4f8041e6dbe39f56f40992c9a1b199a0b8a27cd0fc4d6037715d2" ;;
+	windows/arm64) echo "pdfcraft-$v-windows-arm64-portable.zip b066d375a16f6cda28c24a99f7b3d90582d9a70f4af0c4473dc0ffaae7170c7f" ;;
+	*) return 1 ;;
+	esac
+}
+
+cache_root() {
+	local base=${MEDIA_CACHE:-${XDG_CACHE_HOME:-${LOCALAPPDATA:-$HOME/.cache}}}
+	echo "$base/bashy/media/pdfcraft-$PDFCRAFT_VERSION"
+}
+
+sha256_of() {
+	# sha256sum is a bashy builtin on every OS (no PATH binary needed on Windows).
+	local h=""
+	h=$(sha256sum <"$1" 2>/dev/null) || h=$(shasum -a 256 <"$1" 2>/dev/null) || die "cannot hash $1"
+	echo "${h%% *}"
+}
+
+find_cli() {
+	local f
+	for f in "$1"/pdfcraft-cli "$1"/pdfcraft-cli.exe "$1"/*/pdfcraft-cli "$1"/*/pdfcraft-cli.exe; do
+		[ -f "$f" ] && { echo "$f"; return 0; }
+	done
+	return 1
+}
+
+# pdfcraft: print the path of the verified pdfcraft-cli, downloading it once.
+pdfcraft() {
+	if [ -n "${MEDIA_PDFCRAFT:-}" ]; then echo "$MEDIA_PDFCRAFT"; return 0; fi
+	local root bin pin asset want got tmp
+	root=$(cache_root)
+	if bin=$(find_cli "$root"); then echo "$bin"; return 0; fi
+	pin=$(pin_for) || die "no pinned pdfcraft-cli for $(os_name)/$(arch_name)"
+	read -r asset want <<<"$pin"
+	tmp="$root.tmp.$$"
+	rm -rf "$tmp"; mkdir -p "$tmp/x"
+	note "downloading $asset (pinned $PDFCRAFT_VERSION) into $root"
+	curl -fsSL --retry 3 -o "$tmp/$asset" "$PDFCRAFT_URL/$asset" || { rm -rf "$tmp"; die "download failed: $PDFCRAFT_URL/$asset"; }
+	got=$(sha256_of "$tmp/$asset")
+	[ "$got" = "$want" ] || { rm -rf "$tmp"; die "SHA-256 mismatch for $asset: got $got, want $want"; }
+	case $asset in
+	*.zip)
+		if [ "$(os_name)" = windows ]; then
+			local archive destination expanded
+			archive=$(native_path "$tmp/$asset"); destination=$(native_path "$tmp/x")
+			expanded := ps.ExpandZip(archive, destination)
+			[ -n "$expanded" ] || die "cannot extract $asset"
+		elif command -v unzip >/dev/null; then unzip -q "$tmp/$asset" -d "$tmp/x"
+		else die "unzip is required to extract $asset"; fi ;;
+	*) tar -xzf "$tmp/$asset" -C "$tmp/x" ;;
+	esac
+	mkdir -p "$(dirname "$root")"
+	rm -rf "$root"; mv "$tmp/x" "$root"; rm -rf "$tmp"
+	bin=$(find_cli "$root") || die "pdfcraft-cli not found in $asset"
+	chmod +x "$bin" 2>/dev/null || true
+	echo "$bin"
+}
+
+# ---- small helpers ----------------------------------------------------------
+
+abspath() {
+	local d b
+	d=$(dirname "$1"); b=$(basename "$1")
+	[ -d "$d" ] || die "no such folder: $d"
+	echo "$(cd "$d" && pwd)/$b"
+}
+
+# Native Windows programs cannot open Bashy's /c/... names.
+native_path() {
+	local p=$1 drive
+	if [ "$(os_name)" = windows ]; then
+		case $p in
+		/[a-zA-Z]/*) drive=${p:1:1}; p="${drive^^}:/${p:3}" ;;
+		\\[a-zA-Z]\\*) p=${p//\\//}; drive=${p:1:1}; p="${drive^^}:/${p:3}" ;;
+		[a-zA-Z]:\\*) p=${p//\\//} ;;
+		esac
+	fi
+	printf '%s\n' "$p"
+}
+
+registered_media_tool() {
+	local name=$1 arg
+	shift
+	local args=()
+	for arg in "$@"; do args+=("$(native_path "$arg")"); done
+	"$(native_path "$BASHY_RUNNER")" "$name" "${args[@]}"
+}
+ffmpeg() { registered_media_tool ffmpeg "$@"; }
+ffprobe() { registered_media_tool ffprobe "$@"; }
+agg() { registered_media_tool agg "$@"; }
+
+register_tool() {
+	local name=$1 path=$2
+	[ -n "$path" ] && [ -f "$path" ] || return 1
+	"$(native_path "$(command -v bashy)")" commands add "$name" --set "exec.0=$(native_path "$path")" \
+		--set effects.0=read --set effects.1=write --set effects.2=exec >/dev/null
+}
+
+tool_path() {
+	local name=$1 override=$2 path
+	path=${!override:-}
+	[ -n "$path" ] || path=$(type -P "$name" 2>/dev/null || true)
+	printf '%s\n' "$path"
+}
+
+registered_pdfcraft() {
+	local bin
+	bin=$(pdfcraft)
+	register_tool pdfcraft-cli "$bin" || die "cannot register pdfcraft-cli"
+	printf 'pdfcraft-cli\n'
+}
+
+# jstr: JSON string literal of $1.
+jstr() {
+	local s=$1
+	s=${s//\\/\\\\}; s=${s//\"/\\\"}
+	printf '"%s"' "$s"
+}
+
+# json_string: stdin bytes to one JSON string literal (for .cast banners).
+json_string() {
+	local s
+	s=$(cat)
+	s=${s//\\/\\\\}
+	s=${s//\"/\\\"}
+	s=${s//$'\e'/\\u001b}
+	s=${s//$'\n'/\\n}
+	s=${s//$'\r'/\\r}
+	s=${s//$'\t'/\\t}
+	printf '"%s"\n' "$s"
+}
+
+# ass_time SEC: seconds (float) to an .ass timestamp H:MM:SS.cc.
+ass_time() {
+	awk -v t="$1" 'BEGIN{h=int(t/3600); m=int((t-h*3600)/60); s=t-h*3600-m*60; printf "%d:%02d:%05.2f", h, m, s}'
+}
+
+# ass_escape: strip { and } (they would open override blocks) for .ass text.
+ass_escape() { sed 's/[{}]//g'; }
+
+# parse_cues FILE: emit "start_sec<TAB>end_sec<TAB>text" for SRT or WebVTT cues;
+# multi-line cue text is joined with a literal \N (ass-ready), markup stripped.
+parse_cues() {
+	awk '
+	function ts(s,   a, n) {
+		gsub(/,/, ".", s)
+		n = split(s, a, ":")
+		if (n == 3) return a[1]*3600 + a[2]*60 + a[3]
+		if (n == 2) return a[1]*60 + a[2]
+		return s + 0
+	}
+	function emit() {
+		if (in_cue && txt != "") {
+			gsub(/<[^>]+>/, "", txt)
+			printf "%.3f\t%.3f\t%s\n", s_sec, e_sec, txt
+		}
+		in_cue = 0; txt = ""
+	}
+	{
+		sub(/\r$/, "")
+		if ($0 ~ /^[ \t]*$/) { emit(); next }
+		if ($0 ~ /-->/) {
+			emit()
+			split($0, p, /[ \t]*-->[ \t]*/)
+			split(p[1], s_tok, /[ \t]+/)
+			split(p[2], e_tok, /[ \t]+/)
+			s_sec = ts(s_tok[1]); e_sec = ts(e_tok[1])
+			in_cue = (e_sec > s_sec)
+			next
+		}
+		if (!in_cue) next
+		line = $0
+		gsub(/<[^>]+>/, "", line)
+		txt = (txt == "" ? line : txt "\\N" line)
+	}
+	END { emit() }
+	' "$1"
+}
+
+# cue_count FILE: number of cues parse_cues emits.
+cue_count() { parse_cues "$1" | wc -l | tr -d ' '; }
+
+dur() { ffprobe -v error -show_entries format=duration -of csv=p=0 "$1"; }
+
+# lf FILE...: rewrite CRLF to LF in place (shared projects come from Windows).
+lf() {
+	local f
+	for f in "$@"; do
+		[ -f "$f" ] || continue
+		if grep -q $'\r' "$f"; then
+			tr -d '\r' <"$f" >"$f.lf.$$" && mv "$f.lf.$$" "$f"
+		fi
+	done
+}
+
+norm_project() {
+	[ -d "$1" ] || die "no such project folder: $1"
+	lf "$1/storyboard.txt" "$1/narration.txt" "$1"/cards/*.txt
+}
+
+# ---- doctor -----------------------------------------------------------------
+
+doctor() {
+	local os bad=0 bin tool path
+	os=$(os_name)
+	if bin=$(pdfcraft); then
+		register_tool pdfcraft-cli "$bin" || bad=1
+		echo "ok   pdfcraft-cli $PDFCRAFT_VERSION: $bin"
+	else
+		echo "MISSING pdfcraft-cli (download or checksum failed, see above)"; bad=1
+	fi
+	local ffm_install ffm_agg ffm_voice ffm_rec
+	case $os in
+	darwin) ffm_install="brew install ffmpeg"; ffm_agg="brew install agg"; ffm_voice="(macOS ships say)"; ffm_rec="brew install asciinema" ;;
+	windows) ffm_install="winget install Gyan.FFmpeg"; ffm_agg="winget install asciinema.agg  (or: scoop install agg)"; ffm_voice="(Windows ships System.Speech; install PowerShell 7 if powershell is missing: winget install Microsoft.PowerShell)"; ffm_rec="cast (bashy yoke) - asciinema has no Windows build" ;;
+	*) ffm_install="sudo apt install ffmpeg"; ffm_agg="cargo install --locked agg  (agg is not in apt; or download from github.com/asciinema/agg/releases)"; ffm_voice="sudo apt install espeak-ng"; ffm_rec="sudo apt install asciinema" ;;
+	esac
+	for tool in ffmpeg ffprobe agg; do
+		case $tool in ffmpeg) path=$(tool_path "$tool" MEDIA_FFMPEG) ;; ffprobe) path=$(tool_path "$tool" MEDIA_FFPROBE) ;; agg) path=$(tool_path "$tool" MEDIA_AGG) ;; esac
+		if [ -n "$path" ] && [ -f "$path" ]; then register_tool "$tool" "$path" || bad=1; fi
+	done
+	case $os in
+		darwin) path=$(type -P say 2>/dev/null || true); [ -z "$path" ] || register_tool say "$path" || bad=1 ;;
+		linux) path=$(type -P espeak-ng 2>/dev/null || true); [ -z "$path" ] || register_tool espeak-ng "$path" || bad=1 ;;
+	esac
+	if [ "$os" = windows ]; then
+		"$(native_path "$(command -v bashy)")" go version >/dev/null 2>&1 || { echo "MISSING Go toolchain: bashy go version"; bad=1; }
+		"$(native_path "$(command -v bashy)")" commands add cast \
+			--set "exec.0=$(native_path "$(command -v bashy)")" --set exec.1=--bashsharp \
+			--set "exec.2=$(native_path "$here/../cast/cast.bsh")" \
+			--set effects.0=read --set effects.1=write --set effects.2=exec >/dev/null || bad=1
+	fi
+	if "$(native_path "$BASHY_RUNNER")" commands show ffmpeg --json >/dev/null 2>&1 && \
+		"$(native_path "$BASHY_RUNNER")" commands show ffprobe --json >/dev/null 2>&1; then
+		if ffmpeg -hide_banner -encoders 2>/dev/null | grep -qE ' (libx264|h264_[a-z0-9]+) '; then
+			echo "ok   ffmpeg: H.264 encoder"
+		else
+			echo "MISSING ffmpeg H.264 encoder (libx264 or h264_*): $ffm_install"; bad=1
+		fi
+		if ffmpeg -hide_banner -filters 2>/dev/null | grep -qE ' overlay '; then
+			echo "ok   ffmpeg: overlay filter"
+		else
+			echo "MISSING ffmpeg overlay filter: $ffm_install"; bad=1
+		fi
+		echo "ok   ffprobe: $(command -v ffprobe)"
+	else
+		echo "MISSING ffmpeg/ffprobe: $ffm_install"; bad=1
+	fi
+	if "$(native_path "$BASHY_RUNNER")" commands show agg --json >/dev/null 2>&1; then echo "ok   agg: registered"; else echo "MISSING agg: $ffm_agg"; bad=1; fi
+	if command -v cast >/dev/null || command -v asciinema >/dev/null; then
+		echo "ok   recorder: $(command -v cast || command -v asciinema)"
+	else
+		echo "MISSING recorder for step segments: $ffm_rec"; bad=1
+	fi
+	case $os in
+	darwin) command -v say >/dev/null && echo "ok   voice: say" || { echo "MISSING voice: say"; bad=1; } ;;
+	windows)
+		echo "ok   voice: System.Speech via pinned PowerShell fence" ;;
+	*) command -v espeak-ng >/dev/null && echo "ok   voice: espeak-ng" || { echo "MISSING voice: $ffm_voice"; bad=1; } ;;
+	esac
+	# Optional: the expressive local neural voice (media voice) needs uv.
+	command -v uv >/dev/null && echo "ok   neural voice (optional): uv" || echo "note neural voice (optional, media voice): $(uv_install_line)"
+	[ -f "$video_sh" ] && echo "ok   video.sh: $video_sh" || { echo "MISSING video.sh: $video_sh"; bad=1; }
+	echo "ok   assembly: cards/subs/cut need only ffmpeg + agg (libass/drawtext not required)"
+	if [ $bad -ne 0 ]; then
+		echo "media: doctor failed; install what is marked MISSING (the line is shown), then rerun" >&2
+		return 1
+	fi
+}
+
+# ---- pdf --------------------------------------------------------------------
+
+run_steps() { # run_steps STEPS_JSON -> exits on failure
+	local cli
+	cli=$(registered_pdfcraft)
+	"$(native_path "$BASHY_RUNNER")" "$cli" run --script "$(native_path "$1")" >/dev/null || die "pdfcraft-cli run failed ($1)"
+}
+
+cmd_pdf() {
+	local out="" title="" author="" imgs=() i
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o | --out) out=$2; shift 2 ;;
+		--title) title=$2; shift 2 ;;
+		--author) author=$2; shift 2 ;;
+		-*) die "pdf: unknown option: $1" ;;
+		*) imgs+=("$1"); shift ;;
+		esac
+	done
+	[ ${#imgs[@]} -gt 0 ] || die "usage: media pdf IMG... -o OUT.pdf [--title T] [--author A]"
+	[ -n "$out" ] || die "pdf: -o OUT.pdf is required"
+	out=$(abspath "$out")
+	local paths="" tmp cli
+	for i in "${imgs[@]}"; do
+		[ -f "$i" ] || die "pdf: no such image: $i"
+		paths+="${paths:+,}$(jstr "$(native_path "$(abspath "$i")")")"
+	done
+	local tempbase=${MEDIA_TEMP:-${LOCALAPPDATA:-${TMPDIR:-/tmp}}}
+	tmp=$(mktemp -d "$tempbase/media.XXXXXX")
+	if [ -n "${MEDIA_KEEP_TEMP:-}" ]; then note "keeping temporary files in $tmp"; else trap "rm -rf '$tmp'" EXIT; fi
+	cli=$(registered_pdfcraft)
+	printf '[{"tool":"doc_create","args":{"from":"images","paths":[%s]}},{"tool":"doc_save","args":{"doc":1,"path":%s}}]\n' \
+		"$paths" "$(jstr "$(native_path "$tmp/raw.pdf")")" >"$tmp/steps.json"
+	run_steps "$tmp/steps.json"
+	if [ -n "$title$author" ]; then
+		local eargs=()
+		[ -z "$title" ] || eargs+=(--title "$title")
+		[ -z "$author" ] || eargs+=(--author "$author")
+		"$(native_path "$BASHY_RUNNER")" "$cli" edit "$(native_path "$tmp/raw.pdf")" "${eargs[@]}" --out "$(native_path "$tmp/edited.pdf")" || die "pdf: edit failed"
+		mv "$tmp/edited.pdf" "$out"
+	else
+		mv "$tmp/raw.pdf" "$out"
+	fi
+	echo "$out"
+}
+
+cmd_combine() {
+	local out="" ins=() cli
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o | --out) out=$2; shift 2 ;;
+		-*) die "combine: unknown option: $1" ;;
+		*) ins+=("$1"); shift ;;
+		esac
+	done
+	[ ${#ins[@]} -ge 2 ] || die "usage: media combine A.pdf B.pdf... -o OUT.pdf"
+	[ -n "$out" ] || die "combine: -o OUT.pdf is required"
+	local f
+	for f in "${ins[@]}"; do [ -f "$f" ] || die "combine: no such file: $f"; done
+	out=$(abspath "$out")
+	cli=$(registered_pdfcraft)
+	local native_ins=()
+	for f in "${ins[@]}"; do native_ins+=("$(native_path "$(abspath "$f")")"); done
+	"$(native_path "$BASHY_RUNNER")" "$cli" combine "${native_ins[@]}" --out "$(native_path "$out")" >/dev/null || die "combine failed"
+	echo "$out"
+}
+
+cmd_slides() {
+	[ $# -eq 2 ] || die "usage: media slides IN.pdf DIR"
+	local in=$1 dir=$2 cli n p
+	[ -f "$in" ] || die "slides: no such file: $in"
+	mkdir -p "$dir"
+	dir=$(cd "$dir" && pwd)
+	cli=$(registered_pdfcraft)
+	n=$("$(native_path "$BASHY_RUNNER")" "$cli" info "$(native_path "$(abspath "$in")")" | sed -n 's/^ *"pages": *\([0-9][0-9]*\).*/\1/p')
+	[ -n "$n" ] && [ "$n" -gt 0 ] || die "slides: cannot read the page count of $in"
+	for ((p = 1; p <= n; p++)); do
+		"$(native_path "$BASHY_RUNNER")" "$cli" render "$(native_path "$(abspath "$in")")" --page "$p" --dpi "${MEDIA_DPI:-150}" --out "$(native_path "$dir/$(printf '%02d' "$p").png")" >/dev/null 2>&1 || die "slides: render of page $p failed"
+		echo "$dir/$(printf '%02d' "$p").png"
+	done
+}
+
+# ---- narrate ----------------------------------------------------------------
+
+# synth VOICE TEXT OUT: speak TEXT with the OS voice into an audio file OUT.
+synth() {
+	local voice=$1 text=$2 out=$3 nativeout voice_file
+	case $(os_name) in
+	darwin)
+		if [ "$voice" = default ]; then registered_media_tool say --data-format=LEI16@22050 -o "$out" -- "$text"; else registered_media_tool say -v "$voice" --data-format=LEI16@22050 -o "$out" -- "$text"; fi ;;
+	windows)
+		nativeout=$(native_path "$out")
+		voice_file := ps.Speak(voice, text, nativeout)
+		[ -n "$voice_file" ] ;;
+	*)
+		if [ "$voice" = default ]; then registered_media_tool espeak-ng -w "$out" -- "$text"; else registered_media_tool espeak-ng -v "$voice" -w "$out" -- "$text"; fi ;;
+	esac
+}
+
+# find_take N: the member's own recording for line N (voice/NN.*), if any.
+find_take() {
+	local nn ext
+	nn=$(printf '%02d' "$1")
+	for ext in m4a wav mp3 webm mp4 ogg aac; do
+		[ -f "$P/voice/$nn.$ext" ] && { echo "$P/voice/$nn.$ext"; return 0; }
+	done
+	return 1
+}
+
+# fit_line IN OUT SECONDS: speed IN up only if it does not fit SECONDS, pad
+# with silence, trim to exactly SECONDS (S523 method, same on every OS).
+fit_line() {
+	local in=$1 out=$2 d=$3 a r af
+	a=$(dur "$in")
+	r=$(awk -v a="$a" -v d="$d" 'BEGIN{b=d-0.75; if(b<=0.5)b=0.5; r=a/b; if(r<1)r=1; printf "%.4f", r}')
+	awk -v r="$r" 'BEGIN{exit !(r>1.4)}' && die "narration line does not fit its segment (${a}s of speech, ${d}s of picture); shorten the line or lengthen the segment"
+	af="adelay=250|250,apad,atrim=0:$d"
+	awk -v r="$r" 'BEGIN{exit !(r>1.0001)}' && af="atempo=$r,$af"
+	ffmpeg -nostdin -hide_banner -loglevel error -y -i "$in" -af "$af" -ar 48000 -ac 2 "$out" || die "ffmpeg could not fit $in"
+	echo "ratio $r"
+}
+
+cmd_narrate() {
+	local mode="" voice=""
+	P=""
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--own) mode=own; shift ;;
+		--voice) mode=voice; voice=${2:?--voice needs a voice name or default}; shift 2 ;;
+		-*) die "narrate: unknown option: $1" ;;
+		*) [ -z "$P" ] || die "narrate: unexpected argument: $1"; P=$1; shift ;;
+		esac
+	done
+	[ -n "$P" ] && [ -n "$mode" ] || die "usage: media narrate PROJECT --own | --voice NAME"
+	norm_project "$P"
+	P=$(cd "$P" && pwd)
+	[ -f "$P/narration.txt" ] || die "narrate: missing $P/narration.txt"
+	local B="$P/build" N="$P/build/narration" lines=() i=0 f seg d line take nn missing=0 fit
+	mapfile -t lines <"$P/narration.txt"
+	# Own takes first: list what is missing before any slow work.
+	if [ $mode = own ]; then
+		for i in "${!lines[@]}"; do
+			[ -n "${lines[$i]}" ] || continue
+			if ! find_take $((i + 1)) >/dev/null; then
+				nn=$(printf '%02d' $((i + 1)))
+				mkdir -p "$B/script" "$P/voice"
+				printf '%s\n' "${lines[$i]}" >"$B/script/$nn.txt"
+				echo "record audio --script build/script/$nn.txt --out voice/$nn.m4a   # run from $P" >&2
+				missing=1
+			fi
+		done
+		[ $missing -eq 0 ] || die "narrate --own: record the takes above (the person's own voice), then rerun"
+	fi
+	if [ ! -s "$B/segments.txt" ] || [ ! -s "$B/video.mp4" ]; then
+		note "measuring segments (silent build)"
+		rm -f "$P/narration.m4a"
+		cmd_build "$P" >/dev/null
+	fi
+	rm -rf "$N"; mkdir -p "$N"; : >"$N/list.txt"
+	i=0
+	while read -r _ f; do
+		f=${f//\'/}; seg=$B/$f; d=$(dur "$seg"); line=${lines[$i]:-}
+		if [ -n "$line" ]; then
+			if [ $mode = own ]; then
+				take=$(find_take $((i + 1)))
+			else
+				synth "$voice" "$line" "$N/$i.raw.wav" || die "narrate: the OS voice failed on line $((i + 1))"
+				take=$N/$i.raw.wav
+			fi
+			fit=$(fit_line "$take" "$N/$i.wav" "$d") || die "narrate: cannot fit line $((i + 1))"
+			note "narration line $((i + 1)): $fit of ${d}s"
+		else
+			ffmpeg -nostdin -hide_banner -loglevel error -y -f lavfi -i "anullsrc=r=48000:cl=stereo" -t "$d" "$N/$i.wav"
+		fi
+		[ -s "$N/$i.wav" ] || die "narrate: no audio for line $((i + 1))"
+		echo "file '$i.wav'" >>"$N/list.txt"
+		i=$((i + 1))
+	done <"$B/segments.txt"
+	ffmpeg -nostdin -hide_banner -loglevel error -y -f concat -safe 0 -i "$N/list.txt" \
+		-af loudnorm=I=-16:TP=-1.5:LRA=11 -ar 48000 -ac 2 -c:a aac -b:a 160k "$P/narration.m4a" || die "narrate: joining failed"
+	[ -s "$P/narration.m4a" ] || die "narrate: joining produced no audio"
+	echo "$P/narration.m4a"
+}
+
+# ---- voice (local neural TTS) -----------------------------------------------
+
+# Pinned, permissively licensed: chatterbox-tts (MIT), kokoro (Apache-2.0).
+# en_core_web_sm is pinned because misaki would otherwise fetch it at first use
+# through `uv pip`, which fails outside an activated environment.
+NEURAL_PKGS=(chatterbox-tts==0.1.7 kokoro==0.9.4 "misaki[en]==0.9.4" soundfile==0.14.0 setuptools==80.10.2
+	"en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl")
+
+voice_root() {
+	local base=${MEDIA_CACHE:-${XDG_CACHE_HOME:-${LOCALAPPDATA:-$HOME/.cache}}}
+	echo "$base/bashy/media/neural-voice"
+}
+
+uv_install_line() {
+	case $(os_name) in
+	darwin) echo "brew install uv" ;;
+	windows) echo "winget install astral-sh.uv" ;;
+	*) echo "curl -LsSf https://astral.sh/uv/install.sh | sh" ;;
+	esac
+}
+
+# neural_python: the cached environment's python (created once), or $MEDIA_VOICE_PY.
+neural_python() {
+	if [ -n "${MEDIA_VOICE_PY:-}" ]; then echo "$MEDIA_VOICE_PY"; return 0; fi
+	local root py ready
+	root=$(voice_root)
+	case $(os_name) in windows) py=$root/.venv/Scripts/python.exe ;; *) py=$root/.venv/bin/python ;; esac
+	# The marker names the package set, so a changed pin reinstalls.
+	ready=$root/.ready-$(printf '%s\n' "${NEURAL_PKGS[@]}" | cksum | cut -d' ' -f1)
+	if [ ! -f "$ready" ]; then
+		command -v uv >/dev/null || die "voice: needs uv; install: $(uv_install_line)"
+		mkdir -p "$root"
+		note "voice: creating the local neural voice environment (one time, a few GB)"
+		[ -x "$py" ] || uv venv --python 3.11 "$root/.venv" >&2 || die "voice: uv venv failed"
+		uv pip install --python "$py" "${NEURAL_PKGS[@]}" >&2 || die "voice: package install failed"
+		: >"$ready"
+	fi
+	echo "$py"
+}
+
+write_generator() {
+	cat >"$1" <<'PY'
+import argparse, os
+from pathlib import Path
+ap = argparse.ArgumentParser()
+ap.add_argument("--text", required=True)
+ap.add_argument("--out", required=True)
+ap.add_argument("--energy", type=float, default=0.7)
+ap.add_argument("--reference", default="")
+ap.add_argument("--kokoro-voice", default="am_fenrir")
+ap.add_argument("--seed", type=int, default=436)
+a = ap.parse_args()
+os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
+os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+import numpy as np, soundfile as sf, torch
+dev = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
+out = Path(a.out)
+ref = a.reference
+if not ref:
+    ref = str(out / ".reference.wav")
+    if not Path(ref).exists():
+        from misaki import espeak
+        def _dictionary_only(*_, **__):
+            raise RuntimeError("dictionary G2P only")
+        espeak.EspeakFallback = _dictionary_only
+        from kokoro import KPipeline
+        p = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M", device=dev)
+        s = "This is what I love about building software! We have a real product, a clear vision, and an exciting road ahead."
+        sf.write(ref, np.concatenate([x.cpu().numpy() for _, _, x in p(s, voice=a.kokoro_voice, speed=1.05)]), 24000)
+        del p
+from chatterbox.tts import ChatterboxTTS
+m = ChatterboxTTS.from_pretrained(device=dev)
+m.prepare_conditionals(ref, exaggeration=a.energy)
+for i, line in enumerate(Path(a.text).read_text(encoding="utf-8").splitlines(), 1):
+    if not line.strip():
+        continue
+    torch.manual_seed(a.seed + i)
+    w = m.generate(line.strip(), exaggeration=a.energy, cfg_weight=0.3, temperature=0.8)
+    f = out / f"{i:02d}.raw.wav"
+    sf.write(str(f), w.squeeze().detach().cpu().numpy(), m.sr)
+    print(f, flush=True)
+PY
+}
+
+cmd_voice() {
+	local P="" energy=0.7 ref="" kvoice=am_fenrir force=0
+	while [ $# -gt 0 ]; do
+		case $1 in
+		--energy) energy=${2:?--energy needs a number}; shift 2 ;;
+		--reference) ref=$(abspath "${2:?--reference needs a file}"); shift 2 ;;
+		--kokoro-voice) kvoice=${2:?--kokoro-voice needs a name}; shift 2 ;;
+		--force) force=1; shift ;;
+		-*) die "voice: unknown option: $1" ;;
+		*) [ -z "$P" ] || die "voice: unexpected argument: $1"; P=$1; shift ;;
+		esac
+	done
+	[ -n "$P" ] || die "usage: media voice PROJECT [--energy 0.7] [--reference FILE] [--force]"
+	norm_project "$P"
+	P=$(cd "$P" && pwd)
+	local text=$P/narration.txt
+	[ -f "$P/narration-spoken.txt" ] && text=$P/narration-spoken.txt
+	[ -f "$text" ] || die "voice: missing $P/narration.txt"
+	[ -z "$ref" ] || [ -f "$ref" ] || die "voice: reference not found: $ref"
+	awk -v e="$energy" 'BEGIN{exit !(e>=0.25 && e<=2)}' || die "voice: --energy must be between 0.25 and 2"
+	mkdir -p "$P/voice"
+	local n=0 i
+	n=$(grep -c '' "$text")
+	if [ $force -eq 0 ]; then
+		for ((i = 1; i <= n; i++)); do
+			find_take "$i" >/dev/null 2>&1 && die "voice: $P/voice already has takes; pass --force to replace them"
+		done
+	fi
+	local py gen
+	py=$(neural_python)
+	gen=$(voice_root)/generate.py
+	mkdir -p "$(dirname "$gen")"
+	write_generator "$gen"
+	local args=(--text "$(native_path "$text")" --out "$(native_path "$P/voice")" --energy "$energy" --kokoro-voice "$kvoice")
+	[ -z "$ref" ] || args+=(--reference "$(native_path "$ref")")
+	"$py" "$gen" "${args[@]}" >&2 || die "voice: generation failed"
+	local raw nn
+	for raw in "$P"/voice/*.raw.wav; do
+		[ -f "$raw" ] || continue
+		nn=$(basename "$raw" .raw.wav)
+		rm -f "$P/voice/$nn".{m4a,mp3,webm,mp4,ogg,aac}
+		# Trim leading and trailing silence; narrate fits and normalises later.
+		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$raw" \
+			-af "silenceremove=start_periods=1:start_threshold=-45dB,areverse,silenceremove=start_periods=1:start_threshold=-45dB,areverse" \
+			"$P/voice/$nn.wav" || die "voice: trimming $nn failed"
+		rm -f "$raw"
+		echo "$P/voice/$nn.wav"
+	done
+}
+
+# ---- cards ------------------------------------------------------------------
+
+# One encoding for assembly segments so concatenation can copy streams.
+ASM_VENC=(-c:v libx264 -preset medium -crf 20 -pix_fmt yuv420p -r 30)
+ASM_AENC=(-c:a aac -b:a 160k -ar 48000 -ac 2)
+ASM_FPS=30
+
+# asm_size SIZE: validate WxH, print "W H".
+asm_size() {
+	case $1 in
+	[0-9]*x[0-9]*) echo "${1%x*} ${1#*x}" ;;
+	*) die "bad --size (want WxH): $1" ;;
+	esac
+}
+
+# card_gif TXT GIF CAST: centred card text (first line bold) rendered by agg.
+# The GIF is one 1 s frame; cmd_cards holds it (tpad clone) for --secs.
+card_gif() {
+	local txt=$1 gif=$2 cast=$3
+	local cols=60 rows=14 lines=() i=0 l pad top out=""
+	mapfile -t lines <"$txt"
+	top=$(((rows - ${#lines[@]}) / 2))
+	for ((i = 0; i < top; i++)); do out+=$'\r\n'; done
+	for i in "${!lines[@]}"; do
+		l=${lines[$i]}
+		pad=$(((cols - $(cell_width "$l")) / 2)); ((pad < 0)) && pad=0
+		out+=$(printf '%*s' "$pad" '')
+		if ((i == 0)); then out+=$'\e[1m'"$l"$'\e[0m'; else out+="$l"; fi
+		out+=$'\r\n'
+	done
+	out+=$'\e[?25l'
+	{
+		printf '{"version": 2, "width": %d, "height": %d}\n' "$cols" "$rows"
+		printf '[0.0, "o", %s]\n' "$(printf '%s' "$out" | json_string)"
+	} >"$cast"
+	agg --font-dir "${MEDIA_FONT_DIR:-$here/fonts}" --font-family "${MEDIA_FONT_FAMILY:-IBM Plex Mono}" \
+		--font-size 48 --theme monokai \
+		--last-frame-duration 1 --no-loop "$cast" "$gif" >/dev/null || die "cards: agg could not render $txt"
+}
+
+cmd_cards() {
+	local out="" secs=4 size="1280x720" txts=()
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o | --out) out=$2; shift 2 ;;
+		--secs) secs=$2; shift 2 ;;
+		--size) size=$2; shift 2 ;;
+		-*) die "cards: unknown option: $1" ;;
+		*) txts+=("$1"); shift ;;
+		esac
+	done
+	[ ${#txts[@]} -gt 0 ] || die "usage: media cards CARD.txt... -o OUT.mp4 [--secs N] [--size WxH]"
+	[ -n "$out" ] || die "cards: -o OUT.mp4 is required"
+	awk -v s="$secs" 'BEGIN{exit !(s > 0)}' || die "cards: --secs must be positive (got $secs)"
+	local w h
+	read -r w h <<<"$(asm_size "$size")"
+	out=$(abspath "$out")
+	local f
+	for f in "${txts[@]}"; do [ -f "$f" ] || die "cards: no such file: $f"; done
+	local tempbase=${MEDIA_TEMP:-${LOCALAPPDATA:-${TMPDIR:-/tmp}}}
+	local tmp
+	tmp=$(mktemp -d "$tempbase/media-cards.XXXXXX")
+	if [ -n "${MEDIA_KEEP_TEMP:-}" ]; then note "keeping temporary files in $tmp"; else trap "rm -rf '$tmp'" EXIT; fi
+	local i=0 seg
+	: >"$tmp/list.txt"
+	for f in "${txts[@]}"; do
+		i=$((i + 1))
+		tr -d '\r' <"$f" >"$tmp/card-$i.txt"
+		[ -s "$tmp/card-$i.txt" ] || die "cards: $f is empty"
+		card_gif "$tmp/card-$i.txt" "$tmp/card-$i.gif" "$tmp/card-$i.cast"
+		seg="$tmp/card-$i.mp4"
+		ffmpeg -nostdin -hide_banner -loglevel error -y -i "$tmp/card-$i.gif" \
+			-f lavfi -i "anullsrc=r=48000:cl=stereo" \
+			-map 0:v:0 -map 1:a:0 -t "$secs" \
+			-vf "scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${ASM_FPS},tpad=stop_mode=clone:stop_duration=${secs},format=yuv420p" \
+			"${ASM_VENC[@]}" "${ASM_AENC[@]}" "$seg" || die "cards: ffmpeg could not render $f"
+		echo "file 'card-$i.mp4'" >>"$tmp/list.txt"
+	done
+	(cd "$tmp" && ffmpeg -nostdin -hide_banner -loglevel error -y -f concat -safe 0 -i list.txt -c copy "$out") || die "cards: joining failed"
+	[ -s "$out" ] || die "cards: joining produced no output"
+	if [ -z "${MEDIA_KEEP_TEMP:-}" ]; then trap - EXIT; rm -rf "$tmp"; fi
+	echo "$out"
+}
+
+# ---- subs -------------------------------------------------------------------
+
+SUBS_CJK_FONT_SHA256=a3041811a78c361b1de50f953c805e0244951c21c5bd412f7232ef0d899af0da
+SUBS_CJK_FONT_URL='https://raw.githubusercontent.com/google/fonts/29b4ec6df2522a8aee279414b78a07910b065874/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf'
+
+# The large OFL font is fetched once to the media cache. A supplied font dir
+# may be a pre-staged offline cache, but its bytes must match the pin too.
+subs_font_dir() {
+	local family=${MEDIA_SUBS_FONT_FAMILY:-Noto Sans SC}
+	if [ "$family" != 'Noto Sans SC' ]; then
+		echo "${MEDIA_FONT_DIR:-$here/fonts}"
+		return
+	fi
+	local base=${MEDIA_CACHE:-${XDG_CACHE_HOME:-${LOCALAPPDATA:-$HOME/.cache}}}
+	local dir=${MEDIA_FONT_DIR:-$base/bashy/media/fonts} font got tmp
+	font=$dir/NotoSansSC-wght.ttf
+	if [ ! -f "$font" ]; then
+		[ "${MEDIA_OFFLINE:-0}" != 1 ] || die "subs: missing pinned CJK font at $font; prefetch with: curl -fsSL -o '$font' '$SUBS_CJK_FONT_URL' (SHA-256 $SUBS_CJK_FONT_SHA256)"
+		mkdir -p "$dir"
+		tmp=$font.tmp.$$
+		note "downloading pinned Noto Sans SC font into $dir"
+		curl -fsSL --retry 3 -o "$tmp" "$SUBS_CJK_FONT_URL" || { rm -f "$tmp"; die "subs: CJK font download failed: $SUBS_CJK_FONT_URL"; }
+		got=$(sha256_of "$tmp")
+		[ "$got" = "$SUBS_CJK_FONT_SHA256" ] || { rm -f "$tmp"; die "subs: CJK font SHA-256 mismatch: got $got, want $SUBS_CJK_FONT_SHA256"; }
+		mv "$tmp" "$font"
+	fi
+	got=$(sha256_of "$font")
+	[ "$got" = "$SUBS_CJK_FONT_SHA256" ] || die "subs: CJK font SHA-256 mismatch at $font: got $got, want $SUBS_CJK_FONT_SHA256"
+	echo "$dir"
+}
+
+cmd_subs() {
+	local out="" video="" burn="" files=()
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o | --out) out=$2; shift 2 ;;
+		--video) video=$2; shift 2 ;;
+		--burn) burn=$2; shift 2 ;;
+		-*) die "subs: unknown option: $1" ;;
+		*) files+=("$1"); shift ;;
+		esac
+	done
+	[ ${#files[@]} -ge 1 ] && [ ${#files[@]} -le 2 ] || die "usage: media subs TIMING.srt [LANG2.srt] -o OUT.ass [--video IN.mp4 --burn OUT.mp4]"
+	[ -n "$out" ] || die "subs: -o OUT.ass is required"
+	if [ -n "$burn" ] && [ -z "$video" ]; then die "subs: --burn needs --video IN.mp4"; fi
+	local f
+	for f in "${files[@]}"; do [ -f "$f" ] || die "subs: no such file: $f"; done
+	if [ -n "$video" ]; then [ -f "$video" ] || die "subs: no such video: $video"; fi
+	case $out in *.ass) ;; *) die "subs: -o must end in .ass (got $out)" ;; esac
+	out=$(abspath "$out")
+	local n1 n2=0
+	n1=$(cue_count "${files[0]}")
+	[ "$n1" -gt 0 ] || die "subs: no cues in ${files[0]}"
+	if [ ${#files[@]} -eq 2 ]; then
+		n2=$(cue_count "${files[1]}")
+		[ "$n1" = "$n2" ] || die "subs: cue counts differ (${files[0]}: $n1, ${files[1]}: $n2); align them first"
+	fi
+	local tempbase=${MEDIA_TEMP:-${LOCALAPPDATA:-${TMPDIR:-/tmp}}}
+	local tmp
+	tmp=$(mktemp -d "$tempbase/media-subs.XXXXXX")
+	if [ -n "${MEDIA_KEEP_TEMP:-}" ]; then note "keeping temporary files in $tmp"; else trap "rm -rf '$tmp'" EXIT; fi
+	parse_cues "${files[0]}" >"$tmp/cues1.txt"
+	if [ ${#files[@]} -eq 2 ]; then parse_cues "${files[1]}" >"$tmp/cues2.txt"; else : >"$tmp/cues2.txt"; fi
+	{
+		printf '[Script Info]\nScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\nWrapStyle: 0\nScaledBorderAndShadow: yes\n\n'
+		printf '[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n'
+		printf 'Style: Primary,IBM Plex Mono,56,&H00FFFFFF,&H000000FF,&H80000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,40,40,50,1\n'
+		printf 'Style: Secondary,%s,48,&H0000FFFF,&H000000FF,&H80000000,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,40,40,50,1\n\n' "${MEDIA_SUBS_FONT_FAMILY:-Noto Sans SC}"
+		printf '[Events]\nFormat: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n'
+	} >"$out"
+	local i=0 s e t1 t2 text
+	while IFS=$'\t' read -r s e t1; do
+		[ -n "${s:-}" ] || continue
+		i=$((i + 1))
+		t1=$(printf '%s' "$t1" | ass_escape)
+		if [ ${#files[@]} -eq 2 ]; then
+			t2=$(sed -n "${i}p" "$tmp/cues2.txt" | cut -f3- | ass_escape)
+			[ -n "$t2" ] || die "subs: missing cue $i in ${files[1]}"
+			text="$t1{\\rSecondary}\\N$t2"
+		else
+			text=$t1
+		fi
+		printf 'Dialogue: 0,%s,%s,Primary,,0,0,0,,%s\n' "$(ass_time "$s")" "$(ass_time "$e")" "$text" >>"$out"
+	done <"$tmp/cues1.txt"
+	[ "$i" = "$n1" ] || die "subs: wrote $i of $n1 cues"
+	if [ -n "$burn" ]; then
+		burn_cues "$video" "$tmp" "$out" "$burn" "$n1"
+	fi
+	if [ -z "${MEDIA_KEEP_TEMP:-}" ]; then trap - EXIT; rm -rf "$tmp"; fi
+	echo "$out"
+}
+
+# banner_width: stdin cue text (\N-separated) to its longest line in characters.
+# cell_width LINE: display cells of one line; East Asian wide and fullwidth
+# glyphs (CJK, Hangul, kana, fullwidth forms) take two cells in agg's grid,
+# so a centred CJK line pads by cells, not characters (Sprint 634).
+cell_width() {
+	local s=$1 i c cp n=0
+	for ((i = 0; i < ${#s}; i++)); do
+		c=${s:i:1}
+		printf -v cp '%d' "'$c"
+		if ((cp >= 0x1100 && (cp <= 0x115F || (cp >= 0x2E80 && cp <= 0xA4CF) || (cp >= 0xAC00 && cp <= 0xD7A3) || (cp >= 0xF900 && cp <= 0xFAFF) || (cp >= 0xFE30 && cp <= 0xFE4F) || (cp >= 0xFF00 && cp <= 0xFF60) || (cp >= 0xFFE0 && cp <= 0xFFE6) || (cp >= 0x20000 && cp <= 0x3FFFD)))); then
+			n=$((n + 2))
+		else
+			n=$((n + 1))
+		fi
+	done
+	echo "$n"
+}
+banner_width() {
+	local t l w max=0
+	t=$(cat)
+	t=${t//\\N/$'\n'}
+	while IFS= read -r l || [ -n "$l" ]; do
+		w=$(cell_width "$l")
+		((w > max)) && max=$w
+	done <<<"$t"
+	echo "$max"
+}
+
+# wrap_cue TEXT COLS: word-wrap each \N-separated line of TEXT to COLS
+# characters, joined again with \N (a word longer than COLS keeps its line).
+wrap_cue() {
+	printf '%s\n' "$1" | awk -v cols="$2" '{
+		n = split($0, seg, /\\N/); out = ""
+		for (i = 1; i <= n; i++) {
+			m = split(seg[i], w, / +/); line = ""
+			for (j = 1; j <= m; j++) {
+				if (w[j] == "") continue
+				if (line != "" && length(line) + 1 + length(w[j]) > cols) { out = out (out == "" ? "" : "\\N") line; line = w[j] }
+				else line = (line == "" ? w[j] : line " " w[j])
+			}
+			if (line != "") out = out (out == "" ? "" : "\\N") line
+		}
+		print out
+	}'
+}
+
+# banner_lines TEXT COLS CODE: centred .cast lines for TEXT (\N-separated) in
+# ANSI style CODE (1 bold white, 33 yellow), CRLF-separated, no trailing gap.
+banner_lines() {
+	local text=$1 cols=$2 code=$3 l pad chunk first=1
+	text=${text//\\N/$'\n'}
+	while IFS= read -r l || [ -n "$l" ]; do
+		pad=$(((cols - $(cell_width "$l")) / 2)); ((pad < 0)) && pad=0
+		chunk=$(printf '%*s\e[%sm%s\e[0m' "$pad" '' "$code" "$l")
+		if [ $first -eq 1 ]; then first=0; else printf '\r\n'; fi
+		printf '%s' "$chunk"
+	done <<<"$text"
+}
+
+# burn_cues VIDEO TMP ASS BURN N: burn the N cues in TMP/cues{1,2}.txt plus the
+# ASS soft track into VIDEO, writing BURN. Banners are agg GIFs overlaid with
+# enable=between(t) (portable: no libass build needed); the .ass itself is
+# muxed as mov_text so players can toggle it.
+burn_cues() {
+	local video=$1 tmp=$2 ass=$3 burn=$4 n=$5
+	local idx=0 i s e t1 t2 cols rows line1 line2 line cast gif
+	local inputs=() fc=() prev="[0:v]" vw wrap font_dir
+	font_dir=$(subs_font_dir)
+	inputs=(-i "$video")
+	# Wrap each language to the frame: agg draws 28 px IBM Plex Mono at about
+	# 17 px a column, and a banner keeps 5 % margins; at most 46 columns.
+	vw=$(ffprobe -v error -select_streams v:0 -show_entries stream=width -of csv=p=0 "$video")
+	wrap=$(awk -v w="${vw:-1280}" 'BEGIN{c = int(w * 0.9 / 17) - 4; if (c > 46) c = 46; if (c < 12) c = 12; print c}')
+	i=0
+	while IFS=$'\t' read -r s e t1; do
+		[ -n "${s:-}" ] || continue
+		i=$((i + 1))
+		if [ -s "$tmp/cues2.txt" ]; then
+			t2=$(sed -n "${i}p" "$tmp/cues2.txt" | cut -f3-)
+		else
+			t2=""
+		fi
+		idx=$((idx + 1))
+		t1=$(wrap_cue "$t1" "$wrap")
+		[ -z "$t2" ] || t2=$(wrap_cue "$t2" "$wrap")
+		cast="$tmp/sub-$idx.cast"; gif="$tmp/sub-$idx.gif"
+		line1=$(printf '%s' "$t1" | banner_width)
+		line2=$(printf '%s' "$t2" | banner_width)
+		cols=$((line1 + 4)); ((line2 + 4 > cols)) && cols=$((line2 + 4)); ((cols < 36)) && cols=36
+		rows=$(printf '%s\n%s' "$t1" "$t2" | awk '{n += gsub(/\\N/, "&") + ($0 != "")} END{print (n < 2 ? 2 : n)}')
+		line=$(banner_lines "$t1" "$cols" 1)
+		if [ -n "$t2" ]; then
+			line+=$'\r\n'
+			line+=$(banner_lines "$t2" "$cols" 33)
+		fi
+		# no trailing newline: in a cast exactly $rows tall it would scroll the
+		# first language off the top (S627 M8 draft 08)
+		line+=$'\e[?25l'
+		{
+			printf '{"version": 2, "width": %d, "height": %d}\n' "$cols" "$rows"
+			printf '[0.0, "o", %s]\n' "$(printf '%s' "$line" | json_string)"
+		} >"$cast"
+		# The Latin face leads the family list so line 1 keeps its own metrics
+		# (the CJK face kerned "Hol d the l ight", Sprint 634); the CJK face is
+		# the fallback that line 2's glyphs resolve to.
+		agg --font-dir "$here/fonts" --font-dir "$font_dir" \
+			--font-family "${MEDIA_FONT_FAMILY:-IBM Plex Mono},${MEDIA_SUBS_FONT_FAMILY:-Noto Sans SC}" \
+			--font-size 28 --theme monokai \
+			--last-frame-duration 1 --no-loop "$cast" "$gif" >/dev/null || die "subs: agg could not render cue $i"
+		inputs+=(-i "$gif")
+		fc+=("${prev}[${idx}:v]overlay=(W-w)/2:H-h-40:enable='between(t,${s},${e})'[v${idx}]")
+		prev="[v${idx}]"
+	done <"$tmp/cues1.txt"
+	[ "$idx" = "$n" ] || die "subs: rendered $idx of $n banners"
+	burn=$(abspath "$burn")
+	local IFS_SAVE=$IFS filter_str sub_in=$((idx + 1))
+	IFS=';'; filter_str="${fc[*]}"; IFS=$IFS_SAVE
+	inputs+=(-i "$ass")
+	ffmpeg -nostdin -hide_banner -loglevel error -y "${inputs[@]}" \
+		-filter_complex "$filter_str" \
+		-map "$prev" -map 0:a:0 -map "${sub_in}:s:0" \
+		"${ASM_VENC[@]}" -c:a copy -c:s mov_text -metadata:s:s:0 title=Bilingual "$burn" \
+		|| die "subs: burn-in failed"
+	[ -s "$burn" ] || die "subs: burn-in produced no output"
+	echo "$burn" >&2
+}
+
+# ---- cut --------------------------------------------------------------------
+
+# read_beats FILE: print validated strictly-increasing beat times, one per line.
+read_beats() {
+	local line beat n=0 prev=""
+	while IFS= read -r line || [ -n "$line" ]; do
+		line=${line%$'\r'}
+		beat=${line%%[[:space:]]*}
+		[ -z "$beat" ] && continue
+		case $beat in '#'*) continue ;; esac
+		case $beat in
+		'' | *[!0-9.]*) die "cut: bad beat time: $beat" ;;
+		esac
+		awk -v t="$beat" -v p="${prev:-$beat}" -v n="$n" 'BEGIN{ok=(t>0); if(n>0) ok=(t>p); exit !ok}' \
+			|| die "cut: beats must be positive and strictly increasing (got $beat after ${prev:-start})"
+		printf '%s\n' "$beat"
+		prev=$beat; n=$((n + 1))
+	done <"$1"
+	[ "$n" -ge 2 ] || die "cut: need at least 2 beats (got $n)"
+}
+
+cmd_cut() {
+	local out="" beats="" size="1280x720" clips=()
+	while [ $# -gt 0 ]; do
+		case $1 in
+		-o | --out) out=$2; shift 2 ;;
+		--beats) beats=$2; shift 2 ;;
+		--size) size=$2; shift 2 ;;
+		-*) die "cut: unknown option: $1" ;;
+		*) clips+=("$1"); shift ;;
+		esac
+	done
+	[ ${#clips[@]} -ge 1 ] || die "usage: media cut CLIP... --beats BEATS.txt -o OUT.mp4 [--size WxH]"
+	[ -n "$beats" ] || die "cut: --beats BEATS.txt is required"
+	[ -n "$out" ] || die "cut: -o OUT.mp4 is required"
+	local c
+	for c in "${clips[@]}" "$beats"; do [ -f "$c" ] || die "cut: no such file: $c"; done
+	local w h
+	read -r w h <<<"$(asm_size "$size")"
+	out=$(abspath "$out")
+	local tempbase=${MEDIA_TEMP:-${LOCALAPPDATA:-${TMPDIR:-/tmp}}}
+	local tmp
+	tmp=$(mktemp -d "$tempbase/media-cut.XXXXXX")
+	if [ -n "${MEDIA_KEEP_TEMP:-}" ]; then note "keeping temporary files in $tmp"; else trap "rm -rf '$tmp'" EXIT; fi
+	read_beats "$beats" >"$tmp/beats.txt"
+	mapfile -t BEATS <"$tmp/beats.txt"
+	local nb=${#BEATS[@]} i=0 b0 b1 dur clip seg
+	: >"$tmp/list.txt"
+	for ((i = 0; i < nb - 1; i++)); do
+		b0=${BEATS[$i]}; b1=${BEATS[$((i + 1))]}
+		dur=$(awk -v a="$b0" -v b="$b1" 'BEGIN{printf "%.3f", b-a}')
+		clip=${clips[$((i % ${#clips[@]}))]}
+		seg="$tmp/seg-$i.mp4"
+		if [ -n "$(ffprobe -v error -select_streams a -show_entries stream=index -of csv=p=0 "$clip")" ]; then
+			ffmpeg -nostdin -hide_banner -loglevel error -y -stream_loop -1 -i "$clip" \
+				-map 0:v:0 -map 0:a:0 -t "$dur" \
+				-vf "scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${ASM_FPS},format=yuv420p" \
+				-af "aformat=sample_rates=48000:channel_layouts=stereo" \
+				"${ASM_VENC[@]}" "${ASM_AENC[@]}" "$seg" || die "cut: ffmpeg failed on interval $((i + 1)) ($clip)"
+		else
+			ffmpeg -nostdin -hide_banner -loglevel error -y -stream_loop -1 -i "$clip" \
+				-f lavfi -i "anullsrc=r=48000:cl=stereo" \
+				-map 0:v:0 -map 1:a:0 -t "$dur" \
+				-vf "scale=${w}:${h}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${ASM_FPS},format=yuv420p" \
+				"${ASM_VENC[@]}" "${ASM_AENC[@]}" "$seg" || die "cut: ffmpeg failed on interval $((i + 1)) ($clip)"
+		fi
+		[ -s "$seg" ] || die "cut: empty segment $((i + 1))"
+		echo "file 'seg-$i.mp4'" >>"$tmp/list.txt"
+	done
+	(cd "$tmp" && ffmpeg -nostdin -hide_banner -loglevel error -y -f concat -safe 0 -i list.txt -c copy "$out") || die "cut: joining failed"
+	[ -s "$out" ] || die "cut: joining produced no output"
+	if [ -z "${MEDIA_KEEP_TEMP:-}" ]; then trap - EXIT; rm -rf "$tmp"; fi
+	echo "$out"
+}
+
+# ---- build ------------------------------------------------------------------
+
+cmd_build() {
+	[ $# -eq 1 ] || die "usage: media build PROJECT"
+	norm_project "$1"
+	local proj
+	proj=$(cd "$1" && pwd)
+	[ -f "$video_sh" ] || die "build: missing $video_sh"
+	export VIDEO_FONT_DIR="$here/fonts" VIDEO_FONT_FAMILY="IBM Plex Mono"
+	if command -v cast >/dev/null && cast record --help 2>&1 | grep -q headless; then
+		export VIDEO_RECORDER=cast
+	fi
+	# Project narration.m4a replaces silence under pictures; segment sidecars stay.
+	"$(native_path "$(command -v bashy)")" "$video_sh" build "$proj" >&2 || die "build failed (video.sh)"
+	echo "$proj/build/demo.mp4"
+}
+
+# ---- dispatch ---------------------------------------------------------------
+
+case ${1:-} in
+--skill) sed -n '/^~~~skill/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d' ;;
+-h | --help | help | "") usage; [ -n "${1:-}" ] || exit 2 ;;
+doctor) doctor ;;
+pdf) shift; cmd_pdf "$@" ;;
+combine) shift; cmd_combine "$@" ;;
+slides) shift; cmd_slides "$@" ;;
+voice) shift; cmd_voice "$@" ;;
+narrate) shift; cmd_narrate "$@" ;;
+cards) shift; cmd_cards "$@" ;;
+subs) shift; cmd_subs "$@" ;;
+cut) shift; cmd_cut "$@" ;;
+build) shift; cmd_build "$@" ;;
+*) die "unknown verb: $1 (doctor, pdf, combine, slides, voice, narrate, cards, subs, cut, build)" ;;
+esac

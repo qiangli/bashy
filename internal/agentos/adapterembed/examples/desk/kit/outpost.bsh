@@ -1,0 +1,212 @@
+# outpost.bsh — the one publish-outpost / unpublish-outpost verb pair every
+# catalog app shares. Source it from the app's .bsh and dispatch:
+#
+#   source "$kit/outpost.bsh"
+#   publish-outpost|unpublish-outpost) kit_outpost "$1" TOOL NAME PORT PUBLIC "${@:2}" ;;
+#
+# TOOL prefixes messages, NAME is the app's console mount (/NAME/), PORT the
+# console port that serves it, PUBLIC (true|false) the app's default reach.
+# Catalog apps are "just for me": PUBLIC is false, so the outpost tile needs
+# a login (owner or sharee). site and vlog keep their public default.
+#
+#   publish-outpost   [NAME] [--public|--private] [--icon URL] [--json] [--dry-run]
+#   unpublish-outpost [NAME] [--json] [--dry-run]
+#
+# publish upserts `outpost apps add NAME --url http://127.0.0.1:PORT/NAME/`
+# (with --require-login unless public, and --icon from --icon or the app's
+# fleet record), so a re-run converges on the same entry. --public also sets
+# `bashy app set NAME --auth public`; unpublish runs `outpost apps rm NAME`
+# and returns a public console record to --auth system. --dry-run reads but
+# never writes and prints the commands it would run. --json prints one
+# object; failures are {code,message}, exit 2 for usage and 1 otherwise.
+# OUTPOST_BIN and BASHY_BIN select the binaries (tests stub them).
+# Plain bash: vlog.sh sources it too.
+
+kit_outpost_json_str() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
+  printf '"%s"' "$s"
+}
+
+# kit_outpost_json_argv ARG... — one JSON array of strings.
+kit_outpost_json_argv() {
+  local sep='' a
+  printf '['
+  for a in "$@"; do printf '%s' "$sep"; kit_outpost_json_str "$a"; sep=,; done
+  printf ']'
+}
+
+# kit_outpost_icon_url ICON — a fleet icon (one emoji, or SVG path data on a
+# 24 grid) as the image URL outpost's --icon expects; URLs pass through.
+kit_outpost_icon_url() {
+  local icon=$1 svg
+  case $icon in
+    '') return 0 ;;
+    http://*|https://*|data:*) printf '%s' "$icon"; return 0 ;;
+  esac
+  if [[ $icon =~ ^[MmLlHhVvCcSsQqTtAaZz0-9\ .,-]+$ ]]; then
+    svg="<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='#52525b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='$icon'/></svg>"
+  else
+    svg="<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><text x='12' y='19' font-size='18' text-anchor='middle'>$icon</text></svg>"
+  fi
+  svg=${svg//%/%25}
+  svg=${svg//</%3C}
+  svg=${svg//>/%3E}
+  svg=${svg//#/%23}
+  svg=${svg// /%20}
+  printf 'data:image/svg+xml,%s' "$svg"
+}
+
+# kit_outpost_owner_url NAME — the address the owner opens, from the paired
+# outpost's status; empty when outpost is unpaired or not running.
+kit_outpost_owner_url() {
+  local status cloudbox agent
+  status=$("${OUTPOST_BIN:-outpost}" status --json 2>/dev/null) || return 0
+  cloudbox=$(printf '%s\n' "$status" | sed -n 's/.*"cloudbox_url": *"\([^"]*\)".*/\1/p' | head -n 1)
+  agent=$(printf '%s\n' "$status" | sed -n 's/.*"agent_name": *"\([^"]*\)".*/\1/p' | head -n 1)
+  [[ -n $cloudbox && -n $agent ]] || return 0
+  printf '%s/matrix/h/%s/app/%s/' "${cloudbox%/}" "$agent" "$1"
+}
+
+kit_outpost_fail() { # CODE MESSAGE EXIT
+  if [[ ${_ko_json:-false} == true ]]; then
+    printf '{"code":%s,"message":%s}\n' "$(kit_outpost_json_str "$1")" "$(kit_outpost_json_str "$2")"
+  else
+    printf '%s: %s\n' "${_ko_tool:-outpost}" "$2" >&2
+  fi
+  return "$3"
+}
+
+kit_outpost_usage() {
+  printf '%s publish-outpost [NAME] [--public|--private] [--icon URL] [--json] [--dry-run]\n' "$_ko_tool"
+  printf '%s unpublish-outpost [NAME] [--json] [--dry-run]\n' "$_ko_tool"
+  printf '  Put the console app (default %s, port %s) on the paired outpost'"'"'s app list.\n' "$_ko_name" "$_ko_port"
+  if [[ $_ko_public == true ]]; then
+    printf '  Default: public link, no login; --private requires an outpost login.\n'
+  else
+    printf '  Default: outpost login required (owner or sharee); --public opts into a public link.\n'
+  fi
+}
+
+kit_outpost() { # VERB TOOL NAME PORT PUBLIC [ARGS...]
+  local verb=$1 _ko_tool=$2 _ko_name=$3 _ko_port=$4 _ko_public=$5
+  shift 5
+  local _ko_json=false dry=false icon='' icon_set=false public=$_ko_public name=$_ko_name
+  local named=false auth='' registered=false target url rc n=0 i
+  local -a cmds
+  for i in "$@"; do [[ $i != --json ]] || _ko_json=true; done
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -h|--help) kit_outpost_usage; return 0 ;;
+      --json) _ko_json=true ;;
+      --dry-run) dry=true ;;
+      --public|--private)
+        [[ $verb == publish-outpost ]] || { kit_outpost_fail usage "$1 applies to publish-outpost only" 2; return; }
+        if [[ $1 == --public ]]; then public=true; else public=false; fi ;;
+      --icon)
+        [[ $verb == publish-outpost ]] || { kit_outpost_fail usage "--icon applies to publish-outpost only" 2; return; }
+        [[ $# -ge 2 && -n $2 ]] || { kit_outpost_fail usage '--icon needs a URL' 2; return; }
+        icon=$2; icon_set=true; shift ;;
+      --icon=*)
+        [[ $verb == publish-outpost ]] || { kit_outpost_fail usage "--icon applies to publish-outpost only" 2; return; }
+        icon=${1#--icon=}; icon_set=true
+        [[ -n $icon ]] || { kit_outpost_fail usage '--icon needs a URL' 2; return; } ;;
+      -*) kit_outpost_fail usage "unknown option $1" 2; return ;;
+      *)
+        [[ $named == false ]] || { kit_outpost_fail usage "unexpected argument $1" 2; return; }
+        name=$1; named=true ;;
+    esac
+    shift
+  done
+  [[ $name =~ ^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$ ]] || { kit_outpost_fail usage "invalid app name: $name" 2; return; }
+  if [[ $icon_set == true ]]; then
+    case $icon in http://*|https://*|data:*) ;; *) kit_outpost_fail usage "--icon must be an http(s) or data: URL" 2; return ;; esac
+  fi
+
+  local runner=${BASHY_BIN:-bashy} op=${OUTPOST_BIN:-outpost}
+  if "$runner" app show "$name" >/dev/null 2>&1; then
+    registered=true
+    auth=$("$runner" app show "$name" --field auth 2>/dev/null) || auth=''
+  fi
+  target="http://127.0.0.1:$_ko_port/$name/"
+
+  case $verb in
+    publish-outpost)
+      [[ $registered == true ]] || { kit_outpost_fail not_registered "no console app named $name; install or register it first" 1; return; }
+      if [[ $icon_set == false ]]; then
+        icon=$(kit_outpost_icon_url "$("$runner" app show "$name" --field icon 2>/dev/null || true)")
+      fi
+      if [[ $public == true && $auth != public ]]; then
+        cmds[n++]="$runner"$'\x1f'app$'\x1f'set$'\x1f'"$name"$'\x1f'--auth$'\x1f'public
+      fi
+      local add="$op"$'\x1f'apps$'\x1f'add$'\x1f'"$name"$'\x1f'--url$'\x1f'"$target"
+      [[ $public == true ]] || add+=$'\x1f'--require-login
+      [[ -z $icon ]] || add+=$'\x1f'--icon$'\x1f'"$icon"
+      cmds[n++]=$add
+      ;;
+    unpublish-outpost)
+      cmds[n++]="$op"$'\x1f'apps$'\x1f'rm$'\x1f'"$name"
+      if [[ $registered == true && $auth == public ]]; then
+        cmds[n++]="$runner"$'\x1f'app$'\x1f'set$'\x1f'"$name"$'\x1f'--auth$'\x1f'system
+      fi
+      ;;
+    *) kit_outpost_fail usage "unknown verb $verb" 2; return ;;
+  esac
+
+  local -a argv
+  local out
+  if [[ $dry == false ]]; then
+    for ((i = 0; i < n; i++)); do
+      IFS=$'\x1f' read -r -a argv <<< "${cmds[i]}"
+      if ! out=$("${argv[@]}" 2>&1); then
+        kit_outpost_fail outpost_failed "${argv[*]:0:3} failed: ${out:-no output}" 1
+        return
+      fi
+    done
+  fi
+  [[ $verb == unpublish-outpost ]] || url=$(kit_outpost_owner_url "$name")
+
+  if [[ $_ko_json == true ]]; then
+    printf '{"app":%s,"verb":%s,"dryRun":%s,"target":%s' \
+      "$(kit_outpost_json_str "$name")" "$(kit_outpost_json_str "${verb%-outpost}")" "$dry" "$(kit_outpost_json_str "$target")"
+    if [[ $verb == publish-outpost ]]; then
+      local req=true; [[ $public == false ]] || req=false
+      printf ',"public":%s,"requireLogin":%s,"icon":%s,"url":' "$public" "$req" "$(kit_outpost_json_str "$icon")"
+      if [[ -n $url ]]; then kit_outpost_json_str "$url"; else printf null; fi
+    fi
+    printf ',"commands":['
+    for ((i = 0; i < n; i++)); do
+      IFS=$'\x1f' read -r -a argv <<< "${cmds[i]}"
+      [[ $i -eq 0 ]] || printf ,
+      kit_outpost_json_argv "${argv[@]}"
+    done
+    printf ']}\n'
+    return 0
+  fi
+
+  if [[ $dry == true ]]; then
+    for ((i = 0; i < n; i++)); do
+      IFS=$'\x1f' read -r -a argv <<< "${cmds[i]}"
+      printf '%s: would run:' "$_ko_tool"; printf ' %q' "${argv[@]}"; printf '\n'
+    done
+    return 0
+  fi
+  if [[ $verb == unpublish-outpost ]]; then
+    printf '%s: removed %s from outpost\n' "$_ko_tool" "$name"
+    return 0
+  fi
+  if [[ $public == true ]]; then
+    printf '%s: published %s to outpost as a public link (no login)\n' "$_ko_tool" "$name"
+  else
+    printf '%s: published %s to outpost (login required)\n' "$_ko_tool" "$name"
+  fi
+  if [[ -n $url ]]; then
+    printf '%s: open %s\n' "$_ko_tool" "$url"
+  else
+    printf '%s: outpost is not paired yet; after pairing the tile is %s on this host\n' "$_ko_tool" "/app/$name/"
+  fi
+}

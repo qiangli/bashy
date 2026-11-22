@@ -1,0 +1,65 @@
+#!/usr/bin/env -S bashy --bashsharp
+~~~skill as guide
+---
+name: desktop
+description: Inspect and personalize a Cloudbox desktop through its server, using the same operations as the Shape button and settings controls.
+---
+# Desktop shaping
+
+Agents are first-class users. The GUI is a view of server capabilities.
+Use existing member, group, suite, share, paired-host, token and app commands
+for their operations; desktop supplies personal presentation, history and live
+page actions. `pages` lists mounted actions; `invoke PAGE ACTION JSON` waits
+for completion; `result ID` inspects an uncertain outcome without replay.
+When building pages, give every operation CLI/API parity, register semantic
+handlers shared with human controls, validate input, enforce server permissions,
+and test errors, account isolation, disconnection and handler unmount.
+Keep the Shape control reachable in Shape-only mode. Domain mutations keep
+their own API scopes; desktop handlers are for presentation only.
+
+Start with `bashy desktop schema --json`, `get --json`, and `catalog --json`.
+Use `set PROPERTY VALUE --dry-run --json` to validate; omit --dry-run to apply.
+`shape-only` toggles the single-Shape-button view; `shape-only off` restores it.
+`wish "words" --json` uses the configured model allowance; ordinary `set` does not.
+`allowance --json` shows what is left today, or a `reason` when wishes are
+unavailable (not_configured, allowance_off); ordinary settings still work.
+A wish the pool never answered costs nothing; a refusal after the model
+answered counts, and says so.
+`history` and `undo` use the same numbered revisions as the page; repeated
+`undo` keeps stepping back.
+`policy ls|set OWNER LIMIT|unset OWNER` sets the daily allowance: `*` is the
+default, an email overrides it, 0 switches wishes off. Only the master's
+superadmin or a satellite's owner may, with a signed-in session in
+CLOUDBOX_SUPERADMIN_SESSION; API tokens are refused.
+Exit 0 is success, 3 a refusal with a reason (conflict, invalid change,
+allowance, unavailable), 1 anything else.
+Use --revision for an explicit base. A conflict is a refusal, never auto-retry.
+Account selection and credentials are those of the existing Cloudbox commands.
+
+Run this script with no arguments to inspect. Pass `walkthrough` to change
+density, undo it, and check that undo restored the original value, against
+the selected account. Other arguments pass
+through to the desktop command. No browser or model is needed for the walkthrough.
+~~~
+set -euo pipefail
+runner=${BASHY_BIN:-bashy}
+case ${1:-inspect} in
+ inspect)
+  "$runner" desktop schema --json
+  "$runner" desktop get --json
+  "$runner" desktop catalog --json
+  ;;
+ walkthrough)
+  before=$("$runner" desktop get --json | jq -r .resolved.density)
+  next=compact
+  [ "$before" = compact ] && next=comfortable
+  "$runner" desktop set density "$next" --dry-run --json
+  changed=$("$runner" desktop set density "$next" --json | jq -r .resolved.density)
+  [ "$changed" = "$next" ] || { echo "density did not change to $next" >&2; exit 1; }
+  restored=$("$runner" desktop undo --json | jq -r .resolved.density)
+  [ "$restored" = "$before" ] || { echo "undo left density at $restored, expected $before" >&2; exit 1; }
+  "$runner" desktop history --json
+  echo "walkthrough ok: density $before -> $next -> $restored" >&2
+  ;;
+ *) "$runner" desktop "$@" ;;
+esac

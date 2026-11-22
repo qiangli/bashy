@@ -5,11 +5,18 @@ package agentos
 
 import (
 	"bytes"
+	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"testing"
+
+	"github.com/qiangli/bashy/internal/agentos/adapterembed"
+	"github.com/qiangli/yoke/pkg/shape/slot"
 )
 
 func TestResolveAdapterScriptFindsPilotStats(t *testing.T) {
@@ -38,6 +45,391 @@ func TestResolveAdapterScriptHonorsOverride(t *testing.T) {
 	}
 	if got := resolveAdapterScript("yoke", "missing"); got != "" {
 		t.Fatalf("resolveAdapterScript for missing entry = %q, want empty", got)
+	}
+}
+
+func captureCommandAdapterRun(t *testing.T, folder, entry, invokedAs string, args []string) (string, string, int) {
+	t.Helper()
+	origOut, origErr := os.Stdout, os.Stderr
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		_ = outR.Close()
+		_ = outW.Close()
+		t.Fatal(err)
+	}
+	os.Stdout, os.Stderr = outW, errW
+
+	var outBuf, errBuf bytes.Buffer
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(&outBuf, outR)
+	}()
+	go func() {
+		defer wg.Done()
+		_, _ = io.Copy(&errBuf, errR)
+	}()
+
+	code := runCommandAdapter(folder, entry, invokedAs, args)
+
+	os.Stdout, os.Stderr = origOut, origErr
+	_ = outW.Close()
+	_ = errW.Close()
+	wg.Wait()
+	_ = outR.Close()
+	_ = errR.Close()
+	return outBuf.String(), errBuf.String(), code
+}
+
+func TestEmbeddedAdaptersMatchSourceTree(t *testing.T) {
+	root, ok := findBashySourceRoot(".")
+	if !ok {
+		t.Fatal("cannot locate bashy source root")
+	}
+
+	embedded := map[string][]byte{}
+	err := fs.WalkDir(adapterembed.FS, ".", func(p string, d fs.DirEntry, werr error) error {
+		if werr != nil {
+			return werr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(p, ".bsh") {
+			t.Errorf("non-.bsh file embedded in adapterembed.FS: %s (only .bsh adapters may be embedded)", p)
+			return nil
+		}
+		raw, err := fs.ReadFile(adapterembed.FS, p)
+		if err != nil {
+			return err
+		}
+		embedded[p] = raw
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("walk adapterembed.FS: %v", err)
+	}
+	if len(embedded) == 0 {
+		t.Fatal("adapterembed.FS contains zero embedded .bsh files")
+	}
+
+	onDisk := map[string][]byte{}
+	for _, folder := range adapterembed.Folders {
+		srcDir := filepath.Join(root, folder)
+		err := filepath.WalkDir(srcDir, func(p string, d fs.DirEntry, werr error) error {
+			if werr != nil {
+				return werr
+			}
+			if d.IsDir() {
+				if d.Name() == ".git" || d.Name() == "node_modules" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			rel, err := filepath.Rel(root, p)
+			if err != nil {
+				return err
+			}
+			relSlash := filepath.ToSlash(rel)
+			if !adapterembed.ShouldEmbed(relSlash) {
+				return nil
+			}
+			raw, err := os.ReadFile(p)
+			if err != nil {
+				return err
+			}
+			onDisk[relSlash] = bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\n"))
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("walk %s: %v", srcDir, err)
+		}
+	}
+
+	for p, want := range onDisk {
+		got, exists := embedded[p]
+		if !exists {
+			t.Errorf("missing embedded adapter %s (run `go generate ./internal/agentos/adapterembed`)", p)
+			continue
+		}
+		if !bytes.Equal(got, want) {
+			t.Errorf("embedded adapter %s drifted from source tree (run `go generate ./internal/agentos/adapterembed`)", p)
+		}
+	}
+	for p := range embedded {
+		if _, exists := onDisk[p]; !exists {
+			t.Errorf("stale embedded adapter %s no longer in source tree (run `go generate ./internal/agentos/adapterembed`)", p)
+		}
+	}
+
+	// Every adaptedVerbs and customAgentCLIEntries route must be backed by an embedded .bsh.
+	for verb, fe := range adaptedVerbs {
+		p := fe[0] + "/" + fe[1] + "/" + fe[1] + ".bsh"
+		if _, exists := embedded[p]; !exists {
+			t.Errorf("adaptedVerbs[%q] -> %s is missing from adapterembed.FS", verb, p)
+		}
+	}
+	for tool := range customAgentCLIEntries {
+		p := "custom/" + tool + "/" + tool + ".bsh"
+		if _, exists := embedded[p]; !exists {
+			t.Errorf("customAgentCLIEntries[%q] -> %s is missing from adapterembed.FS", tool, p)
+		}
+	}
+	if _, exists := embedded["custom/agent-cli/agent-cli.bsh"]; !exists {
+		t.Error("custom/agent-cli/agent-cli.bsh is missing from adapterembed.FS")
+	}
+}
+
+func TestResolveAndRunEmbeddedAdapterEmptyHomeAndCwd(t *testing.T) {
+	origRoots := adapterCandidateRoots
+	adapterCandidateRoots = func() []string { return nil }
+	t.Cleanup(func() { adapterCandidateRoots = origRoots })
+
+	t.Run("empty-dirs", func(t *testing.T) {
+		emptyHome := t.TempDir()
+		emptyCwd := t.TempDir()
+		adapterCache := filepath.Join(t.TempDir(), "adapter-cache")
+
+		t.Setenv("HOME", emptyHome)
+		t.Setenv("USERPROFILE", emptyHome)
+		t.Setenv("BASHY_HOME", "")
+		t.Setenv("XDG_CACHE_HOME", "")
+		t.Setenv(adaptersRootEnv, "")
+		t.Setenv("BASHY_ADAPTER_CACHE", adapterCache)
+		t.Setenv("GOWORK", "off")
+		t.Setenv("BASHY_HINTS", "off")
+		t.Chdir(emptyCwd)
+		t.Setenv("PWD", emptyCwd)
+
+		// Verify no source pin exists under HOME.
+		if _, err := os.Stat(filepath.Join(emptyHome, ".bashy", "src", "bashy")); !os.IsNotExist(err) {
+			t.Fatalf("expected no source pin under empty HOME, stat err = %v", err)
+		}
+
+		// Resolve across all 5 embedded folders and confirm content-addressed caching.
+		for _, tc := range [][2]string{
+			{"yoke", "dag"},
+			{"optional", "jq"},
+			{"toolchain", "cmake"},
+			{"custom", "gh"},
+			{"examples", "desktop"},
+			{"examples", "desk/notepad"},
+		} {
+			got1 := resolveAdapterScript(tc[0], tc[1])
+			if got1 == "" {
+				t.Fatalf("resolveAdapterScript(%q, %q) returned empty path", tc[0], tc[1])
+			}
+			if !isRegularFile(got1) {
+				t.Fatalf("resolveAdapterScript(%q, %q) = %q is not a regular file", tc[0], tc[1], got1)
+			}
+			wantPrefix := filepath.ToSlash(filepath.Join(adapterCache, ".embedded")) + "/"
+			if !strings.HasPrefix(filepath.ToSlash(got1), wantPrefix) {
+				t.Fatalf("resolveAdapterScript(%q, %q) = %q, want under %q", tc[0], tc[1], got1, wantPrefix)
+			}
+			base := filepath.Base(filepath.FromSlash(tc[1]))
+			wantSuffix := "/" + tc[0] + "/" + tc[1] + "/" + base + ".bsh"
+			if !strings.HasSuffix(filepath.ToSlash(got1), wantSuffix) {
+				t.Fatalf("resolveAdapterScript(%q, %q) = %q, want suffix %q", tc[0], tc[1], got1, wantSuffix)
+			}
+			got2 := resolveAdapterScript(tc[0], tc[1])
+			if got2 != got1 {
+				t.Fatalf("content-addressed path changed across calls: %q vs %q", got1, got2)
+			}
+		}
+
+		if got := resolveAdapterScript("yoke", "definitely-missing"); got != "" {
+			t.Fatalf("resolveAdapterScript for missing entry = %q, want empty", got)
+		}
+
+		// Run a pure Bash# embedded adapter (examples/notes/notes.bsh, which also
+		// sources ../desk/kit/outpost.bsh) with empty HOME/cwd and no source pin.
+		notesOut, notesErr, notesCode := captureCommandAdapterRun(t, "examples", "notes", "notes", []string{"status"})
+		if notesCode != 0 || !strings.Contains(notesOut, "notes: not installed") {
+			t.Fatalf("embedded examples/notes status: code=%d stderr=%q stdout=%q", notesCode, notesErr, notesOut)
+		}
+
+		// Run the Go-backed yoke/dag adapter resolved from the embedded .bsh
+		// (matching test-bash-container-mode in the official container: cwd outside
+		// repo, no source pin, cached binary present in BASHY_ADAPTER_CACHE).
+		selfExe, err := os.Executable()
+		if err != nil {
+			t.Fatalf("os.Executable: %v", err)
+		}
+		ext := ""
+		if runtime.GOOS == "windows" {
+			ext = ".exe"
+		}
+		cachedDag := filepath.Join(adapterCache, "yoke", "dag"+ext)
+		if err := os.MkdirAll(filepath.Dir(cachedDag), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		rawExe, err := os.ReadFile(selfExe)
+		if err != nil {
+			t.Fatalf("read test executable: %v", err)
+		}
+		if err := os.WriteFile(cachedDag, rawExe, 0o755); err != nil {
+			t.Fatalf("stage cached dag binary: %v", err)
+		}
+
+		dagOut, dagErr, dagCode := captureCommandAdapterRun(t, "yoke", "dag", "dag", []string{"--embedded-probe", "ok"})
+		if dagCode != 0 || strings.TrimSpace(dagOut) != "--embedded-probe ok" {
+			t.Fatalf("embedded yoke/dag execution: code=%d stderr=%q stdout=%q", dagCode, dagErr, dagOut)
+		}
+	})
+
+	t.Run("unset-home-env", func(t *testing.T) {
+		emptyCwd := t.TempDir()
+		tmpDir := t.TempDir()
+
+		t.Setenv("HOME", "")
+		t.Setenv("USERPROFILE", "")
+		t.Setenv("BASHY_HOME", "")
+		t.Setenv("XDG_CACHE_HOME", "")
+		t.Setenv("BASHY_ADAPTER_CACHE", "")
+		t.Setenv(adaptersRootEnv, "")
+		t.Setenv("TMPDIR", tmpDir)
+		t.Setenv("TMP", tmpDir)
+		t.Setenv("TEMP", tmpDir)
+		t.Setenv("GOWORK", "off")
+		t.Setenv("BASHY_HINTS", "off")
+		t.Chdir(emptyCwd)
+		t.Setenv("PWD", emptyCwd)
+
+		got := resolveAdapterScript("examples", "collab-save")
+		if got == "" || !isRegularFile(got) {
+			t.Fatalf("resolveAdapterScript with empty HOME env = %q, want materialized file", got)
+		}
+		out, errStr, code := captureCommandAdapterRun(t, "examples", "collab-save", "collab-save", nil)
+		if code != 2 || !strings.Contains(errStr, "collab-save save PATH...") {
+			t.Fatalf("embedded examples/collab-save with empty HOME env: code=%d stderr=%q stdout=%q", code, errStr, out)
+		}
+	})
+}
+
+func TestResolveAdapterScriptPrecedence(t *testing.T) {
+	origRoots := adapterCandidateRoots
+	origSelect := shapeSlotSelect
+	origLaunch := shapeSlotLaunch
+	t.Cleanup(func() {
+		adapterCandidateRoots = origRoots
+		shapeSlotSelect = origSelect
+		shapeSlotLaunch = origLaunch
+	})
+
+	emptyHome := t.TempDir()
+	emptyCwd := t.TempDir()
+	bashyHome := filepath.Join(emptyHome, ".bashy")
+
+	t.Setenv("HOME", emptyHome)
+	t.Setenv("USERPROFILE", emptyHome)
+	t.Setenv("BASHY_HOME", bashyHome)
+	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("BASHY_ADAPTER_CACHE", "")
+	t.Setenv(adaptersRootEnv, "")
+	t.Setenv("GOWORK", "off")
+	t.Setenv("BASHY_HINTS", "off")
+	t.Chdir(emptyCwd)
+	t.Setenv("PWD", emptyCwd)
+
+	adapterCandidateRoots = func() []string { return nil }
+	shapeSlotSelect = func(string) (slot.Version, bool, error) { return slot.Version{}, false, nil }
+
+	writeMarkerAdapter := func(root, label string) string {
+		p := filepath.Join(root, "yoke", "dag", "dag.bsh")
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		body := "#!/usr/bin/env -S bashy --bashsharp\nprintf 'winner=" + label + ":%s\\n' \"$*\"\n"
+		if err := os.WriteFile(p, []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+
+	// 1. Embedded fallback when nothing exists on disk.
+	embeddedPath := resolveAdapterScript("yoke", "dag")
+	if embeddedPath == "" || !strings.Contains(filepath.ToSlash(embeddedPath), "/embedded-adapters/") {
+		t.Fatalf("step 1 (embedded fallback): got %q, want embedded-adapters cache path", embeddedPath)
+	}
+	// Companion helper materialization check for examples/notes -> examples/desk/kit/outpost.bsh.
+	notesPath := resolveAdapterScript("examples", "notes")
+	if notesPath == "" {
+		t.Fatal("resolveAdapterScript(examples, notes) returned empty path")
+	}
+	companionPath := filepath.Join(filepath.Dir(notesPath), "..", "desk", "kit", "outpost.bsh")
+	if !isRegularFile(companionPath) {
+		t.Fatalf("expected companion helper materialized at %q alongside %q", companionPath, notesPath)
+	}
+
+	// 2. On-disk candidate root beats embedded.
+	diskRoot := t.TempDir()
+	diskScript := writeMarkerAdapter(diskRoot, "disk")
+	adapterCandidateRoots = func() []string { return []string{diskRoot} }
+	if got := resolveAdapterScript("yoke", "dag"); got != diskScript {
+		t.Fatalf("step 2 (on-disk > embedded): got %q, want %q", got, diskScript)
+	}
+	out, errStr, code := captureCommandAdapterRun(t, "yoke", "dag", "dag", []string{"arg1"})
+	if code != 0 || strings.TrimSpace(out) != "winner=disk:arg1" {
+		t.Fatalf("step 2 run: code=%d stderr=%q stdout=%q", code, errStr, out)
+	}
+	// Other verbs absent from diskRoot still fall back to embedded.
+	if got := resolveAdapterScript("optional", "jq"); !strings.Contains(filepath.ToSlash(got), "/embedded-adapters/") {
+		t.Fatalf("step 2 fallback for optional/jq: got %q, want embedded-adapters path", got)
+	}
+
+	// 3. Source pin (~/.bashy/src/bashy) beats on-disk root and embedded.
+	pinRoot := filepath.Join(bashyHome, "src", "bashy")
+	pinScript := writeMarkerAdapter(pinRoot, "source-pin")
+	if got := resolveAdapterScript("yoke", "dag"); got != pinScript {
+		t.Fatalf("step 3 (source pin > on-disk > embedded): got %q, want %q", got, pinScript)
+	}
+	out, errStr, code = captureCommandAdapterRun(t, "yoke", "dag", "dag", []string{"arg2"})
+	if code != 0 || strings.TrimSpace(out) != "winner=source-pin:arg2" {
+		t.Fatalf("step 3 run: code=%d stderr=%q stdout=%q", code, errStr, out)
+	}
+
+	// 4. BASHY_ADAPTERS_ROOT override beats source pin, on-disk root, and embedded.
+	overrideRoot := t.TempDir()
+	overrideScript := writeMarkerAdapter(overrideRoot, "override")
+	t.Setenv(adaptersRootEnv, overrideRoot)
+	if got := resolveAdapterScript("yoke", "dag"); got != overrideScript {
+		t.Fatalf("step 4 (override > source pin > on-disk > embedded): got %q, want %q", got, overrideScript)
+	}
+	out, errStr, code = captureCommandAdapterRun(t, "yoke", "dag", "dag", []string{"arg3"})
+	if code != 0 || strings.TrimSpace(out) != "winner=override:arg3" {
+		t.Fatalf("step 4 run: code=%d stderr=%q stdout=%q", code, errStr, out)
+	}
+	// Explicit override remains authoritative when an entry is absent from it.
+	if got := resolveAdapterScript("optional", "jq"); got != "" {
+		t.Fatalf("step 4 missing in override: got %q, want empty", got)
+	}
+
+	// 5. Active shape slot beats override, source pin, on-disk root, and embedded.
+	slotBin := filepath.Join(t.TempDir(), "dag-slot")
+	if err := os.WriteFile(slotBin, []byte("slot"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	var launchedPath string
+	var launchedArgs []string
+	shapeSlotSelect = func(name string) (slot.Version, bool, error) {
+		if name == "dag" {
+			return slot.Version{Path: slotBin}, true, nil
+		}
+		return slot.Version{}, false, nil
+	}
+	shapeSlotLaunch = func(path string, args []string, _ []string) int {
+		launchedPath = path
+		launchedArgs = append([]string(nil), args...)
+		return 0
+	}
+	code = runCommandAdapter("yoke", "dag", "dag", []string{"arg4"})
+	if code != 0 || launchedPath != slotBin || strings.Join(launchedArgs, " ") != "dag arg4" {
+		t.Fatalf("step 5 (shape slot > all): code=%d path=%q args=%v", code, launchedPath, launchedArgs)
 	}
 }
 

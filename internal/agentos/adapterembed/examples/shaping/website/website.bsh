@@ -1,0 +1,360 @@
+#!/usr/bin/env -S bashy --bashsharp
+# website: shaping-enable an existing website. The site stays where it is;
+# a small shaping layer (its own shaped app, in a private companion repo)
+# fronts it through outpost, injects a panel, and serves visitors by tier.
+# One editable Bash# body for the website command and skill.
+#
+#   website assess URL
+#   website enable DIR --site URL [--title T] [--contact URI]
+#   website serve DIR [--name NAME] [--port PORT]
+#   website register DIR [--name NAME]
+#   website status [--name NAME]
+#   website stop [--name NAME]
+#
+# Rod not fish: every action is one existing verb (curl, go build,
+# outpost apps add/secret, bashy app add); this script only orders them.
+
+~~~skill as guide
+---
+name: website
+description: Shaping-enable an existing website (static host, e.g. GitHub Pages) at no cost. The site stays where it is; a shaping layer in a private companion repo fronts it through outpost as a cloudbox-public app, injects a panel, and serves visitors by tier (anonymous, signed-in, circle member, owner) with private fields gated by audience and generated views from a free OpenAI-compatible route. The executable body is this Bash# file; run it with bashy --bashsharp.
+metadata:
+  requires: "has=bashy"
+---
+# website — shaping-enable an existing site
+
+Roles: the OWNER runs the shaping host (a free cloud workspace or their own
+outpost machine) and owns the private companion repo. VISITORS reach the
+site two ways: the static host, unchanged, and the engine face
+(`/matrix/h/<host>/app/<name>/` on cloudbox), where the panel appears.
+
+| Visitor | Gets | The site learns |
+|---|---|---|
+| anonymous | the page as today and a sign-in hint | nothing |
+| signed-in, not a member | the views open to `signed_in` | a per-site pseudonym, never the email |
+| member | also the fields whose audience admits their circle | email and circle |
+| owner | everything | everything |
+
+## The steps
+
+1. `website assess URL` — is the site reachable, what generated it, does it
+   use root-absolute links (rebased automatically), does it send a CSP.
+2. `website enable DIR --site URL` — writes the shaping layer into DIR (the
+   private companion repo): the Go server, `site.json`, `fields/`,
+   `public/shaping.{js,css}`, `shaped.json`, `contract.bsh`, `checks/`.
+   Edit `site.json` (title, contact, AI route, views) and `fields/*.md`
+   (one private fact each; `circles:` / `groups:` / `emails:` /
+   `signed_in:` front matter; no audience = owner only).
+3. `website serve DIR --name NAME` — builds the server, registers the
+   outpost app NAME (cloudbox public, trusted identity), reads its SSO
+   secret, and runs it on loopback. Set the AI key first in the variable
+   `site.json` names (`SITE_AI_KEY` by default) — any OpenAI-compatible
+   route: a free API tier, or `bashy llm` on the owner's machine.
+4. `website register DIR --name NAME` — registers the same repo as a shaped
+   app so the owner shapes the layer with `bashy shape` (wish, verify,
+   preview, approve); run `serve` again to publish the approved build.
+5. Put a plain link on the static site:
+   `<a href="https://<cloudbox>/matrix/h/<host>/app/<name>/">Shape this page</a>`.
+
+`website status` shows the server, the outpost app and the engine URL;
+`website stop` stops the server (the static site is unaffected).
+
+## Rules
+
+- The site repo stays public and unchanged except for the link; private
+  fields live only in the companion repo and never reach the static build.
+- Visitors never code-shape the site; only the owner shapes, with
+  `bashy shape` on the host.
+- `--dry-run` anywhere prints the calls and runs none.
+- `WEBSITE_OUTPOST_BIN` / `WEBSITE_BASHY_BIN` / `WEBSITE_GO_BIN` override the
+  executables; `WEBSITE_STATE` the state dir (default `~/.bashy/website`).
+~~~
+
+set -e
+
+PROG=website
+DRY_RUN=0
+NAME=site
+PORT=18930
+
+usage() {
+    echo "Usage: $PROG assess URL" >&2
+    echo "       $PROG enable DIR --site URL [--title T] [--contact URI]" >&2
+    echo "       $PROG serve DIR [--name NAME] [--port PORT]" >&2
+    echo "       $PROG register DIR [--name NAME]" >&2
+    echo "       $PROG status [--name NAME]" >&2
+    echo "       $PROG stop [--name NAME]" >&2
+    exit 2
+}
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+outpost_bin() { printf '%s\n' "${WEBSITE_OUTPOST_BIN:-outpost}"; }
+bashy_bin() { printf '%s\n' "${WEBSITE_BASHY_BIN:-bashy}"; }
+go_bin() { printf '%s\n' "${WEBSITE_GO_BIN:-go}"; }
+state_dir() { printf '%s\n' "${WEBSITE_STATE:-$HOME/.bashy/website}"; }
+
+run() {
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $*"
+        return 0
+    fi
+    "$@"
+}
+
+template_dir() {
+    t="$(dirname "$0")/template"
+    [ -f "$t/main.go" ] || fail "template not found next to $0"
+    printf '%s\n' "$t"
+}
+
+# json_safe refuses characters this script does not escape.
+json_safe() {
+    case "$1" in
+        *'"'* | *'\'*) fail "value must not contain a quote or backslash: $1" ;;
+    esac
+}
+
+cmd_assess() {
+    url="$1"
+    [ "${2:-}" = "--dry-run" ] && DRY_RUN=1
+    [ -n "$url" ] || usage
+    tmp="$(state_dir)/assess.html"
+    run mkdir -p "$(state_dir)"
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: curl -fsSL -D - $url"
+        return 0
+    fi
+    headers=$(curl -fsSL -D - -o "$tmp" "$url") || fail "cannot fetch $url"
+    generator=unknown
+    if LC_ALL=C grep -q '/_next/' "$tmp"; then generator=nextjs; fi
+    if LC_ALL=C grep -qi 'name="generator" content="Hugo' "$tmp"; then generator=hugo; fi
+    if LC_ALL=C grep -q '/assets/index-' "$tmp"; then generator=vite; fi
+    rooted=$(LC_ALL=C grep -o '\(href\|src\)="/[^/]' "$tmp" | LC_ALL=C grep -c . || true)
+    csp=no
+    case "$headers" in
+        *[Cc]ontent-[Ss]ecurity-[Pp]olicy*) csp=yes ;;
+    esac
+    echo "{\"url\":\"$url\",\"generator\":\"$generator\",\"root_absolute_links\":$rooted,\"csp\":\"$csp\",\"bytes\":$(wc -c <"$tmp" | tr -d ' ')}"
+    echo "next: $PROG enable DIR --site $url" >&2
+}
+
+cmd_enable() {
+    dir="$1"
+    shift || true
+    site="" title="My site" contact=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --site) site="$2"; shift 2 ;;
+            --title) title="$2"; shift 2 ;;
+            --contact) contact="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            *) usage ;;
+        esac
+    done
+    [ -n "$dir" ] && [ -n "$site" ] || usage
+    json_safe "$site"; json_safe "$title"; json_safe "$contact"
+    t=$(template_dir)
+    run mkdir -p "$dir"
+    for f in go.mod main.go identity.go audience.go proxy.go view.go main_test.go shaped.json contract.bsh; do
+        if [ -e "$dir/$f" ]; then
+            echo "keep: $f (exists)"
+        else
+            run cp "$t/$f" "$dir/$f"
+        fi
+    done
+    for d in public checks fields .devcontainer; do
+        if [ -e "$dir/$d" ]; then
+            echo "keep: $d/ (exists)"
+        else
+            run cp -R "$t/$d" "$dir/$d"
+        fi
+    done
+    run mkdir -p "$dir/bin"
+    for f in "$0" "$(dirname "$0")/../../shaping-host/shaping-host.bsh"; do
+        b=$(basename "$f")
+        if [ -f "$f" ] && [ ! -e "$dir/bin/$b" ]; then
+            run cp "$f" "$dir/bin/$b"
+        fi
+    done
+    if [ -e "$dir/site.json" ]; then
+        echo "keep: site.json (exists)"
+    elif [ "$DRY_RUN" = 1 ]; then
+        echo "would write: $dir/site.json (site_url $site)"
+    else
+        {
+            echo '{'
+            echo "  \"site_url\": \"$site\","
+            echo "  \"title\": \"$title\","
+            echo "  \"contact\": \"$contact\","
+            echo '  "sign_in": "/cloud/signin",'
+            echo '  "ai": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-flash-lite-latest", "key_env": "SITE_AI_KEY", "daily_cap": 5, "daily_max": 50, "max_tokens": 900},'
+            echo '  "views": [{"name": "recruiter-summary", "title": "Recruiter summary", "audience": {"signed_in": true},'
+            echo '    "prompt": "Write a one-page recruiter summary: a two-sentence headline, the strongest skills as bullets, the most relevant roles with years, and certifications. If contact details are among the facts, end with them; otherwise end with one line saying more details are shared on request."}]'
+            echo '}'
+        } >"$dir/site.json"
+    fi
+    if [ ! -d "$dir/.git" ]; then
+        run git -C "$dir" init -q
+    fi
+    if [ ! -e "$dir/.gitignore" ] && [ "$DRY_RUN" = 0 ]; then
+        printf '.build/\n' >"$dir/.gitignore"
+    fi
+    echo "enabled: $dir — edit site.json and fields/*.md (they are private: keep this repo private), then: $PROG serve $dir --name NAME"
+}
+
+# Codespaces injects user secrets into the container's own startup and
+# terminals, but not into every session (an ssh session has none); read a
+# missing one from the shared secrets file. Values are never printed.
+load_codespace_secrets() {
+    f=/workspaces/.codespaces/shared/user-secrets-envs.json
+    [ -f "$f" ] || return 0
+    for v in "$@"; do
+        eval "cur=\${$v:-}"
+        [ -n "$cur" ] && continue
+        val=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get(sys.argv[2], ""))' "$f" "$v" 2>/dev/null) || continue
+        if [ -n "$val" ]; then
+            export "$v=$val"
+        fi
+    done
+}
+
+have_pkill() { command -v pkill >/dev/null 2>&1; }
+
+app_secret() {
+    "$(outpost_bin)" apps secret "$1" 2>/dev/null || true
+}
+
+cmd_serve() {
+    load_codespace_secrets SITE_AI_KEY
+    dir="$1"
+    shift || true
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) NAME="$2"; shift 2 ;;
+            --port) PORT="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            *) usage ;;
+        esac
+    done
+    [ -n "$dir" ] && [ -f "$dir/site.json" ] || fail "no shaping layer in '$dir' (run: $PROG enable DIR --site URL)"
+    st=$(state_dir)
+    run mkdir -p "$st" "$dir/.build"
+    run env GOWORK=off CGO_ENABLED=0 "$(go_bin)" -C "$dir" build -trimpath -o .build/site-shaping .
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $(outpost_bin) apps add $NAME --port $PORT --trust-cloud-identity"
+    else
+        # The daemon may be restarting (an attach restarts it): retry briefly.
+        n=0
+        until "$(outpost_bin)" apps add "$NAME" --port "$PORT" --trust-cloud-identity; do
+            n=$((n + 1))
+            [ "$n" -lt 20 ] || fail "outpost did not accept the app (is the daemon running? outpost start)"
+            sleep 3
+        done
+    fi
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $dir/.build/site-shaping -addr 127.0.0.1:$PORT (SITE_SSO_SECRET from outpost apps secret $NAME)"
+        return 0
+    fi
+    secret=$(app_secret "$NAME")
+    [ -n "$secret" ] || echo "$PROG: warning: no SSO secret for $NAME; every visitor will be anonymous" >&2
+    cmd_stop_quiet
+    # Its own session, so it outlives the shell (or ssh session) that started it.
+    if command -v setsid >/dev/null 2>&1; then
+        SITE_SSO_SECRET="$secret" setsid nohup "$dir/.build/site-shaping" -addr "127.0.0.1:$PORT" >"$st/$NAME.log" 2>&1 </dev/null &
+    else
+        SITE_SSO_SECRET="$secret" nohup "$dir/.build/site-shaping" -addr "127.0.0.1:$PORT" >"$st/$NAME.log" 2>&1 </dev/null &
+    fi
+    echo $! >"$st/$NAME.pid"
+    echo "$PORT" >"$st/$NAME.port"
+    echo "serving: $NAME on 127.0.0.1:$PORT (pid $(cat "$st/$NAME.pid"), log $st/$NAME.log)"
+    echo "engine face: https://<cloudbox>/matrix/h/<this host>/app/$NAME/ — link it from the static site"
+}
+
+cmd_stop_quiet() {
+    pidf="$(state_dir)/$NAME.pid"
+    if [ -f "$pidf" ]; then
+        kill "$(cat "$pidf")" 2>/dev/null || true
+        rm -f "$pidf"
+    fi
+    # The recorded pid may be a wrapper's: also stop whatever holds the port.
+    portf="$(state_dir)/$NAME.port"
+    if [ -f "$portf" ] && have_pkill; then
+        # [s]: the pattern must not match a wrapper's own command line.
+        pkill -f "[s]ite-shaping -addr 127.0.0.1:$(cat "$portf")" 2>/dev/null || true
+    fi
+}
+
+cmd_stop() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) NAME="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            *) usage ;;
+        esac
+    done
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would stop: $NAME"
+        return 0
+    fi
+    cmd_stop_quiet
+    echo "stopped: $NAME (the static site is unaffected)"
+}
+
+cmd_register() {
+    dir="$1"
+    shift || true
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) NAME="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            *) usage ;;
+        esac
+    done
+    [ -n "$dir" ] && [ -f "$dir/shaped.json" ] || fail "no shaped app in '$dir'"
+    run "$(bashy_bin)" app add "$NAME-shaping" --type shaped --source "$(cd "$dir" && pwd)" --label "Shaping layer for $NAME"
+    echo "next: bashy shape wish $NAME-shaping \"...\"; after approving, bashy shape submit, then $PROG serve $dir --name $NAME"
+}
+
+cmd_status() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) NAME="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            *) usage ;;
+        esac
+    done
+    pidf="$(state_dir)/$NAME.pid"
+    running=no
+    # The pid may be a wrapper's; the server answering on its port is the truth.
+    portf="$(state_dir)/$NAME.port"
+    if [ -f "$portf" ] && curl -fs -m 5 -o /dev/null "http://127.0.0.1:$(cat "$portf")/_shaping/api/me"; then
+        running=yes
+    elif [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null; then
+        running=yes
+    fi
+    secret=no
+    if [ -n "$(app_secret "$NAME")" ]; then secret=yes; fi
+    echo "{\"name\":\"$NAME\",\"server_running\":\"$running\",\"sso_secret\":\"$secret\",\"log\":\"$(state_dir)/$NAME.log\"}"
+}
+
+while [ "${1:-}" = "--dry-run" ]; do
+    DRY_RUN=1
+    shift
+done
+[ $# -gt 0 ] || usage
+verb="$1"
+shift
+case "$verb" in
+    assess) cmd_assess "$@" ;;
+    enable) cmd_enable "$@" ;;
+    serve) cmd_serve "$@" ;;
+    register) cmd_register "$@" ;;
+    status) cmd_status "$@" ;;
+    stop) cmd_stop "$@" ;;
+    -h | --help | help) usage ;;
+    *) usage ;;
+esac

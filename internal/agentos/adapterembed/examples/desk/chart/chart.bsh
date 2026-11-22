@@ -1,0 +1,57 @@
+#!/usr/bin/env -S bashy --bashsharp
+~~~skill as guide
+---
+name: chart
+description: Quick offline statistics from JSON, CSV, NDJSON or OTLP metrics, rendered as ready-made SVG widgets on a local desk page.
+metadata:
+  requires: "has=bashy"
+---
+# Chart
+
+For a standalone listener, start `bashy chart serve`. For a console-managed
+listener, set `CHART_ADDR`, `CHART_DATA` and `CHART_PUBLIC_URL` as described
+in the README. Create with
+`bashy chart add --input metrics.json --widget auto --json` (or pipe to
+`add --input -`). Keep the returned ownerKey private; use CHART_KEY for
+show/set/share/close. `open ID --json` returns only id, URL and status.
+`share ID --json` returns a single-use browser invite; `revoke ID` removes
+all invites and browser memberships. No accounts or external services.
+
+Choose auto, counter, sum, gauge, updowncounter, histogram,
+exponentialhistogram, line, bar, table or stat. `--refresh 5s` explicitly
+re-reads a file or literal HTTP loopback URL while viewed. Default is a
+snapshot. `--template FILE` embeds a shaped copy of templates/page.html.
+Secrets are refused. `show` returns data and SVG; large data should be
+re-surfaced with `open`, not pasted into chat. No query or layout language.
+~~~
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-chart
+exe=$(go env GOEXE)
+bin="$cache/chart$exe"
+build() {
+ stale=false
+ [[ -f "$bin" ]] || stale=true
+ for src in "$here"/*.go "$here"/go.mod "$here"/go.sum "$here"/templates/*; do
+  [[ "$src" -nt "$bin" ]] && stale=true
+ done
+ if [[ $stale == true ]]; then
+  mkdir -p "$here/.desk-build" "$cache"
+  (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/chart$exe" . && { mv -f ".desk-build/chart$exe" "$bin" || [[ -f "$bin" ]]; })
+ fi
+}
+case ${1:-} in
+ --skill)
+ copying=false
+ while IFS= read -r line; do
+  if [[ $line == '~~~skill as guide' ]]; then copying=true; continue; fi
+  if [[ $copying == true && $line == '~~~' ]]; then break; fi
+  if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
+ done < "${BASH_SOURCE[0]}"
+ ;;
+ *)
+ build
+ exec "$bin" "$@"
+ ;;
+esac

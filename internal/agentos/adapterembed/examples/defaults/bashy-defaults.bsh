@@ -1,0 +1,354 @@
+#!/usr/bin/env -S bashy --bashsharp
+# bashy-defaults: set up the default Bash# commands and kb pages that ship
+# in Bashy's source tree (not its binary).
+# One editable Bash# body for the bashy-defaults command and skill.
+#
+#   bashy-defaults apply [--upgrade] [--force]
+#   bashy-defaults merge [--upgrade]
+#   bashy-defaults status
+
+~~~skill as guide
+---
+name: bashy-defaults
+description: Set up the default Bash# commands and kb pages every Bashy install can use, from Bashy's own release-pinned source. The executable body is this Bash# file; run it with bashy --bashsharp.
+metadata:
+  requires: "has=bashy"
+---
+# bashy-defaults — default commands and kb pages from the source pin
+
+Scripts, skills and kb pages live outside the bashy binary, in Bashy's
+source tree. Every install can fetch that tree pinned at its release, and
+this command turns it into working defaults.
+
+## Run
+
+```sh
+bashy src fetch bashy
+bashy --bashsharp "${BASHY_HOME:-$HOME/.bashy}/src/bashy/examples/defaults/bashy-defaults.bsh" apply
+```
+
+- `apply` fetches the source pin when it is missing (`--upgrade` moves it
+  to the installed release with `bashy src upgrade bashy`), registers each
+  default command from the pin with `bashy commands add`, and reports the
+  default kb pages. A command you registered yourself under the same name
+  (pointing elsewhere) is kept; `--force` replaces it. Running `apply`
+  again is safe.
+- `status` prints the pin, each default command (default, own, missing),
+  and how many default kb pages are present.
+- `merge` is for a host that already has a setup (after an upgrade): it
+  registers default commands the host is missing, keeps the ones you
+  registered yourself, and lists every kb page of yours that SHADOWS a
+  default page with the same slug but different content, with both paths.
+  It changes no page. `--upgrade` first moves the pin to the installed
+  release.
+
+## Merging shadowed pages (for agents)
+
+`merge` does the mechanical half; the content half is judgment. For each
+shadowed pair it prints, read both files, then either keep yours and fold
+in what the new default adds (`bashy kb update <slug>` on your page), or
+adopt the default by hiding yours (`bashy kb forget <slug>`; the default
+then shows through). Keep the user's intent; never copy host, user or
+secret details into a page that may be shared.
+
+Default commands: `outpost-profile` (examples/outpost-profile),
+`satellite-member` (examples/satellite-member), `onboard`
+(examples/onboard: the member journey as one resumable sequence),
+`satellite-provision` (examples/satellite-provision; an owner's cloud
+satellite from plan to teardown), `media` (examples/media: PDFs and narrated
+videos), `film` (examples/film: a music video from a storyboard — oss
+drafts, a lock, a commercial-route final through the service verbs),
+`film-lipsync` (examples/film/lipsync.bsh: lip-synced takes and their review
+for the locked storyboard, behind examples/film/dag.md),
+`record` (examples/record: camera and microphone takes), `cast`
+(examples/cast: a command's terminal output as asciicast v2 under a
+pty/ConPTY, the recorder examples/video uses), `chrome` and `chrome-open`
+(examples/chrome: cross-platform Google Chrome detection, installation, and
+tab opening), the service verbs `plan`,
+`image`, `draw`, `pdf`, `video`, `narrate`, `song`, `animate`,
+`translate`, `email` and `drive` (examples/service-door: one door body per role; providers
+are rods, see docs/service-rod-contract.md); `transcribe` has an embedded
+pipeline front door. The M2 oss rods `song-acestep`,
+`image-klein`, `narrate-local`, `transcribe-whisperx`, `translate-ollama`,
+`animate-prerendered` and `animate-echomimic` (examples/oss-rods:
+provides/route/requires records; `animate-prerendered` also `accepts
+/takes_dir`, so only a request with a takes directory selects it, and
+`animate-echomimic` `accepts /model=^echomimic`, so only a request that asks
+for EchoMimicV3 does), the M5 Replicate API rods
+(`examples/api-rods`, with vault-bound HTTP tool commands), and
+`bashy-defaults` itself.
+
+The default kb pages (`kb/defaults` in the pin) need no setup:
+`bashy kb search|list|show` and `bashy recall` read them as a read-only
+ring after your own pages, and a page of yours with the same slug wins.
+
+`BASHY_DEFAULTS_BASHY_BIN` overrides the `bashy` used for the src and
+commands calls.
+
+## Verification
+
+`go test ./examples/defaults/` drives the command with a fake `bashy`
+and a temp `BASHY_HOME`; it never touches a real registry.
+~~~
+
+set -e
+
+PROG=bashy-defaults
+
+# name|path inside the source tree|effects[|door role|provides|route|requires|accepts PTR=RE2]
+DEFAULT_COMMANDS="outpost-profile|examples/outpost-profile/outpost-profile.bsh|read,write,exec
+satellite-member|examples/satellite-member/satellite-member.bsh|read,write,exec
+onboard|examples/onboard/onboard.bsh|read,write,exec
+satellite-provision|examples/satellite-provision/satellite-provision.bsh|read,write,exec,net
+media|examples/media/media.bsh|read,write,exec,net
+film|examples/film/film.bsh|read,write,exec,net
+film-lipsync|examples/film/lipsync.bsh|read,write,exec,net
+record|examples/record/record.bsh|read,write,exec
+cast|examples/cast/cast.bsh|read,write,exec
+chrome|examples/chrome/chrome.bsh|read,write,exec,net
+chrome-open|examples/chrome/chrome.bsh|read,exec|open
+plan|examples/service-door/service-door.bsh|read,exec,net|plan
+image|examples/service-door/service-door.bsh|read,write,exec,net|image.generate
+draw|examples/service-door/service-door.bsh|read,write,exec,net|draw
+pdf|examples/service-door/service-door.bsh|read,write,exec,net|pdf.read
+video|examples/service-door/service-door.bsh|read,exec,net|video.understand
+narrate|examples/service-door/service-door.bsh|read,write,exec,net|narrate
+song|examples/service-door/service-door.bsh|read,write,exec,net|song
+animate|examples/service-door/service-door.bsh|read,write,exec,net|animate
+translate|examples/service-door/service-door.bsh|read,write,exec,net|translate
+email|examples/service-door/service-door.bsh|read,write,exec,net|email.read
+drive|examples/service-door/service-door.bsh|read,write,exec,net|drive.read
+song-suno|examples/service-door/song-suno.bsh|read,write,exec,net,spend||song|browser|has=bashy has=jq has=curl has=ffprobe
+image-chatgpt|examples/service-door/image-chatgpt.bsh|read,write,exec,net,spend||image.generate,image.edit|browser|has=bashy has=jq has=curl has=ffprobe
+animate-kling|examples/service-door/animate-kling.bsh|read,write,exec,net,spend||animate|browser|has=bashy has=jq has=curl has=ffprobe
+tavily|examples/service-door/search-provider.bsh|read,exec,net|tavily|search|api
+brave|examples/service-door/search-provider.bsh|read,exec,net|brave|search|api
+serper|examples/service-door/search-provider.bsh|read,exec,net|serper|search|api
+search-claude|examples/service-door/search-claude.bsh|read,exec,net||search|vendor|claude>=2.1.284
+search-codex|examples/service-door/search-codex.bsh|read,exec,net||search|vendor|has=codex
+search-agy|examples/service-door/search-agy.bsh|read,exec,net||search|vendor|has=agy
+search-muse|examples/service-door/search-muse.bsh|read,exec,net||search|vendor|has=muse
+song-acestep|examples/oss-rods/song-acestep.bsh|read,write,exec,net||song|oss|has=uv has=ffmpeg has=git
+image-klein|examples/oss-rods/image-klein.bsh|read,write,exec,net||image.generate,image.edit|oss|has=uv
+narrate-local|examples/oss-rods/narrate-local.bsh|read,write,exec,net||narrate|oss|has=uv has=ffmpeg
+transcribe-whisperx|examples/oss-rods/transcribe-whisperx.bsh|read,write,exec,net||transcribe|oss|has=uv has=ffmpeg
+translate-ollama|examples/oss-rods/translate-ollama.bsh|read,write,exec,net||translate,text|oss|has=curl
+animate-prerendered|examples/oss-rods/animate-prerendered.bsh|read,write,exec||animate|oss|has=ffmpeg|/takes_dir=.
+animate-echomimic|examples/oss-rods/animate-echomimic.bsh|read,write,exec,net||animate|oss|has=uv|/model=^echomimic
+song-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|song|song|api|has=jq has=curl has=ffprobe has=python3
+image-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|image|image.generate,image.edit|api|has=jq has=curl has=ffprobe has=python3
+animate-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|animate|animate|api|has=jq has=curl has=ffprobe has=python3
+bashy-defaults|examples/defaults/bashy-defaults.bsh|read,write,exec"
+
+usage() {
+    echo "Usage: $PROG apply [--upgrade] [--force]" >&2
+    echo "       $PROG merge [--upgrade]" >&2
+    echo "       $PROG status" >&2
+    exit 2
+}
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+bashy_bin() {
+    if [ -n "${BASHY_DEFAULTS_BASHY_BIN:-}" ]; then
+        printf '%s\n' "$BASHY_DEFAULTS_BASHY_BIN"
+    else
+        runtime_bin
+    fi
+}
+
+runtime_bin() {
+    case $(uname -s) in
+        MINGW*|MSYS*|CYGWIN*|Windows*) registry_path "$(command -v bashy)" ;;
+        *) printf 'bashy\n' ;;
+    esac
+}
+
+src_dir() {
+    printf '%s/src/bashy\n' "${BASHY_HOME:-$HOME/.bashy}"
+}
+
+# Go fences on Windows resolve their module beside a native script path.
+registry_path() {
+    local path=$1 drive
+    case $(uname -s) in
+        MINGW*|MSYS*|CYGWIN*|Windows*)
+            case $path in
+                /[a-zA-Z]/*) drive=${path:1:1}; path="${drive^^}:/${path:3}" ;;
+                \\[a-zA-Z]\\*) path=${path//\\//}; drive=${path:1:1}; path="${drive^^}:/${path:3}" ;;
+            esac ;;
+    esac
+    printf '%s\n' "$path"
+}
+
+# The exec path a registered command runs, or nothing when unregistered.
+registered_path() {
+    out=$("$(bashy_bin)" commands show "$1" --json 2>/dev/null) || return 0
+    printf '%s\n' "$out" | jq -r '.exec[2] // empty' 2>/dev/null || true
+}
+
+kb_pages() {
+    n=0
+    for f in "$(src_dir)"/kb/defaults/pages/*.md; do
+        [ -f "$f" ] && n=$((n + 1))
+    done
+    printf '%s\n' "$n"
+}
+
+cmd_apply() {
+    upgrade=$1; force=$2
+    src=$(src_dir)
+    if [ ! -d "$src/examples" ]; then
+        "$(bashy_bin)" src fetch bashy >/dev/null || fail "cannot fetch the bashy source pin" 1
+        echo "$PROG: fetched the bashy source pin into $src"
+    elif [ "$upgrade" = 1 ]; then
+        "$(bashy_bin)" src upgrade bashy >/dev/null || fail "cannot upgrade the bashy source pin" 1
+        echo "$PROG: upgraded the bashy source pin"
+    fi
+    [ -d "$src/examples" ] || fail "no source pin at $src" 1
+    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects role provides route requires accepts; do
+        [ -n "$name" ] || continue
+        path="$src/$rel"
+        if [ ! -f "$path" ]; then
+            echo "$PROG: $name: not in this release's source ($rel), skipped"
+            continue
+        fi
+        current=$(registered_path "$name")
+        registry=$(registry_path "$path")
+        if [ -n "$current" ] && [ "$current" != "$registry" ] && [ "$force" != 1 ]; then
+            echo "$PROG: $name: kept your own registration ($current); --force replaces it"
+            continue
+        fi
+        set -- --set "exec.0=$(runtime_bin)" --set exec.1=--bashsharp --set "exec.2=$registry"
+        [ -z "$role" ] || set -- "$@" --set "exec.3=$role"
+        # provides may list several roles, comma-separated (image.generate,image.edit).
+        pi=0
+        save_ifs=$IFS; IFS=','
+        for p in $provides; do set -- "$@" --set "provides.$pi=$p"; pi=$((pi + 1)); done
+        IFS=$save_ifs
+        [ -z "$route" ] || set -- "$@" --set "route=$route"
+        [ -z "$requires" ] || set -- "$@" --set "requires=$requires"
+        # accepts: one JSON-pointer=RE2 request matcher (the selector skips the
+        # rod for a request without it).
+        [ -z "$accepts" ] || set -- "$@" --set "accepts.0.path=${accepts%%=*}" --set "accepts.0.pattern=${accepts#*=}"
+        i=0
+        for e in ${effects//,/ }; do
+            set -- "$@" --set "effects.$i=$e"
+            i=$((i + 1))
+        done
+        "$(bashy_bin)" commands add "$name" "$@" >/dev/null || fail "cannot register $name" 1
+        echo "$PROG: $name: registered from the source pin"
+    done
+    tool_path="$src/examples/api-rods/replicate.yaml"
+    if [ -f "$tool_path" ]; then
+        if "$(bashy_bin)" tool show replicate-media --json >/dev/null 2>&1; then
+            if [ "$force" = 1 ]; then
+                "$(bashy_bin)" tool add --force "$tool_path" >/dev/null || fail "cannot replace replicate-media tool" 1
+                echo "$PROG: replicate-media: replaced from the source pin"
+            else
+                echo "$PROG: replicate-media: kept your own tool registration"
+            fi
+        else
+            "$(bashy_bin)" tool add "$tool_path" >/dev/null || fail "cannot register replicate-media tool" 1
+            echo "$PROG: replicate-media: registered from the source pin"
+        fi
+    fi
+    echo "$PROG: kb defaults: $(kb_pages) page(s) in $src/kb/defaults (read automatically)"
+}
+
+# Pages of the host kb that shadow a default page with different content.
+cmd_merge() {
+    cmd_apply "$1" 0
+    defs="$(src_dir)/kb/defaults/pages"
+    host="${BASHY_KB_DIR:-$HOME/.bashy/kb}/pages"
+    n=0
+    for d in "$defs"/*.md; do
+        [ -f "$d" ] || continue
+        slug=${d##*/}
+        slug=${slug%.md}
+        mine="$host/$slug.md"
+        if [ -f "$mine" ] && ! cmp -s -- "$mine" "$d"; then
+            echo "shadowed: $slug"
+            echo "  yours:   $mine"
+            echo "  default: $d"
+            n=$((n + 1))
+        fi
+    done
+    if [ "$n" = 0 ]; then
+        echo "$PROG: merge: no kb page of yours shadows a changed default"
+    else
+        echo "$PROG: merge: $n shadowed page(s); reconcile each (see: $PROG --skill)"
+    fi
+}
+
+cmd_status() {
+    src=$(src_dir)
+    if [ -d "$src/examples" ]; then
+        echo "source pin: $src"
+    else
+        echo "source pin: missing (run: $PROG apply)"
+    fi
+    printf '%s\n' "$DEFAULT_COMMANDS" | while IFS='|' read -r name rel effects role provides route requires; do
+        [ -n "$name" ] || continue
+        current=$(registered_path "$name")
+        if [ -z "$current" ]; then
+            state=missing
+        elif [ "$current" = "$(registry_path "$src/$rel")" ]; then
+            state=default
+        else
+            state="own ($current)"
+        fi
+        printf '%-16s %s\n' "$name" "$state"
+    done
+    echo "kb defaults: $(kb_pages) page(s)"
+}
+
+if [ $# -lt 1 ]; then
+    usage
+fi
+case "$1" in
+    --skill)
+        sed -n '/^~~~skill/,/^~~~$/p' "$0" | sed '1d;$d'
+        exit 0
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+esac
+
+sub=$1; shift
+case "$sub" in
+    apply)
+        upgrade=0; force=0
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --upgrade) upgrade=1 ;;
+                --force) force=1 ;;
+                *) usage ;;
+            esac
+            shift
+        done
+        cmd_apply "$upgrade" "$force"
+        ;;
+    merge)
+        upgrade=0
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --upgrade) upgrade=1 ;;
+                *) usage ;;
+            esac
+            shift
+        done
+        cmd_merge "$upgrade"
+        ;;
+    status)
+        [ $# -eq 0 ] || usage
+        cmd_status
+        ;;
+    *)
+        usage
+        ;;
+esac

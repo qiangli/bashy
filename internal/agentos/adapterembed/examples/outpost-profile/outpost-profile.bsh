@@ -1,0 +1,625 @@
+#!/usr/bin/env -S bashy --bashsharp
+# outpost-profile: per-satellite outpost profiles (add/use/list).
+# One editable Bash# body for the outpost-profile command and skill.
+# No outpost code change: this only drives `outpost register --out`,
+# `outpost restart` and `bashy service` around files under the matrix
+# config directory.
+#
+#   outpost-profile add <name> --code <code> --server <url> [--name <host>] [--as-owner-node]
+#   outpost-profile use <name>
+#   outpost-profile list
+#   outpost-profile up <name> [--app <app>]... [--admin-port <port>]
+#   outpost-profile down <name>
+#   outpost-profile status
+#
+# The pairing code on the add command line is visible to local process
+# listing while register runs; prefer a fresh one-time code, as usual.
+
+~~~skill as guide
+---
+name: outpost-profile
+description: Keep one outpost pairing per satellite as a named profile and switch the active one. The executable body is this Bash# file; register it as outpost-profile.
+metadata:
+  requires: "has=bashy"
+---
+# outpost-profile — per-satellite outpost pairings
+
+One machine can pair with several satellites (or a satellite plus the
+portal), one pairing at a time. Each pairing lives in its own profile
+file; `use` copies a profile into the active agent file and restarts
+outpost, so the running outpost always matches the active file. This
+skill changes no outpost code: it only drives `outpost register --out`
+and `outpost restart` around files under the matrix config directory.
+This file is the one executable body for the command and the text-outer
+skill step (`--skill` prints this guidance); run it with
+`bashy --bashsharp`.
+
+## Register
+
+Every installation can fetch Bashy's own source pinned at the installed
+release, so register the command from that pin (no repo checkout needed):
+
+```sh
+bashy src fetch bashy
+bashy commands add outpost-profile \
+  --set exec.0=bashy --set exec.1=--bashsharp \
+  --set "exec.2=${BASHY_HOME:-$HOME/.bashy}/src/bashy/examples/outpost-profile/outpost-profile.bsh" \
+  --set effects.0=read --set effects.1=write --set effects.2=exec
+```
+
+`bashy src upgrade bashy` moves the pin with each release, and the
+registered command follows it. To adapt the command, shape it like any
+Bashy source: `bashy src branch bashy <name>`, edit, run
+`go test ./examples/outpost-profile/` in that tree, and register that
+path instead. From a repo checkout, use
+`$PWD/examples/outpost-profile/outpost-profile.bsh` as exec.2.
+
+`bashy commands show outpost-profile` identifies the registered body.
+The name stays free for registration: unlike Go front-door verbs, this
+command has no doc under `skills/bashy/commands/` (that ring would
+reserve the name and refuse the registration above).
+
+## Use
+
+Pair once per satellite into a named profile, then switch:
+
+```sh
+outpost-profile add <name> --code <code> --server <url> [--name <host>] [--as-owner-node]
+outpost-profile use <name>
+outpost-profile list
+```
+
+- `add` runs `outpost register --server <url> --code <code> --out
+  <config>/matrix/profiles/<name>/agent.json` and leaves the active
+  pairing untouched. Without `--name` the machine registers under this
+  machine's host name, exactly as before; `--name <host>` (or
+  `--name=<host>`) overrides it, so a machine whose host name is
+  already taken on a satellite can still add a profile, and one
+  machine can register under a different host name per satellite (one
+  assignment per host name, so pick a free name per profile).
+  Re-adding a name re-pairs it with a fresh one-time code; the code is
+  visible to local process listing while register runs, so use a fresh
+  code as usual.
+- `use` saves the current active file back into its own profile first
+  (so credentials refreshed in place are kept; an active file that
+  matches no profile is kept as profile `previous`), copies the named
+  profile over the active `<config>/matrix/agent.json`, records it as
+  current, and runs `outpost restart`. Unknown names fail without
+  touching anything.
+- `list` prints one profile per line as `NAME  SERVER  HOST` (the
+  server and host name the profile was added with) and marks the
+  profile whose file is byte-identical to the active file with `*`. A
+  profile directory without an `agent.json` is shown as
+  `(incomplete)`.
+
+The config directory is `${XDG_CONFIG_HOME:-$HOME/.config}/matrix` on
+macOS, Linux and Windows (Git Bash supplies `$HOME` on Windows; the
+path handed to a native `outpost.exe` is converted at that boundary:
+via `cygpath` when present, else MSYS `/c/x` becomes `C:/x`). `add` checks
+the profile file exists after register and, if not, prints what outpost
+reported.
+`OUTPOST_BIN` overrides the outpost executable lookup when set;
+otherwise `outpost` resolves through `PATH`. Profile names become one
+path segment: empty names, `/`, `\`, `..`, and leading `.`/`-` are
+refused.
+
+## Several satellites at once
+
+`use` keeps one pairing active. To stay connected to the main
+satellite and another one at the same time, run the other profile as
+its own outpost instance:
+
+```sh
+outpost-profile up <name> [--app <app>]... [--admin-port <port>]
+outpost-profile down <name>
+outpost-profile status
+```
+
+- `up` gives the profile its own config, cache and service-unit store
+  under `<config>/matrix/profiles/<name>/instance/` and its own
+  loopback admin port (the one it had, else the first free one from
+  17778). The live config is copied from the profile on the first `up`
+  only; the instance refreshes its credentials in place after that.
+  Every host-wide feature is off in the instance: LAN ssh, mesh,
+  desktop, clipboard, shell, discovery and cluster in its
+  `agent.json`, and the units sshd, shard, ollama, ollama-pool, warm,
+  files, podman, otel, apps, meet and otel-stack in its store (they
+  stay with the main instance). Each `--app <app>` copies that app
+  entry from the main outpost, including its SSO secret, so the
+  instance publishes the same local backend through its satellite
+  and the app verifies signed identities from both. `up` then adds,
+  enables and starts the Bashy service unit `outpost-<name>` (restart
+  policy always), so the instance comes back with Bashy's supervisor.
+  The main outpost's active profile is refused: it is already
+  connected.
+- `down` stops and removes the `outpost-<name>` unit and keeps the
+  instance directory for the next `up`. The main outpost and other
+  instances keep running.
+- `status` prints one line per instance: name, up or down, server,
+  admin port and unit.
+- `use` refuses a profile that is up as an instance.
+
+`OUTPOST_PROFILE_BASHY_BIN` overrides the `bashy` executable used for
+the service calls.
+
+## Verification
+
+`go test ./examples/outpost-profile/` drives the registered shape with
+a temp `HOME`/`XDG_CONFIG_HOME` and a fake `outpost` on `PATH`: two
+fake profiles, `use` swaps the active file and calls restart, `list`
+marks the active one, plus add/unknown-name/XDG/Windows-path cases.
+It never touches a live outpost. Never point these commands at a live
+outpost from automated tests.
+~~~
+
+set -e
+
+PROG=outpost-profile
+
+usage() {
+    echo "Usage: $PROG add <name> --code <code> --server <url> [--name <host>] [--as-owner-node]" >&2
+    echo "       $PROG use <name>" >&2
+    echo "       $PROG list" >&2
+    echo "       $PROG up <name> [--app <app>]... [--admin-port <port>]" >&2
+    echo "       $PROG down <name>" >&2
+    echo "       $PROG status" >&2
+    exit 2
+}
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+# Config base on every OS. XDG_CONFIG_HOME wins when set (even to a
+# relative or Windows-style spelling); otherwise the home config dir.
+config_base() {
+    if [ -n "${XDG_CONFIG_HOME:-}" ]; then
+        printf '%s/matrix\n' "$XDG_CONFIG_HOME"
+    else
+        printf '%s/.config/matrix\n' "$HOME"
+    fi
+}
+
+# Windows detection for the native-outpost boundary. ${OS} is set to
+# Windows_NT by Git Bash, MSYS2, Cygwin and native shells alike; uname
+# covers the rest. (Do not fake uname in tests: bashy resolves it
+# in-process. Simulate Windows with OS=Windows_NT plus a fake cygpath.)
+on_windows() {
+    case "${OS:-}" in
+        Windows_NT) return 0 ;;
+    esac
+    case "$(uname -s 2>/dev/null)" in
+        Windows*|MINGW*|MSYS*|CYGWIN*) return 0 ;;
+    esac
+    return 1
+}
+
+# Path to hand to the outpost executable for --out. The shell keeps its
+# own spelling for copies and comparisons; a native Windows outpost.exe
+# needs the Windows spelling, converted at this boundary only.
+native_path() {
+    if on_windows && command -v cygpath >/dev/null 2>&1; then
+        cygpath -m "$1"
+        return
+    fi
+    if forced_windows || on_windows; then
+        # No cygpath: convert MSYS-style /x/rest to X:/rest ourselves;
+        # native (C:/x, C:\x) and relative paths pass through.
+        case "$1" in
+            /[a-zA-Z]) d=${1#/}; printf '%s:/\n' "${d^^}"; return ;;
+            /[a-zA-Z]/*)
+                d=${1#/}
+                drive=${d%%/*}
+                printf '%s:/%s\n' "${drive^^}" "${d#*/}"
+                return ;;
+        esac
+    fi
+    printf '%s\n' "$1"
+}
+
+# Test switch: treat the host as Windows without needing one.
+forced_windows() {
+    [ "${OUTPOST_PROFILE_FORCE_WINDOWS:-}" = 1 ]
+}
+
+outpost_bin() {
+    if [ -n "${OUTPOST_BIN:-}" ]; then
+        printf '%s\n' "$OUTPOST_BIN"
+    else
+        printf 'outpost\n'
+    fi
+}
+
+# Profile names become one path segment. Refuse separators, parent
+# traversal, and dot/dash leaders (hidden dirs, flag confusion).
+check_name() {
+    case "$1" in
+        ""|.*|-*|*/*|*\\*|*..*) fail "invalid profile name: $1" 2 ;;
+    esac
+}
+
+same_file() {
+    cmp -s -- "$1" "$2" 2>/dev/null
+}
+
+# Name of the profile whose file matches the active file, if any.
+active_profile() {
+    base=$1
+    [ -f "$base/agent.json" ] || return 1
+    for f in "$base"/profiles/*/agent.json; do
+        [ -f "$f" ] || continue
+        if same_file "$base/agent.json" "$f"; then
+            printf '%s\n' "${f%/agent.json}"
+            return 0
+        fi
+    done
+    return 1
+}
+
+profile_name_of() {
+    printf '%s\n' "${1##*/}"
+}
+
+cmd_add() {
+    name=$1; code=$2; server=$3; host=$4; as_owner_node=${5:-}
+    check_name "$name"
+    [ -n "$code" ] || usage
+    [ -n "$server" ] || usage
+    base=$(config_base)
+    [ -n "${HOME:-}" ] || [ -n "${XDG_CONFIG_HOME:-}" ] || fail "HOME is unset" 1
+    out="$base/profiles/$name/agent.json"
+    mkdir -p "$base/profiles/$name" || fail "cannot create profile dir for $name"
+    # Without --name outpost registers under this machine's host name
+    # (the default, unchanged); an explicit --name lets a machine whose
+    # host name is already taken join a satellite under another name,
+    # and one machine hold a different host name per profile/satellite.
+    regname=()
+    if [ -n "$host" ]; then
+        regname=(--name "$host")
+    fi
+    # A profile pairs through the satellite's legacy exchange, which makes
+    # the account that minted the code this host's owner; outpost requires
+    # that consent explicitly in non-interactive runs.
+    if [ "$as_owner_node" = "1" ]; then
+        regname+=(--as-owner-node)
+    fi
+    nout=$(native_path "$out")
+    if ! reg_out=$("$(outpost_bin)" register --server "$server" --code "$code" "${regname[@]}" --out "$nout" 2>&1); then
+        [ -z "$reg_out" ] || printf '%s\n' "$reg_out" >&2
+        fail "outpost register failed for profile $name" 1
+    fi
+    code=
+    [ -z "$reg_out" ] || printf '%s\n' "$reg_out"
+    if [ ! -f "$out" ]; then
+        echo "$PROG: outpost was given --out $nout" >&2
+        echo "$PROG: outpost output: $reg_out" >&2
+        fail "register reported success but wrote no file: $out" 1
+    fi
+    printf '%s\n' "$server" > "$base/profiles/$name/server"
+    if [ -n "$host" ]; then
+        printf '%s\n' "$host" > "$base/profiles/$name/host"
+    else
+        rm -f -- "$base/profiles/$name/host"
+    fi
+    echo "$PROG: profile $name paired ($out)"
+}
+
+cmd_use() {
+    name=$1
+    check_name "$name"
+    base=$(config_base)
+    target="$base/profiles/$name/agent.json"
+    [ -f "$target" ] || fail "no such profile: $name" 1
+    if [ -f "$(instance_dir "$base" "$name")/up" ]; then
+        fail "profile $name is running as its own instance; run '$PROG down $name' first" 1
+    fi
+    active="$base/agent.json"
+    if [ -f "$active" ] && ! same_file "$active" "$target"; then
+        current=""
+        if cur=$(active_profile "$base"); then
+            current=$(profile_name_of "$cur")
+        elif [ -f "$base/.active" ]; then
+            # The active file drifted (e.g. refreshed credentials) since
+            # it was copied out: its own profile is the recorded one.
+            current=$(cat "$base/.active")
+            case "$current" in
+                ""|.*|-*|*/*|*\\*|*..*) current="" ;;
+            esac
+            [ -n "$current" ] || current="previous"
+        else
+            current="previous"
+        fi
+        mkdir -p "$base/profiles/$current" || fail "cannot back up current profile" 1
+        cp -f -- "$active" "$base/profiles/$current/agent.json" || fail "cannot back up current profile" 1
+        echo "$PROG: backed up current pairing into profile $current"
+        cp -f -- "$target" "$active" || fail "cannot activate profile $name" 1
+    elif [ ! -f "$active" ]; then
+        mkdir -p "$base" || fail "cannot create config dir" 1
+        cp -f -- "$target" "$active" || fail "cannot activate profile $name" 1
+    fi
+    printf '%s\n' "$name" > "$base/.active" || fail "cannot record active profile" 1
+    "$(outpost_bin)" restart || fail "outpost restart failed after activating $name" 1
+    echo "$PROG: now using profile $name"
+}
+
+# --- instances: one extra outpost process per satellite -------------
+#
+# `up` runs a profile as its own outpost next to the main one, so the
+# host stays paired with the main satellite and this one at once. Each
+# instance has its own config, cache and service-unit store under
+# profiles/<name>/instance/, its own admin port, and every host-wide
+# feature off: LAN ssh, mesh, desktop, clipboard, shell, discovery,
+# cluster and the in-process units (ollama pool, shard, warm, ...).
+# Those stay with the main instance. The instance only publishes the
+# apps copied into it, which proxy to the same local backends.
+
+# In-process and process units an instance must not run (they belong
+# to the main instance; shard starts the mesh even with
+# mesh_enabled=false).
+INSTANCE_UNITS="sshd shard ollama ollama-pool warm files podman otel apps meet otel-stack"
+
+bashy_bin() {
+    if [ -n "${OUTPOST_PROFILE_BASHY_BIN:-}" ]; then
+        printf '%s\n' "$OUTPOST_PROFILE_BASHY_BIN"
+    else
+        printf 'bashy\n'
+    fi
+}
+
+instance_dir() {
+    printf '%s/profiles/%s/instance\n' "$1" "$2"
+}
+
+# App names are interpolated into jq filters (this jq has no --arg), so
+# they are held to a plain identifier charset.
+check_app_name() {
+    case "$1" in
+        ""|-*|*[!A-Za-z0-9._-]*) fail "invalid app name: $1" 2 ;;
+    esac
+}
+
+# Absolute outpost path for the unit's exec (a supervisor has no PATH
+# guarantee).
+outpost_exec_path() {
+    ob=$(outpost_bin)
+    case "$ob" in
+        /*|[A-Za-z]:*) printf '%s\n' "$ob" ;;
+        *) command -v "$ob" 2>/dev/null || fail "outpost not found on PATH" 1 ;;
+    esac
+}
+
+# Admin port: the one this instance had, else the first in 17778-17797
+# no other instance records.
+pick_admin_port() {
+    base=$1; inst=$2
+    if [ -f "$inst/admin_port" ]; then
+        head -n 1 -- "$inst/admin_port"
+        return
+    fi
+    port=17778
+    while [ "$port" -le 17797 ]; do
+        taken=0
+        for f in "$base"/profiles/*/instance/admin_port; do
+            [ -f "$f" ] || continue
+            if [ "$(head -n 1 -- "$f")" = "$port" ]; then taken=1; break; fi
+        done
+        if [ "$taken" = 0 ]; then
+            printf '%s\n' "$port"
+            return
+        fi
+        port=$((port + 1))
+    done
+    fail "no free instance admin port in 17778-17797" 1
+}
+
+cmd_up() {
+    name=$1; port=$2; shift 2
+    check_name "$name"
+    base=$(config_base)
+    profile="$base/profiles/$name/agent.json"
+    [ -f "$profile" ] || fail "no such profile: $name" 1
+    if [ -f "$base/agent.json" ] && same_file "$base/agent.json" "$profile"; then
+        fail "profile $name is the main outpost's active pairing; it is already connected" 1
+    fi
+    if [ -f "$base/.active" ] && [ "$(cat "$base/.active")" = "$name" ]; then
+        fail "profile $name is the main outpost's active pairing; it is already connected" 1
+    fi
+    for app in "$@"; do
+        check_app_name "$app"
+    done
+    case "$port" in
+        "") ;;
+        *[!0-9]*) fail "invalid admin port: $port" 2 ;;
+    esac
+    inst=$(instance_dir "$base" "$name")
+    live="$inst/cfg/matrix/agent.json"
+    mkdir -p "$inst/cfg/matrix" "$inst/cache" "$inst/fleet" || fail "cannot create instance dir for $name" 1
+    # The live file is the instance's own from the first up on: the
+    # daemon refreshes credentials in place, so it is never re-copied.
+    if [ ! -f "$live" ]; then
+        cp -f -- "$profile" "$live" || fail "cannot seed instance config for $name" 1
+    fi
+    filter='.ssh_enabled=false | .mesh_enabled=false | .desktop_enabled=false | .clipboard_enabled=false | .shell_enabled=false | .discovery_enabled=false | del(.cluster)'
+    for app in "$@"; do
+        entry=$(jq -c ".apps[]? | select(.name==\"$app\")" "$base/agent.json" 2>/dev/null | head -n 1)
+        [ -n "$entry" ] || fail "main outpost has no app named $app" 1
+        filter="$filter | .apps = (((.apps // []) | map(select(.name != \"$app\"))) + [$entry])"
+    done
+    jq "$filter" "$live" > "$live.tmp" || { rm -f -- "$live.tmp"; fail "cannot update instance config for $name" 1; }
+    mv -f -- "$live.tmp" "$live" || fail "cannot update instance config for $name" 1
+    chmod 600 "$live" 2>/dev/null || true
+    # Outpost declares sshd (enabled, lan:2222) on its first start
+    # unless a declaration exists, and a fresh instance store has none:
+    # declare it first so the disable below has a unit to hold off.
+    BASHY_FLEET_DIR=$(native_path "$inst/fleet") "$(bashy_bin)" service add sshd --force --provider internal --port 2222 \
+        --set capability=outpost.sshd --set owner=outpost --set ports.0.name=ssh --set ports.0.bind=lan >/dev/null ||
+        fail "cannot declare sshd in the $name instance store" 1
+    for u in $INSTANCE_UNITS; do
+        BASHY_FLEET_DIR=$(native_path "$inst/fleet") "$(bashy_bin)" service disable "$u" >/dev/null ||
+            fail "cannot disable unit $u in the $name instance store" 1
+    done
+    [ -n "$port" ] || port=$(pick_admin_port "$base" "$inst")
+    printf '%s\n' "$port" > "$inst/admin_port"
+    unit="outpost-$name"
+    "$(bashy_bin)" service add "$unit" --force \
+        --description "outpost instance for profile $name (second satellite)" \
+        --exec "$(native_path "$(outpost_exec_path)")" --exec start \
+        --port "$port" \
+        --set "ports.0.bind=loopback" \
+        --set "restart.policy=always" \
+        --set "env.XDG_CONFIG_HOME=$(native_path "$inst/cfg")" \
+        --set "env.XDG_CACHE_HOME=$(native_path "$inst/cache")" \
+        --set "env.BASHY_FLEET_DIR=$(native_path "$inst/fleet")" \
+        --set "env.OUTPOST_ADMIN_ADDR=127.0.0.1:$port" \
+        --set "env.OUTPOST_SUPERVISED=" >/dev/null || fail "cannot add service unit $unit" 1
+    "$(bashy_bin)" service enable "$unit" >/dev/null || fail "cannot enable service unit $unit" 1
+    "$(bashy_bin)" service start "$unit" >/dev/null || fail "cannot start service unit $unit (is bashy supervisord running?)" 1
+    : > "$inst/up"
+    echo "$PROG: profile $name is up as $unit (admin http://127.0.0.1:$port)"
+}
+
+cmd_down() {
+    name=$1
+    check_name "$name"
+    base=$(config_base)
+    inst=$(instance_dir "$base" "$name")
+    [ -f "$inst/up" ] || fail "profile $name is not up" 1
+    unit="outpost-$name"
+    # Stop is runtime-only and fails when supervisord is not running;
+    # removing the unit is what keeps it from coming back.
+    "$(bashy_bin)" service stop "$unit" >/dev/null 2>&1 || true
+    "$(bashy_bin)" service rm "$unit" >/dev/null || fail "cannot remove service unit $unit" 1
+    rm -f -- "$inst/up"
+    echo "$PROG: profile $name is down (its instance config is kept for the next up)"
+}
+
+cmd_status() {
+    base=$(config_base)
+    [ -d "$base/profiles" ] || return 0
+    for d in "$base"/profiles/*/instance/; do
+        [ -d "$d" ] || continue
+        inst=${d%/}
+        pdir=${inst%/instance}
+        name=$(profile_name_of "$pdir")
+        server="-"
+        [ -f "$pdir/server" ] && server=$(head -n 1 -- "$pdir/server")
+        port="-"
+        [ -f "$inst/admin_port" ] && port=$(head -n 1 -- "$inst/admin_port")
+        state=down
+        [ -f "$inst/up" ] && state=up
+        printf '%-16s %-5s %s  admin=%s  unit=outpost-%s\n' "$name" "$state" "$server" "$port" "$name"
+    done
+}
+
+cmd_list() {
+    base=$(config_base)
+    if [ ! -d "$base/profiles" ]; then
+        return 0
+    fi
+    for d in "$base"/profiles/*/; do
+        [ -d "$d" ] || continue
+        name=$(profile_name_of "${d%/}")
+        case "$name" in
+            ""|.*) continue ;;
+        esac
+        # The server and host name this profile was added with. A
+        # missing host file means this machine's host name was used
+        # (add without --name); a profile that predates the sidecars
+        # (e.g. the `previous` backup `use` makes) shows '-'.
+        server="-"
+        [ -f "$d/server" ] && server=$(head -n 1 -- "$d/server")
+        host=""
+        [ -f "$d/host" ] && host=$(head -n 1 -- "$d/host")
+        if [ -z "$host" ]; then
+            host=$(hostname 2>/dev/null || printf 'this-host\n')
+        fi
+        if [ -f "$base/agent.json" ] && [ -f "$d/agent.json" ] && same_file "$base/agent.json" "$d/agent.json"; then
+            mark="*"
+        else
+            mark=" "
+        fi
+        if [ ! -f "$d/agent.json" ]; then
+            echo "$mark $name (incomplete)"
+        else
+            printf '%s %-16s %s  %s\n' "$mark" "$name" "$server" "$host"
+        fi
+    done
+}
+
+if [ $# -lt 1 ]; then
+    usage
+fi
+case "$1" in
+    --skill)
+        sed -n '/^~~~skill/,/^~~~$/p' "$0" | sed '1d;$d'
+        exit 0
+        ;;
+    -h|--help|help)
+        usage
+        ;;
+esac
+
+sub=$1; shift
+case "$sub" in
+    add)
+        if [ $# -lt 1 ]; then usage; fi
+        name=$1; shift
+        code=""; server=""; host=""; as_owner_node=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --as-owner-node) as_owner_node=1 ;;
+                --code=*) code=${1#--code=} ;;
+                --server=*) server=${1#--server=} ;;
+                --name=*) host=${1#--name=} ;;
+                --code) [ $# -ge 2 ] || usage; code=$2; shift ;;
+                --server) [ $# -ge 2 ] || usage; server=$2; shift ;;
+                --name) [ $# -ge 2 ] || usage; host=$2; shift ;;
+                --) shift; break ;;
+                -*) usage ;;
+                *) usage ;;
+            esac
+            shift
+        done
+        [ $# -eq 0 ] || usage
+        cmd_add "$name" "$code" "$server" "$host" "$as_owner_node"
+        ;;
+    use)
+        [ $# -eq 1 ] || usage
+        cmd_use "$1"
+        ;;
+    __native_path)
+        native_path "$1"
+        ;;
+    list)
+        [ $# -eq 0 ] || usage
+        cmd_list
+        ;;
+    up)
+        if [ $# -lt 1 ]; then usage; fi
+        name=$1; shift
+        port=""; apps=()
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --app=*) apps+=("${1#--app=}") ;;
+                --admin-port=*) port=${1#--admin-port=} ;;
+                --app) [ $# -ge 2 ] || usage; apps+=("$2"); shift ;;
+                --admin-port) [ $# -ge 2 ] || usage; port=$2; shift ;;
+                *) usage ;;
+            esac
+            shift
+        done
+        cmd_up "$name" "$port" "${apps[@]}"
+        ;;
+    down)
+        [ $# -eq 1 ] || usage
+        cmd_down "$1"
+        ;;
+    status)
+        [ $# -eq 0 ] || usage
+        cmd_status
+        ;;
+    *)
+        usage
+        ;;
+esac

@@ -4,13 +4,19 @@
 package agentos
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 
+	"github.com/qiangli/bashy/internal/agentos/adapterembed"
 	"github.com/qiangli/yoke/pkg/shape/slot"
 	"github.com/qiangli/yoke/pkg/src"
 )
@@ -364,11 +370,30 @@ func stripEnvKey(env []string, key string) []string {
 	return out
 }
 
-// resolveAdapterScript locates <folder>/<entry>/<entry>.bsh across explicit
+// adapterCandidateRoots is candidateBashyRoots; tests replace it to exercise
+// embedded fallback resolution without compile-time runtime.Caller or on-disk
+// source checkout discovery.
+var adapterCandidateRoots = candidateBashyRoots
+
+const embeddedOutpostHelper = "examples/desk/kit/outpost.bsh"
+
+// resolveAdapterScript locates <folder>/<entry>/<base>.bsh across explicit
 // overrides, the fetched source pin (~/.bashy/src/bashy), the executable tree,
-// the working directory, GOWORK, and compile-time source location (tests).
+// the working directory, GOWORK, compile-time source location (tests), and
+// finally the embedded adapter scripts materialized into a content-addressed
+// cache file.
 func resolveAdapterScript(folder, entry string) string {
-	rel := filepath.Join(folder, entry, entry+".bsh")
+	folder = strings.Trim(filepath.ToSlash(folder), "/")
+	entry = strings.Trim(filepath.ToSlash(entry), "/")
+	if folder == "" || entry == "" || strings.Contains(folder, "..") || strings.Contains(entry, "..") {
+		return ""
+	}
+	base := path.Base(entry)
+	if base == "" || base == "." || base == ".." {
+		return ""
+	}
+	relSlash := path.Join(folder, entry, base+".bsh")
+	rel := filepath.FromSlash(relSlash)
 
 	if override := strings.TrimSpace(os.Getenv(adaptersRootEnv)); override != "" {
 		p := filepath.Join(override, rel)
@@ -386,12 +411,112 @@ func resolveAdapterScript(folder, entry string) string {
 		}
 	}
 
-	for _, root := range candidateBashyRoots() {
+	for _, root := range adapterCandidateRoots() {
 		if p := filepath.Join(root, rel); isRegularFile(p) {
 			return p
 		}
 	}
+
+	return materializeEmbeddedAdapter(relSlash)
+}
+
+func materializeEmbeddedAdapter(relSlash string) string {
+	data, err := fs.ReadFile(adapterembed.FS, relSlash)
+	if err != nil {
+		return ""
+	}
+	data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+
+	var companion []byte
+	if strings.HasPrefix(relSlash, "examples/") && relSlash != embeddedOutpostHelper && bytes.Contains(data, []byte("outpost.bsh")) {
+		if raw, err := fs.ReadFile(adapterembed.FS, embeddedOutpostHelper); err == nil {
+			companion = bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\n"))
+		}
+	}
+
+	h := sha256.New()
+	h.Write(data)
+	if len(companion) > 0 {
+		h.Write([]byte{0})
+		h.Write(companion)
+	}
+	sum := h.Sum(nil)
+	digest := hex.EncodeToString(sum[:16])
+
+	rel := filepath.FromSlash(relSlash)
+	companionRel := filepath.FromSlash(embeddedOutpostHelper)
+	for _, cacheRoot := range embeddedAdapterCacheRoots() {
+		baseDir := filepath.Join(cacheRoot, digest)
+		if len(companion) > 0 {
+			if _, err := writeEmbeddedCacheFile(filepath.Join(baseDir, companionRel), companion, 0o644); err != nil {
+				continue
+			}
+		}
+		if target, err := writeEmbeddedCacheFile(filepath.Join(baseDir, rel), data, 0o755); err == nil {
+			return target
+		}
+	}
 	return ""
+}
+
+func writeEmbeddedCacheFile(target string, data []byte, perm os.FileMode) (string, error) {
+	if existing, err := os.ReadFile(target); err == nil && bytes.Equal(existing, data) {
+		return target, nil
+	}
+	dir := filepath.Dir(target)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	tmp, err := os.CreateTemp(dir, filepath.Base(target)+".tmp.*")
+	if err != nil {
+		return "", err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpName)
+		return "", err
+	}
+	_ = tmp.Chmod(perm)
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpName)
+		return "", err
+	}
+	if err := os.Rename(tmpName, target); err != nil {
+		_ = os.Remove(tmpName)
+		if existing, readErr := os.ReadFile(target); readErr == nil && bytes.Equal(existing, data) {
+			return target, nil
+		}
+		return "", err
+	}
+	return target, nil
+}
+
+func embeddedAdapterCacheRoots() []string {
+	var roots []string
+	add := func(p string) {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return
+		}
+		for _, r := range roots {
+			if r == p {
+				return
+			}
+		}
+		roots = append(roots, p)
+	}
+	if c := strings.TrimSpace(os.Getenv("BASHY_ADAPTER_CACHE")); c != "" {
+		add(filepath.Join(c, ".embedded"))
+	}
+	if xdg := strings.TrimSpace(os.Getenv("XDG_CACHE_HOME")); xdg != "" {
+		add(filepath.Join(xdg, "bashy", "embedded-adapters"))
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
+		add(filepath.Join(home, ".cache", "bashy", "embedded-adapters"))
+	}
+	add(filepath.Join(os.TempDir(), "bashy-embedded-adapters"))
+	return roots
 }
 
 func candidateBashyRoots() []string {
