@@ -161,7 +161,7 @@ build() {
   done
   if [[ $stale == true ]]; then
     mkdir -p "$here/server/.desk-build" "$cache"
-    (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".desk-build/brainstorm$exe" . && { mv -f ".desk-build/brainstorm$exe" "$bin" || [[ -f "$bin" ]]; })
+    (cd "$here/server" && GOWORK=off CGO_ENABLED=0 go build -buildvcs=false -trimpath -o ".desk-build/brainstorm$exe" . && { mv -f ".desk-build/brainstorm$exe" "$bin" || [[ -f "$bin" ]]; })
   fi
 }
 usage='Usage: brainstorm [serve|status|backup|restore SNAPSHOT|stop|test|add|open|show|set|list|share|close|--skill|--contract]'

@@ -31,7 +31,7 @@ import (
 //	codex     no override surface on macOS (spawns /bin/zsh by absolute
 //	          path, verified v0.142.5) — upstream work tracked
 //
-// The written value defaults to the running binary itself (bashy IS a bash);
+// The written value defaults to the bashy launcher (an adapter is not a shell);
 // override with --shell.
 
 type agentInstaller struct {
@@ -125,15 +125,14 @@ With no agent, prints the wiring status of every known agent; --json emits it
 
 	shell := *shellPath
 	if shell == "" {
-		exe, err := os.Executable()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "install-agent: cannot resolve own path: %v\n", err)
-			return 1
-		}
-		shell = exe
+		shell = bashySelfPath()
 	}
 	if abs, err := filepath.Abs(shell); err == nil {
 		shell = abs
+	}
+	if err := validateShellShimTarget(shell); err != nil {
+		fmt.Fprintf(os.Stderr, "install-agent: %v\n", err)
+		return 1
 	}
 	if _, err := os.Stat(shell); err != nil {
 		fmt.Fprintf(os.Stderr, "install-agent: shell binary not found: %s\n", shell)
@@ -380,9 +379,44 @@ func shimDir() string {
 // (e.g. agy/antigravity) still lands on bashy.
 var shimNames = []string{"bash", "sh", "zsh"}
 
+// validateShellShimTarget rejects command adapters, including targets reached
+// through symlinks. A cached adapter speaks a command's CLI, never shell syntax.
+func validateShellShimTarget(shell string) error {
+	canonical := func(p string) string {
+		if abs, err := filepath.Abs(p); err == nil {
+			p = abs
+		}
+		if real, err := filepath.EvalSymlinks(p); err == nil {
+			p = real
+		}
+		return filepath.Clean(p)
+	}
+	target := canonical(shell)
+	roots := []string{os.Getenv("BASHY_ADAPTER_CACHE")}
+	if xdg := os.Getenv("XDG_CACHE_HOME"); xdg != "" {
+		roots = append(roots, filepath.Join(xdg, "bashy", "adapters"))
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		roots = append(roots, filepath.Join(home, ".cache", "bashy", "adapters"))
+	}
+	for _, root := range roots {
+		if strings.TrimSpace(root) == "" {
+			continue
+		}
+		rel, err := filepath.Rel(canonical(root), target)
+		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
+			return fmt.Errorf("refusing adapter-cache shell target %q; use the bashy launcher", shell)
+		}
+	}
+	return nil
+}
+
 // writeShimWithAgentEnv writes a shell shim that exports AGENT and/or the
 // projected BASHY_PREFS before execing bashy; with neither it is the plain shim.
 func writeShimWithAgentEnv(path, bashy, agentEnv, prefs string) error {
+	if err := validateShellShimTarget(bashy); err != nil {
+		return err
+	}
 	if agentEnv == "" && prefs == "" {
 		return chat.WriteShellShim(path, bashy)
 	}
@@ -534,7 +568,7 @@ func codexInstaller(yes bool) agentInstaller {
 		if err := os.MkdirAll(shimDir(), 0o755); err != nil {
 			return "", err
 		}
-		if err := chat.WriteShellShim(shimBash, shell); err != nil {
+		if err := writeShimWithAgentEnv(shimBash, shell, "", ""); err != nil {
 			return "", fmt.Errorf("shim %s: %w", shimBash, err)
 		}
 		steps := fmt.Sprintf(`codex reads the /etc/passwd login shell (not $SHELL/PATH). Route it via a

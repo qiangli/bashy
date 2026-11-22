@@ -17,6 +17,6 @@ done
 if [[ $stale == true ]]; then
   mkdir -p "${bin%/*}"
   run_go() { if command -v go >/dev/null 2>&1; then go "$@"; else BASHY_ADAPTER_INPROC=1 "${BASHY_SELF:-bashy}" go "$@"; fi; }
-  (cd "$root" && GOWORK=off CGO_ENABLED=0 run_go build -trimpath -o "$bin.tmp.$$" . && { mv -f "$bin.tmp.$$" "$bin" || { rm -f "$bin.tmp.$$"; [[ -x "$bin" ]]; }; })
+  (cd "$root" && GOWORK=off CGO_ENABLED=0 run_go build -buildvcs=false -trimpath -o "$bin.tmp.$$" . && { mv -f "$bin.tmp.$$" "$bin" || { rm -f "$bin.tmp.$$"; [[ -x "$bin" ]]; }; })
 fi
 exec "$bin" "$@"

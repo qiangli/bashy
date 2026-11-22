@@ -69,7 +69,7 @@ build() {
 	done
 	if [[ $stale == true ]]; then
 		mkdir -p "$here/.clip-build" "$cache"
-		(cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o ".clip-build/clip$exe" ./server && { mv -f ".clip-build/clip$exe" "$bin" || [[ -f "$bin" ]]; })
+		(cd "$here" && GOWORK=off CGO_ENABLED=0 go build -buildvcs=false -trimpath -o ".clip-build/clip$exe" ./server && { mv -f ".clip-build/clip$exe" "$bin" || [[ -f "$bin" ]]; })
 	fi
 }
 case ${1:-list} in

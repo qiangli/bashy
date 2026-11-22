@@ -267,7 +267,9 @@ func PreambleFor(agentMode bool) string {
 	//
 	// A machine at the wheel earns better HINTS. Only bashy orchestrating the run earns
 	// a different WORLD.
-	if agentMode {
+	// Adapter bootstrap must reach the host toolchain, not recursively build
+	// the provisioner adapter. This is decided before the script clears its env.
+	if agentMode && os.Getenv(adapterExecEnv) != "1" {
 		for _, v := range agentModeShimVerbs {
 			if activatedEnvNames[v] {
 				fmt.Fprintf(&b, activatedEnvShim, v, v, shellQuote(self), v)
