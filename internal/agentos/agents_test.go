@@ -90,11 +90,11 @@ func TestAgentRosterIncludesStandaloneRoomAssignments(t *testing.T) {
 		{
 			ID: "Beatrix-invoke", Principal: "conductor", Tool: "claude", Model: "opus4.8",
 			Binding: "claude:opus4.8", Nick: "Beatrix", Band: 4, Mode: "oneshot",
-			Role: "reviewer", Task: "review assignment visibility", PID: os.Getpid(), Cwd: "/work/bashy", Joined: joined.Format(time.RFC3339),
+			Role: "reviewer", Task: "review assignment visibility", PID: os.Getpid(), Cwd: filepath.Join(t.TempDir(), "bashy"), Joined: joined.Format(time.RFC3339),
 		},
 		{
 			ID: "codex-gpt-5-5", Principal: "operator", Tool: "codex", Model: "gpt-5.5",
-			Binding: "codex:gpt-5.5", Mode: "interactive", PID: os.Getpid(), Cwd: "/work/coreutils",
+			Binding: "codex:gpt-5.5", Mode: "interactive", PID: os.Getpid(), Cwd: filepath.Join(t.TempDir(), "coreutils"),
 		},
 	}
 	for _, card := range cards {
