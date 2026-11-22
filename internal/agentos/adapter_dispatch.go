@@ -24,6 +24,7 @@ import (
 const (
 	adapterExecEnv   = "BASHY_ADAPTER_EXEC"
 	adapterInprocEnv = "BASHY_ADAPTER_INPROC"
+	adapterSelfEnv   = "BASHY_ADAPTER_SELF"
 	adaptersRootEnv  = "BASHY_ADAPTERS_ROOT"
 	invokedAsEnv     = "BASHY_INVOKED_AS"
 )
@@ -344,18 +345,18 @@ func appendAdapterEnv(base []string, invokedAs string, markAdapterExec bool) []s
 	for _, kv := range base {
 		k, _, _ := strings.Cut(kv, "=")
 		switch k {
-		case adapterExecEnv, invokedAsEnv, "BASHY_SELF":
+		case adapterExecEnv, adapterInprocEnv, adapterSelfEnv, invokedAsEnv, "BASHY_SELF":
 			continue
 		}
 		out = append(out, kv)
 	}
 	if markAdapterExec {
 		out = append(out, adapterExecEnv+"=1")
+		if self != "" {
+			out = append(out, "BASHY_SELF="+self)
+		}
 	}
 	out = append(out, invokedAsEnv+"="+invokedAs)
-	if self != "" {
-		out = append(out, "BASHY_SELF="+self)
-	}
 	return out
 }
 

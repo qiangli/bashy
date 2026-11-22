@@ -732,12 +732,14 @@ func dispatchWithContext(ctx context.Context) {
 	if code, handled := dispatchFormattedHelp(os.Args[1:]); handled {
 		dispatchExit(code)
 	}
-	// L1 of the skills advertisement ladder: agent driving + agent-naive
-	// repo + not hinted here before → one stderr pointer. Zero repo writes.
-	maybeAdvertiseSkillHint()
-	// Unread-mail hint (Sprint 321): every ordinary command surfaces the same
-	// stderr-only hint when unread mail waits — read-only, arrival-scoped.
-	maybeHintUnreadMail(os.Args[1:])
+	if os.Getenv(adapterExecEnv) != "1" && os.Getenv(adapterInprocEnv) != "1" {
+		// L1 of the skills advertisement ladder: agent driving + agent-naive
+		// repo + not hinted here before → one stderr pointer. Zero repo writes.
+		maybeAdvertiseSkillHint()
+		// Unread-mail hint (Sprint 321): every ordinary command surfaces the same
+		// stderr-only hint when unread mail waits — read-only, arrival-scoped.
+		maybeHintUnreadMail(os.Args[1:])
+	}
 	// L2.5 (orchestrator channel): freshly created weave workspaces are
 	// bashy-owned space-time — stock each with the agent skill surface
 	// before any agent brand launches. $BASHY_WEAVE_SKILLS extends the
@@ -1333,7 +1335,9 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// so the toolchain provisioner runs in-process without recursing back
 		// into toolchain/go/go.bsh.
 		if os.Getenv(adapterInprocEnv) == "1" {
-			_ = os.Unsetenv(adapterInprocEnv)
+			for _, k := range []string{adapterInprocEnv, adapterExecEnv, adapterSelfEnv, invokedAsEnv, "BASHY_SELF"} {
+				_ = os.Unsetenv(k)
+			}
 			applyAllProxyFallback()
 			cmd := gotoolchain.NewGoCmd()
 			setCobraArgs(cmd, os.Args[2:])

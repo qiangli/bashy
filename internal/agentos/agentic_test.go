@@ -48,6 +48,20 @@ func TestBashySelfPathRenamedBashyBuild(t *testing.T) {
 	}
 }
 
+func TestBashySelfPathInTestBinaryReturnsTestBinary(t *testing.T) {
+	t.Setenv("BASHY_SELF", "")
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skip(err)
+	}
+	old := RunningAsBashy
+	t.Cleanup(func() { RunningAsBashy = old })
+	RunningAsBashy = false
+	if got := bashySelfPath(); got != exe {
+		t.Fatalf("bashySelfPath() = %q, want test binary %q", got, exe)
+	}
+}
+
 func TestIsBashyExecutable(t *testing.T) {
 	for path, want := range map[string]bool{
 		"/usr/local/bin/bashy": true, "/x/bashy.real": true, "/b/bashy.exe": true,

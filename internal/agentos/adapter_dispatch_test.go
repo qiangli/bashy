@@ -574,3 +574,126 @@ func TestStage0StatsAdapterEndToEndParity(t *testing.T) {
 		}
 	}
 }
+
+func TestAppendAdapterEnvOnlyPassesBashySelfToAdapterScript(t *testing.T) {
+	base := []string{
+		"PATH=/usr/bin",
+		"BASHY_SELF=/stale/bashy",
+		adapterExecEnv + "=1",
+		adapterInprocEnv + "=1",
+		adapterSelfEnv + "=/stale/bashy",
+		invokedAsEnv + "=old",
+	}
+	slotEnv := appendAdapterEnv(base, "go", false)
+	for _, kv := range slotEnv {
+		k, _, _ := strings.Cut(kv, "=")
+		switch k {
+		case "BASHY_SELF", adapterExecEnv, adapterInprocEnv, adapterSelfEnv:
+			t.Fatalf("non-script adapter env unexpectedly retained %q", kv)
+		}
+	}
+
+	scriptEnv := appendAdapterEnv(base, "go", true)
+	sawSelf := false
+	sawExec := false
+	for _, kv := range scriptEnv {
+		switch {
+		case strings.HasPrefix(kv, "BASHY_SELF=") && kv != "BASHY_SELF=/stale/bashy":
+			sawSelf = true
+		case kv == adapterExecEnv+"=1":
+			sawExec = true
+		case strings.HasPrefix(kv, adapterInprocEnv+"="), strings.HasPrefix(kv, adapterSelfEnv+"="):
+			t.Fatalf("script adapter env unexpectedly retained %q", kv)
+		}
+	}
+	if !sawSelf || !sawExec {
+		t.Fatalf("script adapter env missing BASHY_SELF or %s: %v", adapterExecEnv, scriptEnv)
+	}
+}
+
+func TestToolchainGoAdapterStripsBashySelfFromGoTestChild(t *testing.T) {
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("go executable unavailable")
+	}
+	gorootOut, err := exec.Command(goBin, "env", "GOROOT").Output()
+	if err != nil {
+		t.Fatalf("go env GOROOT: %v", err)
+	}
+	realGoroot := strings.TrimSpace(string(gorootOut))
+	if realGoroot == "" {
+		realGoroot = runtime.GOROOT()
+	}
+
+	binCache := t.TempDir()
+	const ver = "99.0.0-e2e"
+	stageParent := filepath.Join(binCache, "go", ver)
+	if err := os.MkdirAll(stageParent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(realGoroot, filepath.Join(stageParent, "go")); err != nil {
+		t.Skipf("symlink GOROOT unavailable: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stageParent, ".binmgr-tree-complete"), []byte("ok\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	modDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(modDir, "go.mod"), []byte("module example.com/gotestchild\n\ngo 1.21\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	testSrc := `package gotestchild
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestNoAdapterEnvLeaksIntoGoTestBinary(t *testing.T) {
+	for _, k := range []string{
+		"BASHY_SELF",
+		"BASHY_ADAPTER_SELF",
+		"BASHY_ADAPTER_EXEC",
+		"BASHY_ADAPTER_INPROC",
+		"BASHY_INVOKED_AS",
+	} {
+		if v, ok := os.LookupEnv(k); ok {
+			t.Fatalf("adapter env %s=%q leaked into go test child", k, v)
+		}
+	}
+	if got := os.Getenv("BASHY_HINTS"); got == "off" {
+		t.Fatalf("BASHY_HINTS=off leaked from adapter script into go test child")
+	}
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(strings.TrimSuffix(filepath.Base(exe), ".exe"), ".test") {
+		t.Fatalf("expected .test binary, got %q", exe)
+	}
+}
+`
+	if err := os.WriteFile(filepath.Join(modDir, "child_test.go"), []byte(testSrc), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("BASHY_ADAPTER_CACHE", filepath.Join(t.TempDir(), "adapter-cache"))
+	t.Setenv("BASHY_BIN_CACHE", binCache)
+	t.Setenv("BASHY_GO_VERSION", ver)
+	t.Setenv(adaptersRootEnv, "")
+	t.Setenv("GOWORK", "off")
+	t.Setenv("GOTOOLCHAIN", "local")
+	t.Setenv("BASHY_SELF", "")
+	t.Setenv("BASHY_HINTS", "on")
+	t.Chdir(modDir)
+
+	out, errStr, code := captureCommandAdapterRun(t, "toolchain", "go", "go", []string{"test", "-v", "-count=1", "."})
+	if code != 0 {
+		t.Fatalf("runCommandAdapter(toolchain, go, test): code=%d\nstdout:\n%s\nstderr:\n%s", code, out, errStr)
+	}
+	if !strings.Contains(out, "TestNoAdapterEnvLeaksIntoGoTestBinary") {
+		t.Fatalf("expected child test execution in stdout, got:\n%s", out)
+	}
+}

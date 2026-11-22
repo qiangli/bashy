@@ -57,6 +57,7 @@ func RunToolMain(def string) {
 }
 
 func RunTool(name string, args []string, stdio tool.Stdio) int {
+	StripAdapterEnv()
 	t := tool.Lookup(name)
 	if t == nil {
 		fmt.Fprintf(stdio.Err, "bashy: %s: No such command\n", name)

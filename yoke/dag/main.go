@@ -4,14 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/qiangli/bashy/yoke/internal/adapter"
 	"github.com/qiangli/yoke/pkg/dag"
 )
 
 func applyBashySelfArgv0() {
-	if self := strings.TrimSpace(os.Getenv("BASHY_SELF")); self != "" && len(os.Args) > 0 {
+	self := adapter.BashySelf()
+	adapter.StripAdapterEnv()
+	if self != "" && len(os.Args) > 0 {
 		os.Args[0] = self
 	}
 }

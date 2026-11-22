@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
 	"strings"
 
@@ -158,7 +157,7 @@ func run(rc *tool.RunContext, args []string) int {
 		fmt.Fprintf(rc.Out, "%s (qiangli/coreutils) %s\n", cmd.Name, tool.Version)
 		return 0
 	}
-	self := strings.TrimSpace(os.Getenv("BASHY_SELF"))
+	self := toolrun.BashySelf()
 	if self == "" {
 		self = "bashy"
 	}

@@ -1,7 +1,7 @@
 #!/usr/bin/env -S bashy --bashsharp
 set -euo pipefail
-unset BASHY_ADAPTER_EXEC
-export BASHY_HINTS=off
+_bashy_self=${BASHY_SELF:-}
+unset BASHY_ADAPTER_EXEC BASHY_ADAPTER_INPROC BASHY_ADAPTER_SELF BASHY_SELF
 here=${BASH_SOURCE[0]%/*}; [[ $here == "${BASH_SOURCE[0]}" ]] && here=.
 gomod="$here/go.mod"; [[ -f "$gomod" ]] || gomod="$here/../go.mod"
 ext=; [[ ${OS:-} == Windows_NT || ${OSTYPE:-} == msys* || ${OSTYPE:-} == cygwin* ]] && ext=.exe
@@ -14,7 +14,7 @@ for src in "$here"/*.go; do
 done
 if [[ -n "$stale" ]]; then
   mkdir -p "${bin%/*}"
-  run_go() { if command -v go >/dev/null 2>&1; then go "$@"; else BASHY_ADAPTER_INPROC=1 "${BASHY_SELF:-bashy}" go "$@"; fi; }
+  run_go() { if command -v go >/dev/null 2>&1; then go "$@"; else BASHY_HINTS=off BASHY_ADAPTER_INPROC=1 "${_bashy_self:-bashy}" go "$@"; fi; }
   (cd "$here" && GOWORK=off CGO_ENABLED=0 run_go build -trimpath -o "$bin.tmp.$$" . && { mv -f "$bin.tmp.$$" "$bin" || { rm -f "$bin.tmp.$$"; [[ -x "$bin" ]]; }; })
 fi
 exec "$bin" "$@"

@@ -29,7 +29,7 @@ func nftHelperDir() string {
 }
 
 func ensureNFTHelper() (string, error) {
-	target := strings.TrimSpace(os.Getenv("BASHY_SELF"))
+	target := adapter.BashySelf()
 	if target == "" {
 		if p, err := exec.LookPath("bashy"); err == nil {
 			target = p
@@ -138,7 +138,7 @@ func sameFile(a, b string) bool {
 
 func resolvePodmanBinary() string {
 	self, _ := os.Executable()
-	bashySelf := strings.TrimSpace(os.Getenv("BASHY_SELF"))
+	bashySelf := adapter.BashySelf()
 	if p, err := exec.LookPath("podman"); err == nil && p != "" && !sameFile(p, self) && !sameFile(p, bashySelf) {
 		return p
 	}

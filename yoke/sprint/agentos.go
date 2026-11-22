@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/qiangli/bashy/yoke/internal/adapter"
 	_ "github.com/qiangli/yoke/pkg/accounts/builtin"
 )
 
@@ -23,7 +24,7 @@ import (
 var RunningAsBashy bool
 
 func bashySelfPath() string {
-	if self := strings.TrimSpace(os.Getenv("BASHY_SELF")); self != "" {
+	if self := adapter.BashySelf(); self != "" {
 		return self
 	}
 	exe, err := os.Executable()

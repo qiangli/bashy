@@ -87,3 +87,68 @@ func TestBashySelfPropagatesToTargetEnvAndNoDoubleErrorPrefix(t *testing.T) {
 		t.Fatalf("expected no duplicate 'bashy dag:' prefix on *dag.Error, got:\n%s", errBuf2.String())
 	}
 }
+
+func TestStandaloneDagProvidesInProcessJQAndStripsAdapterEnv(t *testing.T) {
+	tmp := t.TempDir()
+	fakeBashy := filepath.Join(tmp, "bashy")
+	if err := os.WriteFile(fakeBashy, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	dagFile := filepath.Join(tmp, "dag.md")
+	md := "## Tasks\n\n### profile-like\n```bash\nset -e\nquoted=$(M=$GENIE_MODEL_ID jq -n 'env.M')\ncobj=$(T_ID=x1 jq -cn '{id: env.T_ID, model: '\"$quoted\"'}')\nraw=$(printf '%s' \"$cobj\" | jq -r '.model')\nprintf 'QUOTED=%s\\nRAW=%s\\nBASHY=%s\\nBASHY_SELF=%s\\nBASHY_ADAPTER_SELF=%s\\nBASHY_INVOKED_AS=%s\\n' \\\n  \"$quoted\" \"$raw\" \"$BASHY\" \"${BASHY_SELF-<unset>}\" \"${BASHY_ADAPTER_SELF-<unset>}\" \"${BASHY_INVOKED_AS-<unset>}\"\n```\n"
+	if err := os.WriteFile(dagFile, []byte(md), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	origArg0 := os.Args[0]
+	t.Cleanup(func() { os.Args[0] = origArg0 })
+	os.Args[0] = filepath.Join(tmp, "adapters", "yoke", "dag")
+	t.Setenv("PATH", "")
+	t.Setenv("GENIE_MODEL_ID", "s677-jq-profile")
+	t.Setenv("BASHY_SELF", fakeBashy)
+	t.Setenv("BASHY_ADAPTER_SELF", fakeBashy)
+	t.Setenv("BASHY_INVOKED_AS", "dag")
+
+	outR, outW, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	errR, errW, err := os.Pipe()
+	if err != nil {
+		_ = outR.Close()
+		_ = outW.Close()
+		t.Fatal(err)
+	}
+	var outBuf, errBuf bytes.Buffer
+	doneOut := make(chan struct{})
+	doneErr := make(chan struct{})
+	go func() { _, _ = outBuf.ReadFrom(outR); close(doneOut) }()
+	go func() { _, _ = errBuf.ReadFrom(errR); close(doneErr) }()
+
+	code := runDagArgs([]string{"--no-journal", "--force", "--file", dagFile, "profile-like"}, func() (*os.File, *os.File) {
+		return outW, errW
+	})
+	_ = outW.Close()
+	_ = errW.Close()
+	<-doneOut
+	<-doneErr
+	_ = outR.Close()
+	_ = errR.Close()
+
+	if code != 0 {
+		t.Fatalf("runDagArgs exited %d: stderr=%s stdout=%s", code, errBuf.String(), outBuf.String())
+	}
+	combined := outBuf.String() + errBuf.String()
+	for _, want := range []string{
+		`QUOTED="s677-jq-profile"`,
+		`RAW=s677-jq-profile`,
+		"BASHY=" + fakeBashy,
+		"BASHY_SELF=<unset>",
+		"BASHY_ADAPTER_SELF=<unset>",
+		"BASHY_INVOKED_AS=<unset>",
+	} {
+		if !strings.Contains(combined, want) {
+			t.Errorf("missing %q in output:\n%s", want, combined)
+		}
+	}
+}

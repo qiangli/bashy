@@ -24,11 +24,50 @@ import (
 	"github.com/spf13/pflag"
 )
 
+var (
+	startupInvokedAs = strings.TrimSpace(os.Getenv("BASHY_INVOKED_AS"))
+	startupBashySelf = strings.TrimSpace(os.Getenv("BASHY_ADAPTER_SELF"))
+)
+
+func init() {
+	StripAdapterEnv()
+}
+
+// StripAdapterEnv removes adapter-trampoline variables from the process
+// environment so child processes (dag target bodies, weave workers, …) never
+// inherit them.
+func StripAdapterEnv() {
+	for _, k := range []string{
+		"BASHY_SELF",
+		"BASHY_ADAPTER_SELF",
+		"BASHY_ADAPTER_EXEC",
+		"BASHY_ADAPTER_INPROC",
+		"BASHY_INVOKED_AS",
+	} {
+		_ = os.Unsetenv(k)
+	}
+}
+
+// BashySelf returns the invoking bashy executable path passed by the adapter
+// script (or an explicit BASHY_SELF override in tests).
+func BashySelf() string {
+	if v := strings.TrimSpace(os.Getenv("BASHY_SELF")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("BASHY_ADAPTER_SELF")); v != "" {
+		return v
+	}
+	return startupBashySelf
+}
+
 // InvokedAs returns the verb spelling bashy received on argv[1], falling back
 // to def when invoked directly outside bashy.
 func InvokedAs(def string) string {
 	if v := strings.TrimSpace(os.Getenv("BASHY_INVOKED_AS")); v != "" {
 		return v
+	}
+	if startupInvokedAs != "" {
+		return startupInvokedAs
 	}
 	return def
 }
@@ -47,6 +86,7 @@ func RunCobra(cmd *cobra.Command, errPrefix string, exitCode func(error) int) in
 
 // RunCobraArgs is RunCobra with an explicit argument slice.
 func RunCobraArgs(cmd *cobra.Command, args []string, errPrefix string, exitCode func(error) int) int {
+	StripAdapterEnv()
 	DisableCompletion(cmd)
 	if certProfile() {
 		cmd.SetArgs(args)

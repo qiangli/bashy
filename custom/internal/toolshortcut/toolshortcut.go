@@ -13,10 +13,10 @@ import (
 	"strings"
 
 	"github.com/qiangli/bash/pathconv"
+	"github.com/qiangli/bashy/custom/internal/adapter"
 	"github.com/qiangli/yoke/pkg/agentlaunch"
 	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/room"
-	"github.com/qiangli/bashy/custom/internal/adapter"
 	"golang.org/x/term"
 )
 
@@ -394,7 +394,7 @@ func DispatchToolShortcut(toolName string, args []string, stdin *os.File, stdout
 		chatArgs = append(chatArgs, "--")
 		chatArgs = append(chatArgs, opts.prompt...)
 	}
-	self := strings.TrimSpace(os.Getenv("BASHY_SELF"))
+	self := adapter.BashySelf()
 	if self == "" {
 		self = "bashy"
 	}

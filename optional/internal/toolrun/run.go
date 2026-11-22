@@ -14,15 +14,56 @@ import (
 	"github.com/qiangli/coreutils/tool"
 )
 
+var (
+	startupInvokedAs = strings.TrimSpace(os.Getenv("BASHY_INVOKED_AS"))
+	startupBashySelf = strings.TrimSpace(os.Getenv("BASHY_ADAPTER_SELF"))
+)
+
+func init() {
+	StripAdapterEnv()
+}
+
+// StripAdapterEnv removes adapter-trampoline variables from the process
+// environment so applets (printenv, timeout, watch, …) never expose or
+// propagate them.
+func StripAdapterEnv() {
+	for _, k := range []string{
+		"BASHY_SELF",
+		"BASHY_ADAPTER_SELF",
+		"BASHY_ADAPTER_EXEC",
+		"BASHY_ADAPTER_INPROC",
+		"BASHY_INVOKED_AS",
+	} {
+		_ = os.Unsetenv(k)
+	}
+}
+
+// BashySelf returns the invoking bashy executable path passed by the adapter
+// script (or an explicit BASHY_SELF override in tests).
+func BashySelf() string {
+	if v := strings.TrimSpace(os.Getenv("BASHY_SELF")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("BASHY_ADAPTER_SELF")); v != "" {
+		return v
+	}
+	return startupBashySelf
+}
+
 func InvokedAs(def string) string {
 	if v := strings.TrimSpace(os.Getenv("BASHY_INVOKED_AS")); v != "" {
 		return v
+	}
+	if startupInvokedAs != "" {
+		return startupInvokedAs
 	}
 	return def
 }
 
 func Main(def string) {
-	os.Exit(Run(InvokedAs(def), os.Args[1:], tool.Stdio{
+	name := InvokedAs(def)
+	StripAdapterEnv()
+	os.Exit(Run(name, os.Args[1:], tool.Stdio{
 		In:  os.Stdin,
 		Out: os.Stdout,
 		Err: os.Stderr,
@@ -30,6 +71,7 @@ func Main(def string) {
 }
 
 func Run(name string, args []string, stdio tool.Stdio) int {
+	StripAdapterEnv()
 	t := tool.Lookup(name)
 	if t == nil {
 		fmt.Fprintf(stdio.Err, "bashy: %s: No such command\n", name)
@@ -55,8 +97,8 @@ func Run(name string, args []string, stdio tool.Stdio) int {
 func AssertStandaloneDeps(t *testing.T, selfEntry string, allowedCmdPkgs ...string) {
 	t.Helper()
 	allow := map[string]bool{
-		"github.com/qiangli/bashy/optional/" + selfEntry:        true,
-		"github.com/qiangli/bashy/optional/internal/toolrun":    true,
+		"github.com/qiangli/bashy/optional/" + selfEntry:     true,
+		"github.com/qiangli/bashy/optional/internal/toolrun": true,
 	}
 	for _, p := range allowedCmdPkgs {
 		allow[p] = true
