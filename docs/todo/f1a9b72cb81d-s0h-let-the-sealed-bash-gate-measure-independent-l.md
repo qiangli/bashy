@@ -3,7 +3,7 @@ id: f1a9b72cb81d
 kind: refactor
 title: S0H Let the sealed Bash gate measure independent layer artifacts
 seq: 3243
-status: todo
+status: wontfix
 priority: p0
 labels:
     - superseded-plan
@@ -11,7 +11,10 @@ created: 2026-11-18T01:26:31.650866Z
 sprint: 575
 sprint_id: 65ce85f5-87c0-5863-bf55-62de86f5df36
 sprint_title: 'Layer separation: Classic <- Bash# <- Yoke import-graph delineation'
+closed: 2026-11-22T13:41:43.290181Z
 ---
+
+WONTFIX (operator rescope 2026-11-22; Sprint 575 ended): superseded. The shared-engine split is future refactoring the operator has not authorized; Sprint 677 delivered the certified-core boundary as bsh (bashsharp/cmd/bsh, zero yoke). Reopen only under a new, operator-authorized separation sprint.
 
 Sprint575 reviewed gate adaptation, from umbrella final split-artifact source review. Reuse current S0G make-free harness/evidence/image builders; do not create a new verifier. Pure A refuses all Bashsharp invocation options, so old single-testee matrix passing --no-bashpp in Classic mode cannot measure A. Add only the minimum explicit artifact/invocation seam below. Default existing same-artifact behavior remains unchanged until caller selects split mode.
 
