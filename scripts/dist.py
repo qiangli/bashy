@@ -145,7 +145,6 @@ class Dist:
             clean_source(source, self.inputs["sources"][role]["commit"])
             module = source / "external/otel" if role == "yoke" else source
             self.run("download-" + role, ["go", "mod", "download"], cwd=module)
-        self.run("meet-spa-check", ["/usr/bin/dash", "scripts/build-meet-spa.sh", "check"], self.sources["bashy"])
         self.mutable_yoke = Path(subprocess.check_output(
             ["go", "list", "-mod=readonly", "-m", "-f", "{{.Dir}}", "github.com/qiangli/yoke"],
             cwd=self.sources["bashy"], env=self.env, text=True).strip())
@@ -195,6 +194,12 @@ class Dist:
             raise ValueError("unsupported runner profile: " + target)
         self.run(target + "-bashy", ["/usr/bin/dash", "scripts/build-bashy-artifact.sh", str(stage / ("bashy" + suffix)), flags, tags], sources["bashy"], dict(env, BASHY_EXE="/bashy"))
         host_env = {key: value for key, value in env.items() if key not in ("GOOS", "GOARCH")}
+        if [goos, arch] == subprocess.check_output(["go", "env", "GOHOSTOS", "GOHOSTARCH"], env=env, text=True).split():
+            # The tracked SPA must be fresh against its source. Probe pnpm through the
+            # CANDIDATE just built: the builder image's own bashy predates the toolchain
+            # adapters and cannot provision pnpm (Sprint 692 release story).
+            self.run(target + "-spa-fresh", ["/usr/bin/dash", "scripts/build-meet-spa.sh", "check"], sources["bashy"],
+                     dict(host_env, BASHY_BIN=str(stage / ("bashy" + suffix))))
         self.run(target + "-spa", ["/usr/bin/dash", "scripts/verify-meet-spa-release.sh", str(stage / ("bashy" + suffix)), goos + "_" + arch], sources["bashy"], host_env)
         shell_sha = self.inputs["sources"]["bash"]["commit"]
         shell_time = subprocess.check_output(["git", "show", "-s", "--format=%cI", shell_sha], cwd=sources["bash"], text=True).strip()
