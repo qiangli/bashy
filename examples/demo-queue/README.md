@@ -78,3 +78,67 @@ decoded over 30 seconds of shared tab video and audio, then displayed an
 interactive browser tab on the next turn. The installed Outpost CLI also
 passed the host expose and cleanup smoke check. The in-room rehearsal above
 checks the physical projector, speakers, and separate LAN devices.
+
+## Agent CLI
+
+Agents can run the organizer, presenter, and projector roles through the same
+session endpoints as the browser. Commands accept `--url PRIVATE_LINK` or
+`DEMO_QUEUE_URL`. Keep the role links private. Control actions return JSON.
+Use `--dry-run` on writes to check a proposed action without committing it.
+
+| Browser action | Native CLI action |
+|---|---|
+| Host a session and open its role links | `host --json`, then `links` |
+| Create or copy a private invite | `invite --json` returns the invite |
+| Join with an invite and display name | `join --name NAME --invite-file PATH --json` |
+| Inspect the queue, readiness, and countdown | `status --json` or `status --watch` |
+| Start with timing settings | `start --limit 120 --warning 15` |
+| Assign, skip, or end | `assign --id ID`, `skip`, or `end` |
+| Prepare and share when called | `prepare --input CAPTURE.webm --audio` |
+| Leave the ready queue or finish the turn | `leave` or `finish` |
+| Connect a projector and consume the current turn | `view > turn.webm`, or `viewer`, `chunk`, and `rendered` for a player that acknowledges its own first frame |
+
+An organizer agent runs the host and controls from the terminal. A presenter
+agent supplies an authorized VP8 WebM source as a file or as live stdin with
+`--input -`. Add `--audio` for an Opus track. The CLI checks the input and Outpost
+connection first, waits in the ready queue, and starts publishing automatically
+when called. A browser share uses its native capture picker and local preview.
+The presenter chooses which desktop, window, or tab the browser may capture.
+A terminal projector agent connects `view` to its playback sink. The sink
+controls its speakers and fullscreen presentation.
+
+## Shape the app
+
+```sh
+bash ./register.sh
+bashy app show demo-queue --json
+```
+
+Open **Demo Queue** through the Bashy app console to use Genie. Paste a private
+role link from the native process running on the console's machine. The
+shaped page uses the same live session and retains the role's permissions.
+For agents, `links --via-shape` prints the corresponding console URL.
+Add `--via-shape` to other CLI actions to use that principal's running console
+instance. Open the app in the console first.
+
+Use `bashy shape wish demo-queue`, `shape verify`, `shape preview`,
+`shape approve`, and `shape undo` for a personal revision. The candidate
+build and tests are declared in `contract.bsh` and `checks/go.bsh`.
+
+## Native automated browser tests
+
+Install the test-only Apache-2.0 Playwright package and desktop Chrome and Edge,
+then run the suite from this directory. The example binary has no third-party
+runtime libraries.
+
+```sh
+npm install --no-save --no-package-lock playwright@1.65.1
+node checks/e2e.mjs
+```
+
+The suite uses an isolated Outpost command fixture and a generated capture
+source. Chrome and Edge use their real VP8/Opus encoders and decoders. It drives
+browser and terminal presenters, a terminal organizer and projector, timed
+handoff, and the shaped session link. The opt-in GitHub workflow runs the same
+suite on macOS and Windows. The in-room check exercises the OS picker, separate
+Outposts, physical projector, and speakers.

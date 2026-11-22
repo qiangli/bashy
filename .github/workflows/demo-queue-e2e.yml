@@ -1,0 +1,41 @@
+name: Demo Queue native browser E2E
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'demo-queue-e2e/**'
+    paths:
+      - 'examples/demo-queue/**'
+      - '.github/workflows/demo-queue-e2e.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+        working-directory: examples/demo-queue
+    env:
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: examples/demo-queue/go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm install --no-save --no-package-lock playwright@1.65.1
+      - run: npx playwright install chrome msedge
+      - run: go test -count=1 ./...
+      - run: node checks/e2e.mjs

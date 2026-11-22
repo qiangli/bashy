@@ -168,3 +168,52 @@ func TestPendingAssignmentAndStartupTimeout(t *testing.T) {
 		t.Fatal("no-show did not hand off to the interrupted presenter")
 	}
 }
+
+func TestShapedRelayAndDryRun(t *testing.T) {
+	s := &room{session: newSession(), owner: secret(), display: secret(), peer: "peer", service: "test"}
+	native := httptest.NewUnstartedServer(nil)
+	native.Config.Handler = s.local(native.Listener.Addr().String())
+	native.Start()
+	defer native.Close()
+
+	shaped := httptest.NewServer(shapedHandler())
+	defer shaped.Close()
+	host, err := fromLink(native.URL + "/control#" + s.owner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host.via = strings.TrimPrefix(shaped.URL, "http://")
+	ctx := t.Context()
+	if err := host.validate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	res, err := host.post(ctx, "control", action{Action: "invite"}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if len(s.invites) != 0 {
+		t.Fatal("dry-run issued an invite")
+	}
+	res, err = host.post(ctx, "control", action{Action: "invite"}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if len(s.invites) != 1 {
+		t.Fatal("relay did not mutate native room")
+	}
+
+	guest := host
+	guest.role, guest.key = "projector", s.display
+	if _, err := guest.post(ctx, "control", action{Action: "end"}, true); err == nil {
+		t.Fatal("projector reached organizer action")
+	}
+	if s.ended {
+		t.Fatal("denied request mutated state")
+	}
+	guest.addr = "outside.example:443"
+	if err := guest.validate(ctx); err == nil {
+		t.Fatal("relay accepted non-loopback destination")
+	}
+}

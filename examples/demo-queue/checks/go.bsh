@@ -1,0 +1,9 @@
+# Build and test the complete app from the candidate source revision.
+set -eu
+scratch="$(mktemp -d "$PWD/.check.XXXXXX")"
+mkdir "$scratch/bin"
+ln -s "$BASH" "$scratch/bin/bashy"
+export TMPDIR="$scratch" PATH="$scratch/bin:$PATH"
+export GOWORK=off
+bashy go build -o "$scratch/out/" ./...
+bashy go test ./...

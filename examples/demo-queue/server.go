@@ -71,7 +71,7 @@ func loopback(addr string, next http.Handler) http.Handler {
 func page(w http.ResponseWriter, r *http.Request) {
 	name := "web" + r.URL.Path
 	switch r.URL.Path {
-	case "/control", "/projector", "/present":
+	case "/", "/control", "/projector", "/present":
 		name = "web/index.html"
 	case "/app.js", "/style.css":
 	default:
@@ -97,6 +97,16 @@ func page(w http.ResponseWriter, r *http.Request) {
 func (s *room) local(addr string) http.Handler {
 	m := http.NewServeMux()
 	m.HandleFunc("GET /", page)
+	m.HandleFunc("GET /api/demo-link", func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Query().Get("role") {
+		case "control":
+			linkGuard("control", s.owner)(w, r)
+		case "projector":
+			linkGuard("projector", s.display)(w, r)
+		default:
+			fail(w, 403, "Unknown session role.")
+		}
+	})
 	m.HandleFunc("GET /api/events", func(w http.ResponseWriter, r *http.Request) {
 		if !equal(r.URL.Query().Get("key"), s.owner) && !equal(r.URL.Query().Get("key"), s.display) {
 			fail(w, 401, "Open the private session URL.")
@@ -193,6 +203,11 @@ func (s *room) memberAction(w http.ResponseWriter, r *http.Request, p *participa
 		return
 	}
 	now := time.Now()
+	dry := r.URL.Query().Get("dry_run") == "1"
+	if dry {
+		defer s.preview()()
+		p = s.invites[bearer(r)]
+	}
 	s.tick(now)
 	switch a.Action {
 	case "ready":
@@ -225,6 +240,10 @@ func (s *room) control(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
+	dry := r.URL.Query().Get("dry_run") == "1"
+	if dry {
+		defer s.preview()()
+	}
 	s.tick(now)
 	if s.ended {
 		fail(w, 409, "The session already ended.")
@@ -232,6 +251,10 @@ func (s *room) control(w http.ResponseWriter, r *http.Request) {
 	}
 	switch a.Action {
 	case "invite":
+		if dry {
+			w.WriteHeader(204)
+			return
+		}
 		invite, _ := json.Marshal([]string{s.peer, s.service, s.issue()})
 		response(w, 200, map[string]string{"invite": base64.RawURLEncoding.EncodeToString(invite)})
 		return
@@ -379,6 +402,10 @@ func (s *room) connectViewer(w http.ResponseWriter, r *http.Request) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if r.URL.Query().Get("dry_run") == "1" {
+		w.WriteHeader(204)
+		return
+	}
 	s.viewer, s.viewerSeen = secret(), time.Now()
 	if t := s.current; t != nil {
 		t.resetMedia()
@@ -407,6 +434,10 @@ func (s *room) rendered(w http.ResponseWriter, r *http.Request) {
 	t := s.current
 	if t == nil || t.ID != a.Turn || t.Generation != a.Generation || t.mime == "" {
 		fail(w, 409, "The turn has changed.")
+		return
+	}
+	if r.URL.Query().Get("dry_run") == "1" {
+		w.WriteHeader(204)
 		return
 	}
 	if t.Deadline.IsZero() {
@@ -514,4 +545,34 @@ func (s *room) clock(stop <-chan struct{}) {
 
 func report(err error) {
 	_, _ = os.Stderr.WriteString("demo-queue: " + err.Error() + "\n")
+}
+
+// preview replaces the in-memory state while the room lock is held so dry
+// runs execute the same authorization and transition checks as writes.
+func (s *room) preview() func() {
+	original := s.session
+	draft := *original
+	clones := make(map[*participant]*participant)
+	draft.invites = make(map[string]*participant, len(original.invites))
+	for key, p := range original.invites {
+		copy := *p
+		clones[p] = &copy
+		draft.invites[key] = &copy
+	}
+	draft.roster = make([]*participant, len(original.roster))
+	for i, p := range original.roster {
+		draft.roster[i] = clones[p]
+	}
+	draft.queue = make([]*participant, len(original.queue))
+	for i, p := range original.queue {
+		draft.queue[i] = clones[p]
+	}
+	draft.assigned = clones[original.assigned]
+	if original.current != nil {
+		copy := *original.current
+		copy.member = clones[copy.member]
+		draft.current = &copy
+	}
+	s.session = &draft
+	return func() { s.session = original }
 }

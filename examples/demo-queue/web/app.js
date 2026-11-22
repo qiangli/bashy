@@ -1,6 +1,8 @@
 "use strict";
 
-const role = location.pathname.slice(1);
+const role = location.pathname.split("/").filter(Boolean).at(-1);
+const api = path => new URL("./api/" + path, location.href);
+const sessionRoles = ["control", "present", "projector"];
 const $ = id => document.getElementById(id);
 const videoType = "video/webm;codecs=vp8";
 const audioType = "video/webm;codecs=vp8,opus";
@@ -9,24 +11,77 @@ let eventStream;
 let key = "";
 let viewer = "";
 
-if (role !== "present") {
-  key = location.hash.slice(1) || sessionStorage.getItem(role) || "";
+let target = "";
+if (sessionRoles.includes(role)) {
+  const storage = "demo-queue:" + location.pathname;
+  const link = decodeURIComponent(location.hash.slice(1)) || sessionStorage.getItem(storage) || "";
+  if (link.startsWith("http://")) {
+    const native = parseNativeLink(link);
+    if (native.role === role) {
+      target = native.addr;
+      key = native.key;
+    }
+  } else {
+    key = link;
+  }
   if (key) {
-    sessionStorage.setItem(role, key);
+    sessionStorage.setItem(storage, link);
     history.replaceState(null, "", location.pathname);
   }
+}
+
+function parseNativeLink(value) {
+  const url = new URL(value);
+  const role = url.pathname.slice(1);
+  const key = url.hash.slice(1);
+  if (url.protocol !== "http:" || url.hostname !== "127.0.0.1" || !url.port ||
+      url.search || url.username || url.password || !sessionRoles.includes(role) ||
+      !/^[a-zA-Z0-9_-]{32}$/.test(key)) throw new Error("Enter a private Demo Queue link.");
+  return {addr: url.host, role, key};
+}
+
+function connectPage() {
+  document.body.innerHTML = `
+    <main><header><h1>Demo Queue</h1></header>
+      <section><h2>Connect to a session</h2>
+        <form id="attachment">
+          <label>Private session link<input id="local-link" type="password" required autocomplete="off"></label>
+          <button>Connect</button>
+        </form>
+        <p id="error" role="alert"></p>
+      </section>
+    </main>`;
+  $("attachment").onsubmit = async event => {
+    event.preventDefault();
+    clearError();
+    const link = $("local-link").value.trim();
+    try {
+      const {addr, role, key} = parseNativeLink(link);
+      const probe = await fetch(api("demo-link"), {headers: {
+        Authorization: "Bearer " + key, "X-Demo-Target": addr, "X-Demo-Role": role
+      }});
+      if (!probe.ok) throw new Error("The local session rejected this link.");
+      const next = new URL("./" + role, location.href);
+      next.hash = encodeURIComponent(link);
+      location.assign(next);
+    } catch (error) { failure(error); }
+  };
 }
 
 async function request(path, {method = "GET", data, type, signal} = {}) {
   const headers = {};
   if (key) headers.Authorization = "Bearer " + key;
   if (viewer) headers["X-Demo-Viewer"] = viewer;
+  if (target) {
+    headers["X-Demo-Target"] = target;
+    headers["X-Demo-Role"] = role;
+  }
   if (type) headers["Content-Type"] = type;
   if (data && !type) {
     data = JSON.stringify(data);
     headers["Content-Type"] = "application/json";
   }
-  const result = await fetch("/api/" + path, {method, body: data, headers, signal, cache: "no-store"});
+  const result = await fetch(api(path), {method, body: data, headers, signal, cache: "no-store"});
   if (!result.ok) {
     const {error} = await result.json().catch(() => ({}));
     throw new Error(error || "Connection failed. Try again.");
@@ -37,7 +92,9 @@ async function request(path, {method = "GET", data, type, signal} = {}) {
 const post = (path, data) => request(path, {method: "POST", data});
 function events(render, onLost, params = {}) {
   eventStream?.close();
-  eventStream = new EventSource("/api/events?" + new URLSearchParams(params));
+  const query = new URLSearchParams({...params, key});
+  if (target) { query.set("target", target); query.set("role", role); }
+  eventStream = new EventSource(api("events?" + query));
   eventStream.onmessage = event => {
     state = JSON.parse(event.data);
     render(state);
@@ -323,7 +380,9 @@ function presenter() {
   }, 1000);
   addEventListener("pagehide", () => {
     release();
-    navigator.sendBeacon("/api/member", JSON.stringify({action: "withdraw"}));
+    const query = new URLSearchParams({key});
+    if (target) { query.set("target", target); query.set("role", role); }
+    navigator.sendBeacon(api("member?" + query), JSON.stringify({action: "withdraw"}));
   });
 }
 
@@ -495,3 +554,4 @@ function projector() {
 if (role === "control") control();
 else if (role === "projector") projector();
 else if (role === "present") presenter();
+else connectPage();

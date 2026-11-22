@@ -1,0 +1,10 @@
+{
+  "server": {"main": ".", "args": ["serve", "--addr", "$ADDR", "--data", "$DATA"]},
+  "genie": {
+    "examples": [
+      "Make the countdown easier to read from the back of the room.",
+      "Show the next two ready presenters on my organizer page.",
+      "Use a high-contrast projector layout in bright rooms."
+    ]
+  }
+}

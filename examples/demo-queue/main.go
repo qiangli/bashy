@@ -36,27 +36,44 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
-		fmt.Println("Usage: demo-queue host | demo-queue join [--name NAME]")
+		fmt.Println("Usage: demo-queue host | join | serve | status | invite | start | assign | skip | end | prepare | leave | finish | view | viewer | rendered | chunk | links (run VERB --help)")
 		return nil
 	}
 	switch args[0] {
 	case "host":
-		if len(args) != 1 {
-			return errors.New("usage: demo-queue host")
+		flags := flag.NewFlagSet("host", flag.ContinueOnError)
+		output := flags.Bool("json", false, "Print links as JSON")
+		dry := flags.Bool("dry-run", false, "Validate without starting a session")
+		if err := flags.Parse(args[1:]); err != nil {
+			return err
 		}
-		return host(ctx)
+		if flags.NArg() != 0 {
+			return errors.New("usage: demo-queue host [--json] [--dry-run]")
+		}
+		if *dry {
+			if _, err := meshStatus(ctx); err != nil {
+				return err
+			}
+			return printJSON(map[string]any{"action": "host", "dryRun": true})
+		}
+		return host(ctx, *output)
+	case "serve":
+		return serveShape(ctx, args[1:])
 	case "join":
 		flags := flag.NewFlagSet("join", flag.ContinueOnError)
 		name := flags.String("name", "", "Presenter display name")
+		output := flags.Bool("json", false, "Print presenter URL as JSON")
+		dry := flags.Bool("dry-run", false, "Validate the invite without joining")
+		invite := flags.String("invite-file", "", "Read the invite from a file or - for stdin")
 		if err := flags.Parse(args[1:]); err != nil {
 			return err
 		}
 		if flags.NArg() != 0 {
 			return errors.New("usage: demo-queue join [--name NAME]")
 		}
-		return join(ctx, *name)
+		return join(ctx, *name, *invite, *output, *dry)
 	default:
-		return errors.New("usage: demo-queue host | demo-queue join [--name NAME]")
+		return command(ctx, args)
 	}
 }
 
@@ -121,7 +138,7 @@ func serve(ln net.Listener, handler http.Handler) (*http.Server, <-chan error) {
 	return server, done
 }
 
-func host(ctx context.Context) error {
+func host(ctx context.Context, jsonOutput bool) error {
 	status, err := meshStatus(ctx)
 	if err != nil {
 		return err
@@ -151,8 +168,14 @@ func host(ctx context.Context) error {
 	clockDone := make(chan struct{})
 	defer close(clockDone)
 	go s.clock(clockDone)
-	fmt.Printf("Organizer (private): http://%s/control#%s\n", local.Addr(), s.owner)
-	fmt.Printf("Projector (local):   http://%s/projector#%s\n", local.Addr(), s.display)
+	if jsonOutput {
+		if err := printJSON(map[string]string{"control": "http://" + local.Addr().String() + "/control#" + s.owner, "projector": "http://" + local.Addr().String() + "/projector#" + s.display}); err != nil {
+			return err
+		}
+	} else {
+		fmt.Printf("Organizer (private): http://%s/control#%s\n", local.Addr(), s.owner)
+		fmt.Printf("Projector (local):   http://%s/projector#%s\n", local.Addr(), s.display)
+	}
 	select {
 	case <-ctx.Done():
 		return nil
@@ -176,9 +199,20 @@ func decodeInvite(input string) ([]string, error) {
 	return parts, nil
 }
 
-func join(ctx context.Context, name string) error {
-	console := bufio.NewScanner(os.Stdin)
-	fmt.Print("Private invite: ")
+func join(ctx context.Context, name, inviteFile string, jsonOutput, dry bool) error {
+	input := os.Stdin
+	if inviteFile != "" && inviteFile != "-" {
+		file, err := os.Open(inviteFile)
+		if err != nil {
+			return err
+		}
+		defer file.Close()
+		input = file
+	}
+	console := bufio.NewScanner(input)
+	if inviteFile == "" {
+		fmt.Fprint(os.Stderr, "Private invite: ")
+	}
 	if !console.Scan() {
 		return errors.New("a private invite is required")
 	}
@@ -187,13 +221,22 @@ func join(ctx context.Context, name string) error {
 		return err
 	}
 	if name == "" {
-		fmt.Print("Display name: ")
+		if input != os.Stdin {
+			return errors.New("--name is required with an invite file")
+		}
+		fmt.Fprint(os.Stderr, "Display name: ")
 		if !console.Scan() {
 			return errors.New("a display name is required")
 		}
 		name = console.Text()
 	}
+	if strings.TrimSpace(name) == "" || len(strings.TrimSpace(name)) > 80 {
+		return errors.New("enter a display name of up to 80 bytes")
+	}
 	peer, service, key := parts[0], parts[1], parts[2]
+	if dry {
+		return printJSON(map[string]any{"action": "join", "dryRun": true, "name": name})
+	}
 	out, err := meshCommand(ctx, "listen", peer, service, "--local", "127.0.0.1:0")
 	if err != nil {
 		return err
@@ -229,10 +272,18 @@ func join(ctx context.Context, name string) error {
 		return err
 	}
 	defer ln.Close()
-	m := presenterProxy(target, peer, key, joined.Lease)
+	localKey := secret()
+	m := presenterProxy(target, peer, key, joined.Lease, localKey)
 	server, done := serve(ln, loopback(ln.Addr().String(), m))
 	defer server.Close()
-	fmt.Printf("Presenter (local): http://%s/present\n", ln.Addr())
+	presenterURL := "http://" + ln.Addr().String() + "/present#" + localKey
+	if jsonOutput {
+		if err := printJSON(map[string]string{"presenter": presenterURL}); err != nil {
+			return err
+		}
+	} else {
+		fmt.Printf("Presenter (local): %s\n", presenterURL)
+	}
 	select {
 	case <-ctx.Done():
 		return nil
@@ -241,7 +292,7 @@ func join(ctx context.Context, name string) error {
 	}
 }
 
-func presenterProxy(target *url.URL, peer, key, lease string) http.Handler {
+func presenterProxy(target *url.URL, peer, key, lease, localKey string) http.Handler {
 	proxy := &httputil.ReverseProxy{
 		Transport:     &http.Transport{ResponseHeaderTimeout: 12 * time.Second},
 		FlushInterval: -1,
@@ -257,6 +308,7 @@ func presenterProxy(target *url.URL, peer, key, lease string) http.Handler {
 	}
 	m := http.NewServeMux()
 	m.HandleFunc("GET /", page)
+	m.HandleFunc("GET /api/demo-link", linkGuard("present", localKey))
 	m.Handle("GET /api/events", proxy)
 	m.Handle("POST /api/member", proxy)
 	m.Handle("POST /api/upload", proxy)
@@ -272,5 +324,12 @@ func presenterProxy(target *url.URL, peer, key, lease string) http.Handler {
 		}
 		fail(w, 409, "The organizer needs a direct Outpost mesh connection. Check that both devices are on the same LAN, then retry.")
 	})
-	return m
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/api/") && r.URL.Path != "/api/demo-link" &&
+			!equal(bearer(r), localKey) && !equal(r.URL.Query().Get("key"), localKey) {
+			fail(w, 403, "Open the private presenter URL.")
+			return
+		}
+		m.ServeHTTP(w, r)
+	})
 }
