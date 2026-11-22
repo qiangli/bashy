@@ -169,6 +169,13 @@ class Dist:
             copy = workspace / role
             self.run(target + "-source-" + role, ["git", "clone", "--quiet", "--shared", str(original), str(copy)])
             self.run(target + "-pin-" + role, ["git", "checkout", "--quiet", "--detach", self.inputs["sources"][role]["commit"]], copy)
+            # Command adapters judge their cached binary stale by file mtime; a fresh
+            # clone would make every warm adapter rebuild inside a timed smoke. Pin
+            # the copy's mtimes to its commit time so the shared adapter cache stays warm.
+            commit_time = int(subprocess.check_output(["git", "-C", str(copy), "show", "-s", "--format=%ct", "HEAD"], text=True).strip())
+            for name in subprocess.check_output(["git", "-C", str(copy), "ls-files", "-z"], text=True).split("\0"):
+                if name:
+                    os.utime(copy / name, (commit_time, commit_time), follow_symlinks=False)
             sources[role] = copy
         module_cache = workspace / "modules"
         isolated_modcache(self.cache, module_cache, self.mutable_yoke)

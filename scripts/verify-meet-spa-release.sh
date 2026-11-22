@@ -48,6 +48,10 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
+# `meet` is a command adapter: its first use may build the yoke/meet binary.
+# Warm it before the timed readiness window so the smoke measures the server,
+# not a cold adapter build (Sprint 692 release story).
+BASHY_MEET_DIR="$state_dir" "$artifact" meet --help >"$state_dir/warm.log" 2>&1 || true
 BASHY_MEET_DIR="$state_dir" "$artifact" meet serve --port "$port" >"$state_dir/server.log" 2>&1 &
 server_pid=$!
 
