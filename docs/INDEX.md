@@ -1,5 +1,7 @@
 # bashy docs index
 
+- [Thin core, commands on demand](decision-thin-core-command-delivery.md) — P5 (Sprint 692) decision record: the scratch image ships the thin core; adapters build on demand (toolchain + source pin), with prebuilt-per-release as the fallback; before/after size and package counts, adapter first-use latency, and what stays linked and why.
+
 - [S575 POSIX engineering baseline](s575-posix-engineering-baseline.md) — completed 117-target separated-source measurement, exact source/artifact marker, preserved residual results and verified evidence retention.
 
 - [Moving the boxes](retro-s575-package-separation.md) — the Sprint 575 package-separation anecdote and lessons on scope, build order, preserved baselines and concrete handoffs.
