@@ -8,7 +8,8 @@ ext=; [[ ${OS:-} == Windows_NT || ${OSTYPE:-} == msys* || ${OSTYPE:-} == cygwin*
 bin="${BASHY_ADAPTER_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/bashy/adapters}/toolchain/go$ext"
 if [[ ! -x "$bin" || "$here/main.go" -nt "$bin" || "$gomod" -nt "$bin" ]]; then
   mkdir -p "${bin%/*}"
-  run_go() { if command -v go >/dev/null 2>&1; then go "$@"; else BASHY_HINTS=off BASHY_ADAPTER_INPROC=1 "${_bashy_self:-bashy}" go "$@"; fi; }
+  # Never dispatch our own build through the adapter we are building.
+  run_go() { BASHY_HINTS=off BASHY_ADAPTER_INPROC=1 "${_bashy_self:-bashy}" go "$@"; }
   (cd "$here" && GOWORK=off CGO_ENABLED=0 run_go build -trimpath -o "$bin.tmp.$$" . && { mv -f "$bin.tmp.$$" "$bin" || { rm -f "$bin.tmp.$$"; [[ -x "$bin" ]]; }; })
 fi
 exec "$bin" "$@"
