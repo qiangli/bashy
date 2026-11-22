@@ -3,11 +3,12 @@ id: 160f5356fa2f
 kind: feature
 title: Prepare presenters and automate timed handoffs
 seq: 3294
-status: todo
+status: assigned
 priority: p1
 labels:
     - demo-queue
 created: 2026-11-21T23:44:29.648583Z
+assignee: s690-codex-manager
 sprint: 690
 sprint_id: 3462c15d-bc37-505c-849d-64a3453232d7
 sprint_title: Demo Queue — LAN screen sharing for team demos
