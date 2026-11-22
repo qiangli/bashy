@@ -3,12 +3,13 @@ id: 3d47facb6d19
 kind: bug
 title: 'install-agent shims point at the adapter binary (foreman) instead of bashy when dispatched through an adapter: bash/sh/zsh shims exec the wrong program'
 seq: 3300
-status: todo
+status: assigned
 priority: p0
 labels:
     - bashy
     - adapter
 created: 2026-11-22T13:50:33.902213Z
+assignee: codex-gpt6-astra
 sprint: 692
 ---
 

@@ -3,11 +3,13 @@ id: 42f79daac406
 kind: bug
 title: Adapter cold build fork-bombs under BASHY_AGENTIC=1
 seq: 3298
-status: todo
+status: assigned
 priority: p0
 labels:
     - adapters
 created: 2026-11-22T12:52:13.231974Z
+weave: 135
+assignee: codex-gpt6-astra
 sprint: 692
 sprint_id: 58370405-625f-5802-b886-32f3bd57dece
 sprint_title: '677 closure: green integration (go test), WSL keep-alive, symbol strip, dependency bumps, retire switch'

@@ -3,11 +3,12 @@ id: 3dd8b4ec6f29
 kind: bug
 title: Adapter cold build fails inside git hooks (inherited GIT_DIR breaks go VCS stamping)
 seq: 3299
-status: todo
+status: assigned
 priority: p1
 labels:
     - adapters
 created: 2026-11-22T13:08:39.904914Z
+assignee: codex-gpt6-astra
 sprint: 692
 ---
 
