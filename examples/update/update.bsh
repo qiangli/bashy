@@ -1,0 +1,80 @@
+#!/usr/bin/env -S bashy --bashsharp
+# update - build bashy from its main branch and install it over the bashy on PATH.
+#
+# For humans. Agent sessions are deliberately barred from replacing the shell
+# binary they run in; this command refuses inside an agent session unless
+# BASHY_UPDATE_ALLOW_AGENT=1 is set (logged override).
+#
+# Usage: bashy update [--ref REF] [--src DIR] [--dry-run]
+#   --ref REF    git ref to build (default: origin/main)
+#   --src DIR    build checkout (default: $BASHY_HOME or ~/.bashy, then src/bashy-update)
+#   --dry-run    print the plan and the versions, change nothing
+set -euo pipefail
+
+ref=origin/main
+src=""
+dry=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--ref) ref=${2:?--ref needs a value}; shift 2 ;;
+	--src) src=${2:?--src needs a value}; shift 2 ;;
+	--dry-run) dry=1; shift ;;
+	-h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	*) echo "update: unknown argument: $1" >&2; exit 2 ;;
+	esac
+done
+
+# Guard: humans only. An agent replacing its own shell can break every session.
+if [ "${BASHY_UPDATE_ALLOW_AGENT:-}" != 1 ]; then
+	for v in CLAUDECODE CLAUDE_CODE_SESSION_ID CODEX_SANDBOX CODEX_THREAD_ID BASHY_AGENTIC; do
+		if [ -n "${!v:-}" ] && [ "${!v}" != 0 ]; then
+			echo "update: refusing inside an agent session ($v is set)." >&2
+			echo "  Run 'bashy update' from your own terminal, or set BASHY_UPDATE_ALLOW_AGENT=1 to override (logged)." >&2
+			exit 3
+		fi
+	done
+else
+	logdir=${BASHY_HOME:-$HOME/.bashy}/log
+	mkdir -p "$logdir"
+	printf '%s update override BASHY_UPDATE_ALLOW_AGENT=1 by %s ref=%s\n' "$(date -u +%FT%TZ)" "${BASHY_AGENT:-${USER:-unknown}}" "$ref" >> "$logdir/update.log"
+fi
+
+home=${BASHY_HOME:-$HOME/.bashy}
+src=${src:-$home/src/bashy-update}
+repo=${BASHY_UPDATE_REPO:-https://github.com/qiangli/bashy.git}
+git=/usr/bin/git
+[ -x "$git" ] || git=git
+
+current=$(command -v bashy || true)
+old=$("${current:-bashy}" --version 2>/dev/null | head -1 || true)
+
+echo "update: build checkout $src  ref $ref"
+echo "update: installed now: ${old:-none} (${current:-not on PATH})"
+if [ "$dry" = 1 ]; then
+	echo "update: dry run; nothing changed"
+	exit 0
+fi
+
+if [ ! -d "$src/.git" ]; then
+	mkdir -p "$(dirname "$src")"
+	"$git" clone -q "$repo" "$src"
+fi
+"$git" -C "$src" fetch -q origin
+"$git" -C "$src" checkout -q --detach "$ref"
+echo "update: building $("$git" -C "$src" log --oneline -1)"
+
+cd "$src"
+GOWORK=off "${current:-bashy}" dag build
+echo "update: built $(./bin/bashy --version | head -1)"
+
+if [ -n "$current" ] && [ -f "$current" ]; then
+	stamp=$(date +%Y%m%d-%H%M%S)
+	cp -p "$current" "$current.bak-$stamp"
+	echo "update: backed up the previous binary to $current.bak-$stamp"
+fi
+
+GOWORK=off "${current:-bashy}" go run ./tools/installbashy -bash bin/bash -bashy bin/bashy
+
+echo "update: was  ${old:-none}"
+echo "update: now  $(bashy --version | head -1)"
+echo "update: restart agent sessions (and 'outpost restart') to pick up the new binary"
