@@ -7,9 +7,6 @@ package agentos
 // Sprint: #490; Story: #2644; Story-ID: 0a55048e5c6a (satellite/reproduce/paired-host rods)
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
 
 	"github.com/qiangli/yoke/pkg/fleet"
@@ -28,29 +25,6 @@ func newFleetCmd() *cobra.Command {
 	return root
 }
 
-// dispatchToken runs the scoped-token tree (fleet.NewTokenCmd: create list
-// revoke) as the top-level `bashy token` verb.
-func dispatchToken(args []string) int {
-	cmd := fleet.NewTokenCmd()
-	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "bashy token:", err)
-		return fleet.ExitCode(err)
-	}
-	return 0
-}
-
-// dispatchFleet runs the `bashy fleet` verb (currently master-token only).
-func dispatchFleet(args []string) int {
-	cmd := newFleetCmd()
-	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "bashy fleet:", err)
-		return fleet.ExitCode(err)
-	}
-	return 0
-}
-
 // newPairedHostCmd mounts the paired-hosts tree (fleet.NewPairedHostCmd)
 // under the `paired-host` verb (S490 story 0a55048e5c6a). Yoke's tree is
 // named `host`, but a bare `host` shim would shadow the platform DNS
@@ -62,61 +36,6 @@ func newPairedHostCmd() *cobra.Command {
 	return cmd
 }
 
-// dispatchSatellite runs the `bashy satellite` verb (list/show/invite/transfer).
-func dispatchSatellite(args []string) int {
-	cmd := fleet.NewSatelliteCmd()
-	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "bashy satellite:", err)
-		return fleet.ExitCode(err)
-	}
-	return 0
-}
-
-// dispatchMember runs the account member tree from yoke.
-func dispatchMember(args []string) int {
-	cmd := fleet.NewMemberCmd()
-	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "bashy member:", err)
-		return fleet.ExitCode(err)
-	}
-	return 0
-}
-
-// dispatchGroup runs the account group tree from yoke.
-func dispatchGroup(args []string) int {
-	cmd := fleet.NewGroupCmd()
-	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "bashy group:", err)
-		return fleet.ExitCode(err)
-	}
-	return 0
-}
-
-// dispatchSuperadmin runs the cloudbox operator repair tree from yoke.
-func dispatchSuperadmin(args []string) int {
-	cmd := fleet.NewSuperadminCmd()
-	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "bashy superadmin:", err)
-		return fleet.ExitCode(err)
-	}
-	return 0
-}
-
-// dispatchSuite runs the Cloudbox app suite tree from yoke.
-func dispatchSuite(args []string) int {
-	cmd := fleet.NewSuiteCmd()
-	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "bashy suite:", err)
-		return fleet.ExitCode(err)
-	}
-	return 0
-}
-
 // newShareCmd mounts yoke's host-app share verbs (`who`, and the grant rule
 // verbs `add`, `ls`, `rm`) under the existing `share` command beside `qr`.
 func newShareCmd() *cobra.Command {
@@ -125,54 +44,4 @@ func newShareCmd() *cobra.Command {
 		cmd.AddCommand(sub)
 	}
 	return cmd
-}
-
-// dispatchShare runs the `bashy share` verb (`share qr`, `share who` and the
-// host grant verbs `share add|ls|rm`).
-func dispatchShare(args []string) int {
-	cmd := newShareCmd()
-	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "bashy share:", err)
-		return fleet.ExitCode(err)
-	}
-	return 0
-}
-
-// dispatchReproduce runs the `bashy reproduce` verb (plan-only in this run).
-func dispatchReproduce(args []string) int {
-	cmd := fleet.NewReproduceCmd()
-	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "bashy reproduce:", err)
-		return fleet.ExitCode(err)
-	}
-	return 0
-}
-
-// dispatchPairedHost runs the `bashy paired-host` verb (currently ls only).
-func dispatchPairedHost(args []string) int {
-	cmd := newPairedHostCmd()
-	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "bashy paired-host:", err)
-		return fleet.ExitCode(err)
-	}
-	return 0
-}
-
-// dispatchDesktop uses the existing account-level fleet transport.
-func dispatchDesktop(args []string) int {
-	cmd := fleet.NewDesktopCmd()
-	setCobraArgs(cmd, args)
-	if err := cmd.Execute(); err != nil {
-		// --json (the default) gets the refusal as an envelope on stdout so
-		// an agent reads status, reason code and exit; people get stderr.
-		if asJSON, _ := cmd.Flags().GetBool("json"); asJSON {
-			fmt.Fprintln(os.Stdout, fleet.DesktopErrorJSON(err))
-		}
-		fmt.Fprintln(os.Stderr, "bashy desktop:", err)
-		return fleet.DesktopExitCode(err)
-	}
-	return 0
 }

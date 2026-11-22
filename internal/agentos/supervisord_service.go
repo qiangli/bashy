@@ -190,15 +190,11 @@ func notifyServiceFailed(ev service.Event) {
 
 // ─── bashy service ────────────────────────────────────────────────────────
 
-// dispatchService mounts the unit-definition tree (fleet.NewServiceCmd: list
-// show schema add set rm edit enable disable retire unretire) and adds the
+// dispatchServiceContext mounts the unit-definition tree (fleet.NewServiceCmd:
+// list show schema add set rm edit enable disable retire unretire) and adds the
 // runtime verbs over the same records. A declaration write is followed by a
 // reload request, so a running monitor applies it now instead of at its next
 // poll; with no monitor the write simply stands.
-func dispatchService(args []string) int {
-	return dispatchServiceContext(context.Background(), args)
-}
-
 func dispatchServiceContext(ctx context.Context, args []string) int {
 	cmd := newServiceCmd()
 	setCobraArgs(cmd, args)

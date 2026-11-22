@@ -302,15 +302,3 @@ func mcpOutputArgs(args []string) ([]string, int, error) {
 	}
 	return rest, maxOutput, nil
 }
-
-func serveMCPShells(ctx context.Context, name, version string, maxOutput int) error {
-	ctx, cancel := context.WithCancel(ctx)
-	srv := yokemcp.NewServerWithOptions(name, version, yokemcp.Options{})
-	sessions := registerMCPShells(ctx, srv, maxOutput)
-	defer func() { cancel(); <-sessions.done }()
-	err := srv.Run(ctx, &mcpsdk.StdioTransport{})
-	if errors.Is(err, io.EOF) || (err != nil && strings.Contains(err.Error(), "server is closing")) {
-		return nil
-	}
-	return err
-}
