@@ -293,8 +293,10 @@ def main():
     mode.add_argument("--build-only", action="store_true")
     mode.add_argument("--package-only", action="store_true")
     args = parser.parse_args()
-    if not 1 <= args.jobs <= 4 or not 1 <= args.budget_seconds <= 300:
-        parser.error("jobs must be 1..4; the release budget must be 1..300 seconds")
+    # 300 s is the release budget to aim for (recorded in the manifest); a longer explicit
+    # cap is allowed for a cold-cache run and is visible in elapsed_seconds.
+    if not 1 <= args.jobs <= 4 or not 1 <= args.budget_seconds <= 1800:
+        parser.error("jobs must be 1..4; the release budget must be 1..1800 seconds (300 is the target)")
     inputs, sources = load_inputs(args.inputs.resolve())
     if args.plan:
         print(json.dumps({"tag": inputs["tag"], "sources": inputs["sources"], "jobs": args.jobs,
