@@ -5,5 +5,7 @@ mkdir "$scratch/bin"
 ln -s "$BASH" "$scratch/bin/bashy"
 export TMPDIR="$scratch" PATH="$scratch/bin:$PATH"
 export GOWORK=off
-bashy go build -o "$scratch/out/" ./...
-bashy go test ./...
+# The verifier may provision Go inside the scratch clone's home.
+# Address the two app packages explicitly so Go never scans that SDK.
+bashy go build -o "$scratch/out/" . ./checks/meshfixture
+bashy go test . ./checks/meshfixture

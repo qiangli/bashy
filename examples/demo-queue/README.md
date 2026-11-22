@@ -144,3 +144,8 @@ browser and terminal presenters, a terminal organizer and projector, timed
 handoff, and the shaped session link. The opt-in GitHub workflow runs the same
 suite on macOS and Windows. The in-room check exercises the OS picker, separate
 Outposts, physical projector, and speakers.
+
+[Native end-to-end run 45014343706](https://github.com/qiangli/bashy/actions/runs/45014343706)
+passed on macOS and Windows. The local Bashy console check also exercised
+Genie, CLI runtime discovery, and verification, approval, and undo of a
+personal shaping candidate.
