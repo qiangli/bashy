@@ -3,9 +3,11 @@ id: 1082c8db1d24
 kind: task
 title: 'C4b: land the C4 fixes (yoke tool-call framing + bashy Node 18/screenshot fixture) and bump bashy''s yoke pin'
 seq: 3290
-status: todo
+status: assigned
 priority: p0
 created: 2026-11-21T20:54:42.119376Z
+weave: 134
+assignee: claude-opus5-s624
 sprint: 682
 sprint_id: 623586bb-742f-570e-87c9-9af0c101bac1
 sprint_title: Shaping-enable the example apps for consumers (viewer, session, form, board/whiteboard/table/hello-world, notepad/chart)

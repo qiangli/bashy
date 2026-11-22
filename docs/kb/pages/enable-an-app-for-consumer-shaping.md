@@ -10,11 +10,12 @@ tags:
     - apps
     - genie
     - consumer
-status: candidate
-evidence: 'Sprint 682 C1-C3 enabling the example apps (viewer/chart/form/notepad/session/board/whiteboard/table): C1 notes, C2 session report, C3 commit 83486184; lifecycle spellings from the bashy shape companion doc, marked pending the C4 gate-host e2e run'
+status: validated
+evidence: Sprint 682 C1–C3 shipped example-app checks plus the 2026-11-21 native WSL Hello World walkthrough on Bashy 5c8be965. Production Genie candidate 02ad98b45385e8bc, trusted verifier, paired Chrome preview/approval/isolation/undo. Private evidence manifest SHA-256 f945a5851b962bd3de6340542e338e952edeadc5d9fd8075227161a62f29445b.
 source:
     tool: qiangli
 created: "2026-11-21T00:18:49Z"
+updated: "2026-11-21T08:42:50Z"
 ---
 
 ## Who this is for
@@ -27,11 +28,10 @@ verifier checks it, the member previews and approves, and undo always
 brings the baseline back. Other members never see the change. Owner-side
 offer/adopt/release flows are a separate topic and are not covered here.
 
-Marking: **✓** = the step was exercised end-to-end while enabling the
-example apps in Sprint 682 (C1–C3). **○** = the spelling comes from the
-`bashy shape` companion doc (`bashy skill show shape` / the hello-world
-shaping example) and is pending a live gate-host run of
-`examples/shaping/example-apps/e2e-agent.sh`; flip ○ to ✓ after that run.
+A **✓** marks a step exercised while enabling the Sprint 682 examples or
+walking through the live Hello World lifecycle. The walkthrough used the
+production Genie delegate, the trusted verifier, and two independently
+paired Chrome sessions on the WSL gate.
 
 ## 1. Declare the app shapeable: `shaped.json` ✓
 
@@ -64,7 +64,7 @@ placeholders — never a fixed port:
 
 For a static app there is no `server` block: the shaped files live under
 `public/` and the same lifecycle applies (the hello-world example under
-`examples/shaping/` is the reference). ○
+`examples/shaping/` is the reference). ✓
 
 ## 2. Register through the public shaped path ✓
 
@@ -110,7 +110,7 @@ are present on the page. Testing the app's own listener directly can pass
 every functional check while the shaping entry point is missing, because
 injection happens on the console path, not inside the app. ✓
 
-## 5. The member lifecycle ○
+## 5. The member lifecycle ✓
 
 ```sh
 bashy shape status  APP --user PRINCIPAL --json
@@ -119,7 +119,7 @@ bashy shape wish    APP 'Keep the action bar visible while I scroll.' \
 bashy shape show    APP CANDIDATE --user PRINCIPAL --json
 bashy shape diff    APP CANDIDATE --user PRINCIPAL
 bashy shape verify  APP CANDIDATE --user PRINCIPAL
-bashy shape preview APP CANDIDATE --user PRINCIPAL
+bashy shape preview APP CANDIDATE --user PRINCIPAL --console CONSOLE_ORIGIN
 bashy shape approve APP CANDIDATE --user PRINCIPAL
 bashy shape undo    APP --user PRINCIPAL
 ```
@@ -128,10 +128,12 @@ Rules of the road: a wish produces an isolated candidate; approve only
 after `verify` passes (approval re-verifies); `preview` prints a console
 URL to open in a browser paired as the same principal (the printed URL is
 not evidence the page rendered); a second principal stays on the baseline
-throughout; `undo` restores the previous version. These spellings are the
-companion doc's, pending the live run that flips this section to ✓; the
-same lifecycle is what `examples/shaping/example-apps/e2e-agent.sh`
-drives across the example apps. ○
+throughout, and `undo` restores the previous version. Pass the console's
+origin explicitly when it uses a non-default port. In the Hello World
+walkthrough, the member saw the candidate greeting in preview while their
+active page still showed the baseline. Approval changed only that member's
+active page, and undo restored it. The example-app matrix uses the same
+lifecycle for its app-specific checks. ✓
 
 ## Common failures found while enabling the examples ✓
 
@@ -159,6 +161,6 @@ drives across the example apps. ○
 
 - ✓ `bashy app show APP --json` shows a shaped registration; the console
   page shows Genie; the app CLI (if any) reaches the console instance.
-- ○ One member wish went wish → verify → preview → approve → undo with a
+- ✓ One member wish went wish → verify → preview → approve → undo with a
   second member unaffected (the C4 e2e script automates exactly this).
 - ✓ This page itself: `bashy kb search "enable an app for shaping"` finds it.

@@ -3,7 +3,7 @@ id: 85d6a32cacbc
 kind: refactor
 title: S1C Own the cert-base command catalog without upper-layer imports
 seq: 3241
-status: todo
+status: wontfix
 priority: p0
 labels:
     - superseded-plan
@@ -11,9 +11,11 @@ created: 2026-11-18T00:56:29.150374Z
 sprint: 575
 sprint_id: 65ce85f5-87c0-5863-bf55-62de86f5df36
 sprint_title: 'Layer separation: Classic <- Bash# <- Yoke import-graph delineation'
+closed: 2026-11-21T12:17:46.718817Z
 ---
 
-Sprint575 S1 implementation slice, following source reviews recorded in umbrella .agents/s575/neutral-boundary-review.log and S1-complete-design.log. Read umbrella docs/plan-s575-master-execution.md, docs/s575-runtime-boundary.md and this repo CLAUDE.md. Goal: cert-base internal/core stops importing Yoke/Bashsharp through the command catalog, preserving existing command behavior except the explicitly required refusal of Bashsharp execution in a Bash-only profile. Full AgentOS Yoke catalog remains unchanged.
+SUPERSEDED POINTER (2026-11-21, Sprint 677 manager muse-wonder-full per conductor claude+2): superseded by Sprint 677 P2 story 46743cdd0cda (bsh certified binary: Bash 5.3 + Bash# + POSIX coreutils, zero yoke packages, frozen digest). Do NOT staff this S1C separately; 677 P2 is the single tracked delivery for the cert-base separation. Close as superseded when 677 P2 is accepted.
+
 
 Place a private owned command-only mechanism under internal/core (child package as appropriate), copying existing command-relevant source and tests from frozen Yoke c9057f1e. Preserve record fields/defaults and complete commands CLI (bare/list/show/schema/retire/unretire/add/register/set/rm/edit/verify), shared/cached-org/local ring precedence, sparse overlay ACTUAL baseline behavior, aliases/shadows/warnings, schema/vocabulary/collision/applicability checks, local atomic writes/lifecycle, applet->registered command->PATH route, VSC_PROFILE=cert suppression, syntax probes, env/cwd/exit mapping and exec/script/download paths.
 
