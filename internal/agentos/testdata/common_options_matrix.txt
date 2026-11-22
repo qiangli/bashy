@@ -438,14 +438,6 @@ fold	--json	unsupported
 fold	--no-input	supported
 fold	--null	unsupported
 fold	--since	unsupported
-foreman	--depth	unsupported
-foreman	--dry-run	unsupported
-foreman	--explain	unsupported
-foreman	--fields	unsupported
-foreman	--json	unsupported
-foreman	--no-input	unsupported
-foreman	--null	unsupported
-foreman	--since	unsupported
 gencat	--depth	unsupported
 gencat	--dry-run	unsupported
 gencat	--explain	unsupported
