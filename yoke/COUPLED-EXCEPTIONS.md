@@ -29,6 +29,7 @@ one side changes, change the other.
 
 | Adapter | Duplicated file(s) | Original |
 |---|---|---|
+| `yoke/dag` | `capacity.go`, `capacity_monitor.go` | Sprint capacity services and read-only monitor snapshot closure from `internal/agentos/sprint_monitor*.go`; old dispatch/services retained only in legacy test helpers. No sprint command import. |
 | `yoke/dag` | `jq.go` | `yoke/cmds/jq/jq.go` |
 | `yoke/kb` | `codering.go`, `index_reader.go`, `recall.go` | `yoke/cmds/graph/codering.go` (+ graph cache helpers), `internal/agentos/index_reader.go`, `kbrecall.go`, `kbmemory.go` |
 | `yoke/meet` | `steward_meet.go`, `steward_select.go`, `mb_seam.go`, `main.go` (`wireMeet`) | `internal/agentos/steward_meet.go`, `steward_select.go`, `budget_admission.go`, `messageboard.go`, `agentos.go` (`wireMeet`) |

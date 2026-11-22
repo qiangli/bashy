@@ -7,6 +7,7 @@ import (
 
 	"github.com/qiangli/bashy/yoke/internal/adapter"
 	"github.com/qiangli/yoke/pkg/dag"
+	"github.com/spf13/cobra"
 )
 
 func applyBashySelfArgv0() {
@@ -17,10 +18,15 @@ func applyBashySelfArgv0() {
 	}
 }
 
+func newDagCommand() *cobra.Command {
+	cmd := dag.NewDagCmd()
+	dag.AddCapacityCommands(cmd, sprintCapacityServices())
+	return cmd
+}
+
 func runDagArgs(args []string, cmdFn func() (*os.File, *os.File)) int {
 	applyBashySelfArgv0()
-	cmd := dag.NewDagCmd()
-	dag.AddCapacityCommands(cmd, dag.CapacityServices{})
+	cmd := newDagCommand()
 	if cmdFn != nil {
 		out, errOut := cmdFn()
 		if out != nil {
