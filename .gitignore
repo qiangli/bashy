@@ -68,3 +68,6 @@ vsxgen/
 
 # macOS Finder metadata
 .DS_Store
+
+# kb tooling runtime lock (never committed)
+docs/kb/.workflow.lock
