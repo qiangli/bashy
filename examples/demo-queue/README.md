@@ -64,3 +64,10 @@ the video and its audio stay in sync, the countdown starts when it appears,
 and the outgoing audio stops as the interactive session takes over. Try
 skipping and recalling a presenter. Repeat with the other projector browser
 and confirm that closing a presenter command clears its readiness.
+
+The Sprint 690 automated rehearsal used desktop Chrome and Edge 158 with
+three distinct Outpost mesh peers on one machine. Both projector browsers
+decoded over 30 seconds of shared tab video and audio, then displayed an
+interactive browser tab on the next turn. The installed Outpost CLI also
+passed the host expose and cleanup smoke check. The in-room rehearsal above
+checks the physical projector, speakers, and separate LAN devices.
