@@ -295,7 +295,7 @@ case "$1 ${2-}" in
         # Extract the final shell command argument and execute it locally with /work -> sources.
         last=""
         for arg in "$@"; do last=$arg; done
-        rewritten=$(printf '%%s' "$last" | sed "s|/bashy|%s|g; s|bashy dag|%s dag|g")
+        rewritten=$(printf '%%s' "$last" | sed "s|/bashy -c|%s -c|g; s|bashy dag|%s dag|g")
         GOMODCACHE=%q GOCACHE=%q GOTMPDIR=%q BASHY_BIN_CACHE=%q sh -c "cd %q && $rewritten"
         ;;
       *)
