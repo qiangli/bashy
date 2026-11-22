@@ -4,7 +4,9 @@
 package agentos
 
 import (
+	"bytes"
 	"context"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -109,12 +111,31 @@ func acpTestBinary(t *testing.T) string {
 	return out
 }
 
+// makeTreeWritable restores write permission under root so a TempDir
+// cleanup can remove it: adapter builds run with HOME inside the TempDir
+// accumulate a read-only Go module cache (0555 dirs, 0444 files), which a
+// plain RemoveAll cannot unlink on Linux.
+func makeTreeWritable(root string) {
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			_ = os.Chmod(path, 0o700)
+		} else {
+			_ = os.Chmod(path, 0o600)
+		}
+		return nil
+	})
+}
+
 // acpTestEnv isolates the server from the invoking agent's own identity and
 // stores, and keeps it offline: a help render and a refused turn must touch
 // neither the operator's fleet nor the network.
 func acpTestEnv(t *testing.T) []string {
 	t.Helper()
 	home := t.TempDir()
+	t.Cleanup(func() { makeTreeWritable(home) })
 	tmp := filepath.Join(home, "tmp")
 	if err := os.MkdirAll(tmp, 0o755); err != nil {
 		t.Fatal(err)
@@ -144,6 +165,10 @@ func TestACPHelpIsHeraldACPHelpByteForByte(t *testing.T) {
 	bin := acpTestBinary(t)
 	env := acpTestEnv(t)
 
+	// Help is a stdout claim: compare stdout only. A cold adapter build
+	// legitimately writes module-download and build noise to stderr, and
+	// folding stderr in (CombinedOutput) makes the first, cold spelling
+	// differ from the second, warm one for a venue reason, not a text one.
 	run := func(args ...string) string {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -151,14 +176,16 @@ func TestACPHelpIsHeraldACPHelpByteForByte(t *testing.T) {
 		cmd := exec.CommandContext(ctx, bin, args...)
 		cmd.Env = env
 		cmd.Stdin = strings.NewReader("")
-		out, err := cmd.CombinedOutput()
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &stdout, &stderr
+		err := cmd.Run()
 		if ctx.Err() != nil {
 			t.Fatalf("`bashy %s` did not finish: %v", strings.Join(args, " "), ctx.Err())
 		}
 		if err != nil {
-			t.Fatalf("`bashy %s` failed: %v\n%s", strings.Join(args, " "), err, out)
+			t.Fatalf("`bashy %s` failed: %v\n%s", strings.Join(args, " "), err, stderr.String())
 		}
-		return string(out)
+		return stdout.String()
 	}
 
 	alias := run("acp", "--help")
