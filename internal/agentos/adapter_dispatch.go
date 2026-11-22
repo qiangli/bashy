@@ -376,6 +376,14 @@ func stripEnvKey(env []string, key string) []string {
 // source checkout discovery.
 var adapterCandidateRoots = candidateBashyRoots
 
+// adapterSourceFetch materializes the release-pinned Bashy source tree for a
+// Go-backed adapter when a binary-only install has no source beside it. Tests
+// replace it so embedded-fallback coverage never reaches the network.
+var adapterSourceFetch = func(home string) error {
+	_, err := src.Fetch(home, "bashy")
+	return err
+}
+
 const embeddedOutpostHelper = "examples/desk/kit/outpost.bsh"
 
 // resolveAdapterScript locates <folder>/<entry>/<base>.bsh across explicit
@@ -399,7 +407,7 @@ func resolveAdapterScript(folder, entry string) string {
 	if override := strings.TrimSpace(os.Getenv(adaptersRootEnv)); override != "" {
 		p := filepath.Join(override, rel)
 		if isRegularFile(p) {
-			return p
+			return adapterScriptPath(p)
 		}
 		return ""
 	}
@@ -407,18 +415,52 @@ func resolveAdapterScript(folder, entry string) string {
 	if !certProfile() {
 		if home := strings.TrimSpace(src.Home()); home != "" {
 			if p := filepath.Join(home, "src", "bashy", rel); isRegularFile(p) {
-				return p
+				return adapterScriptPath(p)
 			}
 		}
 	}
 
 	for _, root := range adapterCandidateRoots() {
 		if p := filepath.Join(root, rel); isRegularFile(p) {
-			return p
+			return adapterScriptPath(p)
+		}
+	}
+
+	// An embedded .bsh is self-contained only for shell-only adapters. The Go
+	// adapters compile the package beside their wrapper, so a binary-only
+	// install must first materialize the release-pinned source tree. This uses
+	// yoke's pure-Go fetcher and therefore does not depend on a host git or Go
+	// installation; the wrapper's run_go path provisions Go afterward.
+	if !certProfile() && embeddedAdapterBuildsGo(relSlash) {
+		home := strings.TrimSpace(src.Home())
+		if home != "" {
+			if err := adapterSourceFetch(home); err == nil {
+				if p := filepath.Join(src.SrcDir(home), "bashy", rel); isRegularFile(p) {
+					return adapterScriptPath(p)
+				}
+			} else if strings.TrimSpace(os.Getenv("BASHY_ADAPTER_DEBUG")) != "" {
+				fmt.Fprintf(os.Stderr, "bashy adapter: fetch release source for %s: %v\n", relSlash, err)
+			}
 		}
 	}
 
 	return materializeEmbeddedAdapter(relSlash)
+}
+
+func embeddedAdapterBuildsGo(relSlash string) bool {
+	data, err := fs.ReadFile(adapterembed.FS, relSlash)
+	return err == nil && bytes.Contains(data, []byte(`gomod="$here/go.mod"`))
+}
+
+func adapterScriptPath(p string) string {
+	return adapterScriptPathForOS(p, runtime.GOOS)
+}
+
+func adapterScriptPathForOS(p, goos string) string {
+	if goos == "windows" {
+		return strings.ReplaceAll(p, `\`, "/")
+	}
+	return p
 }
 
 func materializeEmbeddedAdapter(relSlash string) string {
@@ -454,7 +496,7 @@ func materializeEmbeddedAdapter(relSlash string) string {
 			}
 		}
 		if target, err := writeEmbeddedCacheFile(filepath.Join(baseDir, rel), data, 0o755); err == nil {
-			return target
+			return adapterScriptPath(target)
 		}
 	}
 	return ""

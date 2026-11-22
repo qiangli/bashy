@@ -124,7 +124,10 @@ var classicHelpCommand = func(ctx context.Context, args []string) *exec.Cmd {
 }
 
 func classicHelp(args []string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// The classic help subprocess may cold-build a Go-backed adapter. A
+	// source-free install first fetches the pinned source and provisions its Go
+	// toolchain, which routinely takes several minutes on Windows gate hosts.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	cmd := classicHelpCommand(ctx, args)
 	cmd.Env = append(os.Environ(), "BASHY_HELP_FORMAT=classic", "BASHY_HINTS=off")

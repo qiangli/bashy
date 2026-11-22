@@ -5,6 +5,7 @@ package agentos
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"io/fs"
 	"os"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/qiangli/bashy/internal/agentos/adapterembed"
 	"github.com/qiangli/yoke/pkg/shape/slot"
+	"github.com/qiangli/yoke/pkg/src"
 )
 
 func TestResolveAdapterScriptFindsPilotStats(t *testing.T) {
@@ -45,6 +47,57 @@ func TestResolveAdapterScriptHonorsOverride(t *testing.T) {
 	}
 	if got := resolveAdapterScript("yoke", "missing"); got != "" {
 		t.Fatalf("resolveAdapterScript for missing entry = %q, want empty", got)
+	}
+}
+
+func TestAdapterScriptPathNormalizesWindowsSeparators(t *testing.T) {
+	const in = `C:\Users\runner\AppData\Local\bashy\yoke\sprint\sprint.bsh`
+	const want = `C:/Users/runner/AppData/Local/bashy/yoke/sprint/sprint.bsh`
+	if got := adapterScriptPathForOS(in, "windows"); got != want {
+		t.Fatalf("adapterScriptPathForOS(%q, windows) = %q, want %q", in, got, want)
+	}
+	if got := adapterScriptPathForOS(in, "linux"); got != in {
+		t.Fatalf("non-Windows adapter path changed: %q", got)
+	}
+}
+
+func TestResolveGoAdapterFetchesPinnedSourceBeforeEmbeddedFallback(t *testing.T) {
+	origRoots := adapterCandidateRoots
+	origFetch := adapterSourceFetch
+	adapterCandidateRoots = func() []string { return nil }
+	t.Cleanup(func() {
+		adapterCandidateRoots = origRoots
+		adapterSourceFetch = origFetch
+	})
+
+	home := t.TempDir()
+	t.Setenv("BASHY_HOME", home)
+	t.Setenv(adaptersRootEnv, "")
+	fetches := 0
+	adapterSourceFetch = func(gotHome string) error {
+		if gotHome != home {
+			t.Fatalf("fetch home = %q, want %q", gotHome, home)
+		}
+		fetches++
+		dir := filepath.Join(src.SrcDir(home), "bashy", "yoke", "sprint")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dir, "sprint.bsh"), []byte("#!/usr/bin/env bashy\n"), 0o755)
+	}
+
+	want := filepath.Join(src.SrcDir(home), "bashy", "yoke", "sprint", "sprint.bsh")
+	if got := resolveAdapterScript("yoke", "sprint"); got != adapterScriptPath(want) {
+		t.Fatalf("resolveAdapterScript after source fetch = %q, want %q", got, adapterScriptPath(want))
+	}
+	if fetches != 1 {
+		t.Fatalf("Go-backed embedded adapter source fetches = %d, want 1", fetches)
+	}
+	if got := resolveAdapterScript("examples", "notes"); got == "" {
+		t.Fatal("shell-only embedded adapter did not resolve")
+	}
+	if fetches != 1 {
+		t.Fatalf("shell-only embedded adapter triggered source fetch; total = %d", fetches)
 	}
 }
 
@@ -187,8 +240,13 @@ func TestEmbeddedAdaptersMatchSourceTree(t *testing.T) {
 
 func TestResolveAndRunEmbeddedAdapterEmptyHomeAndCwd(t *testing.T) {
 	origRoots := adapterCandidateRoots
+	origFetch := adapterSourceFetch
 	adapterCandidateRoots = func() []string { return nil }
-	t.Cleanup(func() { adapterCandidateRoots = origRoots })
+	adapterSourceFetch = func(string) error { return errors.New("offline embedded-fallback fixture") }
+	t.Cleanup(func() {
+		adapterCandidateRoots = origRoots
+		adapterSourceFetch = origFetch
+	})
 
 	t.Run("empty-dirs", func(t *testing.T) {
 		emptyHome := t.TempDir()
@@ -313,10 +371,12 @@ func TestResolveAndRunEmbeddedAdapterEmptyHomeAndCwd(t *testing.T) {
 
 func TestResolveAdapterScriptPrecedence(t *testing.T) {
 	origRoots := adapterCandidateRoots
+	origFetch := adapterSourceFetch
 	origSelect := shapeSlotSelect
 	origLaunch := shapeSlotLaunch
 	t.Cleanup(func() {
 		adapterCandidateRoots = origRoots
+		adapterSourceFetch = origFetch
 		shapeSlotSelect = origSelect
 		shapeSlotLaunch = origLaunch
 	})
@@ -337,6 +397,7 @@ func TestResolveAdapterScriptPrecedence(t *testing.T) {
 	t.Setenv("PWD", emptyCwd)
 
 	adapterCandidateRoots = func() []string { return nil }
+	adapterSourceFetch = func(string) error { return errors.New("offline precedence fixture") }
 	shapeSlotSelect = func(string) (slot.Version, bool, error) { return slot.Version{}, false, nil }
 
 	writeMarkerAdapter := func(root, label string) string {

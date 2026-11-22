@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/fleet"
@@ -49,6 +50,27 @@ func skillHelpProcess(t *testing.T, format string, args ...string) []byte {
 		t.Fatalf("%v: %v (%s)", args, err, string(out)+stderr.String())
 	}
 	return out
+}
+
+func TestClassicHelpAllowsColdAdapterBootstrap(t *testing.T) {
+	orig := classicHelpCommand
+	t.Cleanup(func() { classicHelpCommand = orig })
+
+	var remaining time.Duration
+	classicHelpCommand = func(ctx context.Context, _ []string) *exec.Cmd {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Fatal("classic help context has no deadline")
+		}
+		remaining = time.Until(deadline)
+		return exec.CommandContext(ctx, os.Args[0], "-test.run=^$")
+	}
+	if _, err := classicHelp([]string{"sprint", "--help"}); err != nil {
+		t.Fatal(err)
+	}
+	if remaining < 5*time.Minute {
+		t.Fatalf("classic help timeout = %v, want enough time for cold adapter bootstrap", remaining)
+	}
 }
 
 func TestSkillHelpExplicit(t *testing.T) {
