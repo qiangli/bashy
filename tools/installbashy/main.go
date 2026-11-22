@@ -49,7 +49,7 @@ func main() {
 	flag.StringVar(&bashySource, "bashy", filepath.Join("bin", executableName("bashy")), "freshly built bashy binary")
 	flag.StringVar(&installDir, "dir", defaultInstallDir(), "installation directory (default: $DHNT_BIN_DIR or ~/.local/bin)")
 	flag.StringVar(&manDir, "man-dir", strings.TrimSpace(os.Getenv("DHNT_MAN_DIR")), "manual section-1 directory (default: the installation prefix's share/man/man1)")
-	flag.StringVar(&shManDir, "sh-man-dir", filepath.Join("..", "sh", "docs", "man", "man1"), "shell manual-page source directory")
+	flag.StringVar(&shManDir, "sh-man-dir", filepath.Join("..", "bash", "docs", "man", "man1"), "shell manual-page source directory (the github.com/qiangli/bash engine fork)")
 	flag.StringVar(&coreutilsManDir, "coreutils-man-dir", filepath.Join("..", "coreutils", "docs", "man", "man1"), "coreutils manual-page source directory")
 	flag.Parse()
 
@@ -149,7 +149,7 @@ type moduleDownloader func(module string) (string, error)
 // umbrella. A standalone checkout has no siblings, so it instead obtains the
 // exact versions pinned by this checkout's go.mod from the module cache.
 func resolveManualSourceDirs(shDir, coreutilsDir string, download moduleDownloader) ([]string, error) {
-	shSource, err := resolveManualSourceDir(shDir, "mvdan.cc/sh/v3", download)
+	shSource, err := resolveManualSourceDir(shDir, "github.com/qiangli/bash", download)
 	if err != nil {
 		return nil, err
 	}

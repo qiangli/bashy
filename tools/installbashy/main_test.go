@@ -163,7 +163,7 @@ func TestResolveManualSourceDirsUsesPinnedModulesWithoutSiblings(t *testing.T) {
 	download := func(module string) (string, error) {
 		downloaded = append(downloaded, module)
 		switch module {
-		case "mvdan.cc/sh/v3":
+		case "github.com/qiangli/bash":
 			return shModule, nil
 		case "github.com/qiangli/coreutils":
 			return coreutilsModule, nil
@@ -179,7 +179,7 @@ func TestResolveManualSourceDirsUsesPinnedModulesWithoutSiblings(t *testing.T) {
 	if want := []string{sh, coreutils}; !reflect.DeepEqual(sources, want) {
 		t.Fatalf("manual sources = %v, want %v", sources, want)
 	}
-	if want := []string{"mvdan.cc/sh/v3", "github.com/qiangli/coreutils"}; !reflect.DeepEqual(downloaded, want) {
+	if want := []string{"github.com/qiangli/bash", "github.com/qiangli/coreutils"}; !reflect.DeepEqual(downloaded, want) {
 		t.Fatalf("downloaded modules = %v, want %v", downloaded, want)
 	}
 	dst := filepath.Join(root, "share", "man", "man1")
