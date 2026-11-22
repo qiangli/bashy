@@ -13,6 +13,8 @@ sprint_id: 58370405-625f-5802-b886-32f3bd57dece
 sprint_title: '677 closure: green integration (go test), WSL keep-alive, symbol strip, dependency bumps, retire switch'
 ---
 
+RESCOPE (operator 2026-11-22, Sprint 692 plan umbrella docs/plan-sprint-692-release-thin-bashy.md): p0, owner codex, delivered in ONE run together with 3dd8b4ec (both change the adapter .bsh template; regenerate the embedded adapters with go generate ./internal/agentos/adapterembed and keep TestEmbeddedAdaptersMatchSourceTree green). Follow the fix direction below: recursion guard in toolchain/go/go.bsh (own build always via BASHY_ADAPTER_INPROC=1), exempt adapter scripts (BASHY_ADAPTER_EXEC) from the agent-mode route that turns a bare go into bashy go, one unit test asserting a bounded process count for a cold agent-mode adapter build with an empty cache. TEST RULE (operator 2026-11-22): build + the smallest targeted unit tests for the changed packages only, then submit. No go test ./..., no gates, no integration per story or per commit. The one full run is the rc.40 candidate gate (458628c0) at sprint close. Start on current heads (bashy mod drift; rebase before submit). Trailers: Sprint/Story/Story-ID + Agent; bashy commit+push first, then the umbrella pin.
+
 Symptom: on a fresh bashy checkout (bashy main 8fcceee7), `tools/installbashy` hung at its `judge --help` dispatch probe and spawned about 2400 processes before it was killed. Nothing was installed.
 
 Reproduced on the dev box with an empty cache (BASHY_ADAPTER_CACHE pointing at an empty directory):
