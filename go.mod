@@ -26,7 +26,6 @@ require (
 	github.com/ProtonMail/go-crypto v1.4.1 // indirect
 	github.com/RoaringBitmap/roaring/v2 v2.16.0 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
-	github.com/a2aproject/a2a-go/v2 v2.3.1 // indirect
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/aead/serpent v0.0.0-20160714141033-fba169763ea6 // indirect
 	github.com/agnivade/levenshtein v1.2.1 // indirect
@@ -593,7 +592,7 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261121101804-c5832f99ccf6
 	github.com/qiangli/ycode v0.3.1-dev.0.20261121101805-4c6cee72ad8a
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261121163358-be872cc5a395
+	github.com/qiangli/yoke v0.0.0-20261122140723-5d05a756b49c
 	github.com/qiangli/yoke/external/otel v0.0.0-20261121163358-be872cc5a395
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
