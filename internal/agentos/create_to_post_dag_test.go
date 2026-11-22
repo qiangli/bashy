@@ -33,6 +33,7 @@ func TestCreateToPostDAGFixture(t *testing.T) {
 		t.Fatal("pre-created image fixture changed")
 	}
 	base := t.TempDir()
+	t.Cleanup(func() { makeTreeWritable(base) })
 	home := filepath.Join(base, "home")
 	storage := filepath.Join(base, "storage")
 	sink := filepath.Join(base, "feed.git")
