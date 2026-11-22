@@ -51,12 +51,7 @@ jobs:
           mkdir release-dist
           gh release download "$TAG" -D release-dist
           ./scripts/verify-release-asset-set.sh release-dist
-          python3 scripts/local-release-evidence.py verify "$RUNNER_TEMP/local-security-evidence.json" --commit "$COMMIT" --dist release-dist | tee "$RUNNER_TEMP/receipt.txt"
-          # An operator vulnerability override is published in the run summary.
-          if grep -q 'OVERRIDE' "$RUNNER_TEMP/receipt.txt"; then
-            { echo '## Vulnerability gate: operator override'; echo; sed 's/^/    /' "$RUNNER_TEMP/receipt.txt"; } >> "$GITHUB_STEP_SUMMARY"
-            grep -q 'Vulnerability override' candidate-notes.md || { echo 'draft notes must disclose the vulnerability override' >&2; exit 1; }
-          fi
+          python3 scripts/local-release-evidence.py verify "$RUNNER_TEMP/local-security-evidence.json" --commit "$COMMIT" --dist release-dist
           python3 scripts/release-signing-status.py read-note candidate-notes.md darwin
           python3 scripts/release-signing-status.py read-note candidate-notes.md windows
           cp "$RUNNER_TEMP/local-security-evidence.json" local-security-evidence.json

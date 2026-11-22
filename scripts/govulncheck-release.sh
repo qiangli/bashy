@@ -11,11 +11,6 @@
 #
 # usage: scripts/govulncheck-release.sh [MODULE_DIR...]   (default: . ../outpost ../yoke)
 # env:   GOVULNCHECK_VERSION (default v1.9.0), GOVULNCHECK_OUT (report directory)
-#        RELEASE_VULN_OVERRIDE + RELEASE_VULN_OVERRIDE_BY (both or neither): an
-#        explicit operator override. Unwaived reachable findings are recorded in
-#        $GOVULNCHECK_OUT/../vuln-override.json instead of failing; scanner
-#        failures still fail. The receipt carries the override and the release
-#        notes must disclose it (docs/release-runbook.md).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 root=$PWD
@@ -28,15 +23,7 @@ have=$(go env GOVERSION)
 [[ $have == "$want" ]] || { echo "govulncheck-release: toolchain $have, release needs $want" >&2; exit 1; }
 command -v python3 >/dev/null || { echo "govulncheck-release: python3 is required" >&2; exit 1; }
 
-override=${RELEASE_VULN_OVERRIDE:-}
-override_by=${RELEASE_VULN_OVERRIDE_BY:-}
-if [[ -n $override || -n $override_by ]] && [[ -z $override || -z $override_by ]]; then
-  echo "govulncheck-release: RELEASE_VULN_OVERRIDE and RELEASE_VULN_OVERRIDE_BY must both be set" >&2
-  exit 1
-fi
 mkdir -p "$out"
-override_file=$(cd "$out/.." && pwd)/vuln-override.json
-rm -f "$override_file"
 bin=$(mktemp -d)
 trap 'rm -rf "$bin"' EXIT
 GOBIN=$bin go install "golang.org/x/vuln/cmd/govulncheck@$version"
@@ -45,8 +32,10 @@ echo "govulncheck $version built with $have"
 (($#)) || set -- . ../outpost ../yoke
 status=0
 blocked=0
-: >"$bin/overridden"
 for dir in "$@"; do
+  if [[ -f $dir/.gitmodules && ( ! -f $dir/external/ollama/src/go.mod || ! -f $dir/external/podman/src/go.mod ) ]]; then
+    git -C "$dir" submodule update --init external/ollama/src external/podman/src
+  fi
   mod=$(cd "$dir" && go list -m)
   tags_sets=('')
   target=./...
@@ -61,7 +50,7 @@ for dir in "$@"; do
   [[ -z $tags ]] || tag_args=(-tags "$tags")
   # govulncheck exits 3 when it finds anything; the verdict is rendered below.
   scan_status=0
-  (cd "$dir" && "$bin/govulncheck" -format json "${tag_args[@]}" "$target") >"$report" || scan_status=$?
+  (cd "$dir" && "$bin/govulncheck" -format json ${tag_args[@]+"${tag_args[@]}"} "$target") >"$report" || scan_status=$?
   # Exit 3 carries findings; every other nonzero exit is a scanner failure,
   # even when it emitted a config header before failing to load packages.
   if ((scan_status != 0 && scan_status != 3)); then
@@ -85,7 +74,7 @@ while True:
     f = msg.get("finding")
     if f:
         top = (f.get("trace") or [{}])[0]
-        level = 3 if top.get("function") else 2 if top.get("package") else 1
+        level = 3 if top.get("package") and top.get("function") else 3 if top.get("function") else 2 if top.get("package") else 1
         if level > best.get(f["osv"], (0, ""))[0]:
             best[f["osv"]] = (level, top.get("module", ""))
 if not config:
@@ -106,29 +95,14 @@ PY
     unwaived=$(comm -23 "$bin/reachable" "$bin/waived" | tee "$bin/unwaived" | wc -l | tr -d ' ')
     echo "  $unwaived unwaived reachable"
     sed 's/^/    /' "$bin/unwaived"
-    ((unwaived == 0)) || { blocked=1; awk -v s="$name" '{ print s "\t" $1 }' "$bin/unwaived" >>"$bin/overridden"; }
+    ((unwaived == 0)) || blocked=1
   else
-    ((reachable == 0)) || { blocked=1; awk -v s="$name" '$1 == "REACHABLE" { print s "\t" $2 }' "$bin/found" >>"$bin/overridden"; }
+    ((reachable == 0)) || blocked=1
   fi
   done
 done
 if ((blocked)); then
-  if [[ -n $override ]]; then
-    python3 - "$bin/overridden" "$override_file" "$override" "$override_by" <<'PY'
-import json, sys
-ids = {}
-for line in open(sys.argv[1]):
-    scope, osv = line.rstrip('\n').split('\t')
-    ids.setdefault(scope, []).append(osv)
-record = {'reason': sys.argv[3], 'by': sys.argv[4], 'overridden': {k: sorted(set(v)) for k, v in sorted(ids.items())}}
-open(sys.argv[2], 'w').write(json.dumps(record, indent=2, sort_keys=True) + '\n')
-PY
-    echo "govulncheck-release: OVERRIDE by $override_by: $override"
-    cut -f2 "$bin/overridden" | sort -u | sed 's/^/  overridden /'
-  else
-    status=1
-    echo "govulncheck-release: reachable vulnerabilities found" >&2
-  fi
+  status=1
+  echo "govulncheck-release: reachable vulnerabilities found" >&2
 fi
-((status == 0)) || [[ $blocked == 1 && -z $override ]] || echo "govulncheck-release: scanner failure" >&2
 exit "$status"

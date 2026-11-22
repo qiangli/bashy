@@ -47,6 +47,9 @@ else
   git clone --quiet --filter=blob:none https://github.com/qiangli/yoke.git ../yoke
   git -C ../yoke checkout --quiet "$yoke_commit"
 fi
+if [[ -f ../yoke/.gitmodules && ( ! -f ../yoke/external/ollama/src/go.mod || ! -f ../yoke/external/podman/src/go.mod ) ]]; then
+  git -C ../yoke submodule update --init external/ollama/src external/podman/src
+fi
 if [[ -n ${GITHUB_ENV:-} ]]; then
   { echo "OUTPOST_COMMIT=$outpost_commit"; echo "SHELL_RUNTIME_COMMIT=$shell_runtime"; echo "SHELL_RUNTIME_COMMIT_TIME="; } >> "$GITHUB_ENV"
 fi

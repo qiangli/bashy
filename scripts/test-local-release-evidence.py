@@ -62,19 +62,13 @@ class ReceiptTests(unittest.TestCase):
                 else: self.record[key]['verdict'] = 'fail'
                 with self.assertRaises(ValueError): self.check()
 
-    def test_operator_vulnerability_override(self):
+    def test_vulnerability_override_verdict_is_rejected(self):
         override = {'reason': 'disclosed advisories', 'by': 'operator', 'sha256': '1' * 64,
                     'overridden': {'yoke': ['GO-2026-6859']}}
         self.record['govulncheck'].update(verdict='override', override=override)
-        self.check()
-        for key, bad in (('reason', ' '), ('by', ''), ('overridden', {}), ('overridden', {'yoke': []}),
-                         ('overridden', {'yoke': ['CVE-1']}), ('sha256', '')):
-            with self.subTest(key=key, bad=bad):
-                self.record['govulncheck']['override'] = dict(override, **{key: bad})
-                with self.assertRaises(ValueError): self.check()
-        del self.record['govulncheck']['override']
         with self.assertRaises(ValueError): self.check()
-        self.record['govulncheck']['override'] = override
+        self.record['govulncheck'] = {'verdict': 'pass', 'reports': {'scan.json': 'f' * 64},
+                                      'database_modified': (self.now - dt.timedelta(days=1)).isoformat()}
         self.record['license']['verdict'] = 'override'
         with self.assertRaises(ValueError): self.check()
 
