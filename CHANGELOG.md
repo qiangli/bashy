@@ -31,13 +31,86 @@ frozen release candidate before the tag.
 
 ## [Unreleased]
 
+Nothing yet.
+
+## [1.0.0-rc.40] — 2026-11-22 (candidate)
+
+Everything user-visible merged since `v1.0.0-rc.37` (the last promoted
+release). `v1.0.0-rc.38-dev` and `v1.0.0-rc.39-dev` were tagged but never
+promoted (the rc.39 publication stopped at the release receipt), so their
+draft notes are folded in below after the rc.40 changes. Build coordinate:
+Go 1.27, toolchain go1.27.4; Bash compatibility 5.3.
+
+### Changed
+
+- **bashy is a thin core over one certified shell.** `bsh` (Bash 5.3, Bash#
+  and the POSIX-required coreutils) is its own module at
+  `bashsharp/cmd/bsh` and links no yoke code; bashy is the `bsh` engine, the
+  agentic shell hooks, the internal verbs (`model`, `agent`, `tool`,
+  `commands`, `app`, `skill`, `self`, `run`, `agentic` and their kin) and a
+  dispatcher. Every other command lives in one of five folders
+  (`optional/`, `toolchain/`, `yoke/`, `custom/`, `examples/`) as a
+  Bash# adapter plus its own `main.go`, is built on first use into the
+  adapter cache and run across the process boundary. The command surface is
+  unchanged: `bashy <verb>` still works as before. `TestBashyImportBoundary`
+  enforces that `cmd/bashy` links no command-folder package on Linux, macOS,
+  Windows and the scratch and engines profiles.
+- **The `bashy_cert_base` / `bashy_core` build profile is gone.** The
+  certified thin shell is `bsh`; the Linux startup-time gate
+  (`test-startup-linux`) now builds and measures `bsh` with unchanged
+  thresholds. The `bashy_scratch` image ships the same thin core; adapted
+  verbs need a Go toolchain and the adapter source on first use (decision
+  record: `docs/decision-thin-core-command-delivery.md`).
+- **Adapter scripts are embedded** in the bashy binary as the last fallback
+  after a shape slot, `BASHY_ADAPTERS_ROOT`, the fetched source pin and an
+  on-disk checkout.
+- **Release receipts no longer accept a vulnerability override.** The
+  `RELEASE_VULN_OVERRIDE` path, `vuln-override.json` and the `override`
+  verdict were removed from `scripts/govulncheck-release.sh`,
+  `scripts/local-release-evidence.py` and `release.yml`; a reachable finding
+  blocks the receipt. Reachable advisories in bashy, outpost and yoke were
+  bumped to fixed versions and `vuln-ignore` is empty.
+- **Go 1.27.4** across the release modules; the official build image is
+  `bashy-build:v1.0.0-rc.40-go1.27.4`.
+- **`bashy dag --makefile`** generates the Makefile forwarder; `dag.md` is the
+  only build and test source.
+
+### Fixed
+
+- **Adapter first use.** A cold adapter build under `BASHY_AGENTIC=1` no
+  longer recurses into the `toolchain/go` adapter (fork bomb); adapter builds
+  pass `-buildvcs=false` so a first `bashy sprint` inside a git hook with an
+  inherited `GIT_DIR` succeeds; the adapter-trampoline environment
+  (`BASHY_SELF` and friends) is stripped before any child process so `go
+  test` binaries no longer inherit it.
+- **Shell shims point at bashy, never at an adapter.** `install-agent` and
+  `yoke/pkg/chat` resolve the shell from the bashy launcher identity
+  (`BASHY_SELF`, then `bashy` on PATH) and refuse any target under the
+  adapter cache. Before this, a foreman-managed session could rewrite
+  `~/.bashy/shims/{bash,sh,zsh}` to exec the foreman binary.
+- **`bashy dag`** mounts the sprint capacity services again after its move to
+  the `yoke/dag` adapter; **`bashy kubectl`** on Windows keeps the
+  `KUBECONFIG` path conversion (now covered by tests).
+- **`bashy self install`** refuses to replace a newer installed bashy with an
+  older release; **outpost** registers its service at boot from the bashy
+  service bootstrap, so a service restore cannot put an older release over a
+  newer build.
+- `jq` is available to the standalone `yoke/dag` adapter.
+
+### Added
+
+- **`examples/update`**: one-command build and install of bashy for humans.
+- **Demo Queue** example: timed team demos over the Outpost mesh.
+
+### Earlier in this candidate (rc.38/rc.39 drafts)
+
 Draft notes for 1.0.0-rc.39: everything user-visible merged since
 `v1.0.0-rc.38-dev`, by theme. No changelog entries were cut for
 rc.28–rc.38; the sprint-coordination verbs that landed during the rc.38
 cycle are recorded here so the gap is not silent. Docs-only and test-only
 commits are omitted except where they change a public claim.
 
-### Added
+#### Added
 
 - **Sprint coordination for agent fleets** — `bashy sprint await` blocks on
   typed submit events instead of polling; `sprint directive add|list|rm`
@@ -86,7 +159,7 @@ commits are omitted except where they change a public claim.
   that already exists, and backs off instead of spinning when a start
   fails.
 
-### Changed
+#### Changed
 
 - **Platforms and images** — macOS Intel (darwin/amd64) is no longer
   supported; macOS releases support Apple Silicon (arm64). The public
@@ -112,7 +185,7 @@ commits are omitted except where they change a public claim.
   scans unrelated stores; on a large board it completes in seconds, and
   goal stories living in submodule checkouts resolve like local ones.
 
-### Fixed
+#### Fixed
 
 - **The git applet speaks worker** — the in-process `git` now serves the
   forms scripts and agents actually use: `commit -q`, `--allow-empty` and
