@@ -3,15 +3,12 @@ id: 92b00a7d4e7e
 kind: feature
 title: Stream screen and tab audio over Outpost
 seq: 3293
-status: assigned
+status: todo
 priority: p1
 labels:
     - demo-queue
+    - deferred-hardware
 created: 2026-11-21T23:44:29.494536Z
-assignee: s690-codex-manager
-sprint: 690
-sprint_id: 3462c15d-bc37-505c-849d-64a3453232d7
-sprint_title: Demo Queue — LAN screen sharing for team demos
 ---
 
 Build the standalone Bashy example at examples/demo-queue using Brainstorm's Bash# entrypoint pattern, a small Go HTTP server, and embedded browser assets. Provide host and join commands, one private invite per roster entry, and temporary outpost mesh expose/listen forwards that are cleaned up on orderly shutdown. Keep organizer controls and projector media on a separate loopback listener. The host prints control and fullscreen projector URLs. The join command prompts for an invite and prints a local presenter URL. Reusing an invite restores the roster entry.

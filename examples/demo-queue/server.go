@@ -24,10 +24,16 @@ type room struct {
 	owner, display, peer, service string
 }
 
+type displaySettings struct {
+	Sound      bool `json:"sound"`
+	Fullscreen bool `json:"fullscreen"`
+}
+
 type action struct {
-	Name, ID, Action string
-	Limit, Warning   int
-	Turn, Generation uint64
+	Sound, Fullscreen *bool
+	Name, ID, Action  string
+	Limit, Warning    int
+	Turn, Generation  uint64
 }
 
 func response(w http.ResponseWriter, status int, data any) {
@@ -116,6 +122,7 @@ func (s *room) local(addr string) http.Handler {
 	})
 	m.HandleFunc("POST /api/control", s.control)
 	m.HandleFunc("POST /api/viewer", s.connectViewer)
+	m.HandleFunc("POST /api/display", s.configureDisplay)
 	m.HandleFunc("POST /api/rendered", s.rendered)
 	m.HandleFunc("GET /api/chunk", s.chunk)
 	return loopback(addr, m)
@@ -330,6 +337,7 @@ func (s *room) snapshot(p *participant, now time.Time) map[string]any {
 		roster = append(roster, copy)
 	}
 	state["roster"] = roster
+	state["display"] = s.displaySettings
 	if s.assigned != nil {
 		state["assigned"] = s.assigned.Name
 	}
@@ -393,6 +401,30 @@ func (s *room) events(w http.ResponseWriter, r *http.Request, p *participant, le
 		case <-ticker.C:
 		}
 	}
+}
+
+func (s *room) configureDisplay(w http.ResponseWriter, r *http.Request) {
+	if !equal(bearer(r), s.display) {
+		fail(w, 403, "Projector access is required.")
+		return
+	}
+	a, ok := readAction(w, r)
+	if !ok {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	settings := s.displaySettings
+	if a.Sound != nil {
+		settings.Sound = *a.Sound
+	}
+	if a.Fullscreen != nil {
+		settings.Fullscreen = *a.Fullscreen
+	}
+	if r.URL.Query().Get("dry_run") != "1" {
+		s.displaySettings = settings
+	}
+	response(w, 200, settings)
 }
 
 func (s *room) connectViewer(w http.ResponseWriter, r *http.Request) {

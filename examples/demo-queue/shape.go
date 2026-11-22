@@ -96,7 +96,7 @@ func relaySession(w http.ResponseWriter, r *http.Request) {
 	// shaped page can forward an action. Only known Demo Queue routes are sent.
 	switch r.Method + " " + r.URL.Path {
 	case "GET /api/demo-link", "GET /api/events", "GET /api/chunk",
-		"POST /api/control", "POST /api/viewer", "POST /api/rendered",
+		"POST /api/control", "POST /api/viewer", "POST /api/rendered", "POST /api/display",
 		"POST /api/prepare", "POST /api/member", "POST /api/upload":
 	default:
 		http.NotFound(w, r)

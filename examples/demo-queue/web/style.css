@@ -98,3 +98,5 @@ label input { max-width: 11rem; }
 @media (prefers-reduced-motion: reduce) {
   #clock.warning::before, #guidance.presenter-warning::before { animation: none; }
 }
+
+#stage.immersive { padding: .5rem; }

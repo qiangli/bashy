@@ -423,6 +423,14 @@ function projector() {
   let referenceTime = 0;
   let clockTime = 0;
   let userSound = false;
+  let displaySettings = {};
+
+  function fullscreen(enabled) {
+    $("stage").classList.toggle("immersive", enabled);
+    if (enabled && !document.fullscreenElement) return $("stage").requestFullscreen();
+    if (!enabled && document.fullscreenElement) return document.exitFullscreen();
+    return Promise.resolve();
+  }
 
   function play() {
     media.muted = !userSound;
@@ -439,10 +447,12 @@ function projector() {
     userSound = !userSound;
     $("sound").textContent = userSound ? "Mute" : "Enable sound";
     if (media.src) play();
+    post("display", {sound: userSound}).catch(failure);
   };
   $("full").onclick = () => {
-    const change = document.fullscreenElement ? document.exitFullscreen() : $("stage").requestFullscreen();
-    change.catch(failure);
+    const enabled = !document.fullscreenElement;
+    post("display", {fullscreen: enabled}).catch(failure);
+    fullscreen(enabled).catch(failure);
   };
   document.addEventListener("fullscreenchange", () => {
     $("full").textContent = document.fullscreenElement ? "Exit fullscreen" : "Fullscreen";
@@ -529,6 +539,17 @@ function projector() {
       events(s => {
         referenceTime = s.now;
         clockTime = performance.now();
+        if (s.display) {
+          if (s.display.sound !== displaySettings.sound && s.display.sound !== userSound) {
+            userSound = s.display.sound;
+            $("sound").textContent = userSound ? "Mute" : "Enable sound";
+            if (media.src) play();
+          }
+          if (s.display.fullscreen !== displaySettings.fullscreen) {
+            fullscreen(s.display.fullscreen).catch(() => {});
+          }
+          displaySettings = s.display;
+        }
         const turn = s.turn;
         const expired = turn && Date.parse(turn.Deadline) > 0 && remaining(turn, s.now) === 0;
         $("name").textContent = turn?.Presenter || "Demo Queue";

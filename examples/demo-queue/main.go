@@ -36,7 +36,7 @@ func main() {
 
 func run(ctx context.Context, args []string) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
-		fmt.Println("Usage: demo-queue host | join | serve | status | invite | start | assign | skip | end | prepare | leave | finish | view | viewer | rendered | chunk | links (run VERB --help)")
+		fmt.Println("Usage: demo-queue host | join | serve | status | invite | start | assign | skip | end | prepare | leave | finish | display | view | viewer | rendered | chunk | links (run VERB --help)")
 		return nil
 	}
 	switch args[0] {

@@ -169,6 +169,8 @@ func command(ctx context.Context, args []string) error {
 	generation := flags.Uint64("generation", 0, "Media generation")
 	seq := flags.Uint64("seq", 0, "Media sequence")
 	watch := flags.Bool("watch", false, "Stream state as NDJSON")
+	sound := flags.String("sound", "", "Projector sound on or off")
+	fullscreen := flags.String("fullscreen", "", "Projector fullscreen on or off")
 	input := flags.String("input", "", "VP8 WebM file or - for a live WebM stream on stdin")
 	audio := flags.Bool("audio", false, "The supplied WebM stream contains Opus audio")
 	if err := flags.Parse(args[1:]); err != nil {
@@ -220,6 +222,23 @@ func command(ctx context.Context, args []string) error {
 		}
 	case "viewer", "rendered":
 		path = verb
+	case "display":
+		path = verb
+		for _, option := range []struct {
+			flag, value string
+			dest        **bool
+		}{
+			{"sound", *sound, &a.Sound}, {"fullscreen", *fullscreen, &a.Fullscreen},
+		} {
+			switch option.value {
+			case "":
+			case "on", "off":
+				on := option.value == "on"
+				*option.dest = &on
+			default:
+				return fmt.Errorf("--%s must be on or off", option.flag)
+			}
+		}
 	case "chunk":
 		if *dry {
 			return errors.New("chunk is a binary read")

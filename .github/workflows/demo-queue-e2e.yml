@@ -36,6 +36,7 @@ jobs:
         with:
           node-version: 24
       - run: npm install --no-save --no-package-lock playwright@1.65.1
-      - run: npx playwright install chrome msedge
+      - if: runner.os == 'macOS'
+        run: npx playwright install chrome msedge
       - run: go test -count=1 ./...
       - run: node checks/e2e.mjs

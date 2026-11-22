@@ -96,6 +96,7 @@ Use `--dry-run` on writes to check a proposed action without committing it.
 | Assign, skip, or end | `assign --id ID`, `skip`, or `end` |
 | Prepare and share when called | `prepare --input CAPTURE.webm --audio` |
 | Leave the ready queue or finish the turn | `leave` or `finish` |
+| Set projector sound and fullscreen layout | `display --sound on --fullscreen on` |
 | Connect a projector and consume the current turn | `view > turn.webm`, or `viewer`, `chunk`, and `rendered` for a player that acknowledges its own first frame |
 
 An organizer agent runs the host and controls from the terminal. A presenter
@@ -105,7 +106,8 @@ connection first, waits in the ready queue, and starts publishing automatically
 when called. A browser share uses its native capture picker and local preview.
 The presenter chooses which desktop, window, or tab the browser may capture.
 A terminal projector agent connects `view` to its playback sink. The sink
-controls its speakers and fullscreen presentation.
+controls its speakers and fullscreen presentation. The browser can enter OS
+fullscreen from its local button when browser policy requires a gesture.
 
 ## Shape the app
 

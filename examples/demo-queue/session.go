@@ -47,19 +47,20 @@ type broadcast struct {
 }
 
 type session struct {
-	invites    map[string]*participant
-	roster     []*participant
-	queue      []*participant
-	assigned   *participant
-	current    *broadcast
-	notice     string
-	started    bool
-	ended      bool
-	limit      int
-	warning    int
-	serial     uint64
-	viewer     string
-	viewerSeen time.Time
+	invites         map[string]*participant
+	roster          []*participant
+	queue           []*participant
+	assigned        *participant
+	current         *broadcast
+	notice          string
+	started         bool
+	ended           bool
+	limit           int
+	warning         int
+	serial          uint64
+	viewer          string
+	viewerSeen      time.Time
+	displaySettings displaySettings
 }
 
 func newSession() *session {
