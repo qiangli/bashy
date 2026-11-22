@@ -3,12 +3,34 @@ package main
 import (
 	"bytes"
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/qiangli/bashy/yoke/internal/adapter"
 	"github.com/qiangli/yoke/pkg/meet"
 )
+
+func TestStandaloneExternalSenderGetsPairCode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("BASHY_HOME", filepath.Join(home, "bashy"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+	t.Setenv("XDG_STATE_HOME", filepath.Join(home, "state"))
+	t.Setenv("BASHY_ROOM_DIR", filepath.Join(home, "rooms"))
+	wireMeet()
+	cmd := meet.NewMeetCmd()
+	var out, errOut bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetErr(&errOut)
+	if code := adapter.RunCobraArgs(cmd, []string{"dm", "fixture-agent", "--channel", "fixture", "--sender", "alice", "hello"}, "bashy meet:", nil); code != 0 {
+		t.Fatalf("external sender: exit=%d stderr=%s", code, &errOut)
+	}
+	if !strings.Contains(out.String(), "pair code") || !strings.Contains(out.String(), "message not delivered") {
+		t.Fatalf("unpaired sender did not receive a pairing refusal: %s", &out)
+	}
+}
 
 func TestStandaloneHelpAndDeps(t *testing.T) {
 	wireMeet()

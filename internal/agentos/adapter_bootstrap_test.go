@@ -56,7 +56,8 @@ func runColdAdapterBootstrap(t *testing.T, folder, entry string, prepare func(st
 	t.Setenv("BASHY_AGENTIC", "1")
 	t.Setenv(adapterExecEnv, "1")
 	t.Setenv("BASHY_SELF", filepath.Join(dir, "bashy"))
-	t.Setenv("BASHY_ADAPTER_CACHE", t.TempDir())
+	cache := t.TempDir()
+	t.Setenv("BASHY_ADAPTER_CACHE", cache)
 	t.Setenv("GOTOOLCHAIN", "local")
 	// The preamble is installed at shell startup, before the adapter unsets env.
 	prog, err := syntax.NewParser().Parse(strings.NewReader(PreambleFor(true)+string(raw)), script)
@@ -70,6 +71,9 @@ func runColdAdapterBootstrap(t *testing.T, folder, entry string, prepare func(st
 		interp.ExecHandler(func(ctx context.Context, args []string) error {
 			if launches.Add(1) > 8 {
 				return fmt.Errorf("bootstrap exceeded 8 process launches")
+			}
+			if entry == "dag" && filepath.Base(args[0]) == "go" {
+				fmt.Fprintln(interp.HandlerCtx(ctx).Stderr, "go: downloading fixture")
 			}
 			if args[0] == filepath.Join(dir, "bashy") {
 				// Stand in for the in-process Go provisioner, never another adapter.
@@ -91,11 +95,21 @@ func runColdAdapterBootstrap(t *testing.T, folder, entry string, prepare func(st
 	if strings.TrimSpace(out.String()) != "adapter ready" {
 		t.Fatalf("payload did not execute: %s", &out)
 	}
+	if entry == "dag" {
+		name := "dag"
+		if runtime.GOOS == "windows" {
+			name += ".exe"
+		}
+		log, err := os.ReadFile(filepath.Join(cache, "yoke", name+".build.log"))
+		if err != nil || !strings.Contains(string(log), "go: downloading fixture") {
+			t.Fatalf("DAG bootstrap diagnostics were not retained: %q (%v)", log, err)
+		}
+	}
 	return launches.Load()
 }
 
 func TestAgentModeColdAdapterBuildBounded(t *testing.T) {
-	for _, adapter := range [][2]string{{"yoke", "judge"}, {"toolchain", "go"}} {
+	for _, adapter := range [][2]string{{"yoke", "judge"}, {"toolchain", "go"}, {"yoke", "dag"}} {
 		t.Run(adapter[1], func(t *testing.T) {
 			n := runColdAdapterBootstrap(t, adapter[0], adapter[1], nil)
 			if n < 2 || n > 8 {

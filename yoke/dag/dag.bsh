@@ -15,6 +15,14 @@ done
 if [[ -n "$stale" ]]; then
   mkdir -p "${bin%/*}"
   run_go() { if command -v go >/dev/null 2>&1; then go "$@"; else BASHY_HINTS=off BASHY_ADAPTER_INPROC=1 "${_bashy_self:-bashy}" go "$@"; fi; }
-  (cd "$here" && GOWORK=off CGO_ENABLED=0 run_go build -buildvcs=false -trimpath -o "$bin.tmp.$$" . && { mv -f "$bin.tmp.$$" "$bin" || { rm -f "$bin.tmp.$$"; [[ -x "$bin" ]]; }; })
+  # DAG error envelopes use stderr. Successful bootstrap diagnostics must
+  # never precede that JSON; retain them in the adapter cache instead.
+  build_log="$bin.build.$$.log"
+  if (cd "$here" && GOWORK=off CGO_ENABLED=0 run_go build -buildvcs=false -trimpath -o "$bin.tmp.$$" . && { mv -f "$bin.tmp.$$" "$bin" || { rm -f "$bin.tmp.$$"; [[ -x "$bin" ]]; }; }) 2>"$build_log"; then
+    mv -f "$build_log" "$bin.build.log"
+  else
+    cat "$build_log" >&2
+    exit 1
+  fi
 fi
 BASHY_ADAPTER_SELF="$_bashy_self" exec "$bin" "$@"

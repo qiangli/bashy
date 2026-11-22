@@ -7,12 +7,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -114,8 +116,46 @@ type synergyEnv struct {
 	vars                       []string
 }
 
+var synergyAdaptersOnce sync.Once
+var synergyAdaptersDir string
+var synergyAdaptersErr error
+
+// Compile the fixture's real adapters once, before its bounded commands.
+// Only executables are shared: every test still owns fresh pairing, approval,
+// room, kb and todo state. Go's read-only module cache stays outside TempDir.
+func synergyAdapters(t *testing.T) string {
+	t.Helper()
+	synergyAdaptersOnce.Do(func() {
+		root, ok := findBashySourceRoot(mustGetwd())
+		if !ok || testIsolatedBase == "" {
+			synergyAdaptersErr = fmt.Errorf("synergy adapter build requires checkout and package isolation")
+			return
+		}
+		synergyAdaptersDir = filepath.Join(testIsolatedBase, "synergy-adapters")
+		out := filepath.Join(synergyAdaptersDir, "yoke")
+		if err := os.MkdirAll(out, 0o755); err != nil {
+			synergyAdaptersErr = err
+			return
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, "go", "build", "-buildvcs=false", "-trimpath", "-o", out+string(os.PathSeparator),
+			"./dag", "./meet", "./kb", "./todo", "./chat")
+		cmd.Dir = filepath.Join(root, "yoke")
+		cmd.Env = append(os.Environ(), "GOWORK=off", "CGO_ENABLED=0")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			synergyAdaptersErr = fmt.Errorf("prepare synergy adapters: %w\n%s", err, output)
+		}
+	})
+	if synergyAdaptersErr != nil {
+		t.Fatal(synergyAdaptersErr)
+	}
+	return synergyAdaptersDir
+}
+
 func newSynergyEnv(t *testing.T) synergyEnv {
 	t.Helper()
+	cache := synergyAdapters(t)
 	home := t.TempDir()
 	work := t.TempDir()
 	stubs := filepath.Join(home, "stubs")
@@ -143,6 +183,7 @@ func newSynergyEnv(t *testing.T) synergyEnv {
 	return synergyEnv{
 		home: home, work: work, state: filepath.Join(home, "state"), stubLog: stubLog,
 		vars: []string{
+			"BASHY_ADAPTER_CACHE=" + cache,
 			"PATH=" + os.Getenv("PATH"),
 			"HOME=" + home,
 			"USERPROFILE=" + home,

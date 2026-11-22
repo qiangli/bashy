@@ -8,6 +8,8 @@ import (
 
 	"github.com/qiangli/bashy/yoke/internal/adapter"
 	"github.com/qiangli/yoke/pkg/meet"
+	// Registers the app-pair store used by external-sender meet dm.
+	_ "github.com/qiangli/yoke/pkg/webconsole"
 )
 
 // wireMeet connects every host-owned meet seam in one place: permanent role
