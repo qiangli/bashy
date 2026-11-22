@@ -8,10 +8,14 @@ import (
 	"github.com/qiangli/yoke/external/kubectl"
 )
 
-func main() {
-	if runtime.GOOS == "windows" {
+func prepareKubeEnvironment(goos string) {
+	if goos == "windows" {
 		adapter.AdaptKubeEnvironment()
 	}
+}
+
+func main() {
+	prepareKubeEnvironment(runtime.GOOS)
 	args := adapter.NativeArgsOnWindows(os.Args[1:])
 	os.Exit(adapter.RunCobraArgs(kubectl.NewKubectlCmd(), args, "", nil))
 }

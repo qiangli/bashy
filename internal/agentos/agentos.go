@@ -30,7 +30,6 @@ import (
 
 	"github.com/qiangli/bash/expand"
 	"github.com/qiangli/bash/interp"
-	"github.com/qiangli/bash/pathconv"
 	"github.com/spf13/cobra"
 
 	"github.com/bashsharp/bashsharp/cli"
@@ -1994,19 +1993,4 @@ func liveProbeAgent(ctx context.Context, agent string, timeout time.Duration) (s
 		fmt.Fprintf(os.Stderr, "warning: could not record probe result for %s: %v\n", key, err)
 	}
 	return string(status), note, status.OK()
-}
-
-// adaptKubeEnvironment converts KUBECONFIG and related plane path variables
-// from MSYS/POSIX drive forms (/c/...) to native Windows path lists (C:\...).
-func adaptKubeEnvironment() {
-	for _, key := range []string{
-		"KUBECONFIG",
-		"OUTPOST_KUBECONFIG_PATH",
-		"DKS_PEER_KUBECONFIG",
-		"DKS_FEDERATION_KUBECONFIG",
-	} {
-		if val := os.Getenv(key); val != "" {
-			_ = os.Setenv(key, pathconv.NativePathList(val))
-		}
-	}
 }

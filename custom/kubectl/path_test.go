@@ -1,4 +1,4 @@
-package agentos
+package main
 
 import (
 	"os"
@@ -15,7 +15,7 @@ func TestKubectlPathAndEnvConversion(t *testing.T) {
 	t.Setenv("DKS_PEER_KUBECONFIG", "/c/Users/liqia/.kube/peer.yaml")
 	t.Setenv("DKS_FEDERATION_KUBECONFIG", "/c/Users/liqia/.kube/fed.yaml")
 
-	adaptKubeEnvironment()
+	prepareKubeEnvironment("windows")
 
 	if got := os.Getenv("KUBECONFIG"); got != `C:\Users\liqia\AppData\Local\Temp\tmp.X` {
 		t.Errorf("KUBECONFIG = %q, want C:\\Users\\liqia\\AppData\\Local\\Temp\\tmp.X", got)
@@ -54,5 +54,29 @@ func TestKubectlPathAndEnvConversion(t *testing.T) {
 		if !reflect.DeepEqual(got, tc.want) {
 			t.Errorf("NativeArgsIn(%v) = %v, want %v", tc.in, got, tc.want)
 		}
+	}
+}
+
+func TestKubectlPreservesNonWindowsEnvironment(t *testing.T) {
+	for _, goos := range []string{"linux", "darwin"} {
+		t.Run(goos, func(t *testing.T) {
+			t.Setenv("KUBECONFIG", "/c/config:/d/config")
+			prepareKubeEnvironment(goos)
+			if got := os.Getenv("KUBECONFIG"); got != "/c/config:/d/config" {
+				t.Fatalf("changed non-Windows env: %q", got)
+			}
+		})
+	}
+}
+
+func TestKubectlWindowsEnvironmentPathList(t *testing.T) {
+	t.Setenv("KUBECONFIG", "/c/config:/d/config")
+	t.Setenv("OUTPOST_KUBECONFIG_PATH", "")
+	prepareKubeEnvironment("windows")
+	if got := os.Getenv("KUBECONFIG"); got != `C:\config;D:\config` {
+		t.Fatalf("path list = %q", got)
+	}
+	if got := os.Getenv("OUTPOST_KUBECONFIG_PATH"); got != "" {
+		t.Fatalf("empty env = %q", got)
 	}
 }
