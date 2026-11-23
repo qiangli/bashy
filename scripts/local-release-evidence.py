@@ -141,7 +141,9 @@ def collect(root, report_dir, scopes):
                     # build; the receipt only records that fact.
                     item['go_mod_pruned'] = True
             module_dir = pathlib.Path(effective['Dir']) if effective.get('Dir') else (gomod.parent if gomod is not None else None)
-            if module_dir is not None and (module_dir / 'go.sum').is_file():
+            # A pruned module may still sit extracted in a shared module cache from
+            # another build; its go.sum there is not this scope's lock data.
+            if not item.get('go_mod_pruned') and module_dir is not None and (module_dir / 'go.sum').is_file():
                 item['go_sum_sha256'] = digest(module_dir / 'go.sum')
             if 'Replace' in m:
                 item['replacement'] = {k: effective[k] for k in ('Path', 'Version', 'Sum', 'GoModSum') if k in effective}
