@@ -1,0 +1,8 @@
+# DHNT
+
+> DHNT turns the computers you already own into one self-hostable, agent-operable mesh. Pages serve HTML by default, Markdown with `Accept: text/markdown` or at their `.md` twin, and JSON at their `.json` twin; cite `page#section @ revision`.
+
+## Pages
+
+- [Home](/): what DHNT is and how to start
+- [About](/about): about, team and contact sections

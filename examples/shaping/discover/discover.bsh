@@ -1,0 +1,626 @@
+#!/usr/bin/env -S bashy --bashsharp
+# discover: run the agent/client discovery matrix against a site origin.
+# Each client is handed ONLY the page URL (ORIGIN/about) and the matrix
+# records what it actually sent and received: request method/Accept/
+# User-Agent (from the request log when one is given, else from what the
+# client is known to send), the representation received (content-type,
+# ETag, Vary), the section ids and links it extracted, whether it found a
+# structured format by itself, needed the direct .md/.json twin, or needed
+# the skill, and whether it fetched /llms.txt or followed rel=alternate
+# (recorded from the log, never assumed).
+#
+#   discover matrix ORIGIN [--clients LIST] [--json|--md] [--log FILE]
+#   discover serve [DIR] --log FILE [--port PORT] [--proxy ORIGIN]
+#
+# serve runs a local request-logging server: with --proxy it reverse-proxies
+# a site server; otherwise it serves DIR, or the bundled testdata/ fixture
+# (the plan's three representations) when DIR is omitted or "fixture".
+# Every request is appended to the log as one JSON line, so the matrix can
+# produce real facts about what each agent sends before the live release.
+#
+# Rod not fish: every leg is one existing verb (curl, bashy fetch, bashy
+# browser, an agent CLI's own fetch tool); this script only orders them.
+
+~~~skill as guide
+---
+name: discover
+description: Run the Sprint 693 discovery matrix against any site origin (or the local fixture server) and record, per client, what it sent and received. Use to produce the live evidence table for docs/evidence/sprint-693-dhnt-io-navigation.md with one command, and to learn how to read dhnt-style pages (Accept negotiation, .md/.json twins, citation record).
+metadata:
+  requires: "has=bashy"
+---
+# discover — client discovery evidence for people-and-agents sites
+
+A dhnt-style page (see the Sprint 693 plan contracts) serves, from one
+content module and one revision:
+
+- `GET /about` — HTML by default; `Accept: text/markdown` returns Markdown,
+  `Accept: application/json` returns JSON; every response carries
+  `Vary: Accept` and a strong `ETag` equal to the page revision, plus
+  `Link: </about.md>; rel="alternate"; type="text/markdown"` (and the JSON
+  twin); HTML carries `<link rel="alternate">` for both twins,
+  `<link rel="canonical">` and `<meta name="revision">`.
+- Twins: `/index.md`, `/index.json`, `/about.md`, `/about.json`;
+  `/robots.txt`, `/llms.txt`.
+- Citation record: `{url, section_id, revision, section_sha256, quote}`,
+  human form `https://ai.dhnt.io/about#team @ <revision>`.
+
+## Reading a page as an agent (the dhnt-site reading skill)
+
+1. Fetch the page URL. If you can set headers, send
+   `Accept: text/markdown, text/html, */*` — a negotiating origin answers
+   with Markdown directly (that is the "found it by itself" path).
+2. If you received HTML, look for `<link rel="alternate"
+   type="text/markdown">` (or the `Link:` header) and fetch the `.md`
+   twin directly — no skill needed, the page advertises it.
+3. The `.json` twin carries `{path, title, revision, nav, sections:[{id,
+   heading, html, markdown, sha256}]}`: cite `page#section @ revision`.
+4. `/llms.txt` and `/robots.txt` exist, but nothing here assumes any
+   client fetches them — the matrix records whether each client did.
+
+## The commands
+
+- `discover serve --log FILE [--port N]` — local fixture server (the
+  plan's contract under `testdata/`); `discover serve DIR --log FILE`
+  serves DIR instead; `--proxy ORIGIN` reverse-proxies a site server.
+  The log is JSON lines: method, path, Accept, User-Agent, status.
+- `discover matrix ORIGIN [--clients LIST] [--log FILE] [--json|--md]` —
+  runs each client with only `ORIGIN/about`. Give it the serve log with
+  `--log` so agent-CLI request headers come from the server's own record.
+  Clients: `curl`, `curl-cc` (Claude Code Accept header), `bashy-fetch`,
+  `bashy-fetch-md`, `browser`, and the agent CLIs `claude`, `codex`,
+  `gemini`, `agy`, `opencode` (skipped cleanly when absent). Output is a
+  Markdown table ready to paste into the evidence doc, or `--json`.
+
+## Rules
+
+- A client is handed the page URL only — never a twin URL, never a hint.
+- `llms.txt` / `rel=alternate` use is read from the request log, never
+  assumed; without a log it is reported as `not-observed`.
+- `--dry-run` anywhere prints the calls and runs none.
+- `DISCOVER_CURL_BIN` / `DISCOVER_BASHY_BIN` / `DISCOVER_PYTHON_BIN`
+  override executables; `DISCOVER_AGENT_TIMEOUT` bounds each agent leg
+  (default 150s); `DISCOVER_BROWSER_TIMEOUT` the browser leg (60s).
+~~~
+
+set -e
+set -f
+
+PROG=discover
+DRY_RUN=0
+PORT=18931
+AGENT_TIMEOUT="${DISCOVER_AGENT_TIMEOUT:-150}"
+BROWSER_TIMEOUT="${DISCOVER_BROWSER_TIMEOUT:-60}"
+ALL_CLIENTS="curl,curl-cc,bashy-fetch,bashy-fetch-md,browser,claude,codex,gemini,agy,opencode"
+
+usage() {
+    echo "Usage: $PROG matrix ORIGIN [--clients LIST] [--json|--md] [--log FILE]" >&2
+    echo "       $PROG serve [DIR] --log FILE [--port PORT] [--proxy ORIGIN]" >&2
+    echo "Clients: curl,curl-cc,bashy-fetch,bashy-fetch-md,browser,claude,codex,gemini,agy,opencode" >&2
+    exit 2
+}
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+curl_bin() { printf '%s\n' "${DISCOVER_CURL_BIN:-curl}"; }
+bashy_bin() { printf '%s\n' "${DISCOVER_BASHY_BIN:-bashy}"; }
+python_bin() { printf '%s\n' "${DISCOVER_PYTHON_BIN:-python3}"; }
+script_dir() { cd "$(dirname "$0")" && pwd; }
+
+run() {
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $*"
+        return 0
+    fi
+    "$@"
+}
+
+# with_timeout SECONDS CMD... — runs CMD under a wall clock when timeout(1)
+# exists; otherwise runs it bare (the caller records the failure honestly).
+with_timeout() {
+    t="$1"; shift
+    if command -v timeout >/dev/null 2>&1; then
+        timeout "$t" "$@"
+    else
+        "$@"
+    fi
+}
+
+json_safe() {
+    case "$1" in
+        *'"'* | *'\'*) fail "value must not contain a quote or backslash: $1" ;;
+    esac
+}
+
+# ---------------------------------------------------------------- serve ---
+
+# write_server writes the request-logging server (stdlib python3) to $1.
+# It serves a fixture/static root with the plan's negotiation contract, or
+# reverse-proxies an origin; every request lands in the log as JSON lines.
+write_server() {
+    cat >"$1" <<'PYEOF'
+import json, os, sys, urllib.request, urllib.error
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+ROOT = sys.argv[1]            # fixture root, or "" in proxy mode
+LOG = sys.argv[2]
+PORT = int(sys.argv[3])
+PROXY = sys.argv[4] if len(sys.argv) > 4 else ""
+
+def revision():
+    try:
+        with open(os.path.join(ROOT, "REVISION")) as f:
+            return f.read().strip()
+    except OSError:
+        return "fixture-rev"
+
+def read(rel):
+    try:
+        with open(os.path.join(ROOT, rel), "rb") as f:
+            return f.read()
+    except OSError:
+        return None
+
+CT = {".html": "text/html; charset=utf-8", ".md": "text/markdown; charset=utf-8",
+      ".json": "application/json", ".txt": "text/plain; charset=utf-8"}
+
+class H(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *a):
+        pass
+
+    def record(self, status):
+        rec = {"method": self.command, "path": self.path,
+               "accept": self.headers.get("Accept", ""),
+               "user_agent": self.headers.get("User-Agent", ""),
+               "status": status}
+        with open(LOG, "a") as f:
+            f.write(json.dumps(rec) + "\n")
+
+    def send_body(self, body, ctype, path):
+        rev = revision()
+        self.send_response(200)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Vary", "Accept")
+        self.send_header("ETag", '"%s"' % rev)
+        base = path if path not in ("", "/") else "/index"
+        if base.endswith((".md", ".json")):
+            base = base.rsplit(".", 1)[0]
+        self.send_header("Link", '<%s.md>; rel="alternate"; type="text/markdown", '
+                                 '<%s.json>; rel="alternate"; type="application/json"' % (base, base))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+        self.record(200)
+
+    def do_GET(self):
+        self.handle_req()
+
+    def do_HEAD(self):
+        self.handle_req()
+
+    def handle_req(self):
+        if PROXY:
+            return self.proxy()
+        path = self.path.split("?")[0]
+        if path in ("/robots.txt", "/llms.txt"):
+            body = read(path.lstrip("/"))
+            if body is None:
+                return self.not_found()
+            return self.send_body(body, "text/plain; charset=utf-8", path)
+        stem, dot, ext = path.rpartition(".")
+        if dot and ext in ("md", "json") and not path.endswith((".md", ".json")):
+            pass
+        if path.endswith((".md", ".json")):
+            body = read(path.lstrip("/"))
+            if body is None:
+                return self.not_found()
+            return self.send_body(body, CT["." + path.rsplit(".", 1)[1]], path)
+        page = "index" if path in ("", "/") else path.lstrip("/")
+        accept = self.headers.get("Accept", "")
+        if "text/markdown" in accept:
+            body, ext = read(page + ".md"), ".md"
+        elif "application/json" in accept:
+            body, ext = read(page + ".json"), ".json"
+        else:
+            body, ext = read(page + ".html"), ".html"
+        if body is None:
+            return self.not_found()
+        self.send_body(body, CT[ext], "/" + page)
+
+    def not_found(self):
+        body = b"not found\n"
+        self.send_response(404)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        self.record(404)
+
+    def proxy(self):
+        url = PROXY.rstrip("/") + self.path
+        req = urllib.request.Request(url, method=self.command)
+        for k, v in self.headers.items():
+            if k.lower() not in ("host", "content-length"):
+                req.add_header(k, v)
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                body, status, hdrs = r.read(), r.status, r.headers
+        except urllib.error.HTTPError as e:
+            body, status, hdrs = e.read(), e.code, e.headers
+        except Exception as e:  # origin down: honest 502, still logged
+            body, status, hdrs = ("proxy error: %s\n" % e).encode(), 502, {}
+        self.send_response(status)
+        for k in ("Content-Type", "ETag", "Vary", "Link"):
+            if hdrs.get(k):
+                self.send_header(k, hdrs[k])
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+        # self.record in proxy mode must reflect status: reuse record via header
+        rec = {"method": self.command, "path": self.path,
+               "accept": self.headers.get("Accept", ""),
+               "user_agent": self.headers.get("User-Agent", ""), "status": status}
+        with open(LOG, "a") as f:
+            f.write(json.dumps(rec) + "\n")
+
+ThreadingHTTPServer(("127.0.0.1", PORT), H).serve_forever()
+PYEOF
+}
+
+cmd_serve() {
+    dir="" log="" proxy=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --log) log="$2"; shift 2 ;;
+            --port) PORT="$2"; shift 2 ;;
+            --proxy) proxy="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            -*) usage ;;
+            *) [ -z "$dir" ] || usage; dir="$1"; shift ;;
+        esac
+    done
+    [ -n "$log" ] || usage
+    if [ -n "$proxy" ]; then
+        root=""
+    elif [ -z "$dir" ] || [ "$dir" = "fixture" ]; then
+        root="$(script_dir)/testdata"
+    else
+        root="$dir"
+    fi
+    if [ -n "$root" ]; then
+        [ -f "$root/about.html" ] || fail "no fixture/site root at '$root' (need about.html; run without DIR for the bundled testdata)"
+    fi
+    srv="$(mktemp "${TMPDIR:-/tmp}/discover-serve.XXXXXX.py")"
+    write_server "$srv"
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $(python_bin) $srv '$root' $log $PORT '$proxy' (127.0.0.1:$PORT, log $log)"
+        rm -f "$srv"
+        return 0
+    fi
+    : >>"$log" || fail "cannot write request log: $log"
+    echo "serving: ${root:-proxy→$proxy} on 127.0.0.1:$PORT (log $log)" >&2
+    exec "$(python_bin)" "$srv" "$root" "$log" "$PORT" "$proxy"
+}
+
+# --------------------------------------------------------------- matrix ---
+
+# Globals set by cmd_matrix: ORIGIN PAGE LOGFILE ROWDIR FORMAT.
+ORIGIN="" PAGE="" LOGFILE="" ROWDIR="" ROWNUM=0
+
+log_lines() {
+    if [ -n "$LOGFILE" ] && [ -f "$LOGFILE" ]; then
+        wc -l <"$LOGFILE" | tr -d ' '
+    else
+        echo 0
+    fi
+}
+
+# log_since MARK OUTFILE: copies log lines after MARK into OUTFILE.
+log_since() {
+    if [ -n "$LOGFILE" ] && [ -f "$LOGFILE" ]; then
+        tail -n "+$(($1 + 1))" "$LOGFILE" >"$2" 2>/dev/null || : >"$2"
+    else
+        : >"$2"
+    fi
+}
+
+# log_first FIELD SLICE: first value of "FIELD": "..." in the JSON-lines slice.
+log_first() {
+    sed -n 's/.*"'"$1"'": "\([^"]*\)".*/\1/p' "$2" | head -n 1
+}
+
+# log_has_path PATH SLICE: succeeds when the slice records that path.
+log_has_path() {
+    grep -q '"path": "'"$1"'"' "$2" 2>/dev/null
+}
+
+# extract_sections BODYFILE: comma-joined section ids across representations.
+extract_sections() {
+    {
+        grep -o '<section[^>]*id="[^"]*"' "$1" 2>/dev/null | sed 's/.*id="//; s/"$//'
+        grep -o '{#[A-Za-z0-9_-]*}' "$1" 2>/dev/null | tr -d '{#}'
+        grep -o '"id": *"[^"]*"' "$1" 2>/dev/null | sed 's/.*: *"//; s/"$//'
+    } | awk 'NF && !seen[$0]++' | paste -sd, -
+}
+
+# extract_links BODYFILE: comma-joined hrefs/targets across representations.
+extract_links() {
+    {
+        grep -o 'href="[^"]*"' "$1" 2>/dev/null | sed 's/^href="//; s/"$//'
+        grep -o '"href": *"[^"]*"' "$1" 2>/dev/null | sed 's/.*: *"//; s/"$//'
+        grep -o ']([^)]*)' "$1" 2>/dev/null | sed 's/^](//; s/)$//'
+    } | awk 'NF && !seen[$0]++' | paste -sd, -
+}
+
+advertises_alternate() {
+    grep -qi 'rel="alternate"' "$1" 2>/dev/null || grep -q '\.md' "$1" 2>/dev/null
+}
+
+# classify CT BODYFILE: self|twin|skill from what the client itself received.
+classify() {
+    case "$1" in
+        *markdown* | *json*) echo self ;;
+        *)
+            if advertises_alternate "$2"; then echo twin; else echo skill; fi
+            ;;
+    esac
+}
+
+# emit_row CLIENT STATUS METHOD ACCEPT UA CT ETAG VARY SECTIONS LINKS
+#          DISCOVERY LLMS ALTERNATE NOTE
+emit_row() {
+    ROWNUM=$((ROWNUM + 1))
+    {
+        printf 'client=%s\n' "$1"; printf 'status=%s\n' "$2"
+        printf 'method=%s\n' "$3"; printf 'accept=%s\n' "$4"
+        printf 'user_agent=%s\n' "$5"; printf 'content_type=%s\n' "$6"
+        printf 'etag=%s\n' "$7"; printf 'vary=%s\n' "$8"
+        printf 'sections=%s\n' "$9"; printf 'links=%s\n' "${10}"
+        printf 'discovery=%s\n' "${11}"; printf 'llms_txt=%s\n' "${12}"
+        printf 'followed_alternate=%s\n' "${13}"; printf 'note=%s\n' "${14}"
+    } >"$ROWDIR/$(printf '%02d' "$ROWNUM")-$1.row"
+}
+
+# observed SLICE KNOWN_ACCEPT KNOWN_UA: echoes "method|accept|ua|llms|alt"
+# preferring the server log (the fact), falling back to what the client is
+# known to send; llms/alt are yes|no only with a log, else not-observed.
+observed() {
+    slice="$1"; ka="$2"; kua="$3"
+    if [ -s "$slice" ]; then
+        m=$(log_first method "$slice"); [ -n "$m" ] || m=GET
+        a=$(log_first accept "$slice"); [ -n "$a" ] || a="$ka"
+        u=$(log_first user_agent "$slice"); [ -n "$u" ] || u="$kua"
+        llms=no; log_has_path /llms.txt "$slice" && llms=yes
+        alt=no
+        if grep -q '"path": "/[^"]*\(about\|index\)\.\(md\|json\)"' "$slice" 2>/dev/null; then alt=yes; fi
+        echo "$m|$a|$u|$llms|$alt"
+    else
+        echo "GET|$ka|$kua|not-observed|not-observed"
+    fi
+}
+
+header_of() { # header_of NAME HEADERSFILE
+    grep -i "^$1: " "$2" 2>/dev/null | head -n 1 | sed 's/^[^:]*: //' | tr -d '\r'
+}
+
+# run_curl_leg ID KNOWN_ACCEPT [EXTRA curl args...]
+run_curl_leg() {
+    id="$1"; ka="$2"; shift 2
+    mark=$(log_lines); hdrs="$ROWDIR/$id.h"; body="$ROWDIR/$id.body"; slice="$ROWDIR/$id.log"
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $(curl_bin) -sS -D - $* $PAGE"
+        emit_row "$id" dry-run GET "$ka" "not-observed" "" "" "" "" "" "" "not-observed" "dry-run"
+        return 0
+    fi
+    if "$(curl_bin)" -sS -m 30 -D "$hdrs" -o "$body" "$@" "$PAGE" 2>"$ROWDIR/$id.err"; then st=ok; else st=error; fi
+    log_since "$mark" "$slice"
+    o=$(observed "$slice" "$ka" "curl")
+    ct=$(header_of Content-Type "$hdrs"); et=$(header_of ETag "$hdrs"); va=$(header_of Vary "$hdrs")
+    sec=$(extract_sections "$body"); lnk=$(extract_links "$body")
+    dis=$(classify "$ct" "$body")
+    oldIFS=$IFS; IFS='|'; set -- $o; IFS=$oldIFS
+    emit_row "$id" "$st" "$1" "$2" "$3" "$ct" "$et" "$va" "$sec" "$lnk" "$dis" "$4" "$5" "$(cat "$ROWDIR/$id.err" | head -n 1)"
+}
+
+# run_fetch_leg ID MD(0|1): bashy fetch with the --json envelope for headers.
+run_fetch_leg() {
+    id="$1"; md="$2"
+    mark=$(log_lines); body="$ROWDIR/$id.body"; slice="$ROWDIR/$id.log"
+    args="--json"
+    [ "$md" = 1 ] && args="--json --md"
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $(bashy_bin) fetch $args $PAGE"
+        emit_row "$id" dry-run GET "not-observed" "not-observed" "" "" "" "" "" "" "not-observed" "dry-run"
+        return 0
+    fi
+    if "$(bashy_bin)" fetch $args "$PAGE" >"$body" 2>"$ROWDIR/$id.err"; then st=ok; else st=error; fi
+    log_since "$mark" "$slice"
+    o=$(observed "$slice" "" "bashy-fetch")
+    # Decode the bashy-fetch-v1 envelope: body to $id.text, headers to $id.h.
+    "$(python_bin)" - "$body" "$ROWDIR/$id.text" "$ROWDIR/$id.h" <<'PYEOF' 2>/dev/null || cp "$body" "$ROWDIR/$id.text"
+import json, sys
+env = json.load(open(sys.argv[1]))
+open(sys.argv[2], "w").write(env.get("body", ""))
+with open(sys.argv[3], "w") as f:
+    for k, v in (env.get("headers") or {}).items():
+        f.write("%s: %s\n" % (k, v))
+PYEOF
+    body="$ROWDIR/$id.text"
+    ct=$(header_of Content-Type "$ROWDIR/$id.h"); et=$(header_of ETag "$ROWDIR/$id.h"); va=$(header_of Vary "$ROWDIR/$id.h")
+    sec=$(extract_sections "$body"); lnk=$(extract_links "$body")
+    dis=$(classify "$ct" "$body")
+    if [ "$md" = 1 ] && [ "$st" = ok ]; then
+        # --md converts the received HTML locally: the client ends with
+        # Markdown without negotiation or a twin fetch.
+        dis=self-md
+        if [ -z "$sec" ]; then
+            sec=$(grep '^## ' "$body" 2>/dev/null | sed 's/^## //' | tr 'A-Z' 'a-z' | paste -sd, -)
+        fi
+    fi
+    oldIFS=$IFS; IFS='|'; set -- $o; IFS=$oldIFS
+    emit_row "$id" "$st" "$1" "$2" "$3" "$ct" "$et" "$va" "$sec" "$lnk" "$dis" "$4" "$5" "$(head -n 1 "$ROWDIR/$id.err")"
+}
+
+run_browser_leg() {
+    id=browser
+    mark=$(log_lines); body="$ROWDIR/$id.body"; slice="$ROWDIR/$id.log"
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $(bashy_bin) browser --mode solo --json navigate $PAGE"
+        emit_row "$id" dry-run GET "not-observed" "browser" "" "" "" "" "" "" "not-observed" "dry-run"
+        return 0
+    fi
+    if with_timeout "$BROWSER_TIMEOUT" "$(bashy_bin)" browser --mode solo --json navigate "$PAGE" >"$body" 2>"$ROWDIR/$id.err"; then st=ok; else st=error; fi
+    log_since "$mark" "$slice"
+    o=$(observed "$slice" "text/html" "browser-chrome")
+    # Solo calls are stateless, so sections/links come from the same
+    # browser's fetch of the page DOM; the rendered text above is navigate's.
+    sec=""; lnk=""
+    ev="$ROWDIR/$id.fetch"
+    if with_timeout 30 "$(bashy_bin)" browser --mode solo --json fetch "$PAGE" >"$ev" 2>/dev/null; then
+        "$(python_bin)" - "$ev" "$ROWDIR/$id.dom" <<'PYEOF' 2>/dev/null || true
+import json, sys
+env = json.load(open(sys.argv[1]))
+open(sys.argv[2], "w").write(env.get("body", ""))
+PYEOF
+        sec=$(extract_sections "$ROWDIR/$id.dom"); lnk=$(extract_links "$ROWDIR/$id.dom")
+    fi
+    [ -n "$sec" ] || sec=$(extract_sections "$body")
+    [ -n "$lnk" ] || lnk=$(extract_links "$body")
+    dis=skill
+    if [ -f "$ROWDIR/$id.dom" ] && advertises_alternate "$ROWDIR/$id.dom"; then dis=twin; fi
+    oldIFS=$IFS; IFS='|'; set -- $o; IFS=$oldIFS
+    emit_row "$id" "$st" "$1" "$2" "$3" "text/html (rendered)" "" "" "$sec" "$lnk" "$dis" "$4" "$5" "$(head -n 1 "$ROWDIR/$id.err")"
+}
+
+agent_prompt() {
+    cat <<EOF
+Fetch this URL with your own web fetch tool and report only what you observed: $PAGE
+Do not fetch any other URL first. Then reply with exactly these lines:
+CONTENT-TYPE: <the response content-type you received>
+SECTIONS: <comma-separated HTML section ids, or markdown {#id} headings, you saw>
+LINKS: <comma-separated link hrefs you saw>
+DISCOVERY: <self if you received Markdown or JSON directly; twin if you received HTML that advertised a .md/.json alternate; skill if neither>
+FETCHED-LLMS: <yes only if you fetched /llms.txt, else no>
+EOF
+}
+
+# run_agent_leg ID BINARY [ARGS...]: absent CLI -> skipped row, never a failure.
+run_agent_leg() {
+    id="$1"; bin="$2"; shift 2
+    slice="$ROWDIR/$id.log"; out="$ROWDIR/$id.out"
+    if ! command -v "$bin" >/dev/null 2>&1; then
+        emit_row "$id" skipped "" "absent" "absent" "" "" "" "" "" "" "not-observed" "not-observed" "CLI '$bin' not on PATH"
+        return 0
+    fi
+    mark=$(log_lines)
+    if [ "$DRY_RUN" = 1 ]; then
+        echo "would run: $bin $* <prompt: fetch $PAGE and report>"
+        emit_row "$id" dry-run GET "not-observed" "not-observed" "" "" "" "" "" "" "not-observed" "dry-run"
+        return 0
+    fi
+    prompt=$(agent_prompt)
+    if with_timeout "$AGENT_TIMEOUT" "$bin" "$@" "$prompt" >"$out" 2>"$ROWDIR/$id.err"; then st=ok; else st=error; fi
+    log_since "$mark" "$slice"
+    o=$(observed "$slice" "agent-fetch-tool" "$bin")
+    ct=$(sed -n 's/^[Cc][Oo][Nn][Tt][Ee][Nn][Tt]-[Tt][Yy][Pp][Ee]: *//p' "$out" | head -n 1)
+    sec=$(sed -n 's/^SECTIONS: *//p' "$out" | head -n 1 | tr -d '\r')
+    lnk=$(sed -n 's/^LINKS: *//p' "$out" | head -n 1 | tr -d '\r')
+    dis=$(sed -n 's/^DISCOVERY: *//p' "$out" | head -n 1 | tr -d '\r' | tr 'A-Z' 'a-z')
+    case "$dis" in self | twin | skill) ;; *) dis=$(classify "$ct" "$out") ;; esac
+    oldIFS=$IFS; IFS='|'; set -- $o; IFS=$oldIFS
+    emit_row "$id" "$st" "$1" "$2" "$3" "$ct" "" "" "$sec" "$lnk" "$dis" "$4" "$5" "$(head -n 1 "$ROWDIR/$id.err")"
+}
+
+# emit_output FORMAT ROWDIR ORIGIN: renders rows as Markdown table or JSON.
+emit_output() {
+    "$(python_bin)" - "$1" "$2" "$3" <<'PYEOF'
+import glob, json, os, sys
+
+fmt, rowdir, origin = sys.argv[1], sys.argv[2], sys.argv[3]
+rows = []
+for f in sorted(glob.glob(os.path.join(rowdir, "*.row"))):
+    r = {}
+    for line in open(f):
+        if "=" in line:
+            k, v = line.rstrip("\n").split("=", 1)
+            r[k] = v
+    rows.append(r)
+
+if fmt == "json":
+    print(json.dumps({"origin": origin, "page": origin.rstrip("/") + "/about",
+                      "clients": rows}, indent=2))
+else:
+    print("| Client | Status | Request | User-Agent | Received | ETag | Vary | Sections | Links | Discovery | llms.txt | rel=alternate |")
+    print("|---|---|---|---|---|---|---|---|---|---|---|---|")
+    def cell(v):
+        return (v or "—").replace("|", "\\|")
+    for r in rows:
+        req = (r.get("method", "") + " " + (r.get("accept") or "")).strip()
+        print("| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |" % (
+            cell(r.get("client")), cell(r.get("status")), cell(req),
+            cell(r.get("user_agent")), cell(r.get("content_type")),
+            cell(r.get("etag")), cell(r.get("vary")), cell(r.get("sections")),
+            cell(r.get("links")), cell(r.get("discovery")),
+            cell(r.get("llms_txt")), cell(r.get("followed_alternate"))))
+PYEOF
+}
+
+cmd_matrix() {
+    ORIGIN="$1"; shift || true
+    clients="$ALL_CLIENTS" FORMAT=md
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --clients) clients="$2"; shift 2 ;;
+            --json) FORMAT=json; shift ;;
+            --md) FORMAT=md; shift ;;
+            --log) LOGFILE="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            *) usage ;;
+        esac
+    done
+    [ -n "$ORIGIN" ] || usage
+    ORIGIN="${ORIGIN%/}"
+    PAGE="$ORIGIN/about"
+    ROWDIR="$(mktemp -d "${TMPDIR:-/tmp}/discover-matrix.XXXXXX")"
+    trap 'rm -rf "$ROWDIR"' EXIT
+    oldIFS=$IFS; IFS=','
+    for c in $clients; do
+        IFS=$oldIFS
+        case "$c" in
+            curl) run_curl_leg curl '*/*' ;;
+            curl-cc) run_curl_leg curl-cc 'text/markdown, text/html, */*' -H 'Accept: text/markdown, text/html, */*' ;;
+            bashy-fetch) run_fetch_leg bashy-fetch 0 ;;
+            bashy-fetch-md) run_fetch_leg bashy-fetch-md 1 ;;
+            browser) run_browser_leg ;;
+            claude) run_agent_leg claude claude -p ;;
+            codex) run_agent_leg codex codex exec ;;
+            gemini) run_agent_leg gemini gemini -p ;;
+            agy) run_agent_leg agy agy -p ;;
+            opencode) run_agent_leg opencode opencode run ;;
+            *) fail "unknown client '$c' (see: $PROG matrix --help via usage)" ;;
+        esac
+        IFS=','
+    done
+    IFS=$oldIFS
+    emit_output "$FORMAT" "$ROWDIR" "$ORIGIN"
+}
+
+while [ "${1:-}" = "--dry-run" ]; do
+    DRY_RUN=1
+    shift
+done
+[ $# -gt 0 ] || usage
+verb="$1"
+shift
+case "$verb" in
+    matrix) cmd_matrix "$@" ;;
+    serve) cmd_serve "$@" ;;
+    -h | --help | help) usage ;;
+    *) usage ;;
+esac
