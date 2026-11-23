@@ -1138,6 +1138,14 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// dependency graph. dag.ExitCodeOf recovers the stable weavecli exit
 		// code from the cobra error so agents get a meaningful status.
 		dispatchExit(runCommandAdapter("yoke", "dag", os.Args[1], os.Args[2:]))
+	case "site":
+		cmd := newSiteCmd()
+		setCobraArgs(cmd, os.Args[2:])
+		if err := cmd.Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy site:", err)
+			dispatchExit(1)
+		}
+		dispatchExit(0)
 	case "skill", "skills":
 		// The env-gated skills catalog (coreutils/pkg/skills): `list` shows
 		// only skills applicable at this host's space-time coordinate,

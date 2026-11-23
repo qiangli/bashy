@@ -603,6 +603,7 @@ var verbSynopsis = map[string]string{
 	"ask":                "ask the HUMAN operator for an ad-hoc value (a token, an OTP) — never the model; returns a path, not the value",
 	"approve":            "list and decide pending approvals (a yielded @confirm, ACP permission request, chat grant): `approve allow ID` prints the --confirm=TOKEN:yes resume flag; `approve src` records a protected-edit approval only after a human allowed it",
 	"skill":              "tier-2 workplace skills, env-gated: list applicable here, probe the coordinate, show one",
+	"site":               "discover, attach, cite, shape and read recipes from agent-ready websites",
 	"skills":             "hidden alias for bashy skill",
 	"craft":              "the living skill graph: what running skills has taught this host, per skill or per capability",
 	"kb":                 "ring-aware knowledge stages: context/search, observe, validate, and candidate note add (JSON-capable)",
