@@ -100,6 +100,20 @@ the page store; it never appears in show, state, the page or export.
 File fields are not offered on a page (`--def` with a `file` field is
 refused); YAML definitions go through `form` itself.
 
+## Content and timer blocks
+
+- `book:<id>/pN` renders that viewer book page inline; `note:<id>` renders
+  that notepad note inline (`VIEWER_ADDR`, `NOTEPAD_ADDR` locate the apps).
+  An unreachable app or missing item shows a short notice, never an error page.
+- `embed:<same-origin path or URL>` frames a desk-kit app that opted into
+  same-origin framing. Engines that refuse framing (`/whiteboard`, `/table`,
+  `/klatch`, `/demo-queue`, also under `/apps/`) and any block with
+  `mode=link` (or `link_only` face settings) render a link-out card instead.
+- `timer:<name> duration=5m` is a countdown. Only the organizer face has
+  Start, Stop and Reset; every face sees it tick over the live stream. Give it
+  `"project": true` face settings to show the bare clock on `?view=display`.
+  The export records its state.
+
 ## Later Sprint 696 stories
 
 Presence and hands, export with block states inline, PDF.

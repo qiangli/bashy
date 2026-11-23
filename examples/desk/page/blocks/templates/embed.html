@@ -1,0 +1,1 @@
+{{if .Frame}}<iframe class="page-embed" title="{{.Title}}"{{if .Private}} hidden credentialless data-organizer-src="{{.Src}}"{{else}} src="{{.Src}}"{{end}} sandbox="{{.Sandbox}}" referrerpolicy="no-referrer"></iframe>{{end}}{{if .Link}}<p><a href="{{.Src}}" target="_blank" rel="noopener noreferrer">{{.LinkLabel}}</a></p>{{end}}

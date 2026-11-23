@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"slices"
 	"strings"
+
+	"page/blocks"
 )
 
 type blockFaceHTML struct {
@@ -34,17 +36,39 @@ func (a *app) renderBlockFaces(r *http.Request, it *item, b *block, view pageFac
 				add(f.face, f.body)
 			}
 		}
+	case b.Kind == "book" || b.Kind == "note":
+		switch view {
+		case displayFace:
+			return ""
+		case recordFace:
+			faces = append(faces, blockFaceHTML{recordFace, contentHTML(b)})
+		default:
+			add(participantFace, contentHTML(b))
+		}
+	case b.Kind == "timer":
+		switch view {
+		case displayFace:
+			if !settings.Project {
+				return ""
+			}
+			add(displayFace, a.timerHTML(it, b, displayFace))
+		case recordFace:
+			faces = append(faces, blockFaceHTML{recordFace, a.timerHTML(it, b, recordFace)})
+		default:
+			add(view, a.timerHTML(it, b, view))
+		}
 	case view == recordFace:
 		return blockHTML(b)
 	case k.Embed:
+		linkOnly := settings.LinkOnly || b.Options["mode"] == "link"
 		if view == organizerFace {
-			add(organizerFace, embedFace(b, organizerFace, settings.OrganizerURL, settings.LinkOnly, true))
+			add(organizerFace, embedFace(b, organizerFace, settings.OrganizerURL, linkOnly, true))
 		}
 		if view != displayFace {
-			add(participantFace, embedFace(b, participantFace, b.Ref, settings.LinkOnly, true))
+			add(participantFace, embedFace(b, participantFace, b.Ref, linkOnly, true))
 		}
 		if view == organizerFace || view == displayFace {
-			add(displayFace, embedFace(b, displayFace, settings.DisplayURL, settings.LinkOnly, view == organizerFace))
+			add(displayFace, embedFace(b, displayFace, settings.DisplayURL, linkOnly, view == organizerFace))
 		}
 	default:
 		if view != displayFace {
@@ -98,6 +122,8 @@ func faceTitle(face pageFace) string {
 	}
 }
 
+// embedFace frames a same-origin kit app; an engine that refuses framing
+// (or a block with mode=link / link_only) gets a link-out card instead.
 func embedFace(b *block, face pageFace, raw string, linkOnly, openLink bool) string {
 	if raw == "" || validEmbedRef(raw) != nil {
 		return ""
@@ -110,23 +136,12 @@ func embedFace(b *block, face pageFace, raw string, linkOnly, openLink bool) str
 	if face != displayFace {
 		permissions += " allow-forms"
 	}
-	ref := html.EscapeString(raw)
-	source := ` src="` + ref + `"`
-	if face == organizerFace {
+	frame := !linkOnly && !engineRefusesFraming(raw)
+	return blocks.Embed(blocks.EmbedData{Title: title + " · " + faceTitle(face), Src: raw, Sandbox: permissions,
 		// Only start the private face in a browser that isolates its
 		// cookies and session storage from the participant face.
-		source = ` hidden credentialless data-organizer-src="` + ref + `"`
-	}
-	var out string
-	if !linkOnly {
-		out = `<iframe class="page-embed" title="` + html.EscapeString(title+" · "+faceTitle(face)) +
-			`"` + source + ` sandbox="` + permissions + `" referrerpolicy="no-referrer"></iframe>`
-	}
-	if openLink || linkOnly {
-		out += `<p><a href="` + ref + `" target="_blank" rel="noopener noreferrer">Open ` +
-			strings.ToLower(faceTitle(face)) + ` view</a></p>`
-	}
-	return out
+		Private: face == organizerFace, Frame: frame, Link: openLink || !frame,
+		LinkLabel: "Open " + strings.ToLower(faceTitle(face)) + " view"})
 }
 
 const pageFaceStyle = `<style>

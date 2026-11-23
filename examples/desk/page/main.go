@@ -99,6 +99,7 @@ type item struct {
 	Natives     map[string]*nativeBlock `json:"natives,omitempty"`
 	Respondents map[string]string       `json:"respondents,omitempty"`
 	BlockFaces  map[string]storedFaces  `json:"block_faces,omitempty"`
+	Timers      map[string]*TimerState  `json:"timers,omitempty"`
 	Status      string                  `json:"status"`
 	Revision    int                     `json:"revision"`
 	Owner       string                  `json:"owner"`
@@ -141,6 +142,8 @@ type app struct {
 	lanBase     string
 	formURL     string // the form app's origin (PAGE_FORM_URL)
 	previews    map[previewAnswerKey]map[string]any
+	tickMu      sync.Mutex
+	ticking     map[string]bool // running timer tickers, "item/block"
 }
 
 // clone deep-copies the item so a failed save never leaves the in-memory
@@ -166,6 +169,15 @@ func (it *item) clone() item {
 			copy := *nb
 			copy.Options = slices.Clone(nb.Options)
 			c.Natives[id] = &copy
+		}
+	}
+	if it.Timers != nil {
+		c.Timers = make(map[string]*TimerState, len(it.Timers))
+		for id, ts := range it.Timers {
+			if ts != nil {
+				copy := *ts
+				c.Timers[id] = &copy
+			}
 		}
 	}
 	c.Members = make(map[string]bool, len(it.Members))
@@ -313,7 +325,8 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if breakMode != "no-csp" {
-		kit.ApplySecurityHeaders(w)
+		// Same-origin framing only, so a page can sit inside another desk app.
+		kit.SecurityOptions{Embeddable: true}.Apply(w)
 	}
 	if !kit.GuardPOST(w, r, tool) {
 		return
@@ -326,7 +339,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case path == "/" || pageJoinCode(path) != "":
 		if breakMode != "no-csp" {
-			w.Header().Set("Content-Security-Policy", (kit.SecurityOptions{}).CSP()+"; frame-src 'self' https: http:")
+			w.Header().Set("Content-Security-Policy", (kit.SecurityOptions{Embeddable: true}).CSP()+"; frame-src 'self' https: http:")
 		}
 		a.joinPage(w, r, path)
 	case path == "/healthz" && r.Method == "GET":
@@ -401,7 +414,7 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		if it := a.loadOr404(w, req.ID); it != nil {
 			a.beginOrganizer(w, r, it)
 		}
-	case "open", "show", "set", "close", "share", "join", "participant", "block", "results", "answer":
+	case "open", "show", "set", "close", "share", "join", "participant", "block", "results", "answer", "timer":
 		it := a.loadOr404(w, req.ID)
 		if it == nil {
 			return
@@ -460,6 +473,8 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 			if a.viewOr403(w, r, it) {
 				a.answer(w, r, it, req)
 			}
+		case "timer":
+			a.timerAction(w, r, it, req)
 		}
 	default:
 		kit.Fail(w, http.StatusBadRequest, "Unknown action")
@@ -811,8 +826,9 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		}
 		if face == displayFace {
 			revision := `<span hidden data-page-revision>` + fmt.Sprint(it.Revision) + `</span>`
-			return code, kit.Page(tool, it.Title, pageFaceStyle+`<main class="desk-main page-display"><h1>`+
-				html.EscapeString(it.Title)+`</h1>`+body+revision+liveScript(base, it.ID, face)+`</main>`)
+			return code, kit.Page(tool, it.Title, pageFaceStyle+contentBlockStyle+`<main class="desk-main page-display"><h1>`+
+				html.EscapeString(it.Title)+`</h1>`+body+revision+liveScript(base, it.ID, face)+
+				timerScript(base, it.ID, face)+`</main>`)
 		}
 		if face == organizerFace {
 			faceScript = faceTabsScript + nativeControlsScript(base, it.ID)
@@ -820,9 +836,9 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		main = faceNavigation(r, owner, face) + `<h1 class="desk-h1">` + html.EscapeString(it.Title) + `</h1>` + body +
 			`<p class="desk-footer">Revision <span data-page-revision>` + fmt.Sprint(it.Revision) +
 			`</span> · re-surface with <code>page open ` + html.EscapeString(it.ID) + `</code>.</p>` +
-			liveScript(base, it.ID, face) + nativeScript(base, it.ID, face)
+			liveScript(base, it.ID, face) + nativeScript(base, it.ID, face) + timerScript(base, it.ID, face)
 	}
-	body := pageFaceStyle + kit.AppBar(tool, a.base(r)+"/", header, "") + `<main class="desk-main page-main">` +
+	body := pageFaceStyle + contentBlockStyle + kit.AppBar(tool, a.base(r)+"/", header, "") + `<main class="desk-main page-main">` +
 		`<div data-desk-alert class="desk-alert"></div>` + main + `</main>` + faceScript
 	return code, kit.Page(tool, "Page · bashy desk", body)
 }
@@ -850,8 +866,9 @@ func liveScript(base, id string, face pageFace) string {
   const es = new EventSource(` + string(u) + `);
   es.onmessage = function(e){
     let f; try { f = JSON.parse(e.data); } catch (_) { return; }
-    if (!rev || f.revision <= Number(rev.textContent)) return;
-    if (!f.block) { location.reload(); return; }
+    // Block frames (timer ticks too) re-fetch their block; a whole-page
+    // frame reloads only when it is newer than what is shown.
+    if (!f.block) { if (rev && f.revision > Number(rev.textContent)) location.reload(); return; }
     document.dispatchEvent(new CustomEvent('page-block', {detail: f}));
   };
 })();
