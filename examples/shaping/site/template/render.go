@@ -546,13 +546,13 @@ func (s *Site) AgentRecipe(p *Page) string {
 	mdTwin, jsonTwin := TwinPaths(p.Path)
 	lines := []string{
 		"# Agent recipe for " + s.Config.Title,
-		"# 1. Read /agents.txt first: " + s.Config.Origin + "/agents.txt",
-		"# 2. Fetch the Markdown twin: " + s.Config.Origin + mdTwin,
-		"# 3. Fetch the JSON twin: " + s.Config.Origin + jsonTwin,
-		"# 4. Attach the skill: " + s.Config.Skill,
-		"# 5. Connect to MCP: " + s.Config.MCP,
-		"# 6. Cite sections as {url, section_id, revision, section_sha256, quote}; revision " + p.Revision,
-		"bashy site attach " + s.Config.Origin,
+		"# Read /agents.txt first, then fetch the Markdown twin.",
+		"# Next: bashy site attach " + s.Config.Origin + "  (or connect MCP at " + s.Config.MCP + ")",
+		"# Skill: " + s.Config.Skill,
+		"# JSON twin: " + s.Config.Origin + jsonTwin,
+		"# Cite sections as {url, section_id, revision, section_sha256, quote}; revision " + p.Revision,
+		"bashy fetch " + s.Config.Origin + "/agents.txt",
+		"bashy fetch " + s.Config.Origin + mdTwin,
 	}
 	return strings.Join(lines, "\n")
 }
@@ -781,7 +781,8 @@ func (s *Site) RenderHTMLDocument(p *Page) string {
 	b.WriteString(`<link rel="author" href="/humans.txt">` + "\n")
 	b.WriteString(`<link rel="help" href="/llms.txt">` + "\n")
 	// JSON-LD
-	b.WriteString(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","url":"` + html.EscapeString(s.Config.Origin) + `","name":"` + html.EscapeString(s.Config.Title) + `"}</script>` + "\n")
+	ld, _ := json.Marshal(map[string]any{"@context": "https://schema.org", "@graph": []any{map[string]any{"@type": "WebSite", "url": s.Config.Origin, "name": s.Config.Title}, map[string]any{"@type": "SoftwareSourceCode", "name": s.Config.Title, "codeRepository": s.Config.Source}}})
+	b.WriteString(`<script type="application/ld+json">` + string(ld) + "</script>\n")
 	b.WriteString("<style>body{max-width:44rem;margin:2rem auto;padding:0 1rem;font:16px/1.6 system-ui,sans-serif;color:#111}nav{display:flex;gap:1rem;margin-bottom:2rem;border-bottom:1px solid #ddd;padding-bottom:.75rem}section{margin:1.75rem 0}code,pre{font-family:ui-monospace,monospace;background:#f5f5f5}code{padding:.1rem .3rem;border-radius:3px}pre{padding:.75rem;overflow-x:auto;border-radius:4px}</style>\n")
 	b.WriteString("</head>\n<body>\n")
 	if p.site != nil {

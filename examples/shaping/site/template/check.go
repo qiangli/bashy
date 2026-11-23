@@ -293,6 +293,9 @@ func checkAgentPage(s *Site, p *Page, htmlDoc, mdDoc string, jsonDoc []byte) err
 			return fmt.Errorf("agents: %s HTML missing %q", p.Path, frag)
 		}
 	}
+	if !strings.Contains(htmlDoc, "WebSite") || !strings.Contains(htmlDoc, "SoftwareSourceCode") || !strings.Contains(htmlDoc, "codeRepository") || (s.Config.Source != "" && !strings.Contains(htmlDoc, s.Config.Source)) {
+		return fmt.Errorf("agents: %s JSON-LD missing WebSite/SoftwareSourceCode codeRepository", p.Path)
+	}
 	if idxNote := strings.Index(htmlDoc, `id="agent-note"`); idxNote < 0 || (strings.Index(htmlDoc, "<nav") >= 0 && idxNote > strings.Index(htmlDoc, "<nav")) {
 		return fmt.Errorf("agents: %s agent-note is not before nav", p.Path)
 	}

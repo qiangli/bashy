@@ -57,7 +57,16 @@ func (s *Site) BashyShapedValue(p *Page) string {
 	} else {
 		rev = s.SiteRevision()
 	}
-	return `module="` + s.Config.Module + `", revision="` + rev + `", agents="/agents.txt", skill="/skill.md", mcp="/mcp", source="` + s.Config.Source + `", shape="/?shape=open"`
+	rel := func(v string) string {
+		if s.Config.Origin != "" && strings.HasPrefix(v, s.Config.Origin) {
+			if r := strings.TrimPrefix(v, s.Config.Origin); r != "" {
+				return r
+			}
+			return "/"
+		}
+		return v
+	}
+	return `module="` + s.Config.Module + `", revision="` + rev + `", agents="/agents.txt", skill="` + rel(s.Config.Skill) + `", mcp="` + rel(s.Config.MCP) + `", source="` + s.Config.Source + `", shape="` + rel(s.Config.Shape) + `"`
 }
 func (s *Site) LinkHeaderValue(p *Page) string {
 	if p == nil {

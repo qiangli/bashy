@@ -75,6 +75,17 @@ rewrites internal imports in `cmd/server/main.go`. `template/go.mod` stays
   the citation record `{url, section_id, revision, section_sha256, quote}`.
   Admit it to the local catalog with `bashy skill add ./my-site/skills/<owner>-site`.
 
+## Optional DNS TXT
+
+Publish an optional DNS TXT record at `_agents.<host>` so agents can discover
+the site without fetching it first:
+
+```text
+_agents.<host>  TXT  "v=agents1; index=https://<host>/agents.txt; mcp=https://<host>/mcp"
+```
+
+The record is advisory only; `/agents.txt` remains the canonical entry point.
+
 ## Tests
 
 - `GOWORK=off go -C template test ./...` — stdlib-only `package site` library

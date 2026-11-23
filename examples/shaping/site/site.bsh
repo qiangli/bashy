@@ -188,6 +188,8 @@ metadata:
 
 Origin: \`$origin\`
 
+Start at \`$origin/agents.txt\` (the agent entry point) and connect to MCP at \`$origin/mcp\`.
+
 Every page on \`$origin\` renders server-side from one Markdown source under a
 single short SHA-256 content \`revision\`, with an optional lead \`summary\`
 paragraph, explicit section identifiers (\`#id\`), and per-section SHA-256

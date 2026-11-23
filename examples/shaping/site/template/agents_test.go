@@ -87,6 +87,16 @@ func TestAgentChannels(t *testing.T) {
 			t.Errorf("html missing %s", want)
 		}
 	}
+	for _, want := range []string{`"@type":"WebSite"`, "SoftwareSourceCode", "codeRepository", "https://github.com/fixture/site", "bashy fetch https://fixture.example/agents.txt", "bashy fetch https://fixture.example/about.md", "# Next: bashy site attach https://fixture.example"} {
+		// JSON-LD is marshaled with spaces after colons; normalize for type check
+		if want == `"@type":"WebSite"` {
+			if !strings.Contains(html, "WebSite") { t.Errorf("html missing %s", want) }
+			continue
+		}
+		if !strings.Contains(html, want) {
+			t.Errorf("html missing %s", want)
+		}
+	}
 	if strings.Index(html, `<script id="agent-recipe"`) > strings.Index(html, `id="agent-note"`) {
 		t.Errorf("recipe should precede note in body start ordering check")
 	}
@@ -132,6 +142,16 @@ func TestAgentChannels(t *testing.T) {
 			t.Errorf("%s = %d missing %q", path, r.Code, want)
 		}
 	}
+	// Bashy-Shaped derives skill/mcp/shape from config (same-origin stripped, external kept)
+	loaded.Config.Skill = "https://fixture.example/custom-skill.md"
+	loaded.Config.MCP = "https://mcp.example.net/mcp"
+	loaded.Config.Shape = "https://fixture.example/custom-shape"
+	if got := loaded.BashyShapedValue(loaded.ByPath["/about"]); !strings.Contains(got, `skill="/custom-skill.md"`) || !strings.Contains(got, `mcp="https://mcp.example.net/mcp"`) || !strings.Contains(got, `shape="/custom-shape"`) {
+		t.Errorf("Bashy-Shaped configured paths: %s", got)
+	}
+	loaded.Config.Skill = "https://fixture.example/skill.md"
+	loaded.Config.MCP = "https://fixture.example/mcp"
+	loaded.Config.Shape = "https://fixture.example/?shape=open"
 	_ = loaded
 	if err := Validate(loaded); err != nil {
 		t.Fatalf("Validate: %v", err)
