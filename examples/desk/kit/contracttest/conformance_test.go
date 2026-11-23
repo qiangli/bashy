@@ -63,3 +63,33 @@ func TestEveryFamilyToolHasAnAccent(t *testing.T) {
 		}
 	}
 }
+
+func TestFramingViolation(t *testing.T) {
+	none := kit.SecurityOptions{}.CSP()
+	self := kit.SecurityOptions{Embeddable: true}.CSP()
+	if v := FramingViolation(none, false); v != "" {
+		t.Errorf("kit default CSP: %s", v)
+	}
+	if v := FramingViolation(self, true); v != "" {
+		t.Errorf("kit embeddable CSP: %s", v)
+	}
+	for name, c := range map[string]struct {
+		csp        string
+		embeddable bool
+	}{
+		"self without opting in": {self, false},
+		"none after opting in":   {none, true},
+		"wildcard":               {"default-src 'self'; frame-ancestors *", true},
+		"foreign origin":         {"frame-ancestors 'self' https://evil.example", true},
+		"missing directive":      {"default-src 'self'", false},
+		"first directive wins":   {"frame-ancestors *; frame-ancestors 'none'", false},
+		"missing, embeddable":    {"default-src 'self'", true},
+	} {
+		if FramingViolation(c.csp, c.embeddable) == "" {
+			t.Errorf("%s: stayed green", name)
+		}
+	}
+	if got := FrameAncestors("default-src 'self';  FRAME-ANCESTORS  'self' ; base-uri 'none'"); got != "'self'" {
+		t.Errorf("FrameAncestors: %q", got)
+	}
+}

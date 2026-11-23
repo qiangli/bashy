@@ -44,9 +44,11 @@ func runCLI(args []string, stdout io.Writer) int {
 	if verb == "serve" {
 		sfs := flag.NewFlagSet("serve", flag.ContinueOnError)
 		breakFlag := sfs.String("break", "", "deliberately break one contract point")
+		lan := kit.LANFlag(sfs)
+		embeddable := sfs.Bool("embeddable", false, "allow same-origin framing (frame-ancestors 'self')")
 		_ = sfs.Parse(_positional)
 		breakMode = *breakFlag
-		serve(*addr, *data, *prefix)
+		serve(*addr, *data, *prefix, *lan, *embeddable)
 		return 0
 	}
 	base := "http://" + *addr + *prefix

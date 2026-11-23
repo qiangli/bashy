@@ -145,6 +145,51 @@ apps rm NAME` and returns a public console record to `--auth system`.
 object (errors `{code,message}`, exit 2 usage, 1 otherwise). Test:
 `bash examples/desk/kit/outpost_test.sh` (stubbed outpost and bashy).
 
+## Live layer, embedding and the LAN escape hatch (Sprint 696)
+
+Three additive pieces for the `page` app (`docs/page-live-group-page.md`);
+no existing tool changes behaviour until it opts in.
+
+**`kit.Events`: one SSE stream per item.** A tool mounts
+`GET /api/events?id=ITEM`: it validates the id and access as for
+`/api/state` (400 bad id, 404 unknown item), then calls
+`events.Serve(w, r, id, item.Revision)`, and calls
+`events.Publish(id, block, revision)` after every acknowledged save. Frames
+are `{"item","block","revision"}` and never carry content (block `""` means
+the whole item); the browser re-fetches only the block that changed.
+Revisions, never merges. Pattern from meet (`yoke/pkg/meet/events_sse.go`)
+and demo-queue: every frame has `id: <epoch>-<seq>`, so an `EventSource`
+reconnects with `Last-Event-ID` and receives exactly the frames it missed;
+an id the history can no longer continue (unknown, another server run,
+fallen behind `Keep` frames) is answered with one whole-item frame marked
+`"resync": true`. A fresh stream opens with one whole-item frame at the
+current revision. Keepalive comments every 15 s; write deadlines are
+per-frame, so a quiet stream outlives the server's `WriteTimeout`;
+`MaxStreams` (256) refuses more with 503 + `Retry-After`. `ContractHandler`
+streams an event-stream answer on `GET …/api/events` and still envelopes
+that route's refusals.
+
+**Embeddable CSP.** `kit.SecurityOptions{Embeddable: true}.Apply(w)` (or
+`.Wrap(h)`) sends the same headers with `frame-ancestors 'self'` instead of
+`'none'`: same-origin framing only, for engines a page embeds as a block
+under the same console origin. `ApplySecurityHeaders` is unchanged.
+
+**`--lan`: the loopback guard's escape hatch.** `kit.CheckBind(addr, lan,
+logw)` is `CheckLoopback` unless the explicit override is given
+(`kit.LANFlag(fs)` registers `--lan`); then any well-formed address binds and
+the override is logged on start (stderr when `logw` is nil), naming the flag
+and the address. An override that cannot be logged refuses to start.
+
+**Contract rows (opt-in, `contracttest.Config`).** `Events: true` — the
+stream's status codes, headers, fresh/live/resume/resync frames and that no
+frame carries content. `Embeddable: true` — `frame-ancestors` is exactly
+`'self'` (otherwise exactly `'none'`, as before; `FramingViolation` is the
+pure rule). `BindGuard` — the tool's start-up guard: loopback accepted,
+`0.0.0.0`, `:port`, a LAN address and `[::]` refused without `--lan`,
+accepted and logged with it, malformed refused. The memo fixture runs all
+three green (`memo serve -lan`, `-embeddable`) and red on
+`-break events-no-publish|events-no-resume|events-leak-content|embed-unasked|frame-any|lan-open|lan-unlogged`.
+
 ## Use in a tool
 
 ```bash

@@ -97,10 +97,21 @@ func ErrorMessage(raw []byte) string {
 
 // ContractHandler applies the same JSON envelope and field projection to
 // every API response, including errors. Page and asset bytes pass through.
+// A GET .../api/events answer that turns out to be a text/event-stream
+// (kit.Events) is streamed straight to the client; its refusals (400, 404,
+// 503) are still enveloped like every other API error.
 func ContractHandler(tool string, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		rec := httptest.NewRecorder()
-		next.ServeHTTP(rec, r)
+		if r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/api/events") {
+			sw := &streamSwitch{w: w, rec: rec}
+			next.ServeHTTP(sw, r)
+			if sw.streaming {
+				return
+			}
+		} else {
+			next.ServeHTTP(rec, r)
+		}
 		result := rec.Result()
 		defer result.Body.Close()
 		body := rec.Body.Bytes()
@@ -140,6 +151,63 @@ func ContractHandler(tool string, next http.Handler) http.Handler {
 		_, _ = w.Write(body)
 	})
 }
+
+// streamSwitch buffers a response in rec, as ContractHandler always has,
+// unless the handler commits a text/event-stream: then the headers and
+// every later write go straight to w, flushed as the handler flushes.
+type streamSwitch struct {
+	w         http.ResponseWriter
+	rec       *httptest.ResponseRecorder
+	decided   bool
+	streaming bool
+}
+
+func (s *streamSwitch) Header() http.Header {
+	if s.streaming {
+		return s.w.Header()
+	}
+	return s.rec.Header()
+}
+
+func (s *streamSwitch) WriteHeader(code int) {
+	if s.decided {
+		return
+	}
+	s.decided = true
+	if code == http.StatusOK && strings.HasPrefix(s.rec.Header().Get("Content-Type"), "text/event-stream") {
+		s.streaming = true
+		for key, values := range s.rec.Header() {
+			s.w.Header()[key] = values
+		}
+		s.w.WriteHeader(code)
+		return
+	}
+	s.rec.WriteHeader(code)
+}
+
+func (s *streamSwitch) Write(b []byte) (int, error) {
+	if !s.decided {
+		s.WriteHeader(http.StatusOK)
+	}
+	if s.streaming {
+		return s.w.Write(b)
+	}
+	return s.rec.Write(b)
+}
+
+// FlushError lets http.ResponseController flush a committed stream.
+func (s *streamSwitch) FlushError() error {
+	if !s.decided {
+		s.WriteHeader(http.StatusOK)
+	}
+	if s.streaming {
+		return http.NewResponseController(s.w).Flush()
+	}
+	return nil
+}
+
+// Unwrap lets http.ResponseController reach the connection's deadlines.
+func (s *streamSwitch) Unwrap() http.ResponseWriter { return s.w }
 
 // NameRe is the shared item/session name rule inherited from
 // whiteboard/brainstorm: 1-64 chars, letters/digits/-/_ , leading alnum.
@@ -192,12 +260,9 @@ func Fail(w http.ResponseWriter, code int, msg string) {
 // send: no caching, no sniffing, no referrer, and a self-only content
 // policy that forbids framing (tools are linked/embedded as panels only
 // through explicit, tool-owned affordances, never by third-party frames).
-func ApplySecurityHeaders(w http.ResponseWriter) {
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.Header().Set("Referrer-Policy", "no-referrer")
-	w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'")
-}
+// An app a page embeds opts into same-origin framing with
+// SecurityOptions{Embeddable: true}.Apply instead.
+func ApplySecurityHeaders(w http.ResponseWriter) { SecurityOptions{}.Apply(w) }
 
 // WithSecurityHeaders wraps h so every response carries ApplySecurityHeaders.
 func WithSecurityHeaders(h http.Handler) http.Handler {
@@ -521,7 +586,8 @@ func StripPrefix(prefix, path string) (string, bool) {
 // CheckLoopback dials nothing: it verifies the configured listen address
 // binds loopback, as every new desk tool must (LAN reachability comes only
 // through sharing). Whiteboard/brainstorm keep their LAN default as the
-// recorded K0 exception; R1 retrofits them.
+// recorded K0 exception; R1 retrofits them. The explicit, logged escape
+// hatch is CheckBind(addr, lan, logw) behind a tool's --lan flag.
 func CheckLoopback(addr string) error {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {

@@ -17,12 +17,23 @@
 //	-break font-family           page CSS plants its own font-family
 //	-break no-shell              page drops the kit app shell
 //	-break no-render             POST /api/render is not mounted
+//	-break events-no-publish     set saves but publishes no live frame
+//	-break events-no-resume      the stream ignores Last-Event-ID
+//	-break events-leak-content   a live frame carries the item body
+//	-break embed-unasked         frame-ancestors 'self' without opting in
+//	-break frame-any             -embeddable sends frame-ancestors *
+//	-break lan-open              a non-loopback bind passes without --lan
+//	-break lan-unlogged          the --lan override is not logged
+//
+// `memo serve -lan` is the explicit, logged LAN escape hatch of the loopback
+// guard; `memo serve -embeddable` opts into same-origin framing.
 package main
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -66,6 +77,10 @@ type app struct {
 	prefix  string
 	baseURL string // public origin, e.g. http://127.0.0.1:18097
 	items   map[string]*item
+	// embeddable opts into same-origin framing (serve -embeddable).
+	embeddable bool
+	// events is the live layer: GET /api/events?id= per item.
+	events kit.Events
 }
 
 // clone deep-copies the item so a failed save never leaves the in-memory
@@ -117,7 +132,9 @@ func (a *app) loadLocked(id string) (*item, error) {
 	return it, nil
 }
 
-func (a *app) saveLocked(it *item) error {
+// saveLocked persists it at the next revision and, once the save is
+// acknowledged, publishes the live frame for block ("" = the whole item).
+func (a *app) saveLocked(it *item, block string) error {
 	it.Revision++
 	raw, err := kit.MarshalIndent(*it)
 	if err != nil {
@@ -127,6 +144,13 @@ func (a *app) saveLocked(it *item) error {
 		return err
 	}
 	a.items[it.ID] = it
+	switch breakMode {
+	case "events-no-publish":
+	case "events-leak-content":
+		a.events.Publish(it.ID, it.Body, it.Revision)
+	default:
+		a.events.Publish(it.ID, block, it.Revision)
+	}
 	return nil
 }
 
@@ -160,8 +184,15 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
-	if breakMode != "no-csp" {
-		kit.ApplySecurityHeaders(w)
+	switch {
+	case breakMode == "no-csp":
+	case breakMode == "embed-unasked":
+		kit.SecurityOptions{Embeddable: true}.Apply(w)
+	case breakMode == "frame-any" && a.embeddable:
+		kit.SecurityOptions{Embeddable: true}.Apply(w)
+		w.Header().Set("Content-Security-Policy", strings.Replace(w.Header().Get("Content-Security-Policy"), "frame-ancestors 'self'", "frame-ancestors *", 1))
+	default:
+		kit.SecurityOptions{Embeddable: a.embeddable}.Apply(w)
 	}
 	if !kit.GuardPOST(w, r, "memo") {
 		return
@@ -196,6 +227,29 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		kit.WriteJSON(w, a.openView(r, it))
+		return
+	}
+	if path == "/api/events" && r.Method == "GET" {
+		a.mu.Lock()
+		id := r.URL.Query().Get("id")
+		it, err := a.loadLocked(id)
+		if err != nil {
+			a.mu.Unlock()
+			if os.IsNotExist(err) {
+				kit.Fail(w, 404, "Item not found. Create it with memo new first.")
+			} else {
+				kit.Fail(w, 400, err.Error())
+			}
+			return
+		}
+		revision := it.Revision
+		a.mu.Unlock()
+		if breakMode == "events-no-resume" {
+			r.Header.Del("Last-Event-ID")
+		}
+		// Frames are contentless, so the stream needs no more access than
+		// GET /api/state.
+		a.events.Serve(w, r, id, revision)
 		return
 	}
 	if path == "/api/render" && breakMode != "no-render" {
@@ -280,7 +334,7 @@ func (a *app) create(w http.ResponseWriter, r *http.Request, req struct {
 	it := &item{Version: 1, ID: id, Title: title, Body: req.Body,
 		Fields: req.Fields, Status: kit.StatusPending, Owner: kit.NewToken(),
 		Members: map[string]bool{me: true}, Invites: map[string]bool{}}
-	if err := a.saveLocked(it); err != nil {
+	if err := a.saveLocked(it, ""); err != nil {
 		kit.Fail(w, 500, "Could not save. Your change was not accepted.")
 		return
 	}
@@ -379,7 +433,11 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req struct {
 		}
 		next.Status = kit.StatusFilled
 	}
-	if err := a.saveLocked(&next); err != nil {
+	block := "body"
+	if closing {
+		block = ""
+	}
+	if err := a.saveLocked(&next, block); err != nil {
 		kit.Fail(w, 500, "Could not save. Your change was not accepted.")
 		return
 	}
@@ -432,7 +490,7 @@ func (a *app) share(w http.ResponseWriter, r *http.Request, req struct {
 	}
 	code := kit.NewToken()
 	next.Invites[code] = true
-	if err := a.saveLocked(&next); err != nil {
+	if err := a.saveLocked(&next, ""); err != nil {
 		kit.Fail(w, 500, "Could not save. Your change was not accepted.")
 		return
 	}
@@ -466,7 +524,7 @@ func (a *app) join(w http.ResponseWriter, r *http.Request, req struct {
 	next := it.clone()
 	next.Members[me] = true
 	delete(next.Invites, req.Invite) // single use
-	if err := a.saveLocked(&next); err != nil {
+	if err := a.saveLocked(&next, ""); err != nil {
 		kit.Fail(w, 500, "Could not save. Your change was not accepted.")
 		return
 	}
@@ -504,8 +562,20 @@ func (a *app) page(r *http.Request) []byte {
 	return kit.Page("memo", "Memo · desk fixture", body)
 }
 
-func serve(addr, data, prefix string) {
-	if err := kit.CheckLoopback(addr); err != nil {
+// bindGuard is the start-up listen guard: loopback only, unless the
+// explicit --lan override is given, which kit.CheckBind logs to logw.
+func bindGuard(addr string, lan bool, logw io.Writer) error {
+	switch breakMode {
+	case "lan-open":
+		lan = true
+	case "lan-unlogged":
+		logw = io.Discard
+	}
+	return kit.CheckBind(addr, lan, logw)
+}
+
+func serve(addr, data, prefix string, lan, embeddable bool) {
+	if err := bindGuard(addr, lan, os.Stderr); err != nil {
 		log.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(data, "items"), 0700); err != nil {
@@ -517,7 +587,7 @@ func serve(addr, data, prefix string) {
 	}
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	origin := "http://" + net.JoinHostPort("127.0.0.1", port)
-	a := &app{dir: data, prefix: prefix, baseURL: origin + prefix, items: map[string]*item{}}
+	a := &app{dir: data, prefix: prefix, baseURL: origin + prefix, items: map[string]*item{}, embeddable: embeddable}
 	fmt.Printf("\nDesk memo fixture — keep this terminal running\nParticipant: %s/\nSaved memos: %s\nCtrl-C stops the server.\n\n",
 		a.baseURL, filepath.Join(data, "items"))
 	srv := &http.Server{Handler: a, ReadHeaderTimeout: 5 * time.Second,

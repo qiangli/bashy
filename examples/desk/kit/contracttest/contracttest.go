@@ -56,6 +56,21 @@ type Config struct {
 	// refused with 400 over HTTP and exit 2 over the CLI, before and after
 	// close. Every other contract point is unchanged.
 	ViewOnly bool
+	// Events opts into the live-layer rows (kit.Events): GET
+	// /api/events?id= streams contentless {item, block, revision} frames,
+	// each with an id; `set` publishes one; Last-Event-ID resumes with no
+	// gap and no replay; an unknown id is answered with a resync frame.
+	Events bool
+	// Embeddable records that the tool opted into same-origin framing
+	// (kit.SecurityOptions{Embeddable: true}): every response must send
+	// frame-ancestors 'self' and nothing broader. Otherwise 'none'.
+	Embeddable bool
+	// BindGuard is the tool's start-up listen guard (kit.CheckBind behind
+	// its --lan flag), called with an address and the override and
+	// returning what it logged. When set, the LAN-guard rows run: loopback
+	// only by default, a non-loopback bind only with --lan, and the
+	// override logged naming the flag and the address. Nothing listens.
+	BindGuard func(addr string, lan bool) (logged string, err error)
 }
 
 // Run fails the test once per violated contract point.
@@ -90,6 +105,12 @@ func Check(cfg Config) (failures []string) {
 	t.behindShell()
 	t.secrets()
 	t.cliConformance()
+	if cfg.Events {
+		t.events()
+	}
+	if cfg.BindGuard != nil {
+		t.bindGuard()
+	}
 	return t.failures
 }
 
@@ -304,10 +325,39 @@ func (t *check) securityHeaders() {
 		if h.Get("X-Content-Type-Options") != "nosniff" {
 			t.fail("GET %s: X-Content-Type-Options must be nosniff", path)
 		}
-		if !strings.Contains(h.Get("Content-Security-Policy"), "frame-ancestors 'none'") {
-			t.fail("GET %s: Content-Security-Policy must forbid framing", path)
+		if v := FramingViolation(h.Get("Content-Security-Policy"), t.cfg.Embeddable); v != "" {
+			t.fail("GET %s: %s", path, v)
 		}
 	}
+}
+
+// FramingViolation is the pure framing rule for one Content-Security-Policy:
+// frame-ancestors 'none' by default; exactly 'self' for a tool that opted
+// into embedding; never a wildcard or a foreign origin. "" when it holds.
+func FramingViolation(csp string, embeddable bool) string {
+	got := FrameAncestors(csp)
+	if embeddable {
+		if got != "'self'" {
+			return fmt.Sprintf("Content-Security-Policy must allow same-origin framing only (frame-ancestors 'self'), got %q", got)
+		}
+		return ""
+	}
+	if got != "'none'" {
+		return fmt.Sprintf("Content-Security-Policy must forbid framing (frame-ancestors 'none'), got %q", got)
+	}
+	return ""
+}
+
+// FrameAncestors is the source list of the first frame-ancestors directive
+// in csp (the one browsers enforce), "" when there is none.
+func FrameAncestors(csp string) string {
+	for _, d := range strings.Split(csp, ";") {
+		f := strings.Fields(d)
+		if len(f) > 0 && strings.EqualFold(f[0], "frame-ancestors") {
+			return strings.Join(f[1:], " ")
+		}
+	}
+	return ""
 }
 
 // The human page carries the UI kit: copy button + copied state, status
