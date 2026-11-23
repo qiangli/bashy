@@ -90,6 +90,32 @@ with delivery evidence, then the current manager runs `sprint accept` with the
 verification it independently checked. Generic `todo done` never closes a
 sprint story.
 
+## Claim, workspace, and grade retention lifecycle
+
+- **Announce vs lease:** `sprint claim` records an `announce` claim
+  (`story:<sprint>/<id>`, no TTL) alongside the story's `assignee`; resource and
+  project holds (`bashy claim NAME [--story SPRINT/STORY]`) use TTL-backed
+  `lease` mode (or child-scoped `attached` mode with `-- cmd`). Workers launched
+  via `weave start` export `WEAVE_STORY` so any `bashy claim` inside the run
+  is linked to that story automatically.
+- **Delete by default (`--retain` opt-in):** `sprint grade` deletes its temporary
+  checkout immediately after recording the grade event unless
+  `--retain --retain-reason "<why>"` is passed. Weave terminal transitions
+  (`weave pull`, `weave abandon`, and empty `no-op` exits) likewise delete run
+  workspaces by default unless `--retain --retain-reason "<why>"` is set.
+- **Close reclaims everything:** `sprint accept`, `todo done`, `wontfix`, moving
+  a story off a sprint (`todo edit ID --sprint 0|OTHER`), and `sprint end` all
+  call one guarded reclaim path (in both in-process and standalone
+  `yoke/{sprint,todo,weave}` adapters): they release every `story` claim on the
+  story (any holder) plus every lease/project claim naming that story, end
+  `--retain` retention, delete settled weave workspaces and grade checkouts, and
+  append `reclaim` audit events on `bashy events` with the closing verb as
+  reason. Workspaces holding dirty files or unique commits not in the base
+  branch or `refs/salvage/*` are **refused, never deleted**.
+- **Backfill:** `bashy claim prune --stories-closed` (dry-run default; `--apply`
+  to execute) clears stale claims and settled run/grade copies left behind by
+  already-closed or provably missing stories.
+
 Dispatch runs in lanes: `bashy sprint assign` starts one weave run per story in
 its own isolated workspace, and the manager reviews each submission — accept,
 or `bashy sprint reject ID STORY -m "feedback"`, which records the decision and
