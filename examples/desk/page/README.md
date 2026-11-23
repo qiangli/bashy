@@ -124,7 +124,8 @@ settings using `page add -f agenda.md --faces faces.json` or
   "ideas": {"organizer_url": "/brainstorm/?session=ideation#facilitator=EXAMPLE"},
   "demos": {
     "organizer_url": "http://demo.example/control#ORGANIZER_EXAMPLE",
-    "display_url": "http://demo.example/projector#DISPLAY_EXAMPLE"
+    "display_url": "http://demo.example/projector#DISPLAY_EXAMPLE",
+    "link_only": true
   }
 }
 ```
@@ -132,7 +133,7 @@ settings using `page add -f agenda.md --faces faces.json` or
 A settings entry replaces the settings for that block. Use `null` to clear
 an entry. Settings stay in the page store. Keep the import file private.
 Current Brainstorm and Demo Queue releases refuse browser framing. Open
-their face links in a separate tab until the engines support embedding.
+their face links in a separate tab, or set `link_only` to show only those links.
 
 ## Verify
 

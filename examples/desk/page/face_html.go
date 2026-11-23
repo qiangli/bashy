@@ -26,13 +26,13 @@ func renderBlockFaces(it *item, b *block, view pageFace, base string) string {
 	switch {
 	case k.Embed:
 		if view == organizerFace {
-			add(organizerFace, embedFace(b, organizerFace, settings.OrganizerURL, true))
+			add(organizerFace, embedFace(b, organizerFace, settings.OrganizerURL, settings.LinkOnly, true))
 		}
 		if view != displayFace {
-			add(participantFace, embedFace(b, participantFace, b.Ref, true))
+			add(participantFace, embedFace(b, participantFace, b.Ref, settings.LinkOnly, true))
 		}
 		if view == organizerFace || view == displayFace {
-			add(displayFace, embedFace(b, displayFace, settings.DisplayURL, view == organizerFace))
+			add(displayFace, embedFace(b, displayFace, settings.DisplayURL, settings.LinkOnly, view == organizerFace))
 		}
 	default:
 		if view != displayFace {
@@ -86,7 +86,7 @@ func faceTitle(face pageFace) string {
 	}
 }
 
-func embedFace(b *block, face pageFace, raw string, openLink bool) string {
+func embedFace(b *block, face pageFace, raw string, linkOnly, openLink bool) string {
 	if raw == "" || validEmbedRef(raw) != nil {
 		return ""
 	}
@@ -103,9 +103,12 @@ func embedFace(b *block, face pageFace, raw string, openLink bool) string {
 	if face == organizerFace {
 		isolation = " credentialless"
 	}
-	out := `<iframe class="page-embed" title="` + html.EscapeString(title+" · "+faceTitle(face)) +
-		`" src="` + ref + `" sandbox="` + permissions + `" referrerpolicy="no-referrer"` + isolation + `></iframe>`
-	if openLink {
+	var out string
+	if !linkOnly {
+		out = `<iframe class="page-embed" title="` + html.EscapeString(title+" · "+faceTitle(face)) +
+			`" src="` + ref + `" sandbox="` + permissions + `" referrerpolicy="no-referrer"` + isolation + `></iframe>`
+	}
+	if openLink || linkOnly {
 		out += `<p><a href="` + ref + `" target="_blank" rel="noopener noreferrer">Open ` +
 			strings.ToLower(faceTitle(face)) + ` view</a></p>`
 	}
@@ -134,9 +137,8 @@ const pageFaceStyle = `<style>
 </style>`
 
 const faceTabsScript = `<script>
-document.querySelectorAll('.page-face-tabs').forEach(group => {
-  const tabs = Array.from(group.querySelectorAll('[role=tab]'));
-  function select(tab) {
+(function () {
+  function select(tabs, tab) {
     tabs.forEach(other => {
       const active = other === tab;
       other.setAttribute('aria-selected', active);
@@ -144,16 +146,21 @@ document.querySelectorAll('.page-face-tabs').forEach(group => {
       document.getElementById(other.getAttribute('aria-controls')).toggleAttribute('data-active', active);
     });
   }
-  group.addEventListener('click', e => { if (tabs.includes(e.target)) select(e.target); });
-  group.addEventListener('keydown', e => {
-    const i = tabs.indexOf(e.target);
-    if (i < 0) return;
+  document.addEventListener('click', e => {
+    const tab = e.target.closest('.page-face-tabs [role=tab]');
+    if (tab) select(Array.from(tab.parentElement.children), tab);
+  });
+  document.addEventListener('keydown', e => {
+    const tab = e.target.closest('.page-face-tabs [role=tab]');
+    if (!tab) return;
+    const tabs = Array.from(tab.parentElement.children);
+    const i = tabs.indexOf(tab);
     const next = {ArrowLeft: (i + tabs.length - 1) % tabs.length,
       ArrowRight: (i + 1) % tabs.length, Home: 0, End: tabs.length - 1}[e.key];
     if (next === undefined) return;
     e.preventDefault();
-    select(tabs[next]);
+    select(tabs, tabs[next]);
     tabs[next].focus();
   });
-});
+})();
 </script>`

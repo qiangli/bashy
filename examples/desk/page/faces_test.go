@@ -33,7 +33,7 @@ func TestPageFaceDisclosure(t *testing.T) {
 	configPath := filepath.Join(tmp, "faces.json")
 	config, err := json.Marshal(map[string]faceSettings{
 		"brainstorm": {OrganizerURL: organizerURL},
-		"queue":      {OrganizerURL: queueURL, DisplayURL: projectorURL},
+		"queue":      {OrganizerURL: queueURL, DisplayURL: projectorURL, LinkOnly: true},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -145,7 +145,7 @@ func TestPageFaceDisclosure(t *testing.T) {
 	}
 	projector := do(a, "GET", "/roles?view=display", "", peer, nil)
 	got := projector.Body.String()
-	if projector.Code != 200 || !strings.Contains(got, projectorURL) || !strings.Contains(got, `class="desk-main page-display"`) {
+	if projector.Code != 200 || !strings.Contains(got, `href="`+projectorURL+`"`) || !strings.Contains(got, `class="desk-main page-display"`) {
 		t.Fatal("projector view missing")
 	}
 	for _, omitted := range []string{brainstormKey, queueKey, boardURL, "<button", "Welcome to the workshop.", "allow-forms"} {

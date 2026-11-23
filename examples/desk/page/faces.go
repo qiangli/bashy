@@ -29,6 +29,7 @@ type faceSettings struct {
 	OrganizerURL string `json:"organizer_url,omitempty"`
 	DisplayURL   string `json:"display_url,omitempty"`
 	Project      bool   `json:"project,omitempty"`
+	LinkOnly     bool   `json:"link_only,omitempty"`
 }
 
 type storedFaces struct {
@@ -89,7 +90,7 @@ func (it *item) updateFaces(changes map[string]*faceSettings) error {
 
 func validateFaces(b *block, f faceSettings) error {
 	k := blockKinds[b.Kind]
-	if f.OrganizerURL != "" || f.DisplayURL != "" {
+	if f.OrganizerURL != "" || f.DisplayURL != "" || f.LinkOnly {
 		if !k.Embed {
 			return fmt.Errorf("face URLs are for embed blocks")
 		}
