@@ -13,7 +13,7 @@ import (
 	"sort"
 	"strings"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 // Field kinds an agent may declare. "secret" is deliberately absent: a

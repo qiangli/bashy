@@ -1,6 +1,6 @@
 package main
 
-import kit "desk-kit"
+import kit "github.com/qiangli/bashy/examples/desk/kit"
 
 const pageJS = `
 function h(tag,attrs,...kids){const e=document.createElement(tag);for(const k in attrs||{})e.setAttribute(k,attrs[k]);for(const c of kids)e.append(c);return e}

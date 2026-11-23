@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 // book is one viewer item: an ordered, append-only list of pages addressed

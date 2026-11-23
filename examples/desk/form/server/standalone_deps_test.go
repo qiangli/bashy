@@ -37,6 +37,9 @@ func TestStandaloneDeps(t *testing.T) {
 			if pkg == bashy+"internal/transcribecontract" || pkg == bashy+"internal/transcribeseed" {
 				continue // the shared stage contract, not a command package
 			}
+			if strings.HasPrefix(pkg, bashy+"examples/desk/kit") || strings.HasPrefix(pkg, bashy+"examples/desk/chart/fence") {
+				continue // the shared desk libraries, required at a published version
+			}
 			t.Errorf("links another bashy package: %s", pkg)
 		case strings.HasPrefix(pkg, "github.com/qiangli/yoke/cmds/") && !strings.HasPrefix(pkg, "github.com/qiangli/yoke/cmds/internal/"):
 			t.Errorf("links a yoke command package: %s", pkg)

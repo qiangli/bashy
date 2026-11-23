@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 func runCLI(args []string, stdout io.Writer) int {

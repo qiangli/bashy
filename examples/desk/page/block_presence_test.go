@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 const presencePageBody = "# Workshop\n\n" +

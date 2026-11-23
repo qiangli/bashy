@@ -16,8 +16,10 @@ printf '[12,18,15,24]' | bashy chart add --input - --widget gauge --json
 
 Run these from this directory before registration; `bashy chart` then works
 from anywhere. The Bash# entry point builds the native Go server/CLI into the
-user cache. Go 1.27 matches the desk kit. The only module dependency is
-`desk-kit v0.0.0`, replaced by `../kit`.
+user cache. Go 1.27 matches the desk kit. The only module dependency is the
+desk kit, required at the version `../register-modules.sh` publishes to the
+local Go module proxy. The chart module is itself published there, so tools
+that embed charts (`chart/fence`) require it the same way.
 
 Default listener: `127.0.0.1:18098`. Store: `$BASHY_HOME/desk/chart/` (the kit's
 XDG/home fallback applies when unset). `serve --addr`, `--data`, `--prefix`

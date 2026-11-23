@@ -147,6 +147,9 @@ func Inspect(action, data, addr string) (string, error) {
 set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Shared desk modules resolve from the local Go module proxy (desk/register-modules.sh publishes them).
+export GOPROXY="file://${BASHY_GOMOD_PROXY:-${BASHY_HOME:-$HOME/.bashy}/gomod-proxy},${GOPROXY:-https://proxy.golang.org,direct}"
+export GONOSUMDB="${GONOSUMDB:+$GONOSUMDB,}github.com/qiangli/bashy/examples"
 data=${BRAINSTORM_DATA:-${XDG_DATA_HOME:-$HOME/.local/share}/bashy/brainstorm}
 addr=${BRAINSTORM_ADDR:-0.0.0.0:18091}
 prefix=${BRAINSTORM_PREFIX:-}

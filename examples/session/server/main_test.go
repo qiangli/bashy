@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 // TestMain doubles as the fake `bashy`: with FAKE_SESSION_DIR set it answers

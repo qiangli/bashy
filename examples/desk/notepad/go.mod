@@ -4,12 +4,10 @@ go 1.27
 
 toolchain go1.27.4
 
-replace desk-kit => ../kit
-
 require (
-	desk-chart v0.0.0
-	desk-kit v0.0.0
 	github.com/go-pdf/fpdf v0.9.0
+	github.com/qiangli/bashy/examples/desk/chart v0.1.0
+	github.com/qiangli/bashy/examples/desk/kit v0.1.0
 	golang.org/x/image v0.47.0
 )
 
@@ -22,5 +20,3 @@ require (
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/net v0.26.0 // indirect
 )
-
-replace desk-chart => ../chart

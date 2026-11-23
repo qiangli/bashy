@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"desk-kit"
+	"github.com/qiangli/bashy/examples/desk/kit"
 )
 
 func runOutpost(args ...string) []byte {

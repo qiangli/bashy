@@ -41,8 +41,8 @@ import (
 	"syscall"
 	"time"
 
-	kit "desk-kit"
-	"desk-kit/render"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
+	"github.com/qiangli/bashy/examples/desk/kit/render"
 )
 
 // breakMode is set from -break; empty means contract-clean.

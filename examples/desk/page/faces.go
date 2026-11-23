@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 type pageFace string

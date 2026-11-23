@@ -23,9 +23,9 @@ import (
 	"syscall"
 	"time"
 
-	"desk-chart/fence"
-	kit "desk-kit"
-	"desk-kit/render"
+	"github.com/qiangli/bashy/examples/desk/chart/fence"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
+	"github.com/qiangli/bashy/examples/desk/kit/render"
 )
 
 // breakMode is set from -break; empty means contract-clean.

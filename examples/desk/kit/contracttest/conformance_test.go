@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 func page(tool string) string {

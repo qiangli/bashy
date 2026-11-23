@@ -25,7 +25,7 @@ import (
 	"sync"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 const defaultAddr = "0.0.0.0:18093"

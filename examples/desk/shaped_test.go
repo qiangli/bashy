@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -81,7 +82,7 @@ func TestDeskToolsShipShapedServer(t *testing.T) {
 			if testing.Short() {
 				return
 			}
-			bin := buildLikeConsole(t, root, m.Server.Main)
+			bin := buildLikeConsole(t, extractAlone(t, root), m.Server.Main, deskProxy(t))
 			runLikeConsole(t, bin, *m.Server)
 		})
 	}
@@ -111,17 +112,101 @@ func hasMainFunc(t *testing.T, dir string) bool {
 }
 
 // buildLikeConsole mirrors yoke pkg/webconsole's server build: the fixed
-// command, GOWORK=off, CGO_ENABLED=0, in the app root.
-func buildLikeConsole(t *testing.T, root, main string) string {
+// command, GOWORK=off, CGO_ENABLED=0, in the app root, shared modules from
+// the local module proxy (gomod.BuildEnv). The module cache starts empty, so
+// every module comes from a proxy: the desk proxy, then the host's own
+// download cache (offline when warm), then the inherited GOPROXY.
+func buildLikeConsole(t *testing.T, root, main, proxy string) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "server")
+	hostCache, err := exec.Command("go", "env", "GOMODCACHE").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	upstream := os.Getenv("GOPROXY")
+	if upstream == "" {
+		upstream = "https://proxy.golang.org,direct"
+	}
 	cmd := exec.Command("go", "build", "-trimpath", "-o", bin, "./"+main)
 	cmd.Dir = root
-	cmd.Env = append(os.Environ(), "GOWORK=off", "CGO_ENABLED=0")
+	cmd.Env = append(os.Environ(), "GOWORK=off", "CGO_ENABLED=0", "GOFLAGS=-modcacherw",
+		"GOMODCACHE="+filepath.Join(t.TempDir(), "mod"),
+		"GOPROXY="+fileURL(proxy)+","+fileURL(filepath.Join(strings.TrimSpace(string(hostCache)), "cache", "download"))+","+upstream,
+		"GONOSUMDB=github.com/qiangli/bashy/examples")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build ./%s in %s: %v\n%s", main, root, err, out)
 	}
 	return bin
+}
+
+func fileURL(dir string) string {
+	p := filepath.ToSlash(dir)
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	return "file://" + p
+}
+
+// extractAlone copies the files git tracks under root, and nothing else, to
+// a fresh directory: the console builds a revision's tree with no sibling
+// directory beside it.
+func extractAlone(t *testing.T, root string) string {
+	t.Helper()
+	out, err := exec.Command("git", "-C", root, "ls-files", "-z", ".").Output()
+	if err != nil {
+		t.Fatalf("git ls-files %s: %v", root, err)
+	}
+	dst := filepath.Join(t.TempDir(), "src")
+	for _, rel := range strings.Split(strings.TrimRight(string(out), "\x00"), "\x00") {
+		b, err := os.ReadFile(filepath.Join(root, rel))
+		if os.IsNotExist(err) {
+			continue
+		} else if err != nil {
+			t.Fatal(err)
+		}
+		target := filepath.Join(dst, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return dst
+}
+
+var (
+	proxyOnce sync.Once
+	proxyDir  string
+	proxyErr  string
+)
+
+// deskProxy publishes the shared desk modules (register-modules.sh, through
+// the candidate bashy) into a proxy directory private to this test run.
+func deskProxy(t *testing.T) string {
+	t.Helper()
+	proxyOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "desk-gomod-proxy-")
+		if err != nil {
+			proxyErr = err.Error()
+			return
+		}
+		bin := os.Getenv("BASHY_BIN")
+		if bin == "" {
+			bin = productBashy(t)
+		}
+		cmd := exec.Command("bash", "register-modules.sh")
+		cmd.Env = append(os.Environ(), "BASHY_BIN="+bin, "BASHY_GOMOD_PROXY="+dir)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			proxyErr = fmt.Sprintf("register-modules.sh: %v\n%s", err, out)
+			return
+		}
+		proxyDir = dir
+	})
+	if proxyErr != "" {
+		t.Fatal(proxyErr)
+	}
+	return proxyDir
 }
 
 // runLikeConsole starts the server with the manifest's argv on a loopback

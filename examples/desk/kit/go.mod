@@ -1,4 +1,4 @@
-module desk-kit
+module github.com/qiangli/bashy/examples/desk/kit
 
 go 1.27
 

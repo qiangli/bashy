@@ -5,7 +5,7 @@ import (
 	"embed"
 	"html/template"
 
-	"desk-chart/fence"
+	"github.com/qiangli/bashy/examples/desk/chart/fence"
 )
 
 //go:embed templates/*.html

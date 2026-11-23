@@ -2,6 +2,8 @@
 set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Shared desk modules come from the local Go module proxy, never a sibling path.
+. "$here/../desk/register-modules.sh"
 runner=${BASHY_BIN:-bashy}
 guide=$("$runner" --bashsharp "$here/session.bsh" --skill)
 verbs=(plan apply next done time goto skip move pause resume status nudge render prep serve join stop demo go test)

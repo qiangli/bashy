@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 var (

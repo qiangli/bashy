@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"desk-kit/contracttest"
+	"github.com/qiangli/bashy/examples/desk/kit/contracttest"
 )
 
 func startTestServer(t *testing.T, breakM string) (string, string, *app) {

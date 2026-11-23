@@ -33,7 +33,7 @@ import (
 	"text/template"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 //go:embed templates

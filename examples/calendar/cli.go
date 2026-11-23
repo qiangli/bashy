@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 const usage = `Usage: calendar VERB [ID] [options]

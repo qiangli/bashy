@@ -30,8 +30,8 @@ import (
 	"time"
 	_ "time/tzdata"
 
-	kit "desk-kit"
-	"desk-kit/render"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
+	"github.com/qiangli/bashy/examples/desk/kit/render"
 )
 
 const (

@@ -15,7 +15,7 @@ import (
 	"strconv"
 	"strings"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 // export serves GET /api/export?id=&to=md|markdown|html|pdf (organizer only).

@@ -2,7 +2,7 @@ package main
 
 import (
 	"bytes"
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 	"encoding/json"
 	"strings"
 	"testing"

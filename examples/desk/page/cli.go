@@ -20,7 +20,7 @@ import (
 	"strings"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|block|hands|publish-outpost] [--json] [-f FILE|-] [--faces FILE] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|markdown|html|pdf] [-o FILE]"

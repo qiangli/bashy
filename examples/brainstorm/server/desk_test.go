@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"desk-kit/contracttest"
+	"github.com/qiangli/bashy/examples/desk/kit/contracttest"
 )
 
 func deskServer(t *testing.T) (*httptest.Server, *app) {

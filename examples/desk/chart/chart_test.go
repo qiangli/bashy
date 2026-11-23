@@ -17,8 +17,8 @@ import (
 	"testing"
 	"time"
 
-	kit "desk-kit"
-	"desk-kit/contracttest"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
+	"github.com/qiangli/bashy/examples/desk/kit/contracttest"
 )
 
 func startServer(t *testing.T) (*app, *httptest.Server) {

@@ -25,7 +25,7 @@ import (
 	"strings"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 	"page/blocks"
 )
 

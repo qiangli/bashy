@@ -10,7 +10,8 @@ Stdlib-only, same tests on Linux/macOS/Windows. Not a yoke package.
 `examples/desk/kit`, as recommended in the sprint plan. A yoke package
 would couple every tool to the yoke release train and its dependency
 closure; a shared example module keeps each tool a standalone Go module
-(`require desk-kit v0.0.0` + `replace desk-kit => ../kit`), dependency-light
+(`require github.com/qiangli/bashy/examples/desk/kit vX.Y.Z`, published to
+the local Go module proxy by `../register-modules.sh`), dependency-light
 and forkable by Software Shaping per tool or per item template. Desk forms
 stay separate from `yoke/pkg/ask`: secrets are refused here (see point 7).
 
@@ -192,14 +193,22 @@ three green (`memo serve -lan`, `-embeddable`) and red on
 
 ## Use in a tool
 
+The kit is a versioned module served by the local Go module proxy, never a
+sibling path: a tool builds from its own directory alone (the console builds a
+revision's tree with nothing beside it). `../register-modules.sh` publishes
+the kit and chart versions it names (`bashy mod proxy publish`); a kit change
+ships under a new version there, and the tools move to it.
+
 ```bash
-# in the tool server module:
-go mod edit -require=desk-kit@v0.0.0 -replace=desk-kit=../kit
+# in the tool server module, after ../register-modules.sh:
+export GOPROXY="file://${BASHY_GOMOD_PROXY:-$HOME/.bashy/gomod-proxy},https://proxy.golang.org,direct"
+export GONOSUMDB=github.com/qiangli/bashy/examples
+go get github.com/qiangli/bashy/examples/desk/kit@v0.1.0
 ```
 
 ```go
-import kit "desk-kit"
-import "desk-kit/contracttest"
+import kit "github.com/qiangli/bashy/examples/desk/kit"
+import "github.com/qiangli/bashy/examples/desk/kit/contracttest"
 ```
 
 ## Verify

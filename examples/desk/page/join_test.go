@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"desk-kit"
+	"github.com/qiangli/bashy/examples/desk/kit"
 )
 
 func joinRequest(method, path, addr string) *http.Request {

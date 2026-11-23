@@ -17,9 +17,9 @@ import (
 	"strings"
 	"time"
 
-	kit "desk-kit"
-	"desk-kit/render"
 	"github.com/go-pdf/fpdf"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
+	"github.com/qiangli/bashy/examples/desk/kit/render"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
 	"golang.org/x/image/math/fixed"

@@ -9,7 +9,7 @@ import (
 	"regexp"
 	"strings"
 
-	"desk-kit"
+	"github.com/qiangli/bashy/examples/desk/kit"
 )
 
 var errJoinCodeInUse = errors.New("join code is already in use")

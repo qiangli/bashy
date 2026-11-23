@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 const modeReply = "replyform"

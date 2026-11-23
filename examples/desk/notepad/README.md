@@ -104,8 +104,9 @@ bashy src history notepad --user device:alice
 The console builds the server from each user's active revision (`go build
 -trimpath`, `GOWORK=off`, `CGO_ENABLED=0`), starts it on a loopback port it
 picks with that user's app data as `-data`, and proxies `/notepad/` to it.
-`app add` vendors the out-of-tree `desk-kit => ../kit` replace into the
-managed checkout so every revision builds from its own tree. The page calls
+The kit is required at a version served by the local Go module proxy
+(`../register-modules.sh`; the console build sets `GOPROXY=file://…`), so
+every revision builds from its own tree. The page calls
 `api/action` relative to itself so it works at `/` and under a mount, and
 item URLs follow the mount (`X-Forwarded-Prefix`) instead of naming the
 server's internal loopback address.

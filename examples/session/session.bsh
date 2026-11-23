@@ -69,6 +69,9 @@ Render the same source with `--edition owner` for preparation and
 set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Shared desk modules resolve from the local Go module proxy (desk/register-modules.sh publishes them).
+export GOPROXY="file://${BASHY_GOMOD_PROXY:-${BASHY_HOME:-$HOME/.bashy}/gomod-proxy},${GOPROXY:-https://proxy.golang.org,direct}"
+export GONOSUMDB="${GONOSUMDB:+$GONOSUMDB,}github.com/qiangli/bashy/examples"
 usage='Usage: session plan|apply|next|done|time|goto|skip|move|pause|resume|status|nudge|render|prep|serve|join|stop|demo|go|test [ARGS] [--json]'
 # Registered schemas canonicalize flags before positionals as --name=value.
 # Restore the verb-first argv expected by the shared Python dispatchers.

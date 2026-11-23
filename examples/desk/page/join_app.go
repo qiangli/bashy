@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"desk-kit"
+	"github.com/qiangli/bashy/examples/desk/kit"
 )
 
 //go:embed shaped.json

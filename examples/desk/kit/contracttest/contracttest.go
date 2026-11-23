@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 // Config describes the tool server under test.

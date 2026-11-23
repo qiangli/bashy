@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"desk-kit/contracttest"
+	"github.com/qiangli/bashy/examples/desk/kit/contracttest"
 )
 
 func startServer(t *testing.T, breakM string) string {

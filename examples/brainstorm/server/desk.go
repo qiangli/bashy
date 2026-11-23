@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 // The desk agent door: add|open|show|set|list|share|close over the same

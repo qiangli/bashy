@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	kit "desk-kit"
-	"desk-kit/render"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
+	"github.com/qiangli/bashy/examples/desk/kit/render"
 )
 
 // The viewer's own CSS: layout only, every colour and font from kit tokens.

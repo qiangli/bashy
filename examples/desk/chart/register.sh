@@ -2,6 +2,8 @@
 set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Shared desk modules come from the local Go module proxy, never a sibling path.
+. "$here/../register-modules.sh"
 runner=${BASHY_BIN:-bashy}
 guide=$("$runner" --bashsharp "$here/chart.bsh" --skill)
 atlas_args=()

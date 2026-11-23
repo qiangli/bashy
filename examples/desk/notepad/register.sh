@@ -2,6 +2,8 @@
 set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Shared desk modules come from the local Go module proxy, never a sibling path.
+. "$here/../register-modules.sh"
 bin=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-notepad/notepad
 mkdir -p "$(dirname "$bin")"
 (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -o "$bin" .)

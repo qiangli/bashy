@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 // Called under a.mu. Refresh is demand-driven and bounded; snapshots never

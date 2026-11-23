@@ -34,10 +34,10 @@ import (
 	"syscall"
 	"time"
 
-	kit "desk-kit"
-	"desk-kit/render"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
+	"github.com/qiangli/bashy/examples/desk/kit/render"
 
-	"desk-chart/fence"
+	"github.com/qiangli/bashy/examples/desk/chart/fence"
 )
 
 func init() {

@@ -4,7 +4,7 @@ go 1.27
 
 toolchain go1.27.4
 
-require desk-kit v0.0.0
+require github.com/qiangli/bashy/examples/desk/kit v0.1.0
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0 // indirect
@@ -15,5 +15,3 @@ require (
 	github.com/yuin/goldmark v1.8.2 // indirect
 	golang.org/x/net v0.26.0 // indirect
 )
-
-replace desk-kit => ../desk/kit

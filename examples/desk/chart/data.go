@@ -1,6 +1,6 @@
 package main
 
-import "desk-chart/fence"
+import "github.com/qiangli/bashy/examples/desk/chart/fence"
 
 // The chart core (series parsing, SVG geometry) lives in the fence package
 // so kit Markdown ```chart fences reuse the C1 renderer instead of

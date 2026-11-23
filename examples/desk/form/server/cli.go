@@ -16,7 +16,7 @@ import (
 	"strings"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 // answerFlags collects repeated --answer key=value pairs.

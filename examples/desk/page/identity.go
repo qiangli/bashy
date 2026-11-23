@@ -15,7 +15,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"desk-kit"
+	"github.com/qiangli/bashy/examples/desk/kit"
 )
 
 const pageParticipantCookie = "page-participant"

@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 const usage = `Usage: viewer VERB [ID] [options]   (view-only: no set/edit — edit text in notepad)

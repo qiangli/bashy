@@ -14,7 +14,7 @@ import (
 	"sort"
 	"strings"
 
-	kit "desk-kit"
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
 // blockKind describes one block kind: whether it names an item another app

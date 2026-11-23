@@ -181,8 +181,8 @@ Desk seven (`add|open|show|set|list|share|close`, `--json`) plus `ask` and `wait
 all over the same `/api/...` operations; `open` prints id, URL, status
 only; loopback bind (`127.0.0.1:18107` default); stable id + loopback URL;
 contentless `list`; single-use share invites; `set` after `close` is 409.
-Go module `form-server` pulls the kit with
-`require desk-kit v0.0.0` + `replace desk-kit => ../kit`.
+Go module `form-server` requires the kit and chart at the versions
+`../register-modules.sh` publishes to the local Go module proxy.
 
 ## Layout
 
