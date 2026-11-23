@@ -16,11 +16,12 @@ const mailboxSchema = "bashy-mailbox-v1"
 type mailboxSpec struct{ Key, Address, Kind string }
 
 type mailboxMark struct {
-	ReadAt    string `json:"read_at,omitempty"`
-	AckedAt   string `json:"acked_at,omitempty"`
-	Preserved bool   `json:"preserved,omitempty"`
-	Project   string `json:"project,omitempty"`
-	Status    string `json:"status,omitempty"`
+	DeliveredAt string `json:"delivered_at,omitempty"`
+	ReadAt      string `json:"read_at,omitempty"`
+	AckedAt     string `json:"acked_at,omitempty"`
+	Preserved   bool   `json:"preserved,omitempty"`
+	Project     string `json:"project,omitempty"`
+	Status      string `json:"status,omitempty"`
 }
 
 type mailboxState struct {

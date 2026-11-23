@@ -131,8 +131,9 @@ func memoizeHostRolesFor(reader string) (func(), []conductedSprint) {
 	prevRoles := bus.HostRoles
 	prevSelect := bus.FleetSelect
 	if prevRoles == nil && len(conducted) == 0 {
-		snapshotRolesMu.Unlock()
-		return func() {}, nil
+		return func() {
+			snapshotRolesMu.Unlock()
+		}, nil
 	}
 	var rolesOnce sync.Once
 	var roles []bus.HostRole

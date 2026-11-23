@@ -44,6 +44,7 @@ type unifiedInboxEvent struct {
 	StoryID       string              `json:"story_id,omitempty"`
 	SuggestedVerb string              `json:"suggested_verb,omitempty"`
 	Body          string              `json:"body"`
+	HuntGroup     bool                `json:"-"`
 	Origin        *unifiedInboxOrigin `json:"origin,omitempty"`
 }
 
@@ -59,9 +60,10 @@ type inboxBatch struct {
 	hintIncomplete bool
 	// before provenance collapse, for exact turn acknowledgements of seeded
 	// Meet copies that share one rendered MB record.
-	rawEvents []unifiedInboxEvent
-	acks      []func() error
-	warns     []string
+	rawEvents  []unifiedInboxEvent
+	roleTopics map[string]string
+	acks       []func() error
+	warns      []string
 }
 
 // inboxWatcherClaim is one registered watcher's hold on a fleet identity: how
@@ -351,6 +353,42 @@ func inboxPersonClaimID(handle string) string {
 // cursor, or a role must not file a watcher card. The refusal names BOTH
 // registries so it never sends a human to a list they can never appear in.
 func resolveInboxWatcherIdentity(reader string) (inboxWatcherIdentity, error) {
+	if id, isInst := bus.ExplicitInstanceID(reader); isInst {
+		inst, err := bus.InstanceStoreFn().Get(id)
+		if err != nil {
+			return inboxWatcherIdentity{}, fmt.Errorf("inbox: instance %s: %w", id, err)
+		}
+		if !inst.Active() {
+			return inboxWatcherIdentity{}, fmt.Errorf("inbox: instance %s (%s) is retired", inst.UUID, inst.Label)
+		}
+		binding := strings.TrimSpace(inst.Family)
+		if len(inst.Bindings) > 0 {
+			binding = inst.Bindings[0]
+		}
+		toolName, modelName, _ := strings.Cut(binding, ":")
+		if _, ok := fleet.New().Tool(toolName); !ok {
+			toolName, modelName = bus.MainLineBase(inst.Label), ""
+		}
+		sess := bus.HashSessionClaim(currentAgentSession(inst.UUID))
+		if sess == "" {
+			sess = strings.TrimSpace(os.Getenv("BASHY_SESSION_CLAIM"))
+		}
+		nick := strings.TrimSpace(inst.Label)
+		if nick == "" {
+			nick = inst.UUID
+		}
+		return inboxWatcherIdentity{
+			kind:         "instance",
+			name:         inst.UUID,
+			claimID:      inst.ClaimID(),
+			principal:    inst.URN(),
+			sessionClaim: sess,
+			tool:         toolName,
+			model:        modelName,
+			binding:      binding,
+			nick:         nick,
+		}, nil
+	}
 	cat := fleet.New()
 	if agent, ok := cat.Agent(reader); ok {
 		return inboxWatcherIdentity{
@@ -398,7 +436,7 @@ var deliverSessionMail = func(ctx context.Context, repoRoot, reader string) (wea
 }
 
 func snapshotUnifiedInbox(reader string, limit int, includeBus bool) (inboxBatch, error) {
-	return snapshotInbox(reader, limit, includeBus, true)
+	return snapshotInboxWithOptions(reader, limit, includeBus, true, false, true)
 }
 
 // snapshotRolesMu serializes the memoized role-table window below.
@@ -415,6 +453,10 @@ func snapshotInbox(reader string, limit int, includeBus, deliver bool) (inboxBat
 }
 
 func snapshotInboxWithHint(reader string, limit int, includeBus, deliver, hint bool) (inboxBatch, error) {
+	return snapshotInboxWithOptions(reader, limit, includeBus, deliver, hint, false)
+}
+
+func snapshotInboxWithOptions(reader string, limit int, includeBus, deliver, hint, forTurn bool) (inboxBatch, error) {
 	restoreRoles, conducted := memoizeHostRolesFor(reader)
 	defer restoreRoles()
 	var batch inboxBatch
@@ -455,8 +497,9 @@ func snapshotInboxWithHint(reader string, limit int, includeBus, deliver, hint b
 		}
 	}
 	var roleTopics map[string]string
-	if limit > 0 {
-		roleTopics = hostRoleTopics()
+	if limit > 0 || forTurn {
+		roleTopics = hostRoleTopicsLocked()
+		batch.roleTopics = roleTopics
 	}
 	appendLimited := func(source string, events []unifiedInboxEvent, ack func() error) {
 		// Explicit ack is per record, not a source high-water mark: advancing
@@ -468,13 +511,17 @@ func snapshotInboxWithHint(reader string, limit int, includeBus, deliver, hint b
 			if event.Source == "meet" {
 				idSource += ":" + event.Room
 			}
-			if state.Marks[fmt.Sprintf("%s:%d", idSource, event.Seq)].AckedAt != "" {
+			id := fmt.Sprintf("%s:%d", idSource, event.Seq)
+			mark := state.Marks[id]
+			if mark.AckedAt != "" || (forTurn && mark.DeliveredAt != "") {
 				continue
 			}
 			// A seeded Meet copy shares the original MB acknowledgment.
-			if event.Origin != nil && strings.EqualFold(event.Origin.Source, "mb") &&
-				state.Marks[fmt.Sprintf("mb:%d", event.Origin.Seq)].AckedAt != "" {
-				continue
+			if event.Origin != nil && strings.EqualFold(event.Origin.Source, "mb") {
+				origMark := state.Marks[fmt.Sprintf("mb:%d", event.Origin.Seq)]
+				if origMark.AckedAt != "" || (forTurn && origMark.DeliveredAt != "") {
+					continue
+				}
 			}
 			pending = append(pending, event)
 		}
@@ -520,14 +567,26 @@ func snapshotInboxWithHint(reader string, limit int, includeBus, deliver, hint b
 	}
 	posts := append(directed, other...)
 	mbEvents := make([]unifiedInboxEvent, 0, len(posts))
-	var mbHigh int64
+	var mbHigh, waitingHuntSeq int64
 	for _, p := range posts {
+		if p.IsHuntGroup() && bus.ClaimHolder(p.Seq) == "" && !bus.ReaderHasLiveSession(reader, p.To) {
+			if waitingHuntSeq == 0 || p.Seq < waitingHuntSeq {
+				waitingHuntSeq = p.Seq
+			}
+		}
 		if p.Seq > mbHigh {
 			mbHigh = p.Seq
 		}
-		mbEvents = append(mbEvents, unifiedInboxEvent{Schema: unifiedInboxSchema, Source: "mb", Seq: p.Seq, At: p.At, From: p.From, FromParty: p.FromParty, To: mbInboxTo(p), Topic: p.Topic, Body: p.Body})
+		mbEvents = append(mbEvents, unifiedInboxEvent{Schema: unifiedInboxSchema, Source: "mb", Seq: p.Seq, At: p.At, From: p.From, FromParty: p.FromParty, To: mbInboxTo(p), Topic: p.Topic, Body: p.Body, HuntGroup: p.IsHuntGroup()})
 	}
-	appendLimited("mb", mbEvents, func() error { return bus.MarkSeen(reader, mbHigh) })
+	if waitingHuntSeq > 0 && mbHigh >= waitingHuntSeq {
+		mbHigh = waitingHuntSeq - 1
+	}
+	var mbAck func() error
+	if mbHigh > 0 {
+		mbAck = func() error { return bus.MarkSeen(reader, mbHigh) }
+	}
+	appendLimited("mb", mbEvents, mbAck)
 
 	// Every Meet room a reader is SEATED in is a channel. Deliverability keys on
 	// the seat, never on the room's type: holding a seat IS a subscription to
@@ -782,6 +841,17 @@ func emptyAs(value, fallback string) string {
 	return value
 }
 
+func claimAdmittedHuntEvents(reader string, events []unifiedInboxEvent) []unifiedInboxEvent {
+	claimed := make([]unifiedInboxEvent, 0, len(events))
+	for _, e := range events {
+		if !claimHuntInboxEvent(reader, e) {
+			continue
+		}
+		claimed = append(claimed, e)
+	}
+	return claimed
+}
+
 // unifiedTurnPreamble is wired into coreutils/chat. Bus pending is already
 // drained by bus.TurnPreamble itself; this callback adds every other source in
 // one bounded block and acknowledges only after rendering that block in memory.
@@ -791,6 +861,7 @@ func unifiedTurnPreamble(agent string) bus.PreparedPreamble {
 		warning := fmt.Sprintf("[Bashy unified inbox warning]\nCould not read every inbound source: %v\nNo source cursor was advanced; run `bashy inbox --as %s`.", err, agent)
 		return bus.NewPreparedPreamble(warning, nil)
 	}
+	batch.events = claimAdmittedHuntEvents(agent, batch.events)
 	if len(batch.events) == 0 {
 		return bus.PreparedPreamble{}
 	}

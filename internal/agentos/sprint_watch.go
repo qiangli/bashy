@@ -210,6 +210,12 @@ func runSprintInboxWatchLoop(ctx context.Context, out, errOut io.Writer, sprintI
 					return sprintWatchDetachStore, fmt.Errorf("sprint watch: read the unified inbox for %s: %w", owner, err)
 				}
 				gate.commit(sum, sampled, now)
+				if len(batch.events) > 0 {
+					batch.events = claimAdmittedHuntEvents(owner, batch.events)
+					if len(batch.events) == 0 {
+						batch.acks = nil
+					}
+				}
 				if len(batch.events) == 0 {
 					// Filtered outbound records are not manager input and need no
 					// human/model acknowledgement to advance their exact watermark.

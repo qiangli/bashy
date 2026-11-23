@@ -26,17 +26,65 @@ func wireMessageBoard() {
 		return out
 	}
 	bus.DetectHarness = fleet.DetectTool
-	bus.CurrentSessionClaim = func(agentName string) string {
-		agent, ok := fleet.New().Agent(agentName)
-		if !ok {
-			return ""
+	bus.CurrentSessionClaim = currentAgentSession
+	bus.IsMainLineTool = isSteerToolName
+}
+
+func currentAgentSession(agentName string) string {
+	if agent, ok := fleet.New().Agent(agentName); ok {
+		if tool, ok := fleet.New().Tool(agent.Tool); ok {
+			return tool.CurrentSession()
 		}
-		tool, ok := fleet.New().Tool(agent.Tool)
-		if !ok {
-			return ""
+	}
+	if id, isInst := bus.ExplicitInstanceID(agentName); isInst {
+		if inst, err := fleet.NewInstanceStore("").Get(id); err == nil && inst.Active() {
+			if raw := sessionFromInstanceCandidates(inst); raw != "" {
+				return raw
+			}
 		}
+	}
+	if inst, found, err := bus.ResolveLiveInstanceByLabel(agentName); err == nil && found {
+		if raw := sessionFromInstanceCandidates(inst); raw != "" {
+			return raw
+		}
+	}
+	if raw := sessionForBindingOrTool(agentName); raw != "" {
+		return raw
+	}
+	return ""
+}
+
+func sessionFromInstanceCandidates(inst fleet.Instance) string {
+	for _, candidate := range append([]string{inst.Label, inst.Family}, inst.Bindings...) {
+		if raw := sessionForBindingOrTool(candidate); raw != "" {
+			return raw
+		}
+	}
+	return ""
+}
+
+func sessionForBindingOrTool(name string) string {
+	toolName, _, _ := strings.Cut(strings.TrimSpace(name), ":")
+	if tool, ok := fleet.New().Tool(toolName); ok {
 		return tool.CurrentSession()
 	}
+	if tool, ok := fleet.New().Tool(bus.MainLineBase(name)); ok {
+		return tool.CurrentSession()
+	}
+	return ""
+}
+
+func isSteerToolName(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
+	t, ok := fleet.New().Tool(name)
+	if !ok {
+		return false
+	}
+	_, steer := t.SteerArgvPrefix("")
+	return steer
 }
 
 func wrapAuthoredClaimErrors(cmd *cobra.Command) {
@@ -58,41 +106,37 @@ func wrapAuthoredClaimErrors(cmd *cobra.Command) {
 			holderMode := ""
 			holderPID := 0
 			if canon := strings.TrimSpace(as); canon != "" {
-				if card, live, ferr := room.Find(room.AgentClaimID(canon)); ferr == nil && live {
-					mode := strings.TrimSpace(card.Mode)
-					if mode == "" {
-						mode = "unknown"
+				claimIDs := []string{room.AgentClaimID(canon), canon}
+				if id, ok := bus.ExplicitInstanceID(canon); ok {
+					claimIDs = append([]string{"instance:" + id}, claimIDs...)
+				} else if inst, found, _ := bus.ResolveLiveInstanceByLabel(canon); found {
+					claimIDs = append([]string{inst.ClaimID()}, claimIDs...)
+				}
+				for _, cid := range claimIDs {
+					if card, live, ferr := room.Find(cid); ferr == nil && live {
+						mode := strings.TrimSpace(card.Mode)
+						if mode == "" {
+							mode = "unknown"
+						}
+						holderMode = mode
+						owner := card.OwnerPID
+						if owner == 0 {
+							owner = card.PID
+						}
+						holderPID = owner
+						holderDetail = fmt.Sprintf(" holder: pid %d, mode %q, task %q, cwd %q, session %q", owner, mode, strings.TrimSpace(card.Task), strings.TrimSpace(card.Cwd), card.SessionClaim)
+						break
 					}
-					holderMode = mode
-					owner := card.OwnerPID
-					if owner == 0 {
-						owner = card.PID
-					}
-					holderPID = owner
-					holderDetail = fmt.Sprintf(" holder: pid %d, mode %q, task %q, cwd %q, session %q", owner, mode, strings.TrimSpace(card.Task), strings.TrimSpace(card.Cwd), card.SessionClaim)
-				} else if card, live, ferr := room.Find(canon); ferr == nil && live {
-					mode := strings.TrimSpace(card.Mode)
-					if mode == "" {
-						mode = "unknown"
-					}
-					holderMode = mode
-					owner := card.OwnerPID
-					if owner == 0 {
-						owner = card.PID
-					}
-					holderPID = owner
-					holderDetail = fmt.Sprintf(" holder: pid %d, mode %q, task %q, cwd %q, session %q", owner, mode, strings.TrimSpace(card.Task), strings.TrimSpace(card.Cwd), card.SessionClaim)
 				}
 			}
-			hint := "take the seat with 'bashy sprint claim last <story> --owner " + as + "'"
-			if holderPID > 0 {
+			if holderPID > 0 && holderMode != "" {
+				hint := fmt.Sprintf("pid %d (%s) owns this seat; release it there or take explicitly", holderPID, holderMode)
 				if holderMode == "foreman" {
 					hint = fmt.Sprintf("foreman pid %d owns this seat; inspect with 'bashy foreman status' or release with 'bashy foreman pause'", holderPID)
-				} else {
-					hint = fmt.Sprintf("pid %d (%s) owns this seat; release it there or take explicitly", holderPID, holderMode)
 				}
+				return fmt.Errorf("%w (%s; %s)", err, holderDetail, hint)
 			}
-			return fmt.Errorf("%w (%s; %s)", err, holderDetail, hint)
+			return fmt.Errorf("%w; establish or refresh ownership in the SAME session (run `bashy inbox --as %s --peek`, `bashy inbox --as %s --watch`, or export BASHY_AGENT=%s when unclaimed)", err, as, as, as)
 		}
 	}
 }

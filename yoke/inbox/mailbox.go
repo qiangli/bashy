@@ -24,11 +24,12 @@ const mailboxSchema = "bashy-mailbox-v1"
 type mailboxSpec struct{ Key, Address, Kind string }
 
 type mailboxMark struct {
-	ReadAt    string `json:"read_at,omitempty"`
-	AckedAt   string `json:"acked_at,omitempty"`
-	Preserved bool   `json:"preserved,omitempty"`
-	Project   string `json:"project,omitempty"`
-	Status    string `json:"status,omitempty"`
+	DeliveredAt string `json:"delivered_at,omitempty"`
+	ReadAt      string `json:"read_at,omitempty"`
+	AckedAt     string `json:"acked_at,omitempty"`
+	Preserved   bool   `json:"preserved,omitempty"`
+	Project     string `json:"project,omitempty"`
+	Status      string `json:"status,omitempty"`
 }
 
 type mailboxState struct {
@@ -52,6 +53,7 @@ type mailboxItem struct {
 	Status       string              `json:"status,omitempty"`
 	Room         string              `json:"room,omitempty"`
 	Body         string              `json:"body"`
+	Delivered    bool                `json:"delivered"`
 	Read         bool                `json:"read"`
 	Acknowledged bool                `json:"acknowledged"`
 	Preserved    bool                `json:"preserved"`
@@ -222,7 +224,7 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 		}
 		id := fmt.Sprintf("mb:%d", p.Seq)
 		m := state.Marks[id]
-		out = append(out, mailboxItem{Schema: mailboxSchema, ID: id, Source: "mb", Seq: p.Seq, At: p.At, From: p.From, FromParty: p.FromParty, To: p.Audiences(), Topic: p.Topic, Project: m.Project, Status: m.Status, Body: p.Body, Read: m.ReadAt != "", Acknowledged: m.AckedAt != "", Preserved: m.Preserved})
+		out = append(out, mailboxItem{Schema: mailboxSchema, ID: id, Source: "mb", Seq: p.Seq, At: p.At, From: p.From, FromParty: p.FromParty, To: p.Audiences(), Topic: p.Topic, Project: m.Project, Status: m.Status, Body: p.Body, Delivered: m.DeliveredAt != "", Read: m.ReadAt != "", Acknowledged: m.AckedAt != "", Preserved: m.Preserved})
 	}
 	rooms, err := meet.Rooms()
 	if err != nil {
@@ -256,7 +258,7 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 			}
 			id := fmt.Sprintf("meet:%s:%d", r.ID, rec.Seq)
 			m := state.Marks[id]
-			item := mailboxItem{Schema: mailboxSchema, ID: id, Source: "meet", Seq: rec.Seq, At: ev.TS.Format(time.RFC3339Nano), From: ev.Speaker, To: emptyAs(ev.To, "all"), Topic: ev.Kind, Project: m.Project, Status: emptyAs(m.Status, ev.Status), Room: r.ID, Body: ev.Text, Read: m.ReadAt != "", Acknowledged: m.AckedAt != "", Preserved: m.Preserved}
+			item := mailboxItem{Schema: mailboxSchema, ID: id, Source: "meet", Seq: rec.Seq, At: ev.TS.Format(time.RFC3339Nano), From: ev.Speaker, To: emptyAs(ev.To, "all"), Topic: ev.Kind, Project: m.Project, Status: emptyAs(m.Status, ev.Status), Room: r.ID, Body: ev.Text, Delivered: m.DeliveredAt != "", Read: m.ReadAt != "", Acknowledged: m.AckedAt != "", Preserved: m.Preserved}
 			if item.Project == "" {
 				item.Project = r.Topic
 			}
@@ -276,7 +278,7 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 		}
 		id := fmt.Sprintf("bus:%d", e.Seq)
 		m := state.Marks[id]
-		out = append(out, mailboxItem{Schema: mailboxSchema, ID: id, Source: "bus", Seq: e.Seq, At: e.TS, From: e.Principal, To: emptyAs(e.To, "all"), Topic: e.Topic, Project: m.Project, Status: m.Status, Room: e.Room, Body: e.Body, Read: m.ReadAt != "", Acknowledged: m.AckedAt != "", Preserved: m.Preserved})
+		out = append(out, mailboxItem{Schema: mailboxSchema, ID: id, Source: "bus", Seq: e.Seq, At: e.TS, From: e.Principal, To: emptyAs(e.To, "all"), Topic: e.Topic, Project: m.Project, Status: m.Status, Room: e.Room, Body: e.Body, Delivered: m.DeliveredAt != "", Read: m.ReadAt != "", Acknowledged: m.AckedAt != "", Preserved: m.Preserved})
 	}
 	if spec.Kind == "agent" && bus.HostRoles != nil {
 		for _, role := range bus.HostRoles() {
@@ -290,7 +292,7 @@ func snapshotMailbox(spec mailboxSpec) ([]mailboxItem, mailboxState, error) {
 			for _, p := range pending {
 				id := fmt.Sprintf("role:%s:%d", role.Label, p.Seq)
 				mark := state.Marks[id]
-				out = append(out, mailboxItem{Schema: mailboxSchema, ID: id, Source: "role", Seq: p.Seq, At: p.TS, From: p.Principal, To: role.Label, Topic: p.Topic, Project: mark.Project, Status: mark.Status, Room: p.Room, Body: p.Body, Read: mark.ReadAt != "", Acknowledged: mark.AckedAt != "", Preserved: mark.Preserved})
+				out = append(out, mailboxItem{Schema: mailboxSchema, ID: id, Source: "role", Seq: p.Seq, At: p.TS, From: p.Principal, To: role.Label, Topic: p.Topic, Project: mark.Project, Status: mark.Status, Room: p.Room, Body: p.Body, Delivered: mark.DeliveredAt != "", Read: mark.ReadAt != "", Acknowledged: mark.AckedAt != "", Preserved: mark.Preserved})
 			}
 		}
 	}
@@ -473,6 +475,9 @@ func renderMailbox(cmd *cobra.Command, items []mailboxItem, jsonOut bool) error 
 	}
 	for _, i := range items {
 		state := "unread"
+		if i.Delivered {
+			state = "delivered"
+		}
 		if i.Read {
 			state = "read"
 		}
@@ -606,6 +611,15 @@ func newMailboxStateCmd(action string, human bool) *cobra.Command {
 			by[i.ID] = i
 		}
 		now := time.Now().UTC().Format(time.RFC3339)
+		var boardPosts []bus.Post
+		if action == "ack" && !peek {
+			for _, id := range args {
+				if strings.HasPrefix(id, "mb:") {
+					boardPosts, _ = bus.Posts()
+					break
+				}
+			}
+		}
 		var selected []mailboxItem
 		for _, id := range args {
 			i, ok := by[id]
@@ -621,6 +635,19 @@ func newMailboxStateCmd(action string, human bool) *cobra.Command {
 			case "read":
 				m.ReadAt = now
 			case "ack":
+				if i.Source == "mb" {
+					for _, p := range boardPosts {
+						if p.Seq == i.Seq && p.IsHuntGroup() {
+							if !bus.ReaderHasLiveSession(spec.Address, p.To) {
+								return fmt.Errorf("inbox ack: %s requires a live session on %s to claim hunt-group mail", id, p.To)
+							}
+							if holder, granted := bus.ClaimPost(p.Seq, spec.Address); !granted && !bus.ClaimMatchesReader(holder, spec.Address) {
+								return fmt.Errorf("inbox ack: %s was already claimed by %s", id, holder)
+							}
+							break
+						}
+					}
+				}
 				m.ReadAt = now
 				m.AckedAt = now
 				m.Preserved = false

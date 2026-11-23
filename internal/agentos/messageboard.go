@@ -35,6 +35,7 @@ func wireMessageBoard() {
 	bus.FleetSelect = fleetSelectAudience
 	bus.FleetResolveName = fleetResolveAgentName
 	bus.CurrentSessionClaim = currentAgentSession
+	bus.IsMainLineTool = func(name string) bool { _, ok := lookupSteerTool(name); return ok }
 
 	// WHO you are, not merely who you can address.
 	//
@@ -111,15 +112,47 @@ func sharedInboxFingerprint(agent string) (uint64, bool) {
 // or comparing it; keeping registry policy here avoids making pkg/bus depend on
 // the fleet catalog.
 func currentAgentSession(agentName string) string {
-	agent, ok := fleet.New().Agent(agentName)
-	if !ok {
-		return ""
+	if agent, ok := fleet.New().Agent(agentName); ok {
+		if tool, ok := fleet.New().Tool(agent.Tool); ok {
+			return tool.CurrentSession()
+		}
 	}
-	tool, ok := fleet.New().Tool(agent.Tool)
-	if !ok {
-		return ""
+	if id, isInst := bus.ExplicitInstanceID(agentName); isInst {
+		if inst, err := fleet.NewInstanceStore("").Get(id); err == nil && inst.Active() {
+			if raw := sessionFromInstanceCandidates(inst); raw != "" {
+				return raw
+			}
+		}
 	}
-	return tool.CurrentSession()
+	if inst, found, err := bus.ResolveLiveInstanceByLabel(agentName); err == nil && found {
+		if raw := sessionFromInstanceCandidates(inst); raw != "" {
+			return raw
+		}
+	}
+	if raw := sessionForBindingOrTool(agentName); raw != "" {
+		return raw
+	}
+	return ""
+}
+
+func sessionFromInstanceCandidates(inst fleet.Instance) string {
+	for _, candidate := range append([]string{inst.Label, inst.Family}, inst.Bindings...) {
+		if raw := sessionForBindingOrTool(candidate); raw != "" {
+			return raw
+		}
+	}
+	return ""
+}
+
+func sessionForBindingOrTool(name string) string {
+	toolName, _, _ := strings.Cut(strings.TrimSpace(name), ":")
+	if tool, ok := fleet.New().Tool(toolName); ok {
+		return tool.CurrentSession()
+	}
+	if tool, ok := fleet.New().Tool(bus.MainLineBase(name)); ok {
+		return tool.CurrentSession()
+	}
+	return ""
 }
 
 // notifyMeetInvitation is the write half of meet's message-board seam. The

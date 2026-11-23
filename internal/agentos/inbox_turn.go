@@ -20,7 +20,10 @@ func unifiedTurnItems(reader string) ([]admission.Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	roleTopics := hostRoleTopics()
+	roleTopics := batch.roleTopics
+	if roleTopics == nil {
+		roleTopics = hostRoleTopics()
+	}
 	items := make([]admission.Item, 0, len(batch.events))
 	for _, event := range batch.events {
 		e := event
@@ -29,18 +32,30 @@ func unifiedTurnItems(reader string) ([]admission.Item, error) {
 		if e.To != "" {
 			priority = admission.PriorityDirected
 		}
+		var claimFn func() bool
+		if e.Source == "mb" && e.HuntGroup {
+			claimFn = func() bool { return claimHuntInboxEvent(reader, e) }
+		}
 		items = append(items, admission.Item{
 			Source: e.Source, ID: strconv.FormatInt(e.Seq, 10), Sequence: e.Seq, From: e.From,
 			To: e.To, Topic: e.Topic, Priority: priority, Body: e.Body,
-			ArtifactRef: "bashy inbox read --as " + strconv.Quote(reader) + " " + strconv.Quote(id),
-			OverflowRef: "bashy inbox --as " + strconv.Quote(reader) + " --peek",
-			Acknowledge: func() error { return acknowledgeTurnInboxItem(reader, e, batch.rawEvents, roleTopics) },
+			ArtifactRef:   "bashy inbox read --as " + strconv.Quote(reader) + " " + strconv.Quote(id),
+			OverflowRef:   "bashy inbox --as " + strconv.Quote(reader) + " --peek",
+			Claim:         claimFn,
+			MarkDelivered: func() error { return deliverTurnInboxItem(reader, e, batch.rawEvents, roleTopics) },
+			Acknowledge:   func() error { return acknowledgeTurnInboxItem(reader, e, batch.rawEvents, roleTopics) },
 		})
 	}
 	return items, nil
 }
 
 func hostRoleTopics() map[string]string {
+	snapshotRolesMu.Lock()
+	defer snapshotRolesMu.Unlock()
+	return hostRoleTopicsLocked()
+}
+
+func hostRoleTopicsLocked() map[string]string {
 	roleTopics := map[string]string{}
 	if bus.HostRoles != nil {
 		for _, role := range bus.HostRoles() {
@@ -57,7 +72,7 @@ func turnInboxID(e unifiedInboxEvent) string {
 	return fmt.Sprintf("%s:%d", e.Source, e.Seq)
 }
 
-func acknowledgeTurnInboxItem(reader string, event unifiedInboxEvent, raw []unifiedInboxEvent, roles map[string]string) error {
+func turnInboxIDs(event unifiedInboxEvent, raw []unifiedInboxEvent) []string {
 	ids := []string{turnInboxID(event)}
 	if event.Source == "mb" {
 		for _, copy := range raw {
@@ -66,14 +81,46 @@ func acknowledgeTurnInboxItem(reader string, event unifiedInboxEvent, raw []unif
 			}
 		}
 	}
+	return ids
+}
+
+func claimHuntInboxEvent(reader string, event unifiedInboxEvent) bool {
+	if event.Source != "mb" || !event.HuntGroup {
+		return true
+	}
+	if !bus.ReaderHasLiveSession(reader, event.To) {
+		return false
+	}
+	holder, granted := bus.ClaimPost(event.Seq, reader)
+	return granted || bus.ClaimMatchesReader(holder, reader)
+}
+
+func deliverTurnInboxItem(reader string, event unifiedInboxEvent, raw []unifiedInboxEvent, roles map[string]string) error {
+	return recordTurnInboxItem(reader, event, raw, roles, false)
+}
+
+func acknowledgeTurnInboxItem(reader string, event unifiedInboxEvent, raw []unifiedInboxEvent, roles map[string]string) error {
+	return recordTurnInboxItem(reader, event, raw, roles, true)
+}
+
+func recordTurnInboxItem(reader string, event unifiedInboxEvent, raw []unifiedInboxEvent, roles map[string]string, ack bool) error {
+	if !claimHuntInboxEvent(reader, event) {
+		return nil
+	}
+	ids := turnInboxIDs(event, raw)
 	spec := mailboxSpec{Key: "agent:" + reader, Address: reader, Kind: "agent"}
 	if err := updateMailboxState(spec, func(state *mailboxState) error {
 		now := time.Now().UTC().Format(time.RFC3339)
 		for _, id := range ids {
 			mark := state.Marks[id]
-			if mark.AckedAt == "" {
-				mark.ReadAt, mark.AckedAt = now, now
-				mark.Preserved = false
+			if ack {
+				if mark.AckedAt == "" {
+					mark.ReadAt, mark.AckedAt = now, now
+					mark.Preserved = false
+					state.Marks[id] = mark
+				}
+			} else if mark.DeliveredAt == "" {
+				mark.DeliveredAt = now
 				state.Marks[id] = mark
 			}
 		}
@@ -134,7 +181,8 @@ func advanceTurnSource(reader, source, roomID string, raw []unifiedInboxEvent, s
 	sort.Slice(events, func(i, j int) bool { return events[i].Seq < events[j].Seq })
 	var through int64
 	for _, e := range events {
-		if state.Marks[turnInboxID(e)].AckedAt == "" {
+		mark := state.Marks[turnInboxID(e)]
+		if mark.DeliveredAt == "" && mark.AckedAt == "" {
 			break
 		}
 		through = e.Seq
