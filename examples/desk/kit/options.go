@@ -72,6 +72,7 @@ func ToolVerbs(tool string) []string {
 		"memo":       {"add", "show", "set", "list", "open", "share", "close"},
 		"viewer":     {"serve", "add", "show", "list", "open", "share", "close", "append", "export", "join"},
 		"calendar":   {"serve", "add", "show", "set", "list", "cancel", "open", "share", "join", "close", "export", "import", "save", "load"},
+		"page":       {"serve", "add", "show", "set", "list", "open", "share", "close", "export"},
 	}
 	return verbs[tool]
 }

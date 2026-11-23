@@ -209,6 +209,24 @@ have checkout registration scripts, while Video intentionally has only a script.
 
 All write verbs above accept `--dry-run`. `--participant` carries the same member identity across separate CLI invocations.
 
+## Sprint 696: page (one live page for a group)
+
+Source: `examples/desk/page` (page skeleton, Story-ID `df08cca51889`). The
+organizer authors through the agent door; the page itself is the
+participants' reading surface, so every page action has a verb.
+
+| Page action | CLI verb |
+|---|---|
+| Open a page (follow the link, or type it on the open screen) | `bashy page open ID --json` (id, URL, status only) |
+| Read the page (Markdown, blocks, audience, participants, revision) | `bashy page show ID --json` |
+| Copy link | `bashy page open ID --json` (`url`) |
+| Live update (the page follows `GET /api/events?id=`) | `bashy page show ID --json` (`revision`); the stream itself is the HTTP API, not verb-shaped |
+| Theme toggle | Page-only reason: client-local display preference; no server state |
+| Create / change / close a page | `bashy page add -f FILE` / `set ID -f FILE [--title T] [--audience A]` / `close ID` (CLI-first; the page has no editor yet) |
+| Share a page | `bashy page share ID --json` (single-use invite link) |
+| Record | `bashy page export ID --to md\|html [-o FILE] --json` |
+| Publish at the satellite door | `bashy page publish-outpost [--dry-run] --json` (login required) |
+
 ## Sprint 641: hosted desktop (Periscope / cloudbox Shape button)
 
 Every action on the hosted desktop's Shape button and settings panel has a

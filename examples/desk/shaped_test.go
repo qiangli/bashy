@@ -33,6 +33,7 @@ var shapedTools = map[string]string{
 	"brainstorm": "../brainstorm/server",
 	"session":    "../session",
 	"calendar":   "../calendar",
+	"page":       "page",
 }
 
 func TestConsumerPolishedToolsDeclareGenieExamples(t *testing.T) {

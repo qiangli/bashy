@@ -27,7 +27,7 @@ func TestDeskRegisterScriptsUsePublicShapedAppPath(t *testing.T) {
 		t.Skip("git is required for a revision round trip")
 	}
 	bin := productBashy(t)
-	for _, name := range []string{"notepad", "form", "viewer", "chart", "calendar"} {
+	for _, name := range []string{"notepad", "form", "viewer", "chart", "calendar", "page"} {
 		t.Run(name, func(t *testing.T) {
 			rel := name
 			if v, ok := shapedTools[name]; ok {
