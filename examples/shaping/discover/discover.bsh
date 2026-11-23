@@ -525,7 +525,9 @@ run_agent_leg() {
         return 0
     fi
     prompt=$(agent_prompt)
-    if with_timeout "$AGENT_TIMEOUT" "$bin" "$@" "$prompt" >"$out" 2>"$ROWDIR/$id.err"; then st=ok; else st=error; fi
+    # </dev/null: some CLIs (codex exec) otherwise block reading a prompt
+    # from stdin and the leg times out with no request ever sent.
+    if with_timeout "$AGENT_TIMEOUT" "$bin" "$@" "$prompt" >"$out" 2>"$ROWDIR/$id.err" </dev/null; then st=ok; else st=error; fi
     log_since "$mark" "$slice"
     o=$(observed "$slice" "agent-fetch-tool" "$bin")
     ct=$(sed -n 's/^[Cc][Oo][Nn][Tt][Ee][Nn][Tt]-[Tt][Yy][Pp][Ee]: *//p' "$out" | head -n 1)
