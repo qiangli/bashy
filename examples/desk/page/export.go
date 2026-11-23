@@ -87,10 +87,6 @@ func (a *app) exportHTMLLocked(it *item, r *http.Request) ([]byte, error) {
 				`" data-kind="embed"><p><a href="` + html.EscapeString(b.Ref) + `">` +
 				html.EscapeString(label) + `</a></p></section>`
 		}
-		if b.Kind == "here" {
-			return `<section class="desk-panel page-block" data-block="` + html.EscapeString(b.ID) +
-				`" data-kind="here">` + participantsListHTML(it) + `</section>`
-		}
 		return a.renderBlockFaces(r, it, b, recordFace)
 	})
 	if err != nil {
