@@ -22,7 +22,7 @@ import (
 	kit "desk-kit"
 )
 
-const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|block|publish-outpost] [--json] [-f FILE|-] [--faces FILE] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|html] [-o FILE]"
+const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|block|publish-outpost] [--json] [-f FILE|-] [--faces FILE] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|markdown|html|pdf] [-o FILE]"
 
 const blockUsage = "use page block add poll PAGE --options a,b,c [--title Q] [--votes N] | add form PAGE --def FILE|- [--title T]" +
 	" [--block NAME] [--anonymous] [--results-visible] [--closed]; page block open|close|show-results|hide-results|results PAGE BLOCK"
@@ -298,9 +298,9 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 			return 2
 		}
 		switch o.to {
-		case "md", "markdown", "html":
+		case "md", "markdown", "html", "pdf":
 		default:
-			return kit.UsageError(stdout, tool, o.asJSON, "export to md or html (--to md|html)")
+			return kit.UsageError(stdout, tool, o.asJSON, "export to md, html or pdf (--to md|markdown|html|pdf)")
 		}
 		c.resolveKey(id)
 		return c.export(id)

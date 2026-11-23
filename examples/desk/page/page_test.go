@@ -179,8 +179,8 @@ func TestCLIRoundTrip(t *testing.T) {
 	if code != 0 || !strings.Contains(out, `data-block="poll-1"`) || strings.Contains(out, "<script>alert(1)") {
 		t.Errorf("export html: %d\n%s", code, out)
 	}
-	if code, _ = run("export", "class", "--to", "pdf"); code != 2 {
-		t.Errorf("export --to pdf: want exit 2, got %d", code)
+	if code, _ = run("export", "class", "--to", "docx"); code != 2 {
+		t.Errorf("export --to docx: want exit 2, got %d", code)
 	}
 	if code, out = run("share", "class"); code != 0 || !strings.Contains(out, "invite: "+url+"/blue-fox#invite=") {
 		t.Errorf("share: %d %q", code, out)

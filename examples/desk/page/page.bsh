@@ -27,7 +27,7 @@ timer, here, hands (page-local) and embed (a same-origin path or URL).
 - `bashy page show ID` reads title, Markdown, blocks, audience, participants (handle and auth only) and revision.
 - `bashy page set ID [-f FILE|-] [--faces FILE] [--title T] [--audience A]` changes the page; every save bumps the revision and pushes a live frame.
 - `bashy page list` lists pages; `bashy page share ID` mints a single-use invite link; `bashy page close ID` ends the page.
-- `bashy page export ID --to md|html [-o FILE]` writes the record (handles, never addresses).
+- `bashy page export ID --to md|markdown|html|pdf [-o FILE]` writes the session record (handles, never addresses; pdf via headless Chrome, `CHROME_PATH` overrides discovery).
 - `bashy page serve --lan --port PORT` listens on a fixed LAN port. Without `--lan`, the default is loopback port 18113.
 - `bashy page participant ID --open|list|kick HANDLE|rename HANDLE NAME|merge HANDLE INTO` is the organizer's participant command.
 - `bashy page block add poll ID --options a,b,c [--title Q] [--votes N] [--anonymous] [--results-visible] [--closed]` and `bashy page block add form ID --def FILE` create the item in the form app and add its block; each page identity is one respondent, a re-vote replaces.

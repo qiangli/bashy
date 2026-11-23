@@ -878,8 +878,15 @@ func nativeMarkdown(b *block, res *nativeResults) string {
 
 // blockMarkdownLocked is a block's place in the record.
 func (a *app) blockMarkdownLocked(it *item, b *block) string {
-	if b.Kind == "timer" {
+	switch b.Kind {
+	case "timer":
 		return timerMarkdown(it, b)
+	case "book", "note":
+		return contentMarkdown(b)
+	case "embed":
+		return embedMarkdown(b)
+	case "here":
+		return hereMarkdown(it, b)
 	}
 	nb := nativeBlockLocked(it, b)
 	if nb == nil {

@@ -48,7 +48,7 @@ embed:/whiteboard/?room=r1 id=board
 `page add [-f FILE|-] [--title T] [--audience host|lan|satellite] [--id ID] [--code CODE]`,
 `open ID` (join links, QR codes and the bare code), `show ID`, `set ID [-f FILE|-] [--title T]
 [--audience A]`, `list`, `share ID` (single-use invite), `close ID`,
-`export ID --to md|html [-o FILE]`, `serve [--lan] [--port PORT]`,
+`export ID --to md|markdown|html|pdf [-o FILE]`, `serve [--lan] [--port PORT]`,
 and `publish-outpost [--port PORT]` / `unpublish-outpost`. Every verb takes `--json`, `--fields`,
 `--explain`, `--dry-run`, `--help=mcp`. `set`, `close`, `share` and
 `export` need the organizer's owner key: `--key`, `PAGE_KEY`, or the local
@@ -94,7 +94,7 @@ the page store; it never appears in show, state, the page or export.
   when results are visible. `GET /api/block?id=&block=` returns one block's
   HTML for the caller; every answer and control publishes the block's live
   frame, and the page re-fetches only that block.
-- **Record**: `export --to md|html` writes each block's tally with handles
+- **Record**: `export --to md|html|pdf` writes each block's tally with handles
   and the per-handle answers.
 
 File fields are not offered on a page (`--def` with a `file` field is
@@ -114,9 +114,25 @@ refused); YAML definitions go through `form` itself.
   `"project": true` face settings to show the bare clock on `?view=display`.
   The export records its state.
 
+## Export: the session record
+
+`page export ID --to md` (or `--to markdown`) writes a repo-committable
+session record: the title, a session metadata line (page id, status,
+audience, revision), the body in order with every block's final state
+inline — poll tallies `option -> votes (handles)` and per-handle form
+answers (handles omitted for `--anonymous` blocks), book and note Markdown
+inline when viewer/notepad are reachable (a short fallback otherwise), the
+timer's final clock and state, an embed's public link only, and a `here`
+participant list — followed by `## Participants` with `handle (auth)`
+only. `--to html` is the same record as one self-contained page (kit CSS
+inline, no external assets, no interactive controls); `--to pdf` prints
+that HTML through headless Chrome (`CHROME_PATH` overrides discovery).
+Exports are organizer-only and never carry addresses, fingerprints,
+cookies, respondent tokens or facilitator keys.
+
 ## Later Sprint 696 stories
 
-Presence and hands, export with block states inline, PDF.
+Presence and hands.
 Until a kind's renderer lands its block renders as a labelled placeholder.
 
 ## Organizer and display views
