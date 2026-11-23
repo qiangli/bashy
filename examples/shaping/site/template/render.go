@@ -44,9 +44,12 @@ type Config struct {
 	AgentUserAgents []string  `json:"agent_user_agents,omitempty"`
 	Nav             []NavItem `json:"nav"`
 	// Verified bashy agents (botauth.go): Ed25519 keys trusted directly,
-	// and allowlisted key directory URLs a signed request may name.
+	// allowlisted key directory URLs a signed request may name, and the
+	// public origins besides Origin (e.g. a front's mount URL) a signature
+	// may be addressed to.
 	TrustedBotKeys        []TrustedBotKey `json:"trusted_bot_keys,omitempty"`
 	TrustedKeyDirectories []string        `json:"trusted_key_directories,omitempty"`
+	TrustedOrigins        []string        `json:"trusted_origins,omitempty"`
 }
 
 var DefaultAgentUserAgents = []string{"Claude-User", "ClaudeCode", "claude-code", "Codex", "codex-cli", "Gemini-CLI", "gemini-cli", "OpenCode", "opencode", "ChatGPT-User", "OAI-SearchBot", "Perplexity-User", "Google-Extended", "bashy-fetch", "bashy-site"}

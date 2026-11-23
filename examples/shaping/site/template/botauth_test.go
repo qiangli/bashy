@@ -79,8 +79,8 @@ func botSite(t *testing.T, trust string) *Site {
 	return s
 }
 
-func trustJSON(t *testing.T, keys []TrustedBotKey, dirs []string) string {
-	b, err := json.Marshal(map[string]any{"trusted_bot_keys": keys, "trusted_key_directories": dirs})
+func trustJSON(t *testing.T, keys []TrustedBotKey, dirs []string, origins ...string) string {
+	b, err := json.Marshal(map[string]any{"trusted_bot_keys": keys, "trusted_key_directories": dirs, "trusted_origins": origins})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestVerifiedAgentNoCloaking(t *testing.T) {
 	other := newTestSigner(t)
 	s := botSite(t, trustJSON(t, []TrustedBotKey{signer.jwk()}, nil))
 	h := s.Handler()
-	const origin = "http://fixture.test"
+	const origin = "https://fixture.example"
 
 	for _, tc := range []struct {
 		path, accept, method string
@@ -198,6 +198,30 @@ func TestVerifiedAgentNoCloaking(t *testing.T) {
 				n.components = []string{"@method", "@target-uri"}
 				n.sign(t, r, origin+tc.path)
 			},
+			"no-method": func(r *http.Request) {
+				n := *signer
+				n.components = []string{"@authority", "@target-uri"}
+				n.sign(t, r, origin+tc.path)
+			},
+			"no-target": func(r *http.Request) {
+				n := *signer
+				n.components = []string{"@authority", "@method"}
+				n.sign(t, r, origin+tc.path)
+			},
+			"oversized": func(r *http.Request) {
+				signer.sign(t, r, origin+tc.path)
+				r.Header.Add("Signature-Input", "pad=();x=\""+strings.Repeat("x", 4096)+"\"")
+			},
+			"too-many-members": func(r *http.Request) {
+				// The valid sig1 is the fifth member: past the cap.
+				signer.sign(t, r, origin+tc.path)
+				in := r.Header.Get("Signature-Input")
+				for i := 3; i >= 0; i-- {
+					label := "pad" + strconv.Itoa(i) + "="
+					r.Header.Set("Signature-Input", strings.Replace(in, "sig1=", label, 1)+", "+r.Header.Get("Signature-Input"))
+					r.Header.Set("Signature", label+":"+base64.StdEncoding.EncodeToString(make([]byte, 64))+":, "+r.Header.Get("Signature"))
+				}
+			},
 			"agent-uncovered": func(r *http.Request) {
 				signer.sign(t, r, origin+tc.path)
 				r.Header.Set("Signature-Agent", `"https://agent.example/"`)
@@ -224,11 +248,12 @@ func TestVerifiedAgentNoCloaking(t *testing.T) {
 	}
 }
 
-// Behind a front the request is reconstructed from the forwarded proto,
-// host and mount prefix, or from the configured origin.
+// Behind a front the request is reconstructed under the configured origin
+// or a trusted origin (its mount prefix + the request path), never from the
+// client-supplied Host or X-Forwarded-* headers.
 func TestVerifiedAgentBehindFront(t *testing.T) {
 	signer := newTestSigner(t)
-	s := botSite(t, trustJSON(t, []TrustedBotKey{signer.jwk()}, nil))
+	s := botSite(t, trustJSON(t, []TrustedBotKey{signer.jwk()}, nil, "https://dhnt.example/h/host-a/app/site"))
 	h := s.Handler()
 
 	r := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8090/about?x=1", nil)
@@ -237,13 +262,54 @@ func TestVerifiedAgentBehindFront(t *testing.T) {
 	r.Header.Set("X-Forwarded-Prefix", "/h/host-a/app/site")
 	signer.sign(t, r, "https://dhnt.example/h/host-a/app/site/about?x=1")
 	if serve(h, r).header.Get(VerifiedAgentHeader) == "" {
-		t.Fatal("forwarded request not verified")
+		t.Fatal("trusted-origin request not verified")
 	}
 
 	r = httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8090/about", nil)
 	signer.sign(t, r, "https://fixture.example/about")
 	if serve(h, r).header.Get(VerifiedAgentHeader) == "" {
 		t.Fatal("origin-addressed request not verified")
+	}
+
+	// Forwarded headers alone do not make an origin trusted.
+	r = httptest.NewRequest(http.MethodGet, "http://127.0.0.1:8090/about", nil)
+	r.Header.Set("X-Forwarded-Proto", "https")
+	r.Header.Set("X-Forwarded-Host", "other.example")
+	r.Header.Set("X-Forwarded-Prefix", "/h/host-a/app/site")
+	signer.sign(t, r, "https://other.example/h/host-a/app/site/about")
+	if serve(h, r).header.Get(VerifiedAgentHeader) != "" {
+		t.Fatal("untrusted forwarded origin verified")
+	}
+}
+
+// Blocker B1: a valid signature minted for another site, replayed here with
+// a forged Host and X-Forwarded-Host naming that site, is not verified and
+// is served exactly like an unsigned request.
+func TestVerifiedAgentCrossSiteReplay(t *testing.T) {
+	signer := newTestSigner(t)
+	s := botSite(t, trustJSON(t, []TrustedBotKey{signer.jwk()}, nil))
+	h := s.Handler()
+
+	base := serve(h, httptest.NewRequest(http.MethodGet, "https://fixture.example/about", nil))
+	for name, forge := range map[string]func(*http.Request){
+		"host":      func(r *http.Request) { r.Host = "evil.test" },
+		"forwarded": func(r *http.Request) { r.Header.Set("X-Forwarded-Host", "evil.test") },
+		"host+forwarded": func(r *http.Request) {
+			r.Host = "evil.test"
+			r.Header.Set("X-Forwarded-Proto", "https")
+			r.Header.Set("X-Forwarded-Host", "evil.test")
+		},
+	} {
+		r := httptest.NewRequest(http.MethodGet, "https://fixture.example/about", nil)
+		signer.sign(t, r, "https://evil.test/about")
+		forge(r)
+		g := serve(h, r)
+		if g.header.Get(VerifiedAgentHeader) != "" {
+			t.Fatalf("%s: cross-site replay verified", name)
+		}
+		if g.status != http.StatusOK || g.body != base.body || g.header.Get("ETag") != base.header.Get("ETag") {
+			t.Fatalf("%s: replay served differently (status %d)", name, g.status)
+		}
 	}
 }
 
@@ -272,7 +338,7 @@ func TestVerifiedAgentKeyDirectory(t *testing.T) {
 
 	s := botSite(t, trustJSON(t, nil, []string{dir.URL}))
 	h := s.Handler()
-	const origin = "http://fixture.test"
+	const origin = "https://fixture.example"
 	for i := 0; i < 3; i++ {
 		r := httptest.NewRequest(http.MethodGet, origin+"/about", nil)
 		signer.agent = dir.URL + SignatureDirectoryPath
@@ -308,6 +374,8 @@ func TestBotTrustValidation(t *testing.T) {
 		"http directory": `"trusted_key_directories": ["http://agent.example/"],`,
 		"ftp directory":  `"trusted_key_directories": ["ftp://agent.example/"],`,
 		"credentials":    `"trusted_key_directories": ["https://u:p@agent.example/"],`,
+		"http origin":    `"trusted_origins": ["http://front.example/site"],`,
+		"origin query":   `"trusted_origins": ["https://front.example/site?x=1"],`,
 	} {
 		fs := cloneMapFS(fixture)
 		cfg := strings.Replace(string(fixture["site.json"].Data), `"owner": "fixture",`, `"owner": "fixture",`+trust, 1)
@@ -318,5 +386,48 @@ func TestBotTrustValidation(t *testing.T) {
 	}
 	if u, err := directoryURL("https://Agent.Example"); err != nil || u != "https://agent.example"+SignatureDirectoryPath {
 		t.Fatalf("directoryURL = %q %v", u, err)
+	}
+}
+
+// Directory keys not refreshed for botMaxLifetime are dropped: a revoked key
+// fails closed once its directory stops answering.
+func TestVerifiedAgentDirectoryStale(t *testing.T) {
+	signer := newTestSigner(t)
+	var down atomic.Bool
+	dir := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if down.Load() {
+			http.Error(w, "down", http.StatusServiceUnavailable)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{"keys": []TrustedBotKey{signer.jwk()}})
+	}))
+	defer dir.Close()
+
+	s := botSite(t, trustJSON(t, nil, []string{dir.URL}))
+	h := s.Handler()
+	start := time.Now()
+	now := start
+	s.botVerifier().now = func() time.Time { return now }
+	verified := func(at time.Duration) bool {
+		now = start.Add(at)
+		sg := *signer
+		sg.created = now
+		r := httptest.NewRequest(http.MethodGet, "https://fixture.example/about", nil)
+		sg.sign(t, r, "https://fixture.example/about")
+		return serve(h, r).header.Get(VerifiedAgentHeader) != ""
+	}
+	if !verified(0) {
+		t.Fatal("directory key not trusted")
+	}
+	down.Store(true)
+	if !verified(10 * time.Minute) {
+		t.Fatal("stale key within the lifetime dropped on a failed refresh")
+	}
+	if verified(61 * time.Minute) {
+		t.Fatal("stale key past the lifetime still trusted")
+	}
+	down.Store(false)
+	if !verified(63 * time.Minute) {
+		t.Fatal("key not trusted again after the directory recovered")
 	}
 }

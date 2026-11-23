@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -24,6 +25,11 @@ import (
 // naming the agent-only entry points. Verification never changes content:
 // body, ETag and status are identical for signed, unsigned and failed
 // requests; an invalid signature is simply not marked verified.
+//
+// The signed @authority is bound to the site's own audience: the configured
+// origin and the owner's trusted_origins, never the client-supplied Host or
+// X-Forwarded-* headers, so a signature minted for another site does not
+// verify here.
 
 // VerifiedAgentHeader is the response header a verified request receives.
 const VerifiedAgentHeader = "Bashy-Verified-Agent"
@@ -39,6 +45,8 @@ const (
 	botDirTimeout    = 5 * time.Second
 	botDirBodyLimit  = 64 << 10
 	botDirMaxEntries = 16
+	botSigHeaderMax  = 4096
+	botSigMaxMembers = 4
 )
 
 // TrustedBotKey is an Ed25519 public key as an OKP JWK; an empty kid is the
@@ -78,6 +86,14 @@ func validateBotTrust(c *Config) error {
 			return fmt.Errorf("site.json: trusted_bot_keys[%d]: %v", i, err)
 		}
 	}
+	if len(c.TrustedOrigins) > botDirMaxEntries {
+		return fmt.Errorf("site.json: trusted_origins: at most %d", botDirMaxEntries)
+	}
+	for i, o := range c.TrustedOrigins {
+		if _, err := originView(o, true); err != nil {
+			return fmt.Errorf("site.json: trusted_origins[%d]: %v", i, err)
+		}
+	}
 	if len(c.TrustedKeyDirectories) > botDirMaxEntries {
 		return fmt.Errorf("site.json: trusted_key_directories: at most %d", botDirMaxEntries)
 	}
@@ -93,24 +109,34 @@ func validateBotTrust(c *Config) error {
 // loopback), no credentials or fragment; a bare origin means the
 // well-known path.
 func directoryURL(raw string) (string, error) {
-	u, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" {
-		return "", errors.New("want an absolute https URL without credentials")
-	}
-	switch u.Scheme {
-	case "https":
-	case "http":
-		if ip := net.ParseIP(u.Hostname()); u.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback()) {
-			return "", errors.New("http is allowed for loopback only")
-		}
-	default:
-		return "", errors.New("want an https URL")
+	u, err := secureURL(raw)
+	if err != nil {
+		return "", err
 	}
 	if u.Path == "" || u.Path == "/" {
 		u.Path = SignatureDirectoryPath
 	}
 	u.Host = strings.ToLower(u.Host)
 	return u.String(), nil
+}
+
+// secureURL parses an absolute https URL (http only on loopback) without
+// credentials or fragment.
+func secureURL(raw string) (*url.URL, error) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.Host == "" || u.User != nil || u.Fragment != "" {
+		return nil, errors.New("want an absolute https URL without credentials")
+	}
+	switch u.Scheme {
+	case "https":
+	case "http":
+		if ip := net.ParseIP(u.Hostname()); u.Hostname() != "localhost" && (ip == nil || !ip.IsLoopback()) {
+			return nil, errors.New("http is allowed for loopback only")
+		}
+	default:
+		return nil, errors.New("want an https URL")
+	}
+	return u, nil
 }
 
 type botDirectory struct {
@@ -179,20 +205,37 @@ func (v *botVerifier) lookup(kid, agent string) ed25519.PublicKey {
 	return nil
 }
 
+// directoryKey returns kid from the directory at u, refreshing a stale or
+// missing entry at most once per botDirRetry without holding the lock over
+// the fetch. Keys not refreshed for botMaxLifetime are dropped, so a revoked
+// key fails closed once its directory stops serving it or goes away.
 func (v *botVerifier) directoryKey(u, kid string) ed25519.PublicKey {
 	d := v.dirs[u]
-	d.mu.Lock()
-	defer d.mu.Unlock()
 	now := v.now()
+	d.mu.Lock()
 	fresh := !d.fetched.IsZero() && now.Sub(d.fetched) < botDirTTL
 	if pub := d.keys[kid]; pub != nil && fresh {
+		d.mu.Unlock()
 		return pub
 	}
-	if (!fresh || d.keys[kid] == nil) && now.Sub(d.tried) >= botDirRetry {
+	refresh := now.Sub(d.tried) >= botDirRetry
+	if refresh {
 		d.tried = now
-		if keys, err := v.fetchDirectory(u); err == nil {
+	}
+	d.mu.Unlock()
+	if refresh {
+		keys, err := v.fetchDirectory(u)
+		d.mu.Lock()
+		if err == nil && !d.fetched.After(now) {
 			d.keys, d.fetched = keys, now
 		}
+		d.mu.Unlock()
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	if d.fetched.IsZero() || v.now().Sub(d.fetched) >= botMaxLifetime {
+		d.keys = nil
+		return nil
 	}
 	return d.keys[kid]
 }
@@ -238,13 +281,23 @@ type botSignature struct {
 	raw        string            // the serialized member value, for @signature-params
 }
 
-// verify reports the trusted keyid of a valid web-bot-auth signature on r.
-func (v *botVerifier) verify(r *http.Request, origin string) (string, bool) {
-	inputs := parseSignatureInput(strings.Join(r.Header.Values("Signature-Input"), ", "))
+// verify reports the trusted keyid of a valid web-bot-auth signature on r,
+// addressed at one of the site's origins.
+func (v *botVerifier) verify(r *http.Request, origins []string) (string, bool) {
+	input := strings.Join(r.Header.Values("Signature-Input"), ", ")
+	signature := strings.Join(r.Header.Values("Signature"), ", ")
+	if len(input) > botSigHeaderMax || len(signature) > botSigHeaderMax {
+		return "", false
+	}
+	inputs := parseSignatureInput(input)
 	if len(inputs) == 0 {
 		return "", false
 	}
-	sigs := parseSignatureValues(strings.Join(r.Header.Values("Signature"), ", "))
+	if len(inputs) > botSigMaxMembers {
+		inputs = inputs[:botSigMaxMembers]
+	}
+	sigs := parseSignatureValues(signature)
+	views := requestViews(r, origins)
 	agent := signatureAgentURL(r.Header.Values("Signature-Agent"))
 	now := v.now().Unix()
 	for _, in := range inputs {
@@ -262,7 +315,10 @@ func (v *botVerifier) verify(r *http.Request, origin string) (string, bool) {
 		for _, c := range in.components {
 			covered[c] = true
 		}
-		if !covered["@authority"] || (r.Header.Get("Signature-Agent") != "" && !covered["signature-agent"]) {
+		// Bound to the site, method and target: a signature cannot be
+		// replayed on another path, method or Signature-Agent.
+		if !covered["@authority"] || !covered["@method"] || (!covered["@target-uri"] && !covered["@path"]) ||
+			(r.Header.Get("Signature-Agent") != "" && !covered["signature-agent"]) {
 			continue
 		}
 		sig := sigs[in.label]
@@ -273,7 +329,7 @@ func (v *botVerifier) verify(r *http.Request, origin string) (string, bool) {
 		if pub == nil {
 			continue
 		}
-		for _, view := range requestViews(r, origin) {
+		for _, view := range views {
 			base, ok := signatureBase(r, view, in)
 			if ok && ed25519.Verify(pub, []byte(base), sig) {
 				return p["keyid"], true
@@ -286,33 +342,44 @@ func (v *botVerifier) verify(r *http.Request, origin string) (string, bool) {
 // requestView is the request as the client addressed it.
 type requestView struct{ scheme, authority, path, query string }
 
-// requestViews reconstructs the public request: first from the forwarded
-// headers a front sets (proto, host, mount prefix), then from the site's
-// configured origin.
-func requestViews(r *http.Request, origin string) []requestView {
-	first := func(name string) string {
-		return strings.TrimSpace(strings.Split(r.Header.Get(name), ",")[0])
+// originView parses a site origin (scheme://authority[/mount prefix]); a
+// trusted origin must also be https, or http on loopback.
+func originView(origin string, secure bool) (requestView, error) {
+	var u *url.URL
+	var err error
+	if secure {
+		u, err = secureURL(origin)
+	} else {
+		u, err = url.Parse(strings.TrimSpace(origin))
 	}
-	scheme := first("X-Forwarded-Proto")
-	if scheme == "" {
-		scheme = "http"
-		if r.TLS != nil {
-			scheme = "https"
-		}
+	if err != nil {
+		return requestView{}, err
 	}
-	host := first("X-Forwarded-Host")
-	if host == "" {
-		host = r.Host
+	if u.Host == "" || (u.Scheme != "https" && u.Scheme != "http") || u.RawQuery != "" || u.Fragment != "" {
+		return requestView{}, errors.New("want scheme://host[/prefix] without query or fragment")
 	}
+	return requestView{scheme: u.Scheme, authority: normalizeAuthority(u.Scheme, u.Host), path: strings.TrimRight(u.EscapedPath(), "/")}, nil
+}
+
+// requestViews reconstructs the public request under each configured
+// origin: its scheme and authority, its mount prefix + the request path.
+// Host and X-Forwarded-* are client-supplied and never consulted, so the
+// signed @authority must name this site.
+func requestViews(r *http.Request, origins []string) []requestView {
 	path := r.URL.EscapedPath()
 	if path == "" {
 		path = "/"
 	}
-	views := []requestView{{scheme, normalizeAuthority(scheme, host), strings.TrimRight(first("X-Forwarded-Prefix"), "/") + path, r.URL.RawQuery}}
-	if u, err := url.Parse(origin); err == nil && u.Host != "" {
-		alt := requestView{u.Scheme, normalizeAuthority(u.Scheme, u.Host), strings.TrimRight(u.EscapedPath(), "/") + path, r.URL.RawQuery}
-		if alt != views[0] {
-			views = append(views, alt)
+	var views []requestView
+	for _, o := range origins {
+		view, err := originView(o, false)
+		if err != nil {
+			continue
+		}
+		view.path += path
+		view.query = r.URL.RawQuery
+		if !slices.Contains(views, view) {
+			views = append(views, view)
 		}
 	}
 	return views
@@ -477,5 +544,5 @@ func (s *Site) VerifyAgent(r *http.Request) (string, bool) {
 	if !v.enabled() || r.Header.Get("Signature-Input") == "" {
 		return "", false
 	}
-	return v.verify(r, s.Config.Origin)
+	return v.verify(r, append([]string{s.Config.Origin}, s.Config.TrustedOrigins...))
 }
