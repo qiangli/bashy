@@ -1,0 +1,4 @@
+# Shaping contract: checks build and test the stdlib Go module inside the
+# verifier's isolated clone (read, write, exec) and may provision Go into a
+# scratch directory when the host lacks a system toolchain (net).
+@effects("read,write,exec,net")

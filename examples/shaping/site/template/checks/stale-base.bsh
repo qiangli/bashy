@@ -1,0 +1,71 @@
+# Frozen check: a wish --element 'section=ID revision=REV' must match the base
+# page revision; otherwise fail with 'stale, re-read'.
+set -eu
+export LC_ALL=C
+scratch="$(mktemp -d "$PWD/.check.XXXXXX")"
+trap 'chmod -R u+w "$scratch" 2>/dev/null || true; rm -rf "$scratch"' EXIT
+mkdir -p "$scratch/bin" "$scratch/home" "$scratch/tmp"
+if [ -n "${BASH:-}" ] && [ -x "$BASH" ]; then
+    ln -s "$BASH" "$scratch/bin/bashy"
+fi
+export HOME="$scratch/home" TMPDIR="$scratch/tmp" BASHY_HINTS=off
+export PATH="$scratch/bin:$PATH:/usr/local/go/bin:/opt/homebrew/bin:/usr/local/bin"
+run_go() {
+    if [ -n "${SITE_GO_BIN:-}" ]; then
+        GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 "$SITE_GO_BIN" "$@"
+    elif command -v go >/dev/null 2>&1; then
+        GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go "$@"
+    else
+        GOWORK=off CGO_ENABLED=0 bashy go "$@"
+    fi
+}
+
+wish_page="${SITE_WISH_PAGE:-${SHAPE_PAGE:-}}"
+wish_element="${SITE_WISH_ELEMENT:-${SHAPE_ELEMENT:-}}"
+wish_file=""
+msg_file=""
+base_dir="${SITE_BASE_DIR:-$PWD}"
+
+if [ -z "$wish_element" ]; then
+    cand_wish=""
+    if [ -f "$PWD/.wish" ]; then
+        cand_wish="$PWD/.wish"
+    elif [ -f "$PWD/wish.json" ]; then
+        cand_wish="$PWD/wish.json"
+    fi
+    parent_sha=""
+    if [ -d "$PWD/.git" ]; then
+        parent_sha="$(git rev-parse HEAD~1 2>/dev/null || true)"
+    fi
+    if [ -n "$parent_sha" ]; then
+        mkdir -p "$scratch/base"
+        for item in "$PWD"/* "$PWD"/.[!.]* "$PWD"/..?*; do
+            [ -e "$item" ] || continue
+            case "$(basename "$item")" in .check.* | .shape) continue ;; esac
+            cp -R "$item" "$scratch/base/"
+        done
+        if (cd "$scratch/base" && git checkout -q "$parent_sha" >/dev/null 2>&1); then
+            base_dir="$scratch/base"
+        fi
+        if [ -n "$cand_wish" ]; then
+            rel_wish="$(basename "$cand_wish")"
+            if [ ! -f "$base_dir/$rel_wish" ] || ! cmp -s "$cand_wish" "$base_dir/$rel_wish"; then
+                wish_file="$cand_wish"
+            fi
+        fi
+        msg_file="$scratch/commit-msg.txt"
+        git log -n 1 HEAD >"$msg_file" 2>/dev/null || true
+    elif [ -n "$cand_wish" ]; then
+        wish_file="$cand_wish"
+    fi
+fi
+
+runner_dir="$PWD"
+if [ -f "$base_dir/go.mod" ] && [ -f "$base_dir/check.go" ]; then
+    runner_dir="$base_dir"
+fi
+
+run_go -C "$runner_dir" run . -check stale-base \
+    -dir "$base_dir" -base-dir "$base_dir" \
+    -page "$wish_page" -element "$wish_element" \
+    -wish-file "$wish_file" -commit-msg-file "$msg_file"

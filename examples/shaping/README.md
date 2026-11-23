@@ -6,3 +6,4 @@
 
 - `hello-world/` — the minimal Software Shaping tutorial.
 - `website/` — shaping-enable an existing website: anonymous, signed-in, circle-member and owner tiers over an unchanged static site.
+- `site/` — generate and shape an `<owner>/site` content module: HTML, Markdown and JSON under one revision, with `Accept` negotiation, `.md`/`.json` twins and frozen checks.

@@ -1,0 +1,9 @@
+{
+  "title": "Example Site",
+  "origin": "https://example.com",
+  "owner": "example",
+  "nav": [
+    {"label": "Home", "href": "/"},
+    {"label": "About", "href": "/about"}
+  ]
+}

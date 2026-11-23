@@ -1,0 +1,21 @@
+# Frozen check: every page path and declared section {#id} is unique.
+set -eu
+export LC_ALL=C
+scratch="$(mktemp -d "$PWD/.check.XXXXXX")"
+trap 'chmod -R u+w "$scratch" 2>/dev/null || true; rm -rf "$scratch"' EXIT
+mkdir -p "$scratch/bin" "$scratch/home" "$scratch/tmp"
+if [ -n "${BASH:-}" ] && [ -x "$BASH" ]; then
+    ln -s "$BASH" "$scratch/bin/bashy"
+fi
+export HOME="$scratch/home" TMPDIR="$scratch/tmp"
+export PATH="$scratch/bin:$PATH:/usr/local/go/bin:/opt/homebrew/bin:/usr/local/bin"
+run_go() {
+    if [ -n "${SITE_GO_BIN:-}" ]; then
+        GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 "$SITE_GO_BIN" "$@"
+    elif command -v go >/dev/null 2>&1; then
+        GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 go "$@"
+    else
+        GOWORK=off CGO_ENABLED=0 bashy go "$@"
+    fi
+}
+run_go run . -check unique-ids
