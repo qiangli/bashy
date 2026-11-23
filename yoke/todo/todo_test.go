@@ -22,3 +22,10 @@ func TestStandaloneHelpAndDeps(t *testing.T) {
 	}
 	adapter.AssertStandaloneDeps(t, "todo")
 }
+
+func TestStandaloneSprintAndCloseLifecycleHooksWired(t *testing.T) {
+	if todo.SprintHandles == nil || todo.SprintChanged == nil || todo.SprintPreflight == nil {
+		t.Fatalf("standalone todo adapter missing sprint/weave lifecycle hooks: SprintHandles=%v SprintChanged=%v SprintPreflight=%v",
+			todo.SprintHandles != nil, todo.SprintChanged != nil, todo.SprintPreflight != nil)
+	}
+}

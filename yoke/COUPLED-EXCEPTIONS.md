@@ -9,7 +9,7 @@ duplicate code.
 
 | Verb | Status | Adapter Entry | Notes / Exception Reason |
 |---|---|---|---|
-| `todo` | Converted | `yoke/todo` | Landed in 62ee3c74; standalone deps and help verified. |
+| `todo` | Converted | `yoke/todo` | Landed in 62ee3c74; links `_ "github.com/qiangli/yoke/pkg/weave"` so sprint/story-close reclamation hooks fire in the standalone adapter; standalone deps and help verified. |
 | `dag` | Converted | `yoke/dag` | Carries its own copy of `jq.go` (`yoke/cmds/jq/jq.go`) so DAG target bodies resolve `jq` in-process via `coreutils/shell.Handler()` without importing `yoke/cmds/jq`; `AssertStandaloneDeps` clean; routed via `runCommandAdapter`. |
 | `mb` | Converted | `yoke/mb` | Standalone deps and help verified; routed via `runCommandAdapter`. |
 | `inbox` | Converted | `yoke/inbox` | Sprint 677 story #612 (conductor review 2026-11-21): the session-relay, turn-delivery, watcher-claim and poll glue is DUPLICATED into `yoke/inbox` (package main, no import of another command package); routed via `runCommandAdapter`. Copied inbox tests run there; the agentos originals stay for chat turn delivery and the unread hint. |

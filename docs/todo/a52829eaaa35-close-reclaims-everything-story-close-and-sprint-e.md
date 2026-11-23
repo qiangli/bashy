@@ -84,3 +84,11 @@ Paused per Operator instruction ("pause all non-677 work until 677 completes; co
   - `bashy` branch `agent/weave-issue-128` (workspace `bashy#128` preserved in place)
 - **Remaining when resumed after Sprint 677:** Rebase `agent/weave-issue-96` and `agent/weave-issue-128` onto post-677 `origin/main` heads (or replay small patch onto fresh heads if rebase is nontrivial), rerun fast unit tests + build-only `.bashy/gate`, bump `bashy` -> `yoke` pin on merge, and close via manager review.
 - **Claims:** Sprint 652 story claim yielded/released; no resource or project claims held.
+
+### Post-677 Resume & Standalone Adapter Coverage (`agy-gemini4-carbon`, 2026-11-23)
+
+1. **Current-head producer & consumer branches (zero conflict on current `origin/main` heads):**
+   - `yoke#100` (`agent/weave-issue-100` @ `20c36534`, based on `yoke` `origin/main` `4bafb600`): full close-reclamation implementation + manager safeguards (`pkg/policy/coord`, `pkg/todo`, `pkg/weave`), clean tree, fast `GOWORK=off` unit suites (`coord`, `prune/...`, `todo`, `weave` reclaim/grade/claim/cleanup) + `darwin`/`linux`/`windows` `CGO_ENABLED=0` builds green.
+   - `bashy#138` (`agent/weave-issue-138`, based on `bashy` `origin/main` `847f7032`): skill docs (`collaborate.md`, `sprint.md`) + post-677 standalone adapter wiring (`yoke/todo/main.go` blank-imports `github.com/qiangli/yoke/pkg/weave` so standalone `bashy todo` / `bashy issue` wires `SprintHandles`, `SprintChanged`, `SprintPreflight`, `StoryClosePreflight`, `StoryClosed`, `StorySprintMovePreflight`, and `StorySprintMoved`; verified with `AssertStandaloneDeps` in `yoke/todo/todo_test.go`).
+2. **Manager integration note (dual `go.mod` pin bump required after Sprint 677):**
+   - Merge/push `yoke#100` (`20c36534`) to `yoke` `origin/main` first, then bump `github.com/qiangli/yoke` in **both** root `bashy/go.mod` (in-process `claim`) **and** `bashy/yoke/go.mod` (used by standalone `GOWORK=off` adapter builds for `yoke/sprint`, `yoke/weave`, and `yoke/todo`), then pull `bashy#138`.
