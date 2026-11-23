@@ -319,7 +319,7 @@ require (
 	github.com/itchyny/gojq v0.12.19
 	github.com/qiangli/coreutils v0.0.0-20261123172741-e0184192020b
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be
-	github.com/qiangli/yoke v0.0.0-20261123182843-8278811066ba
+	github.com/qiangli/yoke v0.0.0-20261123195327-35ce40805fec
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
