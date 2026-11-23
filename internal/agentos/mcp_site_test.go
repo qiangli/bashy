@@ -257,6 +257,13 @@ func TestSiteMCPTiersOverHTTP(t *testing.T) {
 					if _, refusal := callSite(t, cs, tool, map[string]any{"id": "c1"}); refusal != "" {
 						t.Fatalf("%s: %s", tool, refusal)
 					}
+					// preview builds its URL from the console, as the CLI's --console default.
+					if r := (*calls)[len(*calls)-1]; r.ID != "c1" || r.Console == "" {
+						t.Fatalf("%s request = %+v", tool, r)
+					}
+					if _, err := shapeConsoleURL((*calls)[len(*calls)-1].Console); err != nil {
+						t.Fatalf("%s console: %v", tool, err)
+					}
 				}
 				if _, refusal := callSite(t, cs, "shape_undo", nil); refusal != "" {
 					t.Fatal(refusal)

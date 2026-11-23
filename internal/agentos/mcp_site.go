@@ -23,6 +23,7 @@ import (
 	yokemcp "github.com/qiangli/yoke/mcp"
 	"github.com/qiangli/yoke/pkg/coopauth"
 	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/webconsole"
 )
 
 // siteMCPTools are the tool names of the `site` profile, in the order the
@@ -539,6 +540,9 @@ func (s *siteMCP) shape(ctx context.Context, req *mcpsdk.CallToolRequest, tool s
 		return nil, out, err
 	}
 	r.App, r.User, r.Actor = s.app, c.Principal, actor
+	// The local console the CLI's --console defaults to: preview names the
+	// candidate's isolated preview there.
+	r.Console = fmt.Sprintf("http://127.0.0.1:%d", webconsole.DefaultPort)
 	result, err := siteShapeExecute(ctx, r)
 	if err != nil {
 		return nil, out, err
