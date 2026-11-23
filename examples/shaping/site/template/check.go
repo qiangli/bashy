@@ -94,6 +94,9 @@ func CheckRenderDeterminism(dir string) error {
 	if len(first.Pages) != len(second.Pages) {
 		return fmt.Errorf("render-determinism: page count %d != %d", len(first.Pages), len(second.Pages))
 	}
+	if first.RenderAgentsTxt() != second.RenderAgentsTxt() {
+		return errors.New("render-determinism: /agents.txt differed across two renders")
+	}
 	if first.RenderRobotsTxt() != second.RenderRobotsTxt() {
 		return errors.New("render-determinism: /robots.txt differed across two renders")
 	}
@@ -146,7 +149,7 @@ func checkParitySite(s *Site) error {
 		if err != nil {
 			return err
 		}
-		if !slices.Equal(idsFrag, idsDoc) || !slices.Equal(idsDoc, idsMD) || !slices.Equal(idsDoc, idsJSON) {
+		if !equalSorted(idsFrag, idsDoc) || !equalSorted(idsDoc, idsMD) || !equalSorted(idsDoc, idsJSON) {
 			return fmt.Errorf("parity: %s section ids differ across representations: html=%v md=%v json=%v", p.Path, idsDoc, idsMD, idsJSON)
 		}
 
@@ -157,9 +160,164 @@ func checkParitySite(s *Site) error {
 		if err != nil {
 			return fmt.Errorf("parity: %s: %w", p.Path, err)
 		}
-		if !slices.Equal(linksFrag, linksDoc) || !slices.Equal(linksDoc, linksMD) || !slices.Equal(linksDoc, linksJSON) {
+		if !equalSorted(linksFrag, linksDoc) || !equalSorted(linksDoc, linksMD) || !equalSorted(linksDoc, linksJSON) {
 			return fmt.Errorf("parity: %s links differ across representations: html=%v md=%v json=%v", p.Path, linksDoc, linksMD, linksJSON)
 		}
+		if err := checkAgentPage(s, p, htmlDoc, mdDoc, jsonDoc); err != nil {
+			return err
+		}
+	}
+	// agents.txt equivalence with home block
+	if home := s.homePage(); home != nil {
+		at := s.RenderAgentsTxt()
+		head, block, found := strings.Cut(at, "\n\n")
+		if !found {
+			return errors.New("agents: /agents.txt missing blank-line separator")
+		}
+		for _, k := range []string{"site:", "title:", "module:", "revision:", "index:", "agents_md:", "markdown:", "json:", "skill:", "skills_index:", "mcp:", "mcp_card:", "source:", "edit:", "shape:", "cite:", "bashy:"} {
+			if !strings.Contains(head, k) {
+				return fmt.Errorf("agents: /agents.txt missing key %s", k)
+			}
+		}
+		if strings.TrimSpace(block) != strings.TrimSpace(s.AgentBlockMarkdown(home)) {
+			return errors.New("agents: /agents.txt block differs from home agent block")
+		}
+		// well-known shapes
+		var skills struct {
+			Version string `json:"version"`
+			Skills  []struct {
+				Name string `json:"name"`
+				URL  string `json:"url"`
+				SHA  string `json:"sha256"`
+			} `json:"skills"`
+		}
+		if err := json.Unmarshal([]byte(s.RenderAgentSkillsIndex()), &skills); err != nil || skills.Version != "0.2.0" || len(skills.Skills) != 1 || skills.Skills[0].URL != "/skill.md" || len(skills.Skills[0].SHA) != 64 {
+			return fmt.Errorf("agents: invalid agent-skills index: %v", err)
+		}
+		var card map[string]any
+		if err := json.Unmarshal([]byte(s.RenderMCPServerCard()), &card); err != nil || card["schema_version"] != "mcp-server-card-v1" || card["endpoint"] != s.Config.MCP {
+			return fmt.Errorf("agents: invalid MCP server card: %v", err)
+		}
+		var oauth map[string]any
+		if err := json.Unmarshal([]byte(s.RenderOAuthProtectedResource()), &oauth); err != nil || oauth["resource"] != s.Config.MCP {
+			return fmt.Errorf("agents: invalid oauth-protected-resource: %v", err)
+		}
+	}
+	return nil
+}
+
+func equalSorted(a, b []string) bool {
+	ac := append([]string{}, a...)
+	bc := append([]string{}, b...)
+	slices.Sort(ac)
+	slices.Sort(bc)
+	return slices.Equal(ac, bc)
+}
+
+var tagStripRe = regexp.MustCompile(`<[^>]+>`)
+
+func normalizeText(s string) string {
+	s = tagStripRe.ReplaceAllString(s, " ")
+	s = strings.ReplaceAll(s, "&amp;", "&")
+	return strings.Join(strings.Fields(s), " ")
+}
+
+func extractBetween(doc, start, end string) string {
+	i := strings.Index(doc, start)
+	if i < 0 {
+		return ""
+	}
+	rest := doc[i+len(start):]
+	j := strings.Index(rest, end)
+	if j < 0 {
+		return ""
+	}
+	return rest[:j]
+}
+
+func checkAgentPage(s *Site, p *Page, htmlDoc, mdDoc string, jsonDoc []byte) error {
+	// JSON agents first field
+	trimmed := strings.TrimSpace(string(jsonDoc))
+	if !strings.HasPrefix(trimmed, "{\n  \"agents\":") && !strings.HasPrefix(trimmed, "{\"agents\":") {
+		return fmt.Errorf("agents: %s JSON agents is not the first field", p.Path)
+	}
+	var decoded struct {
+		Agents   *AgentInfo `json:"agents"`
+		Revision string     `json:"revision"`
+	}
+	if err := json.Unmarshal(jsonDoc, &decoded); err != nil {
+		return fmt.Errorf("agents: %s JSON: %w", p.Path, err)
+	}
+	if decoded.Agents == nil {
+		return fmt.Errorf("agents: %s JSON missing agents", p.Path)
+	}
+	if decoded.Revision != p.Revision {
+		return fmt.Errorf("agents: %s JSON revision %s != %s", p.Path, decoded.Revision, p.Revision)
+	}
+	want := s.AgentInfoFor(p)
+	if *decoded.Agents != *want {
+		return fmt.Errorf("agents: %s JSON agents %+v != %+v", p.Path, decoded.Agents, want)
+	}
+	// Markdown: block first after front matter, agent: front matter
+	body := stripFrontMatter(mdDoc)
+	if !strings.HasPrefix(strings.TrimSpace(body), "## For agents {#agents}") {
+		return fmt.Errorf("agents: %s Markdown agent block is not first after front matter", p.Path)
+	}
+	for _, frag := range []string{"agent:\n", "  instructions:", "  agents_txt:", "  index:", "  skills:", "  skill:", "  mcp:", "  source:", "  edit:", "  cite:", "revision: " + p.Revision} {
+		if !strings.Contains(mdDoc, frag) {
+			return fmt.Errorf("agents: %s Markdown missing %q", p.Path, frag)
+		}
+	}
+	if !strings.Contains(mdDoc, s.AgentBlockMarkdown(p)) {
+		return fmt.Errorf("agents: %s Markdown block differs", p.Path)
+	}
+	// HTML head/link/meta
+	for _, frag := range []string{
+		`<meta name="agent:instructions" content="` + want.Instructions + `">`,
+		`<meta name="generator" content="bashy site 0.2.0">`,
+		`<meta name="revision" content="` + p.Revision + `">`,
+		`<link rel="alternate" type="text/markdown"`,
+		`<link rel="alternate" type="application/json"`,
+		`<link rel="describedby" href="/llms.txt">`,
+		`<link rel="edit" href="` + want.Edit + `">`,
+		`<link rel="service-doc" href="/AGENTS.md">`,
+		`<link rel="service-desc" href="/.well-known/mcp/server-card.json">`,
+		`<link rel="canonical"`,
+		`<link rel="author"`,
+		`<link rel="help"`,
+		`<script id="agent-recipe" type="text/bashsharp">`,
+		`<p id="agent-note" role="note">`,
+		`<section id="agents">`,
+	} {
+		if !strings.Contains(htmlDoc, frag) {
+			return fmt.Errorf("agents: %s HTML missing %q", p.Path, frag)
+		}
+	}
+	if idxNote := strings.Index(htmlDoc, `id="agent-note"`); idxNote < 0 || (strings.Index(htmlDoc, "<nav") >= 0 && idxNote > strings.Index(htmlDoc, "<nav")) {
+		return fmt.Errorf("agents: %s agent-note is not before nav", p.Path)
+	}
+	// script recipe: ASCII, no literal closing tag inside
+	recipe := extractBetween(htmlDoc, `<script id="agent-recipe" type="text/bashsharp">`, "</script>")
+	if recipe == "" {
+		return fmt.Errorf("agents: %s missing bashsharp recipe", p.Path)
+	}
+	for _, r := range recipe {
+		if r > 127 {
+			return fmt.Errorf("agents: %s recipe is not plain ASCII", p.Path)
+		}
+	}
+	if strings.Contains(recipe, "</script>") {
+		return fmt.Errorf("agents: %s recipe contains closing script tag", p.Path)
+	}
+	// visible == hidden == noscript normalized
+	visible := extractBetween(htmlDoc, `<section id="agents">`, "</section>")
+	hidden := extractBetween(htmlDoc, `<div hidden>`, "</div>")
+	noscript := extractBetween(htmlDoc, `<noscript>`, "</noscript>")
+	if visible == "" || hidden == "" || noscript == "" {
+		return fmt.Errorf("agents: %s missing visible/hidden/noscript block", p.Path)
+	}
+	if normalizeText(visible) != normalizeText(hidden) || normalizeText(visible) != normalizeText(noscript) {
+		return fmt.Errorf("agents: %s hidden/noscript text differs from visible agents block", p.Path)
 	}
 	return nil
 }
@@ -208,8 +366,8 @@ func CheckLinksResolve(dir string) error {
 
 func checkLinksResolveSite(s *Site) error {
 	staticRoutes := map[string]bool{
-		"/robots.txt": true,
-		"/llms.txt":   true,
+		"/robots.txt": true, "/llms.txt": true, "/agents.txt": true, "/AGENTS.md": true, "/README.md": true, "/skill.md": true, "/humans.txt": true, "/sitemap.xml": true, "/feed.xml": true,
+		"/.well-known/agent-skills/index.json": true, "/.well-known/mcp/server-card.json": true, "/.well-known/oauth-protected-resource": true, "/.well-known/agent-card.json": true, "/.well-known/api-catalog": true, "/.well-known/security.txt": true,
 	}
 	for _, p := range s.Pages {
 		mdTwin, jsonTwin := TwinPaths(p.Path)

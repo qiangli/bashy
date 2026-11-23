@@ -31,10 +31,68 @@ var Assets embed.FS
 
 // Config is site.json: site-wide metadata and shared navigation.
 type Config struct {
-	Title  string    `json:"title"`
-	Origin string    `json:"origin"`
-	Owner  string    `json:"owner,omitempty"`
-	Nav    []NavItem `json:"nav"`
+	Title           string    `json:"title"`
+	Origin          string    `json:"origin"`
+	Owner           string    `json:"owner,omitempty"`
+	Module          string    `json:"module,omitempty"`
+	Source          string    `json:"source,omitempty"`
+	EditURL         string    `json:"edit_url,omitempty"`
+	MCP             string    `json:"mcp,omitempty"`
+	Skill           string    `json:"skill,omitempty"`
+	Shape           string    `json:"shape,omitempty"`
+	AgentUserAgents []string  `json:"agent_user_agents,omitempty"`
+	Nav             []NavItem `json:"nav"`
+}
+
+var DefaultAgentUserAgents = []string{"Claude-User", "ClaudeCode", "claude-code", "Codex", "codex-cli", "Gemini-CLI", "gemini-cli", "OpenCode", "opencode", "ChatGPT-User", "OAI-SearchBot", "Perplexity-User", "Google-Extended", "bashy-fetch", "bashy-site"}
+
+func (c *Config) applyDefaults() {
+	c.Module = strings.TrimSpace(c.Module)
+	c.Source = strings.TrimSpace(c.Source)
+	c.EditURL = strings.TrimSpace(c.EditURL)
+	c.MCP = strings.TrimSpace(c.MCP)
+	c.Skill = strings.TrimSpace(c.Skill)
+	c.Shape = strings.TrimSpace(c.Shape)
+	if c.Module == "" {
+		if c.Owner != "" {
+			c.Module = "github.com/" + c.Owner + "/site"
+		} else {
+			c.Module = "site"
+		}
+	}
+	if c.Source == "" && c.Owner != "" {
+		c.Source = "https://github.com/" + c.Owner + "/site"
+	}
+	if c.EditURL == "" {
+		c.EditURL = c.Source + "/edit/main/{source}"
+	}
+	if c.MCP == "" {
+		c.MCP = c.Origin + "/mcp"
+	}
+	if c.Skill == "" {
+		c.Skill = c.Origin + "/skill.md"
+	}
+	if c.Shape == "" {
+		c.Shape = c.Origin + "/?shape=open"
+	}
+	if c.AgentUserAgents == nil {
+		c.AgentUserAgents = append([]string{}, DefaultAgentUserAgents...)
+	}
+}
+
+// AgentInfo is the agent block in structured form.
+type AgentInfo struct {
+	Instructions string `json:"instructions"`
+	AgentsTxt    string `json:"agents_txt"`
+	Index        string `json:"index"`
+	Skills       string `json:"skills"`
+	Skill        string `json:"skill"`
+	MCP          string `json:"mcp"`
+	Source       string `json:"source"`
+	Edit         string `json:"edit"`
+	Shape        string `json:"shape,omitempty"`
+	Cite         string `json:"cite"`
+	Recipe       string `json:"recipe,omitempty"`
 }
 
 // NavItem is one link in the shared navigation bar.
@@ -54,14 +112,16 @@ type Section struct {
 
 // Page is one rendered content document across HTML, Markdown, and JSON.
 type Page struct {
-	Path         string    `json:"path"`
-	Title        string    `json:"title"`
-	Summary      string    `json:"summary,omitempty"`
-	Revision     string    `json:"revision"`
-	Nav          []NavItem `json:"nav"`
-	Sections     []Section `json:"sections"`
-	Source       string    `json:"-"`
-	DeclaredList []string  `json:"-"`
+	Agents       *AgentInfo `json:"agents,omitempty"`
+	Path         string     `json:"path"`
+	Title        string     `json:"title"`
+	Summary      string     `json:"summary,omitempty"`
+	Revision     string     `json:"revision"`
+	Nav          []NavItem  `json:"nav"`
+	Sections     []Section  `json:"sections"`
+	Source       string     `json:"-"`
+	DeclaredList []string   `json:"-"`
+	site         *Site
 }
 
 // Site holds the loaded configuration and pages in deterministic order.
@@ -117,6 +177,7 @@ func LoadFS(fsys fs.FS) (*Site, error) {
 	if cfg.Nav == nil {
 		cfg.Nav = []NavItem{}
 	}
+	cfg.applyDefaults()
 
 	entries, err := fs.ReadDir(fsys, "content")
 	if err != nil {
@@ -153,6 +214,9 @@ func LoadFS(fsys fs.FS) (*Site, error) {
 		}
 	}
 
+	for _, p := range site.Pages {
+		p.site = site
+	}
 	sort.SliceStable(site.Pages, func(i, j int) bool {
 		if site.Pages[i].Path == site.Pages[j].Path {
 			return site.Pages[i].Source < site.Pages[j].Source
@@ -171,7 +235,18 @@ func LoadFS(fsys fs.FS) (*Site, error) {
 // SetOrigin updates the canonical origin used in HTML links and llms.txt.
 // Revisions depend only on canonical content, never on deployment origin.
 func (s *Site) SetOrigin(origin string) {
-	s.Config.Origin = strings.TrimRight(strings.TrimSpace(origin), "/")
+	old := s.Config.Origin
+	newOrigin := strings.TrimRight(strings.TrimSpace(origin), "/")
+	if s.Config.MCP == old+"/mcp" {
+		s.Config.MCP = newOrigin + "/mcp"
+	}
+	if s.Config.Skill == old+"/skill.md" {
+		s.Config.Skill = newOrigin + "/skill.md"
+	}
+	if s.Config.Shape == old+"/?shape=open" {
+		s.Config.Shape = newOrigin + "/?shape=open"
+	}
+	s.Config.Origin = newOrigin
 }
 
 // TwinPaths returns the .md and .json twin paths for a canonical page path.
@@ -419,6 +494,205 @@ func ComputeRevision(p *Page) string {
 	return hex.EncodeToString(sum[:6])
 }
 
+func (s *Site) homePage() *Page {
+	if p, ok := s.ByPath["/"]; ok {
+		return p
+	}
+	if len(s.Pages) > 0 {
+		return s.Pages[0]
+	}
+	return nil
+}
+func (s *Site) SiteRevision() string {
+	if p := s.homePage(); p != nil {
+		return p.Revision
+	}
+	return ""
+}
+func (s *Site) SkillName() string {
+	if s.Config.Owner != "" {
+		return s.Config.Owner + "-site"
+	}
+	return "site"
+}
+func (s *Site) EditURL(p *Page) string {
+	if p == nil {
+		return strings.ReplaceAll(s.Config.EditURL, "{source}", "")
+	}
+	return strings.ReplaceAll(s.Config.EditURL, "{source}", p.Source)
+}
+func (s *Site) AgentInfoFor(p *Page) *AgentInfo {
+	if p == nil {
+		return nil
+	}
+	mdTwin, _ := TwinPaths(p.Path)
+	_ = mdTwin
+	return &AgentInfo{
+		Instructions: s.Config.Origin + p.Path + "#agents",
+		AgentsTxt:    s.Config.Origin + "/agents.txt",
+		Index:        s.Config.Origin + "/llms.txt",
+		Skills:       s.Config.Origin + "/.well-known/agent-skills/index.json",
+		Skill:        s.Config.Skill,
+		MCP:          s.Config.MCP,
+		Source:       s.Config.Source,
+		Edit:         s.EditURL(p),
+		Shape:        s.Config.Shape,
+		Cite:         s.Config.Origin + p.Path + " @ " + p.Revision + " {url, section_id, revision, section_sha256, quote}",
+		Recipe:       s.AgentRecipe(p),
+	}
+}
+func (p *Page) agentSite() *Site { return p.site }
+func (s *Site) AgentRecipe(p *Page) string {
+	mdTwin, jsonTwin := TwinPaths(p.Path)
+	lines := []string{
+		"# Agent recipe for " + s.Config.Title,
+		"# 1. Read /agents.txt first: " + s.Config.Origin + "/agents.txt",
+		"# 2. Fetch the Markdown twin: " + s.Config.Origin + mdTwin,
+		"# 3. Fetch the JSON twin: " + s.Config.Origin + jsonTwin,
+		"# 4. Attach the skill: " + s.Config.Skill,
+		"# 5. Connect to MCP: " + s.Config.MCP,
+		"# 6. Cite sections as {url, section_id, revision, section_sha256, quote}; revision " + p.Revision,
+		"bashy site attach " + s.Config.Origin,
+	}
+	return strings.Join(lines, "\n")
+}
+func (s *Site) AgentBlockBody(p *Page) string {
+	info := s.AgentInfoFor(p)
+	mdTwin, jsonTwin := TwinPaths(p.Path)
+	lines := []string{
+		"This site is agent-ready and shaping-enabled, built with bashy. If you are an agent, start here.",
+		"Read this page as Markdown at " + s.Config.Origin + mdTwin + " or as JSON at " + s.Config.Origin + jsonTwin + " ; use Accept: text/markdown for the Markdown twin. The site index is " + info.Index + " and the agent entry point is " + info.AgentsTxt + " .",
+		"Equip yourself with the skill at " + info.Skill + " (skills index " + info.Skills + ") and connect to MCP at " + info.MCP + " . Run: bashy site attach " + s.Config.Origin,
+		"Source: " + info.Source + " . Propose changes through the per-page edit URL " + info.Edit + " and pull requests.",
+		"Shape: register the source as a shaped app, then wish, verify, preview, approve and undo. Shape URL: " + info.Shape,
+		"Cite sections as {url, section_id, revision, section_sha256, quote}; this page revision is " + p.Revision + " .",
+		"People reading over the agent shoulder: this block is the site instructions for agents; the human content follows the same source.",
+	}
+	return strings.Join(lines, "\n\n")
+}
+func (s *Site) AgentBlockMarkdown(p *Page) string {
+	return "## For agents {#agents}\n\n" + s.AgentBlockBody(p) + "\n"
+}
+func (s *Site) RenderAgentsTxt() string {
+	p := s.homePage()
+	if p == nil {
+		return ""
+	}
+	info := s.AgentInfoFor(p)
+	mdTwin, jsonTwin := TwinPaths(p.Path)
+	var b strings.Builder
+	b.WriteString("site: " + s.Config.Origin + "\n")
+	b.WriteString("title: " + s.Config.Title + "\n")
+	b.WriteString("module: " + s.Config.Module + "\n")
+	b.WriteString("revision: " + p.Revision + "\n")
+	b.WriteString("index: " + info.Index + "\n")
+	b.WriteString("agents_md: " + s.Config.Origin + "/AGENTS.md\n")
+	b.WriteString("markdown: " + s.Config.Origin + mdTwin + "\n")
+	b.WriteString("json: " + s.Config.Origin + jsonTwin + "\n")
+	b.WriteString("skill: " + info.Skill + "\n")
+	b.WriteString("skills_index: " + info.Skills + "\n")
+	b.WriteString("mcp: " + info.MCP + "\n")
+	b.WriteString("mcp_card: " + s.Config.Origin + "/.well-known/mcp/server-card.json\n")
+	b.WriteString("source: " + info.Source + "\n")
+	b.WriteString("edit: " + info.Edit + "\n")
+	b.WriteString("shape: " + info.Shape + "\n")
+	b.WriteString("cite: " + info.Cite + "\n")
+	b.WriteString("bashy: bashy site attach " + s.Config.Origin + "\n")
+	b.WriteString("\n")
+	b.WriteString(s.AgentBlockMarkdown(p))
+	return b.String()
+}
+func (s *Site) RenderAGENTSmd() string {
+	p := s.homePage()
+	var b strings.Builder
+	b.WriteString("# AGENTS.md\n\n")
+	if p != nil {
+		b.WriteString(s.AgentBlockMarkdown(p) + "\n")
+	}
+	b.WriteString("## Pages\n\n")
+	for _, pg := range s.Pages {
+		mdTwin, jsonTwin := TwinPaths(pg.Path)
+		b.WriteString("- " + pg.Title + ": " + s.Config.Origin + pg.Path + " markdown " + s.Config.Origin + mdTwin + " json " + s.Config.Origin + jsonTwin + " revision " + pg.Revision + "\n")
+	}
+	return b.String()
+}
+func (s *Site) RenderSkillMD() string {
+	name := s.SkillName()
+	return "---\nname: " + name + "\ndescription: Read and cite pages on " + s.Config.Title + " (" + s.Config.Origin + ") via /agents.txt, Markdown and JSON twins, and MCP.\nmetadata:\n  requires: \"has=bashy\"\n---\n# " + name + "\n\nOrigin: " + s.Config.Origin + "\n\nRead " + s.Config.Origin + "/agents.txt first, fetch the .md and .json twins, cite as {url, section_id, revision, section_sha256, quote}, and connect to MCP at " + s.Config.MCP + ".\n"
+}
+func (s *Site) RenderReadmeMD() string {
+	return "# " + s.Config.Title + "\n\n" + s.Config.Origin + "\n\nAgent-ready site. Read /agents.txt and /AGENTS.md for agent instructions; see /llms.txt for the index.\n"
+}
+func (s *Site) RenderHumansTxt() string {
+	return "/* SITE */\nSite: " + s.Config.Title + "\nOrigin: " + s.Config.Origin + "\n\n/* AGENTS */\nAgents: " + s.Config.Origin + "/agents.txt\nInstructions: " + s.Config.Origin + "/AGENTS.md\nMCP: " + s.Config.MCP + "\nSkill: " + s.Config.Skill + "\n"
+}
+func (s *Site) RenderAgentSkillsIndex() string {
+	skill := s.RenderSkillMD()
+	sum := sha256.Sum256([]byte(skill))
+	obj := map[string]any{"version": "0.2.0", "skills": []map[string]any{{"name": s.SkillName(), "type": "skill-md", "description": "Read and cite pages on " + s.Config.Title, "url": "/skill.md", "sha256": hex.EncodeToString(sum[:])}}}
+	b, _ := json.MarshalIndent(obj, "", "  ")
+	return string(b) + "\n"
+}
+func (s *Site) RenderMCPServerCard() string {
+	obj := map[string]any{"schema_version": "mcp-server-card-v1", "name": s.SkillName(), "title": s.Config.Title, "version": "0.2.0", "endpoint": s.Config.MCP, "transport": "streamable-http", "authentication": map[string]any{"type": "cookie-or-oauth2", "oauth_protected_resource": s.Config.Origin + "/.well-known/oauth-protected-resource"}, "tools": []string{"list_pages", "read_page", "cite", "shape_wish", "shape_verify", "shape_preview", "shape_approve", "shape_undo"}}
+	b, _ := json.MarshalIndent(obj, "", "  ")
+	return string(b) + "\n"
+}
+func (s *Site) RenderOAuthProtectedResource() string {
+	obj := map[string]any{"resource": s.Config.MCP, "authorization_servers": []string{s.Config.Origin}}
+	b, _ := json.MarshalIndent(obj, "", "  ")
+	return string(b) + "\n"
+}
+func (s *Site) RenderAgentCard() string {
+	obj := map[string]any{"name": s.SkillName(), "description": "Read and cite pages on " + s.Config.Title, "url": s.Config.Origin, "version": "0.2.0", "capabilities": map[string]any{"streaming": false}, "skills": []map[string]any{{"id": s.SkillName(), "name": s.SkillName(), "description": "Read and cite pages on " + s.Config.Title}}}
+	b, _ := json.MarshalIndent(obj, "", "  ")
+	return string(b) + "\n"
+}
+func (s *Site) RenderAPICatalog() string {
+	type link struct {
+		Href string `json:"href"`
+		Rel  string `json:"rel"`
+		Type string `json:"type,omitempty"`
+	}
+	links := []link{{s.Config.MCP, "service-desc", "application/json"}, {s.Config.Origin + "/agents.txt", "service-doc", "text/plain"}, {s.Config.Origin + "/llms.txt", "describedby", "text/plain"}}
+	for _, p := range s.Pages {
+		mdTwin, jsonTwin := TwinPaths(p.Path)
+		links = append(links, link{s.Config.Origin + mdTwin, "alternate", "text/markdown"}, link{s.Config.Origin + jsonTwin, "alternate", "application/json"})
+	}
+	obj := map[string]any{"linkset": []map[string]any{{"anchor": s.Config.Origin, "items": links}}}
+	b, _ := json.MarshalIndent(obj, "", "  ")
+	return string(b) + "\n"
+}
+func (s *Site) RenderSecurityTxt() string {
+	return "Policy: " + s.Config.Origin + "/AGENTS.md\nExpires: 2030-01-01T00:00:00.000Z\n"
+}
+func (s *Site) RenderSitemapXML() string {
+	var b strings.Builder
+	b.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">\n")
+	for _, p := range s.Pages {
+		mdTwin, jsonTwin := TwinPaths(p.Path)
+		for _, u := range []string{s.Config.Origin + p.Path, s.Config.Origin + mdTwin, s.Config.Origin + jsonTwin} {
+			b.WriteString("<url><loc>" + html.EscapeString(u) + "</loc></url>\n")
+		}
+	}
+	b.WriteString("</urlset>\n")
+	return b.String()
+}
+func (s *Site) RenderAtomFeed() string {
+	p := s.homePage()
+	desc := ""
+	if p != nil {
+		desc = s.AgentBlockMarkdown(p)
+	}
+	var b strings.Builder
+	b.WriteString("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\">\n<title>" + html.EscapeString(s.Config.Title) + "</title>\n<id>" + html.EscapeString(s.Config.Origin+"/") + "</id>\n<subtitle>" + html.EscapeString(desc) + "</subtitle>\n")
+	for _, pg := range s.Pages {
+		b.WriteString("<entry><title>" + html.EscapeString(pg.Title) + "</title><id>" + html.EscapeString(s.Config.Origin+pg.Path) + "</id><link href=\"" + html.EscapeString(s.Config.Origin+pg.Path) + "\"/></entry>\n")
+	}
+	b.WriteString("</feed>\n")
+	return b.String()
+}
+
 // RenderHTMLFragment renders the semantic HTML fragment for p.
 func RenderHTMLFragment(p *Page) string {
 	return p.RenderHTMLFragment()
@@ -439,6 +713,10 @@ func RenderJSON(p *Page) ([]byte, error) {
 func (p *Page) RenderHTMLFragment() string {
 	var b strings.Builder
 	b.WriteString(`<article data-path="` + html.EscapeString(p.Path) + `" data-revision="` + html.EscapeString(p.Revision) + `">` + "\n")
+	if p.site != nil {
+		info := p.site.AgentInfoFor(p)
+		b.WriteString(`<p id="agent-note" role="note">This site is agent-ready: instructions at #agents - MCP ` + html.EscapeString(info.MCP) + ` - skill ` + html.EscapeString(info.Skill) + `</p>` + "\n")
+	}
 	if len(p.Nav) > 0 {
 		b.WriteString(`<nav aria-label="Site">` + "\n")
 		for _, n := range p.Nav {
@@ -456,6 +734,11 @@ func (p *Page) RenderHTMLFragment() string {
 		if s.HTML != "" {
 			b.WriteString(s.HTML + "\n")
 		}
+		b.WriteString("</section>\n")
+	}
+	if p.site != nil {
+		b.WriteString(`<section id="agents">` + "\n<h2>For agents</h2>\n")
+		b.WriteString(renderMarkdownBlocks(p.site.AgentBlockBody(p)) + "\n")
 		b.WriteString("</section>\n")
 	}
 	b.WriteString("</article>\n")
@@ -477,11 +760,36 @@ func (s *Site) RenderHTMLDocument(p *Page) string {
 	b.WriteString("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
 	b.WriteString("<title>" + html.EscapeString(docTitle) + "</title>\n")
 	b.WriteString(`<meta name="revision" content="` + html.EscapeString(p.Revision) + `">` + "\n")
+	if p.site != nil {
+		info := s.AgentInfoFor(p)
+		b.WriteString(`<meta name="agent:instructions" content="` + html.EscapeString(info.Instructions) + `">` + "\n")
+	}
+	b.WriteString(`<meta name="generator" content="bashy site 0.2.0">` + "\n")
 	b.WriteString(`<link rel="canonical" href="` + html.EscapeString(canonicalURL) + `">` + "\n")
 	b.WriteString(`<link rel="alternate" type="text/markdown" href="` + html.EscapeString(mdTwin) + `">` + "\n")
 	b.WriteString(`<link rel="alternate" type="application/json" href="` + html.EscapeString(jsonTwin) + `">` + "\n")
+	b.WriteString(`<link rel="alternate" type="application/atom+xml" href="/feed.xml">` + "\n")
+	b.WriteString(`<link rel="describedby" href="/llms.txt">` + "\n")
+	if p.site != nil {
+		b.WriteString(`<link rel="edit" href="` + html.EscapeString(s.EditURL(p)) + `">` + "\n")
+		if s.Config.Source != "" {
+			b.WriteString(`<link rel="via" href="` + html.EscapeString(s.Config.Source) + `">` + "\n")
+		}
+	}
+	b.WriteString(`<link rel="service-doc" href="/AGENTS.md">` + "\n")
+	b.WriteString(`<link rel="service-desc" href="/.well-known/mcp/server-card.json">` + "\n")
+	b.WriteString(`<link rel="author" href="/humans.txt">` + "\n")
+	b.WriteString(`<link rel="help" href="/llms.txt">` + "\n")
+	// JSON-LD
+	b.WriteString(`<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebSite","url":"` + html.EscapeString(s.Config.Origin) + `","name":"` + html.EscapeString(s.Config.Title) + `"}</script>` + "\n")
 	b.WriteString("<style>body{max-width:44rem;margin:2rem auto;padding:0 1rem;font:16px/1.6 system-ui,sans-serif;color:#111}nav{display:flex;gap:1rem;margin-bottom:2rem;border-bottom:1px solid #ddd;padding-bottom:.75rem}section{margin:1.75rem 0}code,pre{font-family:ui-monospace,monospace;background:#f5f5f5}code{padding:.1rem .3rem;border-radius:3px}pre{padding:.75rem;overflow-x:auto;border-radius:4px}</style>\n")
-	b.WriteString("</head>\n<body>\n<main>\n")
+	b.WriteString("</head>\n<body>\n")
+	if p.site != nil {
+		b.WriteString(`<script id="agent-recipe" type="text/bashsharp">` + "\n" + s.AgentRecipe(p) + "\n</script>\n")
+		b.WriteString(`<div hidden>` + "\n<h2>For agents</h2>\n" + renderMarkdownBlocks(s.AgentBlockBody(p)) + "\n</div>\n")
+		b.WriteString(`<noscript>` + "\n<h2>For agents</h2>\n" + renderMarkdownBlocks(s.AgentBlockBody(p)) + "\n</noscript>\n")
+	}
+	b.WriteString("<main>\n")
 	b.WriteString(p.RenderHTMLFragment())
 	b.WriteString("</main>\n</body>\n</html>\n")
 	return b.String()
@@ -501,7 +809,23 @@ func (p *Page) RenderMarkdown() string {
 	b.WriteString("  html: " + yamlScalar(p.Path) + "\n")
 	b.WriteString("  markdown: " + yamlScalar(mdTwin) + "\n")
 	b.WriteString("  json: " + yamlScalar(jsonTwin) + "\n")
+	if p.site != nil {
+		info := p.site.AgentInfoFor(p)
+		b.WriteString("agent:\n")
+		b.WriteString("  instructions: " + yamlScalar(info.Instructions) + "\n")
+		b.WriteString("  agents_txt: " + yamlScalar(info.AgentsTxt) + "\n")
+		b.WriteString("  index: " + yamlScalar(info.Index) + "\n")
+		b.WriteString("  skills: " + yamlScalar(info.Skills) + "\n")
+		b.WriteString("  skill: " + yamlScalar(info.Skill) + "\n")
+		b.WriteString("  mcp: " + yamlScalar(info.MCP) + "\n")
+		b.WriteString("  source: " + yamlScalar(info.Source) + "\n")
+		b.WriteString("  edit: " + yamlScalar(info.Edit) + "\n")
+		b.WriteString("  cite: " + yamlScalar(info.Cite) + "\n")
+	}
 	b.WriteString("---\n\n")
+	if p.site != nil {
+		b.WriteString(p.site.AgentBlockMarkdown(p) + "\n")
+	}
 	if len(p.Nav) > 0 {
 		parts := make([]string, 0, len(p.Nav))
 		for _, n := range p.Nav {
@@ -524,7 +848,11 @@ func (p *Page) RenderMarkdown() string {
 
 // RenderJSON renders the structured JSON representation of the page.
 func (p *Page) RenderJSON() ([]byte, error) {
-	b, err := json.MarshalIndent(p, "", "  ")
+	cp := *p
+	if p.site != nil {
+		cp.Agents = p.site.AgentInfoFor(p)
+	}
+	b, err := json.MarshalIndent(&cp, "", "  ")
 	if err != nil {
 		return nil, err
 	}
@@ -533,13 +861,21 @@ func (p *Page) RenderJSON() ([]byte, error) {
 
 // RenderRobotsTxt renders RFC 9309 /robots.txt.
 func (s *Site) RenderRobotsTxt() string {
-	return "User-agent: *\nAllow: /\n"
+	var b strings.Builder
+	b.WriteString("# Agent-ready site: read /agents.txt and /AGENTS.md for agent instructions.\n")
+	b.WriteString("# MCP: " + s.Config.MCP + " Skill: " + s.Config.Skill + "\n")
+	b.WriteString("User-agent: *\nAllow: /\n")
+	b.WriteString("Sitemap: " + s.Config.Origin + "/sitemap.xml\n")
+	return b.String()
 }
 
 // RenderLLMsTxt renders /llms.txt listing all published pages and their twins.
 func (s *Site) RenderLLMsTxt() string {
 	var b strings.Builder
 	b.WriteString("# " + s.Config.Title + "\n\n")
+	if p := s.homePage(); p != nil {
+		b.WriteString(s.AgentBlockMarkdown(p) + "\n")
+	}
 	b.WriteString("## Pages\n\n")
 	for _, p := range s.Pages {
 		mdTwin, jsonTwin := TwinPaths(p.Path)
@@ -897,7 +1233,10 @@ func ExtractJSONSectionIDs(raw []byte) ([]string, error) {
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, err
 	}
-	out := make([]string, 0, len(p.Sections))
+	out := make([]string, 0, len(p.Sections)+1)
+	if p.Agents != nil {
+		out = append(out, "agents")
+	}
 	for _, s := range p.Sections {
 		out = append(out, s.ID)
 	}

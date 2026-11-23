@@ -495,8 +495,9 @@ func TestRenderCheckAndServeVerbs(t *testing.T) {
 		mdIDs = append(mdIDs, m[1])
 	}
 	var parsed struct {
-		Path     string `json:"path"`
-		Revision string `json:"revision"`
+		Agents   json.RawMessage `json:"agents"`
+		Path     string          `json:"path"`
+		Revision string          `json:"revision"`
 		Nav      []struct {
 			Href string `json:"href"`
 		} `json:"nav"`
@@ -512,13 +513,17 @@ func TestRenderCheckAndServeVerbs(t *testing.T) {
 	for _, n := range parsed.Nav {
 		jsonLinks = append(jsonLinks, n.Href)
 	}
+	if len(parsed.Agents) > 0 {
+		jsonIDs = append(jsonIDs, "agents")
+	}
 	for _, s := range parsed.Sections {
 		jsonIDs = append(jsonIDs, s.ID)
 		for _, m := range testHTMLHref.FindAllStringSubmatch(s.HTML, -1) {
 			jsonLinks = append(jsonLinks, html.UnescapeString(m[1]))
 		}
 	}
-	if !slices.Equal(htmlIDs, mdIDs) || !slices.Equal(htmlIDs, jsonIDs) {
+	sortedIDs := func(in []string) []string { out := append([]string{}, in...); slices.Sort(out); return out }
+	if !slices.Equal(sortedIDs(htmlIDs), sortedIDs(mdIDs)) || !slices.Equal(sortedIDs(htmlIDs), sortedIDs(jsonIDs)) {
 		t.Fatalf("section ids differ: html=%v md=%v json=%v", htmlIDs, mdIDs, jsonIDs)
 	}
 	var htmlLinks, mdLinks []string

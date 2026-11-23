@@ -50,10 +50,93 @@ func NewServerHandler(fsys fs.FS, getenv func(string) string) (*Site, http.Handl
 	return s, NewHandler(s), nil
 }
 
+func (s *Site) BashyShapedValue(p *Page) string {
+	rev := ""
+	if p != nil {
+		rev = p.Revision
+	} else {
+		rev = s.SiteRevision()
+	}
+	return `module="` + s.Config.Module + `", revision="` + rev + `", agents="/agents.txt", skill="/skill.md", mcp="/mcp", source="` + s.Config.Source + `", shape="/?shape=open"`
+}
+func (s *Site) LinkHeaderValue(p *Page) string {
+	if p == nil {
+		p = s.homePage()
+	}
+	if p == nil {
+		return ""
+	}
+	mdTwin, jsonTwin := TwinPaths(p.Path)
+	canonicalURL := s.Config.Origin + p.Path
+	parts := []string{
+		`<` + mdTwin + `>; rel="alternate"; type="text/markdown"`,
+		`<` + jsonTwin + `>; rel="alternate"; type="application/json"`,
+		`</llms.txt>; rel="describedby"`,
+		`<` + s.EditURL(p) + `>; rel="edit"`,
+	}
+	if s.Config.Source != "" {
+		parts = append(parts, `<`+s.Config.Source+`>; rel="via"`)
+	}
+	parts = append(parts,
+		`</AGENTS.md>; rel="service-doc"`,
+		`</.well-known/mcp/server-card.json>; rel="service-desc"`,
+		`<`+canonicalURL+`>; rel="canonical"`,
+		`</humans.txt>; rel="author"`,
+		`</llms.txt>; rel="help"`,
+	)
+	return strings.Join(parts, ", ")
+}
+func (h *routeHandler) setAgentHeaders(w http.ResponseWriter, p *Page) {
+	w.Header().Set("Bashy-Shaped", h.site.BashyShapedValue(p))
+	if v := h.site.LinkHeaderValue(p); v != "" {
+		w.Header().Set("Link", v)
+	}
+	w.Header().Set("Vary", "Accept")
+	if p != nil {
+		w.Header().Set("ETag", `"`+p.Revision+`"`)
+	} else if rev := h.site.SiteRevision(); rev != "" {
+		w.Header().Set("ETag", `"`+rev+`"`)
+	}
+}
+func (h *routeHandler) serveText(w http.ResponseWriter, r *http.Request, ctype, body string) {
+	h.setAgentHeaders(w, nil)
+	w.Header().Set("Content-Type", ctype)
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodGet {
+		_, _ = w.Write([]byte(body))
+	}
+}
+func (h *routeHandler) serveError(w http.ResponseWriter, r *http.Request, status int, msg string) {
+	h.setAgentHeaders(w, nil)
+	if status == http.StatusMethodNotAllowed {
+		w.Header().Set("Allow", "GET, HEAD")
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	if r.Method != http.MethodHead {
+		home := h.site.homePage()
+		note := `<p id="agent-note" role="note">This site is agent-ready: instructions at #agents - see /agents.txt and /llms.txt</p>`
+		if home != nil {
+			if info := h.site.AgentInfoFor(home); info != nil {
+				note = `<p id="agent-note" role="note">This site is agent-ready: instructions at #agents - MCP ` + info.MCP + ` - skill ` + info.Skill + `</p>`
+			}
+		}
+		_, _ = w.Write([]byte("<!DOCTYPE html>\n<html lang=\"en\"><head><meta charset=\"utf-8\"><title>" + msg + "</title></head><body>\n" + note + "\n<h1>" + msg + "</h1><p><a href=\"/llms.txt\">Site index</a></p></body></html>\n"))
+	}
+}
+func IsAgentUserAgent(ua string, list []string) bool {
+	lower := strings.ToLower(ua)
+	for _, a := range list {
+		if a != "" && strings.Contains(lower, strings.ToLower(a)) {
+			return true
+		}
+	}
+	return false
+}
+
 func (h *routeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		w.Header().Set("Allow", "GET, HEAD")
-		http.Error(w, "read-only", http.StatusMethodNotAllowed)
+		h.serveError(w, r, http.StatusMethodNotAllowed, "read-only")
 		return
 	}
 
@@ -63,19 +146,50 @@ func (h *routeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch reqPath {
+	case "/agents.txt":
+		h.serveText(w, r, "text/plain; charset=utf-8", h.site.RenderAgentsTxt())
+		return
+	case "/AGENTS.md":
+		h.serveText(w, r, "text/markdown; charset=utf-8", h.site.RenderAGENTSmd())
+		return
+	case "/README.md":
+		h.serveText(w, r, "text/markdown; charset=utf-8", h.site.RenderReadmeMD())
+		return
+	case "/skill.md":
+		h.serveText(w, r, "text/markdown; charset=utf-8", h.site.RenderSkillMD())
+		return
+	case "/humans.txt":
+		h.serveText(w, r, "text/plain; charset=utf-8", h.site.RenderHumansTxt())
+		return
 	case "/robots.txt":
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		if r.Method == http.MethodGet {
-			_, _ = w.Write([]byte(h.site.RenderRobotsTxt()))
-		}
+		h.serveText(w, r, "text/plain; charset=utf-8", h.site.RenderRobotsTxt())
 		return
 	case "/llms.txt":
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusOK)
-		if r.Method == http.MethodGet {
-			_, _ = w.Write([]byte(h.site.RenderLLMsTxt()))
-		}
+		h.serveText(w, r, "text/plain; charset=utf-8", h.site.RenderLLMsTxt())
+		return
+	case "/sitemap.xml":
+		h.serveText(w, r, "application/xml; charset=utf-8", h.site.RenderSitemapXML())
+		return
+	case "/feed.xml":
+		h.serveText(w, r, "application/atom+xml; charset=utf-8", h.site.RenderAtomFeed())
+		return
+	case "/.well-known/agent-skills/index.json":
+		h.serveText(w, r, "application/json; charset=utf-8", h.site.RenderAgentSkillsIndex())
+		return
+	case "/.well-known/mcp/server-card.json":
+		h.serveText(w, r, "application/json; charset=utf-8", h.site.RenderMCPServerCard())
+		return
+	case "/.well-known/oauth-protected-resource":
+		h.serveText(w, r, "application/json; charset=utf-8", h.site.RenderOAuthProtectedResource())
+		return
+	case "/.well-known/agent-card.json":
+		h.serveText(w, r, "application/json; charset=utf-8", h.site.RenderAgentCard())
+		return
+	case "/.well-known/api-catalog":
+		h.serveText(w, r, "application/linkset+json; charset=utf-8", h.site.RenderAPICatalog())
+		return
+	case "/.well-known/security.txt":
+		h.serveText(w, r, "text/plain; charset=utf-8", h.site.RenderSecurityTxt())
 		return
 	case "/index.md":
 		if p, ok := h.site.ByPath["/"]; ok {
@@ -110,23 +224,22 @@ func (h *routeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	p, ok := h.site.ByPath[reqPath]
 	if !ok {
-		http.NotFound(w, r)
+		h.serveError(w, r, http.StatusNotFound, "404 page not found")
 		return
 	}
-	h.serveRepresentation(w, r, p, NegotiateRequest(r))
+	format := NegotiateRequest(r)
+	if IsAgentUserAgent(r.UserAgent(), h.site.Config.AgentUserAgents) {
+		accept := strings.TrimSpace(strings.Join(r.Header.Values("Accept"), ", "))
+		if accept == "" || accept == "*/*" {
+			format = "md"
+		}
+	}
+	h.serveRepresentation(w, r, p, format)
 }
 
 func (h *routeHandler) serveRepresentation(w http.ResponseWriter, r *http.Request, p *Page, format string) {
-	mdTwin, jsonTwin := TwinPaths(p.Path)
-	canonicalURL := h.site.Config.Origin + p.Path
 	etag := `"` + p.Revision + `"`
-
-	w.Header().Set("Vary", "Accept")
-	w.Header().Set("ETag", etag)
-	w.Header().Set("Link",
-		`<`+mdTwin+`>; rel="alternate"; type="text/markdown", `+
-			`<`+jsonTwin+`>; rel="alternate"; type="application/json", `+
-			`<`+canonicalURL+`>; rel="canonical"`)
+	h.setAgentHeaders(w, p)
 
 	var (
 		ctype string
@@ -183,6 +296,7 @@ func ifNoneMatchMatches(header, strongETag string) bool {
 type acceptSpec struct {
 	q           float64
 	specificity int // 3 = exact type/subtype, 2 = type/*, 1 = */*
+	order       int
 	matched     bool
 }
 
@@ -196,7 +310,13 @@ func (a acceptSpec) betterThan(b acceptSpec) bool {
 	if a.q != b.q {
 		return a.q > b.q
 	}
-	return a.specificity > b.specificity
+	if a.specificity != b.specificity {
+		return a.specificity > b.specificity
+	}
+	return a.order < b.order
+}
+func (a acceptSpec) equalRank(b acceptSpec) bool {
+	return a.matched && b.matched && a.q == b.q && a.specificity == b.specificity && a.order == b.order
 }
 
 // NegotiateRequest chooses "html" (default), "md", or "json" from r's Accept
@@ -218,7 +338,8 @@ func NegotiateAccept(accept string) string {
 	var htmlSpec, mdSpec, jsonSpec acceptSpec
 	var htmlDisallowed, mdDisallowed, jsonDisallowed bool
 
-	for _, part := range strings.Split(accept, ",") {
+	for idx, part := range strings.Split(accept, ",") {
+		order := idx
 		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
@@ -247,7 +368,7 @@ func NegotiateAccept(accept string) string {
 				}
 				return
 			}
-			cand := acceptSpec{q: q, specificity: spec, matched: true}
+			cand := acceptSpec{q: q, specificity: spec, order: order, matched: true}
 			if cand.betterThan(*cur) {
 				*cur = cand
 			}
@@ -281,7 +402,12 @@ func NegotiateAccept(accept string) string {
 		jsonSpec = acceptSpec{}
 	}
 
-	// HTML is the default unless Markdown or JSON is strictly preferred.
+	if mdSpec.equalRank(htmlSpec) || jsonSpec.equalRank(htmlSpec) {
+		// Complete tie (e.g. */*): HTML default.
+		if mdSpec.equalRank(jsonSpec) {
+			return "html"
+		}
+	}
 	if mdSpec.betterThan(htmlSpec) && !jsonSpec.betterThan(mdSpec) {
 		return "md"
 	}

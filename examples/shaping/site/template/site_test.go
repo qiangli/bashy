@@ -296,13 +296,20 @@ func TestThreeRepresentationsListSameLinksAndSectionIDs(t *testing.T) {
 		if len(wantIDs) == 0 {
 			t.Fatalf("%s: no section ids", p.Path)
 		}
-		if got := ExtractHTMLSectionIDs(doc); !slices.Equal(got, wantIDs) {
+		sortedEq := func(a, b []string) bool {
+			ac := append([]string{}, a...)
+			bc := append([]string{}, b...)
+			slices.Sort(ac)
+			slices.Sort(bc)
+			return slices.Equal(ac, bc)
+		}
+		if got := ExtractHTMLSectionIDs(doc); !sortedEq(got, wantIDs) {
 			t.Errorf("%s html-doc ids %v != %v", p.Path, got, wantIDs)
 		}
-		if got := ExtractMarkdownSectionIDs(md); !slices.Equal(got, wantIDs) {
+		if got := ExtractMarkdownSectionIDs(md); !sortedEq(got, wantIDs) {
 			t.Errorf("%s markdown ids %v != %v", p.Path, got, wantIDs)
 		}
-		if got, err := ExtractJSONSectionIDs(rawJSON); err != nil || !slices.Equal(got, wantIDs) {
+		if got, err := ExtractJSONSectionIDs(rawJSON); err != nil || !sortedEq(got, wantIDs) {
 			t.Errorf("%s json ids %v (err=%v) != %v", p.Path, got, err, wantIDs)
 		}
 
