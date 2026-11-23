@@ -90,6 +90,21 @@ class ReceiptTests(unittest.TestCase):
         self.record['govulncheck']['database_upstream_modified'] = self.record['govulncheck']['database_modified']
         with self.assertRaises(ValueError): self.check()
 
+    def test_pruned_module_without_any_lock_is_recorded_not_required(self):
+        row = {'path': 'example.org/outside-build', 'version': 'v0.9.0', 'main': False,
+               'go_mod_downloaded': False, 'go_mod_sum': '', 'sum': '', 'go_mod_pruned': True}
+        self.record['module_graphs'][0]['modules'].append(row)
+        def reseal():
+            self.record['module_graphs_sha256'] = hashlib.sha256(evidence.canonical(self.record['module_graphs'])).hexdigest()
+        reseal()
+        self.check()
+        for bad in (dict(row, go_mod_sum='h1:x='), dict(row, sum='h1:y='), dict(row, go_sum_sha256='e' * 64),
+                    dict(row, go_mod_pruned='yes'), dict(row, go_mod_downloaded=True, go_mod_sha256='d' * 64)):
+            with self.subTest(bad=bad):
+                self.record['module_graphs'][0]['modules'][-1] = bad
+                reseal()
+                with self.assertRaises(ValueError): self.check()
+
     def test_transitive_graph_tampering_fails(self):
         self.record['module_graphs'][1]['modules'][0]['version'] = 'v2.0.0'
         with self.assertRaises(ValueError): self.check()

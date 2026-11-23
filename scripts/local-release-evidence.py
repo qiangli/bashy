@@ -97,8 +97,13 @@ def verify(record, root, commit, now=None):
                 if 'go_mod_sha256' in module:
                     raise ValueError('unexpected go.mod content digest for un-downloaded module')
                 sum_value = module.get('go_mod_sum')
-                if not isinstance(sum_value, str) or not sum_value.startswith('h1:') or len(sum_value) <= len('h1:'):
+                if module.get('go_mod_pruned', False) is True:
+                    if sum_value or module.get('sum') or 'go_sum_sha256' in module:
+                        raise ValueError('pruned module carries lock data')
+                elif not isinstance(sum_value, str) or not sum_value.startswith('h1:') or len(sum_value) <= len('h1:'):
                     raise ValueError('un-downloaded module missing h1: go.mod sum')
+            elif 'go_mod_pruned' in module:
+                raise ValueError('downloaded module marked pruned')
                 continue
             digest_value = module.get('go_mod_sha256', '')
             if not isinstance(digest_value, str) or not re.fullmatch('[0-9a-f]{64}', digest_value):
@@ -125,6 +130,13 @@ def collect(root, report_dir, scopes):
                 item['go_mod_sha256'] = digest(gomod)
             else:
                 item['go_mod_downloaded'] = False
+                if not item['go_mod_sum']:
+                    # `go list -m all` enumerates the full graph, but under module
+                    # pruning a module no build needs has no go.sum line at all and
+                    # is never downloaded; record it as pruned instead of pretending
+                    # it has a lock. go verifies that such a module cannot reach a
+                    # build; the receipt only records that fact.
+                    item['go_mod_pruned'] = True
             module_dir = pathlib.Path(effective['Dir']) if effective.get('Dir') else (gomod.parent if gomod is not None else None)
             if module_dir is not None and (module_dir / 'go.sum').is_file():
                 item['go_sum_sha256'] = digest(module_dir / 'go.sum')
