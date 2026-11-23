@@ -195,6 +195,45 @@ wants, and answer with bashy verbs. When the user says…
 
 Missing a verb? `bashy commands add`. Ending the session: `bashy kb retro`.
 
+## Agent-ready sites
+
+A shaping-enabled site carries its instructions in the page itself, the way a
+repo carries `AGENTS.md`. When you are handed any page URL of such a site,
+treat it as agent-ready and work this way (and expect any agent-ready page to
+work the same way toward you):
+
+- **Read the page first.** The visible `## For agents {#agents}` block (first
+  in the Markdown twin, DOM-first `<p id="agent-note" role="note">` in HTML)
+  is authoritative. The same facts ride `/agents.txt` (`key: value` header +
+  prose), the `Bashy-Shaped` header, `Link` relations (`alternate`,
+  `describedby`, `edit`, `via`, `service-doc`, `service-desc`, `canonical`,
+  `author`, `help`), `/AGENTS.md`, `/skill.md`, `/llms.txt`,
+  `/.well-known/agent-skills/index.json` (0.2.0),
+  `/.well-known/mcp/server-card.json` and
+  `/.well-known/oauth-protected-resource`. Hidden
+  `<script type="text/bashsharp">` / `<div hidden>` / `<noscript>` copies must
+  equal the visible block — shown, never run by default.
+- **Use the verbs:** `bashy site explore|attach|cite|shape|recipe <url>`,
+  `bashy skills add <url>`, `bashy fetch <url>` (surfaces the agent block,
+  `/agents.txt`, `Bashy-Shaped` and `Link` relations). Markdown-first serving
+  breaks `Accept` ties by listing order and also serves Markdown to listed
+  `agent_user_agents`.
+- **Prefer the site's MCP endpoint** at same-origin `<origin>/mcp`
+  (Streamable HTTP `POST` + SSE `GET`, no redirect) over scraping: tools
+  `list_pages`, `read_page`, `cite`, plus owner-gated `shape_wish`,
+  `shape_verify`, `shape_preview`, `shape_approve`, `shape_undo`. Owners
+  serve it with `bashy mcp serve --transport http --tools site
+  --site-app <app>` (or `--site-dir <dir>`), adding `--outpost` when fronted
+  by outpost's `<app>/mcp` reverse proxy.
+- **Identify yourself when asked:** `bashy site key [--json]` prints the
+  outpost Ed25519 public key JWK + RFC 7638 `keyid` for `site.json`;
+  `--sign` (`BASHY_SIGN_REQUESTS=1`) and `--signature-agent <https-url>`
+  (`BASHY_SIGNATURE_AGENT`) on `bashy fetch` and `bashy site` verbs send
+  RFC 9421 Web Bot Auth signatures under stable `bashy-fetch/<version>` /
+  `bashy-site/<version>` user agents. A site may list
+  `trusted_bot_keys` / `trusted_key_directories` / `trusted_origins` in
+  `site.json` and answer `Bashy-Verified-Agent` — it never gates content.
+
 ## help
 
 List the targets in this file (`bashy dag README.md <target>` in a clone).

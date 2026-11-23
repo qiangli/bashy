@@ -235,6 +235,36 @@ re-imports it).
   markdown-defined task DAGs. Read the `conductor` skill
   (`bashy skill show conductor`) before orchestrating a fleet.
 
+## Agent-ready sites (any page that follows the convention)
+
+Treat any page with a visible `## For agents {#agents}` block as a repo root:
+read that block first (Markdown twin first; DOM-first
+`<p id="agent-note" role="note">` in HTML), then `/agents.txt`,
+`/llms.txt`, `/AGENTS.md` as it directs. Channels: `/agents.txt`
+(`key: value` + prose), `Bashy-Shaped` header, `Link` relations
+(`alternate`, `describedby`, `edit`, `via`, `service-doc`, `service-desc`,
+`canonical`, `author`, `help`), `<script type="text/bashsharp">` +
+`<div hidden>`/`<noscript>` twins (must equal the visible block; shown,
+never run by default), `/skill.md`,
+`/.well-known/agent-skills/index.json` (0.2.0),
+`/.well-known/mcp/server-card.json`, `/.well-known/oauth-protected-resource`.
+Markdown-first serving breaks `Accept` ties by listing order and serves
+listed `agent_user_agents`. Verbs: `bashy site
+explore|attach|cite|shape|recipe <url>`, `bashy skills add <url>`,
+`bashy fetch <url>`. Prefer the same-origin `<origin>/mcp` MCP endpoint
+(Streamable HTTP `POST` + SSE `GET`, no redirect; `list_pages`,
+`read_page`, `cite`, owner-gated `shape_wish|shape_verify|shape_preview|
+shape_approve|shape_undo`). Owners serve it via
+`bashy mcp serve --transport http --tools site --site-app <app>` (or
+`--site-dir <dir>`; add `--outpost` behind outpost's `<app>/mcp` proxy).
+Identity: `bashy site key [--json]` (Ed25519 JWK + RFC 7638 `keyid`),
+`--sign` (`BASHY_SIGN_REQUESTS=1`) / `--signature-agent <https-url>`
+(`BASHY_SIGNATURE_AGENT`) on `bashy fetch`/`bashy site` under
+`bashy-fetch/<version>` / `bashy-site/<version>`; `site.json`
+`trusted_bot_keys`/`trusted_key_directories`/`trusted_origins` yield
+`Bashy-Verified-Agent` and never gate content. Vice versa: pages you
+publish should carry the same block so other agents treat them this way.
+
 ## Rules of thumb
 
 1. `bashy inspect context --json` first; trust it over your own probes.
