@@ -6,8 +6,9 @@ description: "serve bashy commands to agents over the Model Context Protocol (st
 
 ## Usage
   bashy mcp serve [--transport stdio|http] [--listen ADDR] [--allow EFFECTS]
-                       [--tools default|all|NAME,...] [--max-output BYTES] [--outpost]
-       bashy mcp tools [--tools default|all|NAME,...] [--json]
+                       [--tools default|all|site|NAME,...] [--max-output BYTES] [--outpost]
+                       [--site-dir DIR] [--site-app APP]
+       bashy mcp tools [--tools default|all|site|NAME,...] [--json]
 
 Serve bashy commands to agents over the Model Context Protocol.
 
@@ -18,6 +19,11 @@ Serve bashy commands to agents over the Model Context Protocol.
                             (--json: the bashy-mcp-tools-v1 envelope)
   --tools default           registered tools plus available core commands
   --tools all               all canonical registry commands and visible verbs for this OS
+  --tools site              the site profile: list_pages, read_page, cite and the
+                            owner-only shape_wish/verify/preview/approve/undo
+  --site-dir DIR            site module the site profile reads (its own renderer)
+  --site-app APP            shaped app the shape tools act on; its outpost upstream
+                            (or source) is read and its signed stamp decides the tier
   --allow EFFECTS           grant destroy,spend,cred,priv (comma-separated)
 
 ```json mcp

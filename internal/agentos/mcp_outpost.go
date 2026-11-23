@@ -11,55 +11,89 @@ import (
 	"github.com/qiangli/yoke/pkg/coopauth"
 )
 
+// mcpOutpostApp is the part of one outpost app registration the MCP fronts
+// read: its signing key, its login posture and its loopback upstream.
+type mcpOutpostApp struct {
+	Name         string `json:"name"`
+	SSOSecret    string `json:"sso_secret"`
+	RequireLogin bool   `json:"require_login"`
+	Scheme       string `json:"scheme"`
+	Host         string `json:"host"`
+	Port         int    `json:"port"`
+	BasePath     string `json:"base_path"`
+}
+
+type mcpOutpostConfig struct {
+	ServiceSSO map[string]string `json:"service_sso"`
+	Apps       []mcpOutpostApp   `json:"apps"`
+}
+
 // Re-read the host's private app key on each request: outpost may provision it
 // after this process starts, or rotate it without restarting the MCP server.
 // No token is accepted on the command line or returned in diagnostics.
-func mcpOutpostAuthenticate(r *http.Request) bool {
-	if !coopauth.IsLoopbackAddr(r.RemoteAddr) {
-		return false
-	}
+func readMCPOutpostConfig() (mcpOutpostConfig, bool) {
+	var config mcpOutpostConfig
 	dir := os.Getenv("XDG_CONFIG_HOME")
 	if dir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			return false
+			return config, false
 		}
 		dir = filepath.Join(home, ".config")
 	}
 	path := filepath.Join(dir, "matrix", "agent.json")
 	f, err := os.Open(path)
 	if err != nil {
-		return false
+		return config, false
 	}
 	defer f.Close()
 	st, err := f.Stat()
 	if err != nil || !st.Mode().IsRegular() || (runtime.GOOS != "windows" && st.Mode().Perm()&0077 != 0) {
-		return false
-	}
-	var config struct {
-		ServiceSSO map[string]string `json:"service_sso"`
-		Apps       []struct {
-			Name      string `json:"name"`
-			SSOSecret string `json:"sso_secret"`
-		} `json:"apps"`
+		return config, false
 	}
 	if json.NewDecoder(f).Decode(&config) != nil {
-		return false
+		return config, false
 	}
-	// The outpost signs with the key of whichever registration fronts the
-	// app: the bashy-mcp service unit (service_sso) or an app published with
-	// `outpost apps add --trust-cloud-identity` (apps[].sso_secret). Both are
-	// host-private entries in the same 0600 file; accept a signature from
-	// either, never from anything else.
-	keys := []string{config.ServiceSSO["bashy-mcp"]}
-	for _, app := range config.Apps {
-		if app.Name == "bashy-mcp" {
-			keys = append(keys, app.SSOSecret)
+	return config, true
+}
+
+// signingKeys are the keys outpost signs an app's requests with: the service
+// unit (service_sso) or an app published with `outpost apps add
+// --trust-cloud-identity` (apps[].sso_secret). Both are host-private entries
+// in the same 0600 file; nothing else is ever accepted.
+func (c mcpOutpostConfig) signingKeys(app string) []string {
+	var keys []string
+	if key := strings.TrimSpace(c.ServiceSSO[app]); key != "" {
+		keys = append(keys, key)
+	}
+	for _, entry := range c.Apps {
+		if key := strings.TrimSpace(entry.SSOSecret); entry.Name == app && key != "" {
+			keys = append(keys, key)
 		}
 	}
+	return keys
+}
+
+func (c mcpOutpostConfig) app(name string) (mcpOutpostApp, bool) {
+	for _, entry := range c.Apps {
+		if entry.Name == name {
+			return entry, true
+		}
+	}
+	return mcpOutpostApp{}, false
+}
+
+func mcpOutpostAuthenticate(r *http.Request) bool {
+	if !coopauth.IsLoopbackAddr(r.RemoteAddr) {
+		return false
+	}
+	config, ok := readMCPOutpostConfig()
+	if !ok {
+		return false
+	}
 	verified := false
-	for _, key := range keys {
-		if strings.TrimSpace(key) != "" && coopauth.VerifyOutpost(r, []byte(key)) {
+	for _, key := range config.signingKeys("bashy-mcp") {
+		if coopauth.VerifyOutpost(r, []byte(key)) {
 			verified = true
 			break
 		}

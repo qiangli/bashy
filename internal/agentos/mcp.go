@@ -30,8 +30,9 @@ import (
 // mcpUsage is the `bashy mcp` front-door usage, printed to stderr with
 // exit 2 when no subcommand (or --help) is given.
 const mcpUsage = `usage: bashy mcp serve [--transport stdio|http] [--listen ADDR] [--allow EFFECTS]
-                       [--tools default|all|NAME,...] [--max-output BYTES] [--outpost]
-       bashy mcp tools [--tools default|all|NAME,...] [--json]
+                       [--tools default|all|site|NAME,...] [--max-output BYTES] [--outpost]
+                       [--site-dir DIR] [--site-app APP]
+       bashy mcp tools [--tools default|all|site|NAME,...] [--json]
 
 Serve bashy commands to agents over the Model Context Protocol.
 
@@ -42,6 +43,11 @@ Serve bashy commands to agents over the Model Context Protocol.
                             (--json: the bashy-mcp-tools-v1 envelope)
   --tools default           registered tools plus available core commands
   --tools all               all canonical registry commands and visible verbs for this OS
+  --tools site              the site profile: list_pages, read_page, cite and the
+                            owner-only shape_wish/verify/preview/approve/undo
+  --site-dir DIR            site module the site profile reads (its own renderer)
+  --site-app APP            shaped app the shape tools act on; its outpost upstream
+                            (or source) is read and its signed stamp decides the tier
   --allow EFFECTS           grant destroy,spend,cred,priv (comma-separated)
 `
 
@@ -83,13 +89,14 @@ func dispatchMCP(args []string) int {
 	outpost := false
 	allow := ""
 	profile, listen := "default", ""
+	siteDir, siteApp := "", ""
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
 		a := rest[i]
 		name, value, hasValue := strings.Cut(a, "=")
 		if !hasValue {
 			switch a {
-			case "--transport", "--allow", "--tools", "--listen":
+			case "--transport", "--allow", "--tools", "--listen", "--site-dir", "--site-app":
 				name, value, hasValue = a, "", false
 				if i+1 < len(rest) {
 					i++
@@ -115,15 +122,20 @@ func dispatchMCP(args []string) int {
 				return 2
 			}
 			allow = value
-		case "--tools", "--listen":
+		case "--tools", "--listen", "--site-dir", "--site-app":
 			if !hasValue || value == "" {
 				fmt.Fprint(os.Stderr, mcpUsage)
 				return 2
 			}
-			if name == "--tools" {
+			switch name {
+			case "--tools":
 				profile = value
-			} else {
+			case "--listen":
 				listen = value
+			case "--site-dir":
+				siteDir = value
+			default:
+				siteApp = value
 			}
 		case "--help", "-h":
 			fmt.Fprint(os.Stderr, mcpUsage)
@@ -140,6 +152,33 @@ func dispatchMCP(args []string) int {
 	if outpost && transport != "http" {
 		fmt.Fprintln(os.Stderr, "bashy mcp: --outpost requires --transport http")
 		return 2
+	}
+	// cli.BashyVersion is the exported source of what `bashy --version`
+	// prints (internal/cli/version.go); "dev" when unstamped.
+	version := cli.BashyVersion()
+	if version == "" {
+		version = "dev"
+	}
+	if (siteDir != "" || siteApp != "") != (profile == "site") {
+		fmt.Fprintln(os.Stderr, "bashy mcp: --tools site needs --site-dir DIR or --site-app APP, and they need --tools site")
+		return 2
+	}
+	if profile == "site" {
+		if outpost && siteApp == "" {
+			fmt.Fprintln(os.Stderr, "bashy mcp: --outpost with --tools site needs --site-app APP (the app whose stamp is verified)")
+			return 2
+		}
+		if allow != "" {
+			fmt.Fprintln(os.Stderr, "bashy mcp: --allow does not apply to --tools site")
+			return 2
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		if err := runSiteMCP(ctx, transport, listen, siteApp, siteDir, version, outpost); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy mcp:", err)
+			return 2
+		}
+		return 0
 	}
 	opts, err := mcpOptions(allow, profile)
 	if err != nil {
@@ -158,12 +197,6 @@ func dispatchMCP(args []string) int {
 	// approve. One approval path, always on the pull route.
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
-	// cli.BashyVersion is the exported source of what `bashy --version`
-	// prints (internal/cli/version.go); "dev" when unstamped.
-	version := cli.BashyVersion()
-	if version == "" {
-		version = "dev"
-	}
 	if transport == "http" {
 		srv, err := yokemcp.BuildServer("bashy", version, opts)
 		if err != nil {
@@ -211,6 +244,9 @@ func dispatchMCPTools(args []string) int {
 			fmt.Fprint(os.Stderr, mcpUsage)
 			return 2
 		}
+	}
+	if profile == "site" {
+		return dispatchSiteMCPTools(asJSON)
 	}
 	opts, err := mcpOptions("", profile)
 	if err != nil {
