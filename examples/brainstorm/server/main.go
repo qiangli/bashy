@@ -380,7 +380,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
-	kit.ApplySecurityHeaders(w)
+	kit.SecurityOptions{Embeddable: true}.Apply(w)
 	if !kit.GuardPOST(w, r, "session's own") {
 		return
 	}

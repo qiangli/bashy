@@ -31,7 +31,7 @@ func deskServer(t *testing.T) (*httptest.Server, *app) {
 // session state, so it is exempt from the contentless-state probe.
 func TestDeskContract(t *testing.T) {
 	srv, _ := deskServer(t)
-	contracttest.Run(t, contracttest.Config{BaseURL: srv.URL, Tool: "brainstorm", CLI: deskCLICallback(srv.URL), ItemParam: "session", StateHasContent: true})
+	contracttest.Run(t, contracttest.Config{BaseURL: srv.URL, Tool: "brainstorm", CLI: deskCLICallback(srv.URL), ItemParam: "session", StateHasContent: true, Embeddable: true})
 }
 
 func TestDefaultBindStaysLAN(t *testing.T) {
