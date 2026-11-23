@@ -102,9 +102,9 @@ def verify(record, root, commit, now=None):
                         raise ValueError('pruned module carries lock data')
                 elif not isinstance(sum_value, str) or not sum_value.startswith('h1:') or len(sum_value) <= len('h1:'):
                     raise ValueError('un-downloaded module missing h1: go.mod sum')
-            elif 'go_mod_pruned' in module:
-                raise ValueError('downloaded module marked pruned')
                 continue
+            if 'go_mod_pruned' in module:
+                raise ValueError('downloaded module marked pruned')
             digest_value = module.get('go_mod_sha256', '')
             if not isinstance(digest_value, str) or not re.fullmatch('[0-9a-f]{64}', digest_value):
                 raise ValueError('missing transitive go.mod content digest')
