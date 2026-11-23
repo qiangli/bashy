@@ -67,9 +67,41 @@ The default outpost Unix tunnel currently omits the forwarded client address
 (outpost follow-up `a1333108286e`). Anonymous requests on a verified tunnel
 need that address to join. Signed-in participants can enter by principal.
 
+## Poll and form blocks (native over the form app)
+
+`page block add poll PAGE --options a,b,c [--title Q] [--votes N]` and
+`page block add form PAGE --def FILE|-` (JSON; `[--title T]`) create the
+item in the form app over its API (`PAGE_FORM_URL`, default
+`http://127.0.0.1:18107`; start it with `form serve`) and append the
+` ```block poll:FORM id=BLOCK ` fence. Common options: `--block NAME`,
+`--anonymous`, `--results-visible`, `--closed`. Form's owner key stays in
+the page store; it never appears in show, state, the page or export.
+
+- **Identity is the respondent.** The page holds one opaque form respondent
+  token per page participant (its cookie jar towards form), so each identity
+  on either door is one respondent: a resubmit or a re-vote after a refresh
+  replaces, never adds. `--votes N` is the budget of distinct options per
+  identity. A rename or merge moves the response with the identity; a kicked
+  participant is no longer counted. Only page participants are counted.
+- **Organizer controls**: `page block open|close|show-results|hide-results
+  PAGE BLOCK` (page-side gates, logged; form's own close is final and is
+  not used) and `page block results PAGE BLOCK [--json]`: `option -> votes
+  (handles)` and `handle -> answer`. `--anonymous` drops handles from the
+  results view, the organizer face and the export.
+- **Faces**: the owner key gets the results view; an enrolled participant
+  gets the ballot or form with their own answer, and counts (never handles)
+  when results are visible. `GET /api/block?id=&block=` returns one block's
+  HTML for the caller; every answer and control publishes the block's live
+  frame, and the page re-fetches only that block.
+- **Record**: `export --to md|html` writes each block's tally with handles
+  and the per-handle answers.
+
+File fields are not offered on a page (`--def` with a `file` field is
+refused); YAML definitions go through `form` itself.
+
 ## Later Sprint 696 stories
 
-Native and embed block renderers, roles and views
+Embed block renderers, roles and views
 (organizer face), presence and hands, export with block states inline, PDF.
 Until a kind's renderer lands its block renders as a labelled placeholder.
 
@@ -81,4 +113,8 @@ cd examples/desk/page && GOWORK=off go test ./...
 
 Desk contract (with the live-layer and LAN-guard rows) green, red on each
 `-break` variant; block parsing; CLI round trip; audience gate; organizer-only
-writes and export; no participant address in show, state, page or export.
+writes and export; no participant address in show, state, page or export. The poll/form tests build and
+run the real form app (`../form/server`, never imported) on a loopback port:
+a three-vote ballot from four identities on both doors, one refreshing and
+reclaiming, counted once; open/close/visibility; anonymous; per-handle form
+answers through rename and kick; form unreachable.

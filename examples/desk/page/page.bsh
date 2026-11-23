@@ -30,6 +30,8 @@ timer, here, hands (page-local) and embed (a same-origin path or URL).
 - `bashy page export ID --to md|html [-o FILE]` writes the record (handles, never addresses).
 - `bashy page serve --lan --port PORT` listens on a fixed LAN port. Without `--lan`, the default is loopback port 18113.
 - `bashy page participant ID --open|list|kick HANDLE|rename HANDLE NAME|merge HANDLE INTO` is the organizer's participant command.
+- `bashy page block add poll ID --options a,b,c [--title Q] [--votes N] [--anonymous] [--results-visible] [--closed]` and `bashy page block add form ID --def FILE` create the item in the form app and add its block; each page identity is one respondent, a re-vote replaces.
+- `bashy page block open|close|show-results|hide-results ID BLOCK` controls a poll or form block; `bashy page block results ID BLOCK` prints option -> votes (handles) and handle -> answer.
 - `bashy page publish-outpost [--public] [--dry-run] [--json]` registers the fixed page listener with outpost identity enabled. Publish before starting the shared listener.
 ~~~
 

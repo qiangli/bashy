@@ -15,13 +15,17 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	kit "desk-kit"
 )
 
-const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|publish-outpost] [--json] [-f FILE|-] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|html] [-o FILE]"
+const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|block|publish-outpost] [--json] [-f FILE|-] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|html] [-o FILE]"
+
+const blockUsage = "use page block add poll PAGE --options a,b,c [--title Q] [--votes N] | add form PAGE --def FILE|- [--title T]" +
+	" [--block NAME] [--anonymous] [--results-visible] [--closed]; page block open|close|show-results|hide-results|results PAGE BLOCK"
 
 type cliOptions struct {
 	addr, data, prefix, key         string
@@ -30,6 +34,9 @@ type cliOptions struct {
 	code, port, icon, conflicts     string
 	openHandles, private, public    bool
 	asJSON, lan                     bool
+	options, votes, def, block      string
+	anonymous, resultsVisible       bool
+	closed                          bool
 	verb                            string
 	args                            []string
 }
@@ -38,8 +45,10 @@ type cliOptions struct {
 var (
 	valueFlags = map[string]bool{"addr": true, "data": true, "prefix": true, "key": true,
 		"title": true, "body": true, "f": true, "file": true, "id": true, "audience": true,
-		"to": true, "o": true, "output": true, "break": true, "code": true, "port": true, "icon": true, "handle-conflicts": true}
-	boolFlags = map[string]bool{"json": true, "lan": true, "open": true, "public": true, "private": true}
+		"to": true, "o": true, "output": true, "break": true, "code": true, "port": true, "icon": true, "handle-conflicts": true,
+		"options": true, "votes": true, "def": true, "block": true}
+	boolFlags = map[string]bool{"json": true, "lan": true, "open": true, "public": true, "private": true,
+		"anonymous": true, "results-visible": true, "closed": true}
 )
 
 func parseCLIOptions(raw []string) (*cliOptions, error) {
@@ -67,6 +76,12 @@ func parseCLIOptions(raw []string) (*cliOptions, error) {
 				o.private = true
 			case "public":
 				o.public = true
+			case "anonymous":
+				o.anonymous = true
+			case "results-visible":
+				o.resultsVisible = true
+			case "closed":
+				o.closed = true
 			}
 			continue
 		case !valueFlags[name]:
@@ -109,6 +124,14 @@ func parseCLIOptions(raw []string) (*cliOptions, error) {
 			o.port = val
 		case "icon":
 			o.icon = val
+		case "options":
+			o.options = val
+		case "votes":
+			o.votes = val
+		case "def":
+			o.def = val
+		case "block":
+			o.block = val
 		case "handle-conflicts":
 			if val != "suffix" && val != "refuse" {
 				return nil, fmt.Errorf("handle-conflicts must be refuse or suffix")
@@ -253,6 +276,8 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 		}
 		c.resolveKey(id)
 		return c.do("participant", map[string]any{"id": id, "kind": kind, "source": source, "target": target})
+	case "block":
+		return c.blockVerb(stdin)
 	case "export":
 		id, ok := needID()
 		if !ok {
@@ -433,4 +458,144 @@ func (c *client) export(id string) int {
 		fmt.Fprintln(c.stdout, out["path"])
 	}
 	return 0
+}
+
+// blockVerb is the organizer's native-block door: add a poll or form
+// block (the page server creates the form item), open, close, show or
+// hide results, and read the results view.
+func (c *client) blockVerb(stdin io.Reader) int {
+	o := c.o
+	if len(o.args) == 0 {
+		return kit.UsageError(c.stdout, tool, o.asJSON, blockUsage)
+	}
+	sub, rest := o.args[0], o.args[1:]
+	payload := map[string]any{}
+	action := "block"
+	switch sub {
+	case "add":
+		if len(rest) == 0 || (rest[0] != "poll" && rest[0] != "form") || len(rest) > 2 {
+			return kit.UsageError(c.stdout, tool, o.asJSON, blockUsage)
+		}
+		id := o.id
+		if len(rest) == 2 {
+			id = rest[1]
+		}
+		if !kit.ValidName(id) {
+			return kit.UsageError(c.stdout, tool, o.asJSON, "give the page id (1-64 letters, digits, - or _)")
+		}
+		payload = map[string]any{"id": id, "kind": rest[0], "title": o.title, "block": o.block,
+			"anonymous": o.anonymous, "results_visible": o.resultsVisible, "closed": o.closed}
+		if rest[0] == "poll" {
+			if o.options == "" || o.def != "" {
+				return kit.UsageError(c.stdout, tool, o.asJSON, "a poll block needs --options a,b,c (and no --def)")
+			}
+			payload["options"] = strings.Split(o.options, ",")
+			if o.votes != "" {
+				n, err := strconv.Atoi(o.votes)
+				if err != nil || n < 1 {
+					return kit.UsageError(c.stdout, tool, o.asJSON, "--votes must be a positive number")
+				}
+				payload["votes"] = n
+			}
+		} else {
+			if o.def == "" || o.options != "" || o.votes != "" {
+				return kit.UsageError(c.stdout, tool, o.asJSON, "a form block needs --def FILE|- (JSON; no --options)")
+			}
+			var raw []byte
+			var err error
+			if o.def == "-" {
+				raw, err = io.ReadAll(stdin)
+			} else {
+				raw, err = os.ReadFile(o.def)
+			}
+			if err != nil {
+				fmt.Fprintln(c.stdout, "error:", err)
+				return 1
+			}
+			if !json.Valid(raw) {
+				return kit.UsageError(c.stdout, tool, o.asJSON, "--def must be a JSON form definition")
+			}
+			payload["definition"] = json.RawMessage(raw)
+		}
+	case "open", "close", "show-results", "hide-results", "results":
+		if len(rest) != 2 || !kit.ValidName(rest[0]) || !kit.ValidName(rest[1]) {
+			return kit.UsageError(c.stdout, tool, o.asJSON, blockUsage)
+		}
+		payload = map[string]any{"id": rest[0], "block": rest[1], "kind": sub}
+		if sub == "results" {
+			action = "results"
+			delete(payload, "kind")
+		}
+	default:
+		return kit.UsageError(c.stdout, tool, o.asJSON, blockUsage)
+	}
+	c.resolveKey(payload["id"].(string))
+	payload["action"] = action
+	for k, v := range payload {
+		if v == "" || v == false {
+			delete(payload, k)
+		}
+	}
+	raw, _ := json.Marshal(payload)
+	req, _ := http.NewRequest("POST", c.base()+"/api/action", bytes.NewReader(raw))
+	req.Header.Set("Content-Type", "application/json")
+	r, buf, ok := c.send(req)
+	if !ok {
+		return 1
+	}
+	if r.StatusCode != http.StatusOK {
+		return c.fail(r.StatusCode, buf)
+	}
+	if o.asJSON {
+		fmt.Fprintln(c.stdout, strings.TrimSpace(string(buf)))
+		return 0
+	}
+	if action == "results" {
+		var res nativeResults
+		if json.Unmarshal(buf, &res) != nil {
+			fmt.Fprintln(c.stdout, "error: invalid server response")
+			return 1
+		}
+		printResults(c.stdout, &res)
+		return 0
+	}
+	var obj map[string]any
+	if json.Unmarshal(buf, &obj) != nil {
+		fmt.Fprintln(c.stdout, "error: invalid server response")
+		return 1
+	}
+	fmt.Fprintf(c.stdout, "%v %v %v\n", obj["id"], obj["url"], obj["status"])
+	if sub == "add" {
+		fmt.Fprintf(c.stdout, "block: %v (%v %v)\n", obj["block"], obj["kind"], obj["form"])
+	} else {
+		fmt.Fprintf(c.stdout, "block: %v open=%v results_visible=%v\n", obj["block"], obj["open"], obj["results_visible"])
+	}
+	return 0
+}
+
+// printResults is the plain-text results view: option -> votes (handles)
+// and handle -> answer.
+func printResults(w io.Writer, res *nativeResults) {
+	fmt.Fprintf(w, "%s (%s %s, %s, %d responses)\n", res.Question, res.Kind, res.Block, res.Status, res.Count)
+	for _, o := range res.Options {
+		fmt.Fprintf(w, "  %s: %d", o.Option, o.Votes)
+		if len(o.Handles) > 0 {
+			fmt.Fprintf(w, " (%s)", strings.Join(o.Handles, ", "))
+		}
+		fmt.Fprintln(w)
+	}
+	if res.Kind == "poll" && res.Anonymous {
+		return
+	}
+	for _, row := range res.Answers {
+		cells := []string{}
+		for _, f := range res.Fields {
+			cells = append(cells, fieldTitle(f, res)+"="+answerText(row.Answers[f.ID]))
+		}
+		who := row.Handle
+		if who == "" {
+			who = "-"
+		}
+		fmt.Fprintf(w, "  %s: %s\n", who, strings.Join(cells, "; "))
+	}
 }

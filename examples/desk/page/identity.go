@@ -268,6 +268,10 @@ func moderateParticipant(page *PageItem, action, source, target string) error {
 					page.Votes[key] = vote
 					delete(page.Votes, source)
 				}
+				if token, ok := page.Respondents[source]; ok {
+					page.Respondents[key] = token
+					delete(page.Respondents, source)
+				}
 			}
 		}
 		p.Handle = handle
@@ -281,6 +285,14 @@ func moderateParticipant(page *PageItem, action, source, target string) error {
 				page.Votes[target] = vote
 			}
 			delete(page.Votes, source)
+		}
+		// Native block responses follow the same rule: the target keeps
+		// its own respondent, or inherits the source's.
+		if token, ok := page.Respondents[source]; ok {
+			if _, exists := page.Respondents[target]; !exists {
+				page.Respondents[target] = token
+			}
+			delete(page.Respondents, source)
 		}
 		p.Kicked = true
 	default:

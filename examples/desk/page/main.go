@@ -33,6 +33,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -91,11 +92,16 @@ type item struct {
 	JoinCode     string            `json:"join_code,omitempty"`
 	OpenHandles  bool              `json:"open_handles,omitempty"`
 	Votes        map[string]string `json:"votes,omitempty"`
-	Status       string            `json:"status"`
-	Revision     int               `json:"revision"`
-	Owner        string            `json:"owner"`
-	Members      map[string]bool   `json:"members"`
-	Invites      map[string]bool   `json:"invites"`
+	// Natives are the poll and form blocks this page owns (form owner
+	// keys); Respondents is the cookie jar towards form (participant key
+	// -> form respondent token). Neither leaves the store.
+	Natives     map[string]*nativeBlock `json:"natives,omitempty"`
+	Respondents map[string]string       `json:"respondents,omitempty"`
+	Status      string                  `json:"status"`
+	Revision    int                     `json:"revision"`
+	Owner       string                  `json:"owner"`
+	Members     map[string]bool         `json:"members"`
+	Invites     map[string]bool         `json:"invites"`
 }
 
 type actionRequest struct {
@@ -110,6 +116,15 @@ type actionRequest struct {
 	Kind     string      `json:"kind,omitempty"`
 	Source   string      `json:"source,omitempty"`
 	Target   string      `json:"target,omitempty"`
+	// Native blocks (block_form.go).
+	Block          string          `json:"block,omitempty"`
+	Options        []string        `json:"options,omitempty"`
+	Votes          int             `json:"votes,omitempty"`
+	Definition     json.RawMessage `json:"definition,omitempty"`
+	Answers        json.RawMessage `json:"answers,omitempty"`
+	Anonymous      bool            `json:"anonymous,omitempty"`
+	ResultsVisible bool            `json:"results_visible,omitempty"`
+	Closed         bool            `json:"closed,omitempty"`
 }
 
 type app struct {
@@ -121,6 +136,7 @@ type app struct {
 	events      kit.Events
 	joinOptions pageJoinOptions
 	lanBase     string
+	formURL     string // the form app's origin (PAGE_FORM_URL)
 }
 
 // clone deep-copies the item so a failed save never leaves the in-memory
@@ -136,6 +152,18 @@ func (it *item) clone() item {
 		c.Participants[key] = &copy
 	}
 	c.Votes = maps.Clone(it.Votes)
+	c.Respondents = maps.Clone(it.Respondents)
+	if it.Natives != nil {
+		c.Natives = make(map[string]*nativeBlock, len(it.Natives))
+		for id, nb := range it.Natives {
+			if nb == nil {
+				continue
+			}
+			copy := *nb
+			copy.Options = slices.Clone(nb.Options)
+			c.Natives[id] = &copy
+		}
+	}
 	c.Members = make(map[string]bool, len(it.Members))
 	for k, v := range it.Members {
 		c.Members[k] = v
@@ -331,6 +359,8 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		a.export(w, r, r.URL.Query().Get("id"), r.URL.Query().Get("to"))
+	case path == "/api/block" && r.Method == "GET":
+		a.serveBlock(w, r)
 	case path == "/api/render":
 		kit.ServeRender(w, r, renderMarkdown)
 	case path == "/api/action" && r.Method == "POST":
@@ -355,7 +385,7 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		a.create(w, r, req, me)
 	case "list":
 		a.list(w, r)
-	case "open", "show", "set", "close", "share", "join", "participant":
+	case "open", "show", "set", "close", "share", "join", "participant", "block", "results", "answer":
 		it := a.loadOr404(w, req.ID)
 		if it == nil {
 			return
@@ -398,6 +428,18 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 			a.join(w, r, it, req, me)
 		case "participant":
 			a.participantAction(w, r, it, req)
+		case "block":
+			if req.Kind == "poll" || req.Kind == "form" {
+				a.blockAdd(w, r, it, req)
+			} else {
+				a.blockSet(w, r, it, req)
+			}
+		case "results":
+			a.blockResults(w, r, it, req)
+		case "answer":
+			if a.viewOr403(w, r, it) {
+				a.answer(w, r, it, req)
+			}
 		}
 	default:
 		kit.Fail(w, http.StatusBadRequest, "Unknown action")
@@ -605,9 +647,9 @@ func (a *app) export(w http.ResponseWriter, r *http.Request, id, to string) {
 	switch to {
 	case "md", "markdown":
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-		io.WriteString(w, exportMarkdown(it))
+		io.WriteString(w, a.exportMarkdownLocked(it))
 	case "html":
-		body, err := renderPage(it)
+		body, err := renderPage(it, func(b *block) string { return a.blockFace(r, it, b) })
 		if err != nil {
 			kit.Fail(w, http.StatusInternalServerError, "Could not render")
 			return
@@ -619,7 +661,13 @@ func (a *app) export(w http.ResponseWriter, r *http.Request, id, to string) {
 	}
 }
 
-func exportMarkdown(it *item) string {
+func exportMarkdown(it *item) string { return exportMarkdownWith(it, blockMarkdown) }
+
+func (a *app) exportMarkdownLocked(it *item) string {
+	return exportMarkdownWith(it, func(b *block) string { return a.blockMarkdownLocked(it, b) })
+}
+
+func exportMarkdownWith(it *item, blockMD func(*block) string) string {
 	var b strings.Builder
 	if titleOf(it.Body) == "" {
 		b.WriteString("# " + it.Title + "\n\n")
@@ -627,7 +675,7 @@ func exportMarkdown(it *item) string {
 	segs, _ := parseBody(it.Body)
 	for _, s := range segs {
 		if s.Block != nil {
-			b.WriteString(blockMarkdown(s.Block))
+			b.WriteString(blockMD(s.Block))
 		} else {
 			b.WriteString(s.Text)
 		}
@@ -667,7 +715,7 @@ func participantsHTML(it *item) string {
 
 // renderPage renders the body: Markdown runs through the kit renderer,
 // block fences become their block's place on the page.
-func renderPage(it *item) (string, error) {
+func renderPage(it *item, blockFn func(*block) string) (string, error) {
 	segs, err := parseBody(it.Body)
 	if err != nil {
 		return "", err
@@ -675,7 +723,7 @@ func renderPage(it *item) (string, error) {
 	var b strings.Builder
 	for _, s := range segs {
 		if s.Block != nil {
-			b.WriteString(blockHTML(s.Block))
+			b.WriteString(blockFn(s.Block))
 			continue
 		}
 		out, err := renderMarkdown([]byte(s.Text))
@@ -710,14 +758,14 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		main = kit.State("error", "This page is not shared with your network", "Ask the organizer for the link.")
 	default:
 		header = kit.ItemHeader(it.ID, it.Status, a.urlFor(r, it.ID))
-		body, err := renderPage(it)
+		body, err := renderPage(it, func(b *block) string { return a.blockFace(r, it, b) })
 		if err != nil {
 			body = kit.State("error", "This page cannot be shown", err.Error())
 		}
 		main = `<h1 class="desk-h1">` + html.EscapeString(it.Title) + `</h1>` + body +
 			`<p class="desk-footer">Revision <span data-page-revision>` + fmt.Sprint(it.Revision) +
 			`</span> · re-surface with <code>page open ` + html.EscapeString(it.ID) + `</code>.</p>` +
-			liveScript(a.base(r), it.ID)
+			liveScript(a.base(r), it.ID) + nativeScript(a.base(r), it.ID)
 	}
 	body := `<style>.page-block{border-style:dashed}</style>` +
 		kit.AppBar(tool, a.base(r)+"/", header, "") + `<main class="desk-main desk-narrow">` +
@@ -770,6 +818,7 @@ func serve(addr, data, prefix string, lan, suffix bool) {
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	origin := "http://" + net.JoinHostPort("127.0.0.1", port)
 	a := &app{dir: data, prefix: prefix, baseURL: origin + prefix, items: map[string]*item{},
+		formURL: os.Getenv("PAGE_FORM_URL"),
 		joinOptions: pageJoinOptions{consolePrincipal: processConsolePrincipal(addr), outpostSecret: pageOutpostSecret(),
 			suffix: suffix}}
 	if lan {
