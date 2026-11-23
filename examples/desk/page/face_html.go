@@ -65,6 +65,16 @@ func (a *app) renderBlockFaces(r *http.Request, it *item, b *block, view pageFac
 		default:
 			add(view, a.timerHTML(it, b, view))
 		}
+	case b.Kind == "here":
+		if view == displayFace {
+			return ""
+		}
+		faces = append(faces, blockFaceHTML{view, blocks.Here(blocks.HereData{Rows: a.hereRows(it, view)})})
+	case b.Kind == "hands":
+		if view == displayFace && !settings.Project {
+			return ""
+		}
+		faces = append(faces, blockFaceHTML{view, a.handsHTML(r, it, view)})
 	case view == recordFace:
 		return blockHTML(b)
 	case k.Embed:

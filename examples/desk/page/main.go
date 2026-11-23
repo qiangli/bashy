@@ -105,6 +105,7 @@ type item struct {
 	BoardVoters map[string]string      `json:"board_voters,omitempty"`
 	BlockFaces  map[string]storedFaces `json:"block_faces,omitempty"`
 	Timers      map[string]*TimerState `json:"timers,omitempty"`
+	Hands       []HandEntry            `json:"hands,omitempty"`
 	Status      string                 `json:"status"`
 	Revision    int                    `json:"revision"`
 	Owner       string                 `json:"owner"`
@@ -154,6 +155,7 @@ type app struct {
 	// brainstormURL is brainstorm's origin (PAGE_BRAINSTORM_URL).
 	brainstormURL string
 	previews      map[previewAnswerKey]map[string]any
+	presence      map[presenceKey]*presenceGroup
 	tickMu        sync.Mutex
 	ticking       map[string]bool // running timer tickers, "item/block"
 }
@@ -172,6 +174,7 @@ func (it *item) clone() item {
 	}
 	c.Votes = maps.Clone(it.Votes)
 	c.Respondents = maps.Clone(it.Respondents)
+	c.Hands = slices.Clone(it.Hands)
 	c.BoardVoters = maps.Clone(it.BoardVoters)
 	if it.Boards != nil {
 		c.Boards = make(map[string]*boardBlock, len(it.Boards))
@@ -264,6 +267,9 @@ func (a *app) loadOr404(w http.ResponseWriter, id string) *item {
 // saveLocked persists it at the next revision and, once the save is
 // acknowledged, publishes the live frame for block ("" = the whole page).
 func (a *app) saveLocked(it *item, block string) error {
+	if participantSave(a.items[it.ID], it, block) {
+		return a.savePresenceBlocksLocked(it, "here", "hands")
+	}
 	it.Revision++
 	if err := a.persistLocked(it); err != nil {
 		return err
@@ -391,6 +397,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		r, done, ok := a.readFaceLocked(w, r, it)
+		preview := faceFor(r, true) == participantFace && a.canOrganize(r, it)
 		revision := it.Revision
 		a.mu.Unlock()
 		if !ok {
@@ -398,7 +405,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		defer done()
 		// Frames are contentless: the stream needs no more than a view.
-		a.events.Serve(w, r, id, revision)
+		a.servePresence(w, r, id, revision, preview)
 	case path == "/api/export" && r.Method == "GET":
 		a.mu.Lock()
 		defer a.mu.Unlock()
@@ -435,6 +442,10 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 	case "organizer-session":
 		if it := a.loadOr404(w, req.ID); it != nil {
 			a.beginOrganizer(w, r, it)
+		}
+	case "hands":
+		if it := a.loadOr404(w, req.ID); it != nil {
+			a.handsAction(w, r, it, req)
 		}
 	case "open", "show", "set", "close", "share", "join", "participant", "block", "results", "answer", "timer", "board":
 		it := a.loadOr404(w, req.ID)
@@ -482,7 +493,12 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		case "join":
 			a.join(w, r, it, req, me)
 		case "participant":
+			if faceFor(r, a.canOrganize(r, it)) != organizerFace {
+				kit.Fail(w, http.StatusForbidden, "Only the organizer can manage participants")
+				return
+			}
 			a.participantAction(w, r, it, req)
+			a.followPresenceRenameLocked(it, req)
 		case "block":
 			if req.Kind == "poll" || req.Kind == "form" {
 				a.blockAdd(w, r, it, req)
@@ -776,7 +792,8 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		main = faceNavigation(r, owner, face) + `<h1 class="desk-h1">` + html.EscapeString(it.Title) + `</h1>` + body +
 			`<p class="desk-footer">Revision <span data-page-revision>` + fmt.Sprint(it.Revision) +
 			`</span> · re-surface with <code>page open ` + html.EscapeString(it.ID) + `</code>.</p>` +
-			liveScript(base, it.ID, face) + nativeScript(base, it.ID, face) + timerScript(base, it.ID, face)
+			liveScript(base, it.ID, face) + nativeScript(base, it.ID, face) + timerScript(base, it.ID, face) +
+			handsScript(base, it.ID, face)
 		if hasBoard(it) {
 			main += boardScript(base, it.ID, face)
 		}
@@ -794,19 +811,33 @@ func liveScript(base, id string, face pageFace) string {
 	blockURL, _ := json.Marshal(base + "/api/block?" + q.Encode())
 	return `<script>
 (function(){
+  const pending = new Map();
   document.addEventListener('page-block', async function(e){
     const block = e.detail && e.detail.block;
     if (!block) return;
     const old = document.getElementById('block-' + block);
     if (!old) return;
+    const request = {};
+    pending.set(block, request);
     try {
       const r = await fetch(` + string(blockURL) + ` + '&block=' + encodeURIComponent(block));
-      if (r.ok) old.outerHTML = await r.text();
-    } catch (_) {}
+      if (r.ok) {
+        const html = await r.text();
+        if (pending.get(block) === request) old.outerHTML = html;
+      }
+    } catch (_) {
+    } finally {
+      if (pending.get(block) === request) pending.delete(block);
+    }
   });
   if (!window.EventSource) return;
   const rev = document.querySelector('[data-page-revision]');
   const es = new EventSource(` + string(u) + `);
+  es.onopen = function(){
+    document.querySelectorAll('[data-kind="here"]').forEach(function(block){
+      document.dispatchEvent(new CustomEvent('page-block', {detail: {block: block.dataset.block}}));
+    });
+  };
   es.onmessage = function(e){
     let f; try { f = JSON.parse(e.data); } catch (_) { return; }
     // Block frames (timer ticks too) re-fetch their block; a whole-page

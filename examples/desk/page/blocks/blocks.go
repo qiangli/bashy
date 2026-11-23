@@ -57,6 +57,21 @@ type TimerData struct {
 	Projected bool
 }
 
+type HereData struct {
+	Rows []HereRow
+}
+
+type HereRow struct {
+	Handle, Auth, LastSeen, Address, Fingerprint string
+	Online                                       bool
+}
+
+type HandsData struct {
+	Handles           []string
+	Organizer         bool
+	ParticipantAction string
+}
+
 // FormatClock renders seconds as M:SS (or H:MM:SS at an hour or more).
 func FormatClock(total int) string {
 	if total < 0 {
@@ -73,6 +88,8 @@ func Book(d ContentData) string { return render("book.html", d) }
 func Note(d ContentData) string { return render("note.html", d) }
 func Embed(d EmbedData) string  { return render("embed.html", d) }
 func Timer(d TimerData) string  { return render("timer.html", d) }
+func Here(d HereData) string    { return render("here.html", d) }
+func Hands(d HandsData) string  { return render("hands.html", d) }
 
 // BoardData is the view model for board.html: a brainstorm session read
 // over HTTP, shaped for one face.

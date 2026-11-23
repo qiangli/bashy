@@ -885,8 +885,8 @@ func (a *app) blockMarkdownLocked(it *item, b *block) string {
 		return contentMarkdown(b)
 	case "embed":
 		return embedMarkdown(b)
-	case "here":
-		return hereMarkdown(it, b)
+	case "here", "hands":
+		return a.presenceMarkdown(it, b)
 	}
 	if b.Kind == "board" {
 		return a.boardMarkdownLocked(b)

@@ -1,0 +1,6 @@
+<h2 class="desk-h2">Who’s here</h2>
+{{if .Rows}}<ul>
+{{range .Rows}}<li><strong>{{.Handle}}</strong> <span class="desk-badge">{{.Auth}}</span> · {{if .Online}}Online{{else}}Offline{{end}}
+{{if .LastSeen}}· Last seen <time datetime="{{.LastSeen}}">{{.LastSeen}}</time>{{end}}
+{{if .Address}}<br>Address: {{.Address}}{{end}}{{if .Fingerprint}}<br>Fingerprint: {{.Fingerprint}}{{end}}</li>
+{{end}}</ul>{{else}}<p class="desk-muted">No participants yet.</p>{{end}}

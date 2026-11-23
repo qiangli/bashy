@@ -249,6 +249,7 @@ func moderateParticipant(page *PageItem, action, source, target string) error {
 		p.Kicked = true
 		// The removed identity no longer speaks for anyone on a board.
 		delete(page.BoardVoters, source)
+		page.remapHand(source, "")
 	case "rename":
 		handle, err := cleanHandle(target)
 		if err != nil {
@@ -266,6 +267,7 @@ func moderateParticipant(page *PageItem, action, source, target string) error {
 				old.Kicked, old.Cookie = true, ""
 				page.Participants[source] = &old
 				page.Participants[key] = p
+				page.remapHand(source, key)
 				if vote, ok := page.Votes[source]; ok {
 					page.Votes[key] = vote
 					delete(page.Votes, source)
@@ -286,6 +288,7 @@ func moderateParticipant(page *PageItem, action, source, target string) error {
 		if source == target || to == nil || to.Kicked {
 			return errors.New("merge needs a different active participant")
 		}
+		page.remapHand(source, target)
 		if vote, ok := page.Votes[source]; ok {
 			if _, exists := page.Votes[target]; !exists {
 				page.Votes[target] = vote

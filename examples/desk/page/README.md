@@ -139,6 +139,19 @@ session on the page instead (the page then holds no facilitator key).
   `"project": true` face settings to show the bare clock on `?view=display`.
   The export records its state.
 
+## Presence and speaking queue
+
+- `here` lists enrolled participants with their auth badge, online status
+  and last-seen time. A participant is online while at least one of their
+  live connections is open. Only the organizer view includes address and
+  fingerprint.
+- `hands` shows a page-wide speaking queue in raise order. Joined
+  participants can raise or lower their own hand. The organizer can take
+  the next hand off the queue or clear it, and can use
+  `page hands next|clear|list PAGE`. Set `"project": true` on a hands block
+  to show the queue on the display face. The record includes the roster
+  and the queue.
+
 ## Export: the session record
 
 `page export ID --to md` (or `--to markdown`) writes a repo-committable
@@ -155,9 +168,6 @@ that HTML through headless Chrome (`CHROME_PATH` overrides discovery).
 Exports are organizer-only and never carry addresses, fingerprints,
 cookies, respondent tokens or facilitator keys.
 
-## Later Sprint 696 stories
-
-Presence and hands.
 Until a kind's renderer lands its block renders as a labelled placeholder.
 
 ## Organizer and display views

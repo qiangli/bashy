@@ -15,6 +15,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +23,7 @@ import (
 	kit "desk-kit"
 )
 
-const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|block|publish-outpost] [--json] [-f FILE|-] [--faces FILE] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|markdown|html|pdf] [-o FILE]"
+const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|block|hands|publish-outpost] [--json] [-f FILE|-] [--faces FILE] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|markdown|html|pdf] [-o FILE]"
 
 const blockUsage = "use page block add poll PAGE --options a,b,c [--title Q] [--votes N] | add form PAGE --def FILE|- [--title T]" +
 	" [--block NAME] [--anonymous] [--results-visible] [--closed] | add board PAGE [--session S] [--title T] [--block NAME];" +
@@ -296,6 +297,13 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 		return c.do("participant", map[string]any{"id": id, "kind": kind, "source": source, "target": target})
 	case "block":
 		return c.blockVerb(stdin)
+	case "hands":
+		if len(o.args) != 2 || !slices.Contains([]string{"next", "clear", "list"}, o.args[0]) || !kit.ValidName(o.args[1]) {
+			return kit.UsageError(stdout, tool, o.asJSON, "use page hands next|clear|list PAGE")
+		}
+		kind, id := o.args[0], o.args[1]
+		c.resolveKey(id)
+		return c.do("hands", map[string]any{"id": id, "kind": kind})
 	case "export":
 		id, ok := needID()
 		if !ok {
@@ -414,6 +422,16 @@ func (c *client) do(action string, payload map[string]any) int {
 	}
 	if c.o.asJSON || action == "participant" && payload["kind"] == "list" {
 		fmt.Fprintln(c.stdout, kit.CanonicalJSON(obj))
+		return 0
+	}
+	if action == "hands" && payload["kind"] == "list" {
+		hands, _ := obj["hands"].([]any)
+		if len(hands) == 0 {
+			fmt.Fprintln(c.stdout, "No hands raised.")
+		}
+		for i, handle := range hands {
+			fmt.Fprintf(c.stdout, "%d. %v\n", i+1, handle)
+		}
 		return 0
 	}
 	if items, ok := obj["items"].([]any); ok {

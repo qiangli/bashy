@@ -39,7 +39,7 @@ var blockKinds = map[string]blockKind{
 	"chart": {Ref: "required", Faces: []string{"participant"}},
 	"timer": {Ref: "optional", Faces: []string{"organizer", "participant", "display"}},
 	"here":  {Ref: "none", Faces: []string{"organizer", "participant"}},
-	"hands": {Ref: "none", Faces: []string{"organizer", "participant"}},
+	"hands": {Ref: "none", Faces: []string{"organizer", "participant", "display"}},
 	"embed": {Ref: "optional", Embed: true, Faces: []string{"organizer", "participant", "display"}},
 }
 

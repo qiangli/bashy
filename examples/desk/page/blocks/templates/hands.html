@@ -1,0 +1,7 @@
+<h2 class="desk-h2">Speaking queue</h2>
+{{if .Handles}}<ol>{{range .Handles}}<li>{{.}}</li>{{end}}</ol>{{else}}<p class="desk-muted">No hands raised.</p>{{end}}
+{{if .Organizer}}<div class="desk-row">
+<button type="button" class="desk-copy" data-hands-action="next" {{if not .Handles}}disabled{{end}}>Next</button>
+<button type="button" class="desk-copy" data-hands-action="clear" {{if not .Handles}}disabled{{end}}>Clear</button>
+</div>{{end}}
+{{if .ParticipantAction}}<button type="button" class="desk-copy" data-hands-action="{{.ParticipantAction}}">{{if eq .ParticipantAction "raise"}}Raise hand{{else}}Lower hand{{end}}</button>{{end}}
