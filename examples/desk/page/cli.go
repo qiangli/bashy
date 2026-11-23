@@ -22,7 +22,7 @@ import (
 	kit "desk-kit"
 )
 
-const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|block|publish-outpost] [--json] [-f FILE|-] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|html] [-o FILE]"
+const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|block|publish-outpost] [--json] [-f FILE|-] [--faces FILE] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|html] [-o FILE]"
 
 const blockUsage = "use page block add poll PAGE --options a,b,c [--title Q] [--votes N] | add form PAGE --def FILE|- [--title T]" +
 	" [--block NAME] [--anonymous] [--results-visible] [--closed]; page block open|close|show-results|hide-results|results PAGE BLOCK"
@@ -32,6 +32,7 @@ type cliOptions struct {
 	title, body, file, id, audience string
 	to, output, breakFlag           string
 	code, port, icon, conflicts     string
+	facesFile                       string
 	openHandles, private, public    bool
 	asJSON, lan                     bool
 	options, votes, def, block      string
@@ -46,7 +47,7 @@ var (
 	valueFlags = map[string]bool{"addr": true, "data": true, "prefix": true, "key": true,
 		"title": true, "body": true, "f": true, "file": true, "id": true, "audience": true,
 		"to": true, "o": true, "output": true, "break": true, "code": true, "port": true, "icon": true, "handle-conflicts": true,
-		"options": true, "votes": true, "def": true, "block": true}
+		"faces": true, "options": true, "votes": true, "def": true, "block": true}
 	boolFlags = map[string]bool{"json": true, "lan": true, "open": true, "public": true, "private": true,
 		"anonymous": true, "results-visible": true, "closed": true}
 )
@@ -108,6 +109,8 @@ func parseCLIOptions(raw []string) (*cliOptions, error) {
 			o.body = val
 		case "f", "file":
 			o.file = val
+		case "faces":
+			o.facesFile = val
 		case "id":
 			o.id = val
 		case "audience":
@@ -233,6 +236,17 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 		}
 		return string(raw), true
 	}
+	var faces json.RawMessage
+	if o.facesFile != "" {
+		if o.verb != "add" && o.verb != "set" {
+			return kit.UsageError(stdout, tool, o.asJSON, "--faces is for add or set")
+		}
+		raw, err := os.ReadFile(o.facesFile)
+		if err != nil || !json.Valid(raw) {
+			return kit.UsageError(stdout, tool, o.asJSON, "--faces requires a readable JSON file")
+		}
+		faces = raw
+	}
 
 	switch o.verb {
 	case "add":
@@ -244,7 +258,7 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 		if id == "" && len(o.args) > 0 {
 			id = o.args[0]
 		}
-		return c.do("add", map[string]any{"id": id, "title": o.title, "body": body, "audience": o.audience, "join_code": o.code})
+		return c.do("add", map[string]any{"id": id, "title": o.title, "body": body, "audience": o.audience, "join_code": o.code, "faces": faces})
 	case "set":
 		id, ok := needID()
 		if !ok {
@@ -255,7 +269,7 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 			return 1
 		}
 		c.resolveKey(id)
-		return c.do("set", map[string]any{"id": id, "title": o.title, "body": body, "audience": o.audience})
+		return c.do("set", map[string]any{"id": id, "title": o.title, "body": body, "audience": o.audience, "faces": faces})
 	case "open", "show", "share", "close":
 		id, ok := needID()
 		if !ok {
@@ -417,6 +431,9 @@ func (c *client) do(action string, payload map[string]any) int {
 	}
 	if k, ok := obj["ownerKey"]; ok {
 		fmt.Fprintf(c.stdout, "ownerKey: %v (keep private; also kept in the local store)\n", k)
+	}
+	if u, ok := obj["organizerURL"]; ok {
+		fmt.Fprintf(c.stdout, "Organizer (keep private): %v\n", u)
 	}
 	return 0
 }

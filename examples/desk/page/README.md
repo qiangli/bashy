@@ -26,7 +26,8 @@ embed:/whiteboard/?room=r1 id=board
 - **Block line**: `kind:ref [id=NAME] [key=value ...]`, as the fence's info
   string or the first line of its body. Kinds (`blocks.go`): `poll form book
   note board chart` (ref = the owning app's item), `timer` (optional ref),
-  `here hands` (no ref), `embed` (a same-origin path or an http(s) URL).
+  `here hands` (no ref), `embed` (optional participant URL, a same-origin
+  path or an HTTP(S) URL).
   Unknown kinds, missing refs, `javascript:`/`//host` embeds, duplicate ids
   and unclosed fences are refused (400 / exit 2) before anything is stored.
   Default ids are `KIND-N`; the live stream addresses blocks by id.
@@ -101,9 +102,37 @@ refused); YAML definitions go through `form` itself.
 
 ## Later Sprint 696 stories
 
-Embed block renderers, roles and views
-(organizer face), presence and hands, export with block states inline, PDF.
+Presence and hands, export with block states inline, PDF.
 Until a kind's renderer lands its block renders as a labelled placeholder.
+
+## Organizer and display views
+
+`page add` returns a private organizer link alongside the regular join link.
+Open that organizer link to see available faces side by side or in tabs.
+**View as participant** uses a separate preview identity. Add
+`?view=display` to the join link to open the projector page. Only the
+configured display faces appear there.
+
+Put only the participant URL in a Markdown block, for example
+`embed:/brainstorm/?session=ideation id=ideas`. A block with only organizer
+and display faces can use `embed id=demos`. Import the corresponding private
+settings using `page add -f agenda.md --faces faces.json` or
+`page set ID --faces faces.json`:
+
+```json
+{
+  "ideas": {"organizer_url": "/brainstorm/?session=ideation#facilitator=EXAMPLE"},
+  "demos": {
+    "organizer_url": "http://demo.example/control#ORGANIZER_EXAMPLE",
+    "display_url": "http://demo.example/projector#DISPLAY_EXAMPLE"
+  }
+}
+```
+
+A settings entry replaces the settings for that block. Use `null` to clear
+an entry. Settings stay in the page store. Keep the import file private.
+Current Brainstorm and Demo Queue releases refuse browser framing. Open
+their face links in a separate tab until the engines support embedding.
 
 ## Verify
 

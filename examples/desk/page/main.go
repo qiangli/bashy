@@ -30,6 +30,7 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -97,6 +98,7 @@ type item struct {
 	// -> form respondent token). Neither leaves the store.
 	Natives     map[string]*nativeBlock `json:"natives,omitempty"`
 	Respondents map[string]string       `json:"respondents,omitempty"`
+	BlockFaces  map[string]storedFaces  `json:"block_faces,omitempty"`
 	Status      string                  `json:"status"`
 	Revision    int                     `json:"revision"`
 	Owner       string                  `json:"owner"`
@@ -105,17 +107,18 @@ type item struct {
 }
 
 type actionRequest struct {
-	Action   string      `json:"action"`
-	ID       string      `json:"id"`
-	Title    string      `json:"title"`
-	Body     string      `json:"body"`
-	Audience string      `json:"audience,omitempty"`
-	Fields   []kit.Field `json:"fields,omitempty"`
-	Invite   string      `json:"invite,omitempty"`
-	JoinCode string      `json:"join_code,omitempty"`
-	Kind     string      `json:"kind,omitempty"`
-	Source   string      `json:"source,omitempty"`
-	Target   string      `json:"target,omitempty"`
+	Action   string                   `json:"action"`
+	ID       string                   `json:"id"`
+	Title    string                   `json:"title"`
+	Body     string                   `json:"body"`
+	Audience string                   `json:"audience,omitempty"`
+	Fields   []kit.Field              `json:"fields,omitempty"`
+	Invite   string                   `json:"invite,omitempty"`
+	JoinCode string                   `json:"join_code,omitempty"`
+	Kind     string                   `json:"kind,omitempty"`
+	Source   string                   `json:"source,omitempty"`
+	Target   string                   `json:"target,omitempty"`
+	Faces    map[string]*faceSettings `json:"faces,omitempty"`
 	// Native blocks (block_form.go).
 	Block          string          `json:"block,omitempty"`
 	Options        []string        `json:"options,omitempty"`
@@ -249,7 +252,7 @@ func (a *app) persistLocked(it *item) error {
 }
 
 func (a *app) isOwner(r *http.Request, it *item) bool {
-	return kit.Grant(kit.FacilitatorKey(r), it.Owner)
+	return it.Owner != "" && kit.Grant(kit.FacilitatorKey(r), it.Owner)
 }
 
 // loopbackPeer reports whether the TCP peer is this host (or the outpost
@@ -266,7 +269,7 @@ func loopbackPeer(r *http.Request) bool {
 // canView is the audience gate for reads (page, show, state, events): the
 // owner always; loopback peers always; LAN peers only for a lan page.
 func (a *app) canView(r *http.Request, it *item) bool {
-	return a.isOwner(r, it) || loopbackPeer(r) || it.Audience == audienceLAN
+	return a.isOwner(r, it) || a.organizerCookie(r, it) || loopbackPeer(r) || it.Audience == audienceLAN
 }
 
 func (a *app) viewOr403(w http.ResponseWriter, r *http.Request, it *item) bool {
@@ -321,6 +324,9 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case path == "/" || pageJoinCode(path) != "":
+		if breakMode != "no-csp" {
+			w.Header().Set("Content-Security-Policy", (kit.SecurityOptions{}).CSP()+"; frame-src 'self' https: http:")
+		}
 		a.joinPage(w, r, path)
 	case path == "/healthz" && r.Method == "GET":
 		kit.WriteJSON(w, map[string]bool{"ok": true})
@@ -370,7 +376,10 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		me := kit.ParticipantCookie(w, r, "page-participant")
+		var me string
+		if req.Action != "organizer-session" {
+			me = kit.ParticipantCookie(w, r, "page-participant")
+		}
 		a.action(w, r, req, me)
 	case path == "/api/action" || path == "/api/export":
 		kit.Fail(w, http.StatusMethodNotAllowed, "Method not supported")
@@ -385,6 +394,10 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		a.create(w, r, req, me)
 	case "list":
 		a.list(w, r)
+	case "organizer-session":
+		if it := a.loadOr404(w, req.ID); it != nil {
+			a.beginOrganizer(w, r, it)
+		}
 	case "open", "show", "set", "close", "share", "join", "participant", "block", "results", "answer":
 		it := a.loadOr404(w, req.ID)
 		if it == nil {
@@ -521,18 +534,31 @@ func (a *app) create(w http.ResponseWriter, r *http.Request, req actionRequest, 
 	it := &item{Version: 1, ID: id, Title: title, Body: req.Body, Audience: audience, JoinCode: code,
 		Participants: participantMap{}, Status: status, Owner: kit.NewToken(),
 		Members: map[string]bool{me: true}, Invites: map[string]bool{}}
+	if err := it.updateFaces(req.Faces); err != nil {
+		kit.Fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	if err := a.saveLocked(it, ""); err != nil {
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
 		return
 	}
 	v := a.openView(r, it)
 	v["ownerKey"] = it.Owner // revealed once, at creation
+	u, _ := url.Parse(a.urlFor(r, it.ID))
+	q := u.Query()
+	q.Set("view", "organizer")
+	u.RawQuery, u.Fragment = q.Encode(), "owner="+it.Owner
+	v["organizerURL"] = u.String()
 	kit.WriteJSON(w, v)
 }
 
 // show is the one read that returns content: the Markdown, its blocks, the
 // audience, participants by handle and auth, and the revision.
 func (a *app) show(w http.ResponseWriter, r *http.Request, it *item) {
+	if _, err := parseBody(it.Body); err != nil {
+		kit.Fail(w, http.StatusConflict, "The page body needs an organizer edit")
+		return
+	}
 	kit.WriteJSON(w, map[string]any{"id": it.ID, "url": a.urlFor(r, it.ID),
 		"status": it.Status, "title": it.Title, "body": it.Body,
 		"blocks": blocksOf(it.Body), "audience": it.Audience,
@@ -563,6 +589,10 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, it *item, req actio
 		}
 		if req.Audience != "" {
 			next.Audience = req.Audience
+		}
+		if err := next.updateFaces(req.Faces); err != nil {
+			kit.Fail(w, http.StatusBadRequest, err.Error())
+			return
 		}
 		next.Status = kit.StatusFilled
 	}
@@ -649,7 +679,7 @@ func (a *app) export(w http.ResponseWriter, r *http.Request, id, to string) {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		io.WriteString(w, a.exportMarkdownLocked(it))
 	case "html":
-		body, err := renderPage(it, func(b *block) string { return a.blockFace(r, it, b) })
+		body, err := renderPage(it, recordFace, func(b *block) string { return a.blockFace(r, it, b) })
 		if err != nil {
 			kit.Fail(w, http.StatusInternalServerError, "Could not render")
 			return
@@ -715,7 +745,7 @@ func participantsHTML(it *item) string {
 
 // renderPage renders the body: Markdown runs through the kit renderer,
 // block fences become their block's place on the page.
-func renderPage(it *item, blockFn func(*block) string) (string, error) {
+func renderPage(it *item, face pageFace, blockFn func(*block) string) (string, error) {
 	segs, err := parseBody(it.Body)
 	if err != nil {
 		return "", err
@@ -724,6 +754,9 @@ func renderPage(it *item, blockFn func(*block) string) (string, error) {
 	for _, s := range segs {
 		if s.Block != nil {
 			b.WriteString(blockFn(s.Block))
+			continue
+		}
+		if face == displayFace {
 			continue
 		}
 		out, err := renderMarkdown([]byte(s.Text))
@@ -742,7 +775,7 @@ func (a *app) page(r *http.Request) (int, []byte) {
 	id := r.URL.Query().Get("id")
 	code := http.StatusOK
 	header := kit.EmptyItemHeader("page")
-	var main string
+	var main, faceScript string
 	openForm := `<form method="get" action="` + html.EscapeString(a.base(r)+"/") + `" class="desk-panel">` +
 		kit.TextField("id", "Page", "text", "", "") +
 		`<div class="desk-row"><button type="submit" class="desk-copy">Open</button></div></form>`
@@ -758,18 +791,32 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		main = kit.State("error", "This page is not shared with your network", "Ask the organizer for the link.")
 	default:
 		header = kit.ItemHeader(it.ID, it.Status, a.urlFor(r, it.ID))
-		body, err := renderPage(it, func(b *block) string { return a.blockFace(r, it, b) })
+		owner := a.isOwner(r, it) || a.organizerCookie(r, it)
+		face := faceFor(r, owner)
+		body, err := renderPage(it, face, func(b *block) string {
+			if face != displayFace && nativeBlockLocked(it, b) != nil {
+				return a.blockFace(r, it, b)
+			}
+			return renderBlockFaces(it, b, face, "")
+		})
 		if err != nil {
-			body = kit.State("error", "This page cannot be shown", err.Error())
+			body = kit.State("error", "This page cannot be shown", "Ask the organizer to check the page body.")
 		}
-		main = `<h1 class="desk-h1">` + html.EscapeString(it.Title) + `</h1>` + body +
+		if face == displayFace {
+			revision := `<span hidden data-page-revision>` + fmt.Sprint(it.Revision) + `</span>`
+			return code, kit.Page(tool, it.Title, pageFaceStyle+`<main class="desk-main page-display"><h1>`+
+				html.EscapeString(it.Title)+`</h1>`+body+revision+liveScript(kit.PublicPrefix(r, a.prefix), it.ID)+`</main>`)
+		}
+		if face == organizerFace {
+			faceScript = faceTabsScript
+		}
+		main = faceNavigation(r, owner, face) + `<h1 class="desk-h1">` + html.EscapeString(it.Title) + `</h1>` + body +
 			`<p class="desk-footer">Revision <span data-page-revision>` + fmt.Sprint(it.Revision) +
 			`</span> · re-surface with <code>page open ` + html.EscapeString(it.ID) + `</code>.</p>` +
-			liveScript(a.base(r), it.ID) + nativeScript(a.base(r), it.ID)
+			liveScript(kit.PublicPrefix(r, a.prefix), it.ID) + nativeScript(kit.PublicPrefix(r, a.prefix), it.ID)
 	}
-	body := `<style>.page-block{border-style:dashed}</style>` +
-		kit.AppBar(tool, a.base(r)+"/", header, "") + `<main class="desk-main desk-narrow">` +
-		`<div data-desk-alert class="desk-alert"></div>` + main + `</main>`
+	body := pageFaceStyle + kit.AppBar(tool, a.base(r)+"/", header, "") + `<main class="desk-main page-main">` +
+		`<div data-desk-alert class="desk-alert"></div>` + main + `</main>` + faceScript
 	return code, kit.Page(tool, "Page · bashy desk", body)
 }
 

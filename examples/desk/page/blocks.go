@@ -40,7 +40,7 @@ var blockKinds = map[string]blockKind{
 	"timer": {Ref: "optional", Faces: []string{"organizer", "participant", "display"}},
 	"here":  {Ref: "none", Faces: []string{"organizer", "participant"}},
 	"hands": {Ref: "none", Faces: []string{"organizer", "participant"}},
-	"embed": {Ref: "required", Embed: true, Faces: []string{"participant"}},
+	"embed": {Ref: "optional", Embed: true, Faces: []string{"organizer", "participant", "display"}},
 }
 
 // block is one parsed ```block fence.
@@ -202,6 +202,9 @@ func parseBlock(spec string) (*block, error) {
 		if err := validEmbedRef(ref); err != nil {
 			return nil, err
 		}
+		if hasOrganizerParameter(ref, false) {
+			return nil, fmt.Errorf("block embed: put the organizer URL in private face settings")
+		}
 	case ref != "" && !refRe.MatchString(ref):
 		return nil, fmt.Errorf("block %s: ref %q: use letters, digits, - _ . / :", kind, ref)
 	}
@@ -209,6 +212,9 @@ func parseBlock(spec string) (*block, error) {
 		key, val, ok := strings.Cut(f, "=")
 		if !ok || !optKeyRe.MatchString(key) {
 			return nil, fmt.Errorf("block %s: option %q: write key=value", kind, f)
+		}
+		if privateParameter(key, true) || key == "organizer-url" || key == "display-url" {
+			return nil, fmt.Errorf("block %s: put private face settings outside the page body", kind)
 		}
 		if key == "id" {
 			if !kit.ValidName(val) {
@@ -228,6 +234,9 @@ func parseBlock(spec string) (*block, error) {
 // validEmbedRef accepts a same-origin path or an http(s) URL; nothing that
 // a browser would execute or resolve elsewhere (javascript:, //host).
 func validEmbedRef(ref string) error {
+	if strings.ContainsAny(ref, "\\\t\r\n ") {
+		return fmt.Errorf("block embed: invalid URL")
+	}
 	if strings.HasPrefix(ref, "/") && !strings.HasPrefix(ref, "//") {
 		if _, err := url.Parse(ref); err == nil {
 			return nil
@@ -236,7 +245,7 @@ func validEmbedRef(ref string) error {
 	if u, err := url.Parse(ref); err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil {
 		return nil
 	}
-	return fmt.Errorf("block embed: ref %q must be a same-origin path (/...) or an http(s) URL", ref)
+	return fmt.Errorf("block embed: use a same-origin path (/...) or an http(s) URL")
 }
 
 // blocksOf lists the blocks of a body (already validated on save).

@@ -111,11 +111,17 @@ func (a *app) joinPage(w http.ResponseWriter, r *http.Request, path string) {
 		return
 	}
 	id, title, code := it.ID, it.Title, it.JoinCode
-	owner := a.isOwner(r, it)
+	owner := a.isOwner(r, it) || a.organizerCookie(r, it)
 	a.mu.Unlock()
 	canonical := publicRoot + "/?id=" + id
 	if code != "" {
 		canonical = pageCodeURL(publicRoot, code)
+	}
+	face := faceFor(r, owner)
+	if r.Method == http.MethodGet && !owner && r.URL.Query().Get("view") == "organizer" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(kit.Page(tool, "Page", organizerEntry(publicRoot, id)))
+		return
 	}
 	render := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -126,7 +132,10 @@ func (a *app) joinPage(w http.ResponseWriter, r *http.Request, path string) {
 		w.WriteHeader(status)
 		_, _ = w.Write(body)
 	})
-	if owner && r.Method == http.MethodGet {
+	if r.Method == http.MethodGet && (owner || face == displayFace) {
+		if owner && face == participantFace {
+			r = a.previewParticipant(w, r, it)
+		}
 		render.ServeHTTP(w, r)
 		return
 	}
