@@ -98,7 +98,10 @@ class ReceiptTests(unittest.TestCase):
             self.record['module_graphs_sha256'] = hashlib.sha256(evidence.canonical(self.record['module_graphs'])).hexdigest()
         reseal()
         self.check()
-        for bad in (dict(row, go_mod_sum='h1:x='), dict(row, sum='h1:y='), dict(row, go_sum_sha256='e' * 64),
+        self.record['module_graphs'][0]['modules'][-1] = dict(row, sum='h1:zip-hash-only=')
+        reseal()
+        self.check()
+        for bad in (dict(row, go_mod_sum='h1:x='), dict(row, go_sum_sha256='e' * 64),
                     dict(row, go_mod_pruned='yes'), dict(row, go_mod_downloaded=True, go_mod_sha256='d' * 64)):
             with self.subTest(bad=bad):
                 self.record['module_graphs'][0]['modules'][-1] = bad

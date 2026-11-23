@@ -98,8 +98,11 @@ def verify(record, root, commit, now=None):
                     raise ValueError('unexpected go.mod content digest for un-downloaded module')
                 sum_value = module.get('go_mod_sum')
                 if module.get('go_mod_pruned', False) is True:
-                    if sum_value or module.get('sum') or 'go_sum_sha256' in module:
-                        raise ValueError('pruned module carries lock data')
+                    # A pruned module has no go.mod line in go.sum; go.sum may still
+                    # carry its zip hash from an earlier graph, which is recorded
+                    # verbatim in `sum` and is not a go.mod lock.
+                    if sum_value or 'go_sum_sha256' in module:
+                        raise ValueError('pruned module carries go.mod lock data')
                 elif not isinstance(sum_value, str) or not sum_value.startswith('h1:') or len(sum_value) <= len('h1:'):
                     raise ValueError('un-downloaded module missing h1: go.mod sum')
                 continue
