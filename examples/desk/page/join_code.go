@@ -87,6 +87,11 @@ func writeJoinScreen(w http.ResponseWriter, status int, data joinScreenData) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// The join form is a native same-origin POST. Under the kit-wide
+	// no-referrer a browser sends "Origin: null" for it, and on a plain-HTTP
+	// LAN address no Sec-Fetch-Site either, so GuardPOST could not tell it
+	// from a cross-site post. same-origin still sends nothing cross-origin.
+	w.Header().Set("Referrer-Policy", "same-origin")
 	w.WriteHeader(status)
 	_, _ = w.Write(kit.Page("page", data.Title, kit.AppBar("page", data.Home, kit.EmptyItemHeader("page"), "")+body.String()))
 }

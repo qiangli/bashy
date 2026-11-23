@@ -229,8 +229,16 @@ func TestJoinHTTPRoutesAndExport(t *testing.T) {
 		strings.Contains(response.Body.String(), "Welcome to the workshop.") {
 		t.Fatalf("unauthenticated visit: %d", response.Code)
 	}
+	// The join form posts natively: its screen must let the browser send a
+	// real same-origin Origin, and a null Origin stays refused.
+	if got := response.Header().Get("Referrer-Policy"); got != "same-origin" {
+		t.Fatalf("join screen Referrer-Policy %q, want same-origin", got)
+	}
+	if response = form("/blue-fox", client, url.Values{"handle": {"River"}}, map[string]string{"Origin": "null"}); response.Code != http.StatusForbidden {
+		t.Fatalf("null-origin join: %d", response.Code)
+	}
 	name := url.Values{"handle": {"River"}}
-	response = form("/blue-fox", client, name, nil)
+	response = form("/blue-fox", client, name, map[string]string{"Origin": "http://example.com"})
 	cookies := response.Result().Cookies()
 	if response.Code != http.StatusSeeOther || len(cookies) != 1 {
 		t.Fatalf("first join: %d, cookies %d", response.Code, len(cookies))
