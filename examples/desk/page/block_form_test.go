@@ -29,6 +29,10 @@ var (
 // imported) on a free loopback port, the way the page composes with it.
 func startForm(t *testing.T) string {
 	t.Helper()
+	// A shaped fork verifies its own clone of page, without sibling sources.
+	if _, err := os.Stat(filepath.Join("..", "form", "server")); err != nil {
+		t.Skip("form source is not beside page (a shaped fork's clone); runs in the bashy tree")
+	}
 	formBinOnce.Do(func() {
 		dir, err := os.MkdirTemp("", "page-form-bin-")
 		if err != nil {

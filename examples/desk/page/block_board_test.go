@@ -29,6 +29,10 @@ var (
 // ../../brainstorm/server, never imported) on a free loopback port.
 func startBrainstorm(t *testing.T) string {
 	t.Helper()
+	// A shaped fork verifies its own clone of page, without sibling sources.
+	if _, err := os.Stat(filepath.Join("..", "..", "brainstorm", "server")); err != nil {
+		t.Skip("brainstorm source is not beside page (a shaped fork's clone); runs in the bashy tree")
+	}
 	brainstormBinOnce.Do(func() {
 		dir, err := os.MkdirTemp("", "page-brainstorm-bin-")
 		if err != nil {
