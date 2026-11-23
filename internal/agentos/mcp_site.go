@@ -513,6 +513,7 @@ type siteShapeWishInput struct {
 	Request string `json:"request" jsonschema:"what to change, in words"`
 	Page    string `json:"page,omitempty" jsonschema:"page path the wish is about"`
 	Element string `json:"element,omitempty" jsonschema:"element context, e.g. 'section=ID revision=REV' (compare-and-set)"`
+	Agent   string `json:"agent,omitempty" jsonschema:"shaping agent as tool:model (bashy shape wish --agent)"`
 }
 type siteShapeIDInput struct {
 	ID string `json:"id" jsonschema:"candidate id"`
@@ -570,7 +571,7 @@ func newSiteMCPServer(s *siteMCP, version string, audit func(yokemcp.Record)) *m
 			if strings.TrimSpace(in.Request) == "" {
 				return nil, siteShapeOutput{}, errors.New("shape_wish: request is required")
 			}
-			return s.shape(ctx, req, "shape_wish", shapeCLIRequest{Verb: "wish", Request: in.Request, Page: in.Page, Element: in.Element})
+			return s.shape(ctx, req, "shape_wish", shapeCLIRequest{Verb: "wish", Request: in.Request, Page: in.Page, Element: in.Element, Agent: in.Agent})
 		})
 	for _, verb := range []struct{ tool, verb, doc string }{
 		{"shape_verify", "verify", "Owner only: run the trusted verifier on a candidate."},

@@ -244,13 +244,13 @@ func TestSiteMCPTiersOverHTTP(t *testing.T) {
 				t.Fatalf("read refusal = %q", refusal)
 			}
 			before := len(*calls)
-			out, refusal := callSite(t, cs, "shape_wish", map[string]any{"request": "add a team photo", "element": "section=team revision=abc123def456"})
+			out, refusal := callSite(t, cs, "shape_wish", map[string]any{"request": "add a team photo", "element": "section=team revision=abc123def456", "agent": "claude:sonnet"})
 			if tc.shapeOK {
 				if refusal != "" || out["principal"] != "owner@example.com" || len(*calls) != before+1 {
 					t.Fatalf("owner shape_wish = %v %s", out, refusal)
 				}
 				r := (*calls)[len(*calls)-1]
-				if r.Verb != "wish" || r.App != "site" || r.User != "owner@example.com" || r.Actor != "site-owner-agent" || r.Element != "section=team revision=abc123def456" {
+				if r.Verb != "wish" || r.App != "site" || r.User != "owner@example.com" || r.Actor != "site-owner-agent" || r.Element != "section=team revision=abc123def456" || r.Agent != "claude:sonnet" {
 					t.Fatalf("shape request = %+v", r)
 				}
 				for _, tool := range []string{"shape_verify", "shape_preview", "shape_approve"} {
