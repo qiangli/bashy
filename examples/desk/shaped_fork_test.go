@@ -139,8 +139,11 @@ type forkHome struct {
 
 func newForkHome(t *testing.T, bin, git string) *forkHome {
 	root := t.TempDir()
-	// app add vendors the module: keep the host Go caches so an isolated HOME
-	// neither re-downloads them nor leaves a read-only module cache behind.
+	// Keep the host Go caches so an isolated HOME neither re-downloads modules
+	// nor leaves a read-only module cache behind. The fork's required checks
+	// build the clone alone, so they need the shared desk modules from a
+	// published local proxy (BASHY_GOMOD_PROXY), exactly as a registered host
+	// has them after register-modules.sh.
 	caches, err := exec.Command("go", "env", "GOMODCACHE", "GOCACHE").Output()
 	if err != nil {
 		t.Fatalf("go env: %v", err)
@@ -152,6 +155,7 @@ func newForkHome(t *testing.T, bin, git string) *forkHome {
 		"HOME="+root,
 		"XDG_CONFIG_HOME="+filepath.Join(root, ".config"),
 		"BASHY_PRINCIPAL="+alice,
+		"BASHY_GOMOD_PROXY="+deskProxy(t),
 		"GOMODCACHE="+goenv[0], "GOCACHE="+goenv[1],
 		"GIT_AUTHOR_NAME=alice", "GIT_AUTHOR_EMAIL=alice@example.invalid",
 		"GIT_COMMITTER_NAME=alice", "GIT_COMMITTER_EMAIL=alice@example.invalid",
