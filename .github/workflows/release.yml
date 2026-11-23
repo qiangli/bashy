@@ -21,6 +21,12 @@ jobs:
     outputs:
       draft_id: ${{ steps.draft.outputs.id }}
     runs-on: ubuntu-latest
+    # Draft releases are visible only to tokens with write access: with the
+    # workflow default (contents: read) `gh release view TAG` answers "release
+    # not found" for the reviewed draft (first observed on the rc.40 candidate).
+    # The job performs no writes.
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v7
       - name: Verify frozen local security evidence and draft bytes
