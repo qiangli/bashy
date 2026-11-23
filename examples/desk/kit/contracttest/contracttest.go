@@ -65,6 +65,10 @@ type Config struct {
 	// (kit.SecurityOptions{Embeddable: true}): every response must send
 	// frame-ancestors 'self' and nothing broader. Otherwise 'none'.
 	Embeddable bool
+	// ItemURL validates a URL for tools that route an item by a separate
+	// public code. The default requires the URL to contain the item ID.
+	ItemURL func(rawURL, id string, created map[string]any) bool
+
 	// BindGuard is the tool's start-up listen guard (kit.CheckBind behind
 	// its --lan flag), called with an address and the override and
 	// returning what it logged. When set, the LAN-guard rows run: loopback
@@ -500,7 +504,11 @@ func (t *check) lifecycle() {
 		t.fail("new: id %q is not a stable desk id", id)
 		return
 	}
-	if itemURL == "" || !strings.Contains(itemURL, id) {
+	if t.cfg.ItemURL != nil {
+		if itemURL == "" || !t.cfg.ItemURL(itemURL, id, created) {
+			t.fail("new: url %q does not match the item's public route", itemURL)
+		}
+	} else if itemURL == "" || !strings.Contains(itemURL, id) {
 		t.fail("new: url %q must be stable and contain the id", itemURL)
 	}
 	if !kit.ValidStatus(status) {

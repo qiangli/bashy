@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,12 +21,14 @@ import (
 	kit "desk-kit"
 )
 
-const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|publish-outpost] [--json] [-f FILE|-] [--title T] [--audience host|lan|satellite] [--to md|html] [-o FILE]"
+const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|publish-outpost] [--json] [-f FILE|-] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|html] [-o FILE]"
 
 type cliOptions struct {
 	addr, data, prefix, key         string
 	title, body, file, id, audience string
 	to, output, breakFlag           string
+	code, port, icon, conflicts     string
+	openHandles, private, public    bool
 	asJSON, lan                     bool
 	verb                            string
 	args                            []string
@@ -35,8 +38,8 @@ type cliOptions struct {
 var (
 	valueFlags = map[string]bool{"addr": true, "data": true, "prefix": true, "key": true,
 		"title": true, "body": true, "f": true, "file": true, "id": true, "audience": true,
-		"to": true, "o": true, "output": true, "break": true}
-	boolFlags = map[string]bool{"json": true, "lan": true}
+		"to": true, "o": true, "output": true, "break": true, "code": true, "port": true, "icon": true, "handle-conflicts": true}
+	boolFlags = map[string]bool{"json": true, "lan": true, "open": true, "public": true, "private": true}
 )
 
 func parseCLIOptions(raw []string) (*cliOptions, error) {
@@ -53,10 +56,17 @@ func parseCLIOptions(raw []string) (*cliOptions, error) {
 		name, val, hasVal := strings.Cut(strings.TrimLeft(arg, "-"), "=")
 		switch {
 		case boolFlags[name] && !hasVal:
-			if name == "json" {
+			switch name {
+			case "json":
 				o.asJSON = true
-			} else {
+			case "lan":
 				o.lan = true
+			case "open":
+				o.openHandles = true
+			case "private":
+				o.private = true
+			case "public":
+				o.public = true
 			}
 			continue
 		case !valueFlags[name]:
@@ -93,7 +103,25 @@ func parseCLIOptions(raw []string) (*cliOptions, error) {
 			o.output = val
 		case "break":
 			o.breakFlag = val
+		case "code":
+			o.code = val
+		case "port":
+			o.port = val
+		case "icon":
+			o.icon = val
+		case "handle-conflicts":
+			if val != "suffix" && val != "refuse" {
+				return nil, fmt.Errorf("handle-conflicts must be refuse or suffix")
+			}
+			o.conflicts = val
 		}
+	}
+	if o.port != "" {
+		host, _, err := net.SplitHostPort(o.addr)
+		if err != nil || !fixedPort(o.port) {
+			return nil, fmt.Errorf("use a fixed port (1–65535)")
+		}
+		o.addr = net.JoinHostPort(host, o.port)
 	}
 	if len(pos) > 0 {
 		o.verb, o.args = pos[0], pos[1:]
@@ -118,6 +146,14 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.MCPHelp(tool)))
 		return 0
 	}
+	o, err := parseCLIOptions(args)
+	if err != nil {
+		return kit.UsageError(stdout, tool, common.JSON, err.Error())
+	}
+	o.asJSON = o.asJSON || common.JSON
+	if o.verb == "publish-outpost" || o.verb == "unpublish-outpost" {
+		return publishPage(stdout, o, common.DryRun || common.Explain)
+	}
 	if common.Explain || common.DryRun {
 		verb := kit.FindVerb(tool, args)
 		if verb == "" {
@@ -126,18 +162,22 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 		fmt.Fprintln(stdout, kit.CanonicalJSON(kit.Envelope(tool, map[string]any{"verb": verb, "effects": "desk action", "dry_run": common.DryRun})))
 		return 0
 	}
-	o, err := parseCLIOptions(args)
-	if err != nil {
-		return kit.UsageError(stdout, tool, common.JSON, err.Error())
-	}
-	o.asJSON = o.asJSON || common.JSON
+
 	if o.verb == "" {
 		fmt.Fprintln(stdout, usage)
 		return 2
 	}
 	if o.verb == "serve" {
+		if o.lan && os.Getenv("PAGE_ADDR") == "" && !explicitAddr(args) {
+			_, port, _ := net.SplitHostPort(o.addr)
+			o.addr = net.JoinHostPort("0.0.0.0", port)
+		}
 		breakMode = o.breakFlag
-		serve(o.addr, o.data, o.prefix, o.lan)
+		suffix := joinPolicy(pageManifest)
+		if o.conflicts != "" {
+			suffix = o.conflicts == "suffix"
+		}
+		serve(o.addr, o.data, o.prefix, o.lan, suffix)
 		return 0
 	}
 	c := &client{o: o, fields: common.Fields, stdout: stdout}
@@ -181,7 +221,7 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 		if id == "" && len(o.args) > 0 {
 			id = o.args[0]
 		}
-		return c.do("add", map[string]any{"id": id, "title": o.title, "body": body, "audience": o.audience})
+		return c.do("add", map[string]any{"id": id, "title": o.title, "body": body, "audience": o.audience, "join_code": o.code})
 	case "set":
 		id, ok := needID()
 		if !ok {
@@ -202,6 +242,17 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 		return c.do(o.verb, map[string]any{"id": id})
 	case "list":
 		return c.do("list", map[string]any{})
+	case "participant":
+		id, ok := needID()
+		if !ok {
+			return 2
+		}
+		kind, source, target, err := moderationArgs(o.args, o.openHandles)
+		if err != nil {
+			return kit.UsageError(stdout, tool, o.asJSON, err.Error())
+		}
+		c.resolveKey(id)
+		return c.do("participant", map[string]any{"id": id, "kind": kind, "source": source, "target": target})
 	case "export":
 		id, ok := needID()
 		if !ok {
@@ -298,7 +349,27 @@ func (c *client) do(action string, payload map[string]any) int {
 		fmt.Fprintln(c.stdout, "error: invalid server response")
 		return 1
 	}
-	if c.o.asJSON {
+	if action == "open" && c.fields == "" {
+		code, _ := obj["join_code"].(string)
+		if code != "" {
+			if base := pageSatelliteBase(); base != "" {
+				obj["satellite_url"] = pageCodeURL(base, code)
+			}
+			local, _ := obj["lan_url"].(string)
+			if local == "" {
+				local, _ = obj["url"].(string)
+			}
+			satellite, _ := obj["satellite_url"].(string)
+			if !c.o.asJSON && local != "" {
+				if err := printJoinURLs(c.stdout, code, local, satellite); err != nil {
+					fmt.Fprintln(c.stdout, "error:", err)
+					return 1
+				}
+				return 0
+			}
+		}
+	}
+	if c.o.asJSON || action == "participant" && payload["kind"] == "list" {
 		fmt.Fprintln(c.stdout, kit.CanonicalJSON(obj))
 		return 0
 	}

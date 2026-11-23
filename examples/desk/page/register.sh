@@ -34,6 +34,9 @@ while IFS= read -r row; do atlas_args+=(--set "$row"); done <<< "$atlas_rows"
   --set args.flags.10.name=to --set args.flags.10.type=string \
   --set args.flags.11.name=output --set args.flags.11.shorthand=o --set args.flags.11.type=string \
   --set args.flags.12.name=lan --set args.flags.12.type=bool \
+  --set args.flags.13.name=code --set args.flags.13.type=string \
+  --set args.flags.14.name=port --set args.flags.14.type=string \
+  --set args.flags.15.name=open --set args.flags.15.type=bool \
   --set args.positionals.0.name=verb \
   "${atlas_args[@]}" \
   --set args.positionals.1.name=id

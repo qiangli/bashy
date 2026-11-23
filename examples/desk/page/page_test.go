@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,8 +40,14 @@ func cli(url string, a *app) func(...string) (int, string) {
 	}
 }
 
-func pageConfig(url string, a *app) contracttest.Config {
-	return contracttest.Config{BaseURL: url, Tool: tool, CLI: cli(url, a), Events: true,
+func pageConfig(base string, a *app) contracttest.Config {
+	return contracttest.Config{BaseURL: base, Tool: tool, CLI: cli(base, a), Events: true,
+		ItemURL: func(raw, _ string, created map[string]any) bool {
+			u, err := url.Parse(raw)
+			code, _ := created["join_code"].(string)
+			return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && code != "" &&
+				pageJoinCode(u.Path) == code && u.RawQuery == ""
+		},
 		BindGuard: func(addr string, lan bool) (string, error) {
 			var logged bytes.Buffer
 			err := bindGuard(addr, lan, &logged)
@@ -127,13 +134,13 @@ func TestCLIRoundTrip(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "class.md")
 	os.WriteFile(f, []byte(classPage), 0o644)
 
-	code, out := run("add", "--id", "class", "-f", f, "--audience", "lan")
-	if code != 0 || !strings.HasPrefix(out, "class "+url+"/?id=class filled-by-agent") || strings.Contains(out, "Welcome") {
+	code, out := run("add", "--id", "class", "--code", "blue-fox", "-f", f, "--audience", "lan")
+	if code != 0 || !strings.HasPrefix(out, "class "+url+"/blue-fox filled-by-agent") || strings.Contains(out, "Welcome") {
 		t.Fatalf("add: %d %q", code, out)
 	}
 	code, out = run("open", "class")
-	if code != 0 || strings.TrimSpace(out) != "class "+url+"/?id=class filled-by-agent" {
-		t.Fatalf("open must print id, URL and status only: %d %q", code, out)
+	if code != 0 || !strings.Contains(out, url+"/blue-fox") || !strings.HasSuffix(out, "\nblue-fox\n") || strings.Contains(out, "Welcome") {
+		t.Fatalf("open must print the join link and code without page content: %d %q", code, out)
 	}
 	code, out = run("show", "class", "--json")
 	var shown struct {
@@ -175,13 +182,13 @@ func TestCLIRoundTrip(t *testing.T) {
 	if code, _ = run("export", "class", "--to", "pdf"); code != 2 {
 		t.Errorf("export --to pdf: want exit 2, got %d", code)
 	}
-	if code, out = run("share", "class"); code != 0 || !strings.Contains(out, "invite: "+url+"/?id=class#invite=") {
+	if code, out = run("share", "class"); code != 0 || !strings.Contains(out, "invite: "+url+"/blue-fox#invite=") {
 		t.Errorf("share: %d %q", code, out)
 	}
 	if code, out = run("close", "class"); code != 0 || !strings.Contains(out, " closed") {
 		t.Errorf("close: %d %q", code, out)
 	}
-	if code, out = run("list"); code != 0 || strings.TrimSpace(out) != "class closed "+url+"/?id=class" {
+	if code, out = run("list"); code != 0 || strings.TrimSpace(out) != "class closed "+url+"/blue-fox" {
 		t.Errorf("list: %d %q", code, out)
 	}
 }
@@ -191,7 +198,12 @@ func TestPageRendersBlocks(t *testing.T) {
 	if code, out := cli(url, a)("add", "--id", "class", "--body", classPage); code != 0 {
 		t.Fatal(out)
 	}
-	r, err := http.Get(url + "/?id=class")
+	rq, err := http.NewRequest(http.MethodGet, url+"/?id=class", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rq.Header.Set("X-Facilitator-Key", a.items["class"].Owner)
+	r, err := http.DefaultClient.Do(rq)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +257,7 @@ func TestAudienceGate(t *testing.T) {
 	key := addPage(t, a, "host-page", "host")
 	addPage(t, a, "sat-page", "satellite")
 	addPage(t, a, "lan-page", "lan")
-	lan := "192.168.1.20:5000"
+	lan := "192.0.2.20:5000"
 	for _, id := range []string{"host-page", "sat-page"} {
 		for _, req := range [][2]string{{"GET", "/?id=" + id}, {"GET", "/api/state?id=" + id}, {"GET", "/api/events?id=" + id},
 			{"POST", `{"action":"show","id":"` + id + `"}`}, {"POST", `{"action":"open","id":"` + id + `"}`}} {
@@ -264,8 +276,8 @@ func TestAudienceGate(t *testing.T) {
 	if strings.Contains(w.Body.String(), "host-page") || !strings.Contains(w.Body.String(), "lan-page") {
 		t.Errorf("list from the LAN must name lan pages only: %s", w.Body)
 	}
-	if w := do(a, "GET", "/?id=lan-page", "", lan, nil); w.Code != 200 || !strings.Contains(w.Body.String(), "secret-plan") {
-		t.Errorf("lan page from the LAN: want 200, got %d", w.Code)
+	if w := do(a, "GET", "/?id=lan-page", "", lan, nil); w.Code != 200 || !strings.Contains(w.Body.String(), "Name or email") || strings.Contains(w.Body.String(), "secret-plan") {
+		t.Errorf("new LAN peer should receive the handle prompt: got %d", w.Code)
 	}
 	if w := do(a, "POST", "/api/action", `{"action":"show","id":"host-page"}`, lan, map[string]string{"X-Facilitator-Key": key}); w.Code != 200 {
 		t.Errorf("the organizer's key opens a host page from anywhere: got %d", w.Code)
@@ -296,7 +308,7 @@ func TestParticipantAddressesNeverLeave(t *testing.T) {
 		key := addPage(t, a, "p", "lan")
 		a.mu.Lock()
 		next := a.items["p"].clone()
-		next.Participants = []participant{{Handle: "ada", Address: "192.0.2.7", Fingerprint: "fp-7f3a",
+		next.Participants = participantMap{"ada@192.0.2.7": {Handle: "ada", Address: "192.0.2.7", Fingerprint: "fp-7f3a",
 			Cookie: "cookie-9b1c", Auth: "anonymous", JoinedAt: "2026-11-29T10:00:00Z"}}
 		if err := a.saveLocked(&next, "here"); err != nil {
 			t.Fatal(err)

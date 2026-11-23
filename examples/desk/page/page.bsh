@@ -22,14 +22,15 @@ A page is Markdown written by the organizer plus blocks, one line each in a
 Kinds: poll, form, book, note, board, chart (an item another desk app owns),
 timer, here, hands (page-local) and embed (a same-origin path or URL).
 
-- `bashy page add [-f FILE|-] [--title T] [--audience host|lan|satellite] [--id ID]` creates a page; prints id, URL, status and the owner key once.
-- `bashy page open ID` re-surfaces a page (id, URL, status only — never content).
+- `bashy page add [-f FILE|-] [--title T] [--audience host|lan|satellite] [--id ID] [--code CODE]` creates a page; prints id, URL, status and the owner key once.
+- `bashy page open ID` prints the available join links, a QR for each, and the bare code.
 - `bashy page show ID` reads title, Markdown, blocks, audience, participants (handle and auth only) and revision.
 - `bashy page set ID [-f FILE|-] [--title T] [--audience A]` changes the page; every save bumps the revision and pushes a live frame.
 - `bashy page list` lists pages; `bashy page share ID` mints a single-use invite link; `bashy page close ID` ends the page.
 - `bashy page export ID --to md|html [-o FILE]` writes the record (handles, never addresses).
-- `bashy page serve [--lan]` starts the server (default 127.0.0.1:18113; `--lan` is the explicit, logged LAN override).
-- `bashy page publish-outpost [--public] [--dry-run] [--json]` puts the page app behind the satellite door with login required.
+- `bashy page serve --lan --port PORT` listens on a fixed LAN port. Without `--lan`, the default is loopback port 18113.
+- `bashy page participant ID --open|list|kick HANDLE|rename HANDLE NAME|merge HANDLE INTO` is the organizer's participant command.
+- `bashy page publish-outpost [--public] [--dry-run] [--json]` registers the fixed page listener with outpost identity enabled. Publish before starting the shared listener.
 ~~~
 
 set -euo pipefail
@@ -38,12 +39,10 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-page
 exe=$(go env GOEXE)
 bin="$cache/page$exe"
-# The shared publish-outpost / unpublish-outpost verbs.
-source "$here/../kit/outpost.bsh"
 build() {
   stale=false
   [[ -f "$bin" ]] || stale=true
-  for src in "$here"/*.go "$here"/go.mod "$here"/go.sum "$here"/../kit/*.go "$here"/../kit/render/*.go; do
+  for src in "$here"/*.go "$here"/go.mod "$here"/go.sum "$here"/shaped.json "$here"/../kit/*.go "$here"/../kit/render/*.go; do
     [[ "$src" -nt "$bin" ]] && stale=true
   done
   if [[ $stale == true ]]; then
@@ -62,8 +61,7 @@ case ${1:-serve} in
   done < "${BASH_SOURCE[0]}"
   ;;
 --contract) echo 'sokilili page efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
--h|--help) echo 'page [serve|add|open|show|set|list|share|close|export|publish-outpost|unpublish-outpost|test] — one fixed, live page for a group; --skill prints its embedded skill' ;;
-publish-outpost|unpublish-outpost) kit_outpost "$1" page page "${CONSOLE_PORT:-22749}" false "${@:2}" ;;
+-h|--help) echo 'page [serve|add|open|show|set|list|share|close|export|participant|publish-outpost|unpublish-outpost|test] — one fixed, live page for a group; --skill prints its embedded skill' ;;
 test)
   cd "$here" && GOWORK=off go test ./...
   ;;

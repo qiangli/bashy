@@ -22,10 +22,12 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"io"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -65,10 +67,9 @@ func renderMarkdown(src []byte) ([]byte, error) {
 	return render.Markdown(src, render.Options{})
 }
 
-// participant is one person on the page. The join story fills it; the
-// address and fingerprint are facilitator-only and never leave the store
-// through show, state or export (publicParticipants).
-type participant struct {
+// Participant contains the private fields used to bind an identity.
+// Public views and exports use exportedParticipants.
+type Participant struct {
 	Handle      string `json:"handle"`
 	Principal   string `json:"principal,omitempty"`
 	Address     string `json:"address,omitempty"`
@@ -77,20 +78,24 @@ type participant struct {
 	Auth        string `json:"auth"` // member | signed-in | anonymous
 	JoinedAt    string `json:"joined_at,omitempty"`
 	LastSeen    string `json:"last_seen,omitempty"`
+	Kicked      bool   `json:"kicked,omitempty"`
 }
 
 type item struct {
-	Version      int             `json:"version"`
-	ID           string          `json:"id"`
-	Title        string          `json:"title"`
-	Body         string          `json:"body"`
-	Audience     string          `json:"audience"`
-	Participants []participant   `json:"participants"`
-	Status       string          `json:"status"`
-	Revision     int             `json:"revision"`
-	Owner        string          `json:"owner"`
-	Members      map[string]bool `json:"members"`
-	Invites      map[string]bool `json:"invites"`
+	Version      int               `json:"version"`
+	ID           string            `json:"id"`
+	Title        string            `json:"title"`
+	Body         string            `json:"body"`
+	Audience     string            `json:"audience"`
+	Participants participantMap    `json:"participants"`
+	JoinCode     string            `json:"join_code,omitempty"`
+	OpenHandles  bool              `json:"open_handles,omitempty"`
+	Votes        map[string]string `json:"votes,omitempty"`
+	Status       string            `json:"status"`
+	Revision     int               `json:"revision"`
+	Owner        string            `json:"owner"`
+	Members      map[string]bool   `json:"members"`
+	Invites      map[string]bool   `json:"invites"`
 }
 
 type actionRequest struct {
@@ -101,22 +106,36 @@ type actionRequest struct {
 	Audience string      `json:"audience,omitempty"`
 	Fields   []kit.Field `json:"fields,omitempty"`
 	Invite   string      `json:"invite,omitempty"`
+	JoinCode string      `json:"join_code,omitempty"`
+	Kind     string      `json:"kind,omitempty"`
+	Source   string      `json:"source,omitempty"`
+	Target   string      `json:"target,omitempty"`
 }
 
 type app struct {
-	mu      sync.Mutex
-	dir     string
-	prefix  string
-	baseURL string // public origin, e.g. http://127.0.0.1:18113
-	items   map[string]*item
-	events  kit.Events
+	mu          sync.Mutex
+	dir         string
+	prefix      string
+	baseURL     string // public origin, e.g. http://127.0.0.1:18113
+	items       map[string]*item
+	events      kit.Events
+	joinOptions pageJoinOptions
+	lanBase     string
 }
 
 // clone deep-copies the item so a failed save never leaves the in-memory
 // copy mutated.
 func (it *item) clone() item {
 	c := *it
-	c.Participants = append([]participant(nil), it.Participants...)
+	c.Participants = make(participantMap, len(it.Participants))
+	for key, p := range it.Participants {
+		if p == nil {
+			continue
+		}
+		copy := *p
+		c.Participants[key] = &copy
+	}
+	c.Votes = maps.Clone(it.Votes)
 	c.Members = make(map[string]bool, len(it.Members))
 	for k, v := range it.Members {
 		c.Members[k] = v
@@ -128,7 +147,8 @@ func (it *item) clone() item {
 	return c
 }
 
-func itemPath(dir, id string) string { return filepath.Join(dir, "items", id+".json") }
+func itemDir(dir string) string      { return filepath.Join(dir, "items") }
+func itemPath(dir, id string) string { return filepath.Join(itemDir(dir), id+".json") }
 
 func (a *app) loadLocked(id string) (*item, error) {
 	if !kit.ValidName(id) {
@@ -179,6 +199,16 @@ func (a *app) loadOr404(w http.ResponseWriter, id string) *item {
 // acknowledged, publishes the live frame for block ("" = the whole page).
 func (a *app) saveLocked(it *item, block string) error {
 	it.Revision++
+	if err := a.persistLocked(it); err != nil {
+		return err
+	}
+	if breakMode != "events-no-publish" {
+		a.events.Publish(it.ID, block, it.Revision)
+	}
+	return nil
+}
+
+func (a *app) persistLocked(it *item) error {
 	raw, err := kit.MarshalIndent(*it)
 	if err != nil {
 		return err
@@ -187,9 +217,6 @@ func (a *app) saveLocked(it *item, block string) error {
 		return err
 	}
 	a.items[it.ID] = it
-	if breakMode != "events-no-publish" {
-		a.events.Publish(it.ID, block, it.Revision)
-	}
 	return nil
 }
 
@@ -227,25 +254,25 @@ func (a *app) viewOr403(w http.ResponseWriter, r *http.Request, it *item) bool {
 func (a *app) base(r *http.Request) string { return kit.PublicBase(r, a.baseURL) }
 
 func (a *app) urlFor(r *http.Request, id string) string {
+	if it := a.items[id]; it != nil && it.JoinCode != "" {
+		return pageCodeURL(a.base(r), it.JoinCode)
+	}
 	return kit.ItemURL(a.base(r)+"/", "id", id)
 }
 
 // openView is the contentless re-surface: id + stable URL + status only.
 func (a *app) openView(r *http.Request, it *item) map[string]any {
 	v := kit.OpenView(it.ID, a.urlFor(r, it.ID), it.Status)
+	if it.JoinCode != "" {
+		v["join_code"] = it.JoinCode
+	}
+	if a.lanBase != "" && it.JoinCode != "" && it.Audience == audienceLAN {
+		v["lan_url"] = pageCodeURL(a.lanBase, it.JoinCode)
+	}
 	if breakMode == "open-emits-content" {
 		v["body"] = it.Body // deliberate contract break for red/green proof
 	}
 	return v
-}
-
-// publicParticipants is what anyone but the store sees: handle and auth.
-func publicParticipants(ps []participant) []map[string]string {
-	out := []map[string]string{}
-	for _, p := range ps {
-		out = append(out, map[string]string{"handle": p.Handle, "auth": p.Auth})
-	}
-	return out
 }
 
 func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -265,12 +292,8 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch {
-	case path == "/" && r.Method == "GET":
-		kit.ParticipantCookie(w, r, "page-participant")
-		code, body := a.page(r)
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.WriteHeader(code)
-		w.Write(body)
+	case path == "/" || pageJoinCode(path) != "":
+		a.joinPage(w, r, path)
 	case path == "/healthz" && r.Method == "GET":
 		kit.WriteJSON(w, map[string]bool{"ok": true})
 	case path == "/api/state" && r.Method == "GET":
@@ -281,6 +304,11 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		if it == nil || !a.viewOr403(w, r, it) {
 			return
 		}
+		r, done, ok := a.knownParticipantLocked(w, r, it)
+		if !ok {
+			return
+		}
+		defer done()
 		kit.WriteJSON(w, a.openView(r, it))
 	case path == "/api/events" && r.Method == "GET":
 		a.mu.Lock()
@@ -290,8 +318,13 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			a.mu.Unlock()
 			return
 		}
+		r, done, ok := a.knownParticipantLocked(w, r, it)
 		revision := it.Revision
 		a.mu.Unlock()
+		if !ok {
+			return
+		}
+		defer done()
 		// Frames are contentless: the stream needs no more than a view.
 		a.events.Serve(w, r, id, revision)
 	case path == "/api/export" && r.Method == "GET":
@@ -322,16 +355,37 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		a.create(w, r, req, me)
 	case "list":
 		a.list(w, r)
-	case "open", "show", "set", "close", "share", "join":
+	case "open", "show", "set", "close", "share", "join", "participant":
 		it := a.loadOr404(w, req.ID)
 		if it == nil {
 			return
 		}
+		if a.canView(r, it) {
+			var done func()
+			var ok bool
+			r, done, ok = a.knownParticipantLocked(w, r, it)
+			if !ok {
+				return
+			}
+			defer done()
+			it = a.items[it.ID]
+		}
 		switch req.Action {
 		case "open":
-			if a.viewOr403(w, r, it) {
-				kit.WriteJSON(w, a.openView(r, it))
+			if !a.viewOr403(w, r, it) {
+				return
 			}
+			if it.JoinCode == "" && a.isOwner(r, it) {
+				next := it.clone()
+				code, err := a.assignCodeLocked("")
+				next.JoinCode = code
+				if err != nil || a.saveLocked(&next, "") != nil {
+					kit.Fail(w, http.StatusInternalServerError, "Could not assign a join code")
+					return
+				}
+				it = &next
+			}
+			kit.WriteJSON(w, a.openView(r, it))
 		case "show":
 			if a.viewOr403(w, r, it) {
 				a.show(w, r, it)
@@ -342,6 +396,8 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 			a.share(w, r, it)
 		case "join":
 			a.join(w, r, it, req, me)
+		case "participant":
+			a.participantAction(w, r, it, req)
 		}
 	default:
 		kit.Fail(w, http.StatusBadRequest, "Unknown action")
@@ -411,8 +467,17 @@ func (a *app) create(w http.ResponseWriter, r *http.Request, req actionRequest, 
 	if strings.TrimSpace(req.Body) != "" {
 		status = kit.StatusFilled
 	}
-	it := &item{Version: 1, ID: id, Title: title, Body: req.Body, Audience: audience,
-		Participants: []participant{}, Status: status, Owner: kit.NewToken(),
+	code, err := a.assignCodeLocked(req.JoinCode)
+	if err != nil {
+		if errors.Is(err, errJoinCodeInUse) {
+			kit.Fail(w, http.StatusConflict, err.Error())
+		} else {
+			kit.Fail(w, http.StatusBadRequest, err.Error())
+		}
+		return
+	}
+	it := &item{Version: 1, ID: id, Title: title, Body: req.Body, Audience: audience, JoinCode: code,
+		Participants: participantMap{}, Status: status, Owner: kit.NewToken(),
 		Members: map[string]bool{me: true}, Invites: map[string]bool{}}
 	if err := a.saveLocked(it, ""); err != nil {
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
@@ -429,7 +494,7 @@ func (a *app) show(w http.ResponseWriter, r *http.Request, it *item) {
 	kit.WriteJSON(w, map[string]any{"id": it.ID, "url": a.urlFor(r, it.ID),
 		"status": it.Status, "title": it.Title, "body": it.Body,
 		"blocks": blocksOf(it.Body), "audience": it.Audience,
-		"participants": publicParticipants(it.Participants), "revision": it.Revision})
+		"participants": exportedParticipants(it), "revision": it.Revision})
 }
 
 func (a *app) mutate(w http.ResponseWriter, r *http.Request, it *item, req actionRequest, closing bool) {
@@ -532,6 +597,11 @@ func (a *app) export(w http.ResponseWriter, r *http.Request, id, to string) {
 		kit.Fail(w, http.StatusForbidden, "Only the organizer can export this page")
 		return
 	}
+	_, done, ok := a.knownParticipantLocked(w, r, it)
+	if !ok {
+		return
+	}
+	defer done()
 	switch to {
 	case "md", "markdown":
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
@@ -565,26 +635,30 @@ func exportMarkdown(it *item) string {
 	if !strings.HasSuffix(b.String(), "\n") {
 		b.WriteString("\n")
 	}
-	if len(it.Participants) > 0 {
+	if rows := exportedParticipants(it); len(rows) > 0 {
 		b.WriteString("\n## Participants\n\n")
-		for _, p := range it.Participants {
-			line := "- " + p.Handle + " (" + p.Auth + ")"
-			if breakMode == "export-addresses" {
-				line += " " + p.Address
+		for _, p := range rows {
+			b.WriteString("- " + escapeParticipantMarkdown(p.Handle) + " (" + p.Auth + ")\n")
+		}
+		if breakMode == "export-addresses" {
+			for _, p := range it.Participants {
+				if p != nil {
+					b.WriteString(p.Address + "\n")
+				}
 			}
-			b.WriteString(line + "\n")
 		}
 	}
 	return b.String()
 }
 
 func participantsHTML(it *item) string {
-	if len(it.Participants) == 0 {
+	rows := exportedParticipants(it)
+	if len(rows) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString(`<section class="desk-panel"><h2 class="desk-h2">Participants</h2><ul>`)
-	for _, p := range it.Participants {
+	for _, p := range rows {
 		b.WriteString(`<li>` + html.EscapeString(p.Handle) + ` <span class="desk-muted">` + html.EscapeString(p.Auth) + `</span></li>`)
 	}
 	b.WriteString(`</ul></section>`)
@@ -613,8 +687,7 @@ func renderPage(it *item) (string, error) {
 	return b.String(), nil
 }
 
-// page renders the human door. Without an id it is the open screen (the
-// join story turns it into the join-code screen); with one, the page itself.
+// page renders an item after the human door has resolved its identity.
 func (a *app) page(r *http.Request) (int, []byte) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -674,10 +747,16 @@ func liveScript(base, id string) string {
 // bindGuard is the start-up listen guard: loopback only, unless the
 // explicit --lan override is given, which kit.CheckBind logs to logw.
 func bindGuard(addr string, lan bool, logw io.Writer) error {
+	if lan {
+		_, port, err := net.SplitHostPort(addr)
+		if err != nil || !fixedPort(port) {
+			return fmt.Errorf("page serve --lan needs a fixed port (1–65535)")
+		}
+	}
 	return kit.CheckBind(addr, lan, logw)
 }
 
-func serve(addr, data, prefix string, lan bool) {
+func serve(addr, data, prefix string, lan, suffix bool) {
 	if err := bindGuard(addr, lan, os.Stderr); err != nil {
 		log.Fatal(err)
 	}
@@ -690,7 +769,13 @@ func serve(addr, data, prefix string, lan bool) {
 	}
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	origin := "http://" + net.JoinHostPort("127.0.0.1", port)
-	a := &app{dir: data, prefix: prefix, baseURL: origin + prefix, items: map[string]*item{}}
+	a := &app{dir: data, prefix: prefix, baseURL: origin + prefix, items: map[string]*item{},
+		joinOptions: pageJoinOptions{consolePrincipal: processConsolePrincipal(addr), outpostSecret: pageOutpostSecret(),
+			suffix: suffix}}
+	if lan {
+		host, _ := os.Hostname()
+		a.lanBase = lanJoinBase(a.baseURL, host)
+	}
 	fmt.Printf("\nDesk page — keep this terminal running\nOrganizer: %s/\nSaved pages: %s\nCtrl-C stops the server.\n\n",
 		a.baseURL, filepath.Join(data, "items"))
 	// kit.Events sets a write deadline per frame, so event streams outlive
