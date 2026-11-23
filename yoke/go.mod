@@ -161,10 +161,10 @@ require (
 	github.com/prometheus/common v0.67.5 // indirect
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
-	github.com/qiangli/bash v0.0.0-20261121101805-42efe30317c4 // indirect
-	github.com/qiangli/bonsai v0.0.0-20261121101804-e25a870a0d4a // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261121163358-be872cc5a395 // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261121163358-be872cc5a395 // indirect
+	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136 // indirect
+	github.com/qiangli/bonsai v0.0.0-20261123172747-32d78887eb27 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261123181223-bd32f1b398d9 // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261123181223-bd32f1b398d9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
@@ -317,9 +317,9 @@ replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewi
 require (
 	github.com/bashsharp/bashsharp v0.0.0-20261121160731-621e369d910d
 	github.com/itchyny/gojq v0.12.19
-	github.com/qiangli/coreutils v0.0.0-20261121101804-c5832f99ccf6
+	github.com/qiangli/coreutils v0.0.0-20261123172741-e0184192020b
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be
-	github.com/qiangli/yoke v0.0.0-20261122192157-3eb700cd39d9
+	github.com/qiangli/yoke v0.0.0-20261123181223-bd32f1b398d9
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
