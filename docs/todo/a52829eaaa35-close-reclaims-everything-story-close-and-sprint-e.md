@@ -3,12 +3,16 @@ id: a52829eaaa35
 kind: feature
 title: 'Close reclaims everything: story close and sprint end release claims and delete run/grade copies (no resource leaks)'
 seq: 3286
-status: todo
 priority: p0
 created: 2026-11-21T11:29:39.28621Z
 sprint: 652
 sprint_id: 48a699fb-076f-5442-995a-b12987a45bea
 sprint_title: Outpost reliability and host-offline alerting on cloudbox
+status: done
+weave: 138
+assignee: agy-gemini4-carbon
+closed: 2026-11-23T18:39:23.489875Z
+closed_by: codex-gpt6.2-sol
 ---
 
 Operator 2026-11-21 (typed): 'do it now. this should be treated a top priority it saves time/token the sooner the better. when story/sprint is closed, all its related resource should be cleared/reclaimed. or else it is a leak, right?' Agreed: anything a closed story or ended sprint still holds is a leak.

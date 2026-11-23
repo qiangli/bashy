@@ -3,13 +3,16 @@ id: bc800d2023fe
 kind: bug
 title: 'inbox: live instances name+N appear to share one read cursor (claude+2 mail is acked/consumed by another claude session); name+N is not a registered sender'
 seq: 3285
-status: todo
 priority: p1
 created: 2026-11-21T10:29:53.513924Z
-assignee: agy-gemini4-carbon-w127
 sprint: 652
 sprint_id: 48a699fb-076f-5442-995a-b12987a45bea
 sprint_title: Outpost reliability and host-offline alerting on cloudbox
+status: done
+weave: 139
+assignee: agy-gemini4-hydrogen
+closed: 2026-11-23T18:39:22.871974Z
+closed_by: codex-gpt6.2-sol
 ---
 
 Operator question 2026-11-21: 'agent+seq should not share inbox?'. Evidence from conductor session claude+2 (dev host, after umbrella dcb155d6 'bashy <agent> starts name+N when live'): (1) mb:15014, 15016, 15028, 15030, 15069, 15087 addressed to claude+2 were already [acked] on first read; (2) twice the coordination notice said '1 of 2 unread (2 addressed to you)' and an immediate 'bashy inbox --as claude+2' said 'nothing new'; (3) 'mb send --as claude+2' is refused: names no registered agent or person; other live claude sessions on the host: the backup claude-opus5.5 and an interactive claude. Hypothesis (unconfirmed): read state is keyed on the base agent/principal, not the instance, so name, name+1, name+2 share a cursor; alternative: the session's own coordination-delivery hook acks on injection. Root cause first: reproduce with two live instances of one tool (name, name+1), send one message to each, read as each, and record which instance's read acks which. Expected: each instance has its own cursor and can send as itself; mail to the base name stays distinct from mail to name+N. Related: fa286c7b (attribution), dcb155d6.
