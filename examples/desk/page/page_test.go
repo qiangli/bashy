@@ -41,7 +41,7 @@ func cli(url string, a *app) func(...string) (int, string) {
 }
 
 func pageConfig(base string, a *app) contracttest.Config {
-	return contracttest.Config{BaseURL: base, Tool: tool, CLI: cli(base, a), Events: true,
+	return contracttest.Config{BaseURL: base, Tool: tool, CLI: cli(base, a), Events: true, Embeddable: true,
 		ItemURL: func(raw, _ string, created map[string]any) bool {
 			u, err := url.Parse(raw)
 			code, _ := created["join_code"].(string)

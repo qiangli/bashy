@@ -82,20 +82,21 @@ type Participant struct {
 }
 
 type item struct {
-	Version      int               `json:"version"`
-	ID           string            `json:"id"`
-	Title        string            `json:"title"`
-	Body         string            `json:"body"`
-	Audience     string            `json:"audience"`
-	Participants participantMap    `json:"participants"`
-	JoinCode     string            `json:"join_code,omitempty"`
-	OpenHandles  bool              `json:"open_handles,omitempty"`
-	Votes        map[string]string `json:"votes,omitempty"`
-	Status       string            `json:"status"`
-	Revision     int               `json:"revision"`
-	Owner        string            `json:"owner"`
-	Members      map[string]bool   `json:"members"`
-	Invites      map[string]bool   `json:"invites"`
+	Version      int                    `json:"version"`
+	ID           string                 `json:"id"`
+	Title        string                 `json:"title"`
+	Body         string                 `json:"body"`
+	Audience     string                 `json:"audience"`
+	Participants participantMap         `json:"participants"`
+	Timers       map[string]*TimerState `json:"timers,omitempty"`
+	JoinCode     string                 `json:"join_code,omitempty"`
+	OpenHandles  bool                   `json:"open_handles,omitempty"`
+	Votes        map[string]string      `json:"votes,omitempty"`
+	Status       string                 `json:"status"`
+	Revision     int                    `json:"revision"`
+	Owner        string                 `json:"owner"`
+	Members      map[string]bool        `json:"members"`
+	Invites      map[string]bool        `json:"invites"`
 }
 
 type actionRequest struct {
@@ -108,6 +109,7 @@ type actionRequest struct {
 	Invite   string      `json:"invite,omitempty"`
 	JoinCode string      `json:"join_code,omitempty"`
 	Kind     string      `json:"kind,omitempty"`
+	Block    string      `json:"block,omitempty"`
 	Source   string      `json:"source,omitempty"`
 	Target   string      `json:"target,omitempty"`
 }
@@ -119,6 +121,7 @@ type app struct {
 	baseURL     string // public origin, e.g. http://127.0.0.1:18113
 	items       map[string]*item
 	events      kit.Events
+	ticking     map[string]bool
 	joinOptions pageJoinOptions
 	lanBase     string
 }
@@ -134,6 +137,15 @@ func (it *item) clone() item {
 		}
 		copy := *p
 		c.Participants[key] = &copy
+	}
+	if it.Timers != nil {
+		c.Timers = make(map[string]*TimerState, len(it.Timers))
+		for k, v := range it.Timers {
+			if v != nil {
+				cp := *v
+				c.Timers[k] = &cp
+			}
+		}
 	}
 	c.Votes = maps.Clone(it.Votes)
 	c.Members = make(map[string]bool, len(it.Members))
@@ -281,7 +293,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if breakMode != "no-csp" {
-		kit.ApplySecurityHeaders(w)
+		kit.SecurityOptions{Embeddable: true}.Apply(w)
 	}
 	if !kit.GuardPOST(w, r, tool) {
 		return
@@ -327,6 +339,8 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		defer done()
 		// Frames are contentless: the stream needs no more than a view.
 		a.events.Serve(w, r, id, revision)
+	case path == "/api/block" && r.Method == "GET":
+		a.blockFragment(w, r)
 	case path == "/api/export" && r.Method == "GET":
 		a.mu.Lock()
 		defer a.mu.Unlock()
@@ -355,7 +369,7 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		a.create(w, r, req, me)
 	case "list":
 		a.list(w, r)
-	case "open", "show", "set", "close", "share", "join", "participant":
+	case "open", "show", "set", "close", "share", "join", "participant", "timer":
 		it := a.loadOr404(w, req.ID)
 		if it == nil {
 			return
@@ -398,6 +412,8 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 			a.join(w, r, it, req, me)
 		case "participant":
 			a.participantAction(w, r, it, req)
+		case "timer":
+			a.timerAction(w, r, it, req)
 		}
 	default:
 		kit.Fail(w, http.StatusBadRequest, "Unknown action")
@@ -607,7 +623,7 @@ func (a *app) export(w http.ResponseWriter, r *http.Request, id, to string) {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		io.WriteString(w, exportMarkdown(it))
 	case "html":
-		body, err := renderPage(it)
+		body, err := a.renderPageAs(it, true)
 		if err != nil {
 			kit.Fail(w, http.StatusInternalServerError, "Could not render")
 			return
@@ -627,7 +643,7 @@ func exportMarkdown(it *item) string {
 	segs, _ := parseBody(it.Body)
 	for _, s := range segs {
 		if s.Block != nil {
-			b.WriteString(blockMarkdown(s.Block))
+			b.WriteString(blockMarkdownFor(s.Block, it))
 		} else {
 			b.WriteString(s.Text)
 		}
@@ -668,6 +684,9 @@ func participantsHTML(it *item) string {
 // renderPage renders the body: Markdown runs through the kit renderer,
 // block fences become their block's place on the page.
 func renderPage(it *item) (string, error) {
+	// Kept for the export path, which has no live app handle: embed and
+	// timer blocks render from the item alone; book/note show a placeholder
+	// there and their inline content on the live page (renderPageAs).
 	segs, err := parseBody(it.Body)
 	if err != nil {
 		return "", err
@@ -710,14 +729,14 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		main = kit.State("error", "This page is not shared with your network", "Ask the organizer for the link.")
 	default:
 		header = kit.ItemHeader(it.ID, it.Status, a.urlFor(r, it.ID))
-		body, err := renderPage(it)
+		body, err := a.renderPageAs(it, a.isOwner(r, it))
 		if err != nil {
 			body = kit.State("error", "This page cannot be shown", err.Error())
 		}
 		main = `<h1 class="desk-h1">` + html.EscapeString(it.Title) + `</h1>` + body +
 			`<p class="desk-footer">Revision <span data-page-revision>` + fmt.Sprint(it.Revision) +
 			`</span> · re-surface with <code>page open ` + html.EscapeString(it.ID) + `</code>.</p>` +
-			liveScript(a.base(r), it.ID)
+			liveScript(a.base(r), it.ID) + timerScriptFor(it.ID)
 	}
 	body := `<style>.page-block{border-style:dashed}</style>` +
 		kit.AppBar(tool, a.base(r)+"/", header, "") + `<main class="desk-main desk-narrow">` +
@@ -736,8 +755,7 @@ func liveScript(base, id string) string {
   const es = new EventSource(` + string(u) + `);
   es.onmessage = function(e){
     let f; try { f = JSON.parse(e.data); } catch (_) { return; }
-    if (!rev || f.revision <= Number(rev.textContent)) return;
-    if (!f.block) { location.reload(); return; }
+    if (!f.block) { if (rev && f.revision <= Number(rev.textContent)) return; location.reload(); return; }
     document.dispatchEvent(new CustomEvent('page-block', {detail: f}));
   };
 })();

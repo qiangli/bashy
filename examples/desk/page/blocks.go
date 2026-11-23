@@ -202,6 +202,8 @@ func parseBlock(spec string) (*block, error) {
 		if err := validEmbedRef(ref); err != nil {
 			return nil, err
 		}
+	case kind == "book" && ref != "" && !validBookRef(ref):
+		return nil, fmt.Errorf("block book: ref %q: use book:<id>/pN, e.g. book:sprint-537/p3", ref)
 	case ref != "" && !refRe.MatchString(ref):
 		return nil, fmt.Errorf("block %s: ref %q: use letters, digits, - _ . / :", kind, ref)
 	}
