@@ -188,3 +188,105 @@ func TestFaceSettingsFollowBlockReference(t *testing.T) {
 		t.Fatal("replacing a public reference did not discard its prior private settings")
 	}
 }
+
+func TestNativeFormFacesAndPreview(t *testing.T) {
+	_, a, key := classPageWithForm(t)
+	const peer = "192.0.2.50:5000"
+	owner := map[string]string{"X-Facilitator-Key": key}
+	w := ownerAction(t, a, key, `{"action":"block","id":"class","kind":"form","title":"Teams","definition":[{"id":"team","label":"Team name","kind":"text","required":true}]}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("add native form: %d %s", w.Code, w.Body)
+	}
+	formKey := a.items["class"].Natives["form-1"].Key
+	real := &door{t: t, a: a, peer: "192.0.2.51:5000"}
+	if real.join("River").Code != http.StatusSeeOther ||
+		real.answer("form-1", map[string]any{"team": "Real team"}).Code != http.StatusOK {
+		t.Fatal("participant could not join and answer the form")
+	}
+	session := do(a, "POST", "/api/action", `{"action":"organizer-session","id":"class"}`, peer, owner)
+	cookies := session.Result().Cookies()
+	if session.Code != http.StatusOK || len(cookies) != 1 {
+		t.Fatal("could not establish organizer browser session")
+	}
+	browser := map[string]string{"Cookie": cookies[0].Name + "=" + cookies[0].Value}
+	w = do(a, "GET", "/blue-fox", "", peer, browser)
+	for _, part := range []string{`data-face="organizer"`, `data-face="participant"`, "Close responses", "Real team"} {
+		if !strings.Contains(w.Body.String(), part) {
+			t.Errorf("native dual view missing %q", part)
+		}
+	}
+	if strings.Contains(w.Body.String(), formKey) {
+		t.Fatal("native owner key left the store")
+	}
+
+	w = do(a, "GET", "/blue-fox?view=participant", "", peer, browser)
+	preview := w.Result().Cookies()
+	if w.Code != http.StatusOK || len(preview) != 1 || !strings.Contains(w.Body.String(), `type="submit"`) {
+		t.Fatalf("preview did not show an active respondent: %d, cookies %d", w.Code, len(preview))
+	}
+	browser["Cookie"] += "; " + preview[0].Name + "=" + preview[0].Value
+	submission := `{"action":"answer","id":"class","block":"form-1","answers":{"team":"Preview team"}}`
+	if w = do(a, "POST", "/api/action?view=participant", submission, peer, browser); w.Code != http.StatusOK {
+		t.Fatalf("preview answer: %d %s", w.Code, w.Body)
+	}
+	w = do(a, "GET", "/api/block?id=class&block=form-1&view=participant", "", peer, browser)
+	if !strings.Contains(w.Body.String(), `value="Preview team"`) || strings.Contains(w.Body.String(), "Real team") {
+		t.Fatal("preview did not use its own answer")
+	}
+	if res := results(t, a, key, "form-1"); res.Count != 1 || res.Answers[0].Answers["team"] != "Real team" {
+		t.Fatal("preview changed the form's real tally")
+	}
+
+	for _, tc := range []struct {
+		name string
+		resp *httptest.ResponseRecorder
+		code int
+	}{
+		{"participant page", real.get("/blue-fox"), 200},
+		{"participant block", real.get("/api/block?id=class&block=form-1&view=organizer"), 200},
+		{"participant state", real.get("/api/state?id=class&view=organizer"), 200},
+		{"participant HTML export", real.get("/api/export?id=class&to=html"), 403},
+		{"participant Markdown export", real.get("/api/export?id=class&to=md"), 403},
+		{"owner HTML record", do(a, "GET", "/api/export?id=class&to=html", "", peer, owner), 200},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tc.resp.Body.String()
+			if tc.resp.Code != tc.code {
+				t.Fatalf("status %d, want %d", tc.resp.Code, tc.code)
+			}
+			for _, secret := range []string{key, formKey, `data-face="organizer"`, "data-native-control", "Preview team"} {
+				if strings.Contains(got, secret) {
+					t.Fatal("form key, organizer controls, or preview answer leaked")
+				}
+			}
+		})
+	}
+	closeJSON := `{"action":"block","id":"class","block":"form-1","kind":"close"}`
+	if do(a, "POST", "/api/action?view=participant", closeJSON, peer, browser).Code != http.StatusForbidden ||
+		do(a, "POST", "/api/action?view=organizer", closeJSON, peer, browser).Code != http.StatusOK {
+		t.Fatal("native controls did not require the organizer face")
+	}
+}
+
+func TestNativeDisplayProjectsOnlySelectedBlock(t *testing.T) {
+	_, a, key := classPageWithForm(t)
+	for _, raw := range []string{
+		`{"action":"block","id":"class","kind":"poll","block":"projected","title":"Projected poll","options":["a","b"]}`,
+		`{"action":"block","id":"class","kind":"poll","block":"hidden","title":"Hidden poll","options":["c","d"]}`,
+		`{"action":"set","id":"class","faces":{"projected":{"project":true}}}`,
+	} {
+		if w := ownerAction(t, a, key, raw); w.Code != 200 {
+			t.Fatalf("projector setup: %d %s", w.Code, w.Body)
+		}
+	}
+	w := do(a, "GET", "/blue-fox?view=display", "", "192.0.2.50:5000", nil)
+	out := w.Body.String()
+	if w.Code != 200 || !strings.Contains(out, "Projected poll") || !strings.Contains(out, `data-face="display"`) {
+		t.Fatal("selected poll missing from display")
+	}
+	for _, omitted := range []string{"Hidden poll", "<form", "data-native-control", "View as participant"} {
+		if strings.Contains(out, omitted) {
+			t.Errorf("projector contains %q", omitted)
+		}
+	}
+}

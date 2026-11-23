@@ -111,7 +111,9 @@ Until a kind's renderer lands its block renders as a labelled placeholder.
 Open that organizer link to see available faces side by side or in tabs.
 **View as participant** uses a separate preview identity. Add
 `?view=display` to the join link to open the projector page. Only the
-configured display faces appear there.
+configured display faces appear there. Preview answers stay in server
+memory and never become form responses. The organizer can open or close
+native forms and polls and control results visibility from the Organizer tab.
 
 Put only the participant URL in a Markdown block, for example
 `embed:/brainstorm/?session=ideation id=ideas`. A block with only organizer
@@ -132,6 +134,8 @@ settings using `page add -f agenda.md --faces faces.json` or
 
 A settings entry replaces the settings for that block. Use `null` to clear
 an entry. Settings stay in the page store. Keep the import file private.
+To project a poll tally, give its block id a settings entry with
+`"project": true`.
 Current Brainstorm and Demo Queue releases refuse browser framing. Open
 their face links in a separate tab, or set `link_only` to show only those links.
 

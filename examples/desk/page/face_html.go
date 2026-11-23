@@ -2,6 +2,7 @@ package main
 
 import (
 	"html"
+	"net/http"
 	"slices"
 	"strings"
 )
@@ -11,12 +12,10 @@ type blockFaceHTML struct {
 	body string
 }
 
-func renderBlockFaces(it *item, b *block, view pageFace, base string) string {
+func (a *app) renderBlockFaces(r *http.Request, it *item, b *block, view pageFace) string {
 	settings := it.facesFor(b)
-	if view == recordFace {
-		return blockHTML(b)
-	}
 	k := blockKinds[b.Kind]
+	native := nativeBlockLocked(it, b)
 	var faces []blockFaceHTML
 	add := func(face pageFace, content string) {
 		if content != "" && slices.Contains(k.Faces, string(face)) {
@@ -24,6 +23,19 @@ func renderBlockFaces(it *item, b *block, view pageFace, base string) string {
 		}
 	}
 	switch {
+	case native != nil:
+		if view == displayFace && !settings.Project {
+			return ""
+		}
+		for _, f := range a.nativeFaces(r, it, b, native, view) {
+			if f.face == recordFace {
+				faces = append(faces, f)
+			} else {
+				add(f.face, f.body)
+			}
+		}
+	case view == recordFace:
+		return blockHTML(b)
 	case k.Embed:
 		if view == organizerFace {
 			add(organizerFace, embedFace(b, organizerFace, settings.OrganizerURL, settings.LinkOnly, true))

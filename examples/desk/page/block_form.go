@@ -419,7 +419,7 @@ func (a *app) blockAdd(w http.ResponseWriter, r *http.Request, it *item, req act
 
 // blockSet is the organizer's open, close and results-visibility control.
 func (a *app) blockSet(w http.ResponseWriter, r *http.Request, it *item, req actionRequest) {
-	if !a.isOwner(r, it) {
+	if faceFor(r, a.canOrganize(r, it)) != organizerFace {
 		kit.Fail(w, http.StatusForbidden, "Only the organizer can change blocks")
 		return
 	}
@@ -454,7 +454,7 @@ func (a *app) blockSet(w http.ResponseWriter, r *http.Request, it *item, req act
 
 // blockResults is the organizer's results view.
 func (a *app) blockResults(w http.ResponseWriter, r *http.Request, it *item, req actionRequest) {
-	if !a.isOwner(r, it) {
+	if faceFor(r, a.canOrganize(r, it)) != organizerFace {
 		kit.Fail(w, http.StatusForbidden, "Only the organizer can read block results")
 		return
 	}
@@ -498,6 +498,14 @@ func (a *app) answer(w http.ResponseWriter, r *http.Request, it *item, req actio
 			kit.Fail(w, http.StatusBadRequest, err.Error())
 			return
 		}
+	}
+	if a.canOrganize(r, it) && faceFor(r, true) == participantFace {
+		if a.previews == nil {
+			a.previews = make(map[previewAnswerKey]map[string]any)
+		}
+		a.previews[previewAnswerKey{participant: p.Key, block: req.Block}] = answers
+		kit.WriteJSON(w, a.openView(r, it))
+		return
 	}
 	next := it.clone()
 	if next.Respondents == nil {
@@ -579,35 +587,49 @@ func nativeBlockLocked(it *item, b *block) *nativeBlock {
 	return nb
 }
 
-// blockFace renders one block for the caller: the organizer face for the
-// owner key, the participant face for an enrolled participant, a
-// read-only face otherwise. Kinds without a native renderer keep their
-// placeholder.
-func (a *app) blockFace(r *http.Request, it *item, b *block) string {
-	nb := nativeBlockLocked(it, b)
-	if nb == nil {
-		return blockHTML(b)
-	}
-	organizer := a.isOwner(r, it)
+type previewAnswerKey struct {
+	participant, block string
+}
+
+func (a *app) nativeFaces(r *http.Request, it *item, b *block, nb *nativeBlock, face pageFace) []blockFaceHTML {
 	caller := ""
-	if p, ok := requestParticipant(r); ok && !organizer {
+	if p, ok := requestParticipant(r); ok && face == participantFace {
 		caller = p.Key
 	}
 	res, err := a.nativeResultsLocked(it, b.ID, nb, caller)
 	if err != nil {
-		return nativeShell(b, "participant", html.EscapeString(nb.Question),
-			kit.State("error", "This block is not available right now", "The organizer's form app is not reachable."))
+		return []blockFaceHTML{{face, nativeShell(face, html.EscapeString(nb.Question),
+			kit.State("error", "This block is not available right now", "Check the connection to the form app."))}}
 	}
-	if organizer {
-		return organizerHTML(b, res)
+	switch face {
+	case organizerFace:
+		faces := []blockFaceHTML{
+			{organizerFace, nativeResultsHTML(b, res, organizerFace)},
+			{participantFace, participantHTML(b, res, false)},
+		}
+		if b.Kind == "poll" {
+			faces = append(faces, blockFaceHTML{displayFace, nativeDisplayHTML(res)})
+		}
+		return faces
+	case recordFace:
+		return []blockFaceHTML{{recordFace, nativeResultsHTML(b, res, recordFace)}}
+	case displayFace:
+		return []blockFaceHTML{{displayFace, nativeDisplayHTML(res)}}
+	default:
+		if a.canOrganize(r, it) {
+			res.mine = a.previews[previewAnswerKey{participant: caller, block: b.ID}]
+		}
+		return []blockFaceHTML{{participantFace, participantHTML(b, res, caller != "")}}
 	}
-	return participantHTML(b, res, caller != "")
 }
 
-func nativeShell(b *block, face, title, inner string) string {
-	return `<section class="desk-panel page-block page-native" id="block-` + html.EscapeString(b.ID) +
-		`" data-block="` + html.EscapeString(b.ID) + `" data-kind="` + html.EscapeString(b.Kind) +
-		`" data-face="` + face + `"><h2 class="desk-h2">` + title + `</h2>` + inner + `</section>`
+func nativeShell(face pageFace, title, inner string) string {
+	return `<section class="page-native" data-face="` + string(face) + `"><h2 class="desk-h2">` + title +
+		`</h2>` + inner + `</section>`
+}
+
+func nativeDisplayHTML(res *nativeResults) string {
+	return nativeShell(displayFace, html.EscapeString(res.Question), pollTallyHTML(res))
 }
 
 // participantHTML is the respondent's face: the ballot or form with the
@@ -647,13 +669,19 @@ func participantHTML(b *block, res *nativeResults, enrolled bool) string {
 		s.WriteString(`<p class="desk-muted" data-native-status="answered">Your answer is in; submit again to change it.</p>`)
 	}
 	if res.ResultsVisible && res.Kind == "poll" {
-		s.WriteString(`<ul class="page-tally" data-native-results>`)
-		for _, o := range res.Options {
-			s.WriteString(`<li>` + html.EscapeString(o.Option) + ` <strong>` + strconv.Itoa(o.Votes) + `</strong></li>`)
-		}
-		s.WriteString(`</ul><p class="desk-muted">` + strconv.Itoa(res.Count) + ` responses</p>`)
+		s.WriteString(pollTallyHTML(res))
 	}
-	return nativeShell(b, "participant", html.EscapeString(res.Question), s.String())
+	return nativeShell(participantFace, html.EscapeString(res.Question), s.String())
+}
+
+func pollTallyHTML(res *nativeResults) string {
+	var s strings.Builder
+	s.WriteString(`<ul class="page-tally" data-native-results>`)
+	for _, o := range res.Options {
+		s.WriteString(`<li>` + html.EscapeString(o.Option) + ` <strong>` + strconv.Itoa(o.Votes) + `</strong></li>`)
+	}
+	s.WriteString(`</ul><p class="desk-muted">` + strconv.Itoa(res.Count) + ` responses</p>`)
+	return s.String()
 }
 
 // answerFieldHTML renders one field with the caller's saved answer.
@@ -701,9 +729,9 @@ func answerFieldHTML(f formField, saved any, disabled string) string {
 	return s.String()
 }
 
-// organizerHTML is the results view: option -> votes (handles) and
+// nativeResultsHTML renders option -> votes (handles) and
 // handle -> answer; handles are omitted for an anonymous block.
-func organizerHTML(b *block, res *nativeResults) string {
+func nativeResultsHTML(b *block, res *nativeResults, face pageFace) string {
 	var s strings.Builder
 	visible := "hidden from participants"
 	if res.ResultsVisible {
@@ -750,9 +778,20 @@ func organizerHTML(b *block, res *nativeResults) string {
 		}
 		s.WriteString(`</tbody></table>`)
 	}
-	s.WriteString(`<p class="desk-muted">Controls: <code>page block open|close|show-results|hide-results PAGE ` +
-		html.EscapeString(b.ID) + `</code></p>`)
-	return nativeShell(b, "organizer", html.EscapeString(res.Question), s.String())
+	if face == organizerFace {
+		stateAction, stateLabel := "open", "Open responses"
+		if res.Status == "open" {
+			stateAction, stateLabel = "close", "Close responses"
+		}
+		resultsAction, resultsLabel := "show-results", "Show results"
+		if res.ResultsVisible {
+			resultsAction, resultsLabel = "hide-results", "Hide results"
+		}
+		s.WriteString(`<div class="desk-row" data-native-control-block="` + html.EscapeString(b.ID) + `">` +
+			`<button type="button" class="desk-copy" data-native-control="` + stateAction + `">` + stateLabel + `</button>` +
+			`<button type="button" class="desk-copy" data-native-control="` + resultsAction + `">` + resultsLabel + `</button></div>`)
+	}
+	return nativeShell(face, html.EscapeString(res.Question), s.String())
 }
 
 func fieldTitle(f formField, res *nativeResults) string {
@@ -860,7 +899,7 @@ func (a *app) serveBlock(w http.ResponseWriter, r *http.Request) {
 	if it == nil || !a.viewOr403(w, r, it) {
 		return
 	}
-	r, done, ok := a.knownParticipantLocked(w, r, it)
+	r, done, ok := a.readFaceLocked(w, r, it)
 	if !ok {
 		return
 	}
@@ -870,7 +909,7 @@ func (a *app) serveBlock(w http.ResponseWriter, r *http.Request) {
 	for _, b := range blocksOf(it.Body) {
 		if b.ID == id {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			io.WriteString(w, a.blockFace(r, it, &b))
+			io.WriteString(w, a.renderBlockFaces(r, it, &b, faceFor(r, a.canOrganize(r, it))))
 			return
 		}
 	}
@@ -879,20 +918,12 @@ func (a *app) serveBlock(w http.ResponseWriter, r *http.Request) {
 
 // nativeScript submits answers and swaps a block in place when its live
 // frame arrives.
-func nativeScript(base, id string) string {
-	cfg, _ := json.Marshal(map[string]string{"action": base + "/api/action", "block": base + "/api/block", "id": id})
+func nativeScript(base, id string, face pageFace) string {
+	cfg, _ := json.Marshal(map[string]string{"action": base + "/api/action?view=" + string(face), "id": id})
 	return `<script>
 (function(){
   const cfg = ` + string(cfg) + `;
   function alertMsg(text){ const el = document.querySelector('[data-desk-alert]'); if (el) { el.textContent = text; el.setAttribute('data-kind', text ? 'error' : ''); } }
-  async function refresh(block){
-    const r = await fetch(cfg.block + '?id=' + encodeURIComponent(cfg.id) + '&block=' + encodeURIComponent(block), {credentials: 'same-origin'});
-    if (!r.ok) return;
-    const html = await r.text();
-    const old = document.querySelector('[data-block="' + CSS.escape(block) + '"]');
-    if (old) old.outerHTML = html;
-  }
-  document.addEventListener('page-block', function(e){ if (e.detail && e.detail.block) refresh(e.detail.block); });
   document.addEventListener('submit', async function(e){
     const form = e.target.closest('[data-native-block]');
     if (!form) return;
@@ -916,8 +947,36 @@ func nativeScript(base, id string) string {
       if (!r.ok) { alertMsg((body.error && body.error.message) || 'Could not save your answer.'); return; }
       alertMsg('');
       if (window.deskToast) window.deskToast('Answer saved.', 'ok');
-      refresh(block);
+      document.dispatchEvent(new CustomEvent('page-block', {detail: {block}}));
     } catch (_) { alertMsg('Could not reach the page server; your answer is still on this page.'); }
+  });
+})();
+</script>`
+}
+
+func nativeControlsScript(base, id string) string {
+	cfg, _ := json.Marshal(map[string]string{"action": base + "/api/action?view=organizer", "id": id})
+	return `<script>
+(function () {
+  const cfg = ` + string(cfg) + `;
+  document.addEventListener('click', async e => {
+    const button = e.target.closest('[data-native-control]');
+    if (!button) return;
+    const block = button.closest('[data-native-control-block]').dataset.nativeControlBlock;
+    button.disabled = true;
+    try {
+      const response = await fetch(cfg.action, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'block', id: cfg.id, block, kind: button.dataset.nativeControl})
+      });
+      if (!response.ok) throw new Error();
+      document.dispatchEvent(new CustomEvent('page-block', {detail: {block}}));
+    } catch (_) {
+      if (window.deskToast) window.deskToast('Could not update the block.', 'error');
+    } finally {
+      button.disabled = false;
+    }
   });
 })();
 </script>`

@@ -140,6 +140,7 @@ type app struct {
 	joinOptions pageJoinOptions
 	lanBase     string
 	formURL     string // the form app's origin (PAGE_FORM_URL)
+	previews    map[previewAnswerKey]map[string]any
 }
 
 // clone deep-copies the item so a failed save never leaves the in-memory
@@ -408,7 +409,11 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		if a.canView(r, it) {
 			var done func()
 			var ok bool
-			r, done, ok = a.knownParticipantLocked(w, r, it)
+			if req.Action == "answer" {
+				r, done, ok = a.readFaceLocked(w, r, it)
+			} else {
+				r, done, ok = a.knownParticipantLocked(w, r, it)
+			}
 			if !ok {
 				return
 			}
@@ -681,7 +686,9 @@ func (a *app) export(w http.ResponseWriter, r *http.Request, id, to string) {
 		w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 		io.WriteString(w, a.exportMarkdownLocked(it))
 	case "html":
-		body, err := renderPage(it, recordFace, func(b *block) string { return a.blockFace(r, it, b) })
+		body, err := renderPage(it, recordFace, func(b *block) string {
+			return a.renderBlockFaces(r, it, b, recordFace)
+		})
 		if err != nil {
 			kit.Fail(w, http.StatusInternalServerError, "Could not render")
 			return
@@ -795,11 +802,9 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		header = kit.ItemHeader(it.ID, it.Status, a.urlFor(r, it.ID))
 		owner := a.canOrganize(r, it)
 		face := faceFor(r, owner)
+		base := kit.PublicPrefix(r, a.prefix)
 		body, err := renderPage(it, face, func(b *block) string {
-			if face != displayFace && nativeBlockLocked(it, b) != nil {
-				return a.blockFace(r, it, b)
-			}
-			return renderBlockFaces(it, b, face, "")
+			return a.renderBlockFaces(r, it, b, face)
 		})
 		if err != nil {
 			body = kit.State("error", "This page cannot be shown", "Ask the organizer to check the page body.")
@@ -807,15 +812,15 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		if face == displayFace {
 			revision := `<span hidden data-page-revision>` + fmt.Sprint(it.Revision) + `</span>`
 			return code, kit.Page(tool, it.Title, pageFaceStyle+`<main class="desk-main page-display"><h1>`+
-				html.EscapeString(it.Title)+`</h1>`+body+revision+liveScript(kit.PublicPrefix(r, a.prefix), it.ID, face)+`</main>`)
+				html.EscapeString(it.Title)+`</h1>`+body+revision+liveScript(base, it.ID, face)+`</main>`)
 		}
 		if face == organizerFace {
-			faceScript = faceTabsScript
+			faceScript = faceTabsScript + nativeControlsScript(base, it.ID)
 		}
 		main = faceNavigation(r, owner, face) + `<h1 class="desk-h1">` + html.EscapeString(it.Title) + `</h1>` + body +
 			`<p class="desk-footer">Revision <span data-page-revision>` + fmt.Sprint(it.Revision) +
 			`</span> · re-surface with <code>page open ` + html.EscapeString(it.ID) + `</code>.</p>` +
-			liveScript(kit.PublicPrefix(r, a.prefix), it.ID, face) + nativeScript(kit.PublicPrefix(r, a.prefix), it.ID)
+			liveScript(base, it.ID, face) + nativeScript(base, it.ID, face)
 	}
 	body := pageFaceStyle + kit.AppBar(tool, a.base(r)+"/", header, "") + `<main class="desk-main page-main">` +
 		`<div data-desk-alert class="desk-alert"></div>` + main + `</main>` + faceScript
@@ -827,8 +832,19 @@ func (a *app) page(r *http.Request) (int, []byte) {
 func liveScript(base, id string, face pageFace) string {
 	q := url.Values{"id": {id}, "view": {string(face)}}
 	u, _ := json.Marshal(base + "/api/events?" + q.Encode())
+	blockURL, _ := json.Marshal(base + "/api/block?" + q.Encode())
 	return `<script>
 (function(){
+  document.addEventListener('page-block', async function(e){
+    const block = e.detail && e.detail.block;
+    if (!block) return;
+    const old = document.getElementById('block-' + block);
+    if (!old) return;
+    try {
+      const r = await fetch(` + string(blockURL) + ` + '&block=' + encodeURIComponent(block));
+      if (r.ok) old.outerHTML = await r.text();
+    } catch (_) {}
+  });
   if (!window.EventSource) return;
   const rev = document.querySelector('[data-page-revision]');
   const es = new EventSource(` + string(u) + `);
