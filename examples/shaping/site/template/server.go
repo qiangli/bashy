@@ -149,6 +149,12 @@ func (h *routeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Verified bashy agents get a header naming the agent-only entry points;
+	// the response itself is identical either way (no cloaking).
+	if kid, ok := h.site.VerifyAgent(r); ok {
+		w.Header().Set(VerifiedAgentHeader, h.site.verifiedAgentValue(kid))
+	}
+
 	reqPath := r.URL.Path
 	if reqPath == "" {
 		reqPath = "/"

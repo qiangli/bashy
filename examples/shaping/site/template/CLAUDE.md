@@ -13,3 +13,4 @@ Content and shaping rules for this `<owner>/site` module:
   ```
   When a wish has no `element`, remove `.wish` if present. The frozen `checks/stale-base.bsh` check compares `revision=<rev>` against `HEAD~1` and refuses a stale revision with `stale, re-read`.
 - **Checks.** Do not edit `contract.bsh` or `checks/*.bsh`; the verifier runs the base commit's frozen checks in a scrubbed environment.
+- **Verified bashy agents (`botauth.go`).** Optional `site.json` `trusted_bot_keys` (Ed25519 OKP JWKs; get the owner's with `bashy site key`) and `trusted_key_directories` (allowlisted https key-directory URLs; nothing else is ever fetched). A request with a valid RFC 9421 `web-bot-auth` signature from a trusted key gets a `Bashy-Verified-Agent` header naming the shape and MCP entry points. Verification never changes content: body, status and `ETag` are identical for signed, unsigned and failed requests, and a bad signature is never refused.

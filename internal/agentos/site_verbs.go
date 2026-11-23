@@ -2,18 +2,22 @@ package agentos
 
 import (
 	"context"
+	"crypto/ed25519"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/qiangli/coreutils/tool"
 	"github.com/qiangli/yoke/cmds/fetch/agentwire"
+	"github.com/qiangli/yoke/pkg/webbotauth"
 )
 
 const siteSkillIndex = "/.well-known/agent-skills/index.json"
@@ -39,7 +43,7 @@ func siteGet(ctx context.Context, client *http.Client, target *url.URL, accept s
 	if err != nil {
 		return siteResponse{}, err
 	}
-	req.Header.Set("User-Agent", "bashy-site")
+	req.Header.Set("User-Agent", webbotauth.UserAgent("bashy-site", tool.Version))
 	req.Header.Set("Accept", accept)
 	resp, err := client.Do(req)
 	if err != nil {
@@ -64,7 +68,29 @@ type siteDiscovery struct {
 	BashyShaped map[string]string     `json:"bashy_shaped"`
 	Links       []agentwire.AgentLink `json:"links"`
 	AgentBlock  string                `json:"agent_block"`
-	fields      map[string]string
+	// VerifiedAgent is the site's Bashy-Verified-Agent answer to a signed
+	// request (keyid plus the agent-only entry points); absent otherwise.
+	VerifiedAgent map[string]string `json:"verified_agent,omitempty"`
+	fields        map[string]string
+}
+
+// verifiedAgentFields parses `keyid="..."; shape="..."; mcp="..."`.
+func verifiedAgentFields(header string) map[string]string {
+	if header == "" {
+		return nil
+	}
+	out := map[string]string{}
+	for _, part := range strings.Split(header, ";") {
+		key, value, ok := strings.Cut(strings.TrimSpace(part), "=")
+		if !ok {
+			continue
+		}
+		if unq, err := strconv.Unquote(value); err == nil {
+			value = unq
+		}
+		out[key] = value
+	}
+	return out
 }
 
 func parseAgentsTxt(body string) (map[string]string, string) {
@@ -118,6 +144,7 @@ func (s *siteDiscovery) pageField(base *url.URL, key, value string) {
 func (s *siteDiscovery) pageHeaders(page siteResponse) bool {
 	shaped := strings.Join(page.header.Values("Bashy-Shaped"), ", ")
 	s.BashyShaped = agentwire.ShapedFields(shaped)
+	s.VerifiedAgent = verifiedAgentFields(page.header.Get("Bashy-Verified-Agent"))
 	for _, key := range []string{"module", "skill", "mcp", "source", "shape"} {
 		s.fill(page.url, key, s.BashyShaped[key])
 	}
@@ -249,6 +276,11 @@ func newSiteCmd() *cobra.Command {
 		Use: "site", Short: "Discover and use agent-ready websites",
 		SilenceUsage: true, SilenceErrors: true,
 	}
+	var sign bool
+	var signatureAgent string
+	root.PersistentFlags().BoolVar(&sign, "sign", false, "sign requests with the outpost identity (Web Bot Auth; default $"+webbotauth.EnvSign+")")
+	root.PersistentFlags().StringVar(&signatureAgent, "signature-agent", "", "https URL of this agent's key directory, sent as Signature-Agent (default $"+webbotauth.EnvAgent+")")
+	root.AddCommand(newSiteKeyCmd())
 	for _, verb := range []struct{ name, summary string }{
 		{"explore", "Discover a site's agent channels"},
 		{"attach", "Admit a site skill and record the site in the knowledge base"},
@@ -265,6 +297,13 @@ func newSiteCmd() *cobra.Command {
 					return err
 				}
 				client := &http.Client{Timeout: 15 * time.Second}
+				if webbotauth.Enabled(sign) {
+					signer, err := webbotauth.FromEnv(signatureAgent)
+					if err != nil {
+						return fmt.Errorf("--sign: %w", err)
+					}
+					client.Transport = &webbotauth.Transport{Signer: signer}
+				}
 				switch verb.name {
 				case "explore":
 					s, err := discoverSite(cmd.Context(), client, page)
@@ -284,6 +323,9 @@ func newSiteCmd() *cobra.Command {
 						if value := s.fields[key]; value != "" {
 							fmt.Fprintf(cmd.OutOrStdout(), "%s: %s\n", key, value)
 						}
+					}
+					if v := s.VerifiedAgent; v != nil {
+						fmt.Fprintf(cmd.OutOrStdout(), "verified_agent: keyid=%s shape=%s mcp=%s\n", v["keyid"], v["shape"], v["mcp"])
 					}
 					return nil
 				case "attach":
@@ -309,4 +351,33 @@ func newSiteCmd() *cobra.Command {
 
 func siteJSON(cmd *cobra.Command, value any) error {
 	return json.NewEncoder(cmd.OutOrStdout()).Encode(value)
+}
+
+// newSiteKeyCmd prints the public half of the identity `--sign` uses, as the
+// JWK a site owner trusts in site.json (trusted_bot_keys).
+func newSiteKeyCmd() *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use: "key", Short: "Print the public key and keyid that --sign uses, for a site's trusted_bot_keys",
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			path, err := webbotauth.KeyPath()
+			if err != nil {
+				return err
+			}
+			key, err := webbotauth.LoadKey(path)
+			if err != nil {
+				return err
+			}
+			jwk := webbotauth.PublicJWK(key.Public().(ed25519.PublicKey))
+			if asJSON {
+				return siteJSON(cmd, map[string]any{"kid": jwk.Kid, "jwk": jwk, "trusted_bot_keys": []webbotauth.JWK{jwk}})
+			}
+			line, _ := json.Marshal(jwk)
+			fmt.Fprintf(cmd.OutOrStdout(), "keyid: %s\nsite.json: \"trusted_bot_keys\": [%s]\n", jwk.Kid, line)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "emit machine-readable output")
+	return cmd
 }

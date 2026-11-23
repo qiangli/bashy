@@ -20,6 +20,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // Assets holds the module's embedded site.json and content/*.md files so an
@@ -42,6 +43,10 @@ type Config struct {
 	Shape           string    `json:"shape,omitempty"`
 	AgentUserAgents []string  `json:"agent_user_agents,omitempty"`
 	Nav             []NavItem `json:"nav"`
+	// Verified bashy agents (botauth.go): Ed25519 keys trusted directly,
+	// and allowlisted key directory URLs a signed request may name.
+	TrustedBotKeys        []TrustedBotKey `json:"trusted_bot_keys,omitempty"`
+	TrustedKeyDirectories []string        `json:"trusted_key_directories,omitempty"`
 }
 
 var DefaultAgentUserAgents = []string{"Claude-User", "ClaudeCode", "claude-code", "Codex", "codex-cli", "Gemini-CLI", "gemini-cli", "OpenCode", "opencode", "ChatGPT-User", "OAI-SearchBot", "Perplexity-User", "Google-Extended", "bashy-fetch", "bashy-site"}
@@ -129,6 +134,9 @@ type Site struct {
 	Config Config
 	Pages  []*Page
 	ByPath map[string]*Page
+
+	botOnce sync.Once
+	bot     *botVerifier
 }
 
 var sectionIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
@@ -178,6 +186,9 @@ func LoadFS(fsys fs.FS) (*Site, error) {
 		cfg.Nav = []NavItem{}
 	}
 	cfg.applyDefaults()
+	if err := validateBotTrust(&cfg); err != nil {
+		return nil, err
+	}
 
 	entries, err := fs.ReadDir(fsys, "content")
 	if err != nil {

@@ -2,8 +2,11 @@ package agentos
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,7 +17,10 @@ import (
 	"sync"
 	"testing"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/qiangli/yoke/pkg/kb"
+	"github.com/qiangli/yoke/pkg/webbotauth"
 )
 
 const (
@@ -233,5 +239,74 @@ func TestSiteVerbsRecipeRefusals(t *testing.T) {
 				t.Fatalf("expected the recipe to be printed and refused, got %q %v", out, err)
 			}
 		})
+	}
+}
+
+func TestSiteVerbsUserAgentSignAndKey(t *testing.T) {
+	var mu sync.Mutex
+	var seen []http.Header
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen = append(seen, r.Header.Clone())
+		mu.Unlock()
+		if r.Header.Get("Signature-Input") != "" {
+			w.Header().Set("Bashy-Verified-Agent", `keyid="k1"; shape="https://site.example/?shape=open"; mcp="https://site.example/mcp"`)
+		}
+		if r.URL.Path != "/agents.txt" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprintf(w, "site: /\n\n%s", fixtureAgentBlock)
+	}))
+	defer srv.Close()
+	t.Setenv(webbotauth.EnvSign, "")
+	t.Setenv(webbotauth.EnvAgent, "")
+
+	if _, err := siteCLI(t, "explore", srv.URL+"/"); err != nil {
+		t.Fatal(err)
+	}
+	for _, h := range seen {
+		if !strings.HasPrefix(h.Get("User-Agent"), "bashy-site") || h.Get("Signature") != "" {
+			t.Fatalf("unsigned explore sent UA %q, Signature %q", h.Get("User-Agent"), h.Get("Signature"))
+		}
+	}
+
+	_, priv, _ := ed25519.GenerateKey(rand.Reader)
+	block, _ := ssh.MarshalPrivateKey(priv, "outpost@test")
+	keyPath := filepath.Join(t.TempDir(), "ssh_host_ed25519")
+	if err := os.WriteFile(keyPath, pem.EncodeToMemory(block), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(webbotauth.EnvKey, keyPath)
+	kid := webbotauth.Thumbprint(priv.Public().(ed25519.PublicKey))
+
+	seen = nil
+	agent := "https://agent.example" + webbotauth.DirectoryPath
+	out, err := siteCLI(t, "explore", "--json", "--sign", "--signature-agent", agent, srv.URL+"/")
+	var found siteDiscovery
+	if err != nil || json.Unmarshal([]byte(out), &found) != nil || found.VerifiedAgent["keyid"] != "k1" || found.VerifiedAgent["mcp"] != "https://site.example/mcp" {
+		t.Fatalf("signed explore: %s %v", out, err)
+	}
+	if len(seen) == 0 {
+		t.Fatal("no requests")
+	}
+	for _, h := range seen {
+		if in := h.Get("Signature-Input"); !strings.Contains(in, `keyid="`+kid+`"`) || !strings.Contains(in, `tag="web-bot-auth"`) || h.Get("Signature-Agent") != `"`+agent+`"` {
+			t.Fatalf("signed explore sent Signature-Input %q, Signature-Agent %q", in, h.Get("Signature-Agent"))
+		}
+	}
+
+	out, err = siteCLI(t, "key", "--json")
+	var key struct {
+		Kid            string
+		TrustedBotKeys []webbotauth.JWK `json:"trusted_bot_keys"`
+	}
+	if err != nil || json.Unmarshal([]byte(out), &key) != nil || key.Kid != kid || len(key.TrustedBotKeys) != 1 || key.TrustedBotKeys[0].Kid != kid {
+		t.Fatalf("site key: %s %v", out, err)
+	}
+
+	t.Setenv(webbotauth.EnvKey, filepath.Join(t.TempDir(), "absent"))
+	if _, err := siteCLI(t, "explore", "--sign", srv.URL+"/"); err == nil || !strings.Contains(err.Error(), "no outpost identity") {
+		t.Fatalf("missing key: %v", err)
 	}
 }
