@@ -185,6 +185,25 @@ func faceFor(r *http.Request, owner bool) pageFace {
 	}
 }
 
+func (a *app) canOrganize(r *http.Request, it *item) bool {
+	return a.isOwner(r, it) || a.organizerCookie(r, it)
+}
+
+// readFaceLocked applies the same identity rules to live reads as the
+// initial navigation. Display viewers do not enroll as participants.
+func (a *app) readFaceLocked(w http.ResponseWriter, r *http.Request, it *item) (*http.Request, func(), bool) {
+	owner := a.canOrganize(r, it)
+	switch faceFor(r, owner) {
+	case displayFace:
+		return r, func() {}, true
+	case participantFace:
+		if owner {
+			return a.previewParticipant(w, r, it), func() {}, true
+		}
+	}
+	return a.knownParticipantLocked(w, r, it)
+}
+
 func (a *app) organizerCookie(r *http.Request, it *item) bool {
 	c, err := r.Cookie("page-organizer-" + it.ID)
 	return err == nil && it.Owner != "" && kit.Grant(c.Value, pageToken(it, "organizer"))

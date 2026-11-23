@@ -269,7 +269,7 @@ func loopbackPeer(r *http.Request) bool {
 // canView is the audience gate for reads (page, show, state, events): the
 // owner always; loopback peers always; LAN peers only for a lan page.
 func (a *app) canView(r *http.Request, it *item) bool {
-	return a.isOwner(r, it) || a.organizerCookie(r, it) || loopbackPeer(r) || it.Audience == audienceLAN
+	return a.canOrganize(r, it) || loopbackPeer(r) || it.Audience == audienceLAN
 }
 
 func (a *app) viewOr403(w http.ResponseWriter, r *http.Request, it *item) bool {
@@ -333,12 +333,14 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	case path == "/api/state" && r.Method == "GET":
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		kit.ParticipantCookie(w, r, "page-participant")
 		it := a.loadOr404(w, r.URL.Query().Get("id"))
 		if it == nil || !a.viewOr403(w, r, it) {
 			return
 		}
-		r, done, ok := a.knownParticipantLocked(w, r, it)
+		if r.URL.Query().Get("view") != string(displayFace) && !a.canOrganize(r, it) {
+			kit.ParticipantCookie(w, r, "page-participant")
+		}
+		r, done, ok := a.readFaceLocked(w, r, it)
 		if !ok {
 			return
 		}
@@ -352,7 +354,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			a.mu.Unlock()
 			return
 		}
-		r, done, ok := a.knownParticipantLocked(w, r, it)
+		r, done, ok := a.readFaceLocked(w, r, it)
 		revision := it.Revision
 		a.mu.Unlock()
 		if !ok {
@@ -791,7 +793,7 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		main = kit.State("error", "This page is not shared with your network", "Ask the organizer for the link.")
 	default:
 		header = kit.ItemHeader(it.ID, it.Status, a.urlFor(r, it.ID))
-		owner := a.isOwner(r, it) || a.organizerCookie(r, it)
+		owner := a.canOrganize(r, it)
 		face := faceFor(r, owner)
 		body, err := renderPage(it, face, func(b *block) string {
 			if face != displayFace && nativeBlockLocked(it, b) != nil {
@@ -805,7 +807,7 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		if face == displayFace {
 			revision := `<span hidden data-page-revision>` + fmt.Sprint(it.Revision) + `</span>`
 			return code, kit.Page(tool, it.Title, pageFaceStyle+`<main class="desk-main page-display"><h1>`+
-				html.EscapeString(it.Title)+`</h1>`+body+revision+liveScript(kit.PublicPrefix(r, a.prefix), it.ID)+`</main>`)
+				html.EscapeString(it.Title)+`</h1>`+body+revision+liveScript(kit.PublicPrefix(r, a.prefix), it.ID, face)+`</main>`)
 		}
 		if face == organizerFace {
 			faceScript = faceTabsScript
@@ -813,7 +815,7 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		main = faceNavigation(r, owner, face) + `<h1 class="desk-h1">` + html.EscapeString(it.Title) + `</h1>` + body +
 			`<p class="desk-footer">Revision <span data-page-revision>` + fmt.Sprint(it.Revision) +
 			`</span> · re-surface with <code>page open ` + html.EscapeString(it.ID) + `</code>.</p>` +
-			liveScript(kit.PublicPrefix(r, a.prefix), it.ID) + nativeScript(kit.PublicPrefix(r, a.prefix), it.ID)
+			liveScript(kit.PublicPrefix(r, a.prefix), it.ID, face) + nativeScript(kit.PublicPrefix(r, a.prefix), it.ID)
 	}
 	body := pageFaceStyle + kit.AppBar(tool, a.base(r)+"/", header, "") + `<main class="desk-main page-main">` +
 		`<div data-desk-alert class="desk-alert"></div>` + main + `</main>` + faceScript
@@ -822,8 +824,9 @@ func (a *app) page(r *http.Request) (int, []byte) {
 
 // liveScript follows the page's event stream. The skeleton reloads on a
 // whole-page frame; block renderers re-fetch only their own block.
-func liveScript(base, id string) string {
-	u, _ := json.Marshal(base + "/api/events?id=" + id)
+func liveScript(base, id string, face pageFace) string {
+	q := url.Values{"id": {id}, "view": {string(face)}}
+	u, _ := json.Marshal(base + "/api/events?" + q.Encode())
 	return `<script>
 (function(){
   if (!window.EventSource) return;

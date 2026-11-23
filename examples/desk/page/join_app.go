@@ -111,7 +111,7 @@ func (a *app) joinPage(w http.ResponseWriter, r *http.Request, path string) {
 		return
 	}
 	id, title, code := it.ID, it.Title, it.JoinCode
-	owner := a.isOwner(r, it) || a.organizerCookie(r, it)
+	owner := a.canOrganize(r, it)
 	a.mu.Unlock()
 	canonical := publicRoot + "/?id=" + id
 	if code != "" {

@@ -99,14 +99,16 @@ func embedFace(b *block, face pageFace, raw string, linkOnly, openLink bool) str
 		permissions += " allow-forms"
 	}
 	ref := html.EscapeString(raw)
-	isolation := ""
+	source := ` src="` + ref + `"`
 	if face == organizerFace {
-		isolation = " credentialless"
+		// Only start the private face in a browser that isolates its
+		// cookies and session storage from the participant face.
+		source = ` hidden credentialless data-organizer-src="` + ref + `"`
 	}
 	var out string
 	if !linkOnly {
 		out = `<iframe class="page-embed" title="` + html.EscapeString(title+" · "+faceTitle(face)) +
-			`" src="` + ref + `" sandbox="` + permissions + `" referrerpolicy="no-referrer"` + isolation + `></iframe>`
+			`"` + source + ` sandbox="` + permissions + `" referrerpolicy="no-referrer"></iframe>`
 	}
 	if openLink || linkOnly {
 		out += `<p><a href="` + ref + `" target="_blank" rel="noopener noreferrer">Open ` +
@@ -120,6 +122,7 @@ const pageFaceStyle = `<style>
 .page-view-nav{display:flex;flex-wrap:wrap;gap:1rem;margin-block:1rem}
 .page-block{border-style:dashed}
 .page-embed{display:block;width:100%;min-height:22rem;border:0}
+.page-embed[hidden]{display:none}
 .page-display{max-width:none;font-size:1.6rem}
 .page-display h1{font-size:2.5rem}
 .page-display .page-embed{min-height:66vh}
@@ -138,6 +141,12 @@ const pageFaceStyle = `<style>
 
 const faceTabsScript = `<script>
 (function () {
+  if ('credentialless' in HTMLIFrameElement.prototype) {
+    document.querySelectorAll('iframe[data-organizer-src]').forEach(frame => {
+      frame.src = frame.dataset.organizerSrc;
+      frame.hidden = false;
+    });
+  }
   function select(tabs, tab) {
     tabs.forEach(other => {
       const active = other === tab;

@@ -82,7 +82,7 @@ func TestPageFaceDisclosure(t *testing.T) {
 
 	organizer := do(a, "GET", "/roles?view=organizer", "", peer, organizerHeaders)
 	view := organizer.Body.String()
-	for _, part := range []string{organizerURL, boardURL, queueURL, projectorURL,
+	for _, part := range []string{`credentialless data-organizer-src="` + organizerURL, `src="` + boardURL, queueURL, projectorURL,
 		`role="tab"`, `>Organizer</button>`, `>Participant</button>`, `>Display</button>`, "View as participant"} {
 		if organizer.Code != 200 || !strings.Contains(view, part) {
 			t.Errorf("organizer face missing %q", part)

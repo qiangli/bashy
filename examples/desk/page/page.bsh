@@ -22,10 +22,10 @@ A page is Markdown written by the organizer plus blocks, one line each in a
 Kinds: poll, form, book, note, board, chart (an item another desk app owns),
 timer, here, hands (page-local) and embed (a same-origin path or URL).
 
-- `bashy page add [-f FILE|-] [--title T] [--audience host|lan|satellite] [--id ID] [--code CODE]` creates a page; prints id, URL, status and the owner key once.
+- `bashy page add [-f FILE|-] [--faces FILE] [--title T] [--audience host|lan|satellite] [--id ID] [--code CODE]` creates a page and prints the private organizer link once.
 - `bashy page open ID` prints the available join links, a QR for each, and the bare code.
 - `bashy page show ID` reads title, Markdown, blocks, audience, participants (handle and auth only) and revision.
-- `bashy page set ID [-f FILE|-] [--title T] [--audience A]` changes the page; every save bumps the revision and pushes a live frame.
+- `bashy page set ID [-f FILE|-] [--faces FILE] [--title T] [--audience A]` changes the page; every save bumps the revision and pushes a live frame.
 - `bashy page list` lists pages; `bashy page share ID` mints a single-use invite link; `bashy page close ID` ends the page.
 - `bashy page export ID --to md|html [-o FILE]` writes the record (handles, never addresses).
 - `bashy page serve --lan --port PORT` listens on a fixed LAN port. Without `--lan`, the default is loopback port 18113.
@@ -33,6 +33,12 @@ timer, here, hands (page-local) and embed (a same-origin path or URL).
 - `bashy page block add poll ID --options a,b,c [--title Q] [--votes N] [--anonymous] [--results-visible] [--closed]` and `bashy page block add form ID --def FILE` create the item in the form app and add its block; each page identity is one respondent, a re-vote replaces.
 - `bashy page block open|close|show-results|hide-results ID BLOCK` controls a poll or form block; `bashy page block results ID BLOCK` prints option -> votes (handles) and handle -> answer.
 - `bashy page publish-outpost [--public] [--dry-run] [--json]` registers the fixed page listener with outpost identity enabled. Publish before starting the shared listener.
+
+Put participant URLs in the Markdown fences. Keep private organizer and
+projector URLs in the `--faces` JSON file, keyed by block id, using
+`organizer_url` and `display_url`. Open the organizer link for all faces
+and the participant preview. Append `?view=display` to the join link for the
+projector page.
 ~~~
 
 set -euo pipefail
