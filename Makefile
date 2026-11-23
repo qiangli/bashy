@@ -62,7 +62,7 @@ test-bash-container-mode: FORCE
 verify-bashy-scratch: FORCE
 	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag verify-bashy-scratch
 
-# Gate package initialization and 100 background jobs on Linux.
+# Gate certified bsh package initialization and 100 background jobs on Linux.
 test-startup-linux: FORCE
 	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-startup-linux
 
