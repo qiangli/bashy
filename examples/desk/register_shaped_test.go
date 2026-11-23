@@ -56,7 +56,7 @@ func TestDeskRegisterScriptsUsePublicShapedAppPath(t *testing.T) {
 				t.Fatalf("app list lacks registered shaped app %s:\n%s", name, list)
 			}
 
-			if name == "viewer" || name == "chart" || name == "calendar" {
+			if name == "viewer" || name == "chart" || name == "calendar" || name == "page" {
 				assertRegisteredGenie(t, f, name)
 			}
 
