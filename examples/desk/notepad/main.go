@@ -173,7 +173,7 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if breakMode != "no-csp" {
-		kit.ApplySecurityHeaders(w)
+		kit.SecurityOptions{Embeddable: true}.Apply(w)
 	}
 	if !kit.GuardPOST(w, r, "notepad") {
 		return

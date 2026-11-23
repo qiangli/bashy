@@ -37,7 +37,7 @@ func startServer(t *testing.T, breakM string) (string, string) {
 
 func TestDeskContract(t *testing.T) {
 	url, _ := startServer(t, "")
-	contracttest.Run(t, contracttest.Config{BaseURL: url, Tool: "notepad", CLI: deskCLICallback(url)})
+	contracttest.Run(t, contracttest.Config{BaseURL: url, Tool: "notepad", CLI: deskCLICallback(url), Embeddable: true})
 }
 
 func TestContractRedOnBreak(t *testing.T) {
