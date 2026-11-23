@@ -8,7 +8,10 @@ locked official build image through `scripts/local-release-gate.sh`, with
 report-only mode is disabled. The receipt includes the exact source commit,
 root module locks and builder lock, resolved transitive module graphs and
 module lock digests, retained report digests, and the scanner's actual database
-modification time. The vulnerability database must be at most seven days old.
+modification time. The vulnerability database must be at most seven days old,
+or prove current: the receipt also records the upstream index's modification
+time fetched at collect time, and an older database is accepted only when the
+two match (upstream can stay unchanged for weeks).
 
 After reviewing the passing reports, the release manager records the receipt
 as a Git note keyed by the candidate's exact commit:

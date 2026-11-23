@@ -28,6 +28,20 @@ def objects(text):
         value, pos = decoder.raw_decode(text, pos)
         yield value
 
+VULNDB_INDEX = os.environ.get('GOVULNDB_INDEX', 'https://vuln.go.dev/index/db.json')
+
+
+def upstream_database_modified():
+    """The modification time the vulnerability database upstream serves right now,
+    or None when it cannot be fetched (the seven-day rule then applies alone)."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(VULNDB_INDEX, timeout=20) as response:
+            return timestamp(json.loads(response.read())['modified'])
+    except Exception:
+        return None
+
+
 def timestamp(value):
     parsed = dt.datetime.fromisoformat(value.replace('Z', '+00:00'))
     if parsed.tzinfo is None:
@@ -48,8 +62,15 @@ def verify(record, root, commit, now=None):
         if any(not re.fullmatch('[0-9a-f]{64}', v) for v in result['reports'].values()):
             raise ValueError('invalid report digest')
     date = timestamp(record['govulncheck']['database_modified'])
-    if date > now or now - date > dt.timedelta(days=7):
-        raise ValueError('vulnerability database must be no older than seven days and not in the future')
+    if date > now:
+        raise ValueError('vulnerability database modification time is in the future')
+    # Fresh means the scan used the database upstream serves NOW. Its modification
+    # time is only a proxy: vuln.go.dev can go quiet for weeks (2026-11-11 was
+    # still current on 2026-11-23). Accept a database at most seven days old, or
+    # one proven current by the upstream index time recorded at collect time.
+    upstream = record['govulncheck'].get('database_upstream_modified')
+    if now - date > dt.timedelta(days=7) and (upstream is None or timestamp(upstream) != date):
+        raise ValueError('vulnerability database must be no older than seven days or match the upstream index recorded at collect time')
     generated = timestamp(record['generated_at'])
     if generated > now + dt.timedelta(minutes=5) or generated < date:
         raise ValueError('invalid receipt generation time')
@@ -131,11 +152,15 @@ def collect(root, report_dir, scopes):
         raise ValueError('no vulnerability scanner reports')
     license_reports = sorted((report_dir / 'license').glob('*'))
     now = dt.datetime.now(dt.timezone.utc)
+    govulncheck = {'verdict': 'pass', 'database_modified': min(dates).isoformat(),
+                   'reports': {p.name: digest(p) for p in reports}}
+    upstream = upstream_database_modified()
+    if upstream is not None:
+        govulncheck['database_upstream_modified'] = upstream.isoformat()
     record = {'schema': SCHEMA, 'commit': commit, 'generated_at': now.isoformat(),
               'locks': {n: digest(root / n) for n in ('go.mod', 'go.sum', 'tools/bashy-build/image.lock')},
               'license': {'verdict': 'pass', 'reports': {p.name: digest(p) for p in license_reports if p.is_file()}},
-              'govulncheck': {'verdict': 'pass', 'database_modified': min(dates).isoformat(),
-                             'reports': {p.name: digest(p) for p in reports}},
+              'govulncheck': govulncheck,
               'module_graphs': graphs, 'module_graphs_sha256': hashlib.sha256(canonical(graphs)).hexdigest()}
     return verify(record, root, commit, now)
 

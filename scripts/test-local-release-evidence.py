@@ -79,6 +79,17 @@ class ReceiptTests(unittest.TestCase):
         del self.record['govulncheck']['database_modified']
         with self.assertRaises(KeyError): self.check()
 
+    def test_old_database_passes_only_when_it_matches_upstream(self):
+        old = (self.now - dt.timedelta(days=12)).isoformat()
+        self.record['govulncheck']['database_modified'] = old
+        self.record['govulncheck']['database_upstream_modified'] = (self.now - dt.timedelta(days=11)).isoformat()
+        with self.assertRaises(ValueError): self.check()
+        self.record['govulncheck']['database_upstream_modified'] = old
+        self.check()
+        self.record['govulncheck']['database_modified'] = (self.now + dt.timedelta(seconds=1)).isoformat()
+        self.record['govulncheck']['database_upstream_modified'] = self.record['govulncheck']['database_modified']
+        with self.assertRaises(ValueError): self.check()
+
     def test_transitive_graph_tampering_fails(self):
         self.record['module_graphs'][1]['modules'][0]['version'] = 'v2.0.0'
         with self.assertRaises(ValueError): self.check()
