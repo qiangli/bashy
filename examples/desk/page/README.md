@@ -206,6 +206,17 @@ browser support for isolated iframe storage. Its separate-tab link works
 without that support. Demo Queue refuses framing, so use `link_only` for
 its organizer and projector links.
 
+## Templates
+
+`templates/agenda.md`, `templates/meeting.md` and `templates/retro.md` are
+ready-made pages: phases with timeboxes, a `here` roster, a `hands` queue
+and one `timer:<phase>` block per phase, plus notes on where to add `poll`,
+`form`, `board`, `note`, `book` or `embed` blocks on demand. Each loads as
+shipped with `page add -f templates/<name>.md`. The repo kb runbook
+`run-a-class-or-meeting-on-one-page` (`bashy kb search "run a class or
+meeting"`) walks through both doors, the two speeds of change (data verbs
+in seconds, shaping a new block kind in minutes) and the exported record.
+
 ## Verify
 
 ```bash
@@ -223,3 +234,4 @@ run the real brainstorm app (`../../brainstorm/server`) the same way: cards
 under handles from both doors, one vote per identity through a refresh and a
 reclaimed handle, phase refusals, no facilitator key or voter token in any
 participant read or export, preview isolation, moderation of voter tokens.
+Every `templates/*.md` parses and loads through `page add -f`.

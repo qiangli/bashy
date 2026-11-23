@@ -37,7 +37,7 @@ var shapedTools = map[string]string{
 }
 
 func TestConsumerPolishedToolsDeclareGenieExamples(t *testing.T) {
-	for _, name := range []string{"calendar", "form", "notepad", "whiteboard"} {
+	for _, name := range []string{"calendar", "form", "notepad", "page", "whiteboard"} {
 		t.Run(name, func(t *testing.T) {
 			root := shapedTools[name]
 			b, err := os.ReadFile(filepath.Join(root, appserver.File))

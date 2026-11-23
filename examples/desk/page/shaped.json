@@ -1,3 +1,11 @@
 {
-  "server": {"main": ".", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA", "--handle-conflicts=refuse"]}
+  "server": {"main": ".", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA", "--handle-conflicts=refuse"]},
+  "genie": {
+    "examples": [
+      "Show a poll's vote tallies as a bar chart on the page and the projector.",
+      "Hide a poll's results from participants until I close the vote.",
+      "Add a block with one row per participant to track who has signed off.",
+      "Add a block that lists the open pull requests of a repository."
+    ]
+  }
 }
