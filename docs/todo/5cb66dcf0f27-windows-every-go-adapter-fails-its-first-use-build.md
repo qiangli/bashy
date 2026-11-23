@@ -3,10 +3,13 @@ id: 5cb66dcf0f27
 kind: bug
 title: 'Windows: every Go adapter fails its first-use build — the adapter cache root reaches go.exe in MSYS form'
 seq: 3305
-status: todo
+status: done
 priority: p0
 created: 2026-11-23T06:20:22.04495Z
+assignee: claude-fable5.1
 sprint: 692
+closed: 2026-11-23T06:29:49.060836Z
+closed_by: claude-fable5.1
 ---
 
 Root cause (rc.40 tier verdict 6c36c0a7, Windows lane, run by claude-opus5.5): every Go
