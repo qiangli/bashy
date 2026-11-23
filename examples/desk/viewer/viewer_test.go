@@ -76,7 +76,7 @@ func errMsg(v map[string]any) string {
 
 func TestDeskContract(t *testing.T) {
 	base, dir := startServer(t, "")
-	contracttest.Run(t, contracttest.Config{BaseURL: base, Tool: tool, ViewOnly: true, CLI: cliFor(base, dir)})
+	contracttest.Run(t, contracttest.Config{BaseURL: base, Tool: tool, ViewOnly: true, Embeddable: true, CLI: cliFor(base, dir)})
 }
 
 func TestContractRedOnBreak(t *testing.T) {
