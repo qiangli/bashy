@@ -31,7 +31,7 @@ func startServer(t *testing.T) (*app, *httptest.Server) {
 }
 func TestDeskContract(t *testing.T) {
 	_, s := startServer(t)
-	contracttest.Run(t, contracttest.Config{BaseURL: s.URL, Tool: "chart", CLI: deskCLICallback(s.URL)})
+	contracttest.Run(t, contracttest.Config{BaseURL: s.URL, Tool: "chart", CLI: deskCLICallback(s.URL), Embeddable: true})
 }
 func TestSVGGoldens(t *testing.T) {
 	for _, kind := range widgetKinds {
