@@ -136,8 +136,10 @@ A settings entry replaces the settings for that block. Use `null` to clear
 an entry. Settings stay in the page store. Keep the import file private.
 To project a poll tally, give its block id a settings entry with
 `"project": true`.
-Current Brainstorm and Demo Queue releases refuse browser framing. Open
-their face links in a separate tab, or set `link_only` to show only those links.
+Serve Brainstorm under the same origin as Page. The organizer iframe needs
+browser support for isolated iframe storage. Its separate-tab link works
+without that support. Demo Queue refuses framing, so use `link_only` for
+its organizer and projector links.
 
 ## Verify
 
