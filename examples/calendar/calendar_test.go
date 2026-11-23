@@ -59,9 +59,10 @@ func runTestCLI(t *testing.T, srvURL, dataDir string, stdin string, args ...stri
 func TestDeskContract(t *testing.T) {
 	srvURL, dataDir, _ := startTestServer(t, "")
 	contracttest.Run(t, contracttest.Config{
-		BaseURL: srvURL,
-		Tool:    "calendar",
-		CLI:     deskCLICallback(srvURL, dataDir),
+		BaseURL:    srvURL,
+		Tool:       "calendar",
+		CLI:        deskCLICallback(srvURL, dataDir),
+		Embeddable: true,
 	})
 }
 
