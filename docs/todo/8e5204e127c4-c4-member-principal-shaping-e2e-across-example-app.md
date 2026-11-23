@@ -7,9 +7,9 @@ status: assigned
 priority: p1
 created: 2026-11-20T19:14:04.928857Z
 assignee: claude-fable5.1
-sprint: 682
-sprint_id: 623586bb-742f-570e-87c9-9af0c101bac1
-sprint_title: Shaping-enable the example apps for consumers (viewer, session, form, board/whiteboard/table/hello-world, notepad/chart)
+sprint: 699
+sprint_id: f30c730a-f8ad-57ba-9122-6f1c2a1cd97a
+sprint_title: 'Release train 1: one hosted-plane deploy for Sprints 682/697 + live verification'
 ---
 
 Spec: umbrella docs/plan-s682-consumer-shaping-example-apps.md §C4. Consumer-first shaping (operator 2026-11-20); owner/producer side is Sprint 683.
