@@ -100,6 +100,31 @@ the page store; it never appears in show, state, the page or export.
 File fields are not offered on a page (`--def` with a `file` field is
 refused); YAML definitions go through `form` itself.
 
+## Board blocks (native over brainstorm)
+
+`page block add board PAGE [--title T] [--block NAME]` creates a session in
+the brainstorm app over its API (`PAGE_BRAINSTORM_URL`, else
+`BRAINSTORM_ADDR`, default `http://127.0.0.1:18091`) and appends
+` ```block board:SESSION id=BLOCK `; `--session S` puts an existing public
+session on the page instead (the page then holds no facilitator key).
+
+- **Identity is the brainstorm participant.** The page holds one opaque
+  `brainstorm-participant` token per page participant (`board_voters`),
+  carried through rename and merge and dropped on kick, so a refresh or a
+  reclaimed handle never adds a vote. Cards carry the page handle as their
+  name.
+- **Brainstorm keeps its rules.** Participants add, edit and delete their
+  own cards in the write phase and toggle votes in the vote phase within
+  brainstorm's vote budget; phases and rounds are brainstorm's. The
+  organizer face links out to brainstorm for them, with the facilitator key
+  when the page created the session; the key never appears in participant
+  HTML, state, show or export.
+- **Preview**: the organizer's "view as participant" writes and votes on a
+  page-local overlay that never reaches brainstorm.
+- **Live**: every card and vote publishes the block's frame; the page also
+  re-reads each board every few seconds, since phase changes happen in
+  brainstorm. Export writes the visible cards by column with names and votes.
+
 ## Content and timer blocks
 
 - `book:<id>/pN` renders that viewer book page inline; `note:<id>` renders
@@ -183,4 +208,8 @@ writes and export; no participant address in show, state, page or export. The po
 run the real form app (`../form/server`, never imported) on a loopback port:
 a three-vote ballot from four identities on both doors, one refreshing and
 reclaiming, counted once; open/close/visibility; anonymous; per-handle form
-answers through rename and kick; form unreachable.
+answers through rename and kick; form unreachable. The board tests build and
+run the real brainstorm app (`../../brainstorm/server`) the same way: cards
+under handles from both doors, one vote per identity through a refresh and a
+reclaimed handle, phase refusals, no facilitator key or voter token in any
+participant read or export, preview isolation, moderation of voter tokens.

@@ -98,13 +98,18 @@ type item struct {
 	// -> form respondent token). Neither leaves the store.
 	Natives     map[string]*nativeBlock `json:"natives,omitempty"`
 	Respondents map[string]string       `json:"respondents,omitempty"`
-	BlockFaces  map[string]storedFaces  `json:"block_faces,omitempty"`
-	Timers      map[string]*TimerState  `json:"timers,omitempty"`
-	Status      string                  `json:"status"`
-	Revision    int                     `json:"revision"`
-	Owner       string                  `json:"owner"`
-	Members     map[string]bool         `json:"members"`
-	Invites     map[string]bool         `json:"invites"`
+	// Boards are the brainstorm sessions this page created (facilitator
+	// keys); BoardVoters is the cookie jar towards brainstorm (participant
+	// key -> brainstorm participant token). Neither leaves the store.
+	Boards      map[string]*boardBlock `json:"boards,omitempty"`
+	BoardVoters map[string]string      `json:"board_voters,omitempty"`
+	BlockFaces  map[string]storedFaces `json:"block_faces,omitempty"`
+	Timers      map[string]*TimerState `json:"timers,omitempty"`
+	Status      string                 `json:"status"`
+	Revision    int                    `json:"revision"`
+	Owner       string                 `json:"owner"`
+	Members     map[string]bool        `json:"members"`
+	Invites     map[string]bool        `json:"invites"`
 }
 
 type actionRequest struct {
@@ -129,6 +134,11 @@ type actionRequest struct {
 	Anonymous      bool            `json:"anonymous,omitempty"`
 	ResultsVisible bool            `json:"results_visible,omitempty"`
 	Closed         bool            `json:"closed,omitempty"`
+	// Board blocks (block_board.go).
+	Session string `json:"session,omitempty"`
+	Card    string `json:"card,omitempty"`
+	Text    string `json:"text,omitempty"`
+	Column  int    `json:"column,omitempty"`
 }
 
 type app struct {
@@ -141,9 +151,11 @@ type app struct {
 	joinOptions pageJoinOptions
 	lanBase     string
 	formURL     string // the form app's origin (PAGE_FORM_URL)
-	previews    map[previewAnswerKey]map[string]any
-	tickMu      sync.Mutex
-	ticking     map[string]bool // running timer tickers, "item/block"
+	// brainstormURL is brainstorm's origin (PAGE_BRAINSTORM_URL).
+	brainstormURL string
+	previews      map[previewAnswerKey]map[string]any
+	tickMu        sync.Mutex
+	ticking       map[string]bool // running timer tickers, "item/block"
 }
 
 // clone deep-copies the item so a failed save never leaves the in-memory
@@ -160,6 +172,16 @@ func (it *item) clone() item {
 	}
 	c.Votes = maps.Clone(it.Votes)
 	c.Respondents = maps.Clone(it.Respondents)
+	c.BoardVoters = maps.Clone(it.BoardVoters)
+	if it.Boards != nil {
+		c.Boards = make(map[string]*boardBlock, len(it.Boards))
+		for id, bb := range it.Boards {
+			if bb != nil {
+				copy := *bb
+				c.Boards[id] = &copy
+			}
+		}
+	}
 	if it.Natives != nil {
 		c.Natives = make(map[string]*nativeBlock, len(it.Natives))
 		for id, nb := range it.Natives {
@@ -414,7 +436,7 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		if it := a.loadOr404(w, req.ID); it != nil {
 			a.beginOrganizer(w, r, it)
 		}
-	case "open", "show", "set", "close", "share", "join", "participant", "block", "results", "answer", "timer":
+	case "open", "show", "set", "close", "share", "join", "participant", "block", "results", "answer", "timer", "board":
 		it := a.loadOr404(w, req.ID)
 		if it == nil {
 			return
@@ -422,7 +444,7 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		if a.canView(r, it) {
 			var done func()
 			var ok bool
-			if req.Action == "answer" {
+			if req.Action == "answer" || req.Action == "board" {
 				r, done, ok = a.readFaceLocked(w, r, it)
 			} else {
 				r, done, ok = a.knownParticipantLocked(w, r, it)
@@ -464,6 +486,8 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		case "block":
 			if req.Kind == "poll" || req.Kind == "form" {
 				a.blockAdd(w, r, it, req)
+			} else if req.Kind == "board" {
+				a.boardAdd(w, r, it, req)
 			} else {
 				a.blockSet(w, r, it, req)
 			}
@@ -475,6 +499,10 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 			}
 		case "timer":
 			a.timerAction(w, r, it, req)
+		case "board":
+			if a.viewOr403(w, r, it) {
+				a.boardAction(w, r, it, req)
+			}
 		}
 	default:
 		kit.Fail(w, http.StatusBadRequest, "Unknown action")
@@ -749,6 +777,9 @@ func (a *app) page(r *http.Request) (int, []byte) {
 			`<p class="desk-footer">Revision <span data-page-revision>` + fmt.Sprint(it.Revision) +
 			`</span> · re-surface with <code>page open ` + html.EscapeString(it.ID) + `</code>.</p>` +
 			liveScript(base, it.ID, face) + nativeScript(base, it.ID, face) + timerScript(base, it.ID, face)
+		if hasBoard(it) {
+			main += boardScript(base, it.ID, face)
+		}
 	}
 	body := pageFaceStyle + contentBlockStyle + kit.AppBar(tool, a.base(r)+"/", header, "") + `<main class="desk-main page-main">` +
 		`<div data-desk-alert class="desk-alert"></div>` + main + `</main>` + faceScript
@@ -813,7 +844,7 @@ func serve(addr, data, prefix string, lan, suffix bool) {
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	origin := "http://" + net.JoinHostPort("127.0.0.1", port)
 	a := &app{dir: data, prefix: prefix, baseURL: origin + prefix, items: map[string]*item{},
-		formURL: os.Getenv("PAGE_FORM_URL"),
+		formURL: os.Getenv("PAGE_FORM_URL"), brainstormURL: os.Getenv("PAGE_BRAINSTORM_URL"),
 		joinOptions: pageJoinOptions{consolePrincipal: processConsolePrincipal(addr), outpostSecret: pageOutpostSecret(),
 			suffix: suffix}}
 	if lan {

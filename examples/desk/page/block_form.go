@@ -888,6 +888,9 @@ func (a *app) blockMarkdownLocked(it *item, b *block) string {
 	case "here":
 		return hereMarkdown(it, b)
 	}
+	if b.Kind == "board" {
+		return a.boardMarkdownLocked(b)
+	}
 	nb := nativeBlockLocked(it, b)
 	if nb == nil {
 		return blockMarkdown(b)

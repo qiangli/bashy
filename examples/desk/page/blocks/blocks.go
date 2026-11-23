@@ -73,3 +73,42 @@ func Book(d ContentData) string { return render("book.html", d) }
 func Note(d ContentData) string { return render("note.html", d) }
 func Embed(d EmbedData) string  { return render("embed.html", d) }
 func Timer(d TimerData) string  { return render("timer.html", d) }
+
+// BoardData is the view model for board.html: a brainstorm session read
+// over HTTP, shaped for one face.
+type BoardData struct {
+	ID         string
+	Title      string
+	Phase      string
+	Round      int
+	Columns    []BoardColumn
+	Enrolled   bool // a page participant (or the organizer's preview)
+	Compose    bool // write phase: add, edit and delete own cards
+	Vote       bool // vote phase: toggle votes within the budget
+	VotesLeft  int
+	VoteBudget int
+	Total      int
+	LinkURL    string // organizer face only: the session in brainstorm
+	LinkLabel  string
+	Err        string
+}
+
+// BoardColumn is one brainstorm column with its visible cards.
+type BoardColumn struct {
+	Index  int
+	Name   string
+	Prompt string
+	Cards  []BoardCard
+}
+
+// BoardCard is one visible card; Mine and Voted are the caller's.
+type BoardCard struct {
+	ID    string
+	Text  string
+	Name  string
+	Votes int
+	Mine  bool
+	Voted bool
+}
+
+func Board(d BoardData) string { return render("board.html", d) }

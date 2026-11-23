@@ -45,6 +45,14 @@ func (a *app) renderBlockFaces(r *http.Request, it *item, b *block, view pageFac
 		default:
 			add(participantFace, contentHTML(b))
 		}
+	case b.Kind == "board":
+		for _, f := range a.boardFaces(r, it, b, view) {
+			if f.face == recordFace {
+				faces = append(faces, f)
+			} else {
+				add(f.face, f.body)
+			}
+		}
 	case b.Kind == "timer":
 		switch view {
 		case displayFace:

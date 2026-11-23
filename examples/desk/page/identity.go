@@ -247,6 +247,8 @@ func moderateParticipant(page *PageItem, action, source, target string) error {
 	switch action {
 	case "kick":
 		p.Kicked = true
+		// The removed identity no longer speaks for anyone on a board.
+		delete(page.BoardVoters, source)
 	case "rename":
 		handle, err := cleanHandle(target)
 		if err != nil {
@@ -272,6 +274,10 @@ func moderateParticipant(page *PageItem, action, source, target string) error {
 					page.Respondents[key] = token
 					delete(page.Respondents, source)
 				}
+				if token, ok := page.BoardVoters[source]; ok {
+					page.BoardVoters[key] = token
+					delete(page.BoardVoters, source)
+				}
 			}
 		}
 		p.Handle = handle
@@ -293,6 +299,12 @@ func moderateParticipant(page *PageItem, action, source, target string) error {
 				page.Respondents[target] = token
 			}
 			delete(page.Respondents, source)
+		}
+		if token, ok := page.BoardVoters[source]; ok {
+			if _, exists := page.BoardVoters[target]; !exists {
+				page.BoardVoters[target] = token
+			}
+			delete(page.BoardVoters, source)
 		}
 		p.Kicked = true
 	default:

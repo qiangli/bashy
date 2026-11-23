@@ -25,7 +25,8 @@ import (
 const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|block|publish-outpost] [--json] [-f FILE|-] [--faces FILE] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|markdown|html|pdf] [-o FILE]"
 
 const blockUsage = "use page block add poll PAGE --options a,b,c [--title Q] [--votes N] | add form PAGE --def FILE|- [--title T]" +
-	" [--block NAME] [--anonymous] [--results-visible] [--closed]; page block open|close|show-results|hide-results|results PAGE BLOCK"
+	" [--block NAME] [--anonymous] [--results-visible] [--closed] | add board PAGE [--session S] [--title T] [--block NAME];" +
+	" page block open|close|show-results|hide-results|results PAGE BLOCK"
 
 type cliOptions struct {
 	addr, data, prefix, key         string
@@ -36,6 +37,7 @@ type cliOptions struct {
 	openHandles, private, public    bool
 	asJSON, lan                     bool
 	options, votes, def, block      string
+	session                         string
 	anonymous, resultsVisible       bool
 	closed                          bool
 	verb                            string
@@ -47,7 +49,7 @@ var (
 	valueFlags = map[string]bool{"addr": true, "data": true, "prefix": true, "key": true,
 		"title": true, "body": true, "f": true, "file": true, "id": true, "audience": true,
 		"to": true, "o": true, "output": true, "break": true, "code": true, "port": true, "icon": true, "handle-conflicts": true,
-		"faces": true, "options": true, "votes": true, "def": true, "block": true}
+		"faces": true, "options": true, "votes": true, "def": true, "block": true, "session": true}
 	boolFlags = map[string]bool{"json": true, "lan": true, "open": true, "public": true, "private": true,
 		"anonymous": true, "results-visible": true, "closed": true}
 )
@@ -135,6 +137,8 @@ func parseCLIOptions(raw []string) (*cliOptions, error) {
 			o.def = val
 		case "block":
 			o.block = val
+		case "session":
+			o.session = val
 		case "handle-conflicts":
 			if val != "suffix" && val != "refuse" {
 				return nil, fmt.Errorf("handle-conflicts must be refuse or suffix")
@@ -490,7 +494,7 @@ func (c *client) blockVerb(stdin io.Reader) int {
 	action := "block"
 	switch sub {
 	case "add":
-		if len(rest) == 0 || (rest[0] != "poll" && rest[0] != "form") || len(rest) > 2 {
+		if len(rest) == 0 || (rest[0] != "poll" && rest[0] != "form" && rest[0] != "board") || len(rest) > 2 {
 			return kit.UsageError(c.stdout, tool, o.asJSON, blockUsage)
 		}
 		id := o.id
@@ -502,7 +506,14 @@ func (c *client) blockVerb(stdin io.Reader) int {
 		}
 		payload = map[string]any{"id": id, "kind": rest[0], "title": o.title, "block": o.block,
 			"anonymous": o.anonymous, "results_visible": o.resultsVisible, "closed": o.closed}
-		if rest[0] == "poll" {
+		if rest[0] == "board" {
+			if o.options != "" || o.def != "" || o.votes != "" {
+				return kit.UsageError(c.stdout, tool, o.asJSON, "a board block takes --session S and --title T (no --options or --def)")
+			}
+			payload["session"] = o.session
+		} else if o.session != "" {
+			return kit.UsageError(c.stdout, tool, o.asJSON, "--session is for board blocks")
+		} else if rest[0] == "poll" {
 			if o.options == "" || o.def != "" {
 				return kit.UsageError(c.stdout, tool, o.asJSON, "a poll block needs --options a,b,c (and no --def)")
 			}
@@ -582,7 +593,9 @@ func (c *client) blockVerb(stdin io.Reader) int {
 		return 1
 	}
 	fmt.Fprintf(c.stdout, "%v %v %v\n", obj["id"], obj["url"], obj["status"])
-	if sub == "add" {
+	if sub == "add" && obj["kind"] == "board" {
+		fmt.Fprintf(c.stdout, "block: %v (board %v)\n", obj["block"], obj["session"])
+	} else if sub == "add" {
 		fmt.Fprintf(c.stdout, "block: %v (%v %v)\n", obj["block"], obj["kind"], obj["form"])
 	} else {
 		fmt.Fprintf(c.stdout, "block: %v open=%v results_visible=%v\n", obj["block"], obj["open"], obj["results_visible"])
