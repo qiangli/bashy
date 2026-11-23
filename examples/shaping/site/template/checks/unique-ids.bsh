@@ -18,4 +18,4 @@ run_go() {
         GOWORK=off CGO_ENABLED=0 bashy go "$@"
     fi
 }
-run_go run . -check unique-ids
+run_go run ./cmd/server -check unique-ids

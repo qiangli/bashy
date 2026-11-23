@@ -1,4 +1,4 @@
-package main
+package site
 
 import (
 	"bytes"
@@ -29,6 +29,7 @@ var fixture = fstest.MapFS{
 	"content/home.md": {Data: []byte(`---
 title: Fixture Org
 path: /
+summary: Fixture Org publishes one deterministic content module for [About](/about) and agents.
 ---
 
 ## What It Is {#what}
@@ -91,40 +92,147 @@ func cloneMapFS(m fstest.MapFS) fstest.MapFS {
 }
 
 func TestEmbeddedAssetsPassStructuralInvariants(t *testing.T) {
-	site, err := LoadSite(assets)
+	s, err := LoadEmbedded()
 	if err != nil {
-		t.Fatalf("LoadSite(assets): %v", err)
+		t.Fatalf("LoadEmbedded(): %v", err)
 	}
-	if len(site.Pages) == 0 {
+	if len(s.Pages) == 0 {
 		t.Fatal("embedded site has no pages")
 	}
-	if err := ValidateSite(site); err != nil {
-		t.Fatalf("ValidateSite(assets): %v", err)
+	if err := Validate(s); err != nil {
+		t.Fatalf("Validate(Assets): %v", err)
 	}
 }
 
 func TestSectionIDsMustBeDeclaredNeverDerived(t *testing.T) {
 	bad := cloneMapFS(fixture)
 	bad["content/about.md"] = &fstest.MapFile{Data: []byte("---\ntitle: About\npath: /about\n---\n\n## Team Without ID\n\nCopy.\n")}
-	_, err := LoadSite(bad)
+	_, err := LoadFS(bad)
 	if err == nil || !strings.Contains(err.Error(), "lacks a declared {#id}") {
 		t.Fatalf("expected missing {#id} refusal, got: %v", err)
 	}
 
-	// Heading text can change freely without moving a declared id; and two
-	// completely different words keep the exact id declared in {#...}.
-	site, err := LoadSite(fixture)
+	s, err := LoadFS(fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
-	about := site.ByPath["/about"]
+	about := s.ByPath["/about"]
 	if about.Sections[1].Heading != "Engineering Team" || about.Sections[1].ID != "team" {
 		t.Fatalf("got heading=%q id=%q, want Engineering Team / team", about.Sections[1].Heading, about.Sections[1].ID)
+	}
+	if got := ComputeSectionHash(about.Sections[1].ID, about.Sections[1].Heading, about.Sections[1].Markdown); got != about.Sections[1].SHA256 {
+		t.Fatalf("ComputeSectionHash = %s, want %s", got, about.Sections[1].SHA256)
+	}
+}
+
+func TestSummaryRenderingRevisionAndFrontMatterKeys(t *testing.T) {
+	s, err := LoadFS(fixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := s.ByPath["/"]
+	about := s.ByPath["/about"]
+
+	// Home has optional summary; About does not.
+	if home.Summary == "" {
+		t.Fatal("expected non-empty home.Summary")
+	}
+	if about.Summary != "" {
+		t.Fatalf("expected empty about.Summary, got %q", about.Summary)
+	}
+
+	// HTML places summary as a <p> paragraph directly under <h1>, before the first <section>.
+	homeFrag := RenderHTMLFragment(home)
+	wantTitleAndSummary := "<h1>Fixture Org</h1>\n<p>Fixture Org publishes one deterministic content module for <a href=\"/about\">About</a> and agents.</p>\n<section id=\"what\">"
+	if !strings.Contains(homeFrag, wantTitleAndSummary) {
+		t.Fatalf("HTML fragment missing summary paragraph under <h1>:\n%s", homeFrag)
+	}
+	// About has no summary paragraph between <h1> and first <section>.
+	aboutFrag := RenderHTMLFragment(about)
+	if !strings.Contains(aboutFrag, "<h1>About Fixture Org</h1>\n<section id=\"about\">") {
+		t.Fatalf("About HTML fragment unexpected structure:\n%s", aboutFrag)
+	}
+
+	// Markdown places summary as a paragraph directly under # Title, before first ## Section.
+	homeMD := RenderMarkdown(home)
+	wantMDSummary := "# Fixture Org\n\nFixture Org publishes one deterministic content module for [About](/about) and agents.\n\n## What It Is {#what}"
+	if !strings.Contains(homeMD, wantMDSummary) {
+		t.Fatalf("Markdown missing summary paragraph under title:\n%s", homeMD)
+	}
+	aboutMD := RenderMarkdown(about)
+	if !strings.Contains(aboutMD, "# About Fixture Org\n\n## Overview {#about}") {
+		t.Fatalf("About Markdown unexpected structure:\n%s", aboutMD)
+	}
+
+	// JSON includes "summary" when set and omits "summary" when empty.
+	homeJSON, err := RenderJSON(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var homeMap map[string]any
+	if err := json.Unmarshal(homeJSON, &homeMap); err != nil {
+		t.Fatal(err)
+	}
+	if homeMap["summary"] != home.Summary {
+		t.Fatalf("JSON summary = %v, want %q", homeMap["summary"], home.Summary)
+	}
+	aboutJSON, err := RenderJSON(about)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var aboutMap map[string]any
+	if err := json.Unmarshal(aboutJSON, &aboutMap); err != nil {
+		t.Fatal(err)
+	}
+	if _, hasSummary := aboutMap["summary"]; hasSummary {
+		t.Fatalf("expected omitted summary in About JSON, got %s", aboutJSON)
+	}
+
+	// Editing or removing summary changes Page.Revision while keeping section sha256 digests unchanged.
+	editedSummary := cloneMapFS(fixture)
+	editedSummary["content/home.md"] = &fstest.MapFile{
+		Data: []byte(strings.Replace(string(fixture["content/home.md"].Data), "summary: Fixture Org publishes", "summary: Updated lead paragraph:", 1)),
+	}
+	sEdited, err := LoadFS(editedSummary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	homeEdited := sEdited.ByPath["/"]
+	if homeEdited.Revision == home.Revision {
+		t.Fatalf("summary edit did not change revision (%s)", home.Revision)
+	}
+	if ComputeRevision(homeEdited) != homeEdited.Revision {
+		t.Fatalf("ComputeRevision mismatch: %s != %s", ComputeRevision(homeEdited), homeEdited.Revision)
+	}
+	if homeEdited.Sections[0].SHA256 != home.Sections[0].SHA256 {
+		t.Error("summary edit unexpectedly changed section #what sha256")
+	}
+
+	// Unknown key: value front matter lines stay ignored (and do not alter revision);
+	// malformed lines missing ':' stay rejected.
+	unknownKey := cloneMapFS(fixture)
+	unknownKey["content/about.md"] = &fstest.MapFile{
+		Data: []byte(strings.Replace(string(fixture["content/about.md"].Data), "path: /about\n", "path: /about\ndraft_note: ignored metadata\n", 1)),
+	}
+	sUnknown, err := LoadFS(unknownKey)
+	if err != nil {
+		t.Fatalf("expected unknown key: value in front matter to be ignored, got error: %v", err)
+	}
+	if sUnknown.ByPath["/about"].Revision != about.Revision {
+		t.Errorf("ignored unknown front matter key changed revision: %s != %s", sUnknown.ByPath["/about"].Revision, about.Revision)
+	}
+
+	malformedFM := cloneMapFS(fixture)
+	malformedFM["content/about.md"] = &fstest.MapFile{
+		Data: []byte("---\ntitle: About\npath: /about\nmalformed_no_colon\n---\n\n## Overview {#about}\n\nCopy.\n"),
+	}
+	if _, err := LoadFS(malformedFM); err == nil || !strings.Contains(err.Error(), "invalid front matter line") {
+		t.Fatalf("expected malformed front matter rejection, got: %v", err)
 	}
 }
 
 func TestRevisionSensitivityAndRenderingInvariance(t *testing.T) {
-	site1, err := LoadSite(fixture)
+	site1, err := LoadFS(fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +247,7 @@ func TestRevisionSensitivityAndRenderingInvariance(t *testing.T) {
 	crlf["content/about.md"] = &fstest.MapFile{
 		Data: []byte(strings.ReplaceAll(string(fixture["content/about.md"].Data), "\n", "\r\n") + "\r\n\r\n"),
 	}
-	siteCRLF, err := LoadSite(crlf)
+	siteCRLF, err := LoadFS(crlf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +262,7 @@ func TestRevisionSensitivityAndRenderingInvariance(t *testing.T) {
 	edited["content/about.md"] = &fstest.MapFile{
 		Data: []byte(strings.Replace(string(fixture["content/about.md"].Data), "Explicit section identifiers", "Updated copy in team section", 1)),
 	}
-	siteEdited, err := LoadSite(edited)
+	siteEdited, err := LoadFS(edited)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -171,13 +279,13 @@ func TestRevisionSensitivityAndRenderingInvariance(t *testing.T) {
 }
 
 func TestThreeRepresentationsListSameLinksAndSectionIDs(t *testing.T) {
-	site, err := LoadSite(fixture)
+	s, err := LoadFS(fixture)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range site.Pages {
+	for _, p := range s.Pages {
 		frag := p.RenderHTMLFragment()
-		doc := site.RenderHTMLDocument(p)
+		doc := s.RenderHTMLDocument(p)
 		md := p.RenderMarkdown()
 		rawJSON, err := p.RenderJSON()
 		if err != nil {
@@ -212,13 +320,23 @@ func TestThreeRepresentationsListSameLinksAndSectionIDs(t *testing.T) {
 }
 
 func TestServerNegotiationTwinsHeadersAndIndexes(t *testing.T) {
-	srv, err := newServerFrom(fixture, func(string) string { return "" })
+	loaded, srv, err := NewServerHandler(fixture, func(string) string { return "" })
 	if err != nil {
 		t.Fatal(err)
 	}
-	aboutRev := srv.site.ByPath["/about"].Revision
-	homeRev := srv.site.ByPath["/"].Revision
+	aboutRev := loaded.ByPath["/about"].Revision
+	homeRev := loaded.ByPath["/"].Revision
 	wantETag := `"` + aboutRev + `"`
+
+	if NegotiateAccept("text/markdown, text/html;q=0.8") != "md" {
+		t.Fatal("NegotiateAccept failed for markdown")
+	}
+	if NegotiateAccept("application/json") != "json" {
+		t.Fatal("NegotiateAccept failed for json")
+	}
+	if NegotiateAccept("*/*") != "html" {
+		t.Fatal("NegotiateAccept failed for wildcard default")
+	}
 
 	request := func(method, target, accept, inm string) *httptest.ResponseRecorder {
 		req := httptest.NewRequest(method, target, nil)
@@ -384,8 +502,8 @@ func TestChecksDeterminismUniqueIDsLinksAndStaleBase(t *testing.T) {
 	}
 
 	// Render determinism guarantees byte-identical outputs across invocations.
-	s1, _ := LoadSiteDir(goodDir)
-	s2, _ := LoadSiteDir(goodDir)
+	s1, _ := Load(goodDir)
+	s2, _ := Load(goodDir)
 	j1, _ := s1.ByPath["/"].RenderJSON()
 	j2, _ := s2.ByPath["/"].RenderJSON()
 	if !bytes.Equal(j1, j2) {
@@ -410,7 +528,15 @@ func TestChecksDeterminismUniqueIDsLinksAndStaleBase(t *testing.T) {
 		t.Errorf("expected duplicate page path error, got %v", err)
 	}
 
-	// Broken internal page link and broken #fragment fail links-resolve.
+	// Broken internal link in summary or section fails links-resolve.
+	badSummaryLink := cloneMapFS(fixture)
+	badSummaryLink["content/about.md"] = &fstest.MapFile{
+		Data: []byte("---\ntitle: About\npath: /about\nsummary: Broken [summary link](/nowhere).\n---\n\n## Team {#team}\n\nCopy.\n"),
+	}
+	if err := CheckLinksResolve(writeMapFSToDir(t, badSummaryLink)); err == nil || !strings.Contains(err.Error(), "broken internal link") {
+		t.Errorf("expected broken summary link error, got %v", err)
+	}
+
 	badPageLink := cloneMapFS(fixture)
 	badPageLink["content/about.md"] = &fstest.MapFile{
 		Data: []byte("---\ntitle: About\npath: /about\n---\n\n## Team {#team}\n\nSee [nowhere](/missing-page).\n"),

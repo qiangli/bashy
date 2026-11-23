@@ -64,8 +64,12 @@ runner_dir="$PWD"
 if [ -f "$base_dir/go.mod" ] && [ -f "$base_dir/check.go" ]; then
     runner_dir="$base_dir"
 fi
+runner_pkg="./cmd/server"
+if [ ! -d "$runner_dir/cmd/server" ]; then
+    runner_pkg="."
+fi
 
-run_go -C "$runner_dir" run . -check stale-base \
+run_go -C "$runner_dir" run "$runner_pkg" -check stale-base \
     -dir "$base_dir" -base-dir "$base_dir" \
     -page "$wish_page" -element "$wish_element" \
     -wish-file "$wish_file" -commit-msg-file "$msg_file"

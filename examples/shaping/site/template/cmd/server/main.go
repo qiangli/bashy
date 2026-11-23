@@ -1,27 +1,18 @@
-// site: deterministic server and renderer for an <owner>/site content module.
-//
-// Each page under content/*.md carries front matter (title, path) and sections
-// with explicit {#id} identifiers (never derived from headings). One renderer
-// produces an HTML fragment (and full HTML document), Markdown with front
-// matter, and JSON under one content SHA-256 revision.
-//
-// It is also the server of a shaped app (shaped.json): the owner shapes copy
-// with `bashy shape`, and frozen checks under checks/ verify render
-// determinism, unique ids, internal link resolution, and stale-base wishes.
+// Command server runs the HTTP server, page renderer, and structural/stale-base
+// checks for an <owner>/site content module (shaped.json server.main = "cmd/server").
 package main
 
 import (
-	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"net/http"
 	"os"
-)
 
-//go:embed site.json content
-var assets embed.FS
+	"site"
+)
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8090", "listen address")
@@ -48,12 +39,12 @@ func main() {
 		if bDir == "" {
 			bDir = targetDir
 		}
-		pHint, elem, err := resolveWishInput(*pageHint, *element, *wishFile, *commitMsgFile)
+		pHint, elem, err := site.ResolveWishInput(*pageHint, *element, *wishFile, *commitMsgFile)
 		if err != nil {
 			writeCheckError(*asJSON, targetDir, *checkName, err)
 			os.Exit(1)
 		}
-		outcomes, err := RunChecks(targetDir, bDir, *checkName, pHint, elem)
+		outcomes, err := site.RunChecks(targetDir, bDir, *checkName, pHint, elem)
 		if *asJSON {
 			env := map[string]any{
 				"ok":     err == nil,
@@ -89,17 +80,17 @@ func main() {
 		if targetDir == "" {
 			targetDir = "."
 		}
-		site, err := LoadSiteDir(targetDir)
+		loaded, err := site.Load(targetDir)
 		if err != nil {
 			log.Fatal(err)
 		}
 		if *origin != "" {
-			site.SetOrigin(*origin)
+			loaded.SetOrigin(*origin)
 		}
-		if err := ValidateSite(site); err != nil {
+		if err := site.Validate(loaded); err != nil {
 			log.Fatal(err)
 		}
-		p, ok := site.ByPath[*renderPath]
+		p, ok := loaded.ByPath[*renderPath]
 		if !ok {
 			log.Fatalf("site: unknown page path %q", *renderPath)
 		}
@@ -129,7 +120,7 @@ func main() {
 			}
 			_, _ = os.Stdout.WriteString(out)
 		case "html-doc":
-			out := site.RenderHTMLDocument(p)
+			out := loaded.RenderHTMLDocument(p)
 			if *asJSON {
 				writeRenderEnvelope(p, "html-doc", out)
 				return
@@ -141,23 +132,19 @@ func main() {
 		return
 	}
 
-	var (
-		s   *server
-		err error
-	)
+	var fsys fs.FS = site.Assets
 	if *dir != "" {
-		s, err = newServerFrom(os.DirFS(*dir), os.Getenv)
-	} else {
-		s, err = newServer(os.Getenv)
+		fsys = os.DirFS(*dir)
 	}
+	loaded, handler, err := site.NewServerHandler(fsys, os.Getenv)
 	if err != nil {
 		log.Fatal(err)
 	}
 	if *origin != "" {
-		s.site.SetOrigin(*origin)
+		loaded.SetOrigin(*origin)
 	}
-	log.Printf("site: serving %s (%d pages) on %s", s.site.Config.Title, len(s.site.Pages), *addr)
-	log.Fatal(http.ListenAndServe(*addr, s))
+	log.Printf("site: serving %s (%d pages) on %s", loaded.Config.Title, len(loaded.Pages), *addr)
+	log.Fatal(http.ListenAndServe(*addr, handler))
 }
 
 func flagWasPassed(name string) bool {
@@ -170,16 +157,20 @@ func flagWasPassed(name string) bool {
 	return found
 }
 
-func writeRenderEnvelope(p *Page, format, content string) {
+func writeRenderEnvelope(p *site.Page, format, content string) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	_ = enc.Encode(map[string]any{
+	env := map[string]any{
 		"path":     p.Path,
 		"title":    p.Title,
 		"revision": p.Revision,
 		"format":   format,
 		"content":  content,
-	})
+	}
+	if p.Summary != "" {
+		env["summary"] = p.Summary
+	}
+	_ = enc.Encode(env)
 }
 
 func writeCheckError(asJSON bool, dir, checkName string, err error) {
@@ -189,7 +180,7 @@ func writeCheckError(asJSON bool, dir, checkName string, err error) {
 		_ = enc.Encode(map[string]any{
 			"ok":     false,
 			"dir":    dir,
-			"checks": []CheckOutcome{{Name: checkName, Status: "fail", Detail: err.Error()}},
+			"checks": []site.CheckOutcome{{Name: checkName, Status: "fail", Detail: err.Error()}},
 			"error":  err.Error(),
 		})
 		return

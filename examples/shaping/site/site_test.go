@@ -1,15 +1,17 @@
 // Copyright (c) 2026 qiangli
 // See LICENSE for licensing information
 
-// Focused tests for the generic <owner>/site Bash# command (site.bsh) and its
-// shaped-app lifecycle under `bashy shape verify` in the verifier's scrubbed
-// environment.
+// Focused tests for the generic <owner>/site Bash# command (site.bsh), its
+// importable library package (`package site`) + `cmd/server` layout, external
+// Go module consumption via `replace`, optional front-matter `summary:`, and
+// shaped-app lifecycle under `bashy shape verify` in the scrubbed environment.
 package site
 
 import (
 	"context"
 	"encoding/json"
 	"html"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -40,6 +42,18 @@ func scriptPath(t *testing.T) string {
 	t.Helper()
 	_, file, _, _ := runtime.Caller(0)
 	return filepath.Join(filepath.Dir(file), "site.bsh")
+}
+
+func runGo(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("go", args...)
+	cmd.Dir = dir
+	cmd.Env = append(cleanEnv(), "GOWORK=off", "CGO_ENABLED=0")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("go %v in %s: %v\n%s", args, dir, err, out)
+	}
+	return string(out)
 }
 
 const fakeGo = `#!/bin/sh
@@ -133,41 +147,59 @@ func wantContains(t *testing.T, what, got string, subs ...string) {
 	}
 }
 
-func TestInitWritesRepoSkillAndPreservesExistingFiles(t *testing.T) {
+func TestInitWritesRepoModuleSkillAndPreservesExistingFiles(t *testing.T) {
 	h := newHarness(t)
 
-	// --dry-run and --dry-run --json touch nothing on disk.
-	out, code := h.runSite(nil, "init", h.repo, "--title", "Acme Studio", "--origin", "https://acme.example", "--dry-run")
+	// Template's own go.mod stays 'module site' for standalone example tests.
+	tplGoMod, err := os.ReadFile(filepath.Join(filepath.Dir(scriptPath(t)), "template", "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(tplGoMod), "module site\n") {
+		t.Fatalf("template/go.mod must stay 'module site', got:\n%s", tplGoMod)
+	}
+
+	// Without --owner and without --module, init refuses (both text and --json).
+	if out, code := h.runSite(nil, "init", h.repo, "--title", "Acme Studio", "--origin", "https://acme.example"); code == 0 {
+		t.Fatalf("expected init without --owner/--module to fail, got 0:\n%s", out)
+	}
+	if out, code := h.runSite(nil, "init", h.repo, "--title", "Acme Studio", "--origin", "https://acme.example", "--json"); code == 0 || !strings.Contains(out, `"ok":false`) {
+		t.Fatalf("expected init --json without --owner/--module to fail cleanly, got %d:\n%s", code, out)
+	}
+
+	// --dry-run and --dry-run --json touch nothing on disk and report derived module path.
+	out, code := h.runSite(nil, "init", h.repo, "--title", "Acme Studio", "--origin", "https://acme.example", "--owner", "acme-studio", "--dry-run")
 	if code != 0 {
 		t.Fatalf("init --dry-run: %d\n%s", code, out)
 	}
-	wantContains(t, "init --dry-run", out, "would create:", "acme-studio-site")
+	wantContains(t, "init --dry-run", out, "would create:", "github.com/acme-studio/site", "acme-studio-site")
 	if _, err := os.Stat(h.repo); !os.IsNotExist(err) {
 		t.Fatalf("dry-run created %s", h.repo)
 	}
 
-	out, code = h.runSite(nil, "init", h.repo, "--title", "Acme Studio", "--origin", "https://acme.example", "--dry-run", "--json")
+	out, code = h.runSite(nil, "init", h.repo, "--title", "Acme Studio", "--origin", "https://acme.example", "--owner", "acme-studio", "--dry-run", "--json")
 	if code != 0 {
 		t.Fatalf("init --dry-run --json: %d\n%s", code, out)
 	}
 	var dry map[string]any
-	if err := json.Unmarshal([]byte(out), &dry); err != nil || dry["dry_run"] != true || dry["skill"] != "acme-studio-site" {
+	if err := json.Unmarshal([]byte(out), &dry); err != nil || dry["dry_run"] != true || dry["skill"] != "acme-studio-site" || dry["module"] != "github.com/acme-studio/site" {
 		t.Fatalf("unexpected dry-run JSON: %v\n%s", err, out)
 	}
 
-	// Real init with --json.
-	out, code = h.runSite(nil, "init", h.repo, "--title", "Acme Studio", "--origin", "https://acme.example/", "--json")
+	// Real init with --owner and --json.
+	out, code = h.runSite(nil, "init", h.repo, "--title", "Acme Studio", "--origin", "https://acme.example/", "--owner", "acme-studio", "--json")
 	if code != 0 {
 		t.Fatalf("init --json: %d\n%s", code, out)
 	}
 	var initRes map[string]any
-	if err := json.Unmarshal([]byte(out), &initRes); err != nil || initRes["ok"] != true || initRes["origin"] != "https://acme.example" {
+	if err := json.Unmarshal([]byte(out), &initRes); err != nil || initRes["ok"] != true || initRes["origin"] != "https://acme.example" || initRes["module"] != "github.com/acme-studio/site" {
 		t.Fatalf("unexpected init JSON: %v\n%s", err, out)
 	}
 
 	for _, rel := range []string{
-		"go.mod", "main.go", "render.go", "server.go", "check.go", "main_test.go",
-		"standalone_deps_test.go", "shaped.json", "contract.bsh", "site.json",
+		"go.mod", "render.go", "server.go", "check.go", "site_test.go",
+		"standalone_deps_test.go", "cmd/server/main.go", "shaped.json",
+		"contract.bsh", "site.json",
 		"content/home.md", "content/about.md",
 		"checks/render-determinism.bsh", "checks/unique-ids.bsh",
 		"checks/links-resolve.bsh", "checks/stale-base.bsh",
@@ -177,13 +209,19 @@ func TestInitWritesRepoSkillAndPreservesExistingFiles(t *testing.T) {
 		if err != nil || len(b) == 0 {
 			t.Errorf("init missing %s: %v", rel, err)
 		}
-		// Nothing dhnt-specific in generated sample content or config.
 		if strings.HasPrefix(rel, "content/") || rel == "site.json" || strings.HasSuffix(rel, "SKILL.md") {
 			if strings.Contains(strings.ToLower(string(b)), "dhnt.io") || strings.Contains(strings.ToLower(string(b)), "dahenito") {
 				t.Errorf("%s leaked dhnt-specific copy:\n%s", rel, b)
 			}
 		}
 	}
+
+	goModBytes, _ := os.ReadFile(filepath.Join(h.repo, "go.mod"))
+	wantContains(t, "generated go.mod", string(goModBytes), "module github.com/acme-studio/site\n")
+	serverMainBytes, _ := os.ReadFile(filepath.Join(h.repo, "cmd", "server", "main.go"))
+	wantContains(t, "generated cmd/server/main.go", string(serverMainBytes), `"github.com/acme-studio/site"`)
+	shapedBytes, _ := os.ReadFile(filepath.Join(h.repo, "shaped.json"))
+	wantContains(t, "generated shaped.json", string(shapedBytes), `"main": "cmd/server"`)
 
 	skillMD, _ := os.ReadFile(filepath.Join(h.repo, "skills", "acme-studio-site", "SKILL.md"))
 	wantContains(t, "SKILL.md", string(skillMD),
@@ -194,6 +232,16 @@ func TestInitWritesRepoSkillAndPreservesExistingFiles(t *testing.T) {
 		"/about.json",
 		`"url":`, `"section_id":`, `"revision":`, `"section_sha256":`, `"quote":`,
 	)
+
+	// Explicit --module without --owner works and builds cleanly.
+	customModDir := filepath.Join(h.root, "custom-mod-site")
+	out, code = h.runSite(nil, "init", customModDir, "--title", "Custom Docs", "--origin", "https://docs.example.test", "--module", "example.test/org/docs-site", "--json")
+	if code != 0 {
+		t.Fatalf("init --module: %d\n%s", code, out)
+	}
+	customGoMod, _ := os.ReadFile(filepath.Join(customModDir, "go.mod"))
+	wantContains(t, "custom go.mod", string(customGoMod), "module example.test/org/docs-site\n")
+	runGo(t, customModDir, "build", "./...")
 
 	// Emitted SKILL.md passes `bashy skill add` and `bashy skill verify` in an isolated store.
 	skillStore := filepath.Join(h.root, "skills-store")
@@ -211,24 +259,196 @@ func TestInitWritesRepoSkillAndPreservesExistingFiles(t *testing.T) {
 		t.Fatalf("bashy skill verify failed: %v\n%s", err, verOut)
 	}
 
-	// Re-init preserves existing files.
+	// Re-init preserves existing files (including go.mod and cmd/server/main.go).
 	customAbout := "---\ntitle: Custom About\npath: /about\n---\n\n## Custom {#custom}\n\nKeep me.\n"
 	if err := os.WriteFile(filepath.Join(h.repo, "content", "about.md"), []byte(customAbout), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	out, code = h.runSite(nil, "init", h.repo, "--title", "Other", "--origin", "https://other.example")
+	out, code = h.runSite(nil, "init", h.repo, "--title", "Other", "--origin", "https://other.example", "--owner", "other")
 	if code != 0 {
 		t.Fatalf("re-init: %d\n%s", code, out)
 	}
-	wantContains(t, "re-init", out, "keep: site.json (exists)", "keep: content/ (exists)")
+	wantContains(t, "re-init", out, "keep: go.mod (exists)", "keep: cmd/server/main.go (exists)", "keep: site.json (exists)", "keep: content/ (exists)")
 	gotAbout, _ := os.ReadFile(filepath.Join(h.repo, "content", "about.md"))
 	if string(gotAbout) != customAbout {
 		t.Fatal("re-init overwrote content/about.md")
 	}
 
 	// Refuses unescaped quotes.
-	if out, code := h.runSite(nil, "init", filepath.Join(h.root, "bad"), "--title", `Bad "Quote"`, "--origin", "https://bad.example"); code == 0 {
+	if out, code := h.runSite(nil, "init", filepath.Join(h.root, "bad"), "--title", `Bad "Quote"`, "--origin", "https://bad.example", "--owner", "bad"); code == 0 {
 		t.Fatalf("quote accepted:\n%s", out)
+	}
+}
+
+func TestGeneratedAcmeModuleBuildsServesRoutesAndImportsViaReplace(t *testing.T) {
+	h := newHarness(t)
+	acmeDir := filepath.Join(h.root, "acme-site")
+
+	// Exact acceptance scenario:
+	// site init <dir> --title T --origin https://example.test --owner acme
+	out, code := h.runSite(nil, "init", acmeDir, "--title", "T", "--origin", "https://example.test", "--owner", "acme")
+	if code != 0 {
+		t.Fatalf("init acme: %d\n%s", code, out)
+	}
+	goMod, err := os.ReadFile(filepath.Join(acmeDir, "go.mod"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(goMod), "module github.com/acme/site\n") {
+		t.Fatalf("expected module github.com/acme/site, got:\n%s", goMod)
+	}
+
+	// Add an optional front-matter summary on home.md to verify end-to-end summary support too.
+	homePath := filepath.Join(acmeDir, "content", "home.md")
+	origHome, err := os.ReadFile(homePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withSummary := strings.Replace(string(origHome), "path: /\n", "path: /\nsummary: One lead paragraph for visitors and agents.\n", 1)
+	if err := os.WriteFile(homePath, []byte(withSummary), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Root package and cmd/server build and pass unit tests with `go build ./...` and `go test ./...`.
+	runGo(t, acmeDir, "build", "./...")
+	runGo(t, acmeDir, "test", "./...")
+
+	// External consumer module importing github.com/acme/site via a replace directive compiles and runs.
+	consumerDir := filepath.Join(h.root, "consumer")
+	if err := os.MkdirAll(consumerDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	consumerGoMod := "module example.test/hosted-consumer\n\ngo 1.23\n\nrequire github.com/acme/site v0.0.0\n\nreplace github.com/acme/site => " + filepath.ToSlash(acmeDir) + "\n"
+	if err := os.WriteFile(filepath.Join(consumerDir, "go.mod"), []byte(consumerGoMod), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	consumerMain := `package main
+
+import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+
+	"github.com/acme/site"
+)
+
+func main() {
+	s, err := site.LoadFS(site.Assets)
+	if err != nil {
+		panic(err)
+	}
+	if err := site.Validate(s); err != nil {
+		panic(err)
+	}
+	var p *site.Page = s.ByPath["/"]
+	var nav []site.NavItem = p.Nav
+	var secs []site.Section = p.Sections
+	if len(nav) == 0 || len(secs) == 0 || p.Summary != "One lead paragraph for visitors and agents." {
+		panic(fmt.Sprintf("unexpected page: %+v", p))
+	}
+	mdTwin, jsonTwin := site.TwinPaths(p.Path)
+	if mdTwin != "/index.md" || jsonTwin != "/index.json" {
+		panic("bad twin paths")
+	}
+	if site.ComputeRevision(p) != p.Revision {
+		panic("revision mismatch")
+	}
+	if site.ComputeSectionHash(secs[0].ID, secs[0].Heading, secs[0].Markdown) != secs[0].SHA256 {
+		panic("section sha256 mismatch")
+	}
+	if site.NegotiateAccept("text/markdown") != "md" {
+		panic("negotiate failed")
+	}
+	frag := p.RenderHTMLFragment()
+	md := p.RenderMarkdown()
+	rawJSON, err := p.RenderJSON()
+	if err != nil {
+		panic(err)
+	}
+	if !strings.Contains(frag, "<p>One lead paragraph for visitors and agents.</p>") ||
+		!strings.Contains(md, "One lead paragraph for visitors and agents.") ||
+		!strings.Contains(string(rawJSON), "\"summary\": \"One lead paragraph for visitors and agents.\"") {
+		panic("summary missing from rendered outputs")
+	}
+	h := site.NewHandler(s)
+	req := httptest.NewRequest(http.MethodGet, "/about", nil)
+	req.Header.Set("Accept", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK || rec.Header().Get("Vary") != "Accept" {
+		panic(fmt.Sprintf("handler status=%d vary=%q", rec.Code, rec.Header().Get("Vary")))
+	}
+	fmt.Println("consumer-ok:" + p.Revision)
+}
+`
+	if err := os.WriteFile(filepath.Join(consumerDir, "main.go"), []byte(consumerMain), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGo(t, consumerDir, "build", "./...")
+	consumerOut := runGo(t, consumerDir, "run", ".")
+	wantContains(t, "external consumer run", consumerOut, "consumer-ok:")
+
+	// cmd/server serves the exact same public routes as before.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+	t.Cleanup(func() { h.runSite(nil, "stop", "--name", "acme-live") })
+	if srvOut, rc := h.runSite(nil, "serve", acmeDir, "--name", "acme-live", "--port", strconv.Itoa(port)); rc != 0 {
+		t.Fatalf("serve acme: %d\n%s", rc, srvOut)
+	}
+	baseURL := "http://127.0.0.1:" + strconv.Itoa(port)
+	var ready bool
+	for range 200 {
+		if r, gerr := http.Get(baseURL + "/robots.txt"); gerr == nil {
+			r.Body.Close()
+			if r.StatusCode == http.StatusOK {
+				ready = true
+				break
+			}
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if !ready {
+		srvLog, _ := os.ReadFile(filepath.Join(h.state, "acme-live.log"))
+		t.Fatalf("cmd/server did not start on %s:\n%s", baseURL, srvLog)
+	}
+	for _, route := range []struct {
+		path   string
+		accept string
+		wantCT string
+		want   string
+	}{
+		{"/", "", "text/html", "<p>One lead paragraph for visitors and agents.</p>"},
+		{"/", "text/markdown", "text/markdown", "One lead paragraph for visitors and agents."},
+		{"/", "application/json", "application/json", `"summary": "One lead paragraph for visitors and agents."`},
+		{"/index.md", "", "text/markdown", "## Overview {#overview}"},
+		{"/index.json", "", "application/json", `"path": "/"`},
+		{"/about", "", "text/html", `<section id="team">`},
+		{"/about.md", "", "text/markdown", "## Team {#team}"},
+		{"/about.json", "", "application/json", `"id": "team"`},
+		{"/robots.txt", "", "text/plain", "Allow: /"},
+		{"/llms.txt", "", "text/plain", "https://example.test/about.md"},
+	} {
+		req, _ := http.NewRequest(http.MethodGet, baseURL+route.path, nil)
+		if route.accept != "" {
+			req.Header.Set("Accept", route.accept)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET %s: %v", route.path, err)
+		}
+		bodyBytes, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), route.wantCT) {
+			t.Fatalf("GET %s (Accept=%q): status=%d ct=%q", route.path, route.accept, resp.StatusCode, resp.Header.Get("Content-Type"))
+		}
+		if !strings.Contains(string(bodyBytes), route.want) {
+			t.Errorf("GET %s (Accept=%q) missing %q:\n%s", route.path, route.accept, route.want, bodyBytes)
+		}
 	}
 }
 
@@ -241,7 +461,7 @@ var (
 
 func TestRenderCheckAndServeVerbs(t *testing.T) {
 	h := newHarness(t)
-	if out, code := h.runSite(nil, "init", h.repo, "--title", "Sample Org", "--origin", "https://sample.example"); code != 0 {
+	if out, code := h.runSite(nil, "init", h.repo, "--title", "Sample Org", "--origin", "https://sample.example", "--owner", "sample"); code != 0 {
 		t.Fatalf("init: %d\n%s", code, out)
 	}
 
@@ -367,7 +587,7 @@ func TestRenderCheckAndServeVerbs(t *testing.T) {
 	}
 	addr := "http://127.0.0.1:" + strconv.Itoa(port)
 	var resp *http.Response
-	for range 40 {
+	for range 200 {
 		resp, err = http.Get(addr + "/about.json")
 		if err == nil {
 			break
@@ -375,7 +595,8 @@ func TestRenderCheckAndServeVerbs(t *testing.T) {
 		time.Sleep(50 * time.Millisecond)
 	}
 	if err != nil {
-		t.Fatalf("server did not answer on %s: %v", addr, err)
+		srvLog, _ := os.ReadFile(filepath.Join(h.state, "live-smoke.log"))
+		t.Fatalf("server did not answer on %s: %v\n%s", addr, err, srvLog)
 	}
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK || resp.Header.Get("ETag") != `"`+parsed.Revision+`"` || resp.Header.Get("Vary") != "Accept" {
@@ -385,7 +606,7 @@ func TestRenderCheckAndServeVerbs(t *testing.T) {
 
 func TestBashyShapeVerifyPassesInScrubbedEnvironmentAndRefusesStaleBase(t *testing.T) {
 	h := newHarness(t)
-	if out, code := h.runSite(nil, "init", h.repo, "--title", "Sample Site", "--origin", "https://sample.example"); code != 0 {
+	if out, code := h.runSite(nil, "init", h.repo, "--title", "Sample Site", "--origin", "https://sample.example", "--owner", "acme"); code != 0 {
 		t.Fatalf("init: %d\n%s", code, out)
 	}
 

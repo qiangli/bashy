@@ -1,4 +1,4 @@
-package main
+package site
 
 import (
 	"bytes"
@@ -20,9 +20,9 @@ type CheckOutcome struct {
 	Detail string `json:"detail,omitempty"`
 }
 
-// ValidateSite enforces unique-ids, links-resolve, and representation parity
-// on an already-loaded Site.
-func ValidateSite(s *Site) error {
+// Validate enforces unique-ids, links-resolve, and representation parity on an
+// already-loaded Site.
+func Validate(s *Site) error {
 	if err := checkUniqueIDsSite(s); err != nil {
 		return err
 	}
@@ -30,6 +30,11 @@ func ValidateSite(s *Site) error {
 		return err
 	}
 	return checkParitySite(s)
+}
+
+// ValidateSite is an alias for Validate.
+func ValidateSite(s *Site) error {
+	return Validate(s)
 }
 
 // RunChecks executes one check ("render-determinism", "unique-ids",
@@ -78,11 +83,11 @@ func RunChecks(dir, baseDir, name, pageHint, element string) ([]CheckOutcome, er
 // CheckRenderDeterminism loads and renders the site twice and verifies
 // byte-identical outputs plus HTML/Markdown/JSON link and section-id parity.
 func CheckRenderDeterminism(dir string) error {
-	first, err := LoadSiteDir(dir)
+	first, err := Load(dir)
 	if err != nil {
 		return err
 	}
-	second, err := LoadSiteDir(dir)
+	second, err := Load(dir)
 	if err != nil {
 		return err
 	}
@@ -161,7 +166,7 @@ func checkParitySite(s *Site) error {
 
 // CheckUniqueIDs verifies unique page paths and unique declared section ids.
 func CheckUniqueIDs(dir string) error {
-	site, err := LoadSiteDir(dir)
+	site, err := Load(dir)
 	if err != nil {
 		return err
 	}
@@ -190,11 +195,11 @@ func checkUniqueIDsSite(s *Site) error {
 	return nil
 }
 
-// CheckLinksResolve verifies that every internal link in navigation and page
-// sections resolves to a served route and (when #fragment is present) to a
-// declared section id on the target page.
+// CheckLinksResolve verifies that every internal link in navigation, optional
+// summary, and page sections resolves to a served route and (when #fragment is
+// present) to a declared section id on the target page.
 func CheckLinksResolve(dir string) error {
-	site, err := LoadSiteDir(dir)
+	site, err := Load(dir)
 	if err != nil {
 		return err
 	}
@@ -294,7 +299,7 @@ func CheckStaleBase(baseDir, pageHint, element string) error {
 	if !hasDirective {
 		return nil
 	}
-	baseSite, err := LoadSiteDir(baseDir)
+	baseSite, err := Load(baseDir)
 	if err != nil {
 		return fmt.Errorf("stale, re-read: load base site: %w", err)
 	}
@@ -372,7 +377,9 @@ func parseWishElement(element string) (sectionID, revision string, hasDirective 
 
 var inlineDirectiveRe = regexp.MustCompile(`\bsection=([#a-zA-Z0-9_-]+)\s+revision=([a-zA-Z0-9_-]+)|\brevision=([a-zA-Z0-9_-]+)\s+section=([#a-zA-Z0-9_-]+)`)
 
-func resolveWishInput(pageHint, element, wishFile, commitMsgFile string) (string, string, error) {
+// ResolveWishInput extracts the wish page and element provenance from explicit
+// flags, an optional .wish / wish.json file, or a git commit message file.
+func ResolveWishInput(pageHint, element, wishFile, commitMsgFile string) (string, string, error) {
 	if strings.TrimSpace(element) != "" {
 		return pageHint, element, nil
 	}

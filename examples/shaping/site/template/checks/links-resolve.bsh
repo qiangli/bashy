@@ -19,4 +19,4 @@ run_go() {
         GOWORK=off CGO_ENABLED=0 bashy go "$@"
     fi
 }
-run_go run . -check links-resolve
+run_go run ./cmd/server -check links-resolve

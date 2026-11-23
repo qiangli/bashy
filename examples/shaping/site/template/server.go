@@ -1,4 +1,4 @@
-package main
+package site
 
 import (
 	"io/fs"
@@ -7,29 +7,50 @@ import (
 	"strings"
 )
 
-type server struct {
+type routeHandler struct {
 	site *Site
 }
 
-func newServer(getenv func(string) string) (*server, error) {
-	return newServerFrom(assets, getenv)
+// NewHandler returns an http.Handler serving the public routes for an
+// already-loaded Site: canonical HTML pages, Accept content negotiation,
+// .md and .json twins, /robots.txt, /llms.txt, Vary: Accept, strong ETag,
+// Link alternates, and strong If-None-Match 304 responses.
+func NewHandler(s *Site) http.Handler {
+	return &routeHandler{site: s}
 }
 
-func newServerFrom(fsys fs.FS, getenv func(string) string) (*server, error) {
-	site, err := LoadSite(fsys)
+// Handler returns an http.Handler serving the public routes for s.
+func (s *Site) Handler() http.Handler {
+	return NewHandler(s)
+}
+
+// NewHandlerFS loads and validates a Site from fsys and returns an
+// http.Handler serving its public routes.
+func NewHandlerFS(fsys fs.FS) (http.Handler, error) {
+	_, h, err := NewServerHandler(fsys, nil)
+	return h, err
+}
+
+// NewServerHandler loads a Site from fsys, applies SITE_ORIGIN when getenv is
+// non-nil and returns a non-empty value, validates structural invariants, and
+// returns both the loaded Site and its public routes http.Handler.
+func NewServerHandler(fsys fs.FS, getenv func(string) string) (*Site, http.Handler, error) {
+	s, err := LoadFS(fsys)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if o := strings.TrimSpace(getenv("SITE_ORIGIN")); o != "" {
-		site.SetOrigin(o)
+	if getenv != nil {
+		if o := strings.TrimSpace(getenv("SITE_ORIGIN")); o != "" {
+			s.SetOrigin(o)
+		}
 	}
-	if err := ValidateSite(site); err != nil {
-		return nil, err
+	if err := Validate(s); err != nil {
+		return nil, nil, err
 	}
-	return &server{site: site}, nil
+	return s, NewHandler(s), nil
 }
 
-func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *routeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "read-only", http.StatusMethodNotAllowed)
@@ -46,24 +67,24 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
-			_, _ = w.Write([]byte(s.site.RenderRobotsTxt()))
+			_, _ = w.Write([]byte(h.site.RenderRobotsTxt()))
 		}
 		return
 	case "/llms.txt":
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		if r.Method == http.MethodGet {
-			_, _ = w.Write([]byte(s.site.RenderLLMsTxt()))
+			_, _ = w.Write([]byte(h.site.RenderLLMsTxt()))
 		}
 		return
 	case "/index.md":
-		if p, ok := s.site.ByPath["/"]; ok {
-			s.serveRepresentation(w, r, p, "md")
+		if p, ok := h.site.ByPath["/"]; ok {
+			h.serveRepresentation(w, r, p, "md")
 			return
 		}
 	case "/index.json":
-		if p, ok := s.site.ByPath["/"]; ok {
-			s.serveRepresentation(w, r, p, "json")
+		if p, ok := h.site.ByPath["/"]; ok {
+			h.serveRepresentation(w, r, p, "json")
 			return
 		}
 	}
@@ -71,8 +92,8 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(reqPath, ".md") {
 		base := strings.TrimSuffix(reqPath, ".md")
 		if base != "" && base != "/index" {
-			if p, ok := s.site.ByPath[base]; ok {
-				s.serveRepresentation(w, r, p, "md")
+			if p, ok := h.site.ByPath[base]; ok {
+				h.serveRepresentation(w, r, p, "md")
 				return
 			}
 		}
@@ -80,25 +101,24 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasSuffix(reqPath, ".json") {
 		base := strings.TrimSuffix(reqPath, ".json")
 		if base != "" && base != "/index" {
-			if p, ok := s.site.ByPath[base]; ok {
-				s.serveRepresentation(w, r, p, "json")
+			if p, ok := h.site.ByPath[base]; ok {
+				h.serveRepresentation(w, r, p, "json")
 				return
 			}
 		}
 	}
 
-	p, ok := s.site.ByPath[reqPath]
+	p, ok := h.site.ByPath[reqPath]
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
-	format := negotiateAccept(strings.Join(r.Header.Values("Accept"), ", "))
-	s.serveRepresentation(w, r, p, format)
+	h.serveRepresentation(w, r, p, NegotiateRequest(r))
 }
 
-func (s *server) serveRepresentation(w http.ResponseWriter, r *http.Request, p *Page, format string) {
+func (h *routeHandler) serveRepresentation(w http.ResponseWriter, r *http.Request, p *Page, format string) {
 	mdTwin, jsonTwin := TwinPaths(p.Path)
-	canonicalURL := s.site.Config.Origin + p.Path
+	canonicalURL := h.site.Config.Origin + p.Path
 	etag := `"` + p.Revision + `"`
 
 	w.Header().Set("Vary", "Accept")
@@ -126,7 +146,7 @@ func (s *server) serveRepresentation(w http.ResponseWriter, r *http.Request, p *
 		}
 	default:
 		ctype = "text/html; charset=utf-8"
-		body = []byte(s.site.RenderHTMLDocument(p))
+		body = []byte(h.site.RenderHTMLDocument(p))
 	}
 	w.Header().Set("Content-Type", ctype)
 
@@ -179,9 +199,18 @@ func (a acceptSpec) betterThan(b acceptSpec) bool {
 	return a.specificity > b.specificity
 }
 
-// negotiateAccept chooses "html" (default), "md" (text/markdown), or "json"
+// NegotiateRequest chooses "html" (default), "md", or "json" from r's Accept
+// header values.
+func NegotiateRequest(r *http.Request) string {
+	if r == nil {
+		return "html"
+	}
+	return NegotiateAccept(strings.Join(r.Header.Values("Accept"), ", "))
+}
+
+// NegotiateAccept chooses "html" (default), "md" (text/markdown), or "json"
 // (application/json) per RFC 9110 quality and specificity rules.
-func negotiateAccept(accept string) string {
+func NegotiateAccept(accept string) string {
 	accept = strings.TrimSpace(accept)
 	if accept == "" {
 		return "html"

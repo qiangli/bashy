@@ -1,4 +1,4 @@
-package main
+package site
 
 import (
 	"os"
@@ -7,9 +7,10 @@ import (
 	"testing"
 )
 
-// TestStandaloneDeps proves this command builds alone with stdlib only: with
-// GOWORK=off its dependency closure holds no external module, no other bashy
-// package, and no yoke/coreutils command package.
+// TestStandaloneDeps proves this module (both the root library package and
+// ./cmd/server) builds alone with stdlib only: with GOWORK=off its dependency
+// closure holds no external module, no other bashy package, and no
+// yoke/coreutils command package.
 func TestStandaloneDeps(t *testing.T) {
 	list := func(args ...string) []string {
 		cmd := exec.Command("go", append([]string{"list"}, args...)...)
@@ -20,8 +21,8 @@ func TestStandaloneDeps(t *testing.T) {
 		}
 		return strings.Fields(string(out))
 	}
-	self := list("-f", "{{.ImportPath}}", ".")[0]
-	for _, item := range list("-deps", "-f", "{{.ImportPath}}={{.Standard}}", ".") {
+	self := list("-m")[0]
+	for _, item := range list("-deps", "-f", "{{.ImportPath}}={{.Standard}}", "./...") {
 		pkg, std, _ := strings.Cut(item, "=")
 		if pkg == self || strings.HasPrefix(pkg, self+"/") {
 			continue

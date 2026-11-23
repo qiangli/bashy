@@ -20,4 +20,4 @@ run_go() {
     fi
 }
 run_go test ./...
-run_go run . -check render-determinism
+run_go run ./cmd/server -check render-determinism

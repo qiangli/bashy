@@ -1,8 +1,13 @@
-package main
+// Package site loads Markdown pages with declared {#id} section identifiers
+// and renders deterministic HTML fragments/documents, Markdown twins, and JSON
+// under one canonical content SHA-256 revision, with an http.Handler for the
+// public routes and structural/compare-and-set checks.
+package site
 
 import (
 	"bufio"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,6 +21,13 @@ import (
 	"sort"
 	"strings"
 )
+
+// Assets holds the module's embedded site.json and content/*.md files so an
+// external module importing this repository at a pinned version can render and
+// serve its published content without a separate filesystem checkout.
+//
+//go:embed site.json content
+var Assets embed.FS
 
 // Config is site.json: site-wide metadata and shared navigation.
 type Config struct {
@@ -44,6 +56,7 @@ type Section struct {
 type Page struct {
 	Path         string    `json:"path"`
 	Title        string    `json:"title"`
+	Summary      string    `json:"summary,omitempty"`
 	Revision     string    `json:"revision"`
 	Nav          []NavItem `json:"nav"`
 	Sections     []Section `json:"sections"`
@@ -60,16 +73,31 @@ type Site struct {
 
 var sectionIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]*$`)
 
-// LoadSiteDir loads site.json and content/*.md from a filesystem directory.
-func LoadSiteDir(dir string) (*Site, error) {
-	return LoadSite(os.DirFS(dir))
+// Load loads site.json and content/*.md from a filesystem directory.
+func Load(dir string) (*Site, error) {
+	return LoadFS(os.DirFS(dir))
 }
 
-// LoadSite loads site.json and content/*.md from fsys without failing on
-// check-level invariants (duplicate ids or broken links), so individual check
-// commands can report their specific diagnostics. Call ValidateSite to enforce
-// all structural checks before serving.
+// LoadSiteDir is an alias for Load.
+func LoadSiteDir(dir string) (*Site, error) {
+	return Load(dir)
+}
+
+// LoadEmbedded loads the site from the package's embedded Assets.
+func LoadEmbedded() (*Site, error) {
+	return LoadFS(Assets)
+}
+
+// LoadSite is an alias for LoadFS.
 func LoadSite(fsys fs.FS) (*Site, error) {
+	return LoadFS(fsys)
+}
+
+// LoadFS loads site.json and content/*.md from fsys without failing on
+// check-level invariants (duplicate ids or broken links), so individual check
+// commands can report their specific diagnostics. Call Validate to enforce all
+// structural checks before serving.
+func LoadFS(fsys fs.FS) (*Site, error) {
 	rawCfg, err := fs.ReadFile(fsys, "site.json")
 	if err != nil {
 		return nil, fmt.Errorf("read site.json: %w", err)
@@ -155,6 +183,9 @@ func TwinPaths(pagePath string) (mdPath, jsonPath string) {
 	return clean + ".md", clean + ".json"
 }
 
+// parsePage parses front matter (required title and path; optional summary and
+// sections; unknown key: value lines are ignored, malformed lines missing ':'
+// are rejected) and body sections with declared {#id} identifiers.
 func parsePage(source, raw string, nav []NavItem) (*Page, error) {
 	norm := strings.ReplaceAll(raw, "\r\n", "\n")
 	if !strings.HasPrefix(norm, "---\n") {
@@ -185,12 +216,14 @@ func parsePage(source, raw string, nav []NavItem) (*Page, error) {
 			return nil, fmt.Errorf("%s: invalid front matter line %q", source, line)
 		}
 		k = strings.TrimSpace(k)
-		v = unquoteYAML(strings.TrimSpace(v))
+		v = strings.TrimSpace(unquoteYAML(strings.TrimSpace(v)))
 		switch k {
 		case "title":
 			p.Title = v
 		case "path":
 			p.Path = v
+		case "summary":
+			p.Summary = v
 		case "sections":
 			for _, item := range strings.Split(v, ",") {
 				if id := strings.TrimSpace(item); id != "" {
@@ -226,12 +259,18 @@ func parsePage(source, raw string, nav []NavItem) (*Page, error) {
 		}
 	}
 	p.Sections = sections
-	p.Revision = computePageRevision(p)
+	p.Revision = ComputeRevision(p)
 	return p, nil
 }
 
 func unquoteYAML(s string) string {
-	if len(s) >= 2 && ((s[0] == '"' && s[len(s)-1] == '"') || (s[0] == '\'' && s[len(s)-1] == '\'')) {
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		inner := s[1 : len(s)-1]
+		inner = strings.ReplaceAll(inner, `\"`, `"`)
+		inner = strings.ReplaceAll(inner, `\\`, `\`)
+		return inner
+	}
+	if len(s) >= 2 && s[0] == '\'' && s[len(s)-1] == '\'' {
 		return s[1 : len(s)-1]
 	}
 	return s
@@ -298,13 +337,12 @@ func parseSections(source, body string) ([]Section, error) {
 	out := make([]Section, 0, len(raw))
 	for _, r := range raw {
 		md := canonicalMarkdownBlock(r.lines)
-		sum := sha256.Sum256([]byte("site-section-v1\nid:" + r.id + "\nheading:" + r.heading + "\n" + md))
 		out = append(out, Section{
 			ID:       r.id,
 			Heading:  r.heading,
 			HTML:     renderMarkdownBlocks(md),
 			Markdown: md,
-			SHA256:   hex.EncodeToString(sum[:]),
+			SHA256:   ComputeSectionHash(r.id, r.heading, md),
 		})
 	}
 	return out, nil
@@ -345,14 +383,24 @@ func canonicalMarkdownBlock(lines []string) string {
 	return strings.Join(cleaned, "\n")
 }
 
-// canonicalPageDocument builds the canonical byte representation of a page's
-// content. Copy changes (title, path, nav, section ids/headings/markdown)
-// change the revision; HTML/CSS/header rendering changes do not.
-func canonicalPageDocument(p *Page) []byte {
+// ComputeSectionHash returns the 64-hex-character SHA-256 digest of a section's
+// canonical id, heading, and Markdown body.
+func ComputeSectionHash(id, heading, markdown string) string {
+	sum := sha256.Sum256([]byte("site-section-v1\nid:" + id + "\nheading:" + heading + "\n" + markdown))
+	return hex.EncodeToString(sum[:])
+}
+
+// CanonicalDocument builds the canonical byte representation of a page's
+// content. Copy changes (title, summary, path, nav, section ids/headings/markdown)
+// change the revision; HTML/CSS/header/origin rendering changes do not.
+func CanonicalDocument(p *Page) []byte {
 	var b strings.Builder
 	b.WriteString("site-content-v1\n")
 	b.WriteString("path:" + p.Path + "\n")
 	b.WriteString("title:" + p.Title + "\n")
+	if p.Summary != "" {
+		b.WriteString("summary:" + p.Summary + "\n")
+	}
 	for _, n := range p.Nav {
 		b.WriteString("nav:" + n.Label + "\t" + n.Href + "\n")
 	}
@@ -364,13 +412,30 @@ func canonicalPageDocument(p *Page) []byte {
 	return []byte(b.String())
 }
 
-func computePageRevision(p *Page) string {
-	sum := sha256.Sum256(canonicalPageDocument(p))
+// ComputeRevision returns the 12-hex-character short SHA-256 content revision
+// of p's CanonicalDocument.
+func ComputeRevision(p *Page) string {
+	sum := sha256.Sum256(CanonicalDocument(p))
 	return hex.EncodeToString(sum[:6])
 }
 
-// RenderHTMLFragment renders the semantic HTML fragment with <nav> and
-// <section id="..."> blocks.
+// RenderHTMLFragment renders the semantic HTML fragment for p.
+func RenderHTMLFragment(p *Page) string {
+	return p.RenderHTMLFragment()
+}
+
+// RenderMarkdown renders the Markdown twin for p.
+func RenderMarkdown(p *Page) string {
+	return p.RenderMarkdown()
+}
+
+// RenderJSON renders the structured JSON representation for p.
+func RenderJSON(p *Page) ([]byte, error) {
+	return p.RenderJSON()
+}
+
+// RenderHTMLFragment renders the semantic HTML fragment with <nav>, optional
+// lead summary paragraph under <h1>, and <section id="..."> blocks.
 func (p *Page) RenderHTMLFragment() string {
 	var b strings.Builder
 	b.WriteString(`<article data-path="` + html.EscapeString(p.Path) + `" data-revision="` + html.EscapeString(p.Revision) + `">` + "\n")
@@ -382,6 +447,9 @@ func (p *Page) RenderHTMLFragment() string {
 		b.WriteString("</nav>\n")
 	}
 	b.WriteString("<h1>" + html.EscapeString(p.Title) + "</h1>\n")
+	if p.Summary != "" {
+		b.WriteString("<p>" + renderInline(p.Summary) + "</p>\n")
+	}
 	for _, s := range p.Sections {
 		b.WriteString(`<section id="` + html.EscapeString(s.ID) + `">` + "\n")
 		b.WriteString("<h2>" + html.EscapeString(s.Heading) + "</h2>\n")
@@ -420,7 +488,8 @@ func (s *Site) RenderHTMLDocument(p *Page) string {
 }
 
 // RenderMarkdown renders the Markdown twin with front matter (path, revision,
-// alternates), labeled navigation links, and {#id} section headings.
+// alternates), labeled navigation links, optional lead summary paragraph under
+// the title, and {#id} section headings.
 func (p *Page) RenderMarkdown() string {
 	mdTwin, jsonTwin := TwinPaths(p.Path)
 	var b strings.Builder
@@ -441,6 +510,9 @@ func (p *Page) RenderMarkdown() string {
 		b.WriteString(strings.Join(parts, " · ") + "\n\n")
 	}
 	b.WriteString("# " + p.Title + "\n")
+	if p.Summary != "" {
+		b.WriteString("\n" + p.Summary + "\n")
+	}
 	for _, s := range p.Sections {
 		b.WriteString("\n## " + s.Heading + " {#" + s.ID + "}\n")
 		if s.Markdown != "" {
@@ -833,7 +905,8 @@ func ExtractJSONSectionIDs(raw []byte) ([]string, error) {
 }
 
 // ExtractJSONLinks decodes a rendered JSON page, verifies each section's HTML
-// and Markdown carry identical links, and returns nav + section links in order.
+// and Markdown carry identical links, and returns nav + summary + section links
+// in order.
 func ExtractJSONLinks(raw []byte) ([]string, error) {
 	var p Page
 	if err := json.Unmarshal(raw, &p); err != nil {
@@ -842,6 +915,9 @@ func ExtractJSONLinks(raw []byte) ([]string, error) {
 	var out []string
 	for _, n := range p.Nav {
 		out = append(out, n.Href)
+	}
+	if p.Summary != "" {
+		out = append(out, extractInlineMarkdownLinks(p.Summary)...)
 	}
 	for _, s := range p.Sections {
 		htmlLinks := ExtractHTMLLinks(s.HTML)
