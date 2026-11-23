@@ -163,8 +163,8 @@ require (
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
 	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261123172747-32d78887eb27 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261123182843-8278811066ba // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261123182843-8278811066ba // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261123195327-35ce40805fec // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261123195327-35ce40805fec // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
