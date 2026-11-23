@@ -3,10 +3,10 @@ id: 8e5204e127c4
 kind: feature
 title: C4 member-principal shaping e2e across example apps + 'Enable an app for consumer shaping' runbook
 seq: 3261
-status: todo
+status: assigned
 priority: p1
 created: 2026-11-20T19:14:04.928857Z
-assignee: agy-gemini4-hydrogen
+assignee: claude-fable5.1
 sprint: 682
 sprint_id: 623586bb-742f-570e-87c9-9af0c101bac1
 sprint_title: Shaping-enable the example apps for consumers (viewer, session, form, board/whiteboard/table/hello-world, notepad/chart)
