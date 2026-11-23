@@ -1088,6 +1088,8 @@ github.com/qiangli/yamux/v5 v5.0.0 h1:c0Jbq9IkVOO0kD2n8cTlHHIRqKtyy5Gy08RR3uEoyU
 github.com/qiangli/yamux/v5 v5.0.0/go.mod h1:YmWeys9yLj7O+j3afOEuWqgda3tbg7NOLsLmBtvD//o=
 github.com/qiangli/ycode v0.3.1-dev.0.20261121101805-4c6cee72ad8a h1:wuhoSBMvSdqRNdd3fkFX9hYCcURz7vis926bb+VPSSU=
 github.com/qiangli/ycode v0.3.1-dev.0.20261121101805-4c6cee72ad8a/go.mod h1:rgEUN160+w2n1uLQ9q3DN953/rTIfDgSUEpID8JwANk=
+github.com/qiangli/ycode v0.3.1-dev.0.20261123171524-5323b1b22403 h1:djcAzODhGUAZo+mnMB/1O5fqkfeO4/tnL4BXMmsWHhw=
+github.com/qiangli/ycode v0.3.1-dev.0.20261123171524-5323b1b22403/go.mod h1:rgEUN160+w2n1uLQ9q3DN953/rTIfDgSUEpID8JwANk=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261121101805-4c6cee72ad8a h1:AZ87IZSSbZ1XyuGCBbA2ku+3+Xd3uXjTDC3u43bMS7Q=
 github.com/qiangli/ycode/examples/genie v0.0.0-20261121101805-4c6cee72ad8a/go.mod h1:x6GayEqdfjk/3fNlF26YJD4sAEZo7RIC8TAdqcntvu4=
 github.com/qiangli/yoke v0.0.0-20261122161039-5f1365166f79 h1:YZb5nj9HqVJUmzBcmGsnPb8e8YmQ6eXRe3XrE2r3BuU=

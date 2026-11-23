@@ -591,7 +591,7 @@ require (
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/bash v0.0.0-20261121101805-42efe30317c4
 	github.com/qiangli/coreutils v0.0.0-20261121101804-c5832f99ccf6
-	github.com/qiangli/ycode v0.3.1-dev.0.20261121101805-4c6cee72ad8a
+	github.com/qiangli/ycode v0.3.1-dev.0.20261123171524-5323b1b22403
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261122192157-3eb700cd39d9
 	github.com/qiangli/yoke/external/otel v0.0.0-20261121163358-be872cc5a395
