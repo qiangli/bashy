@@ -356,6 +356,9 @@ func appendAdapterEnv(base []string, invokedAs string, markAdapterExec bool) []s
 			out = append(out, "BASHY_SELF="+self)
 		}
 	}
+	if export := hostAdapterCacheExport(out); export != "" {
+		out = append(stripEnvKey(out, adapterCacheEnvKey), export)
+	}
 	out = append(out, invokedAsEnv+"="+invokedAs)
 	return out
 }
