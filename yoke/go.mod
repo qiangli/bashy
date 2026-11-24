@@ -163,8 +163,8 @@ require (
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
 	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261123172747-32d78887eb27 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261124150948-f6139e6f1237 // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261124150948-f6139e6f1237 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261124214707-99731cbda580 // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261124214707-99731cbda580 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
@@ -319,7 +319,7 @@ require (
 	github.com/itchyny/gojq v0.12.19
 	github.com/qiangli/coreutils v0.0.0-20261124121700-f9833f726fac
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be
-	github.com/qiangli/yoke v0.0.0-20261124150948-f6139e6f1237
+	github.com/qiangli/yoke v0.0.0-20261124214707-99731cbda580
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
