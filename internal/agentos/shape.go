@@ -9,11 +9,15 @@ import (
 	"strings"
 
 	"github.com/qiangli/yoke/pkg/bus"
+	"github.com/qiangli/yoke/pkg/shape"
 	"github.com/qiangli/yoke/pkg/webconsole"
 	"github.com/spf13/cobra"
 )
 
 type shapeCLIRequest struct {
+	// Caller and Owner are set only by authenticated in-process surfaces.
+	Caller                                                                       *shape.Caller
+	Owner                                                                        string
 	PreviewArgs                                                                  []string
 	IncidentKind, IncidentPath                                                   string
 	Verb, App, ID, Request, From, User, Actor, Agent, Story, Todo, Page, Element string
@@ -167,7 +171,8 @@ func bashyShapeCmd() *cobra.Command {
 		cmd.AddCommand(sub)
 	}
 	addShapePromotionCmds(cmd, &o)
- addShapePageCmds(cmd, &o)
+	addShapeScopeCmd(cmd, &o)
+	addShapePageCmds(cmd, &o)
 	return cmd
 }
 

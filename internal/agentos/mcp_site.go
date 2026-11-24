@@ -23,6 +23,8 @@ import (
 	yokemcp "github.com/qiangli/yoke/mcp"
 	"github.com/qiangli/yoke/pkg/coopauth"
 	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/shape"
+	"github.com/qiangli/yoke/pkg/shape/appserver"
 	"github.com/qiangli/yoke/pkg/webconsole"
 )
 
@@ -57,7 +59,10 @@ type siteMCP struct {
 	baseErr error
 }
 
-type siteCaller struct{ Principal, Tier string }
+type siteCaller struct {
+	Principal, Tier, Circle string
+	Groups                  []string
+}
 
 func newSiteMCP(ctx context.Context, app, dir string, outpost bool) *siteMCP {
 	return &siteMCP{app: app, dir: dir, outpost: outpost, ctx: ctx, client: &http.Client{Timeout: 30 * time.Second}}
@@ -109,7 +114,7 @@ func (s *siteMCP) caller(header http.Header) siteCaller {
 			if tier == "signed-in" {
 				tier = siteTierAccount
 			}
-			return siteCaller{Principal: principal, Tier: tier}
+			return siteCaller{Principal: principal, Tier: tier, Circle: rel.Circle, Groups: append([]string(nil), rel.Groups...)}
 		}
 		if user != "" {
 			return siteCaller{Principal: user, Tier: siteTierAccount}
@@ -148,11 +153,28 @@ func (s *siteMCP) allowRead(c siteCaller, tool string) error {
 }
 
 func (s *siteMCP) allowShape(c siteCaller, tool string) error {
-	if c.Tier != siteTierOwner {
+	if c.Tier != siteTierOwner && c.Tier != siteTierMember {
+		return siteRefusal(c, tool, "owner tier required")
+	}
+	if c.Tier == siteTierMember && tool != "shape_wish" && tool != "shape_verify" && tool != "shape_preview" {
 		return siteRefusal(c, tool, "owner tier required")
 	}
 	if s.app == "" {
 		return fmt.Errorf("%s: no shaped app; serve with --site-app APP", tool)
+	}
+	if c.Tier == siteTierMember {
+		app, err := shapeAppLookup(s.app)
+		if err != nil {
+			return err
+		}
+		scopes, err := (shape.Service{App: app}).Scopes()
+		if err != nil {
+			return err
+		}
+		if !scopes.AdmitsMember(appserver.ScopeShape, c.Circle, c.Groups, strings.TrimPrefix(c.Principal, "cloud:")) && tool != "shape_wish" {
+			return siteRefusal(c, tool, "shape scope required")
+		}
+		// Out-of-scope wishes go through R5a, which files an owner request.
 	}
 	return nil
 }
@@ -544,6 +566,17 @@ func (s *siteMCP) shape(ctx context.Context, req *mcpsdk.CallToolRequest, tool s
 		return nil, out, err
 	}
 	r.App, r.User, r.Actor = s.app, c.Principal, actor
+	r.Caller = &shape.Caller{Principal: c.Principal, Actor: actor, RepresentedUser: c.Principal,
+		Tier: c.Tier, Circle: c.Circle, Groups: append([]string(nil), c.Groups...), Email: strings.TrimPrefix(c.Principal, "cloud:")}
+	if config, ok := readMCPOutpostConfig(); ok && s.outpost {
+		r.Owner = strings.TrimSpace(config.OAuth2Email)
+	}
+	if r.Owner == "" {
+		if c.Tier != siteTierOwner {
+			return nil, out, errors.New("shape: host owner identity is not configured")
+		}
+		r.Owner = c.Principal
+	}
 	// The local console the CLI's --console defaults to: preview names the
 	// candidate's isolated preview there.
 	r.Console = fmt.Sprintf("http://127.0.0.1:%d", webconsole.DefaultPort)
@@ -574,7 +607,7 @@ func newSiteMCPServer(s *siteMCP, version string, audit func(yokemcp.Record)) *m
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "cite", Annotations: readOnly,
 		Description: "Return the citation record {url, section_id, revision, section_sha256, quote} for <url_or_path>#<section_id>."}, s.cite)
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "shape_wish",
-		Description: "Owner only: ask the shape service for a candidate change to the site."},
+		Description: "Ask for a site change. Owners and members with shape scope create candidates; other members file requests on the owner's queue."},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest, in siteShapeWishInput) (*mcpsdk.CallToolResult, siteShapeOutput, error) {
 			if strings.TrimSpace(in.Request) == "" {
 				return nil, siteShapeOutput{}, errors.New("shape_wish: request is required")
@@ -582,8 +615,8 @@ func newSiteMCPServer(s *siteMCP, version string, audit func(yokemcp.Record)) *m
 			return s.shape(ctx, req, "shape_wish", shapeCLIRequest{Verb: "wish", Request: in.Request, Page: in.Page, Element: in.Element, Agent: in.Agent})
 		})
 	for _, verb := range []struct{ tool, verb, doc string }{
-		{"shape_verify", "verify", "Owner only: run the trusted verifier on a candidate."},
-		{"shape_preview", "preview", "Owner only: return the isolated preview URL of a verified candidate."},
+		{"shape_verify", "verify", "Owner or member with shape scope: run the trusted verifier on a candidate."},
+		{"shape_preview", "preview", "Owner or member with shape scope: return the isolated preview URL of a candidate."},
 		{"shape_approve", "approve", "Owner only: verify again and activate a candidate."},
 	} {
 		verb := verb

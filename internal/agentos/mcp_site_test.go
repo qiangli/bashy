@@ -19,6 +19,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	yokemcp "github.com/qiangli/yoke/mcp"
+	"github.com/qiangli/yoke/pkg/shape"
 )
 
 const siteTestKey = "site-test-key"
@@ -65,7 +66,7 @@ func writeSiteOutpostConfig(t *testing.T, upstream string, requireLogin bool) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	host, port, _ := net.SplitHostPort(strings.TrimPrefix(upstream, "http://"))
 	n, _ := strconv.Atoi(port)
-	data, _ := json.Marshal(map[string]any{"apps": []map[string]any{{"name": "site", "scheme": "http", "host": host, "port": n,
+	data, _ := json.Marshal(map[string]any{"oauth2_email": "owner@example.com", "apps": []map[string]any{{"name": "site", "scheme": "http", "host": host, "port": n,
 		"require_login": requireLogin, "sso_secret": siteTestKey}}})
 	if err := os.MkdirAll(filepath.Join(dir, "matrix"), 0o700); err != nil {
 		t.Fatal(err)
@@ -77,6 +78,10 @@ func writeSiteOutpostConfig(t *testing.T, upstream string, requireLogin bool) {
 
 // stamp signs the headers exactly as outpost's app proxy does (apps.go).
 func stamp(h http.Header, key, kind, user, visitor string) {
+	stampAudience(h, key, kind, user, visitor, "", "")
+}
+
+func stampAudience(h http.Header, key, kind, user, visitor, circle, groups string) {
 	prefix, ts := "/h/host/app/site", strconv.FormatInt(time.Now().Unix(), 10)
 	h.Set("X-Forwarded-Prefix", prefix)
 	if user != "" {
@@ -88,11 +93,13 @@ func stamp(h http.Header, key, kind, user, visitor string) {
 	h.Set("X-Outpost-Identity-Ts", ts)
 	if kind != "" {
 		h.Set("X-Outpost-Relationship", kind)
+		h.Set("X-Outpost-Circle", circle)
+		h.Set("X-Outpost-Groups", groups)
 		if visitor != "" {
 			h.Set("X-Outpost-Visitor", visitor)
 		}
 		rmac := hmac.New(sha256.New, []byte(key))
-		rmac.Write([]byte("v2\n" + kind + "\n\n\n" + visitor + "\n" + user + "\n" + prefix + "\n" + ts))
+		rmac.Write([]byte("v2\n" + kind + "\n" + circle + "\n" + groups + "\n" + visitor + "\n" + user + "\n" + prefix + "\n" + ts))
 		h.Set("X-Outpost-Relationship-Sig", hex.EncodeToString(rmac.Sum(nil)))
 	}
 }
@@ -151,6 +158,9 @@ func stubSiteShape(t *testing.T) *[]shapeCLIRequest {
 	t.Helper()
 	var calls []shapeCLIRequest
 	oldExec, oldActor := siteShapeExecute, shapeAuthoredActor
+	oldLookup := shapeAppLookup
+	shapeAppLookup = func(string) (shape.App, error) { return shape.App{Name: "site"}, nil }
+	t.Cleanup(func() { shapeAppLookup = oldLookup })
 	siteShapeExecute = func(_ context.Context, r shapeCLIRequest) (any, error) {
 		calls = append(calls, r)
 		return map[string]any{"id": "c1", "status": "ready"}, nil
@@ -273,7 +283,11 @@ func TestSiteMCPTiersOverHTTP(t *testing.T) {
 				return
 			}
 			want := "refused: caller " + tc.principal + " (tier " + tc.tier + ") is not authorized for shape_wish; owner tier required"
-			if refusal != want || len(*calls) != before {
+			if tc.kind == "member" {
+				if refusal != "" || len(*calls) != before+1 || (*calls)[before].Owner != "owner@example.com" || (*calls)[before].Caller.Tier != "member" {
+					t.Fatalf("member request = %v %s, calls=%+v", out, refusal, *calls)
+				}
+			} else if refusal != want || len(*calls) != before {
 				t.Fatalf("shape_wish refusal = %q, want %q (shape calls %d→%d)", refusal, want, before, len(*calls))
 			}
 			for _, tool := range []string{"shape_verify", "shape_preview", "shape_approve", "shape_undo"} {

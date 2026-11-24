@@ -63,6 +63,9 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 		}
 	}
 	app, lookupErr := shapeAppLookup(r.App)
+	if r.Owner != "" {
+		app.Owner = r.Owner
+	}
 	hostKind := lookupErr == nil && app.Shaping != nil && app.Shaping.Kind != "" && app.Shaping.Kind != "web"
 	if !hostKind {
 		// Existing web version operations retain their original principal semantics.
@@ -91,6 +94,9 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 	}
 	svc := shape.Service{App: app, Options: opts}
 	caller := shape.Caller{Principal: r.User, Actor: r.Actor, RepresentedUser: r.User}
+	if r.Caller != nil {
+		caller = *r.Caller
+	}
 	if hostKind {
 		switch r.Verb {
 		case "status":

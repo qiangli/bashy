@@ -54,6 +54,31 @@ investigating an incident by hand.
 History, undo, restore, release, offer and adopt delegate to the existing source
 operations and their verification gates. `adopt --preview` does not activate.
 
+## Member scopes
+
+The local owner manages member audiences in the app's `shaped.json`:
+
+```sh
+bashy shape scope ls --app website --json
+bashy shape scope set --app website edit --circle company --group support --json
+bashy shape scope set --app website shape --circle contractor --group support --json
+bashy shape scope rm --app website shape --json
+```
+
+`set` replaces the named audience; `rm` removes the entire named grant.
+`ls` optionally accepts `edit` or `shape` to select one grant. Only those two
+scope names are valid. Repeat audience flags or pass comma-separated values;
+`--email` selects member emails. Audiences match circles AND (groups OR emails).
+An empty audience grants nothing. `shape` includes `edit`.
+
+Scope administration requires a local owner session; `--user` cannot impersonate
+the owner and `--remote` is not supported for scope administration. On the site
+MCP, verified members with `shape` can wish, verify and preview. Other members'
+wishes become requests on the owner's queue without running an agent. Approve
+and undo remain owner-only. The host's private outpost configuration supplies
+the account owner for the shared queue; an absent owner identity refuses member
+shaping. Account strangers and anonymous visitors cannot shape or file requests.
+
 ## Submit an approved version
 
 `bashy shape submit APP REV [--story ID]` creates a reviewable source proposal

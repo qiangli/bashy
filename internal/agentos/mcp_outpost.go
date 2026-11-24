@@ -24,8 +24,9 @@ type mcpOutpostApp struct {
 }
 
 type mcpOutpostConfig struct {
-	ServiceSSO map[string]string `json:"service_sso"`
-	Apps       []mcpOutpostApp   `json:"apps"`
+	OAuth2Email string            `json:"oauth2_email"`
+	ServiceSSO  map[string]string `json:"service_sso"`
+	Apps        []mcpOutpostApp   `json:"apps"`
 }
 
 // Re-read the host's private app key on each request: outpost may provision it
