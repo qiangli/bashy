@@ -14,10 +14,10 @@ github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUq
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
 github.com/microcosm-cc/bluemonday v1.0.27 h1:MpEUotklkwCSLeH+Qdx1VJgNqLlpY2KXwXFM08ygZfk=
 github.com/microcosm-cc/bluemonday v1.0.27/go.mod h1:jFi9vgW+H7c3V0lb6nR74Ib/DIB5OBs92Dimizgw2cA=
-github.com/qiangli/bashy/examples/desk/chart v0.1.0 h1:mU7RWtPdPeBUbFp/E1Gwr5cLIrqK6+V/Tjd/+88qaBY=
-github.com/qiangli/bashy/examples/desk/chart v0.1.0/go.mod h1:nJBJJ3K2nXjsOWwdFaFtxXoalzQPe79DROWwQlx1b4c=
-github.com/qiangli/bashy/examples/desk/kit v0.1.0 h1:xgmuru9lMdefU7zQh1p+c6vr+83X/SRosFRBG9ULztU=
-github.com/qiangli/bashy/examples/desk/kit v0.1.0/go.mod h1:su+lTUIe8p0MNo8cmSOXRC5r9TLtqJHpnLB5+RgSWpE=
+github.com/qiangli/bashy/examples/desk/chart v0.1.1 h1:0yO+wFbLmYE0VQrCkPndLMwJ+SWw9ECHj9LHBb4Gxq4=
+github.com/qiangli/bashy/examples/desk/chart v0.1.1/go.mod h1:1hHfPioCJCt+3RpKeh3Q3r9pnUrW/dwZk6q4q6FrOFo=
+github.com/qiangli/bashy/examples/desk/kit v0.2.0 h1:7r2wl+KNJltcgjyR/EyNMEtZSYr0MFoE536Y3a8dylI=
+github.com/qiangli/bashy/examples/desk/kit v0.2.0/go.mod h1:su+lTUIe8p0MNo8cmSOXRC5r9TLtqJHpnLB5+RgSWpE=
 github.com/yuin/goldmark v1.8.2 h1:kEGpgqJXdgbkhcOgBxkC0X0PmoPG1ZyoZ117rDVp4zE=
 github.com/yuin/goldmark v1.8.2/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
 golang.org/x/net v0.26.0 h1:soB7SVo0PWrY4vPW/+ay0jKDNScG2X9wFeYlXIvJsOQ=

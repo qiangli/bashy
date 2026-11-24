@@ -11,8 +11,8 @@
 # console's shaped build does.
 set -euo pipefail
 
-desk_kit_version=v0.1.0
-desk_chart_version=v0.1.0
+desk_kit_version=v0.2.0
+desk_chart_version=v0.1.1
 
 desk_modules_here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 desk_modules_runner=${BASHY_BIN:-bashy}

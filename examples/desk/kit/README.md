@@ -50,6 +50,10 @@ retrofits them); CLI verbs are the desk seven, not serve/status/backup.
   decoding, participant cookie, atomic write, data dir, stable URLs,
   contentless open view, statuses, secret refusal, prefix strip, loopback
   check.
+- `revision.go` — `RevisionStore`, immutable per-item/part snapshots plus an
+  `active`/`previous` pointer (`Save` with optional `base_rev`, `Undo`,
+  `Restore`, `History`, `Read`, `ServeAction` / `ActionHandler`,
+  `WriteRevisionConflict`).
 - `ui.go` + `kit.css` + `kit.js` (embedded) — copy button with "Copied"
   state, status badges (`pending`, `needs-human`, `filled-by-agent`,
   `answered`, `failed`, `closed`), field/question components, item header,
@@ -191,6 +195,44 @@ accepted and logged with it, malformed refused. The memo fixture runs all
 three green (`memo serve -lan`, `-embeddable`) and red on
 `-break events-no-publish|events-no-resume|events-leak-content|embed-unasked|frame-any|lan-open|lan-unlogged`.
 
+## Artifact revisions (Sprint 684)
+
+`kit.RevisionStore` (`revision.go`, shaped like `yoke/pkg/shape/slot/slot.go`)
+applies bashy's software-shaping revision model directly to shared desk items
+with the same words, pointer mechanics, and JSON as `bashy shape
+history|undo|restore`:
+
+| | Shaping a tool (`bashy shape`) | An artifact (`desk/kit`) |
+|---|---|---|
+| a revision | immutable retained version | immutable snapshot of the authored content |
+| current | `active` pointer, with `previous` | same |
+| save | draft saved against `base_rev` | `set --base-rev R`; a different active revision refuses with both |
+| back one | `shape undo APP` | `APP undo ITEM` |
+| to any | `shape restore APP REV` | `APP restore ITEM REV` |
+| list | `shape history APP` | `APP history ITEM` |
+| JSON | `revision`, `created`, `active`, `previous`, `base_rev` | same fields, plus `author` (and optional opaque `kind` and `assistant`) |
+
+Action and CLI JSON contract (served identically on page and CLI through
+`POST /api/action` and `RevisionStore.ServeAction`):
+
+| Verb / Action | Request fields | Response JSON (under `ContractHandler` envelope) | Refusals |
+|---|---|---|---|
+| `set` (via `Save` / `SaveRevision`) | `id`, optional `part`, optional `base_rev` | tool's `set` response (`Save` returns `{id, revision, author, kind?, assistant?, created, active, previous}`) | stale `base_rev`: `409` (`conflict`) with `base_rev` and `active` (`WriteRevisionConflict`); no `base_rev` is a recorded overwrite |
+| `history` | `{"action":"history","id":ITEM}` | `{id, active, previous, versions:[{revision, author, kind?, assistant?, created}, …]}` (newest-first) | `400` invalid id/part |
+| `undo` | `{"action":"undo","id":ITEM}` | `{id, revision, author, kind?, assistant?, created, active, previous}` (swaps `active` and `previous`) | `409` (`conflict`) when `previous` is empty |
+| `restore` | `{"action":"restore","id":ITEM,"revision":REV}` | `{id, revision, author, kind?, assistant?, created, active, previous}` (selects any retained `REV`) | `400` missing `revision`; `404` (`not_found`) unknown `REV` |
+
+Boundaries: the app chooses which bytes enter a snapshot and decides who may
+read or write; `RevisionStore` stores `author`, participant `kind` (`member`,
+`signed-in`, `anonymous`, …) and `assistant` as opaque provenance metadata
+without checking roles or identity, never owns or modifies the app's item file
+(snapshots live beside it under `$data/revisions/<item>/<part>/` with
+`state.json` as the single commit point; an unpublished `rN` orphan is
+atomically replaced on the next save while listed versions stay immutable), and
+implements no merge, no lock, and no roles.
+Callers serialize concurrent mutations per item (desk apps already hold their
+item mutex across `/api/action`).
+
 ## Use in a tool
 
 The kit is a versioned module served by the local Go module proxy, never a
@@ -203,7 +245,7 @@ ships under a new version there, and the tools move to it.
 # in the tool server module, after ../register-modules.sh:
 export GOPROXY="file://${BASHY_GOMOD_PROXY:-$HOME/.bashy/gomod-proxy},https://proxy.golang.org,direct"
 export GONOSUMDB=github.com/qiangli/bashy/examples
-go get github.com/qiangli/bashy/examples/desk/kit@v0.1.0
+go get github.com/qiangli/bashy/examples/desk/kit@v0.2.0
 ```
 
 ```go

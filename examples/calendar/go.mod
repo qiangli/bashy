@@ -4,7 +4,7 @@ go 1.27
 
 toolchain go1.27.4
 
-require github.com/qiangli/bashy/examples/desk/kit v0.1.0
+require github.com/qiangli/bashy/examples/desk/kit v0.2.0
 
 require (
 	github.com/alecthomas/chroma/v2 v2.27.0 // indirect
