@@ -324,29 +324,49 @@ func (a *app) organizerAuthor(r *http.Request, req actionRequest) (author, kind,
 	return "organizer", "", assistant
 }
 
-func (a *app) saveContentRevisionLocked(it *item, baseRev, author, kind, assistant string) (kit.RevisionState, error) {
-	statePath := filepath.Join(a.dir, "revisions", it.ID, "_", "state.json")
-	prevState, readErr := os.ReadFile(statePath)
-	hadState := readErr == nil
+func (a *app) saveContentRevisionLocked(prev, next *item, baseRev, author, kind, assistant string) (kit.RevisionState, error) {
+	h, err := a.revisions().History(next.ID, "")
+	if err != nil {
+		return kit.RevisionState{}, err
+	}
+	if baseRev != "" && baseRev != h.Active {
+		return kit.RevisionState{ID: next.ID, Active: h.Active, Previous: h.Previous}, &kit.RevisionConflictError{
+			Item:    next.ID,
+			BaseRev: baseRev,
+			Active:  h.Active,
+		}
+	}
+	next.Revision++
+	if err := a.persistLocked(next); err != nil {
+		return kit.RevisionState{}, err
+	}
+	saveBase := baseRev
+	// Seed a pre-S1 saved page's existing authored content as r1 so its first edit can undo to it.
+	if prev != nil && baseRev == "" && h.Active == "" && len(h.Versions) == 0 {
+		if _, err := a.revisions().SaveRevision(kit.SaveInput{
+			Item:   next.ID,
+			Author: "organizer",
+			Data:   encodePageContent(prev.Title, prev.Body),
+		}); err != nil {
+			_ = a.persistLocked(prev)
+			return kit.RevisionState{}, err
+		}
+		saveBase = "r1"
+	}
 	st, err := a.revisions().SaveRevision(kit.SaveInput{
-		Item:      it.ID,
-		BaseRev:   baseRev,
+		Item:      next.ID,
+		BaseRev:   saveBase,
 		Author:    author,
 		Kind:      kind,
 		Assistant: assistant,
-		Data:      encodePageContent(it.Title, it.Body),
+		Data:      encodePageContent(next.Title, next.Body),
 	})
 	if err != nil {
-		return st, err
-	}
-	if err := a.saveLocked(it, ""); err != nil {
-		// Keep item file and revision pointer consistent if persisting the item fails.
-		if hadState {
-			_ = kit.AtomicWrite(statePath, prevState)
-		} else if errors.Is(readErr, os.ErrNotExist) {
-			_ = os.Remove(statePath)
-		}
+		_ = a.persistLocked(prev)
 		return kit.RevisionState{}, err
+	}
+	if breakMode != "events-no-publish" {
+		a.events.Publish(next.ID, "", next.Revision)
 	}
 	return st, nil
 }
@@ -749,7 +769,7 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, it *item, req actio
 	if !closing && (contentEdited || req.BaseRev != "") {
 		author, kind, assistant := a.organizerAuthor(r, req)
 		var err error
-		revState, err = a.saveContentRevisionLocked(&next, req.BaseRev, author, kind, assistant)
+		revState, err = a.saveContentRevisionLocked(it, &next, req.BaseRev, author, kind, assistant)
 		if err != nil {
 			if kit.WriteRevisionConflict(w, err) {
 				return
@@ -799,12 +819,7 @@ func (a *app) revisionAction(w http.ResponseWriter, r *http.Request, it *item, r
 		next := it.clone()
 		next.Title = snap.Title
 		next.Body = snap.Body
-		if strings.TrimSpace(next.Body) == "" {
-			next.Status = kit.StatusPending
-		} else {
-			next.Status = kit.StatusFilled
-		}
-		return a.saveLocked(&next, "")
+		return a.persistLocked(&next)
 	})
 }
 

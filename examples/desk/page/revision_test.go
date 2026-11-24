@@ -205,8 +205,9 @@ func TestUndoAndRestoreBringBodyBackLeavingLiveStateIntact(t *testing.T) {
 		t.Fatalf("set r3: %d %s", code, out)
 	}
 	revBeforeUndo := a.items["live"].Revision
+	statusBeforeUndo := a.items["live"].Status
 
-	// CLI undo brings back r2 (Title 2 / Body 2) and bumps live frame counter.
+	// CLI undo brings back r2 (Title 2 / Body 2) while leaving the live frame counter and status untouched.
 	code, out := run("undo", "live", "--json")
 	if code != 0 {
 		t.Fatalf("cli undo: %d %s", code, out)
@@ -216,7 +217,7 @@ func TestUndoAndRestoreBringBodyBackLeavingLiveStateIntact(t *testing.T) {
 		t.Fatalf("undo response = %s (%v)", out, err)
 	}
 
-	checkIntact := func(wantTitle, wantBody string, wantMinRev int) {
+	checkIntact := func(wantTitle, wantBody string, wantRev int, wantStatus string) {
 		t.Helper()
 		a.mu.Lock()
 		defer a.mu.Unlock()
@@ -224,8 +225,11 @@ func TestUndoAndRestoreBringBodyBackLeavingLiveStateIntact(t *testing.T) {
 		if cur.Title != wantTitle || cur.Body != wantBody {
 			t.Fatalf("content = (%q, %q), want (%q, %q)", cur.Title, cur.Body, wantTitle, wantBody)
 		}
-		if cur.Revision <= wantMinRev {
-			t.Fatalf("live frame counter = %d, want > %d", cur.Revision, wantMinRev)
+		if cur.Revision != wantRev {
+			t.Fatalf("live frame counter = %d, want exact %d", cur.Revision, wantRev)
+		}
+		if cur.Status != wantStatus {
+			t.Fatalf("status = %q, want exact %q", cur.Status, wantStatus)
 		}
 		if cur.Votes["ada@192.0.2.1"] != "yes" ||
 			cur.Timers["timer-1"] == nil || cur.Timers["timer-1"].Remaining != 42 ||
@@ -239,10 +243,9 @@ func TestUndoAndRestoreBringBodyBackLeavingLiveStateIntact(t *testing.T) {
 			t.Fatalf("live/private state mutated after undo/restore: %+v", cur)
 		}
 	}
-	checkIntact("Title 2", "# Title 2\n\nBody 2\n\n```block timer:break duration=60s\n```\n", revBeforeUndo)
+	checkIntact("Title 2", "# Title 2\n\nBody 2\n\n```block timer:break duration=60s\n```\n", revBeforeUndo, statusBeforeUndo)
 
-	// CLI restore brings back r1 (Title 1 / Body 1 with blocks) and still leaves live state intact.
-	revBeforeRestore := a.items["live"].Revision
+	// CLI restore brings back r1 (Title 1 / Body 1 with blocks) and still leaves live frame counter and state intact.
 	code, out = run("restore", "live", "r1", "--json")
 	if code != 0 {
 		t.Fatalf("cli restore r1: %d %s", code, out)
@@ -251,7 +254,7 @@ func TestUndoAndRestoreBringBodyBackLeavingLiveStateIntact(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &restored); err != nil || restored.Active != "r1" || restored.Previous != "r2" {
 		t.Fatalf("restore response = %s (%v)", out, err)
 	}
-	checkIntact("Title 1", "# Title 1\n\nBody 1\n\n```block timer:break duration=60s\n```\n\n```block here\n```\n\n```block hands\n```\n", revBeforeRestore)
+	checkIntact("Title 1", "# Title 1\n\nBody 1\n\n```block timer:break duration=60s\n```\n\n```block here\n```\n\n```block hands\n```\n", revBeforeUndo, statusBeforeUndo)
 
 	// Reload from disk into a fresh app to verify persisted state.
 	reloaded := &app{dir: a.dir, items: map[string]*item{}}
@@ -384,6 +387,30 @@ func TestParticipantActionsCreateNoRevision(t *testing.T) {
 	if len(afterHist.Versions) != len(beforeHist.Versions) || afterHist.Active != beforeHist.Active || afterHist.Previous != beforeHist.Previous {
 		t.Fatalf("non-content actions created a revision: before=%+v after=%+v", beforeHist, afterHist)
 	}
+
+	// blockAdd recorded r2 and set recorded r3; undo reverts to r2 (without hands), restore r1 removes the
+	// poll fence while keeping poll owner key and live counter intact, and restore r3 brings everything back.
+	origBody := a.items["class"].Body
+	pollKey := a.items["class"].Natives["poll-1"].Key
+	liveRev := a.items["class"].Revision
+	if w := ownerAction(t, a, key, `{"action":"undo","id":"class"}`); w.Code != http.StatusOK {
+		t.Fatalf("undo to r2: %d %s", w.Code, w.Body)
+	}
+	if strings.Contains(a.items["class"].Body, "```block hands") || !strings.Contains(a.items["class"].Body, "```block poll:") || a.items["class"].Revision != liveRev {
+		t.Fatalf("undo to r2 mismatch: body=%q rev=%d", a.items["class"].Body, a.items["class"].Revision)
+	}
+	if w := ownerAction(t, a, key, `{"action":"restore","id":"class","revision":"r1"}`); w.Code != http.StatusOK {
+		t.Fatalf("restore r1: %d %s", w.Code, w.Body)
+	}
+	if strings.Contains(a.items["class"].Body, "```block poll:") || a.items["class"].Natives["poll-1"].Key != pollKey || a.items["class"].Revision != liveRev {
+		t.Fatalf("restore r1 failed to revert body or lost poll key/rev: body=%q rev=%d", a.items["class"].Body, a.items["class"].Revision)
+	}
+	if w := ownerAction(t, a, key, `{"action":"restore","id":"class","revision":"r3"}`); w.Code != http.StatusOK {
+		t.Fatalf("restore r3: %d %s", w.Code, w.Body)
+	}
+	if a.items["class"].Body != origBody || a.items["class"].Revision != liveRev {
+		t.Fatalf("restore r3 body/rev mismatch: body=%q want=%q rev=%d", a.items["class"].Body, origBody, a.items["class"].Revision)
+	}
 }
 
 func TestPreS1SavedPagePreservedAndPartialWriteSafe(t *testing.T) {
@@ -423,17 +450,27 @@ func TestPreS1SavedPagePreservedAndPartialWriteSafe(t *testing.T) {
 		t.Fatalf("pre-S1 stale base: want 409 with both revisions, got %d %s", w.Code, w.Body.String())
 	}
 
-	// Overwrite without base_rev starts history at r1 and preserves existing votes.
+	// Overwrite without base_rev seeds legacy pre-S1 authored bytes as r1 and saves r2,
+	// so undo brings back the prior pre-S1 title and body while preserving votes and counters.
 	if w := do(a, http.MethodPost, "/api/action", `{"action":"set","id":"legacy","body":"Migrated body"}`, "127.0.0.1:5000", owner); w.Code != http.StatusOK {
-		t.Fatalf("pre-S1 set: %d %s", w.Code, w.Body.String())
+		t.Fatalf("pre-S1 set: %d %s", w.Code, w.Body)
 	}
 	if a.items["legacy"].Votes["ada@127.0.0.1"] != "a" || a.items["legacy"].Revision != 5 {
 		t.Fatalf("pre-S1 votes/revision lost: %+v", a.items["legacy"])
 	}
+	if h, err := a.revisions().History("legacy", ""); err != nil || h.Active != "r2" || h.Previous != "r1" || len(h.Versions) != 2 {
+		t.Fatalf("legacy first edit history = %+v (%v)", h, err)
+	}
+	if w := do(a, http.MethodPost, "/api/action", `{"action":"undo","id":"legacy"}`, "127.0.0.1:5000", owner); w.Code != http.StatusOK {
+		t.Fatalf("legacy first-edit undo: %d %s", w.Code, w.Body)
+	}
+	if a.items["legacy"].Title != "Pre-S1 Title" || a.items["legacy"].Body != "# Pre-S1 Title\n\nLegacy content." || a.items["legacy"].Revision != 5 {
+		t.Fatalf("legacy undo did not restore pre-S1 content cleanly: %+v", a.items["legacy"])
+	}
 
-	// Partial write error path: simulate item write failure on set and undo by replacing items/legacy.json with a non-empty dir.
+	// Partial write error path: simulate item write failure on set, undo and restore by replacing items/legacy.json with a non-empty dir.
 	if w := do(a, http.MethodPost, "/api/action", `{"action":"set","id":"legacy","body":"Second body"}`, "127.0.0.1:5000", owner); w.Code != http.StatusOK {
-		t.Fatalf("set r2: %d", w.Code)
+		t.Fatalf("set r3: %d", w.Code)
 	}
 	origItemRaw, err := os.ReadFile(itemPath(a.dir, "legacy"))
 	if err != nil {
@@ -449,23 +486,50 @@ func TestPreS1SavedPagePreservedAndPartialWriteSafe(t *testing.T) {
 	if w := do(a, http.MethodPost, "/api/action", `{"action":"set","id":"legacy","body":"Failed write"}`, "127.0.0.1:5000", owner); w.Code != http.StatusInternalServerError {
 		t.Fatalf("partial set failure: want 500, got %d %s", w.Code, w.Body.String())
 	}
-	if h, err := a.revisions().History("legacy", ""); err != nil || h.Active != "r2" || h.Previous != "r1" {
+	if h, err := a.revisions().History("legacy", ""); err != nil || h.Active != "r3" || h.Previous != "r1" || len(h.Versions) != 3 {
 		t.Fatalf("partial set left revision pointer dirty: %+v (%v)", h, err)
 	}
 	if w := do(a, http.MethodPost, "/api/action", `{"action":"undo","id":"legacy"}`, "127.0.0.1:5000", owner); w.Code != http.StatusInternalServerError {
 		t.Fatalf("partial undo failure: want 500, got %d %s", w.Code, w.Body.String())
 	}
-	if h, err := a.revisions().History("legacy", ""); err != nil || h.Active != "r2" || h.Previous != "r1" {
+	if h, err := a.revisions().History("legacy", ""); err != nil || h.Active != "r3" || h.Previous != "r1" {
 		t.Fatalf("partial undo left revision pointer dirty: %+v (%v)", h, err)
 	}
-	if a.items["legacy"].Body != "Second body" {
-		t.Fatalf("in-memory item mutated on failed write: %q", a.items["legacy"].Body)
+	if w := do(a, http.MethodPost, "/api/action", `{"action":"restore","id":"legacy","revision":"r1"}`, "127.0.0.1:5000", owner); w.Code != http.StatusInternalServerError {
+		t.Fatalf("partial restore failure: want 500, got %d %s", w.Code, w.Body.String())
+	}
+	if h, err := a.revisions().History("legacy", ""); err != nil || h.Active != "r3" || h.Previous != "r1" {
+		t.Fatalf("partial restore left revision pointer dirty: %+v (%v)", h, err)
+	}
+	if a.items["legacy"].Body != "Second body" || a.items["legacy"].Revision != 6 {
+		t.Fatalf("in-memory item mutated on failed write: %+v", a.items["legacy"])
 	}
 	if err := os.RemoveAll(itemPath(a.dir, "legacy")); err != nil {
 		t.Fatal(err)
 	}
 	if err := kit.AtomicWrite(itemPath(a.dir, "legacy"), origItemRaw); err != nil {
 		t.Fatal(err)
+	}
+
+	// Partial write error path during set when revisions/ snapshots dir is blocked:
+	// item file and in-memory item must roll back to match prior history.
+	snapDir := filepath.Join(a.dir, "revisions", "legacy", "_", "snapshots")
+	if err := os.MkdirAll(filepath.Join(snapDir, "r4", "hold"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if w := do(a, http.MethodPost, "/api/action", `{"action":"set","id":"legacy","body":"Rollback body"}`, "127.0.0.1:5000", owner); w.Code != http.StatusInternalServerError {
+		t.Fatalf("set with blocked snapshot dir: want 500, got %d %s", w.Code, w.Body.String())
+	}
+	_ = os.RemoveAll(filepath.Join(snapDir, "r4"))
+	if a.items["legacy"].Body != "Second body" || a.items["legacy"].Revision != 6 {
+		t.Fatalf("failed revision save did not roll back in-memory item: %+v", a.items["legacy"])
+	}
+	diskCheck := &app{dir: a.dir, items: map[string]*item{}}
+	diskCheck.mu.Lock()
+	diskItem, err := diskCheck.loadLocked("legacy")
+	diskCheck.mu.Unlock()
+	if err != nil || diskItem.Body != "Second body" || diskItem.Revision != 6 {
+		t.Fatalf("failed revision save left dirty item on disk: %+v (%v)", diskItem, err)
 	}
 
 	// Partial write error path during add when revisions/ is blocked.
