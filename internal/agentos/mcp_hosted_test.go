@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -178,6 +179,7 @@ func (tr *mcpHostedTransport) RoundTrip(r *http.Request) (*http.Response, error)
 }
 
 type mcpHostedReply struct {
+	Digest   string   `json:"digest"`
 	Stdout   string   `json:"stdout"`
 	Stderr   string   `json:"stderr"`
 	ExitCode int      `json:"exit_code"`
@@ -381,6 +383,145 @@ echo "` + mcpHostedKeyEnv + `=${` + mcpHostedKeyEnv + `-unset}"
 	}
 	if decisions["rm"] != "deny" || decisions["echo"] != "allow" {
 		t.Fatalf("audit decisions = %v", decisions)
+	}
+}
+
+// A gated call the caller settled on the master runs under an identity that
+// carries the approval: that call only, those effects only, once.
+func TestMCPHostedApproval(t *testing.T) {
+	now := time.Now()
+	for name, approval := range map[string]mcpHostedApproval{
+		"no id":             {Digest: strings.Repeat("a", 64), Effects: []string{"destroy"}},
+		"short digest":      {ApprovalID: "ap-1", Digest: "abc", Effects: []string{"destroy"}},
+		"non-hex digest":    {ApprovalID: "ap-1", Digest: strings.Repeat("Z", 64), Effects: []string{"destroy"}},
+		"no effects":        {ApprovalID: "ap-1", Digest: strings.Repeat("a", 64)},
+		"ungated effect":    {ApprovalID: "ap-1", Digest: strings.Repeat("a", 64), Effects: []string{"destroy", "write"}},
+		"blank effect name": {ApprovalID: "ap-1", Digest: strings.Repeat("a", 64), Effects: []string{""}},
+	} {
+		id := mcpHostedFixtureIdentity("k")
+		id.Approval = &approval
+		if _, ok := mcpHostedVerify(mcpHostedToken(t, id, mcpHostedFixtureKey), []byte(mcpHostedFixtureKey), now); ok {
+			t.Errorf("identity with approval %q verified", name)
+		}
+	}
+	base := mcpHostedFixtureIdentity("k")
+	args := func(v map[string]any) json.RawMessage {
+		data, _ := json.Marshal(v)
+		return data
+	}
+	want, ok := mcpHostedCallDigest(base, "run_tool", args(map[string]any{"name": "rm", "args": []string{"-rf", "a"}}))
+	if !ok || len(want) != 64 {
+		t.Fatalf("digest = %q, %v", want, ok)
+	}
+	other := base
+	other.TaskID = "task-2"
+	for name, got := range map[string]func() (string, bool){
+		"args": func() (string, bool) {
+			return mcpHostedCallDigest(base, "run_tool", args(map[string]any{"name": "rm", "args": []string{"-rf", "b"}}))
+		},
+		"boundary": func() (string, bool) {
+			return mcpHostedCallDigest(base, "run_tool", args(map[string]any{"name": "rm", "args": []string{"-rf a"}}))
+		},
+		"stdin": func() (string, bool) {
+			return mcpHostedCallDigest(base, "run_tool", args(map[string]any{"name": "rm", "args": []string{"-rf", "a"}, "stdin": "x"}))
+		},
+		"dir": func() (string, bool) {
+			return mcpHostedCallDigest(base, "run_tool", args(map[string]any{"name": "rm", "args": []string{"-rf", "a"}, "dir": "x"}))
+		},
+		"env": func() (string, bool) {
+			return mcpHostedCallDigest(base, "run_tool", args(map[string]any{"name": "rm", "args": []string{"-rf", "a"}, "env": map[string]string{"A": "1"}}))
+		},
+		"tool": func() (string, bool) {
+			return mcpHostedCallDigest(base, "rm", args(map[string]any{"name": "rm", "args": []string{"-rf", "a"}}))
+		},
+		"task": func() (string, bool) {
+			return mcpHostedCallDigest(other, "run_tool", args(map[string]any{"name": "rm", "args": []string{"-rf", "a"}}))
+		},
+	} {
+		if digest, ok := got(); !ok || digest == want {
+			t.Errorf("a call differing in %s has digest %q, %v", name, digest, ok)
+		}
+	}
+	if _, ok := mcpHostedCallDigest(base, "run_tool", json.RawMessage(`{"name":"rm","extra":1}`)); ok {
+		t.Error("arguments of an unknown shape have a digest")
+	}
+
+	if runtime.GOOS == "windows" {
+		t.Skip("the child process of this test is the unix test binary")
+	}
+	h, auditLog := mcpHostedFixture(t, time.Minute, defaultMCPMaxOutput)
+	server := httptest.NewServer(h)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	transport := &mcpHostedTransport{}
+	transport.set(mcpHostedToken(t, mcpHostedFixtureIdentity("ask"), mcpHostedFixtureKey))
+	cs, err := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx,
+		&mcpsdk.StreamableClientTransport{Endpoint: server.URL, HTTPClient: &http.Client{Transport: transport}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+	call := map[string]any{"name": "rm", "args": []string{"-rf", "anything"}}
+	isGated := func(what string, reply mcpHostedReply) {
+		t.Helper()
+		if reply.State != "gated" || !slices.Equal(reply.Effects, []string{"destroy"}) {
+			t.Fatalf("%s = %+v, want state gated with effect destroy", what, reply)
+		}
+	}
+
+	// Unapproved, the call answers gated with the digest an approval must carry.
+	asked := mcpHostedCallTool(t, ctx, cs, "run_tool", call)
+	isGated("unapproved call", asked)
+	if len(asked.Digest) != 64 {
+		t.Fatalf("gated answer digest = %q", asked.Digest)
+	}
+	approve := func(key, digest string, effects ...string) {
+		id := mcpHostedFixtureIdentity(key)
+		id.Approval = &mcpHostedApproval{ApprovalID: "ap-7", Digest: digest, Effects: effects}
+		transport.set(mcpHostedToken(t, id, mcpHostedFixtureKey))
+	}
+
+	// An approval of other effects does not cover the call.
+	approve("wrong-effects", asked.Digest, "spend")
+	isGated("call approved for spend only", mcpHostedCallTool(t, ctx, cs, "run_tool", call))
+
+	// An approval runs only the call it names; a mismatch does not spend it.
+	approve("approved", asked.Digest, "destroy")
+	isGated("another call under the approval", mcpHostedCallTool(t, ctx, cs, "run_tool", map[string]any{"name": "rm", "args": []string{"-rf", "/"}}))
+	isGated("the call with other stdin", mcpHostedCallTool(t, ctx, cs, "run_tool", map[string]any{"name": "rm", "args": []string{"-rf", "anything"}, "stdin": "x"}))
+	ran := mcpHostedCallTool(t, ctx, cs, "run_tool", call)
+	if ran.State != "" || ran.ExitCode != 0 || ran.Stderr != "" {
+		t.Fatalf("approved call = %+v, want it to run and exit 0", ran)
+	}
+	mcpHostedScratchEmpty(t, h)
+
+	// The approval cannot be replayed.
+	if replay := mcpHostedCallTool(t, ctx, cs, "run_tool", call); replay.State != "replayed" {
+		t.Fatalf("replayed approved call = %+v, want state replayed", replay)
+	}
+
+	// The audit allows rm exactly once.
+	data, err := os.ReadFile(auditLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	allowed := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		var record struct {
+			Binary   string `json:"binary"`
+			Decision string `json:"decision"`
+			Exit     int    `json:"exit"`
+		}
+		if err := json.Unmarshal([]byte(line), &record); err != nil {
+			t.Fatal(err)
+		}
+		if record.Binary == "rm" && record.Decision == "allow" && record.Exit == 0 {
+			allowed++
+		}
+	}
+	if allowed != 1 {
+		t.Fatalf("audit allows rm %d times, want 1:\n%s", allowed, data)
 	}
 }
 

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net"
 	"net/http"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -65,8 +67,64 @@ type mcpHostedIdentity struct {
 	TaskID         string `json:"task_id"`
 	IdempotencyKey string `json:"idempotency_key"`
 	SecretsToken   string `json:"secrets_token,omitempty"`
-	IssuedAt       int64  `json:"iat"`
-	ExpiresAt      int64  `json:"exp"`
+	// Approval is set when the caller settled this gated call on the master.
+	Approval  *mcpHostedApproval `json:"approval,omitempty"`
+	IssuedAt  int64              `json:"iat"`
+	ExpiresAt int64              `json:"exp"`
+}
+
+// mcpHostedApproval is a settled approval of one gated call. Digest is the
+// mcpHostedCallDigest the runner reported when it answered gated; Effects are
+// the privileged effects the caller approved. The runner grants those effects
+// to the call with that digest and to no other.
+type mcpHostedApproval struct {
+	ApprovalID string   `json:"approval_id"`
+	Digest     string   `json:"digest"`
+	Effects    []string `json:"effects"`
+}
+
+func (a *mcpHostedApproval) valid() bool {
+	if strings.TrimSpace(a.ApprovalID) == "" || strings.ContainsAny(a.ApprovalID, "\x00\r\n") || len(a.Digest) != 2*sha256.Size || len(a.Effects) == 0 {
+		return false
+	}
+	if strings.Trim(a.Digest, "0123456789abcdef") != "" {
+		return false
+	}
+	for _, effect := range a.Effects {
+		if grants, err := yokemcp.ParseAllow(effect); err != nil || !grants[effect] {
+			return false
+		}
+	}
+	return true
+}
+
+// mcpHostedCallDigest binds an approval to one exact call: the caller, the
+// task, the tool and every argument that reaches the command. It is the
+// lowercase hex SHA-256 of these elements, each written as "<byte length>:
+// <bytes>;" in this order: the literal "bashy-hosted-call-v1", caller,
+// task_id, tool name, then the arguments name, dir and stdin, the count of
+// args and each arg, the count of env entries and each "KEY=value" sorted by
+// key. Arguments of any other shape have no digest and cannot be approved.
+func mcpHostedCallDigest(id mcpHostedIdentity, tool string, arguments json.RawMessage) (string, bool) {
+	var in yokemcp.RunToolInput
+	if len(arguments) > 0 {
+		decoder := json.NewDecoder(bytes.NewReader(arguments))
+		decoder.DisallowUnknownFields()
+		if decoder.Decode(&in) != nil {
+			return "", false
+		}
+	}
+	parts := []string{"bashy-hosted-call-v1", id.Caller, id.TaskID, tool, in.Name, in.Dir, in.Stdin, strconv.Itoa(len(in.Args))}
+	parts = append(parts, in.Args...)
+	parts = append(parts, strconv.Itoa(len(in.Env)))
+	for _, key := range slices.Sorted(maps.Keys(in.Env)) {
+		parts = append(parts, key+"="+in.Env[key])
+	}
+	sum := sha256.New()
+	for _, part := range parts {
+		fmt.Fprintf(sum, "%d:%s;", len(part), part)
+	}
+	return fmt.Sprintf("%x", sum.Sum(nil)), true
 }
 
 // mcpHostedKeyPath is the runner key: $BASHY_HOSTED_KEY_FILE, else
@@ -143,6 +201,9 @@ func mcpHostedVerify(token string, key []byte, now time.Time) (mcpHostedIdentity
 		if strings.TrimSpace(field) == "" || strings.ContainsAny(field, "\x00\r\n") {
 			return mcpHostedIdentity{}, false
 		}
+	}
+	if id.Approval != nil && !id.Approval.valid() {
+		return mcpHostedIdentity{}, false
 	}
 	issued, expires := time.Unix(id.IssuedAt, 0), time.Unix(id.ExpiresAt, 0)
 	if !now.Before(expires) || issued.After(now.Add(mcpHostedSkew)) || !expires.After(issued) || expires.Sub(issued) > mcpHostedMaxTTL {
@@ -261,9 +322,13 @@ func (h *mcpHosted) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	opts := h.opts
-	policy := yokemcp.Policy{Audit: h.audit(id), Execute: (&mcpHostedCall{runner: h, id: id}).execute}
+	call := &mcpHostedCall{runner: h, id: id}
+	policy := yokemcp.Policy{Audit: h.audit(call), Execute: call.execute}
+	// The request's own grant set: gate widens it for an approved call, and
+	// the runner's --allow set is never touched.
+	policy.Allow = map[string]bool{}
 	if h.opts.Policy != nil {
-		policy.Allow = h.opts.Policy.Allow
+		maps.Copy(policy.Allow, h.opts.Policy.Allow)
 	}
 	opts.Policy = &policy
 	srv, err := yokemcp.BuildServer("bashy", h.version, opts)
@@ -271,6 +336,7 @@ func (h *mcpHosted) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
 	}
+	srv.AddReceivingMiddleware(call.gate(&policy))
 	mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server { return srv }, &mcpsdk.StreamableHTTPOptions{Stateless: true}).ServeHTTP(w, r)
 }
 
@@ -284,8 +350,12 @@ type mcpHostedAuditLine struct {
 // audit writes the call into the same hash-chained log as every other MCP
 // call, with the verified caller as the accountable principal (the field
 // BASHY_PRINCIPAL fills for a local shell) and the task as the session.
-func (h *mcpHosted) audit(id mcpHostedIdentity) func(yokemcp.Record) {
+func (h *mcpHosted) audit(call *mcpHostedCall) func(yokemcp.Record) {
+	id := call.id
 	return func(r yokemcp.Record) {
+		if r.Allowed {
+			r.ApprovalID = call.approved
+		}
 		if h.writer == nil {
 			data, _ := json.Marshal(mcpHostedAuditLine{Principal: id.Caller, TaskID: id.TaskID, Record: r})
 			_, _ = os.Stderr.Write(append(data, '\n'))
@@ -309,6 +379,63 @@ type mcpHostedCall struct {
 	runner *mcpHosted
 	id     mcpHostedIdentity
 	root   string
+	// approved names the approval applied to the tools/call in flight; gate
+	// sets it and the audit reads it inside the same call.
+	approved string
+}
+
+// mcpHostedGated is the hosted gated answer: the policy's own, plus the
+// digest the master binds the caller's approval to.
+type mcpHostedGated struct {
+	yokemcp.Gated
+	TaskID string `json:"task_id"`
+	Digest string `json:"digest"`
+}
+
+// gate runs outside the policy. The runner's --allow set holds for every
+// call; the identity's approval adds its effects only while the one call
+// whose digest it names passes through. Any other call meets the unwidened
+// policy and answers gated as before, with the digest an approval of it must
+// carry. Calls of one request run one at a time, so a batch cannot borrow
+// another call's approval. The server checks a copy of the policy that shares
+// this grant map, so the grant is added to and taken from the map itself.
+func (c *mcpHostedCall) gate(policy *yokemcp.Policy) mcpsdk.Middleware {
+	allow := policy.Allow
+	var mu sync.Mutex
+	return func(next mcpsdk.MethodHandler) mcpsdk.MethodHandler {
+		return func(ctx context.Context, method string, req mcpsdk.Request) (mcpsdk.Result, error) {
+			call, ok := req.(*mcpsdk.CallToolRequest)
+			if method != "tools/call" || !ok {
+				return next(ctx, method, req)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			digest, bound := mcpHostedCallDigest(c.id, call.Params.Name, call.Params.Arguments)
+			if approval := c.id.Approval; approval != nil && bound && hmac.Equal([]byte(approval.Digest), []byte(digest)) {
+				var granted []string
+				for _, effect := range approval.Effects {
+					if !allow[effect] {
+						allow[effect] = true
+						granted = append(granted, effect)
+					}
+				}
+				c.approved = approval.ApprovalID
+				defer func() {
+					for _, effect := range granted {
+						delete(allow, effect)
+					}
+					c.approved = ""
+				}()
+			}
+			result, err := next(ctx, method, req)
+			if res, ok := result.(*mcpsdk.CallToolResult); ok && res != nil && bound {
+				if gated, ok := res.StructuredContent.(yokemcp.Gated); ok {
+					res.StructuredContent = mcpHostedGated{Gated: gated, TaskID: c.id.TaskID, Digest: digest}
+				}
+			}
+			return result, err
+		}
+	}
 }
 
 type mcpHostedCallKey struct{}
@@ -336,7 +463,8 @@ func mcpHostedRefusal(state, taskID, text string) *mcpsdk.CallToolResult {
 
 // execute is the hosted Policy.Execute hook. It runs after the policy, so a
 // gated call has already answered {state: "gated"} without spending its
-// identity. An executing call claims its idempotency key, gets a scratch home
+// identity. An approved call spends it like any other, so an approval runs
+// once. An executing call claims its idempotency key, gets a scratch home
 // and a deadline, and leaves nothing behind.
 func (c *mcpHostedCall) execute(ctx context.Context, call *mcpsdk.CallToolRequest, next func(context.Context) (mcpsdk.Result, error)) (mcpsdk.Result, error) {
 	h := c.runner
