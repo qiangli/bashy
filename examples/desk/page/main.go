@@ -140,6 +140,12 @@ type actionRequest struct {
 	Card    string `json:"card,omitempty"`
 	Text    string `json:"text,omitempty"`
 	Column  int    `json:"column,omitempty"`
+	// Revision store (kit.RevisionStore).
+	Part      string `json:"part,omitempty"`
+	Revision  string `json:"revision,omitempty"`
+	Rev       string `json:"rev,omitempty"`
+	BaseRev   string `json:"base_rev,omitempty"`
+	Assistant string `json:"assistant,omitempty"`
 }
 
 type app struct {
@@ -290,6 +296,59 @@ func (a *app) persistLocked(it *item) error {
 	}
 	a.items[it.ID] = it
 	return nil
+}
+
+type pageContent struct {
+	Title string `json:"title"`
+	Body  string `json:"body"`
+}
+
+func (a *app) revisions() kit.RevisionStore {
+	return kit.RevisionStore{Dir: a.dir}
+}
+
+func encodePageContent(title, body string) []byte {
+	raw, _ := json.Marshal(pageContent{Title: title, Body: body})
+	return raw
+}
+
+func (a *app) organizerAuthor(r *http.Request, req actionRequest) (author, kind, assistant string) {
+	assistant = strings.TrimSpace(req.Assistant)
+	if p, ok := requestParticipant(r); ok && p.Handle != "" {
+		return p.Handle, p.Auth, assistant
+	}
+	c := identifyParticipant(r, a.joinOptions.consolePrincipal, a.joinOptions.outpostSecret, time.Now())
+	if c.principal != "" && c.handle != "" {
+		return c.handle, c.auth, assistant
+	}
+	return "organizer", "", assistant
+}
+
+func (a *app) saveContentRevisionLocked(it *item, baseRev, author, kind, assistant string) (kit.RevisionState, error) {
+	statePath := filepath.Join(a.dir, "revisions", it.ID, "_", "state.json")
+	prevState, readErr := os.ReadFile(statePath)
+	hadState := readErr == nil
+	st, err := a.revisions().SaveRevision(kit.SaveInput{
+		Item:      it.ID,
+		BaseRev:   baseRev,
+		Author:    author,
+		Kind:      kind,
+		Assistant: assistant,
+		Data:      encodePageContent(it.Title, it.Body),
+	})
+	if err != nil {
+		return st, err
+	}
+	if err := a.saveLocked(it, ""); err != nil {
+		// Keep item file and revision pointer consistent if persisting the item fails.
+		if hadState {
+			_ = kit.AtomicWrite(statePath, prevState)
+		} else if errors.Is(readErr, os.ErrNotExist) {
+			_ = os.Remove(statePath)
+		}
+		return kit.RevisionState{}, err
+	}
+	return st, nil
 }
 
 func (a *app) isOwner(r *http.Request, it *item) bool {
@@ -447,7 +506,7 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		if it := a.loadOr404(w, req.ID); it != nil {
 			a.handsAction(w, r, it, req)
 		}
-	case "open", "show", "set", "close", "share", "join", "participant", "block", "results", "answer", "timer", "board":
+	case "open", "show", "set", "close", "share", "join", "participant", "block", "results", "answer", "timer", "board", "history", "undo", "restore":
 		it := a.loadOr404(w, req.ID)
 		if it == nil {
 			return
@@ -519,6 +578,8 @@ func (a *app) action(w http.ResponseWriter, r *http.Request, req actionRequest, 
 			if a.viewOr403(w, r, it) {
 				a.boardAction(w, r, it, req)
 			}
+		case "history", "undo", "restore":
+			a.revisionAction(w, r, it, req)
 		}
 	default:
 		kit.Fail(w, http.StatusBadRequest, "Unknown action")
@@ -604,11 +665,30 @@ func (a *app) create(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		kit.Fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := a.saveLocked(it, ""); err != nil {
+	it.Revision++
+	if err := a.persistLocked(it); err != nil {
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
 		return
 	}
+	author, kind, assistant := a.organizerAuthor(r, req)
+	st, err := a.revisions().SaveRevision(kit.SaveInput{
+		Item:      it.ID,
+		Author:    author,
+		Kind:      kind,
+		Assistant: assistant,
+		Data:      encodePageContent(it.Title, it.Body),
+	})
+	if err != nil {
+		_ = os.Remove(itemPath(a.dir, it.ID))
+		delete(a.items, it.ID)
+		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
+		return
+	}
+	if breakMode != "events-no-publish" {
+		a.events.Publish(it.ID, "", it.Revision)
+	}
 	v := a.openView(r, it)
+	v["active"] = st.Active
 	v["ownerKey"] = it.Owner // revealed once, at creation
 	u, _ := url.Parse(a.urlFor(r, it.ID))
 	q := u.Query()
@@ -641,6 +721,8 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, it *item, req actio
 		return
 	}
 	next := it.clone()
+	var revState kit.RevisionState
+	contentEdited := false
 	if closing {
 		next.Status = kit.StatusClosed
 	} else {
@@ -649,9 +731,11 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, it *item, req actio
 		}
 		if req.Body != "" {
 			next.Body = req.Body
+			contentEdited = true
 		}
 		if strings.TrimSpace(req.Title) != "" {
 			next.Title = strings.TrimSpace(req.Title)
+			contentEdited = true
 		}
 		if req.Audience != "" {
 			next.Audience = req.Audience
@@ -662,11 +746,66 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, it *item, req actio
 		}
 		next.Status = kit.StatusFilled
 	}
-	if err := a.saveLocked(&next, ""); err != nil {
+	if !closing && (contentEdited || req.BaseRev != "") {
+		author, kind, assistant := a.organizerAuthor(r, req)
+		var err error
+		revState, err = a.saveContentRevisionLocked(&next, req.BaseRev, author, kind, assistant)
+		if err != nil {
+			if kit.WriteRevisionConflict(w, err) {
+				return
+			}
+			kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
+			return
+		}
+	} else if err := a.saveLocked(&next, ""); err != nil {
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
 		return
 	}
-	kit.WriteJSON(w, a.openView(r, &next))
+	v := a.openView(r, &next)
+	if revState.Active != "" {
+		v["active"] = revState.Active
+		if revState.Previous != "" {
+			v["previous"] = revState.Previous
+		}
+	}
+	kit.WriteJSON(w, v)
+}
+
+func (a *app) revisionAction(w http.ResponseWriter, r *http.Request, it *item, req actionRequest) {
+	if faceFor(r, a.canOrganize(r, it)) != organizerFace {
+		kit.Fail(w, http.StatusForbidden, "Only the organizer can manage page revisions")
+		return
+	}
+	if req.Action != "history" && it.Status == kit.StatusClosed {
+		kit.Fail(w, http.StatusConflict, "This page is closed")
+		return
+	}
+	act := kit.RevisionAction{
+		Action:   req.Action,
+		ID:       req.ID,
+		Part:     req.Part,
+		Revision: req.Revision,
+		Rev:      req.Rev,
+		BaseRev:  req.BaseRev,
+	}
+	a.revisions().ServeAction(w, act, func(_ kit.RevisionState, data []byte) error {
+		var snap pageContent
+		if err := json.Unmarshal(data, &snap); err != nil {
+			return err
+		}
+		if _, err := parseBody(snap.Body); err != nil {
+			return err
+		}
+		next := it.clone()
+		next.Title = snap.Title
+		next.Body = snap.Body
+		if strings.TrimSpace(next.Body) == "" {
+			next.Status = kit.StatusPending
+		} else {
+			next.Status = kit.StatusFilled
+		}
+		return a.saveLocked(&next, "")
+	})
 }
 
 func (a *app) list(w http.ResponseWriter, r *http.Request) {
@@ -786,10 +925,18 @@ func (a *app) page(r *http.Request) (int, []byte) {
 				html.EscapeString(it.Title)+`</h1>`+body+revision+liveScript(base, it.ID, face)+
 				timerScript(base, it.ID, face)+`</main>`)
 		}
+		var revisionsHTML string
 		if face == organizerFace {
-			faceScript = faceTabsScript + nativeControlsScript(base, it.ID)
+			faceScript = faceTabsScript + nativeControlsScript(base, it.ID) + revisionsScript(base, it.ID)
+			if h, err := a.revisions().History(it.ID, ""); err == nil {
+				revisionsHTML = renderRevisionsHTML(h)
+			} else {
+				revisionsHTML = `<section class="desk-panel page-revisions" data-page-revisions><h2 class="desk-h2">Revisions</h2>` +
+					kit.State("error", "Revision history unavailable", "The saved page content is unaffected.") + `</section>`
+			}
 		}
 		main = faceNavigation(r, owner, face) + `<h1 class="desk-h1">` + html.EscapeString(it.Title) + `</h1>` + body +
+			revisionsHTML +
 			`<p class="desk-footer">Revision <span data-page-revision>` + fmt.Sprint(it.Revision) +
 			`</span> · re-surface with <code>page open ` + html.EscapeString(it.ID) + `</code>.</p>` +
 			liveScript(base, it.ID, face) + nativeScript(base, it.ID, face) + timerScript(base, it.ID, face) +
@@ -801,6 +948,87 @@ func (a *app) page(r *http.Request) (int, []byte) {
 	body := pageFaceStyle + contentBlockStyle + kit.AppBar(tool, a.base(r)+"/", header, "") + `<main class="desk-main page-main">` +
 		`<div data-desk-alert class="desk-alert"></div>` + main + `</main>` + faceScript
 	return code, kit.Page(tool, "Page · bashy desk", body)
+}
+
+func formatRevisionAuthor(v kit.Revision) string {
+	author := v.Author
+	if author == "" {
+		author = "organizer"
+	}
+	if v.Kind != "" {
+		author += " (" + v.Kind + ")"
+	}
+	if v.Assistant != "" {
+		author += " · via " + v.Assistant
+	}
+	return author
+}
+
+func renderRevisionsHTML(h kit.RevisionHistory) string {
+	var b strings.Builder
+	b.WriteString(`<section class="desk-panel page-revisions" data-page-revisions><h2 class="desk-h2">Revisions</h2>`)
+	if len(h.Versions) == 0 {
+		b.WriteString(`<p class="desk-muted">No revisions recorded yet.</p></section>`)
+		return b.String()
+	}
+	b.WriteString(`<ul class="page-revision-list">`)
+	for _, v := range h.Versions {
+		rev := html.EscapeString(v.Revision)
+		b.WriteString(`<li class="page-revision-row" data-revision="` + rev + `">`)
+		b.WriteString(`<span class="page-revision-meta"><code>` + rev + `</code>`)
+		if v.Revision == h.Active {
+			b.WriteString(` <span class="desk-pill">active</span>`)
+		} else if v.Revision == h.Previous {
+			b.WriteString(` <span class="desk-pill">previous</span>`)
+		}
+		b.WriteString(` <span>` + html.EscapeString(formatRevisionAuthor(v)) + `</span>`)
+		if !v.Created.IsZero() {
+			b.WriteString(` <span class="desk-muted">` + html.EscapeString(v.Created.UTC().Format(time.RFC3339)) + `</span>`)
+		}
+		b.WriteString(`</span>`)
+		disabled := ""
+		if v.Revision == h.Active {
+			disabled = " disabled"
+		}
+		b.WriteString(`<button type="button" class="desk-copy secondary" data-page-restore="` + rev + `"` + disabled + `>Restore</button>`)
+		b.WriteString(`</li>`)
+	}
+	b.WriteString(`</ul></section>`)
+	return b.String()
+}
+
+const revisionsStyle = `<style>
+.page-revision-list{list-style:none;padding:0;margin:0;display:grid;gap:var(--desk-space-2)}
+.page-revision-row{display:flex;align-items:center;justify-content:space-between;gap:var(--desk-space-3);flex-wrap:wrap;padding:var(--desk-space-2) 0;border-top:1px solid var(--desk-line)}
+.page-revision-row:first-child{border-top:0}
+.page-revision-meta{display:flex;align-items:center;gap:var(--desk-space-2);flex-wrap:wrap}
+</style>`
+
+func revisionsScript(base, id string) string {
+	cfg, _ := json.Marshal(map[string]string{"action": base + "/api/action?view=organizer", "id": id})
+	return revisionsStyle + `<script>
+(function(){
+  const cfg = ` + string(cfg) + `;
+  document.addEventListener('click', async function(e){
+    const btn = e.target.closest('[data-page-restore]');
+    if (!btn) return;
+    btn.disabled = true;
+    try {
+      const r = await fetch(cfg.action, {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'restore', id: cfg.id, revision: btn.dataset.pageRestore})
+      });
+      if (!r.ok) throw new Error();
+      location.reload();
+    } catch (_) {
+      btn.disabled = false;
+      if (window.deskToast) window.deskToast('Could not restore revision.', 'error');
+    }
+  });
+})();
+</script>`
 }
 
 // liveScript follows the page's event stream. The skeleton reloads on a

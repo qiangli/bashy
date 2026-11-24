@@ -23,7 +23,7 @@ import (
 	kit "github.com/qiangli/bashy/examples/desk/kit"
 )
 
-const usage = "Usage: page [serve|add|open|show|set|list|share|close|export|participant|block|hands|publish-outpost] [--json] [-f FILE|-] [--faces FILE] [--title T] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|markdown|html|pdf] [-o FILE]"
+const usage = "Usage: page [serve|add|open|show|set|history|undo|restore|list|share|close|export|participant|block|hands|publish-outpost] [--json] [-f FILE|-] [--faces FILE] [--title T] [--base-rev R] [--audience host|lan|satellite] [--code CODE] [--port PORT] [--to md|markdown|html|pdf] [-o FILE]"
 
 const blockUsage = "use page block add poll PAGE --options a,b,c [--title Q] [--votes N] | add form PAGE --def FILE|- [--title T]" +
 	" [--block NAME] [--anonymous] [--results-visible] [--closed] | add board PAGE [--session S] [--title T] [--block NAME];" +
@@ -32,6 +32,7 @@ const blockUsage = "use page block add poll PAGE --options a,b,c [--title Q] [--
 type cliOptions struct {
 	addr, data, prefix, key         string
 	title, body, file, id, audience string
+	baseRev                         string
 	to, output, breakFlag           string
 	code, port, icon, conflicts     string
 	facesFile                       string
@@ -48,7 +49,7 @@ type cliOptions struct {
 // valueFlags take a value (--name V or --name=V); boolFlags do not.
 var (
 	valueFlags = map[string]bool{"addr": true, "data": true, "prefix": true, "key": true,
-		"title": true, "body": true, "f": true, "file": true, "id": true, "audience": true,
+		"title": true, "body": true, "f": true, "file": true, "id": true, "audience": true, "base-rev": true,
 		"to": true, "o": true, "output": true, "break": true, "code": true, "port": true, "icon": true, "handle-conflicts": true,
 		"faces": true, "options": true, "votes": true, "def": true, "block": true, "session": true}
 	boolFlags = map[string]bool{"json": true, "lan": true, "open": true, "public": true, "private": true,
@@ -118,6 +119,8 @@ func parseCLIOptions(raw []string) (*cliOptions, error) {
 			o.id = val
 		case "audience":
 			o.audience = val
+		case "base-rev":
+			o.baseRev = val
 		case "to":
 			o.to = val
 		case "o", "output":
@@ -263,7 +266,7 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 		if id == "" && len(o.args) > 0 {
 			id = o.args[0]
 		}
-		return c.do("add", map[string]any{"id": id, "title": o.title, "body": body, "audience": o.audience, "join_code": o.code, "faces": faces})
+		return c.do("add", map[string]any{"id": id, "title": o.title, "body": body, "audience": o.audience, "join_code": o.code, "faces": faces, "assistant": os.Getenv("BASHY_AGENT")})
 	case "set":
 		id, ok := needID()
 		if !ok {
@@ -274,7 +277,35 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 			return 1
 		}
 		c.resolveKey(id)
-		return c.do("set", map[string]any{"id": id, "title": o.title, "body": body, "audience": o.audience, "faces": faces})
+		return c.do("set", map[string]any{"id": id, "title": o.title, "body": body, "audience": o.audience, "faces": faces, "base_rev": o.baseRev, "assistant": os.Getenv("BASHY_AGENT")})
+	case "history", "undo":
+		if len(o.args) > 1 || (o.id != "" && len(o.args) > 0) {
+			return kit.UsageError(stdout, tool, o.asJSON, "use page "+o.verb+" ID")
+		}
+		id, ok := needID()
+		if !ok {
+			return 2
+		}
+		c.resolveKey(id)
+		return c.do(o.verb, map[string]any{"id": id})
+	case "restore":
+		var id, rev string
+		switch {
+		case o.id != "" && len(o.args) == 1:
+			id, rev = o.id, o.args[0]
+		case o.id == "" && len(o.args) == 2:
+			id, rev = o.args[0], o.args[1]
+		default:
+			return kit.UsageError(stdout, tool, o.asJSON, "use page restore ID REV")
+		}
+		if !kit.ValidName(id) {
+			return kit.UsageError(stdout, tool, o.asJSON, "give the page id (1-64 letters, digits, - or _)")
+		}
+		if !kit.ValidName(rev) {
+			return kit.UsageError(stdout, tool, o.asJSON, "give the revision to restore (e.g. r1)")
+		}
+		c.resolveKey(id)
+		return c.do("restore", map[string]any{"id": id, "revision": rev})
 	case "open", "show", "share", "close":
 		id, ok := needID()
 		if !ok {
@@ -444,6 +475,42 @@ func (c *client) do(action string, payload map[string]any) int {
 	}
 	if action == "show" {
 		fmt.Fprintf(c.stdout, "%v\n%v\n", obj["title"], obj["body"])
+		return 0
+	}
+	if action == "history" {
+		versions, _ := obj["versions"].([]any)
+		active, _ := obj["active"].(string)
+		previous, _ := obj["previous"].(string)
+		if len(versions) == 0 {
+			fmt.Fprintln(c.stdout, "No revisions yet.")
+			return 0
+		}
+		for _, entry := range versions {
+			m, ok := entry.(map[string]any)
+			if !ok {
+				continue
+			}
+			rev, _ := m["revision"].(string)
+			tag := ""
+			if rev == active {
+				tag = " (active)"
+			} else if rev == previous {
+				tag = " (previous)"
+			}
+			author, _ := m["author"].(string)
+			if kind, _ := m["kind"].(string); kind != "" {
+				author += " (" + kind + ")"
+			}
+			if asst, _ := m["assistant"].(string); asst != "" {
+				author += " via " + asst
+			}
+			created, _ := m["created"].(string)
+			fmt.Fprintf(c.stdout, "%s%s  %s  %s\n", rev, tag, created, author)
+		}
+		return 0
+	}
+	if action == "undo" || action == "restore" {
+		fmt.Fprintf(c.stdout, "%v %v active=%v previous=%v\n", obj["id"], obj["revision"], obj["active"], obj["previous"])
 		return 0
 	}
 	// add/open/set/share/close: id, URL, status only — never content.

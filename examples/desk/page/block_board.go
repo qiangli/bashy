@@ -223,7 +223,8 @@ func (a *app) boardAdd(w http.ResponseWriter, r *http.Request, it *item, req act
 		kit.Fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if err := a.saveLocked(&next, ""); err != nil {
+	author, kind, assistant := a.organizerAuthor(r, req)
+	if _, err := a.saveContentRevisionLocked(&next, "", author, kind, assistant); err != nil {
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
 		return
 	}
