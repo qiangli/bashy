@@ -12,12 +12,14 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"slices"
@@ -69,34 +71,71 @@ type Config struct {
 }
 
 type server struct {
-	cfg    Config
-	fields []Field
-	secret string
-	key    string
-	site   *upstream
-	public http.Handler
-	allow  allowance
-	client *http.Client
-	now    func() time.Time
+	cfg     Config
+	fields  []Field
+	secret  string
+	key     string
+	version string
+	site    *upstream
+	public  http.Handler
+	allow   allowance
+	client  *http.Client
+	now     func() time.Time
 }
 
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8090", "listen address")
 	_ = flag.String("data", "", "data directory (unused; views are not stored)")
 	siteURL := flag.String("site", "", "override site_url from site.json")
+	versionFlag := flag.String("version", "", "override active version id")
 	flag.Parse()
 
 	s, err := newServer(os.Getenv)
 	if err != nil {
 		log.Fatal(err)
 	}
+	if *versionFlag != "" {
+		s.version = strings.TrimSpace(*versionFlag)
+	}
 	if *siteURL != "" {
 		s.cfg.SiteURL = *siteURL
 		s.site = newUpstream(*siteURL)
 		s.site.staticOnly = s.cfg.StaticOnly
 	}
-	log.Printf("site-shaping: fronting %s on %s (identity verification %v, ai %v)", s.cfg.SiteURL, *addr, s.secret != "", s.key != "" || isLoopbackRoute(s.cfg.AI.BaseURL))
-	log.Fatal(http.ListenAndServe(*addr, s))
+	ln, err := net.Listen("tcp", *addr)
+	if err != nil {
+		log.Fatal(err)
+	}
+	httpSrv := &http.Server{Handler: s}
+	log.Printf("site-shaping: fronting %s on %s (version %s, identity verification %v, ai %v)", s.cfg.SiteURL, *addr, shortRev(s.version), s.secret != "", s.key != "" || isLoopbackRoute(s.cfg.AI.BaseURL))
+
+	if f := newShapeFollower(os.Getenv, s.version); f != nil {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		swapped := make(chan struct{})
+		var swapErr error
+		f.OnSwap = func(bin, rev string, env []string) error {
+			log.Printf("site-shaping: switching to approved revision %s", shortRev(rev))
+			shutCtx, shutCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutCancel()
+			_ = httpSrv.Shutdown(shutCtx)
+			swapErr = replaceProcess(bin, os.Args, env)
+			close(swapped)
+			return swapErr
+		}
+		go f.run(ctx)
+		if err := httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
+			log.Fatal(err)
+		}
+		<-swapped
+		if swapErr != nil {
+			log.Fatalf("site-shaping: restart failed: %v", swapErr)
+		}
+		return
+	}
+	if err := httpSrv.Serve(ln); err != nil && err != http.ErrServerClosed {
+		log.Fatal(err)
+	}
 }
 
 func newServer(getenv func(string) string) (*server, error) {
@@ -128,15 +167,20 @@ func newServerFrom(fsys fs.FS, getenv func(string) string) (*server, error) {
 	if keyEnv == "" {
 		keyEnv = "SITE_AI_KEY"
 	}
+	ver := strings.TrimSpace(getenv("SITE_VERSION"))
+	if ver == "" {
+		ver = computeAssetsVersion(fsys)
+	}
 	return &server{
-		cfg:    cfg,
-		fields: fields,
-		secret: getenv("SITE_SSO_SECRET"),
-		key:    getenv(keyEnv),
-		site:   newUpstreamFor(cfg),
-		public: http.StripPrefix("/_shaping/", http.FileServer(http.FS(pub))),
-		client: &http.Client{Timeout: 90 * time.Second},
-		now:    time.Now,
+		cfg:     cfg,
+		fields:  fields,
+		secret:  getenv("SITE_SSO_SECRET"),
+		key:     getenv(keyEnv),
+		version: ver,
+		site:    newUpstreamFor(cfg),
+		public:  http.StripPrefix("/_shaping/", http.FileServer(http.FS(pub))),
+		client:  &http.Client{Timeout: 90 * time.Second},
+		now:     time.Now,
 	}, nil
 }
 
@@ -148,6 +192,8 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch p := r.URL.Path; {
 	case p == "/_shaping/api/me":
 		s.me(w, r)
+	case p == "/_shaping/api/version":
+		s.versionHandler(w, r)
 	case p == "/_shaping/api/fields":
 		s.fieldsFor(w, r)
 	case p == "/_shaping/api/view":
@@ -157,6 +203,14 @@ func (s *server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.site.ServeHTTP(w, r)
 	}
+}
+
+func (s *server) versionHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": "GET version"})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"version": s.version})
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -262,6 +316,7 @@ func (s *server) me(w http.ResponseWriter, r *http.Request) {
 		"properties": props,
 		"wishes":     s.allowedWishes(),
 		"shape":      ownerOnly(c, s.cfg.ShapeURL),
+		"version":    s.version,
 		// Without the outpost secret nobody can be identified: this is the
 		// owner's shaping copy inside the console, not the visitors' engine.
 		"public": s.secret != "",

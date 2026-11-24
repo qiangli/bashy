@@ -226,6 +226,7 @@ func TestEnableWritesLayerAndKeepsExistingFiles(t *testing.T) {
 	}
 	for _, name := range []string{
 		"go.mod", "main.go", "identity.go", "audience.go", "proxy.go", "view.go",
+		"version.go", "exec_unix.go", "exec_windows.go",
 		"main_test.go", "shaped.json", "contract.bsh", "site.json", ".gitignore",
 	} {
 		b, err := os.ReadFile(filepath.Join(f.site, name))
@@ -528,4 +529,111 @@ func TestWishesListAddRemoveJSONAndRefusals(t *testing.T) {
 	if out, code = f.website(nil, "wishes", "rm", f.site, "missing-id", "--json"); code == 0 || !strings.Contains(out, "missing-id") {
 		t.Fatalf("missing rm exit=%d want missing-id:\n%s", code, out)
 	}
+}
+
+// serve builds from the owner's active revision when an approval exists in
+// BASHY_HOME/shape and passes SITE_SHAPE_* + SITE_VERSION to the server.
+func TestServeBuildsFromActiveRevisionAndPassesFollowEnv(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not on PATH")
+	}
+	f := newFixture(t)
+	if out, code := f.website(nil, "enable", f.site, "--site", "https://example.com"); code != 0 {
+		t.Fatalf("enable: exit %d\n%s", code, out)
+	}
+
+	// Set up a managed src checkout and an approved active revision in HOME/.bashy.
+	bashyHome := filepath.Join(f.root, "home", ".bashy")
+	srcDir := filepath.Join(bashyHome, "src", "site-shaping")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "site.json"), []byte(`{"site_url":"https://example.com","title":"Approved Rev"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "marker.txt"), []byte("from-approved-rev\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit := func(args ...string) string {
+		cmd := exec.Command("git", append([]string{"-C", srcDir}, args...)...)
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Owner", "GIT_AUTHOR_EMAIL=owner@example.com",
+			"GIT_COMMITTER_NAME=Owner", "GIT_COMMITTER_EMAIL=owner@example.com",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	runGit("init", "-q")
+	runGit("add", ".")
+	runGit("commit", "-q", "-m", "approved")
+	rev := runGit("rev-parse", "HEAD")
+
+	stateDir := filepath.Join(bashyHome, "shape", "site-shaping", "owner%40example.com")
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	stateBody := "{\n  \"schema\": \"bashy-shape-state-v1\",\n  \"active_revision\": \"" + rev + "\"\n}\n"
+	if err := os.WriteFile(filepath.Join(stateDir, "state.json"), []byte(stateBody), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Replace fake go so it verifies the extracted revision tree and emits a
+	// stub server that records the SITE_* environment variables it received.
+	envDump := filepath.Join(f.root, "server-env.txt")
+	markerDump := filepath.Join(f.root, "built-marker.txt")
+	customGo := filepath.Join(f.root, "bin", "go-check")
+	script := `#!/bin/sh
+echo "$*" >> "$FAKE_GO_LOG"
+dir="" out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -C) dir="$2"; shift 2 ;;
+    -o) out="$2"; shift 2 ;;
+    *) shift ;;
+  esac
+done
+[ -f "$dir/marker.txt" ] && cp "$dir/marker.txt" "` + markerDump + `"
+case "$out" in /*) ;; *) out="$dir/$out" ;; esac
+mkdir -p "$(dirname "$out")"
+cat > "$out" <<'EOF'
+#!/bin/sh
+printf 'VERSION=%s\nAPP=%s\nHOME=%s\nGO=%s\n' "$SITE_VERSION" "$SITE_SHAPE_APP" "$SITE_SHAPE_HOME" "$SITE_GO_BIN" > "` + envDump + `"
+for i in 1 2 3 4 5 6; do sleep 5; done
+EOF
+chmod +x "$out"
+`
+	if err := os.WriteFile(customGo, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	stub := filepath.Join(f.site, ".build", "site-shaping")
+	t.Cleanup(func() { exec.Command("pkill", "-f", stub).Run() })
+
+	out, code := f.website([]string{secret, "WEBSITE_GO_BIN=" + customGo}, "serve", f.site, "--name", "site", "--principal", "owner@example.com")
+	if code != 0 {
+		t.Fatalf("serve with active rev: exit %d\n%s", code, out)
+	}
+	t.Cleanup(func() { f.website(nil, "stop", "--name", "site") })
+
+	if b, err := os.ReadFile(markerDump); err != nil || strings.TrimSpace(string(b)) != "from-approved-rev" {
+		t.Errorf("serve did not build from active revision tree: err=%v got=%q", err, string(b))
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	var dumped string
+	for time.Now().Before(deadline) {
+		if b, err := os.ReadFile(envDump); err == nil && len(b) > 0 {
+			dumped = string(b)
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	wantAll(t, "server env", dumped,
+		"VERSION="+rev,
+		"APP=site-shaping,site",
+		"HOME="+bashyHome,
+		"GO="+customGo)
 }

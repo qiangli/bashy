@@ -64,7 +64,8 @@ site two ways: the static host, unchanged, and the engine face
    route: a free API tier, or `bashy llm` on the owner's machine.
 4. `website register DIR --name NAME` — registers the same repo as a shaped
    app so the owner shapes the layer with `bashy shape` (wish, verify,
-   preview, approve); run `serve` again to publish the approved build.
+   preview, approve); a running `serve` rebuilds from the approved revision
+   and open pages reload automatically.
 5. Put a plain link on the static site:
    `<a href="https://<cloudbox>/matrix/h/<host>/app/<name>/">Shape this page</a>`.
 
@@ -96,7 +97,7 @@ usage() {
     echo "       $PROG wishes ls DIR [--json]" >&2
     echo "       $PROG wishes add DIR [--id ID] --label LABEL --patch PROP=VAL [--patch ...] [--dry-run] [--json]" >&2
     echo "       $PROG wishes rm DIR (--id ID | ID) [--dry-run] [--json]" >&2
-    echo "       $PROG serve DIR [--name NAME] [--port PORT]" >&2
+    echo "       $PROG serve DIR [--name NAME] [--port PORT] [--app APP] [--principal P]" >&2
     echo "       $PROG register DIR [--name NAME]" >&2
     echo "       $PROG status [--name NAME]" >&2
     echo "       $PROG stop [--name NAME]" >&2
@@ -180,7 +181,7 @@ cmd_enable() {
     json_safe "$site"; json_safe "$title"; json_safe "$contact"
     t=$(template_dir)
     run mkdir -p "$dir"
-    for f in go.mod main.go identity.go audience.go proxy.go view.go main_test.go shaped.json contract.bsh; do
+    for f in go.mod main.go identity.go audience.go proxy.go view.go version.go exec_unix.go exec_windows.go main_test.go shaped.json contract.bsh; do
         if [ -e "$dir/$f" ]; then
             echo "keep: $f (exists)"
         else
@@ -264,22 +265,115 @@ app_secret() {
     "$(outpost_bin)" apps secret "$1" 2>/dev/null || true
 }
 
+read_active_rev() {
+    [ -f "$1" ] || return 1
+    while IFS= read -r line || [ -n "$line" ]; do
+        case "$line" in
+            *'"active_revision"'*)
+                rest=${line#*'"active_revision"'}
+                rest=${rest#*'"'}
+                rev=${rest%%'"'*}
+                if [ -n "$rev" ]; then
+                    printf '%s\n' "$rev"
+                    return 0
+                fi
+                ;;
+        esac
+    done <"$1"
+    return 1
+}
+
+# encode_state_component mirrors the shape state store's path encoding:
+# [A-Za-z0-9._-] kept, every other byte as %XX.
+encode_state_component() {
+    LC_ALL=C
+    v="$1"
+    out=""
+    while [ -n "$v" ]; do
+        c="${v%"${v#?}"}"
+        v="${v#?}"
+        case "$c" in
+            [A-Za-z0-9._-]) out="$out$c" ;;
+            *) out="$out$(printf '%%%02X' "'$c")" ;;
+        esac
+    done
+    printf '%s' "$out"
+}
+
+find_active_revision() {
+    shome="$1"
+    apps_csv="$2"
+    principal="$3"
+    old_ifs=$IFS
+    IFS=,
+    for app in $apps_csv; do
+        [ -n "$app" ] || continue
+        [ -d "$shome/src/$app" ] || continue
+        if [ -n "$principal" ]; then
+            enc=$(encode_state_component "$principal")
+            if [ -f "$shome/shape/$app/$enc/state.json" ]; then
+                rev=$(read_active_rev "$shome/shape/$app/$enc/state.json") || rev=""
+                if [ -n "$rev" ]; then
+                    IFS=$old_ifs
+                    printf '%s\t%s\n' "$app" "$rev"
+                    return 0
+                fi
+            fi
+            continue
+        fi
+        # Only the owner's line is public: no newest-of-any-principal scan.
+    done
+    IFS=$old_ifs
+    return 1
+}
+
 cmd_serve() {
     load_codespace_secrets SITE_AI_KEY
     dir="$1"
     shift || true
+    shape_app=""
+    shape_principal="${BASHY_PRINCIPAL:-}"
     while [ $# -gt 0 ]; do
         case "$1" in
             --name) NAME="$2"; shift 2 ;;
             --port) PORT="$2"; shift 2 ;;
+            --app) shape_app="$2"; shift 2 ;;
+            --principal) shape_principal="$2"; shift 2 ;;
             --dry-run) DRY_RUN=1; shift ;;
             *) usage ;;
         esac
     done
     [ -n "$dir" ] && [ -f "$dir/site.json" ] || fail "no shaping layer in '$dir' (run: $PROG enable DIR --site URL)"
+    [ -n "$shape_app" ] || shape_app="$NAME-shaping,$NAME"
+    shape_home="${BASHY_HOME:-$HOME/.bashy}"
     st=$(state_dir)
     run mkdir -p "$st" "$dir/.build"
-    run env GOWORK=off CGO_ENABLED=0 "$(go_bin)" -C "$dir" build -trimpath -o .build/site-shaping .
+    site_version=""
+    built_from_active=0
+    if [ "$DRY_RUN" = 0 ]; then
+        if active_info=$(find_active_revision "$shape_home" "$shape_app" "$shape_principal"); then
+            active_app=${active_info%%	*}
+            active_rev=${active_info#*	}
+            abs_out="$(cd "$dir" && pwd)/.build/site-shaping"
+            tmp_src="$st/.build-$NAME-$$"
+            rm -rf "$tmp_src"
+            mkdir -p "$tmp_src"
+            if env git -c "safe.directory=*" -C "$shape_home/src/$active_app" archive "$active_rev" | tar -x -f - -C "$tmp_src"; then
+                env GOWORK=off CGO_ENABLED=0 "$(go_bin)" -C "$tmp_src" build -trimpath -o "$abs_out" . || { rm -rf "$tmp_src"; fail "failed to build active revision $active_rev"; }
+                rm -rf "$tmp_src"
+                site_version="$active_rev"
+                built_from_active=1
+            else
+                rm -rf "$tmp_src"
+            fi
+        fi
+    fi
+    if [ "$built_from_active" = 0 ]; then
+        run env GOWORK=off CGO_ENABLED=0 "$(go_bin)" -C "$dir" build -trimpath -o .build/site-shaping .
+        if [ "$DRY_RUN" = 0 ] && [ -d "$dir/.git" ]; then
+            site_version=$(env git -c "safe.directory=*" -C "$dir" rev-parse --verify HEAD 2>/dev/null || true)
+        fi
+    fi
     if [ "$DRY_RUN" = 1 ]; then
         echo "would run: $(outpost_bin) apps add $NAME --port $PORT --trust-cloud-identity"
     else
@@ -300,9 +394,9 @@ cmd_serve() {
     cmd_stop_quiet
     # Its own session, so it outlives the shell (or ssh session) that started it.
     if command -v setsid >/dev/null 2>&1; then
-        SITE_SSO_SECRET="$secret" setsid nohup "$dir/.build/site-shaping" -addr "127.0.0.1:$PORT" >"$st/$NAME.log" 2>&1 </dev/null &
+        SITE_SSO_SECRET="$secret" SITE_SHAPE_APP="$shape_app" SITE_SHAPE_HOME="$shape_home" SITE_SHAPE_PRINCIPAL="$shape_principal" SITE_GO_BIN="$(go_bin)" SITE_VERSION="$site_version" setsid nohup "$dir/.build/site-shaping" -addr "127.0.0.1:$PORT" >"$st/$NAME.log" 2>&1 </dev/null &
     else
-        SITE_SSO_SECRET="$secret" nohup "$dir/.build/site-shaping" -addr "127.0.0.1:$PORT" >"$st/$NAME.log" 2>&1 </dev/null &
+        SITE_SSO_SECRET="$secret" SITE_SHAPE_APP="$shape_app" SITE_SHAPE_HOME="$shape_home" SITE_SHAPE_PRINCIPAL="$shape_principal" SITE_GO_BIN="$(go_bin)" SITE_VERSION="$site_version" nohup "$dir/.build/site-shaping" -addr "127.0.0.1:$PORT" >"$st/$NAME.log" 2>&1 </dev/null &
     fi
     echo $! >"$st/$NAME.pid"
     echo "$PORT" >"$st/$NAME.port"
@@ -352,7 +446,7 @@ cmd_register() {
     done
     [ -n "$dir" ] && [ -f "$dir/shaped.json" ] || fail "no shaped app in '$dir'"
     run "$(bashy_bin)" app add "$NAME-shaping" --type shaped --source "$(cd "$dir" && pwd)" --label "Shaping layer for $NAME"
-    echo "next: bashy shape wish $NAME-shaping \"...\"; after approving, bashy shape submit, then $PROG serve $dir --name $NAME"
+    echo "next: bashy shape wish $NAME-shaping \"...\"; after approving, the running site rebuilds and open pages reload automatically"
 }
 
 cmd_status() {

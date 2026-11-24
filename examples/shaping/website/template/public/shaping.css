@@ -162,3 +162,25 @@ html.ss-motion-reduce *, html.ss-motion-reduce *::before, html.ss-motion-reduce 
   transition-duration: 0.001ms !important;
   scroll-behavior: auto !important;
 }
+#ss-panel-root .ss-update-notice {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--ss-bg);
+  border: 1px solid var(--ss-line);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  white-space: nowrap;
+}
+#ss-panel-root .ss-reload {
+  padding: 2px 10px;
+  border: 1px solid var(--ss-accent);
+  border-radius: 999px;
+  background: var(--ss-accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}

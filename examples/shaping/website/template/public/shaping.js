@@ -229,6 +229,77 @@
     owner: "Signed in as the owner."
   };
 
+  var VERSION_POLL_MS = 4000;
+
+  // Poll /_shaping/api/version every few seconds so open pages pick up an
+  // approved revision without SSE or a second server. Reloads immediately
+  // unless the viewer is editing, in which case a one-line notice appears.
+  function startVersionPoll(initialVersion, root) {
+    var known = typeof initialVersion === "string" ? initialVersion : "";
+    var inFlight = false;
+    var stopped = false;
+    var timer = null;
+
+    function isEditing() {
+      var a = document.activeElement;
+      if (a) {
+        var tag = (a.tagName || "").toUpperCase();
+        if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || a.isContentEditable) {
+          return true;
+        }
+      }
+      if (root && root.querySelectorAll) {
+        var fields = root.querySelectorAll("input, textarea");
+        for (var i = 0; i < fields.length; i++) {
+          if (fields[i].value && fields[i].value.trim() !== "") return true;
+        }
+      }
+      return false;
+    }
+
+    function stop() {
+      stopped = true;
+      if (timer !== null) {
+        clearInterval(timer);
+        timer = null;
+      }
+    }
+
+    function showNotice() {
+      if (stopped) return;
+      stop();
+      var notice = el("div", { class: "ss-update-notice", role: "status", "aria-live": "polite" });
+      notice.appendChild(el("span", null, "A new version is live."));
+      var btn = el("button", { type: "button", class: "ss-reload" }, "Reload");
+      btn.addEventListener("click", function () { location.reload(); });
+      notice.appendChild(btn);
+      if (root.firstChild) root.insertBefore(notice, root.firstChild);
+      else root.appendChild(notice);
+    }
+
+    function check() {
+      if (inFlight || stopped || document.hidden) return;
+      inFlight = true;
+      get("version").then(function (res) {
+        var next = res && typeof res.version === "string" ? res.version : "";
+        if (!next) return;
+        if (!known) { known = next; return; }
+        if (next === known) return;
+        if (isEditing()) { showNotice(); return; }
+        stop();
+        location.reload();
+      }).catch(function () { /* server restarting or offline: retry next tick */ })
+        .finally(function () { inFlight = false; });
+    }
+
+    timer = setInterval(check, VERSION_POLL_MS);
+    if (document.addEventListener) {
+      document.addEventListener("visibilitychange", function () {
+        if (!document.hidden) check();
+      });
+    }
+  }
+
   get("me").then(function (info) {
     // Inside the console (the owner's shaping copy) visitors cannot be
     // identified, so the visitor panel would only ask to sign in; the
@@ -322,5 +393,6 @@
     root.appendChild(button);
     root.appendChild(panel);
     document.body.appendChild(root);
+    startVersionPoll(info.version || "", root);
   }).catch(function () { /* not behind the shaping server: stay invisible */ });
 })();
