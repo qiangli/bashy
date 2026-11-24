@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log"
 	"net"
 	"net/http"
 	"net/netip"
@@ -23,7 +24,7 @@ type Participant struct {
 	Address     string `json:"address,omitempty"`
 	Fingerprint string `json:"fingerprint,omitempty"`
 	Cookie      string `json:"cookie,omitempty"`
-	Auth        string `json:"auth"` // member | signed-in | anonymous
+	Auth        string `json:"auth"` // member | account | anonymous
 	JoinedAt    string `json:"joined_at,omitempty"`
 	LastSeen    string `json:"last_seen,omitempty"`
 	Kicked      bool   `json:"kicked,omitempty"`
@@ -88,9 +89,13 @@ func IdentifyParticipant(r *http.Request, cookieName, consolePrincipal, secret s
 		if user != "" {
 			c.Principal, c.Handle, c.Auth = "cloud:"+strings.ToLower(user), user, "member"
 		}
-	case "signed-in":
+	case "account", "signed-in":
+		if kind == "signed-in" {
+			log.Printf("desk/kit: deprecated X-Outpost-Relationship %q accepted as %q alias", kind, "account")
+			c.Relationship = "account"
+		}
 		if raw, err := hex.DecodeString(visitor); err == nil && len(raw) == 16 {
-			c.Principal, c.Handle, c.Auth = "visitor:"+visitor, "guest-"+visitor[:8], "signed-in"
+			c.Principal, c.Handle, c.Auth = "visitor:"+visitor, "guest-"+visitor[:8], "account"
 		}
 	}
 	return c

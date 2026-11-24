@@ -73,7 +73,8 @@ func TestNoteRevisionAdmissionAndExport(t *testing.T) {
 	owner := noteTestCaller{relationship: "owner", user: "owner@example.test", address: "192.0.2.1"}
 	member := noteTestCaller{relationship: "member", user: "member@example.test", address: "192.0.2.2"}
 	guest := noteTestCaller{relationship: "anonymous", address: "192.0.2.3"}
-	outsider := noteTestCaller{relationship: "signed-in", visitor: "0123456789abcdef0123456789abcdef", address: "192.0.2.4"}
+	outsider := noteTestCaller{relationship: "account", visitor: "0123456789abcdef0123456789abcdef", address: "192.0.2.4"}
+	legacyOutsider := noteTestCaller{relationship: "signed-in", visitor: "fedcba9876543210fedcba9876543210", address: "192.0.2.6"}
 	bad := member
 	bad.badSignature = true
 	for _, c := range []noteTestCaller{guest, outsider, bad} {
@@ -117,16 +118,19 @@ func TestNoteRevisionAdmissionAndExport(t *testing.T) {
 	noteTestAction(t, a, foreign, `{"action":"set","id":"group","body":"Foreign cookie"}`, 403)
 	noteTestAction(t, a, guest, `{"action":"set","id":"group","base_rev":"r2","body":"Ana third version"}`, 200)
 	_, invite = noteTestAction(t, a, owner, `{"action":"share","id":"group"}`, 200)
-	noteTestAction(t, a, outsider, `{"action":"join","id":"group","invite":"`+invite["invite"].(string)+`","handle":"Signed in guest"}`, 200)
-	noteTestAction(t, a, outsider, `{"action":"set","id":"group","base_rev":"r3","body":"Signed in fourth version"}`, 200)
+	noteTestAction(t, a, outsider, `{"action":"join","id":"group","invite":"`+invite["invite"].(string)+`","handle":"Account guest"}`, 200)
+	noteTestAction(t, a, outsider, `{"action":"set","id":"group","base_rev":"r3","body":"Account fourth version"}`, 200)
+	_, invite = noteTestAction(t, a, owner, `{"action":"share","id":"group"}`, 200)
+	noteTestAction(t, a, legacyOutsider, `{"action":"join","id":"group","invite":"`+invite["invite"].(string)+`","handle":"Legacy alias guest"}`, 200)
+	noteTestAction(t, a, legacyOutsider, `{"action":"set","id":"group","base_rev":"r4","body":"Legacy alias fifth version"}`, 200)
 
 	rec, _ := noteTestAction(t, a, guest, `{"action":"history","id":"group"}`, 200)
 	var history kit.RevisionHistory
-	if err := json.Unmarshal(rec.Body.Bytes(), &history); err != nil || history.Active != "r4" || history.Previous != "r3" || len(history.Versions) != 4 {
+	if err := json.Unmarshal(rec.Body.Bytes(), &history); err != nil || history.Active != "r5" || history.Previous != "r4" || len(history.Versions) != 5 {
 		t.Fatalf("history = %+v, %v", history, err)
 	}
 	for i, want := range []struct{ author, kind string }{
-		{"guest-01234567", "signed-in"}, {"Ana", "anonymous"}, {"member@example.test", "member"}, {"owner@example.test", "member"},
+		{"guest-fedcba98", "account"}, {"guest-01234567", "account"}, {"Ana", "anonymous"}, {"member@example.test", "member"}, {"owner@example.test", "member"},
 	} {
 		if got := history.Versions[i]; got.Author != want.author || got.Kind != want.kind {
 			t.Errorf("revision %s: %q (%s), want %q (%s)", got.Revision, got.Author, got.Kind, want.author, want.kind)
@@ -135,7 +139,7 @@ func TestNoteRevisionAdmissionAndExport(t *testing.T) {
 
 	noteTestAction(t, a, guest, `{"action":"undo","id":"group"}`, 200)
 	_, view := noteTestAction(t, a, member, `{"action":"show","id":"group"}`, 200)
-	if view["body"] != "Ana third version" || view["active"] != "r3" {
+	if view["body"] != "Account fourth version" || view["active"] != "r4" {
 		t.Fatalf("undo view: %v", view)
 	}
 	noteTestAction(t, a, owner, `{"action":"restore","id":"group","revision":"r1"}`, 200)

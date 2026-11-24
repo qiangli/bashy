@@ -17,7 +17,7 @@
       "title": "Recruiter summary",
       "prompt": "Write a one-page recruiter summary: a two-sentence headline, the strongest skills as bullets, the most relevant roles with years, and certifications. If contact details are among the facts, end with them; otherwise end with one line saying more details are shared on request.",
       "audience": {
-        "signed_in": true
+        "account": true
       }
     }
   ],

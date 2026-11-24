@@ -9,18 +9,24 @@ import (
 	"strings"
 )
 
-// Audience is the cloudbox rule grammar plus signed_in: circles AND (group OR
-// email) for members, or any signed-in account. An empty audience is owner
-// only — fail closed.
+// Audience is the cloudbox rule grammar plus account: circles AND (group OR
+// email) for members, or any logged-in cloudbox account. The legacy config key
+// signed_in is kept as an alias of account. An empty audience is owner only —
+// fail closed.
 type Audience struct {
 	Circles  []string `json:"circles,omitempty"`
 	Groups   []string `json:"groups,omitempty"`
 	Emails   []string `json:"emails,omitempty"`
+	Account  bool     `json:"account,omitempty"`
 	SignedIn bool     `json:"signed_in,omitempty"`
 }
 
+func (a Audience) admitsAccount() bool {
+	return a.Account || a.SignedIn
+}
+
 func (a Audience) empty() bool {
-	return !a.SignedIn && len(a.Circles) == 0 && len(a.Groups) == 0 && len(a.Emails) == 0
+	return !a.admitsAccount() && len(a.Circles) == 0 && len(a.Groups) == 0 && len(a.Emails) == 0
 }
 
 // Admits reports whether c may see something with this audience.
@@ -31,7 +37,7 @@ func (a Audience) Admits(c Caller) bool {
 	case TierAnonymous, "":
 		return false
 	}
-	if a.SignedIn {
+	if a.admitsAccount() {
 		return true
 	}
 	if c.Tier != TierMember || a.empty() {
@@ -64,11 +70,12 @@ type Field struct {
 //	---
 //	label: Contact
 //	circles: recruiter
-//	signed_in: false
+//	account: false
 //	---
 //	body text
 //
-// Lists are comma-separated. Unknown keys are ignored.
+// Lists are comma-separated. The legacy key signed_in aliases account.
+// Unknown keys are ignored.
 func loadFields(fsys fs.FS, dir string) ([]Field, error) {
 	entries, err := fs.ReadDir(fsys, dir)
 	if err != nil {
@@ -118,6 +125,8 @@ func parseFront(front string, f *Field) {
 			f.Audience.Groups = list(v)
 		case "emails":
 			f.Audience.Emails = list(v)
+		case "account":
+			f.Audience.Account = v == "true"
 		case "signed_in":
 			f.Audience.SignedIn = v == "true"
 		}

@@ -35,7 +35,7 @@ var siteMCPTools = []string{"list_pages", "read_page", "cite",
 const (
 	siteTierOwner     = "owner"
 	siteTierMember    = "member"
-	siteTierSignedIn  = "signed-in"
+	siteTierAccount   = "account"
 	siteTierAnonymous = "anonymous"
 )
 
@@ -67,7 +67,7 @@ func newSiteMCP(ctx context.Context, app, dir string, outpost bool) *siteMCP {
 // --outpost the server is loopback-only and its caller is the local owner.
 // Behind --outpost only a signature from this app's key counts: an unsigned
 // or foreign-signed request is anonymous, a signed caller without a verified
-// relationship stamp is merely signed in.
+// relationship stamp is an account holder.
 func (s *siteMCP) caller(header http.Header) siteCaller {
 	if !s.outpost {
 		principal := strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL"))
@@ -105,10 +105,14 @@ func (s *siteMCP) caller(header http.Header) siteCaller {
 			if principal == "" {
 				principal = "anonymous"
 			}
-			return siteCaller{Principal: principal, Tier: rel.Kind}
+			tier := rel.Kind
+			if tier == "signed-in" {
+				tier = siteTierAccount
+			}
+			return siteCaller{Principal: principal, Tier: tier}
 		}
 		if user != "" {
-			return siteCaller{Principal: user, Tier: siteTierSignedIn}
+			return siteCaller{Principal: user, Tier: siteTierAccount}
 		}
 		return anonymous
 	}

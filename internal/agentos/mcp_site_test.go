@@ -221,10 +221,12 @@ func TestSiteMCPTiersOverHTTP(t *testing.T) {
 	}{
 		{name: "owner", kind: "owner", user: "owner@example.com", key: siteTestKey, readOK: true, shapeOK: true},
 		{name: "member", kind: "member", user: "friend@example.com", key: siteTestKey, readOK: true, principal: "friend@example.com", tier: "member"},
-		{name: "signed-in visitor", kind: "signed-in", visitor: "v123", key: siteTestKey, readOK: true, principal: "visitor:v123", tier: "signed-in"},
+		{name: "account visitor", kind: "account", visitor: "v123", key: siteTestKey, readOK: true, principal: "visitor:v123", tier: "account"},
+		{name: "signed-in alias visitor", kind: "signed-in", visitor: "v123", key: siteTestKey, readOK: true, principal: "visitor:v123", tier: "account"},
 		{name: "anonymous public", readOK: true, principal: "anonymous", tier: "anonymous"},
 		{name: "anonymous login-required", requireLogin: true, principal: "anonymous", tier: "anonymous"},
-		{name: "signed-in login-required", kind: "signed-in", visitor: "v123", key: siteTestKey, requireLogin: true, principal: "visitor:v123", tier: "signed-in"},
+		{name: "account login-required", kind: "account", visitor: "v123", key: siteTestKey, requireLogin: true, principal: "visitor:v123", tier: "account"},
+		{name: "signed-in alias login-required", kind: "signed-in", visitor: "v123", key: siteTestKey, requireLogin: true, principal: "visitor:v123", tier: "account"},
 		{name: "member login-required", kind: "member", user: "friend@example.com", key: siteTestKey, requireLogin: true, readOK: true, principal: "friend@example.com", tier: "member"},
 		{name: "forged owner stamp", kind: "owner", user: "owner@example.com", key: "wrong-key", readOK: true, principal: "anonymous", tier: "anonymous"},
 	} {

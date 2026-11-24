@@ -4,24 +4,27 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 )
 
-// Tiers a caller resolves to. The tier for a signed-in cloudbox account that
-// is not the owner's member is "signed-in", never "guest": guest is a member
-// circle.
+// Tiers a caller resolves to. The tier for a logged-in cloudbox account that
+// is not the owner's member is "account", never "user" (OS user) or "guest"
+// (a member circle). The legacy wire value "signed-in" is accepted as a logged
+// alias of TierAccount for one release window.
 const (
 	TierAnonymous = "anonymous"
-	TierSignedIn  = "signed-in"
+	TierAccount   = "account"
 	TierMember    = "member"
 	TierOwner     = "owner"
 )
 
 // Caller is who is asking, as outpost vouched for them. Email is set only for
-// the owner and members; a signed-in stranger is known by Visitor alone.
+// the owner and members; a logged-in account holder who is not a member is
+// known by Visitor alone.
 type Caller struct {
 	Tier    string   `json:"tier"`
 	Circle  string   `json:"-"` // the owner's private label: used, never shown
@@ -82,15 +85,21 @@ func resolveCaller(r *http.Request, secret string, now time.Time) Caller {
 		if groups != "" {
 			c.Groups = strings.Split(groups, ",")
 		}
+	case "account":
+		if visitor == "" {
+			return anon
+		}
+		c.Tier = TierAccount
 	case "signed-in":
 		if visitor == "" {
 			return anon
 		}
-		c.Tier = TierSignedIn
+		log.Printf("site-shaping: deprecated X-Outpost-Relationship %q accepted as %q alias", kind, TierAccount)
+		c.Tier = TierAccount
 	default:
 		return anon
 	}
-	if c.Tier != TierSignedIn && c.Email == "" {
+	if c.Tier != TierAccount && c.Email == "" {
 		return anon
 	}
 	return c

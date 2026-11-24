@@ -62,7 +62,7 @@ type RevisionHistory struct {
 }
 
 // SaveInput carries the inputs to RevisionStore.SaveRevision, adding the
-// optional opaque participant Kind (e.g. member, signed-in, anonymous) while
+// optional opaque participant Kind (e.g. member, account, anonymous) while
 // keeping Save's six-argument signature intact.
 type SaveInput struct {
 	Item      string

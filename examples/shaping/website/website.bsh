@@ -20,7 +20,7 @@
 ~~~skill as guide
 ---
 name: website
-description: Shaping-enable an existing website (static host, e.g. GitHub Pages) at no cost. The site stays where it is; a shaping layer in a private companion repo fronts it through outpost as a cloudbox-public app, injects a panel, and serves visitors by tier (anonymous, signed-in, circle member, owner) with private fields gated by audience and generated views from a free OpenAI-compatible route. The executable body is this Bash# file; run it with bashy --bashsharp.
+description: Shaping-enable an existing website (static host, e.g. GitHub Pages) at no cost. The site stays where it is; a shaping layer in a private companion repo fronts it through outpost as a cloudbox-public app, injects a panel, and serves visitors by tier (anonymous, account, circle member, owner) with private fields gated by audience and generated views from a free OpenAI-compatible route. The executable body is this Bash# file; run it with bashy --bashsharp.
 metadata:
   requires: "has=bashy"
 ---
@@ -34,7 +34,7 @@ site two ways: the static host, unchanged, and the engine face
 | Visitor | Gets | The site learns |
 |---|---|---|
 | anonymous | the page as today and a sign-in hint | nothing |
-| signed-in, not a member | the views open to `signed_in` | a per-site pseudonym, never the email |
+| account (logged in, not a member) | the views open to `account` (`signed_in` alias) | a per-site pseudonym, never the email |
 | member | also the fields whose audience admits their circle | email and circle |
 | owner | everything | everything |
 
@@ -51,7 +51,8 @@ site two ways: the static host, unchanged, and the engine face
    apply locally in `localStorage` with zero model calls.
    Edit `site.json` (title, contact, AI route, views, properties) and
    `fields/*.md` (one private fact each; `circles:` / `groups:` /
-   `emails:` / `signed_in:` front matter; no audience = owner only).
+   `emails:` / `account:` front matter, with `signed_in:` accepted as an
+   alias; no audience = owner only).
    Manage the wish list with:
    - `website wishes ls DIR [--json]`
    - `website wishes add DIR --id ID --label LABEL --patch PROP=VAL [--json]`
@@ -214,7 +215,7 @@ cmd_enable() {
             echo "  \"contact\": \"$contact\","
             echo '  "sign_in": "/cloud/signin",'
             echo '  "ai": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-flash-lite-latest", "key_env": "SITE_AI_KEY", "daily_cap": 5, "daily_max": 50, "max_tokens": 900},'
-            echo '  "views": [{"name": "recruiter-summary", "title": "Recruiter summary", "audience": {"signed_in": true},'
+            echo '  "views": [{"name": "recruiter-summary", "title": "Recruiter summary", "audience": {"account": true},'
             echo '    "prompt": "Write a one-page recruiter summary: a two-sentence headline, the strongest skills as bullets, the most relevant roles with years, and certifications. If contact details are among the facts, end with them; otherwise end with one line saying more details are shared on request."}],'
             echo '  "properties": {'
             echo '    "theme": {"values": ["default", "dark", "light"], "class_prefix": "ss-theme-", "description": "Color scheme"},'

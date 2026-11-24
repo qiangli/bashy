@@ -224,7 +224,7 @@ Action and CLI JSON contract (served identically on page and CLI through
 
 Boundaries: the app chooses which bytes enter a snapshot and decides who may
 read or write; `RevisionStore` stores `author`, participant `kind` (`member`,
-`signed-in`, `anonymous`, …) and `assistant` as opaque provenance metadata
+`account`, `anonymous`, …) and `assistant` as opaque provenance metadata
 without checking roles or identity, never owns or modifies the app's item file
 (snapshots live beside it under `$data/revisions/<item>/<part>/` with
 `state.json` as the single commit point; an unpublished `rN` orphan is

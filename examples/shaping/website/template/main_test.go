@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -23,7 +25,7 @@ var fixture = fstest.MapFS{
 	"site.json": {Data: []byte(`{"site_url":"https://example.com","title":"Example Person","contact":"mailto:owner@example.com",
 	  "ai":{"base_url":"http://127.0.0.1:1","model":"m","key_env":"SITE_AI_KEY","daily_cap":5,"daily_max":50},
 	  "shape_url":"/matrix/h/host/app/apps/shape/site-shaping/",
-	  "views":[{"name":"recruiter-summary","title":"Recruiter summary","prompt":"Summarize.","audience":{"signed_in":true}}],
+	  "views":[{"name":"recruiter-summary","title":"Recruiter summary","prompt":"Summarize.","audience":{"account":true}}],
 	  "properties":{
 	    "theme":{"values":["default","dark","light"],"class_prefix":"ss-theme-"},
 	    "text_size":{"values":["default","large","larger"],"class_prefix":"ss-text-"},
@@ -75,11 +77,12 @@ type who struct {
 }
 
 var (
-	owner     = who{"owner", "owner", "", "", "owner@example.com"}
-	recruiter = who{"recruiter", "member", "recruiter", "", "rec@example.com"}
-	friend    = who{"friend", "member", "friend", "", "pal@example.com"}
-	stranger  = who{"signed-in", "signed-in", "", "0123456789abcdef0123456789abcdef", ""}
-	nobody    = who{"anonymous", "", "", "", ""}
+	owner          = who{"owner", "owner", "", "", "owner@example.com"}
+	recruiter      = who{"recruiter", "member", "recruiter", "", "rec@example.com"}
+	friend         = who{"friend", "member", "friend", "", "pal@example.com"}
+	stranger       = who{"account", "account", "", "0123456789abcdef0123456789abcdef", ""}
+	strangerLegacy = who{"signed-in alias", "signed-in", "", "0123456789abcdef0123456789abcdef", ""}
+	nobody         = who{"anonymous", "", "", "", ""}
 )
 
 func newTestServer(t *testing.T, site, model string, key string) *server {
@@ -127,7 +130,8 @@ func TestTierMatrix(t *testing.T) {
 		{owner, "owner", "certificates,contact,notes", 1},
 		{recruiter, "member", "certificates,contact", 1},
 		{friend, "member", "", 1},
-		{stranger, "signed-in", "", 1},
+		{stranger, "account", "", 1},
+		{strangerLegacy, "account", "", 1},
 		{nobody, "anonymous", "", 0},
 	} {
 		_, me := do(t, s, "GET", "/_shaping/api/me", tc.w)
@@ -192,8 +196,69 @@ func TestAudienceFailsClosed(t *testing.T) {
 	if !g.Admits(Caller{Tier: TierMember, Circle: "recruiter", Groups: []string{"hiring"}}) {
 		t.Error("circle and group member refused")
 	}
-	if (Audience{Circles: []string{"recruiter"}}).Admits(Caller{Tier: TierSignedIn, Visitor: "v"}) {
+	if (Audience{Circles: []string{"recruiter"}}).Admits(Caller{Tier: TierAccount, Visitor: "v"}) {
 		t.Error("a stranger must not match a circle")
+	}
+}
+
+func TestSignedInWireAndAudienceAliases(t *testing.T) {
+	// Legacy wire value "signed-in" resolves to TierAccount and logs a deprecation notice.
+	var logBuf bytes.Buffer
+	oldOut := log.Writer()
+	log.SetOutput(&logBuf)
+	t.Cleanup(func() { log.SetOutput(oldOut) })
+
+	req := httptest.NewRequest("GET", "/", nil)
+	now := time.Now()
+	stamp(req, "signed-in", "", "", "0123456789abcdef0123456789abcdef", "", now)
+	if c := resolveCaller(req, testSecret, now); c.Tier != TierAccount || c.Visitor != "0123456789abcdef0123456789abcdef" {
+		t.Fatalf("signed-in alias resolved to %+v, want TierAccount", c)
+	}
+	if !strings.Contains(logBuf.String(), "signed-in") {
+		t.Errorf("signed-in alias did not log warning: %q", logBuf.String())
+	}
+
+	// Canonical "account" wire value resolves to TierAccount without logging an alias warning.
+	logBuf.Reset()
+	req = httptest.NewRequest("GET", "/", nil)
+	stamp(req, "account", "", "", "0123456789abcdef0123456789abcdef", "", now)
+	if c := resolveCaller(req, testSecret, now); c.Tier != TierAccount || c.Visitor != "0123456789abcdef0123456789abcdef" {
+		t.Fatalf("account stamp resolved to %+v, want TierAccount", c)
+	}
+	if logBuf.Len() != 0 {
+		t.Errorf("canonical account stamp logged unexpected warning: %q", logBuf.String())
+	}
+
+	// Legacy config key "signed_in" aliases "account" in both site.json and fields/*.md.
+	legacyFS := fstest.MapFS{
+		"site.json": {Data: []byte(`{"site_url":"https://example.com","title":"T",
+		  "ai":{"base_url":"http://127.0.0.1:1","model":"m","key_env":"SITE_AI_KEY"},
+		  "views":[{"name":"legacy-view","title":"Legacy","prompt":"p","audience":{"signed_in":true}}]}`)},
+		"fields/legacy-fact.md":  {Data: []byte("---\nlabel: Legacy\nsigned_in: true\n---\nlegacy body\n")},
+		"fields/account-fact.md": {Data: []byte("---\nlabel: Account\naccount: true\n---\naccount body\n")},
+		"public/shaping.js":      {Data: []byte("//")},
+	}
+	env := map[string]string{"SITE_SSO_SECRET": testSecret, "SITE_AI_KEY": "k"}
+	s, err := newServerFrom(legacyFS, func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, w := range []who{stranger, strangerLegacy} {
+		_, me := do(t, s, "GET", "/_shaping/api/me", w)
+		if me["tier"] != TierAccount {
+			t.Errorf("%s: tier = %v, want %s", w.name, me["tier"], TierAccount)
+		}
+		if views, _ := me["views"].([]any); len(views) != 1 {
+			t.Errorf("%s: views = %v, want 1", w.name, views)
+		}
+		_, f := do(t, s, "GET", "/_shaping/api/fields", w)
+		if got := strings.Join(fieldNames(f), ","); got != "account-fact,legacy-fact" {
+			t.Errorf("%s: fields = %q, want account-fact,legacy-fact", w.name, got)
+		}
+	}
+	_, f := do(t, s, "GET", "/_shaping/api/fields", nobody)
+	if got := strings.Join(fieldNames(f), ","); got != "" {
+		t.Errorf("anonymous saw fields %q", got)
 	}
 }
 

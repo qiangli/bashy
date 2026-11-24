@@ -5,7 +5,8 @@
 // _shaping/api/: me (the caller's tier), fields (the private facts their
 // audience admits) and view (a generated presentation from only that data).
 // Identity comes from outpost's signed relationship stamp; anything unsigned
-// is anonymous. A signed-in stranger is a pseudonym, never an address.
+// is anonymous. A logged-in account holder who is not a member is a pseudonym,
+// never an address.
 //
 // It is the server of a shaped app (shaped.json): the owner shapes it with
 // `bashy shape`, and `website.bsh serve` runs the approved build for visitors.

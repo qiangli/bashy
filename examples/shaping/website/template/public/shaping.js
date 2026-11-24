@@ -1,5 +1,5 @@
 // shaping.js — the panel the site-shaping server injects into every page.
-// Anonymous visitors get a sign-in hint; signed-in visitors and members get
+// Anonymous visitors get a sign-in hint; account visitors and members get
 // the views their tier allows; members also get the facts shared with their
 // circle. Plain DOM, no framework, no cookies of its own.
 (function () {
@@ -224,6 +224,7 @@
 
   var tierText = {
     anonymous: "You are browsing anonymously.",
+    account: "Signed in.",
     "signed-in": "Signed in.",
     member: "Signed in as a member.",
     owner: "Signed in as the owner."

@@ -259,7 +259,7 @@ func TestRevisionHistoryOrderAndReloadFromDisk(t *testing.T) {
 	if _, err := writer.SaveRevision(SaveInput{Item: "memo1", BaseRev: "r1", Author: "Bob", Kind: "anonymous", Assistant: "claude", Data: []byte("v2")}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := writer.SaveRevision(SaveInput{Item: "memo1", BaseRev: "r2", Author: "guest-1234", Kind: "signed-in", Data: []byte("v3")}); err != nil {
+	if _, err := writer.SaveRevision(SaveInput{Item: "memo1", BaseRev: "r2", Author: "guest-1234", Kind: "account", Data: []byte("v3")}); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := writer.Restore("memo1", "", "r2"); err != nil {
@@ -285,7 +285,7 @@ func TestRevisionHistoryOrderAndReloadFromDisk(t *testing.T) {
 			t.Fatalf("history[%d] = %+v, want revision %s", i, h.Versions[i], want)
 		}
 	}
-	if h.Versions[0].Kind != "signed-in" || h.Versions[1].Author != "Bob" || h.Versions[1].Kind != "anonymous" || h.Versions[1].Assistant != "claude" || h.Versions[2].Kind != "member" {
+	if h.Versions[0].Kind != "account" || h.Versions[1].Author != "Bob" || h.Versions[1].Kind != "anonymous" || h.Versions[1].Assistant != "claude" || h.Versions[2].Kind != "member" {
 		t.Fatalf("reloaded kind/author metadata = %+v", h.Versions)
 	}
 	if h.Versions[0].Assistant != "" || h.Versions[2].Created.IsZero() {

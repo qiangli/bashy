@@ -8,7 +8,7 @@ and serves visitors by tier:
 | Visitor | Gets | The site learns |
 |---|---|---|
 | anonymous | the page as today, and a sign-in hint | nothing |
-| signed-in, not a member | views open to `signed_in` (e.g. a recruiter summary) | a per-site pseudonym, never the email |
+| account (logged in, not a member) | views open to `account` (`signed_in` alias; e.g. a recruiter summary) | a per-site pseudonym, never the email |
 | member of a circle | also the fields whose audience admits that circle | email and circle |
 | owner | everything; shapes the layer with `bashy shape` | everything |
 
@@ -44,7 +44,8 @@ Then link the engine face from the static site:
   `-Circle`, `-Groups`, `-Visitor`, `-Relationship-Sig`; see outpost
   `docs/cooperative-web-apps.md`). Unsigned, stale or forged headers are
   anonymous. Outpost never forwards a non-member's address.
-- **Audience** per field uses the cloudbox rule grammar plus `signed_in`:
+- **Audience** per field uses the cloudbox rule grammar plus `account`
+  (`signed_in` accepted as an alias):
   circles AND (group OR email); a group never widens across circles; a field
   with no audience is owner-only.
 - **Personalization wishes**: `enable` writes a default `properties` schema
