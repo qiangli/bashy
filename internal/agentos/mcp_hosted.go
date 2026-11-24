@@ -585,7 +585,7 @@ func (c *mcpHostedCall) env(extra map[string]string) ([]string, error) {
 	}
 	// Pre-warmed runner caches stay visible to hosted calls and cannot be
 	// redirected by a client env override.
-	for _, cacheKey := range []string{adapterCacheEnvKey, "BASHY_BIN_CACHE"} {
+	for _, cacheKey := range []string{adapterCacheEnvKey, "BASHY_BIN_CACHE", "UV_PYTHON_INSTALL_DIR"} {
 		if cacheDir := strings.TrimSpace(os.Getenv(cacheKey)); cacheDir != "" {
 			own = append(own, cacheKey+"="+cacheDir)
 		}

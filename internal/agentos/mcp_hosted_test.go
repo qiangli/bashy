@@ -305,6 +305,7 @@ func TestMCPHostedServe(t *testing.T) {
 	adapterCache := filepath.Join(filepath.Dir(h.scratch), "adapters")
 	t.Setenv(adapterCacheEnvKey, adapterCache)
 	t.Setenv("BASHY_BIN_CACHE", filepath.Join(filepath.Dir(h.scratch), "bin"))
+	t.Setenv("UV_PYTHON_INSTALL_DIR", filepath.Join(filepath.Dir(h.scratch), "python"))
 	second := mcpHostedFixtureIdentity("call-2")
 	transport.set(mcpHostedToken(t, second, mcpHostedFixtureKey))
 	// The script tool takes the same child-process path as run_tool.

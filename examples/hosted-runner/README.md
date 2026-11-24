@@ -28,3 +28,9 @@ bashy --bashsharp examples/hosted-runner/hosted-runner.bsh stop --json
 ```sh
 GOWORK=off go -C examples/hosted-runner test -v ./...
 ```
+
+## H5 load mode and pre-warmed fakes
+
+- `hosted-runner.bsh build --with-fakes --json` also pre-warms `custom/gh`, `UV_PYTHON_INSTALL_DIR` (`/var/cache/bashy/python`), and static fake `gws` / `gh` binaries (`cmd/fakecli`).
+- `hosted-runner.bsh start --cloudbox-url URL --pids-limit 8192 --json` configures the fake vault endpoint and container PIDs ceiling for concurrent load.
+- `cmd/signer --load [--rate N --duration 60s [--open-loop --queue-cap M] | --burst 1000] --concurrency C --mix echo,gmail,trove,gh --fake-vault-listen 127.0.0.1:22752 --json` drives concurrent fresh-identity MCP calls (including H1b digest-bound `cred` approval for `gh` and H2 vault projection for `google`/`trove`).

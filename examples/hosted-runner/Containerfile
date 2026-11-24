@@ -2,23 +2,36 @@
 ARG BASE_IMAGE=localhost/bashy-hosted-base:latest
 FROM ${BASE_IMAGE}
 
+ARG WITH_FAKES=0
+
 USER 0:0
 
 COPY --chown=0:0 adapters /var/cache/bashy/adapters
+COPY --chown=0:0 fake-bin /opt/bashy/fake-bin
 COPY --chown=0:0 examples/google /opt/bashy/examples/google
 COPY --chown=0:0 examples/trove /opt/bashy/examples/trove
 
 ENV BASHY_ADAPTER_CACHE=/var/cache/bashy/adapters \
     BASHY_HOSTED_SCRATCH_DIR=/tmp/hosted-scratch \
+    UV_PYTHON_INSTALL_DIR=/var/cache/bashy/python \
     BASHY_HINTS=off \
     BASHY_TELEMETRY_QUIET=1
 
 RUN set -eux; \
+    install -d -o 0 -g 0 -m 0755 /var/cache/bashy/python; \
     chmod -R a+rX /var/cache/bashy/adapters /opt/bashy/examples; \
     chmod 0755 /opt/bashy/examples/google/google.bsh /opt/bashy/examples/google/google-rod.bsh /opt/bashy/examples/google/register.sh /opt/bashy/examples/trove/trove.bsh /opt/bashy/examples/trove/register.sh; \
+    if [ "${WITH_FAKES}" = "1" ] && [ -x /opt/bashy/fake-bin/fakecli ]; then \
+        install -m 0755 /opt/bashy/fake-bin/fakecli /opt/bashy/bin/gws; \
+        install -m 0755 /opt/bashy/fake-bin/fakecli /opt/bashy/bin/gh; \
+        install -d -o 0 -g 0 -m 0755 /var/cache/bashy/bin/gh/v2.102.0; \
+        install -m 0755 /opt/bashy/fake-bin/fakecli /var/cache/bashy/bin/gh/v2.102.0/gh; \
+    fi; \
+    rm -rf /opt/bashy/fake-bin; \
     install -d -o 10001 -g 10001 -m 0700 /tmp/hosted-scratch; \
     BASHY_BIN=/bashy HOME=/home/builder /bashy /opt/bashy/examples/google/register.sh; \
     BASHY_BIN=/bashy HOME=/home/builder /bashy /opt/bashy/examples/trove/register.sh; \
+    chmod -R a+rX /var/cache/bashy/bin /var/cache/bashy/python; \
     chown -R 10001:10001 /home/builder
 
 USER 10001:10001
@@ -29,7 +42,13 @@ RUN set -eu; \
     test -x /var/cache/bashy/adapters/yoke/secret; \
     test -x /var/cache/bashy/adapters/optional/jq; \
     test -x /var/cache/bashy/adapters/yoke/lens; \
-    test -x /var/cache/bashy/adapters/optional/sha256sum
+    test -x /var/cache/bashy/adapters/optional/sha256sum; \
+    test -x /var/cache/bashy/adapters/custom/gh; \
+    test -n "$(ls -A /var/cache/bashy/python)"; \
+    if [ "${WITH_FAKES}" = "1" ]; then \
+        /opt/bashy/bin/gws --version | grep -q 'fake'; \
+        /bashy gh --version | grep -q 'fake'; \
+    fi
 
 WORKDIR /work
 ENTRYPOINT ["/bashy"]

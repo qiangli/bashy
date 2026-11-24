@@ -199,7 +199,7 @@ Each request gets its own server bound to the verified caller. An executing
   (the task), `BASHY_HOSTED_IDEMPOTENCY_KEY` and `BASHY_HOSTED_SCRATCH`. A
   client `env` argument cannot override these values. The runner's registered
   commands stay callable through a read-only `BASHY_COMMANDS_PATH`, and any
-  `BASHY_ADAPTER_CACHE` or `BASHY_BIN_CACHE` set on the runner passes through
+  `BASHY_ADAPTER_CACHE`, `BASHY_BIN_CACHE` or `UV_PYTHON_INSTALL_DIR` set on the runner passes through
   unoverridable;
 - with a signed `secrets_token`, lists connected credentials and uses the
   `secret exec --no-cache` projection path. Google Workspace files are
