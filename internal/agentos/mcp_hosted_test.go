@@ -302,6 +302,9 @@ func TestMCPHostedServe(t *testing.T) {
 
 	// The call sees its scratch home and identity, never the runner's, and a
 	// client cannot override them.
+	adapterCache := filepath.Join(filepath.Dir(h.scratch), "adapters")
+	t.Setenv(adapterCacheEnvKey, adapterCache)
+	t.Setenv("BASHY_BIN_CACHE", filepath.Join(filepath.Dir(h.scratch), "bin"))
 	second := mcpHostedFixtureIdentity("call-2")
 	transport.set(mcpHostedToken(t, second, mcpHostedFixtureKey))
 	// The script tool takes the same child-process path as run_tool.
@@ -315,6 +318,7 @@ func TestMCPHostedServe(t *testing.T) {
 echo "BASHY_PRINCIPAL=$BASHY_PRINCIPAL"
 echo "BASHY_HOSTED_TASK_ID=$BASHY_HOSTED_TASK_ID"
 echo "BASHY_SECRETS_TOKEN=$BASHY_SECRETS_TOKEN"
+echo "BASHY_ADAPTER_CACHE=$BASHY_ADAPTER_CACHE"
 echo "` + mcpHostedKeyEnv + `=${` + mcpHostedKeyEnv + `-unset}"
 `
 	env := mcpHostedCallTool(t, ctx, cs, "bashy", map[string]any{"script": script})
@@ -334,6 +338,7 @@ echo "` + mcpHostedKeyEnv + `=${` + mcpHostedKeyEnv + `-unset}"
 	for key, want := range map[string]string{
 		"HOME": "scratch", "BASHY_HOME": "scratch", "TMPDIR": "scratch", "PWD": "scratch", mcpHostedKeyEnv: "unset",
 		"BASHY_PRINCIPAL": second.Caller, "BASHY_HOSTED_TASK_ID": second.TaskID, "BASHY_SECRETS_TOKEN": "",
+		adapterCacheEnvKey: adapterCache,
 	} {
 		if got[key] != want {
 			t.Errorf("%s = %q, want %q", key, got[key], want)
@@ -343,6 +348,21 @@ echo "` + mcpHostedKeyEnv + `=${` + mcpHostedKeyEnv + `-unset}"
 		t.Fatalf("scratch %s still exists after the call: %v", root, err)
 	}
 	mcpHostedScratchEmpty(t, h)
+
+	// A client env argument cannot override BASHY_ADAPTER_CACHE.
+	callEnv, err := (&mcpHostedCall{runner: h, id: second, root: h.scratch}).env(map[string]string{adapterCacheEnvKey: "/elsewhere"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var gotCache string
+	for _, kv := range callEnv {
+		if val, ok := strings.CutPrefix(kv, adapterCacheEnvKey+"="); ok {
+			gotCache = val
+		}
+	}
+	if gotCache != adapterCache {
+		t.Fatalf("effective %s = %q, want %q", adapterCacheEnvKey, gotCache, adapterCache)
+	}
 
 	// A file the call writes lands in its scratch work directory and goes
 	// with it; a client cannot move the call's home through env.

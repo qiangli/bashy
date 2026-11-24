@@ -198,7 +198,9 @@ Each request gets its own server bound to the verified caller. An executing
   `BASHY_PRINCIPAL` (the caller), `BASHY_SESSION` and `BASHY_HOSTED_TASK_ID`
   (the task), `BASHY_HOSTED_IDEMPOTENCY_KEY` and `BASHY_HOSTED_SCRATCH`. A
   client `env` argument cannot override these values. The runner's registered
-  commands stay callable through a read-only `BASHY_COMMANDS_PATH`;
+  commands stay callable through a read-only `BASHY_COMMANDS_PATH`, and any
+  `BASHY_ADAPTER_CACHE` or `BASHY_BIN_CACHE` set on the runner passes through
+  unoverridable;
 - with a signed `secrets_token`, lists connected credentials and uses the
   `secret exec --no-cache` projection path. Google Workspace files are
   written with mode 0600 under the call's `GWS_CONFIG_ROOT` and removed

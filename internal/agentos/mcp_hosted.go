@@ -583,6 +583,13 @@ func (c *mcpHostedCall) env(extra map[string]string) ([]string, error) {
 		// Credentials are projected in the runner using the signed token.
 		"BASHY_SECRETS_TOKEN=",
 	}
+	// Pre-warmed runner caches stay visible to hosted calls and cannot be
+	// redirected by a client env override.
+	for _, cacheKey := range []string{adapterCacheEnvKey, "BASHY_BIN_CACHE"} {
+		if cacheDir := strings.TrimSpace(os.Getenv(cacheKey)); cacheDir != "" {
+			own = append(own, cacheKey+"="+cacheDir)
+		}
+	}
 	if runtime.GOOS == "windows" {
 		own = append(own, "USERPROFILE="+home, "APPDATA="+filepath.Join(home, "AppData", "Roaming"),
 			"LOCALAPPDATA="+filepath.Join(home, "AppData", "Local"), "TEMP="+c.tmp(), "TMP="+c.tmp())
