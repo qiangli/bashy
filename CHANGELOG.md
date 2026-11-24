@@ -31,7 +31,14 @@ frozen release candidate before the tag.
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- `bashy mcp serve --transport http --hosted`: a third serving profile beside
+  `--outpost` and `--tools site`, for callers who have no host. Every request
+  carries a master-signed, short-lived per-call identity; each executing call
+  runs as a child process in a scratch home removed after it, under
+  `--timeout` and `--max-output`; shell sessions are not served; the caller
+  is the principal in the audit line. See `docs/mcp-server.md`.
 
 ## [1.0.0-rc.40] — 2026-11-22 (candidate)
 

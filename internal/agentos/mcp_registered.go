@@ -21,6 +21,12 @@ import (
 // Use the same request-local interpreter and exec ladder as the shell front
 // door. In particular, never execute bashySelfPath to evaluate script bytes.
 func mcpRunScript(ctx context.Context, script, stdin, dir string) (string, string, int, error) {
+	if call := mcpHostedFrom(ctx); call != nil {
+		// A hosted call never evaluates in the server process: the script
+		// runs in a child with the call's scratch home, deadline and cap.
+		stdout, stderr, exit := call.exec(ctx, []string{call.runner.self, "-c", script}, stdin, dir, nil)
+		return stdout, stderr, exit, nil
+	}
 	var stdout, stderr bytes.Buffer
 	exit := cli.RunSessionCommandWithConfig(ctx, cli.SessionIO{
 		Command: script, Dir: dir, Env: os.Environ(), Stdin: strings.NewReader(stdin),

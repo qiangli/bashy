@@ -150,3 +150,67 @@ still apply: `destroy`, `spend`, `cred` and `priv` require explicit host-side
 approval (`--allow` grants); the shipped service grants none. Digest-bound
 per-call approval is handled by the gateway/conductor approval workflow.
 The non-loopback bind refusal also applies with `--outpost`.
+
+## Hosted runner
+
+`bashy mcp serve --transport http --hosted` serves a caller who has no host
+of their own. It is the third profile beside `--outpost` and `--tools site`
+and excludes both. It listens on loopback only.
+
+Every HTTP request carries one per-call identity signed by the master:
+
+```
+X-Bashy-Hosted-Identity: v1.<payload>.<signature>
+```
+
+`payload` is the unpadded base64url JSON below; `signature` is the unpadded
+base64url HMAC-SHA256 of `v1.<payload>` under the runner key.
+
+| Field | Meaning |
+|---|---|
+| `v` | `bashy-hosted-identity-v1` |
+| `caller` | the accountable principal of the call |
+| `task_id` | the master's task for the call |
+| `idempotency_key` | executes at most once on this runner |
+| `secrets_token` | optional `secrets:read` token for this call only |
+| `iat`, `exp` | Unix seconds; `exp - iat` is at most five minutes |
+
+The runner key is the file named by `BASHY_HOSTED_KEY_FILE`, else
+`bashy/hosted-runner.key` under the user configuration directory. It must be
+a private regular file (mode 0600) of at least 16 bytes and is re-read for
+each request, so provisioning and rotation need no restart. A request with a
+missing, unsigned, expired, over-long, future-dated or incomplete identity, a
+second identity header, a missing or public key file, or a non-loopback peer
+answers 401. The key is never a command-line argument.
+
+Each request gets its own server bound to the verified caller. An executing
+`tools/call`:
+
+- claims its `idempotency_key`; a second executing call with the same key
+  answers `{state: "replayed"}` and runs nothing. The cache lives in the
+  runner process; the master keeps the durable record;
+- runs as a child process of the same binary in a scratch tree made for the
+  call under `BASHY_HOSTED_SCRATCH_DIR` (default: the temporary directory)
+  and removed when the call returns. `HOME`, `BASHY_HOME`, `TMPDIR` and the
+  XDG directories point into it; the working directory is its `work`
+  directory, and a `dir` argument must stay inside that;
+- inherits only `PATH`, locale and time zone from the runner. The call sees
+  `BASHY_PRINCIPAL` (the caller), `BASHY_SESSION` and `BASHY_HOSTED_TASK_ID`
+  (the task), `BASHY_HOSTED_IDEMPOTENCY_KEY`, `BASHY_HOSTED_SCRATCH` and
+  `BASHY_SECRETS_TOKEN` (the identity's token, empty when it has none). A
+  client `env` argument cannot override any of them. The runner's registered
+  commands stay callable through a read-only `BASHY_COMMANDS_PATH`;
+- stops at `--timeout` (default 1m): the child's process group is killed and
+  the call answers exit 124;
+- returns at most `--max-output` bytes of each stream; stderr names what was
+  dropped.
+
+`shell_open`, `shell_exec` and `shell_close` are not served, and neither are
+the tools that read the server's own home (`db_lifecycle`, `kb_memory` and
+its retrieval and maintenance tools).
+
+The effect policy is unchanged. A `destroy`, `spend`, `cred` or `priv` call
+answers `{state: "gated"}` before it spends its identity or creates a scratch
+tree. The audit line of every call, gated ones included, names the caller as
+`actor.human` (the field `BASHY_PRINCIPAL` fills for a local shell) and the
+task as `actor.session`.

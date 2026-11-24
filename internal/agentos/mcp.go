@@ -31,7 +31,7 @@ import (
 // exit 2 when no subcommand (or --help) is given.
 const mcpUsage = `usage: bashy mcp serve [--transport stdio|http] [--listen ADDR] [--allow EFFECTS]
                        [--tools default|all|site|NAME,...] [--max-output BYTES] [--outpost]
-                       [--site-dir DIR] [--site-app APP]
+                       [--hosted] [--timeout DURATION] [--site-dir DIR] [--site-app APP]
        bashy mcp tools [--tools default|all|site|NAME,...] [--json]
 
 Serve bashy commands to agents over the Model Context Protocol.
@@ -39,6 +39,10 @@ Serve bashy commands to agents over the Model Context Protocol.
   serve --transport stdio   run the MCP server over stdio (default)
   serve --transport http    loopback HTTP at /mcp (default 127.0.0.1:0)
   --outpost                 require the bashy-mcp outpost app identity signature (HTTP only)
+  --hosted                  serve callers who have no host (HTTP only): every request carries
+                            a master-signed per-call identity; each call runs in a scratch
+                            home removed after it, under --timeout (default 1m) and
+                            --max-output; no shell sessions
   tools                     print the tools a profile would serve, without serving
                             (--json: the bashy-mcp-tools-v1 envelope)
   --tools default           registered tools plus available core commands
@@ -86,7 +90,8 @@ func dispatchMCP(args []string) int {
 		return 2
 	}
 	transport := "stdio"
-	outpost := false
+	outpost, hosted := false, false
+	timeout, timeoutSet := defaultMCPHostedTimout, false
 	allow := ""
 	profile, listen := "default", ""
 	siteDir, siteApp := "", ""
@@ -96,7 +101,7 @@ func dispatchMCP(args []string) int {
 		name, value, hasValue := strings.Cut(a, "=")
 		if !hasValue {
 			switch a {
-			case "--transport", "--allow", "--tools", "--listen", "--site-dir", "--site-app":
+			case "--transport", "--allow", "--tools", "--listen", "--site-dir", "--site-app", "--timeout":
 				name, value, hasValue = a, "", false
 				if i+1 < len(rest) {
 					i++
@@ -110,6 +115,18 @@ func dispatchMCP(args []string) int {
 				return 2
 			}
 			outpost = true
+		case "--hosted":
+			if hasValue {
+				return 2
+			}
+			hosted = true
+		case "--timeout":
+			d, err := time.ParseDuration(value)
+			if !hasValue || err != nil || d <= 0 {
+				fmt.Fprintln(os.Stderr, "bashy mcp: --timeout requires a positive duration such as 30s")
+				return 2
+			}
+			timeout, timeoutSet = d, true
 		case "--transport":
 			if !hasValue || value == "" {
 				fmt.Fprint(os.Stderr, mcpUsage)
@@ -153,6 +170,14 @@ func dispatchMCP(args []string) int {
 		fmt.Fprintln(os.Stderr, "bashy mcp: --outpost requires --transport http")
 		return 2
 	}
+	if hosted && (transport != "http" || outpost || profile == "site") {
+		fmt.Fprintln(os.Stderr, "bashy mcp: --hosted requires --transport http and excludes --outpost and --tools site")
+		return 2
+	}
+	if timeoutSet && !hosted {
+		fmt.Fprintln(os.Stderr, "bashy mcp: --timeout applies to --hosted")
+		return 2
+	}
 	// cli.BashyVersion is the exported source of what `bashy --version`
 	// prints (internal/cli/version.go); "dev" when unstamped.
 	version := cli.BashyVersion()
@@ -175,6 +200,21 @@ func dispatchMCP(args []string) int {
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 		if err := runSiteMCP(ctx, transport, listen, siteApp, siteDir, version, outpost); err != nil {
+			fmt.Fprintln(os.Stderr, "bashy mcp:", err)
+			return 2
+		}
+		return 0
+	}
+	if hosted {
+		// A gated call answers {state: "gated"} here too, before it spends
+		// its identity: the caller settles it on the master.
+		runner, err := newMCPHosted(allow, profile, version, timeout, maxOutput)
+		if err == nil {
+			ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+			defer stop()
+			err = runMCPHosted(ctx, runner, listen)
+		}
+		if err != nil {
 			fmt.Fprintln(os.Stderr, "bashy mcp:", err)
 			return 2
 		}

@@ -71,6 +71,9 @@ func mcpVerbCommand(name string, entry atlas.Entry) yokemcp.RegisteredCommand {
 		Usage: cobraSchemaSummary(name, cobraSchemas(name)),
 		Name:  name, Synopsis: synopsisOf(name), Effects: slices.Clone(entry.Effects), OS: slices.Clone(entry.OS), Static: true,
 		Run: func(ctx context.Context, args []string, stdin, dir string) (string, string, int) {
+			if call := mcpHostedFrom(ctx); call != nil {
+				return call.exec(ctx, append([]string{call.runner.self, name}, args...), stdin, dir, nil)
+			}
 			return mcpVerbExec(ctx, append([]string{bashySelfPath(), name}, args...), stdin, dir)
 		},
 	}
