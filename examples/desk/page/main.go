@@ -211,6 +211,7 @@ func (it *item) clone() item {
 			}
 		}
 	}
+	c.BlockFaces = maps.Clone(it.BlockFaces)
 	c.Members = make(map[string]bool, len(it.Members))
 	for k, v := range it.Members {
 		c.Members[k] = v
@@ -340,6 +341,14 @@ func (a *app) saveContentRevisionLocked(prev, next *item, baseRev, author, kind,
 	if err := a.persistLocked(next); err != nil {
 		return kit.RevisionState{}, err
 	}
+	rollback := func() {
+		if prev == nil {
+			_ = os.Remove(itemPath(a.dir, next.ID))
+			delete(a.items, next.ID)
+			return
+		}
+		_ = a.persistLocked(prev)
+	}
 	saveBase := baseRev
 	// Seed a pre-S1 saved page's existing authored content as r1 so its first edit can undo to it.
 	if prev != nil && baseRev == "" && h.Active == "" && len(h.Versions) == 0 {
@@ -348,7 +357,7 @@ func (a *app) saveContentRevisionLocked(prev, next *item, baseRev, author, kind,
 			Author: "organizer",
 			Data:   encodePageContent(prev.Title, prev.Body),
 		}); err != nil {
-			_ = a.persistLocked(prev)
+			rollback()
 			return kit.RevisionState{}, err
 		}
 		saveBase = "r1"
@@ -362,7 +371,7 @@ func (a *app) saveContentRevisionLocked(prev, next *item, baseRev, author, kind,
 		Data:      encodePageContent(next.Title, next.Body),
 	})
 	if err != nil {
-		_ = a.persistLocked(prev)
+		rollback()
 		return kit.RevisionState{}, err
 	}
 	if breakMode != "events-no-publish" {
@@ -685,27 +694,11 @@ func (a *app) create(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		kit.Fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	it.Revision++
-	if err := a.persistLocked(it); err != nil {
-		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
-		return
-	}
 	author, kind, assistant := a.organizerAuthor(r, req)
-	st, err := a.revisions().SaveRevision(kit.SaveInput{
-		Item:      it.ID,
-		Author:    author,
-		Kind:      kind,
-		Assistant: assistant,
-		Data:      encodePageContent(it.Title, it.Body),
-	})
+	st, err := a.saveContentRevisionLocked(nil, it, "", author, kind, assistant)
 	if err != nil {
-		_ = os.Remove(itemPath(a.dir, it.ID))
-		delete(a.items, it.ID)
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
 		return
-	}
-	if breakMode != "events-no-publish" {
-		a.events.Publish(it.ID, "", it.Revision)
 	}
 	v := a.openView(r, it)
 	v["active"] = st.Active
@@ -819,7 +812,7 @@ func (a *app) revisionAction(w http.ResponseWriter, r *http.Request, it *item, r
 		next := it.clone()
 		next.Title = snap.Title
 		next.Body = snap.Body
-		return a.persistLocked(&next)
+		return a.saveLocked(&next, "")
 	})
 }
 
@@ -944,7 +937,7 @@ func (a *app) page(r *http.Request) (int, []byte) {
 		if face == organizerFace {
 			faceScript = faceTabsScript + nativeControlsScript(base, it.ID) + revisionsScript(base, it.ID)
 			if h, err := a.revisions().History(it.ID, ""); err == nil {
-				revisionsHTML = renderRevisionsHTML(h)
+				revisionsHTML = renderRevisionsHTML(h, it.Status == kit.StatusClosed)
 			} else {
 				revisionsHTML = `<section class="desk-panel page-revisions" data-page-revisions><h2 class="desk-h2">Revisions</h2>` +
 					kit.State("error", "Revision history unavailable", "The saved page content is unaffected.") + `</section>`
@@ -979,7 +972,7 @@ func formatRevisionAuthor(v kit.Revision) string {
 	return author
 }
 
-func renderRevisionsHTML(h kit.RevisionHistory) string {
+func renderRevisionsHTML(h kit.RevisionHistory, closed bool) string {
 	var b strings.Builder
 	b.WriteString(`<section class="desk-panel page-revisions" data-page-revisions><h2 class="desk-h2">Revisions</h2>`)
 	if len(h.Versions) == 0 {
@@ -1002,7 +995,7 @@ func renderRevisionsHTML(h kit.RevisionHistory) string {
 		}
 		b.WriteString(`</span>`)
 		disabled := ""
-		if v.Revision == h.Active {
+		if closed || v.Revision == h.Active {
 			disabled = " disabled"
 		}
 		b.WriteString(`<button type="button" class="desk-copy secondary" data-page-restore="` + rev + `"` + disabled + `>Restore</button>`)
@@ -1024,6 +1017,7 @@ func revisionsScript(base, id string) string {
 	return revisionsStyle + `<script>
 (function(){
   const cfg = ` + string(cfg) + `;
+  function alertMsg(text){ const el = document.querySelector('[data-desk-alert]'); if (el) { el.textContent = text; el.setAttribute('data-kind', text ? 'error' : ''); } }
   document.addEventListener('click', async function(e){
     const btn = e.target.closest('[data-page-restore]');
     if (!btn) return;
@@ -1035,11 +1029,21 @@ func revisionsScript(base, id string) string {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({action: 'restore', id: cfg.id, revision: btn.dataset.pageRestore})
       });
-      if (!r.ok) throw new Error();
+      const out = await r.json().catch(function(){ return {}; });
+      if (!r.ok) {
+        const msg = (out.error && out.error.message) || 'Could not restore revision.';
+        alertMsg(msg);
+        if (window.deskToast) window.deskToast(msg, 'error');
+        btn.disabled = false;
+        return;
+      }
+      alertMsg('');
       location.reload();
     } catch (_) {
       btn.disabled = false;
-      if (window.deskToast) window.deskToast('Could not restore revision.', 'error');
+      const msg = 'Could not restore revision.';
+      alertMsg(msg);
+      if (window.deskToast) window.deskToast(msg, 'error');
     }
   });
 })();

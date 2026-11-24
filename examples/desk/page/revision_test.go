@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +34,109 @@ func outpostOwnerHeaders(secret, prefix, user, role string, now time.Time) map[s
 	return out
 }
 
+func openPageEventStream(t *testing.T, base, id string) (<-chan kit.Frame, func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/events?id="+id, nil)
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		resp.Body.Close()
+		cancel()
+		t.Fatalf("open event stream: status %d", resp.StatusCode)
+	}
+	frames := make(chan kit.Frame, 32)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		defer close(frames)
+		sc := bufio.NewScanner(resp.Body)
+		for sc.Scan() {
+			if raw, ok := strings.CutPrefix(sc.Text(), "data: "); ok {
+				var f kit.Frame
+				if json.Unmarshal([]byte(raw), &f) == nil {
+					frames <- f
+				}
+			}
+		}
+	}()
+	// Consume the initial open frame emitted on subscription.
+	select {
+	case _, ok := <-frames:
+		if !ok {
+			resp.Body.Close()
+			cancel()
+			t.Fatal("event stream closed before initial frame")
+		}
+	case <-time.After(3 * time.Second):
+		resp.Body.Close()
+		cancel()
+		t.Fatal("timed out waiting for initial SSE frame")
+	}
+	return frames, func() {
+		cancel()
+		resp.Body.Close()
+		<-done
+	}
+}
+
+func expectOnePageFrame(t *testing.T, frames <-chan kit.Frame, id string, wantRev int) {
+	t.Helper()
+	var f kit.Frame
+	select {
+	case got, ok := <-frames:
+		if !ok {
+			t.Fatalf("event stream closed waiting for rev %d", wantRev)
+		}
+		f = got
+	case <-time.After(3 * time.Second):
+		t.Fatalf("timed out waiting for SSE frame rev=%d", wantRev)
+	}
+	if f.Item != id || f.Block != "" || f.Revision != wantRev || f.Resync {
+		t.Fatalf("unexpected SSE frame %+v, want {Item:%q Block:\"\" Revision:%d Resync:false}", f, id, wantRev)
+	}
+	select {
+	case extra, ok := <-frames:
+		if ok {
+			t.Fatalf("expected exactly one SSE frame for rev %d, got extra %+v", wantRev, extra)
+		}
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+func expectNoPageFrame(t *testing.T, frames <-chan kit.Frame) {
+	t.Helper()
+	select {
+	case f, ok := <-frames:
+		if ok {
+			t.Fatalf("expected no SSE frame, got %+v", f)
+		}
+	case <-time.After(50 * time.Millisecond):
+	}
+}
+
+// nonContentBytes serializes every field of it except Title, Body, and Revision
+// so callers can prove undo/restore leave all non-content state byte-identical.
+func nonContentBytes(t *testing.T, it *item) []byte {
+	t.Helper()
+	c := it.clone()
+	c.Title = ""
+	c.Body = ""
+	c.Revision = 0
+	raw, err := kit.MarshalIndent(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
 func TestContentSaveRecordedWithAuthorAndBaseRev(t *testing.T) {
 	base, a := startServer(t, "")
 	const secret = "test-outpost-secret"
@@ -56,6 +161,11 @@ func TestContentSaveRecordedWithAuthorAndBaseRev(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil || created.OwnerKey == "" || created.Active != "r1" {
 		t.Fatalf("add response = %s (%v)", w.Body.String(), err)
 	}
+	if a.items["agenda"].Revision != 1 {
+		t.Fatalf("add revision = %d, want 1", a.items["agenda"].Revision)
+	}
+	frames, closeStream := openPageEventStream(t, base, "agenda")
+	defer closeStream()
 
 	// Recorded overwrite without base_rev from outpost owner identity.
 	headers["X-Facilitator-Key"] = created.OwnerKey
@@ -65,6 +175,10 @@ func TestContentSaveRecordedWithAuthorAndBaseRev(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("set overwrite: %d %s", w.Code, w.Body)
 	}
+	if a.items["agenda"].Revision != 2 {
+		t.Fatalf("set r2 revision = %d, want 2", a.items["agenda"].Revision)
+	}
+	expectOnePageFrame(t, frames, "agenda", 2)
 
 	// CLI set with matching --base-rev r2 and BASHY_AGENT assistant.
 	t.Setenv("BASHY_AGENT", "claude")
@@ -76,6 +190,10 @@ func TestContentSaveRecordedWithAuthorAndBaseRev(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &setResp); err != nil || setResp["active"] != "r3" || setResp["previous"] != "r2" {
 		t.Fatalf("cli set response = %s (%v)", out, err)
 	}
+	if a.items["agenda"].Revision != 3 {
+		t.Fatalf("set r3 revision = %d, want 3", a.items["agenda"].Revision)
+	}
+	expectOnePageFrame(t, frames, "agenda", 3)
 
 	// History via CLI --json lists r3, r2, r1 newest-first with author provenance.
 	code, out = run("history", "agenda", "--json")
@@ -135,6 +253,9 @@ func TestStaleBaseReturns409WithBothRevisions(t *testing.T) {
 		t.Fatalf("set r2: %d %s", code, out)
 	}
 
+	frames, closeStream := openPageEventStream(t, base, "doc")
+	defer closeStream()
+
 	// HTTP 409 carries both base_rev and active and leaves content/frame intact.
 	owner := map[string]string{"X-Facilitator-Key": a.items["doc"].Owner}
 	w := do(a, http.MethodPost, "/api/action",
@@ -149,12 +270,18 @@ func TestStaleBaseReturns409WithBothRevisions(t *testing.T) {
 	if errResp["base_rev"] != "r1" || errResp["active"] != "r2" {
 		t.Fatalf("409 response must carry both base_rev and active: %v", errResp)
 	}
+	expectNoPageFrame(t, frames)
 
-	// CLI --base-rev r1 fails with exit 1 and names both revisions.
+	// CLI --base-rev r1 fails with exit 1 and names both revisions in JSON and plain text.
 	code, out := run("set", "doc", "--base-rev", "r1", "--body", "Stale body", "--json")
 	if code != 1 || !strings.Contains(out, `"base_rev":"r1"`) || !strings.Contains(out, `"active":"r2"`) {
-		t.Fatalf("cli stale set = %d %s", code, out)
+		t.Fatalf("cli stale set --json = %d %s", code, out)
 	}
+	code, plain := run("set", "doc", "--base-rev", "r1", "--body", "Stale body")
+	if code != 1 || !strings.Contains(plain, `stale base revision "r1"`) || !strings.Contains(plain, `active revision is "r2"`) {
+		t.Fatalf("cli stale set plain = %d %q", code, plain)
+	}
+	expectNoPageFrame(t, frames)
 
 	// Content and live frame counter are untouched.
 	a.mu.Lock()
@@ -165,15 +292,21 @@ func TestStaleBaseReturns409WithBothRevisions(t *testing.T) {
 	}
 }
 
-func TestUndoAndRestoreBringBodyBackLeavingLiveStateIntact(t *testing.T) {
+func TestUndoAndRestoreBringBodyBackIncrementingLiveFrameWithByteIdenticalNonContentState(t *testing.T) {
 	base, a := startServer(t, "")
 	run := cli(base, a)
 
 	if code, out := run("add", "--id", "live", "--title", "Title 1", "--body", "# Title 1\n\nBody 1\n\n```block timer:break duration=60s\n```\n\n```block here\n```\n\n```block hands\n```\n"); code != 0 {
 		t.Fatalf("add: %d %s", code, out)
 	}
+	if a.items["live"].Revision != 1 {
+		t.Fatalf("add revision = %d, want 1", a.items["live"].Revision)
+	}
 
-	// Seed live & private non-content state: votes, timers, hands, participants, block owner keys.
+	frames, closeStream := openPageEventStream(t, base, "live")
+	defer closeStream()
+
+	// Seed live & private non-content state: votes, timers, hands, participants, block owner keys, faces.
 	a.mu.Lock()
 	next := a.items["live"].clone()
 	next.Votes = map[string]string{"ada@192.0.2.1": "yes"}
@@ -197,27 +330,23 @@ func TestUndoAndRestoreBringBodyBackLeavingLiveStateIntact(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.mu.Unlock()
+	expectOnePageFrame(t, frames, "live", 2)
 
 	if code, out := run("set", "live", "--title", "Title 2", "--body", "# Title 2\n\nBody 2\n\n```block timer:break duration=60s\n```\n"); code != 0 {
 		t.Fatalf("set r2: %d %s", code, out)
 	}
+	expectOnePageFrame(t, frames, "live", 3)
 	if code, out := run("set", "live", "--title", "Title 3", "--body", "# Title 3\n\nBody 3\n\n```block timer:break duration=60s\n```\n"); code != 0 {
 		t.Fatalf("set r3: %d %s", code, out)
 	}
+	expectOnePageFrame(t, frames, "live", 4)
+
+	a.mu.Lock()
 	revBeforeUndo := a.items["live"].Revision
-	statusBeforeUndo := a.items["live"].Status
+	wantNonContent := nonContentBytes(t, a.items["live"])
+	a.mu.Unlock()
 
-	// CLI undo brings back r2 (Title 2 / Body 2) while leaving the live frame counter and status untouched.
-	code, out := run("undo", "live", "--json")
-	if code != 0 {
-		t.Fatalf("cli undo: %d %s", code, out)
-	}
-	var undone kit.RevisionState
-	if err := json.Unmarshal([]byte(out), &undone); err != nil || undone.Active != "r2" || undone.Previous != "r3" {
-		t.Fatalf("undo response = %s (%v)", out, err)
-	}
-
-	checkIntact := func(wantTitle, wantBody string, wantRev int, wantStatus string) {
+	checkIntact := func(wantTitle, wantBody string, wantRev int) {
 		t.Helper()
 		a.mu.Lock()
 		defer a.mu.Unlock()
@@ -228,24 +357,25 @@ func TestUndoAndRestoreBringBodyBackLeavingLiveStateIntact(t *testing.T) {
 		if cur.Revision != wantRev {
 			t.Fatalf("live frame counter = %d, want exact %d", cur.Revision, wantRev)
 		}
-		if cur.Status != wantStatus {
-			t.Fatalf("status = %q, want exact %q", cur.Status, wantStatus)
-		}
-		if cur.Votes["ada@192.0.2.1"] != "yes" ||
-			cur.Timers["timer-1"] == nil || cur.Timers["timer-1"].Remaining != 42 ||
-			len(cur.Hands) != 1 || cur.Hands[0].ParticipantKey != "ada@192.0.2.1" ||
-			cur.Participants["ada@192.0.2.1"] == nil || cur.Participants["ada@192.0.2.1"].Handle != "Ada" ||
-			cur.Natives["poll-1"] == nil || cur.Natives["poll-1"].Key != "secret-form-owner-key" ||
-			cur.Respondents["ada@192.0.2.1"] != "resp-token-1" ||
-			cur.Boards["board-1"] == nil || cur.Boards["board-1"].Key != "secret-board-owner-key" ||
-			cur.BoardVoters["ada@192.0.2.1"] != "voter-token-1" ||
-			!cur.BlockFaces["timer-1"].Project {
-			t.Fatalf("live/private state mutated after undo/restore: %+v", cur)
+		gotNonContent := nonContentBytes(t, cur)
+		if string(gotNonContent) != string(wantNonContent) {
+			t.Fatalf("non-content state drifted:\ngot:\n%s\nwant:\n%s", gotNonContent, wantNonContent)
 		}
 	}
-	checkIntact("Title 2", "# Title 2\n\nBody 2\n\n```block timer:break duration=60s\n```\n", revBeforeUndo, statusBeforeUndo)
 
-	// CLI restore brings back r1 (Title 1 / Body 1 with blocks) and still leaves live frame counter and state intact.
+	// CLI undo brings back r2 (Title 2 / Body 2), increments live Revision by +1, and publishes 1 frame.
+	code, out := run("undo", "live", "--json")
+	if code != 0 {
+		t.Fatalf("cli undo: %d %s", code, out)
+	}
+	var undone kit.RevisionState
+	if err := json.Unmarshal([]byte(out), &undone); err != nil || undone.Active != "r2" || undone.Previous != "r3" {
+		t.Fatalf("undo response = %s (%v)", out, err)
+	}
+	expectOnePageFrame(t, frames, "live", revBeforeUndo+1)
+	checkIntact("Title 2", "# Title 2\n\nBody 2\n\n```block timer:break duration=60s\n```\n", revBeforeUndo+1)
+
+	// CLI restore brings back r1 (Title 1 / Body 1 with blocks), increments live Revision by +1, and publishes 1 frame.
 	code, out = run("restore", "live", "r1", "--json")
 	if code != 0 {
 		t.Fatalf("cli restore r1: %d %s", code, out)
@@ -254,29 +384,37 @@ func TestUndoAndRestoreBringBodyBackLeavingLiveStateIntact(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &restored); err != nil || restored.Active != "r1" || restored.Previous != "r2" {
 		t.Fatalf("restore response = %s (%v)", out, err)
 	}
-	checkIntact("Title 1", "# Title 1\n\nBody 1\n\n```block timer:break duration=60s\n```\n\n```block here\n```\n\n```block hands\n```\n", revBeforeUndo, statusBeforeUndo)
+	expectOnePageFrame(t, frames, "live", revBeforeUndo+2)
+	checkIntact("Title 1", "# Title 1\n\nBody 1\n\n```block timer:break duration=60s\n```\n\n```block here\n```\n\n```block hands\n```\n", revBeforeUndo+2)
 
-	// Reload from disk into a fresh app to verify persisted state.
+	// Reload from disk into a fresh app to verify persisted state matches byte-identically.
 	reloaded := &app{dir: a.dir, items: map[string]*item{}}
 	reloaded.mu.Lock()
 	loaded, err := reloaded.loadLocked("live")
 	reloaded.mu.Unlock()
-	if err != nil || loaded.Title != "Title 1" || loaded.Votes["ada@192.0.2.1"] != "yes" || loaded.Natives["poll-1"].Key != "secret-form-owner-key" {
+	if err != nil || loaded.Title != "Title 1" || loaded.Revision != revBeforeUndo+2 {
 		t.Fatalf("reloaded item mismatch: %+v (%v)", loaded, err)
+	}
+	if got := nonContentBytes(t, loaded); string(got) != string(wantNonContent) {
+		t.Fatalf("reloaded non-content state drifted:\ngot:\n%s\nwant:\n%s", got, wantNonContent)
 	}
 }
 
 func TestOrganizerFaceListsRevisionsAndRestoresViaCookie(t *testing.T) {
-	_, a := startServer(t, "")
+	base, a := startServer(t, "")
 	const peer = "192.0.2.50:5000"
 	key := addPage(t, a, "workshop", "lan")
 	owner := map[string]string{"X-Facilitator-Key": key}
+
+	frames, closeStream := openPageEventStream(t, base, "workshop")
+	defer closeStream()
 
 	if w := do(a, http.MethodPost, "/api/action",
 		`{"action":"set","id":"workshop","title":"Draft 2","body":"# Draft 2\n\nRevised."}`,
 		peer, owner); w.Code != http.StatusOK {
 		t.Fatalf("set r2: %d %s", w.Code, w.Body)
 	}
+	expectOnePageFrame(t, frames, "workshop", 2)
 
 	// Sign in to organizer browser session (cookie only, no X-Facilitator-Key on subsequent requests).
 	session := do(a, http.MethodPost, "/api/action", `{"action":"organizer-session","id":"workshop"}`, peer, owner)
@@ -286,13 +424,17 @@ func TestOrganizerFaceListsRevisionsAndRestoresViaCookie(t *testing.T) {
 	cookie := session.Result().Cookies()[0]
 	browser := map[string]string{"Cookie": cookie.Name + "=" + cookie.Value}
 
-	// Organizer face renders the revision list with a restore button and conforms to kit CSS/JS rules.
+	// Organizer face renders the revision list, error surfacing script, and conforms to kit CSS/JS rules.
 	orgPage := do(a, http.MethodGet, "/?id=workshop&view=organizer", "", peer, browser)
 	if orgPage.Code != http.StatusOK {
 		t.Fatalf("organizer page: %d", orgPage.Code)
 	}
 	htmlOut := orgPage.Body.String()
-	for _, want := range []string{`data-page-revisions`, `data-revision="r2"`, `data-revision="r1"`, `data-page-restore="r1"`, `>Restore</button>`} {
+	for _, want := range []string{
+		`data-page-revisions`, `data-revision="r2"`, `data-revision="r1"`,
+		`data-page-restore="r1"`, `>Restore</button>`,
+		`out.error && out.error.message`, `data-desk-alert`,
+	} {
 		if !strings.Contains(htmlOut, want) {
 			t.Errorf("organizer face missing %q", want)
 		}
@@ -301,15 +443,16 @@ func TestOrganizerFaceListsRevisionsAndRestoresViaCookie(t *testing.T) {
 		t.Errorf("organizer face kit conformance violations: %v", violations)
 	}
 
-	// Clicking restore on the organizer face uses the organizer cookie.
+	// Clicking restore on the organizer face uses the organizer cookie, bumps Revision +1, and publishes 1 frame.
 	res := do(a, http.MethodPost, "/api/action?view=organizer",
 		`{"action":"restore","id":"workshop","revision":"r1"}`, peer, browser)
 	if res.Code != http.StatusOK {
 		t.Fatalf("organizer cookie restore: %d %s", res.Code, res.Body)
 	}
-	if a.items["workshop"].Body != "# P\n\nsecret-plan" {
-		t.Fatalf("body after browser restore = %q", a.items["workshop"].Body)
+	if a.items["workshop"].Body != "# P\n\nsecret-plan" || a.items["workshop"].Revision != 3 {
+		t.Fatalf("after browser restore = body:%q rev:%d", a.items["workshop"].Body, a.items["workshop"].Revision)
 	}
+	expectOnePageFrame(t, frames, "workshop", 3)
 
 	// Participant, preview, and display faces must never render the revision list or restore button.
 	for _, tc := range []struct {
@@ -326,8 +469,134 @@ func TestOrganizerFaceListsRevisionsAndRestoresViaCookie(t *testing.T) {
 	}
 }
 
+func TestBlockAddAndBoardAddContentHistory(t *testing.T) {
+	base, a, key := classPageWithForm(t)
+	a.brainstormURL = startBrainstorm(t)
+	run := cli(base, a)
+	if a.items["class"].Revision != 1 {
+		t.Fatalf("initial revision = %d, want 1", a.items["class"].Revision)
+	}
+
+	frames, closeStream := openPageEventStream(t, base, "class")
+	defer closeStream()
+
+	// 1. blockAdd (poll) records r2, bumps live Revision by +1, publishes 1 frame.
+	t.Setenv("BASHY_AGENT", "genie")
+	code, out := run("block", "add", "poll", "class", "--options", "yes,no", "--title", "Vote")
+	if code != 0 {
+		t.Fatalf("block add poll: %d %s", code, out)
+	}
+	if a.items["class"].Revision != 2 {
+		t.Fatalf("after poll blockAdd revision = %d, want 2", a.items["class"].Revision)
+	}
+	expectOnePageFrame(t, frames, "class", 2)
+
+	// 2. blockAdd (form) records r3, bumps live Revision by +1, publishes 1 frame.
+	defPath := filepath.Join(t.TempDir(), "feedback.json")
+	if err := os.WriteFile(defPath, []byte(`[{"id":"note","label":"Note","kind":"text"}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out = run("block", "add", "form", "class", "--def", defPath, "--title", "Feedback")
+	if code != 0 {
+		t.Fatalf("block add form: %d %s", code, out)
+	}
+	if a.items["class"].Revision != 3 {
+		t.Fatalf("after form blockAdd revision = %d, want 3", a.items["class"].Revision)
+	}
+	expectOnePageFrame(t, frames, "class", 3)
+
+	// 3. boardAdd records r4, bumps live Revision by +1, publishes 1 frame.
+	t.Setenv("BASHY_AGENT", "claude")
+	code, out = run("block", "add", "board", "class", "--title", "Ideas")
+	if code != 0 {
+		t.Fatalf("block add board: %d %s", code, out)
+	}
+	if a.items["class"].Revision != 4 {
+		t.Fatalf("after boardAdd revision = %d, want 4", a.items["class"].Revision)
+	}
+	expectOnePageFrame(t, frames, "class", 4)
+
+	// Verify content history captures all 4 revisions and assistant metadata.
+	histResp := ownerAction(t, a, key, `{"action":"history","id":"class"}`)
+	if histResp.Code != http.StatusOK {
+		t.Fatalf("history: %d %s", histResp.Code, histResp.Body)
+	}
+	var hist kit.RevisionHistory
+	if err := json.Unmarshal(histResp.Body.Bytes(), &hist); err != nil {
+		t.Fatal(err)
+	}
+	if hist.Active != "r4" || hist.Previous != "r3" || len(hist.Versions) != 4 {
+		t.Fatalf("history = %+v", hist)
+	}
+	if hist.Versions[0].Assistant != "claude" || hist.Versions[1].Assistant != "genie" || hist.Versions[2].Assistant != "genie" {
+		t.Fatalf("assistant metadata mismatch: %+v", hist.Versions)
+	}
+
+	pollKey := a.items["class"].Natives["poll-1"].Key
+	formKey := a.items["class"].Natives["form-1"].Key
+	boardKey := a.items["class"].Boards["board-1"].Key
+	bodyR4 := a.items["class"].Body
+	wantNonContent := nonContentBytes(t, a.items["class"])
+
+	// 4. Undo steps back from r4 (board) -> r3 (poll+form), increments Revision +1, publishes 1 frame, keeps all keys.
+	if w := ownerAction(t, a, key, `{"action":"undo","id":"class"}`); w.Code != http.StatusOK {
+		t.Fatalf("undo r4->r3: %d %s", w.Code, w.Body)
+	}
+	expectOnePageFrame(t, frames, "class", 5)
+	if a.items["class"].Revision != 5 || strings.Contains(a.items["class"].Body, "```block board:") || !strings.Contains(a.items["class"].Body, "```block form:") {
+		t.Fatalf("undo to r3 mismatch: rev=%d body=%q", a.items["class"].Revision, a.items["class"].Body)
+	}
+	if string(nonContentBytes(t, a.items["class"])) != string(wantNonContent) {
+		t.Fatal("undo mutated non-content state (native/board keys)")
+	}
+
+	// 5. Restore r1 removes all added blocks from body, increments Revision +1, publishes 1 frame, keeps all keys.
+	if w := ownerAction(t, a, key, `{"action":"restore","id":"class","revision":"r1"}`); w.Code != http.StatusOK {
+		t.Fatalf("restore r1: %d %s", w.Code, w.Body)
+	}
+	expectOnePageFrame(t, frames, "class", 6)
+	if a.items["class"].Revision != 6 || strings.Contains(a.items["class"].Body, "```block ") {
+		t.Fatalf("restore r1 mismatch: rev=%d body=%q", a.items["class"].Revision, a.items["class"].Body)
+	}
+	if a.items["class"].Natives["poll-1"].Key != pollKey || a.items["class"].Natives["form-1"].Key != formKey || a.items["class"].Boards["board-1"].Key != boardKey {
+		t.Fatal("restore r1 lost native or board owner keys")
+	}
+	if string(nonContentBytes(t, a.items["class"])) != string(wantNonContent) {
+		t.Fatal("restore r1 mutated non-content state")
+	}
+
+	// 6. Restore r4 brings back poll, form, and board fences, increments Revision +1, publishes 1 frame.
+	if w := ownerAction(t, a, key, `{"action":"restore","id":"class","revision":"r4"}`); w.Code != http.StatusOK {
+		t.Fatalf("restore r4: %d %s", w.Code, w.Body)
+	}
+	expectOnePageFrame(t, frames, "class", 7)
+	if a.items["class"].Revision != 7 || a.items["class"].Body != bodyR4 {
+		t.Fatalf("restore r4 mismatch: rev=%d body=%q want=%q", a.items["class"].Revision, a.items["class"].Body, bodyR4)
+	}
+	if string(nonContentBytes(t, a.items["class"])) != string(wantNonContent) {
+		t.Fatal("restore r4 mutated non-content state")
+	}
+
+	// 7. Partial write failure during blockAdd and boardAdd rolls back item body, Natives/Boards, and Revision.
+	snapDir := filepath.Join(a.dir, "revisions", "class", "_", "snapshots")
+	if err := os.MkdirAll(filepath.Join(snapDir, "r5", "hold"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if w := ownerAction(t, a, key, `{"action":"block","id":"class","kind":"poll","options":["x","y"]}`); w.Code != http.StatusInternalServerError {
+		t.Fatalf("failed blockAdd: want 500, got %d %s", w.Code, w.Body.String())
+	}
+	if w := ownerAction(t, a, key, `{"action":"block","id":"class","kind":"board"}`); w.Code != http.StatusInternalServerError {
+		t.Fatalf("failed boardAdd: want 500, got %d %s", w.Code, w.Body.String())
+	}
+	_ = os.RemoveAll(filepath.Join(snapDir, "r5"))
+	expectNoPageFrame(t, frames)
+	if a.items["class"].Revision != 7 || a.items["class"].Body != bodyR4 || string(nonContentBytes(t, a.items["class"])) != string(wantNonContent) {
+		t.Fatalf("failed blockAdd/boardAdd left dirty item state: rev=%d body=%q", a.items["class"].Revision, a.items["class"].Body)
+	}
+}
+
 func TestParticipantActionsCreateNoRevision(t *testing.T) {
-	_, a, key := classPageWithForm(t)
+	base, a, key := classPageWithForm(t)
 	if w := ownerAction(t, a, key, `{"action":"block","id":"class","kind":"poll","title":"Vote","options":["yes","no"]}`); w.Code != http.StatusOK {
 		t.Fatalf("block add poll: %d %s", w.Code, w.Body)
 	}
@@ -372,7 +641,7 @@ func TestParticipantActionsCreateNoRevision(t *testing.T) {
 		}
 	}
 
-	// Organizer non-content actions (share, block open/close, close) create no content revision.
+	// Organizer non-content actions (share, block open/close) create no content revision.
 	if w := ownerAction(t, a, key, `{"action":"share","id":"class"}`); w.Code != http.StatusOK {
 		t.Fatalf("share: %d", w.Code)
 	}
@@ -388,33 +657,165 @@ func TestParticipantActionsCreateNoRevision(t *testing.T) {
 		t.Fatalf("non-content actions created a revision: before=%+v after=%+v", beforeHist, afterHist)
 	}
 
-	// blockAdd recorded r2 and set recorded r3; undo reverts to r2 (without hands), restore r1 removes the
-	// poll fence while keeping poll owner key and live counter intact, and restore r3 brings everything back.
+	frames, closeStream := openPageEventStream(t, base, "class")
+	defer closeStream()
+
+	// blockAdd recorded r2 and set recorded r3; undo/restore each increment live Revision by +1,
+	// publish 1 whole-page frame, and leave all non-content state byte-identical.
 	origBody := a.items["class"].Body
 	pollKey := a.items["class"].Natives["poll-1"].Key
 	liveRev := a.items["class"].Revision
+	wantNonContent := nonContentBytes(t, a.items["class"])
+
 	if w := ownerAction(t, a, key, `{"action":"undo","id":"class"}`); w.Code != http.StatusOK {
 		t.Fatalf("undo to r2: %d %s", w.Code, w.Body)
 	}
-	if strings.Contains(a.items["class"].Body, "```block hands") || !strings.Contains(a.items["class"].Body, "```block poll:") || a.items["class"].Revision != liveRev {
+	expectOnePageFrame(t, frames, "class", liveRev+1)
+	if strings.Contains(a.items["class"].Body, "```block hands") || !strings.Contains(a.items["class"].Body, "```block poll:") || a.items["class"].Revision != liveRev+1 {
 		t.Fatalf("undo to r2 mismatch: body=%q rev=%d", a.items["class"].Body, a.items["class"].Revision)
 	}
+	if string(nonContentBytes(t, a.items["class"])) != string(wantNonContent) {
+		t.Fatal("undo mutated non-content state")
+	}
+
 	if w := ownerAction(t, a, key, `{"action":"restore","id":"class","revision":"r1"}`); w.Code != http.StatusOK {
 		t.Fatalf("restore r1: %d %s", w.Code, w.Body)
 	}
-	if strings.Contains(a.items["class"].Body, "```block poll:") || a.items["class"].Natives["poll-1"].Key != pollKey || a.items["class"].Revision != liveRev {
+	expectOnePageFrame(t, frames, "class", liveRev+2)
+	if strings.Contains(a.items["class"].Body, "```block poll:") || a.items["class"].Natives["poll-1"].Key != pollKey || a.items["class"].Revision != liveRev+2 {
 		t.Fatalf("restore r1 failed to revert body or lost poll key/rev: body=%q rev=%d", a.items["class"].Body, a.items["class"].Revision)
 	}
+	if string(nonContentBytes(t, a.items["class"])) != string(wantNonContent) {
+		t.Fatal("restore r1 mutated non-content state")
+	}
+
 	if w := ownerAction(t, a, key, `{"action":"restore","id":"class","revision":"r3"}`); w.Code != http.StatusOK {
 		t.Fatalf("restore r3: %d %s", w.Code, w.Body)
 	}
-	if a.items["class"].Body != origBody || a.items["class"].Revision != liveRev {
+	expectOnePageFrame(t, frames, "class", liveRev+3)
+	if a.items["class"].Body != origBody || a.items["class"].Revision != liveRev+3 {
 		t.Fatalf("restore r3 body/rev mismatch: body=%q want=%q rev=%d", a.items["class"].Body, origBody, a.items["class"].Revision)
+	}
+	if string(nonContentBytes(t, a.items["class"])) != string(wantNonContent) {
+		t.Fatal("restore r3 mutated non-content state")
+	}
+}
+
+func TestClosedPageWriteProtectionAndErrors(t *testing.T) {
+	base, a, key := classPageWithForm(t)
+	a.brainstormURL = startBrainstorm(t)
+	run := cli(base, a)
+
+	if w := ownerAction(t, a, key, `{"action":"set","id":"class","title":"Final Title","body":"# Final\n\nLocked."}`); w.Code != http.StatusOK {
+		t.Fatalf("set r2: %d %s", w.Code, w.Body)
+	}
+	if w := ownerAction(t, a, key, `{"action":"close","id":"class"}`); w.Code != http.StatusOK {
+		t.Fatalf("close: %d %s", w.Code, w.Body)
+	}
+	revAtClose := a.items["class"].Revision
+	wantNonContent := nonContentBytes(t, a.items["class"])
+
+	frames, closeStream := openPageEventStream(t, base, "class")
+	defer closeStream()
+
+	// Read-only history remains allowed on a closed page.
+	if w := ownerAction(t, a, key, `{"action":"history","id":"class"}`); w.Code != http.StatusOK {
+		t.Fatalf("history on closed page: %d %s", w.Code, w.Body)
+	}
+	if code, out := run("history", "class", "--json"); code != 0 || !strings.Contains(out, `"active":"r2"`) {
+		t.Fatalf("cli history on closed page: %d %s", code, out)
+	}
+
+	// Organizer HTML on closed page disables Restore buttons.
+	orgHTML := do(a, http.MethodGet, "/?id=class", "", "127.0.0.1:5000", map[string]string{"X-Facilitator-Key": key})
+	if orgHTML.Code != http.StatusOK || !strings.Contains(orgHTML.Body.String(), `data-page-restore="r1" disabled`) {
+		t.Fatalf("closed organizer page did not disable restore button: %d %s", orgHTML.Code, orgHTML.Body.String())
+	}
+
+	// All write operations are refused with 409 "This page is closed" and emit no SSE frame.
+	for _, payload := range []string{
+		`{"action":"set","id":"class","body":"new"}`,
+		`{"action":"set","id":"class","base_rev":"r2","body":"new"}`,
+		`{"action":"undo","id":"class"}`,
+		`{"action":"restore","id":"class","revision":"r1"}`,
+		`{"action":"block","id":"class","kind":"poll","options":["a","b"]}`,
+		`{"action":"block","id":"class","kind":"board"}`,
+	} {
+		w := ownerAction(t, a, key, payload)
+		if w.Code != http.StatusConflict || !strings.Contains(w.Body.String(), "This page is closed") {
+			t.Errorf("closed write %s: want 409, got %d %s", payload, w.Code, w.Body.String())
+		}
+	}
+
+	// CLI undo, restore, set, and block add on closed page fail with exit 1 and surface "This page is closed".
+	for _, args := range [][]string{
+		{"undo", "class"},
+		{"undo", "class", "--json"},
+		{"restore", "class", "r1"},
+		{"restore", "class", "r1", "--json"},
+		{"set", "class", "--body", "nope"},
+		{"block", "add", "poll", "class", "--options", "a,b"},
+		{"block", "add", "board", "class"},
+	} {
+		code, out := run(args...)
+		if code != 1 || !strings.Contains(out, "This page is closed") {
+			t.Errorf("cli closed %v: want exit 1 with closed error, got %d %q", args, code, out)
+		}
+	}
+	expectNoPageFrame(t, frames)
+
+	if a.items["class"].Status != kit.StatusClosed || a.items["class"].Title != "Final Title" ||
+		a.items["class"].Body != "# Final\n\nLocked." || a.items["class"].Revision != revAtClose {
+		t.Fatalf("closed page state mutated: %+v", a.items["class"])
+	}
+	if string(nonContentBytes(t, a.items["class"])) != string(wantNonContent) {
+		t.Fatal("closed page non-content state mutated")
+	}
+	if h, err := a.revisions().History("class", ""); err != nil || h.Active != "r2" || h.Previous != "r1" || len(h.Versions) != 2 {
+		t.Fatalf("closed page history mutated: %+v (%v)", h, err)
+	}
+}
+
+func TestCLIRevisionErrorsAndUsage(t *testing.T) {
+	base, a := startServer(t, "")
+	run := cli(base, a)
+
+	if code, out := run("add", "--id", "errdoc", "--title", "V1", "--body", "Body 1"); code != 0 {
+		t.Fatalf("add: %d %s", code, out)
+	}
+
+	// Undo with no previous revision returns exit 1 and error message.
+	if code, out := run("undo", "errdoc"); code != 1 || !strings.Contains(out, "no previous revision") {
+		t.Fatalf("cli undo with no previous (plain): %d %q", code, out)
+	}
+	if code, out := run("undo", "errdoc", "--json"); code != 1 || !strings.Contains(out, `"code":"conflict"`) || !strings.Contains(out, "no previous revision") {
+		t.Fatalf("cli undo with no previous (json): %d %q", code, out)
+	}
+
+	// Restore of unknown revision returns exit 1 and error message.
+	if code, out := run("restore", "errdoc", "r99"); code != 1 || !strings.Contains(out, "unknown revision") {
+		t.Fatalf("cli restore unknown (plain): %d %q", code, out)
+	}
+	if code, out := run("restore", "errdoc", "r99", "--json"); code != 1 || !strings.Contains(out, `"code":"not_found"`) || !strings.Contains(out, "unknown revision") {
+		t.Fatalf("cli restore unknown (json): %d %q", code, out)
+	}
+
+	// Usage validation errors return exit 2.
+	for _, args := range [][]string{
+		{"history"},
+		{"undo"},
+		{"restore", "errdoc"},
+		{"undo", "errdoc", "--base-rev", "r1"},
+		{"restore", "errdoc", "r1", "--base-rev", "r1"},
+	} {
+		if code, out := run(args...); code != 2 {
+			t.Errorf("cli usage %v: want exit 2, got %d %q", args, code, out)
+		}
 	}
 }
 
 func TestPreS1SavedPagePreservedAndPartialWriteSafe(t *testing.T) {
-	_, a := startServer(t, "")
+	base, a := startServer(t, "")
 	// Write a pre-S1 saved page directly without any revisions/ directory.
 	legacy := item{
 		Version:  1,
@@ -438,6 +839,9 @@ func TestPreS1SavedPagePreservedAndPartialWriteSafe(t *testing.T) {
 	}
 	owner := map[string]string{"X-Facilitator-Key": legacy.Owner}
 
+	frames, closeStream := openPageEventStream(t, base, "legacy")
+	defer closeStream()
+
 	// Pre-S1 page renders cleanly on organizer face and returns empty history.
 	if w := do(a, http.MethodGet, "/?id=legacy", "", "127.0.0.1:5000", owner); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "No revisions recorded yet.") {
 		t.Fatalf("pre-S1 organizer page: %d %s", w.Code, w.Body.String())
@@ -449,12 +853,28 @@ func TestPreS1SavedPagePreservedAndPartialWriteSafe(t *testing.T) {
 		!strings.Contains(w.Body.String(), `"base_rev":"r1"`) || !strings.Contains(w.Body.String(), `"active":""`) {
 		t.Fatalf("pre-S1 stale base: want 409 with both revisions, got %d %s", w.Code, w.Body.String())
 	}
+	expectNoPageFrame(t, frames)
 
-	// Overwrite without base_rev seeds legacy pre-S1 authored bytes as r1 and saves r2,
-	// so undo brings back the prior pre-S1 title and body while preserving votes and counters.
+	// If the first post-S2 save fails on r2 after seeding r1, item state and disk roll back to pre-S1 state and no frame is emitted.
+	snapDir := filepath.Join(a.dir, "revisions", "legacy", "_", "snapshots")
+	if err := os.MkdirAll(filepath.Join(snapDir, "r2", "hold"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if w := do(a, http.MethodPost, "/api/action", `{"action":"set","id":"legacy","body":"Failed first edit"}`, "127.0.0.1:5000", owner); w.Code != http.StatusInternalServerError {
+		t.Fatalf("pre-S1 failed first edit: want 500, got %d %s", w.Code, w.Body.String())
+	}
+	_ = os.RemoveAll(filepath.Join(snapDir, "r2"))
+	expectNoPageFrame(t, frames)
+	if a.items["legacy"].Title != "Pre-S1 Title" || a.items["legacy"].Body != "# Pre-S1 Title\n\nLegacy content." || a.items["legacy"].Revision != 4 {
+		t.Fatalf("failed first edit left dirty legacy state: %+v", a.items["legacy"])
+	}
+
+	// Overwrite without base_rev leaves r1 as pre-S1 content and saves r2,
+	// so undo brings back the prior pre-S1 title and body, increments Revision +1, and publishes 1 frame.
 	if w := do(a, http.MethodPost, "/api/action", `{"action":"set","id":"legacy","body":"Migrated body"}`, "127.0.0.1:5000", owner); w.Code != http.StatusOK {
 		t.Fatalf("pre-S1 set: %d %s", w.Code, w.Body)
 	}
+	expectOnePageFrame(t, frames, "legacy", 5)
 	if a.items["legacy"].Votes["ada@127.0.0.1"] != "a" || a.items["legacy"].Revision != 5 {
 		t.Fatalf("pre-S1 votes/revision lost: %+v", a.items["legacy"])
 	}
@@ -464,7 +884,8 @@ func TestPreS1SavedPagePreservedAndPartialWriteSafe(t *testing.T) {
 	if w := do(a, http.MethodPost, "/api/action", `{"action":"undo","id":"legacy"}`, "127.0.0.1:5000", owner); w.Code != http.StatusOK {
 		t.Fatalf("legacy first-edit undo: %d %s", w.Code, w.Body)
 	}
-	if a.items["legacy"].Title != "Pre-S1 Title" || a.items["legacy"].Body != "# Pre-S1 Title\n\nLegacy content." || a.items["legacy"].Revision != 5 {
+	expectOnePageFrame(t, frames, "legacy", 6)
+	if a.items["legacy"].Title != "Pre-S1 Title" || a.items["legacy"].Body != "# Pre-S1 Title\n\nLegacy content." || a.items["legacy"].Revision != 6 {
 		t.Fatalf("legacy undo did not restore pre-S1 content cleanly: %+v", a.items["legacy"])
 	}
 
@@ -472,6 +893,7 @@ func TestPreS1SavedPagePreservedAndPartialWriteSafe(t *testing.T) {
 	if w := do(a, http.MethodPost, "/api/action", `{"action":"set","id":"legacy","body":"Second body"}`, "127.0.0.1:5000", owner); w.Code != http.StatusOK {
 		t.Fatalf("set r3: %d", w.Code)
 	}
+	expectOnePageFrame(t, frames, "legacy", 7)
 	origItemRaw, err := os.ReadFile(itemPath(a.dir, "legacy"))
 	if err != nil {
 		t.Fatal(err)
@@ -501,7 +923,8 @@ func TestPreS1SavedPagePreservedAndPartialWriteSafe(t *testing.T) {
 	if h, err := a.revisions().History("legacy", ""); err != nil || h.Active != "r3" || h.Previous != "r1" {
 		t.Fatalf("partial restore left revision pointer dirty: %+v (%v)", h, err)
 	}
-	if a.items["legacy"].Body != "Second body" || a.items["legacy"].Revision != 6 {
+	expectNoPageFrame(t, frames)
+	if a.items["legacy"].Body != "Second body" || a.items["legacy"].Revision != 7 {
 		t.Fatalf("in-memory item mutated on failed write: %+v", a.items["legacy"])
 	}
 	if err := os.RemoveAll(itemPath(a.dir, "legacy")); err != nil {
@@ -512,8 +935,7 @@ func TestPreS1SavedPagePreservedAndPartialWriteSafe(t *testing.T) {
 	}
 
 	// Partial write error path during set when revisions/ snapshots dir is blocked:
-	// item file and in-memory item must roll back to match prior history.
-	snapDir := filepath.Join(a.dir, "revisions", "legacy", "_", "snapshots")
+	// item file and in-memory item must roll back to match prior history, with no SSE frame.
 	if err := os.MkdirAll(filepath.Join(snapDir, "r4", "hold"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -521,16 +943,33 @@ func TestPreS1SavedPagePreservedAndPartialWriteSafe(t *testing.T) {
 		t.Fatalf("set with blocked snapshot dir: want 500, got %d %s", w.Code, w.Body.String())
 	}
 	_ = os.RemoveAll(filepath.Join(snapDir, "r4"))
-	if a.items["legacy"].Body != "Second body" || a.items["legacy"].Revision != 6 {
+	expectNoPageFrame(t, frames)
+	if a.items["legacy"].Body != "Second body" || a.items["legacy"].Revision != 7 {
 		t.Fatalf("failed revision save did not roll back in-memory item: %+v", a.items["legacy"])
 	}
 	diskCheck := &app{dir: a.dir, items: map[string]*item{}}
 	diskCheck.mu.Lock()
 	diskItem, err := diskCheck.loadLocked("legacy")
 	diskCheck.mu.Unlock()
-	if err != nil || diskItem.Body != "Second body" || diskItem.Revision != 6 {
+	if err != nil || diskItem.Body != "Second body" || diskItem.Revision != 7 {
 		t.Fatalf("failed revision save left dirty item on disk: %+v (%v)", diskItem, err)
 	}
+
+	// Restore failure when target snapshot bytes are unparseable (corrupt snapshot JSON):
+	// state.json, item file, and in-memory state stay consistent at r3 / "Second body" / rev 7.
+	if w := do(a, http.MethodPost, "/api/action", `{"action":"set","id":"legacy","body":"`+"```block frobnicate:bad\n```"+`"}`, "127.0.0.1:5000", owner); w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid block body set: want 400, got %d", w.Code)
+	}
+	if err := os.WriteFile(filepath.Join(snapDir, "r1"), []byte("{not-json"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if w := do(a, http.MethodPost, "/api/action", `{"action":"restore","id":"legacy","revision":"r1"}`, "127.0.0.1:5000", owner); w.Code != http.StatusInternalServerError {
+		t.Fatalf("restore corrupt snapshot: want 500, got %d %s", w.Code, w.Body.String())
+	}
+	if h, err := a.revisions().History("legacy", ""); err != nil || h.Active != "r3" || h.Previous != "r1" {
+		t.Fatalf("corrupt restore left revision pointer dirty: %+v (%v)", h, err)
+	}
+	expectNoPageFrame(t, frames)
 
 	// Partial write error path during add when revisions/ is blocked.
 	if err := os.WriteFile(filepath.Join(a.dir, "revisions", "blocked"), []byte("not-a-dir"), 0o600); err != nil {

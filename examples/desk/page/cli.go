@@ -244,6 +244,9 @@ func runCLI(args []string, stdin io.Reader, stdout io.Writer) int {
 		}
 		return string(raw), true
 	}
+	if o.baseRev != "" && o.verb != "set" {
+		return kit.UsageError(stdout, tool, o.asJSON, "--base-rev is for set")
+	}
 	var faces json.RawMessage
 	if o.facesFile != "" {
 		if o.verb != "add" && o.verb != "set" {
@@ -590,7 +593,8 @@ func (c *client) blockVerb(stdin io.Reader) int {
 			return kit.UsageError(c.stdout, tool, o.asJSON, "give the page id (1-64 letters, digits, - or _)")
 		}
 		payload = map[string]any{"id": id, "kind": rest[0], "title": o.title, "block": o.block,
-			"anonymous": o.anonymous, "results_visible": o.resultsVisible, "closed": o.closed}
+			"anonymous": o.anonymous, "results_visible": o.resultsVisible, "closed": o.closed,
+			"assistant": os.Getenv("BASHY_AGENT")}
 		if rest[0] == "board" {
 			if o.options != "" || o.def != "" || o.votes != "" {
 				return kit.UsageError(c.stdout, tool, o.asJSON, "a board block takes --session S and --title T (no --options or --def)")
