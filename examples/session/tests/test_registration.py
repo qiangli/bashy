@@ -46,13 +46,16 @@ class RegistrationTest(TempBashy):
         cache = self.root / 'cache'
         env = dict(os.environ, GOWORK=str(workspace), XDG_CACHE_HOME=str(cache))
         env.pop('SESSION_SERVER_BIN', None)
-        # Missing sprint exits at argument validation after building, without
-        # opening a listener or reading any session state.
-        result = subprocess.run(['bash', str(HERE / 'server' / 'run.sh'), 'serve'],
+        # The supported standalone build path builds without starting a
+        # listener; run.sh forces GOWORK=off, so the unrelated workspace
+        # named by GOWORK must not affect the build.
+        result = subprocess.run(['bash', str(HERE / 'server' / 'run.sh'), 'build'],
                                 env=env, text=True, capture_output=True, timeout=120)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue((cache / 'bashy' / 'session' / 'session-server').is_file(),
                         result.stdout + result.stderr)
-        self.assertIn('usage: session serve N', result.stderr)
+        self.assertEqual(result.stdout.strip(),
+                         str(cache / 'bashy' / 'session' / 'session-server'))
         self.assertNotIn('cannot build the server', result.stderr)
 
     def test_join_message_forwarding(self):
