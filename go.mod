@@ -348,7 +348,7 @@ require (
 	github.com/qiangli/bash/cmd v0.0.0-20261121101805-42efe30317c4 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261123172747-32d78887eb27 // indirect
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261123195328-f84b2a77e6da // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261124073307-5f566a72f622 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
 	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261124003742-dcccc0fa4004 // indirect
 	github.com/qiangli/yoke/pkg/oci v0.0.0-20261124003742-dcccc0fa4004 // indirect
@@ -545,7 +545,7 @@ replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.
 
 replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261123172724-61f678270db3
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261124074129-2d0a6b403b14
 
 tool (
 	github.com/qiangli/bash/cmd/bash
@@ -579,7 +579,7 @@ replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewi
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261123174704-5e16f23b9707
+	github.com/bashsharp/bashsharp v0.0.0-20261124073304-fe4d68ad36d8
 	github.com/benhoyt/goawk v1.31.0
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
@@ -591,7 +591,7 @@ require (
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136
 	github.com/qiangli/coreutils v0.0.0-20261123172741-e0184192020b
-	github.com/qiangli/ycode v0.3.1-dev.0.20261123172724-61f678270db3
+	github.com/qiangli/ycode v0.3.1-dev.0.20261124074129-2d0a6b403b14
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261124003742-dcccc0fa4004
 	github.com/qiangli/yoke/external/otel v0.0.0-20261124003742-dcccc0fa4004
