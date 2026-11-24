@@ -481,7 +481,7 @@ cmd_status() {
       if [[ $line == VmRSS:* ]]; then
         line=${line#VmRSS:}
         line=${line%kB}
-        line=${line// /}
+        line=${line//[ $'\t']/}
         rss_kb=${line:-0}
         rss_bytes=$((rss_kb * 1024))
         break

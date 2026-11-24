@@ -279,7 +279,7 @@ func main() {
 		endpoint       = flag.String("url", "http://127.0.0.1:22751/mcp", "hosted runner /mcp URL")
 		keyFile        = flag.String("key-file", "", "path to 0600 runner HMAC key file (test key only)")
 		caller         = flag.String("caller", "pilot-caller@example.test", "caller identity")
-		taskID         = flag.String("task-id", fmt.Sprintf("task-pilot-%d", time.Now().UnixNano()), "task id")
+		taskID         = flag.String("task-id", fmt.Sprintf("job-pilot-%d", time.Now().UnixNano()), "task id")
 		idempotencyKey = flag.String("idempotency-key", "", "idempotency key (default: unique per run)")
 		secretsToken   = flag.String("secrets-token", "", "optional secrets_token")
 		ttl            = flag.Duration("ttl", time.Minute, "identity TTL (<= 5m)")

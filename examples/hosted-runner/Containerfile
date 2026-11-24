@@ -19,7 +19,7 @@ RUN set -eux; \
     install -d -o 10001 -g 10001 -m 0700 /tmp/hosted-scratch; \
     BASHY_BIN=/bashy HOME=/home/builder /bashy /opt/bashy/examples/google/register.sh; \
     BASHY_BIN=/bashy HOME=/home/builder /bashy /opt/bashy/examples/trove/register.sh; \
-    chown -R 10001:10001 /home/builder/.config /home/builder/.cache
+    chown -R 10001:10001 /home/builder
 
 USER 10001:10001
 
