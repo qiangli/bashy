@@ -17,8 +17,8 @@ import (
 	"syscall"
 	"time"
 
-	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/bashsharp/bashsharp/cli"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/qiangli/coreutils/tool"
 	dbcmd "github.com/qiangli/yoke/cmds/db"
 	yokemcp "github.com/qiangli/yoke/mcp"
@@ -33,8 +33,10 @@ const mcpUsage = `usage: bashy mcp serve [--transport stdio|http] [--listen ADDR
                        [--tools default|all|site|NAME,...] [--max-output BYTES] [--outpost]
                        [--hosted] [--timeout DURATION] [--site-dir DIR] [--site-app APP]
        bashy mcp tools [--tools default|all|site|NAME,...] [--json]
+       bashy mcp connect URL [--account REF] [--json]
 
-Serve bashy commands to agents over the Model Context Protocol.
+Serve bashy commands to agents over the Model Context Protocol, or connect a
+local MCP client over stdio to a remote site MCP on a satellite.
 
   serve --transport stdio   run the MCP server over stdio (default)
   serve --transport http    loopback HTTP at /mcp (default 127.0.0.1:0)
@@ -45,6 +47,10 @@ Serve bashy commands to agents over the Model Context Protocol.
                             --max-output; no shell sessions
   tools                     print the tools a profile would serve, without serving
                             (--json: the bashy-mcp-tools-v1 envelope)
+  connect URL               bridge local stdio to https://SATELLITE/matrix/h/HOST/app/NAME/mcp
+                            with a satellite-exchanged host:proxy token refreshed before expiry
+                            (--account REF selects a saved account; --json probes and prints
+                            the bashy-mcp-connect-v1 envelope without tokens)
   --tools default           registered tools plus available core commands
   --tools all               all canonical registry commands and visible verbs for this OS
   --tools site              the site profile: list_pages, read_page, cite and the
@@ -71,8 +77,12 @@ type mcpToolsEnvelope struct {
 }
 
 // dispatchMCP is the `bashy mcp` front door: it runs the yoke MCP server
-// over stdio or loopback HTTP. A clean shutdown returns 0.
+// over stdio or loopback HTTP, lists profile tools, or bridges a local MCP
+// client to a remote site MCP. A clean shutdown returns 0.
 func dispatchMCP(args []string) int {
+	if len(args) > 0 && args[0] == "connect" {
+		return dispatchMCPConnect(args[1:])
+	}
 	args, maxOutput, err := mcpOutputArgs(args)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "bashy mcp:", err)
