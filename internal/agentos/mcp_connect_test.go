@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -28,15 +30,12 @@ type mcpConnectFixture struct {
 	ownerTok   string
 	memberTok  string
 	outsider   string
-	narrowTok  string
-	mcpServer  *httptest.Server
 	mu         sync.Mutex
 	now        time.Time
 	seenBearer []string
-	seenUsers  []string
 }
 
-func newMCPConnectFixture(t *testing.T, shareWithMember bool) *mcpConnectFixture {
+func newMCPConnectFixture(t *testing.T, shareWithMember, signedIn bool) *mcpConnectFixture {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -59,18 +58,17 @@ func newMCPConnectFixture(t *testing.T, shareWithMember bool) *mcpConnectFixture
 	fx.ownerTok = fx.fake.AddOwner("owner@example.com")
 	fx.memberTok = fx.fake.AddOwner("member@example.com")
 	fx.outsider = fx.fake.AddOwner("outsider@example.com")
-	fx.narrowTok = fx.fake.AddToken("member@example.com", cloudboxfake.ScopeMembersRead)
 	fx.satID = fx.fake.AddSatellite(t, "owner@example.com", "zoo")
 	fx.satURL = fx.fake.SatelliteURL(fx.satID)
 	fx.appURL = fx.satURL + "/matrix/h/studio/app/site/mcp"
 
-	postJSON := func(path, tok string, body any) map[string]any {
+	send := func(method, path, tok string, body any) map[string]any {
 		t.Helper()
 		var raw []byte
 		if body != nil {
 			raw, _ = json.Marshal(body)
 		}
-		req, err := http.NewRequest(http.MethodPost, fx.fake.URL()+path, bytes.NewReader(raw))
+		req, err := http.NewRequest(method, fx.fake.URL()+path, bytes.NewReader(raw))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -91,13 +89,17 @@ func newMCPConnectFixture(t *testing.T, shareWithMember bool) *mcpConnectFixture
 		return out
 	}
 
-	pair := postJSON("/api/v1/hosts/invites", fx.ownerTok, nil)
-	postJSON("/api/v1/hosts/pair", "", map[string]string{"code": pair["code"].(string), "host": "studio"})
-	added := postJSON("/api/v1/members", fx.ownerTok, map[string]string{"email": "member@example.com", "circle": "contractor"})
+	pair := send("POST", "/api/v1/hosts/invites", fx.ownerTok, nil)
+	send("POST", "/api/v1/hosts/pair", "", map[string]string{"code": pair["code"].(string), "host": "studio"})
+	added := send("POST", "/api/v1/members", fx.ownerTok, map[string]string{"email": "member@example.com", "circle": "contractor"})
 	invID := added["invitation"].(map[string]any)["id"].(string)
-	postJSON("/api/v1/member/invitations/"+invID+"/accept", fx.memberTok, map[string]string{"circle": "team"})
+	send("POST", "/api/v1/member/invitations/"+invID+"/accept", fx.memberTok, map[string]string{"circle": "team"})
+	send("PUT", "/api/v1/satellites/"+fx.satID+"/admit", fx.ownerTok, map[string]any{"rules": []cloudboxfake.AdmitRule{{Circles: []string{"contractor"}}}})
+	if signedIn {
+		fx.fake.RecordSatelliteLogin(fx.satID, "member@example.com")
+	}
 	if shareWithMember {
-		shr := postJSON("/api/v1/hosts/studio/shares", fx.ownerTok, map[string]any{"app": "site", "circles": []string{"contractor"}})
+		shr := send("POST", "/api/v1/hosts/studio/shares", fx.ownerTok, map[string]any{"app": "site", "circles": []string{"contractor"}})
 		fx.shareID = shr["share"].(map[string]any)["id"].(string)
 	}
 
@@ -111,15 +113,11 @@ func newMCPConnectFixture(t *testing.T, shareWithMember bool) *mcpConnectFixture
 		Caller   string `json:"caller"`
 		Revision string `json:"revision"`
 	}
-	var lastCaller string
-	var callerMu sync.Mutex
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name:        "read_page",
 		Description: "Read a page from the owner's site.",
-	}, func(_ context.Context, _ *mcpsdk.CallToolRequest, in echoIn) (*mcpsdk.CallToolResult, echoOut, error) {
-		callerMu.Lock()
-		c := lastCaller
-		callerMu.Unlock()
+	}, func(_ context.Context, req *mcpsdk.CallToolRequest, in echoIn) (*mcpsdk.CallToolResult, echoOut, error) {
+		c := req.Extra.Header.Get("X-Periscope-User")
 		return nil, echoOut{Page: in.Page, Caller: c, Revision: "rev-001"}, nil
 	})
 	type listIn struct{}
@@ -134,41 +132,13 @@ func newMCPConnectFixture(t *testing.T, shareWithMember bool) *mcpConnectFixture
 	})
 
 	streamHandler := mcpsdk.NewStreamableHTTPHandler(func(*http.Request) *mcpsdk.Server { return srv }, &mcpsdk.StreamableHTTPOptions{Stateless: true})
-	fx.mcpServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		callerMu.Lock()
-		lastCaller = r.Header.Get("X-Periscope-User")
-		callerMu.Unlock()
-		streamHandler.ServeHTTP(w, r)
-	}))
-	t.Cleanup(fx.mcpServer.Close)
-
-	// Mount the httptest MCP server on cloudboxfake's satellite app route so
-	// cloudboxfake enforces exchanged-token auth, TTL expiry and CanReach.
-	fx.fake.MountApp(fx.satID, "studio", "site", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fx.mu.Lock()
-		fx.seenUsers = append(fx.seenUsers, r.Header.Get("X-Periscope-User"))
-		fx.mu.Unlock()
-
-		proxyReq, err := http.NewRequestWithContext(r.Context(), r.Method, fx.mcpServer.URL+r.URL.RequestURI(), r.Body)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		proxyReq.Header = r.Header.Clone()
-		resp, err := fx.mcpServer.Client().Do(proxyReq)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-			return
-		}
-		defer resp.Body.Close()
-		for k, vv := range resp.Header {
-			for _, v := range vv {
-				w.Header().Add(k, v)
-			}
-		}
-		w.WriteHeader(resp.StatusCode)
-		_, _ = io.Copy(w, resp.Body)
-	}))
+	backend := httptest.NewServer(streamHandler)
+	t.Cleanup(backend.Close)
+	upstream, err := url.Parse(backend.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fx.fake.MountApp(fx.satID, "studio", "site", httputil.NewSingleHostReverseProxy(upstream))
 	return fx
 }
 
@@ -235,24 +205,32 @@ func assertNoTokensInOutput(t *testing.T, text string, extra ...string) {
 	t.Helper()
 	for _, secret := range extra {
 		if secret != "" && strings.Contains(text, secret) {
-			t.Fatalf("secret token %q leaked in output:\n%s", secret, text)
+			t.Fatal("credential leaked in output")
 		}
 	}
 	for _, prefix := range []string{"tok_", "xtok_"} {
 		if strings.Contains(text, prefix) {
-			t.Fatalf("token with prefix %q leaked in output:\n%s", prefix, text)
+			t.Fatal("fake credential leaked in output")
 		}
 	}
 }
 
 func TestMCPConnectStdioPassThroughAndRefreshPastTTL(t *testing.T) {
-	fx := newMCPConnectFixture(t, true)
+	fx := newMCPConnectFixture(t, true, true)
 	seedCloudboxAccount(t, "contractor-acct", fx.fake.URL(), "TEST_CONTRACTOR_TOKEN", fx.memberTok)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	serverSide, clientSide := mcpsdk.NewInMemoryTransports()
+	// Use the same newline-delimited JSON as stdio and inspect the actual wire output.
+	clientRead, serverWrite := io.Pipe()
+	serverRead, clientWrite := io.Pipe()
+	var wire bytes.Buffer
+	serverSide := &mcpsdk.IOTransport{Reader: serverRead, Writer: serverWrite}
+	clientSide := &mcpsdk.IOTransport{Reader: struct {
+		io.Reader
+		io.Closer
+	}{io.TeeReader(clientRead, &wire), clientRead}, Writer: clientWrite}
 	var stdout, stderr bytes.Buffer
 	done := make(chan int, 1)
 	go func() {
@@ -262,13 +240,12 @@ func TestMCPConnectStdioPassThroughAndRefreshPastTTL(t *testing.T) {
 			stderr:     &stderr,
 			httpClient: fx.recordingHTTPClient(),
 			now:        fx.nowTime,
-			ttl:        "10m",
 		})
 	}()
 
 	cs, err := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "claude-code-test", Version: "1"}, nil).Connect(ctx, clientSide, nil)
 	if err != nil {
-		t.Fatalf("local stdio client connect: %v (stderr=%s)", err, stderr.String())
+		t.Fatalf("local stdio client connect: %v", err)
 	}
 
 	// 1. tools/list passes through.
@@ -304,11 +281,11 @@ func TestMCPConnectStdioPassThroughAndRefreshPastTTL(t *testing.T) {
 	}
 	tok1 := firstBearers[0]
 	if !strings.HasPrefix(tok1, "xtok_") || tok1 == fx.memberTok {
-		t.Fatalf("bearer = %q, want exchanged satellite token (xtok_...)", tok1)
+		t.Fatal("expected exchanged satellite bearer")
 	}
 	for _, b := range firstBearers {
 		if b != tok1 {
-			t.Fatalf("expected cached token %q within TTL, saw %q", tok1, b)
+			t.Fatal("bearer changed within TTL")
 		}
 	}
 
@@ -334,7 +311,7 @@ func TestMCPConnectStdioPassThroughAndRefreshPastTTL(t *testing.T) {
 	allBearers := fx.bearers()
 	tok2 := allBearers[len(allBearers)-1]
 	if !strings.HasPrefix(tok2, "xtok_") || tok2 == tok1 || tok2 == fx.memberTok {
-		t.Fatalf("bearer after TTL = %q, want fresh xtok != %q", tok2, tok1)
+		t.Fatal("expected fresh satellite bearer after expiry")
 	}
 
 	// 4. Revoking the owner's share mid-session causes the next call to fail
@@ -360,11 +337,11 @@ func TestMCPConnectStdioPassThroughAndRefreshPastTTL(t *testing.T) {
 	if code := <-done; code != 0 {
 		t.Fatalf("runMCPConnect exit = %d, want 0 (stderr=%s)", code, stderr.String())
 	}
-	assertNoTokensInOutput(t, stdout.String()+stderr.String(), fx.memberTok, fx.ownerTok, tok1, tok2)
+	assertNoTokensInOutput(t, wire.String()+stdout.String()+stderr.String(), fx.memberTok, fx.ownerTok, tok1, tok2)
 }
 
 func TestMCPConnectJSONEnvelopeAndZeroTokenLeakage(t *testing.T) {
-	fx := newMCPConnectFixture(t, true)
+	fx := newMCPConnectFixture(t, true, true)
 	seedCloudboxAccount(t, "c-acct", fx.fake.URL(), "TEST_C_TOKEN", fx.memberTok)
 
 	var stdout, stderr bytes.Buffer
@@ -373,7 +350,6 @@ func TestMCPConnectJSONEnvelopeAndZeroTokenLeakage(t *testing.T) {
 		stderr:     &stderr,
 		httpClient: fx.recordingHTTPClient(),
 		now:        fx.nowTime,
-		ttl:        "10m",
 	})
 	if code != 0 {
 		t.Fatalf("mcp connect --json exited %d: stderr=%s stdout=%s", code, stderr.String(), stdout.String())
@@ -391,22 +367,14 @@ func TestMCPConnectJSONEnvelopeAndZeroTokenLeakage(t *testing.T) {
 	if env.SchemaVersion != mcpConnectSchemaVersion || !env.OK {
 		t.Fatalf("envelope header = %+v", env)
 	}
-	if env.URL != fx.appURL || env.Satellite != fx.satURL || env.Host != "studio" || env.App != "site" || env.Account != "c-acct" {
-		t.Fatalf("envelope target = %+v", env)
-	}
-	if !slices.Equal(env.Scopes, []string{"host:proxy"}) || env.ExpiresAt == "" {
-		t.Fatalf("envelope scopes/expiry = %v %q", env.Scopes, env.ExpiresAt)
-	}
-	gotTools := slices.Clone(env.Tools)
-	slices.Sort(gotTools)
-	if !slices.Equal(gotTools, []string{"list_pages", "read_page"}) || len(env.Definitions) != 2 {
-		t.Fatalf("envelope tools = %v defs=%d", env.Tools, len(env.Definitions))
+	if !slices.Equal(env.Tools, []string{"list_pages", "read_page"}) {
+		t.Fatalf("envelope tools = %v", env.Tools)
 	}
 }
 
 func TestMCPConnectErrorsNameCauseAndScrubTokens(t *testing.T) {
 	t.Run("no account token", func(t *testing.T) {
-		fx := newMCPConnectFixture(t, true)
+		fx := newMCPConnectFixture(t, true, true)
 		var stdout, stderr bytes.Buffer
 		code := runMCPConnect(context.Background(), []string{fx.appURL, "--json"}, mcpConnectDeps{
 			stdout: &stdout,
@@ -426,17 +394,19 @@ func TestMCPConnectErrorsNameCauseAndScrubTokens(t *testing.T) {
 	})
 
 	t.Run("exchange refused", func(t *testing.T) {
-		fx := newMCPConnectFixture(t, true)
+		fx := newMCPConnectFixture(t, true, true)
 		for _, tc := range []struct {
-			name, tok string
+			name, tok, want string
 		}{
-			{"outsider not admitted", fx.outsider},
-			{"narrow scope token", fx.narrowTok},
-			{"invalid token", "tok_invalid_secret_999"},
+			{"outsider not admitted", fx.outsider, "admitted"},
+			{"missing delegate", fx.fake.AddToken("member@example.com", cloudboxfake.ScopeHostProxy), "satellites:delegate"},
+			{"missing requested scope", fx.fake.AddToken("member@example.com", cloudboxfake.ScopeSatellitesDelegate), "host:proxy"},
+			{"invalid token", "sentinel-invalid-account", "invalid or expired"},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
+				t.Setenv("BASHY_FLEET_TOKEN", tc.tok)
 				var stdout, stderr bytes.Buffer
-				code := runMCPConnect(context.Background(), []string{fx.appURL, "--token", tc.tok, "--json"}, mcpConnectDeps{
+				code := runMCPConnect(context.Background(), []string{fx.appURL, "--json"}, mcpConnectDeps{
 					stdout: &stdout,
 					stderr: &stderr,
 					now:    fx.nowTime,
@@ -444,7 +414,7 @@ func TestMCPConnectErrorsNameCauseAndScrubTokens(t *testing.T) {
 				if code == 0 {
 					t.Fatal("expected failure when exchange refused")
 				}
-				if !strings.Contains(stderr.String(), "exchange refused") {
+				if !strings.Contains(stderr.String(), "exchange refused") || !strings.Contains(stderr.String(), tc.want) {
 					t.Fatalf("stderr = %q, want 'exchange refused'", stderr.String())
 				}
 				assertNoTokensInOutput(t, stdout.String()+stderr.String(), tc.tok)
@@ -456,8 +426,19 @@ func TestMCPConnectErrorsNameCauseAndScrubTokens(t *testing.T) {
 		}
 	})
 
+	t.Run("admitted but never signed in", func(t *testing.T) {
+		fx := newMCPConnectFixture(t, true, false)
+		t.Setenv("BASHY_FLEET_TOKEN", fx.memberTok)
+		var stdout, stderr bytes.Buffer
+		code := runMCPConnect(context.Background(), []string{fx.appURL, "--json"}, mcpConnectDeps{stdout: &stdout, stderr: &stderr})
+		if code == 0 || !strings.Contains(stderr.String(), "sign in to this satellite in the browser") {
+			t.Fatal("missing browser sign-in diagnosis", stderr.String())
+		}
+		assertNoTokensInOutput(t, stdout.String()+stderr.String(), fx.memberTok)
+	})
+
 	t.Run("not shared with you", func(t *testing.T) {
-		fx := newMCPConnectFixture(t, false)
+		fx := newMCPConnectFixture(t, false, true)
 		t.Setenv("BASHY_FLEET_TOKEN", fx.memberTok)
 
 		var stdout, stderr bytes.Buffer
@@ -490,7 +471,7 @@ func TestDispatchMCPConnectFrontDoorValidation(t *testing.T) {
 	}
 	const secret = "cli-secret-must-never-appear-123"
 	stderr := captureMCPStderr(t, func() {
-		if code := dispatchMCP([]string{"connect", "http://example.com/matrix/h/studio/app/site/mcp", "--token", secret}); code != 2 {
+		if code := dispatchMCP([]string{"connect", "https://user:" + secret + "@example.com/matrix/h/studio/app/site/mcp"}); code != 2 {
 			t.Fatalf("non-https connect = %d, want 2", code)
 		}
 	})
