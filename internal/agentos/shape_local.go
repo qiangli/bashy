@@ -140,6 +140,17 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 		}
 	}
 	switch r.Verb {
+	case "pull":
+		return svc.PullSource(ctx, caller)
+	case "push":
+		candidate, err := svc.PushPatch(ctx, caller, r.BaseRevision, r.Patch)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{
+			"id": candidate.ID, "status": candidate.Status, "principal": candidate.Principal,
+			"activation_principal": candidate.ActivationPrincipal, "base_rev": candidate.BaseRev, "rev": candidate.Rev,
+		}, nil
 	case "submit":
 		submitOpts := shape.SubmitOptions{Story: r.Story}
 		if r.Story != "" {

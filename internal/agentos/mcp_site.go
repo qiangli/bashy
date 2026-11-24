@@ -31,7 +31,7 @@ import (
 // siteMCPTools are the tool names of the `site` profile, in the order the
 // site template's /.well-known/mcp/server-card.json lists them.
 var siteMCPTools = []string{"list_pages", "read_page", "cite",
-	"shape_wish", "shape_verify", "shape_preview", "shape_approve", "shape_undo"}
+	"shape_wish", "shape_pull", "shape_push", "shape_verify", "shape_preview", "shape_approve", "shape_undo"}
 
 // Caller tiers, the same names the outpost relationship stamp carries.
 const (
@@ -156,8 +156,12 @@ func (s *siteMCP) allowShape(c siteCaller, tool string) error {
 	if c.Tier != siteTierOwner && c.Tier != siteTierMember {
 		return siteRefusal(c, tool, "owner tier required")
 	}
-	if c.Tier == siteTierMember && tool != "shape_wish" && tool != "shape_verify" && tool != "shape_preview" {
-		return siteRefusal(c, tool, "owner tier required")
+	if c.Tier == siteTierMember {
+		switch tool {
+		case "shape_wish", "shape_pull", "shape_push", "shape_verify", "shape_preview":
+		default:
+			return siteRefusal(c, tool, "owner tier required")
+		}
 	}
 	if s.app == "" {
 		return fmt.Errorf("%s: no shaped app; serve with --site-app APP", tool)
@@ -542,6 +546,10 @@ type siteShapeWishInput struct {
 	Element string `json:"element,omitempty" jsonschema:"element context, e.g. 'section=ID revision=REV' (compare-and-set)"`
 	Agent   string `json:"agent,omitempty" jsonschema:"shaping agent as tool:model (bashy shape wish --agent)"`
 }
+type siteShapePushInput struct {
+	BaseRevision string `json:"base_revision" jsonschema:"owner revision returned by shape_pull"`
+	Patch        string `json:"patch" jsonschema:"unified text diff against base_revision"`
+}
 type siteShapeIDInput struct {
 	ID string `json:"id" jsonschema:"candidate id"`
 }
@@ -595,8 +603,7 @@ func (s *siteMCP) shape(ctx context.Context, req *mcpsdk.CallToolRequest, tool s
 	return nil, siteShapeOutput{App: s.app, Verb: r.Verb, Principal: c.Principal, Result: view}, nil
 }
 
-// newSiteMCPServer builds the site profile's server: exactly the eight site
-// tools, no shell sessions, no registry commands, every call audited.
+// newSiteMCPServer registers the site's page and shaping tools.
 func newSiteMCPServer(s *siteMCP, version string, audit func(yokemcp.Record)) *mcpsdk.Server {
 	srv := mcpsdk.NewServer(&mcpsdk.Implementation{Name: "bashy-site", Version: version}, nil)
 	readOnly := &mcpsdk.ToolAnnotations{ReadOnlyHint: true}
@@ -606,6 +613,16 @@ func newSiteMCPServer(s *siteMCP, version string, audit func(yokemcp.Record)) *m
 		Description: "Read one page as Markdown (default), HTML or JSON at its current revision."}, s.readPage)
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "cite", Annotations: readOnly,
 		Description: "Return the citation record {url, section_id, revision, section_sha256, quote} for <url_or_path>#<section_id>."}, s.cite)
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "shape_pull", Annotations: readOnly,
+		Description: "Pull the owner's active revision and tracked source files (path, Git mode and base64 content). Requires shape scope."},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest, _ struct{}) (*mcpsdk.CallToolResult, siteShapeOutput, error) {
+			return s.shape(ctx, req, "shape_pull", shapeCLIRequest{Verb: "pull"})
+		})
+	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "shape_push",
+		Description: "Apply a unified text diff to the owner's current revision and verify a candidate for owner approval. Requires shape scope."},
+		func(ctx context.Context, req *mcpsdk.CallToolRequest, in siteShapePushInput) (*mcpsdk.CallToolResult, siteShapeOutput, error) {
+			return s.shape(ctx, req, "shape_push", shapeCLIRequest{Verb: "push", BaseRevision: in.BaseRevision, Patch: in.Patch})
+		})
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "shape_wish",
 		Description: "Ask for a site change. Owners and members with shape scope create candidates; other members file requests on the owner's queue."},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest, in siteShapeWishInput) (*mcpsdk.CallToolResult, siteShapeOutput, error) {
@@ -650,7 +667,7 @@ func siteAuditMiddleware(audit func(yokemcp.Record)) mcpsdk.Middleware {
 			start := time.Now()
 			call := req.(*mcpsdk.CallToolRequest)
 			effects := []string{"pure"}
-			if strings.HasPrefix(call.Params.Name, "shape_") {
+			if strings.HasPrefix(call.Params.Name, "shape_") && call.Params.Name != "shape_pull" {
 				effects = []string{"write"}
 			}
 			record := yokemcp.Record{Time: start.UTC().Format(time.RFC3339Nano), Tool: call.Params.Name,

@@ -648,7 +648,7 @@ func (s *Site) RenderAgentSkillsIndex() string {
 	return string(b) + "\n"
 }
 func (s *Site) RenderMCPServerCard() string {
-	obj := map[string]any{"schema_version": "mcp-server-card-v1", "name": s.SkillName(), "title": s.Config.Title, "version": "0.2.0", "endpoint": s.Config.MCP, "transport": "streamable-http", "authentication": map[string]any{"type": "cookie-or-oauth2", "oauth_protected_resource": s.Config.Origin + "/.well-known/oauth-protected-resource"}, "tools": []string{"list_pages", "read_page", "cite", "shape_wish", "shape_verify", "shape_preview", "shape_approve", "shape_undo"}}
+	obj := map[string]any{"schema_version": "mcp-server-card-v1", "name": s.SkillName(), "title": s.Config.Title, "version": "0.2.0", "endpoint": s.Config.MCP, "transport": "streamable-http", "authentication": map[string]any{"type": "cookie-or-oauth2", "oauth_protected_resource": s.Config.Origin + "/.well-known/oauth-protected-resource"}, "tools": []string{"list_pages", "read_page", "cite", "shape_wish", "shape_pull", "shape_push", "shape_verify", "shape_preview", "shape_approve", "shape_undo"}}
 	b, _ := json.MarshalIndent(obj, "", "  ")
 	return string(b) + "\n"
 }

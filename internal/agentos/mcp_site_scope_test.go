@@ -8,6 +8,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	gogit "github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"github.com/qiangli/yoke/pkg/shape"
 )
@@ -46,7 +50,7 @@ func TestSiteMCPScopeMatrix(t *testing.T) {
 					h.Set("X-Outpost-Circle", "contractor")
 				}
 			})
-			for _, tool := range []string{"shape_wish", "shape_verify", "shape_preview", "shape_approve", "shape_undo"} {
+			for _, tool := range []string{"shape_wish", "shape_pull", "shape_push", "shape_verify", "shape_preview", "shape_approve", "shape_undo"} {
 				args := map[string]any{"id": "candidate"}
 				want := tc.shape
 				if tool == "shape_wish" {
@@ -56,7 +60,10 @@ func TestSiteMCPScopeMatrix(t *testing.T) {
 				if tool == "shape_approve" || tool == "shape_undo" {
 					want = tc.approve
 				}
-				if tool == "shape_undo" {
+				if tool == "shape_push" {
+					args = map[string]any{"base_revision": "base", "patch": "diff"}
+				}
+				if tool == "shape_undo" || tool == "shape_pull" {
 					args = nil
 				}
 				before := len(*calls)
@@ -71,6 +78,9 @@ func TestSiteMCPScopeMatrix(t *testing.T) {
 					continue
 				}
 				r := (*calls)[before]
+				if tool == "shape_push" && (r.Verb != "push" || r.BaseRevision != "base" || r.Patch != "diff") || tool == "shape_pull" && r.Verb != "pull" {
+					t.Fatalf("%s dispatch = %+v", tool, r)
+				}
 				if r.Owner != "owner@example.com" || r.Caller == nil || r.Caller.Principal != user || r.Caller.Circle != tc.circle || r.Caller.Tier != tc.tier {
 					t.Fatalf("lost trusted caller: %+v", r)
 				}
@@ -157,5 +167,77 @@ func TestSiteMCPMemberRequiresConfiguredOwner(t *testing.T) {
 	_, refusal := callSite(t, cs, "shape_wish", map[string]any{"request": "Change the heading"})
 	if !strings.Contains(refusal, "owner identity is not configured") || len(*calls) != 0 {
 		t.Fatalf("missing owner: refusal=%q calls=%+v", refusal, *calls)
+	}
+}
+
+type sitePatchVerifier struct{ calls []shape.VerifyRequest }
+
+func (v *sitePatchVerifier) Verify(_ context.Context, r shape.VerifyRequest) (shape.Verdict, error) {
+	v.calls = append(v.calls, r)
+	return shape.Verdict{Pass: true}, nil
+}
+
+func TestSiteMCPMemberSourceTransfer(t *testing.T) {
+	home, source := t.TempDir(), t.TempDir()
+	t.Setenv("BASHY_HOME", home)
+	stubSiteShape(t)
+	siteShapeExecute = executeShapeCLI
+	shapeAppLookup = func(string) (shape.App, error) { return shape.App{Name: "site", SourceDir: source}, nil }
+	verifier := &sitePatchVerifier{}
+	oldOptions := shapeServiceOptions
+	t.Cleanup(func() { shapeServiceOptions = oldOptions })
+	shapeServiceOptions = func(string) shape.Options { return shape.Options{Home: home, Verifier: verifier} }
+	repo, err := gogit.PlainInit(source, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wt, err := repo.Worktree()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"page": "old\n", "shaped.json": `{"scopes":{"shape":{"groups":["support"]}}}`} {
+		if err := os.WriteFile(filepath.Join(source, name), []byte(body), 0600); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := wt.Add(name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	hash, err := wt.Commit("base", &gogit.CommitOptions{Author: &object.Signature{Name: "owner", Email: "owner@example.test", When: time.Now()}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeSiteOutpostConfig(t, "http://127.0.0.1:1", true)
+	cs := serveSiteHTTP(t, newSiteMCP(context.Background(), "site", "", true))(func(h http.Header) {
+		stampAudience(h, siteTestKey, "member", "member@example.com", "", "contractor", "support")
+	})
+	pulled, refusal := callSite(t, cs, "shape_pull", nil)
+	if refusal != "" {
+		t.Fatal(refusal)
+	}
+	var snapshot shape.SourceSnapshot
+	raw, err := json.Marshal(pulled["result"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(raw, &snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if snapshot.Revision != hash.String() || len(snapshot.Files) != 2 || snapshot.Files[0].Path != "page" || string(snapshot.Files[0].Content) != "old\n" {
+		t.Fatalf("pull = %+v", snapshot)
+	}
+	args := map[string]any{"base_revision": snapshot.Revision, "patch": "--- a/page\n+++ b/page\n@@ -1 +1 @@\n-old\n+new\n"}
+	pushed, refusal := callSite(t, cs, "shape_push", args)
+	if refusal != "" {
+		t.Fatal(refusal)
+	}
+	c, ok := pushed["result"].(map[string]any)
+	if !ok || c["status"] != shape.Verified || c["principal"] != "member@example.com" || c["activation_principal"] != "owner@example.com" ||
+		c["base_rev"] != snapshot.Revision || len(verifier.calls) != 1 || verifier.calls[0].Principal != c["activation_principal"] || verifier.calls[0].CandidateRev != c["rev"] {
+		t.Fatalf("push = %v, verifier = %+v", c, verifier.calls)
+	}
+	args["base_revision"] = "stale"
+	if _, refusal := callSite(t, cs, "shape_push", args); !strings.Contains(refusal, "base stale") || !strings.Contains(refusal, "active "+snapshot.Revision) || len(verifier.calls) != 1 {
+		t.Fatalf("stale push: refusal=%q verifier calls=%d", refusal, len(verifier.calls))
 	}
 }

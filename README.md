@@ -220,8 +220,12 @@ work the same way toward you):
   `agent_user_agents`.
 - **Prefer the site's MCP endpoint** at same-origin `<origin>/mcp`
   (Streamable HTTP `POST` + SSE `GET`, no redirect) over scraping: tools
-  `list_pages`, `read_page`, `cite`, plus owner-gated `shape_wish`,
-  `shape_verify`, `shape_preview`, `shape_approve`, `shape_undo`. Owners
+  `list_pages`, `read_page` and `cite`. Members can send a `shape_wish`.
+  With shape scope, `shape_pull` returns the owner's revision and files
+  with base64 content. Send that revision as `base_revision` alongside a
+  unified diff in `patch` to `shape_push` for host verification. Members with
+  shape scope can also use `shape_verify` and `shape_preview`. The owner
+  controls `shape_approve` and `shape_undo`. Owners
   serve it with `bashy mcp serve --transport http --tools site
   --site-app <app>` (or `--site-dir <dir>`), adding `--outpost` when fronted
   by outpost's `<app>/mcp` reverse proxy.

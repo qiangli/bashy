@@ -252,9 +252,12 @@ Markdown-first serving breaks `Accept` ties by listing order and serves
 listed `agent_user_agents`. Verbs: `bashy site
 explore|attach|cite|shape|recipe <url>`, `bashy skills add <url>`,
 `bashy fetch <url>`. Prefer the same-origin `<origin>/mcp` MCP endpoint
-(Streamable HTTP `POST` + SSE `GET`, no redirect; `list_pages`,
-`read_page`, `cite`, owner-gated `shape_wish|shape_verify|shape_preview|
-shape_approve|shape_undo`). Owners serve it via
+(Streamable HTTP `POST` + SSE `GET`) for `list_pages`, `read_page` and
+`cite`. Members can send a `shape_wish`. With shape scope, pull the owner's
+source and revision with `shape_pull`, then send `base_revision` and a
+unified diff in `patch` to `shape_push`. The host verifies the candidate.
+Scoped members can also use `shape_verify` and `shape_preview`. Owners
+control `shape_approve` and `shape_undo` and serve the endpoint via
 `bashy mcp serve --transport http --tools site --site-app <app>` (or
 `--site-dir <dir>`; add `--outpost` behind outpost's `<app>/mcp` proxy).
 Identity: `bashy site key [--json]` (Ed25519 JWK + RFC 7638 `keyid`),

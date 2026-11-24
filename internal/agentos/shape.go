@@ -15,6 +15,7 @@ import (
 )
 
 type shapeCLIRequest struct {
+	BaseRevision, Patch string
 	// Caller and Owner are set only by authenticated in-process surfaces.
 	Caller                                                                       *shape.Caller
 	Owner                                                                        string
