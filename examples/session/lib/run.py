@@ -7,7 +7,7 @@ import re
 import sys
 
 from nudge import fetch_body
-from common import bashy, emit, fail, log_path, metadata, participant_roles
+from common import append_event, bashy, emit, fail, metadata, participant_roles, read_events
 
 
 def timestamp(value):
@@ -48,6 +48,7 @@ def read_card(sprint):
 
 MIN_TIMEBOX_S = 60
 FINISHED = ('done', 'skipped')
+UNDOABLE = ('time', 'reorder', 'pause', 'resume', 'skip', 'done')
 CUTOFF = re.compile(r'cutoff (\d{4}-\d\d-\d\dT[\d:.]+(?:Z|[+-]\d\d:\d\d))')
 
 
@@ -77,16 +78,27 @@ def session_clock(card, at, sprint=None):
                              if deadline and not stopped else None))
 
 
-def status(sprint, at=None):
+def active_events(events):
+    undone = {revision for event in events if event['event'] == 'undo'
+              for revision in event['reverts']}
+    return [(revision, event) for revision, event in enumerate(events, 1)
+            if revision not in undone and event['event'] != 'undo']
+
+
+def history(events):
+    return [dict(revision='r%d' % revision, author=event.get('author', 'owner'),
+                 created=event.get('ts'), event=event['event'], step=event.get('step'))
+            for revision, event in enumerate(events, 1)]
+
+
+def status(sprint, at=None, events=None):
     at = at or now()
     card = read_card(sprint)
-    meta = metadata(sprint)
+    events = read_events(sprint) if events is None else events
+    meta = metadata(sprint, events)
     roles = meta["roles"]
     participants = participant_roles(roles)
-    events = []
-    path = log_path(sprint)
-    if path.exists():
-        events = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+    events = [event for _, event in active_events(events)]
     paused_since, intervals = None, []
     for event in events:
         if event['event'] == 'pause' and paused_since is None:
@@ -188,22 +200,24 @@ def clean(line):
 
 
 def log(sprint, step, event, at, **fields):
-    with log_path(sprint).open('a', encoding='utf-8') as stream:
-        stream.write(json.dumps(dict(ts=at.isoformat(), event=event,
-                                     **({'step': step['id']} if step else {}), **fields)) + '\n')
+    if step:
+        fields['step'] = step['id']
+    append_event(sprint, event, at, **fields)
 
 
-def transition(sprint, step, target, at, evidence=None):
+def transition(sprint, step, target, at, evidence=None, *, participant='', advance_from=None):
     if step['status'] == target:
         return
     if target == 'done':
         # People cannot close sprint stories; the session manager (the owner's
         # agent) accepts them later with `bashy sprint accept N ID -m EVIDENCE`.
         bashy('todo', 'edit', "--user", step['id'], '--label', 'step-done')
+        log(sprint, step, 'done', at, evidence=evidence, author=participant or 'owner',
+            **({'participant': True} if participant else {}))
     else:
         bashy('todo', 'status', "--user", step['id'], target)
-    log(sprint, step, 'step_start' if target == 'doing' else 'done', at,
-        **({'evidence': evidence} if target == 'done' else {}))
+        advance = dict(advance_from=advance_from, previous_status=step['status']) if advance_from else {}
+        log(sprint, step, 'step_start', at, **advance)
 
 
 def select_step(steps, selector):
@@ -255,12 +269,60 @@ def reorder(sprint, steps, step, mode, where, at):
     else:
         pos = max(0, min(len(order), at_pos + (-1 if mode == 'up' else 1)))
     order.insert(pos, step)
+    if write_order(order, slots):
+        log(sprint, None, 'reorder', at, order=[s['id'] for s in order],
+            previous_order=[s['id'] for s in upcoming])
+
+
+def write_order(order, slots):
     changed = [(s, slot) for s, slot in zip(order, slots) if s['index'] != slot]
     for s, slot in changed:
         bashy('todo', 'edit', '--user', s['id'], '--label', 'step-%02d' % slot,
               '--unlabel', 'step-%02d' % s['index'])
-    if changed:
-        log(sprint, None, 'reorder', at, order=[s['id'] for s in order])
+    return changed
+
+
+def undo(sprint, steps, events, at):
+    active = dict(active_events(events))
+    for revision, event in reversed(active.items()):
+        kind = event['event']
+        if kind in UNDOABLE and event.get('author', 'owner') == 'owner' and not event.get('participant'):
+            break
+    else:
+        fail('no owner change to undo')
+
+    reverts = [revision]
+    step = None
+    if kind == 'reorder':
+        if 'previous_order' not in event:
+            fail('this reorder has no recorded previous order')
+        by_id = {s['id']: s for s in steps}
+        if any(ident not in by_id for ident in event['previous_order']):
+            fail('cannot undo reorder because an affected step is missing')
+        previous = [by_id[ident] for ident in event['previous_order']]
+        write_order(previous, sorted(s['index'] for s in previous))
+    elif kind in ('done', 'skip'):
+        step = select_step(steps, event['step'])
+        expected = 'skipped' if kind == 'skip' else 'done'
+        # A later goto or participant completion can supersede this finish.
+        # In that case its label belongs to the current run of the step.
+        later = [e for rev, e in active.items() if rev > revision and e.get('step') == step['id']]
+        if step['status'] == expected and not any(e['event'] in ('step_start', 'done', 'skip') for e in later):
+            bashy('todo', 'edit', '--user', step['id'], '--unlabel', 'step-' + expected)
+            started = active.get(revision + 1)
+            if started and started.get('advance_from') == step['id']:
+                successor = next((s for s in steps if s['id'] == started['step']), None)
+                # Preserve a later action on the successor, such as participant done or goto.
+                if successor and successor['status'] == 'doing' and not any(
+                    rev > revision + 1 and e.get('step') == successor['id']
+                    and e['event'] in ('step_start', 'leave')
+                    for rev, e in active.items()
+                ):
+                    set_todo_state(successor, started['previous_status'])
+                    reverts.append(revision + 1)
+    elif 'step' in event:
+        step = dict(id=event['step'])
+    log(sprint, step, 'undo', at, reverts=reverts)
 
 
 def main(argv):
@@ -274,7 +336,8 @@ def main(argv):
     argv = glued
     parser = argparse.ArgumentParser(prog='session')
     verbs = parser.add_subparsers(dest='verb', required=True)
-    for name in ('next', 'done', 'time', 'goto', 'skip', 'move', 'pause', 'resume', 'status'):
+    for name in ('next', 'done', 'time', 'goto', 'skip', 'move', 'pause', 'resume', 'status',
+                 'history', 'undo'):
         sub = verbs.add_parser(name)
         sub.add_argument('sprint', type=int)
         output = sub.add_mutually_exclusive_group()
@@ -295,8 +358,16 @@ def main(argv):
             where.add_argument('--to', type=int)
     args = parser.parse_args(argv)
     try:
+        events = read_events(args.sprint)
+        if args.verb == 'history':
+            read_card(args.sprint)
+            entries = history(events)
+            lines = ['%s  %s  %s  %s%s' % (e['revision'], clean(e['author']), e['created'] or '-',
+                     e['event'], '  ' + e['step'] if e['step'] else '') for e in entries]
+            emit(entries, args.json, '\n'.join(lines) or 'No events')
+            return
         at = now()
-        value = status(args.sprint, at)
+        value = status(args.sprint, at, events)
         roles = value['roles']
         work_roles = roles['participants'] or [roles['owner']]
         steps = [s for s in value['steps'] if s['role'] in work_roles]
@@ -306,14 +377,16 @@ def main(argv):
             pending = [s for s in steps if s['status'] in ('todo', 'assigned')
                        and (not current or s['index'] > current['index'])]
             if pending:
-                transition(args.sprint, pending[0], 'doing', at)
+                transition(args.sprint, pending[0], 'doing', at,
+                           advance_from=current['id'] if current else None)
 
         if args.verb == 'next':
             if current:
                 transition(args.sprint, current, 'done', at)
             start_next()
         elif args.verb == 'done':
-            transition(args.sprint, select_step(value['steps'], args.step), 'done', at, args.message)
+            transition(args.sprint, select_step(value['steps'], args.step), 'done', at, args.message,
+                       participant=os.environ.get('SESSION_PARTICIPANT', ''))
         elif args.verb == 'time':
             if args.step is None and not current:
                 fail('no step is running; name a step')
@@ -335,6 +408,8 @@ def main(argv):
         elif args.verb == 'move':
             mode = 'up' if args.up else 'down' if args.down else 'to'
             reorder(args.sprint, steps, select_step(steps, args.step), mode, args.to, at)
+        elif args.verb == 'undo':
+            undo(args.sprint, value['steps'], events, at)
         if args.verb != 'status':
             value = status(args.sprint, at)
         emit(value, args.json, one_line(value))

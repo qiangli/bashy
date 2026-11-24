@@ -12,6 +12,7 @@ arithmetically, which is why a session can always be planned offline.
 """
 import argparse
 import contextlib
+from datetime import datetime, timezone
 import io
 import json
 import os
@@ -409,10 +410,10 @@ def cmd_apply(argv):
     if not isinstance(sprint, int):
         common.fail("apply: sprint add returned no sprint number")
 
-    with common.log_path(sprint).open("a") as stream:
-        stream.write(json.dumps(dict(event="format", format=draft.get("format", "session"),
-                                    roles=draft.get("roles", ["owner", "participant"]),
-                                    audience=draft.get("audience", ""), tone=draft.get("tone", ""))) + "\n")
+    common.append_event(sprint, "format", datetime.now(timezone.utc),
+                        format=draft.get("format", "session"),
+                        roles=draft.get("roles", ["owner", "participant"]),
+                        audience=draft.get("audience", ""), tone=draft.get("tone", ""))
 
     for owner in dict.fromkeys(s.get("owner", "") for s in draft["steps"]):
         if owner:

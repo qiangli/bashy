@@ -64,6 +64,100 @@ class RunTests(TempBashy):
     def order(self):
         return [(s['index'], s['title']) for s in self.status()['steps']]
 
+    def history(self):
+        return json.loads(self.session('history', '1', '--json').stdout)
+
+    def undo(self):
+        return json.loads(self.session('undo', '1', '--json').stdout)
+
+    def test_history_authors_and_shape_including_legacy_events(self):
+        with log_path(1).open('w') as stream:
+            stream.write('{"event":"format","format":"session","roles":["owner","participant"]}\n')
+        self.session('next', '1')
+        with patch.dict(os.environ, SESSION_PARTICIPANT='alice'):
+            self.session('done', '1', self.ids[0])
+        self.assertEqual(self.history(), [
+            dict(revision='r1', author='owner', created=None, event='format', step=None),
+            dict(revision='r2', author='owner', created='2030-01-01T10:00:00+00:00',
+                 event='step_start', step=self.ids[0]),
+            dict(revision='r3', author='alice', created='2030-01-01T10:00:00+00:00',
+                 event='done', step=self.ids[0]),
+        ])
+        self.assertIn('alice', self.session('history', '1').stdout)
+        self.assertEqual(run.read_events(1)[-1]['author'], 'alice')
+        self.assertEqual(self.session('undo', '1', check=False).returncode, 1)
+        self.session('time', '1', self.ids[1], '--add', '1m')
+        self.assertEqual(self.undo()['steps'][0]['status'], 'done')
+
+    def test_undo_empty_log(self):
+        self.assertEqual(self.history(), [])
+        result = self.session('undo', '1', check=False)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('no owner change to undo', result.stderr)
+        self.assertFalse(log_path(1).exists())
+
+    def test_undo_time_restores_clamped_timebox_and_retains_history(self):
+        self.session('next', '1')
+        self.session('time', '1', '--add', '-1h')
+        before = self.history()
+        self.assertEqual(self.undo()['current']['timebox_s'], 600)
+        after = self.history()
+        self.assertEqual(after[:-1], before)
+        self.assertEqual(after[-1], dict(revision='r3', author='owner',
+                         created='2030-01-01T10:00:00+00:00', event='undo', step=self.ids[0]))
+        self.assertEqual(self.session('undo', '1', check=False).returncode, 1)
+
+    def test_undo_reorder_restores_labels_and_logs_both_orders(self):
+        before = self.order()
+        self.session('move', '1', '2', '--up')
+        event = run.read_events(1)[-1]
+        self.assertEqual(event['author'], 'owner')
+        self.assertEqual(event['previous_order'], self.ids)
+        self.assertEqual(event['order'], self.ids[::-1])
+        value = self.undo()
+        self.assertEqual([(s['index'], s['title']) for s in value['steps']], before)
+        self.assertEqual(self.order(), before)
+
+    def test_undo_resume_then_pause_replays_the_original_clock(self):
+        self.session('next', '1')
+        self.at('10:02:00')
+        self.session('pause', '1')
+        self.at('10:04:00')
+        self.session('resume', '1')
+        self.at('10:05:00')
+        value = self.undo()
+        self.assertTrue(value['paused'])
+        self.assertEqual(value['current']['elapsed_s'], 120)
+        value = self.undo()
+        self.assertFalse(value['paused'])
+        self.assertEqual(value['current']['elapsed_s'], 300)
+
+    def test_undo_skip_restores_running_step_and_unstarts_successor(self):
+        self.session('next', '1')
+        self.at('10:02:00')
+        self.session('skip', '1')
+        self.at('10:03:00')
+        value = self.undo()
+        self.assertEqual(value['current']['id'], self.ids[0])
+        self.assertEqual(value['current']['elapsed_s'], 180)
+        self.assertEqual(value['steps'][1]['status'], 'assigned')
+        self.assertIsNone(value['steps'][1]['started_at'])
+        self.assertEqual([e['event'] for e in self.history()], ['step_start', 'skip', 'step_start', 'undo'])
+
+    def test_undo_done_restores_running_step_and_clears_evidence(self):
+        self.session('next', '1')
+        self.at('10:02:00')
+        self.session('done', '1', '1', '-m', 'Shared')
+        value = self.undo()
+        self.assertEqual(value['current']['id'], self.ids[0])
+        self.assertIsNone(value['steps'][0]['evidence'])
+        self.assertIsNone(value['steps'][0]['done_at'])
+        self.session('next', '1')
+        value = self.undo()
+        self.assertEqual(value['current']['id'], self.ids[0])
+        self.assertEqual(value['steps'][1]['status'], 'assigned')
+        self.assertIsNone(value['steps'][1]['started_at'])
+
     def test_pause_freezes_elapsed_and_resume_continues(self):
         self.session('next', '1')
         self.at('10:02:00')

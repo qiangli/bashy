@@ -141,10 +141,14 @@ func newServer(n int, bin, prefix, path string) *server {
 }
 
 func (s *server) bashy(args ...string) ([]byte, error) {
+	return s.bashyAs("", args...)
+}
+
+func (s *server) bashyAs(participant string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, s.bin, append([]string{"session"}, args...)...)
-	cmd.Env = append(os.Environ(), "BASHY_HINTS=off")
+	cmd.Env = append(os.Environ(), "BASHY_HINTS=off", "SESSION_PARTICIPANT="+participant)
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
@@ -554,7 +558,7 @@ func (s *server) participantDone(w http.ResponseWriter, r *http.Request) {
 		args = append(args, "-m", ev)
 	}
 	args = append(args, "--json")
-	if _, err := s.bashy(args...); err != nil {
+	if _, err := s.bashyAs(person, args...); err != nil {
 		kit.Fail(w, 502, err.Error())
 		return
 	}

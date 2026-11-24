@@ -39,6 +39,8 @@ through the registered command. No default sprint is silently selected.
   freeze and restart the step clock; `time N [STEP] --add 5m|--add -1m` changes a
   timebox (never below 1m); `goto N STEP` jumps to any step; `skip N` skips the
   current step; `move N STEP --up|--down|--to K` reorders upcoming steps.
+- `bashy session history N [--json]` lists events in log order with their author.
+  `bashy session undo N` reverses the latest undoable owner change.
 - `bashy session nudge N [--person P]` asks that person's own agent for a hint or
   a question about the current step. Hints only: the session never does the work.
 - `bashy session render STEP --edition ROLE|owner|shared` prints one edition of a
@@ -69,7 +71,10 @@ Render the same source with `--edition owner` for preparation and
 set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-usage='Usage: session plan|apply|next|done|time|goto|skip|move|pause|resume|status|nudge|render|prep|serve|join|stop|demo|go|test [ARGS] [--json]'
+# Shared desk modules resolve from the local Go module proxy (desk/register-modules.sh publishes them).
+export GOPROXY="file://${BASHY_GOMOD_PROXY:-${BASHY_HOME:-$HOME/.bashy}/gomod-proxy},${GOPROXY:-https://proxy.golang.org,direct}"
+export GONOSUMDB="${GONOSUMDB:+$GONOSUMDB,}github.com/qiangli/bashy/examples"
+usage='Usage: session plan|apply|next|done|time|goto|skip|move|pause|resume|status|history|undo|nudge|render|prep|serve|join|stop|demo|go|test [ARGS] [--json]'
 # Registered schemas canonicalize flags before positionals as --name=value.
 # Restore the verb-first argv expected by the shared Python dispatchers.
 bound_flags=()
@@ -94,7 +99,7 @@ case ${1:-} in
 --contract) echo 'sokilili sesiono efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
 ''|-h|--help) echo "$usage" ;;
 plan|apply)                   exec python3 "$here/lib/plan.py" "$@" ;;
-next|done|time|goto|skip|move|pause|resume|status) exec python3 "$here/lib/run.py" "$@" ;;
+next|done|time|goto|skip|move|pause|resume|status|history|undo) exec python3 "$here/lib/run.py" "$@" ;;
 nudge)                        exec python3 "$here/lib/nudge.py" "$@" ;;
 render)                       exec python3 "$here/lib/render.py" "$@" ;;
 prep)                         exec python3 "$here/lib/prep.py" "$@" ;;

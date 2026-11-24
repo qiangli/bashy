@@ -72,6 +72,20 @@ def log_path(sprint):
     return data_dir() / ("%s.jsonl" % sprint)
 
 
+def read_events(sprint):
+    try:
+        lines = log_path(sprint).read_text(encoding="utf-8").splitlines()
+    except FileNotFoundError:
+        return []
+    return [json.loads(line) for line in lines if line.strip()]
+
+
+def append_event(sprint, event, at, *, author="owner", **fields):
+    with log_path(sprint).open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(dict(ts=at.isoformat(), event=event, author=author,
+                                     **fields)) + "\n")
+
+
 def label_word(prefix, value):
     word = "%s-%s" % (prefix, str(value).lower())
     if not WORD.fullmatch(word) or len(word) > 32:
@@ -106,13 +120,10 @@ def participant_roles(roles):
     return roles[1:] or roles[:1]
 
 
-def metadata(sprint):
-    path = log_path(sprint)
-    if path.exists():
-        for line in reversed(path.read_text().splitlines()):
-            event = json.loads(line)
-            if event.get("event") == "format":
-                return event
+def metadata(sprint, events=None):
+    for event in reversed(read_events(sprint) if events is None else events):
+        if event.get("event") == "format":
+            return event
     return dict(format="session", roles=["owner", "participant"], audience="", tone="")
 
 

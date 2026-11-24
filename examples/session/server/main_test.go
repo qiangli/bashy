@@ -25,6 +25,9 @@ func TestMain(m *testing.M) {
 		f, _ := os.OpenFile(filepath.Join(d, "calls.log"), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 		fmt.Fprintln(f, strings.Join(args, " "))
 		f.Close()
+		if participant := os.Getenv("SESSION_PARTICIPANT"); participant != "" {
+			os.WriteFile(filepath.Join(d, "participant"), []byte(participant), 0o600)
+		}
 		if len(args) > 0 && args[0] == "app" {
 			b, _ := os.ReadFile(filepath.Join(d, "runtime.json"))
 			os.Stdout.Write(b)
@@ -222,6 +225,9 @@ func TestParticipantTokenIsolation(t *testing.T) {
 	}
 	if !strings.Contains(e.calls(), "session done 7 t2 -m http://x/notepad/1 --json") {
 		t.Fatal(e.calls())
+	}
+	if participant, err := os.ReadFile(filepath.Join(e.dir, "participant")); err != nil || string(participant) != "alice" {
+		t.Fatalf("done participant = %q, err = %v", participant, err)
 	}
 	// Views are private to the person.
 	_, v := e.do(t, "GET", "/api/s/"+bob, "")

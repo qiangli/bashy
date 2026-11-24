@@ -6,7 +6,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$here/../desk/register-modules.sh"
 runner=${BASHY_BIN:-bashy}
 guide=$("$runner" --bashsharp "$here/session.bsh" --skill)
-verbs=(plan apply next done time goto skip move pause resume status nudge render prep serve join stop demo go test)
+verbs=(plan apply next done time goto skip move pause resume status nudge render prep serve join stop demo go test history undo)
 args=()
 for i in "${!verbs[@]}"; do
   args+=(--set "args.positionals.0.enum.$i=${verbs[$i]}")
