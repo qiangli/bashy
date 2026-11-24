@@ -288,6 +288,16 @@ python3 tests/shaping-promotion/run.py \
   --evidence "${SHAPING_PROMOTION_EVIDENCE:?set a new evidence JSON path}"
 ```
 
+### test-group-shaping-e2e
+Exercise the owner and member site MCP paths inside the locked Ubuntu base.
+Run on a claimed Linux gate host with the inputs in tests/group-shaping-e2e/README.md.
+Effects: exec, net, read, write
+
+```bash
+set -eu
+python3 tests/group-shaping-e2e/run.py --evidence "${GROUP_SHAPING_EVIDENCE:?set a fresh raw log path}"
+```
+
 ### test-shaping-real-agent
 Opt-in pre-release Hello World lifecycle through the real shaping delegate.
 Requires `BASHY_REAL_AGENT_E2E=1`, `SHAPING_SMOKE_AGENT=TOOL:MODEL`, and

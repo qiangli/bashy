@@ -78,6 +78,10 @@ test-shaping-smoke-regression: FORCE
 test-shaping-promotion: FORCE
 	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-shaping-promotion
 
+# Exercise the owner and member site MCP paths inside the locked Ubuntu base.
+test-group-shaping-e2e: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-group-shaping-e2e
+
 # Opt-in pre-release Hello World lifecycle through the real shaping delegate.
 test-shaping-real-agent: FORCE
 	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-shaping-real-agent
