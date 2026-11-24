@@ -5,7 +5,7 @@
 ~~~skill as guide
 ---
 name: trove
-description: "Virtual drive of path-keyed mount points (bashy-trove-v1) stored in the cloudbox vault entry trove/layout (with local file override for tests and offline outposts). Mount, list, find, stat, cat, put, and add across dir:, dir:@host (outpost sftp), and git: mounts with bashy-node-v1 rows and trove provenance attributes."
+description: "Virtual drive of path-keyed mount points (bashy-trove-v1) stored in the cloudbox vault entry trove/layout (with local file override for tests and offline outposts). Mount, list, find, stat, cat, put, and add across dir:, dir:@host (outpost sftp), git:, drive:, and gh: mounts with bashy-node-v1 rows and trove provenance attributes."
 metadata:
   requires: "has=bashy"
 ---
@@ -47,22 +47,32 @@ credential for cloud/API mounts.
   List mounts at `/` or entries under `PATH` as `bashy-node-v1` JSONL rows
   with `attrs.{mount, owner, provenance}`.
 - `trove find [PATH] [--depth N] [--name GLOB] [--json]`
-  Walk `PATH` recursively via `bashy lens -t listing` and emit `bashy-node-v1` rows.
+  Walk `PATH` recursively and emit `bashy-node-v1` rows.
 - `trove stat PATH [--json]`
   Inspect one entry as a `bashy-node-v1` row with trove attributes.
 - `trove cat PATH [--json]`
   Print raw file bytes verbatim (peer-host files read through outpost SFTP,
   matching `lens`). With `--json`, emit a `bashy-node-v1` row with `attrs.content`.
 - `trove put SRC PATH [--dry-run] [--json]`
-  Write local file `SRC` (or `-` for stdin) to `PATH` on a writable `dir:` mount.
+  Write local file `SRC` (or `-` for stdin) to `PATH` on a writable `dir:` or `drive:` mount.
 - `trove add URL PATH [--dry-run] [--json]`
   Fetch `URL` as Markdown (`bashy fetch --md`) into `PATH` on a writable `dir:` mount.
+
+## Cloud mounts
+
+- `drive:` opens My Drive for the mount account. Use `drive:My Drive/folder`
+  to mount a folder. The mount uses the vault entry
+  `google/<account>/credentials` and the registered Google Workspace wrapper.
+  `cat` downloads stored files. `put` creates files in existing folders and
+  refuses an existing file at the destination.
+- `gh:OWNER/REPO` opens the repository's default branch and exposes issues as
+  `.issues/<number>`. It uses `github/<account>/token` from the vault and is read-only.
 
 ## Exit codes
 
 - `0` — done
 - `3` — refused by venue or availability (peer host offline by name, read-only mount,
-  or mount scheme deferred to a later slice such as `drive:` / `gh:`)
+  or unsupported mount scheme or scope)
 - `1` — error (unknown path / not found, invalid locator or arguments, vault error)
 ~~~
 
@@ -82,6 +92,9 @@ NAME_GLOB=""
 
 TROVE_TMPFILES=()
 cleanup_tmp() {
+  if [[ -n ${CLOUD_TMP:-} ]]; then
+    rm -rf -- "$CLOUD_TMP"
+  fi
   if [[ ${#TROVE_TMPFILES[@]} -gt 0 ]]; then
     rm -f "${TROVE_TMPFILES[@]}" 2>/dev/null || true
   fi
@@ -418,9 +431,6 @@ build_target_locator() {
       fi
       printf 'git:%s:%s' "$LOC_REV" "$full"
       ;;
-    drive|gh|app|mail|cal)
-      die 3 "scheme ${LOC_SCHEME}: is not supported in this slice (see H6b)"
-      ;;
     *)
       die 3 "unsupported mount scheme ${LOC_SCHEME}:"
       ;;
@@ -475,6 +485,229 @@ run_lens_listing() {
   rm -f "$err_file"
   if [[ $rc -ne 0 ]]; then
     handle_lens_error "$vpath" "$err_msg"
+  fi
+}
+
+# Cloud listings use the same intermediate rows as lens and share its enrichment.
+CLOUD_TMP=""
+DRIVE_FOLDER=application/vnd.google-apps.folder
+
+prepare_cloud() {
+  [[ -z $LOC_SCOPE_KIND ]] || die 3 "scope is not supported for ${LOC_SCHEME}: mounts"
+  [[ $MATCH_ACCOUNT =~ ^[A-Za-z0-9_.@+-]+$ && $MATCH_ACCOUNT != "." && $MATCH_ACCOUNT != ".." ]] ||
+    die 1 "mount $MATCH_MOUNT requires a valid account"
+  if [[ -z $CLOUD_TMP ]]; then
+    CLOUD_TMP=$(mktemp -d)
+  fi
+}
+
+run_google() {
+  # The vault binding is the sole source of credentials for this operation.
+  GWS_CREDENTIALS_FILE="" GWS_SERVICE_ACCOUNT_KEY_FILE="" \
+    "$RUNNER" secret exec --google-root "$CLOUD_TMP" "google/$MATCH_ACCOUNT/credentials" -- \
+    "$RUNNER" google "$@" "account=$MATCH_ACCOUNT"
+}
+
+# Drive path components are exact names under one parent, never global matches.
+drive_children() {
+  local parent=$1 name=${2:-} page token="" q rows all=""
+  local -a page_args
+  q="'$parent' in parents and trashed = false"
+  if [[ -n $name ]]; then
+    name=${name//\\/\\\\}
+    name=${name//\'/\\\'}
+    q+=" and name = '$name'"
+  fi
+  while true; do
+    page_args=()
+    [[ -z $token ]] || page_args+=("pageToken=$token")
+    page=$(run_google drive-list "q=$q" 'pageSize:=1000' \
+      'fields=nextPageToken,files(id,name,mimeType,modifiedTime,size,webViewLink)' "${page_args[@]}") || return 1
+    rows=$(printf '%s' "$page" | run_jq -c '
+      if (.error != null) or ((.files // []) | type != "array") then error("invalid Drive listing")
+      else (.files // [])[] end') || return 1
+    if [[ -n $rows ]]; then
+      all+="${all:+,}${rows//$'\n'/,}"
+    fi
+    token=$(printf '%s' "$page" | run_jq -r '.nextPageToken // ""') || return 1
+    [[ -n $token ]] || break
+  done
+  printf '[%s]' "$all"
+}
+
+# Print one metadata object, or nothing when the exact name is absent.
+drive_child() {
+  local parent=$1 name=$2 matches
+  matches=$(drive_children "$parent" "$name") || return 1
+  printf '%s' "$matches" | TROVE_NAME="$name" run_jq -c '
+    map(select(.name == $ENV.TROVE_NAME)) |
+    if length > 1 then error("ambiguous Drive name: " + $ENV.TROVE_NAME)
+    elif length == 1 then .[0] else empty end'
+}
+
+DRIVE_ITEM=""
+DRIVE_ID=""
+DRIVE_MIME=""
+set_drive_item() {
+  DRIVE_ITEM=$1
+  DRIVE_ID=$(printf '%s' "$DRIVE_ITEM" | run_jq -er '.id | strings | select(test("^[A-Za-z0-9_-]+$"))') ||
+    die 1 "invalid Drive file ID"
+  DRIVE_MIME=$(printf '%s' "$DRIVE_ITEM" | run_jq -er '.mimeType | strings | select(length > 0)') ||
+    die 1 "missing Drive MIME type"
+}
+
+drive_resolve() {
+  local rel=$1 base=${LOC_TARGET#/} path segment item
+  base=${base%/}
+  # "My Drive" denotes the account root in a layout locator.
+  case "$base" in
+    'My Drive') base="" ;;
+    'My Drive/'*) base=${base#*/} ;;
+  esac
+  path=$base
+  [[ -z $rel ]] || path="${base:+$base/}$rel"
+
+  set_drive_item '{"id":"root","mimeType":"application/vnd.google-apps.folder"}'
+  while [[ -n $path ]]; do
+    segment=${path%%/*}
+    if [[ $path == */* ]]; then path=${path#*/}; else path=""; fi
+    [[ $DRIVE_MIME == "$DRIVE_FOLDER" && -n $segment && $segment != "." && $segment != ".." ]] ||
+      die 1 "invalid Drive path at $segment"
+    item=$(drive_child "$DRIVE_ID" "$segment") || die 1 "could not resolve Drive entry: $segment"
+    [[ -n $item ]] || die 1 "not found: Drive entry $segment"
+    set_drive_item "$item"
+  done
+}
+
+drive_row() {
+  local item=$1 path=$2
+  printf '%s' "$item" | TROVE_PATH="$path" run_jq -c '
+    ($ENV.TROVE_PATH) as $path |
+    (.mimeType == "application/vnd.google-apps.folder") as $dir |
+    {path: $path, name: ($path | split("/") | last), ref: ("drive:" + .id),
+     kind: (if $dir then "directory" else "file" end),
+     type: (if $dir then "inode/directory" else .mimeType end),
+     attrs: ({id: .id} + (if .webViewLink then {url: .webViewLink} else {} end))}
+    + (if .size then {size: (.size | tonumber)} else {} end)
+    + (if .modifiedTime then {mtime: .modifiedTime} else {} end)'
+}
+
+drive_walk() {
+  local path=$1 depth=$2 item=$3 listed ordered child name
+  set_drive_item "$item"
+  drive_row "$item" "$path" || return 1
+  [[ $depth != 0 && $DRIVE_MIME == "$DRIVE_FOLDER" ]] || return 0
+  listed=$(drive_children "$DRIVE_ID") || die 1 "could not list Drive folder: $path"
+  ordered=$(printf '%s' "$listed" | run_jq -c '
+    map(select(.name | type == "string" and length > 0 and . != "." and . != ".."
+      and (contains("/") or contains("\n") or contains("\u0000") | not))) | group_by(.name)[] |
+    if length > 1 then error("ambiguous Drive name: " + .[0].name) else .[0] end') ||
+    die 1 "could not address Drive entries in $path"
+  [[ $depth == -1 ]] || depth=$((depth - 1))
+  while IFS= read -r child; do
+    [[ -n $child ]] || continue
+    name=$(printf '%s' "$child" | run_jq -r '.name') || return 1
+    drive_walk "$path/$name" "$depth" "$child" || return $?
+  done <<< "$ordered"
+}
+
+run_gh() {
+  local -a gh=("$RUNNER" gh)
+  # Like TROVE_OUTPOST_BIN, this allows a fixture (or an installed CLI) on PATH.
+  [[ -z ${TROVE_GH_BIN:-} ]] || gh=("$TROVE_GH_BIN")
+  GH_CONFIG_DIR="$CLOUD_TMP" GH_TOKEN="" GITHUB_TOKEN="" GH_ENTERPRISE_TOKEN="" GITHUB_ENTERPRISE_TOKEN="" \
+    "$RUNNER" secret exec "github/$MATCH_ACCOUNT/token=GH_TOKEN" -- \
+    "${gh[@]}" api --hostname github.com --method GET "$@"
+}
+
+gh_listing() {
+  local depth=$1 vpath=$2 endpoint="repos/$LOC_TARGET" meta branch tree issues="[]" has_issues
+  [[ $LOC_TARGET =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ && "/$LOC_TARGET/" != */./* && "/$LOC_TARGET/" != */../* ]] ||
+    die 1 "gh locator requires gh:OWNER/REPO"
+  meta=$(run_gh "$endpoint") || die 1 "could not open GitHub repository $LOC_TARGET"
+  branch=$(printf '%s' "$meta" | run_jq -er '.default_branch | strings | select(length > 0) | @uri') ||
+    die 1 "missing GitHub default branch for $LOC_TARGET"
+  has_issues=$(printf '%s' "$meta" | run_jq -r '.has_issues // false')
+  tree=$(run_gh "$endpoint/git/trees/$branch?recursive=1") ||
+    die 1 "could not list GitHub tree for $LOC_TARGET"
+  printf '%s' "$tree" | run_jq -e '(.truncated == false) and (.tree | type == "array")' >/dev/null ||
+    die 1 "invalid or truncated GitHub tree for $LOC_TARGET"
+
+  # Keep the issue namespace distinct from repository files.
+  if [[ $has_issues == true ]] && printf '%s' "$tree" | run_jq -e 'any(.tree[]; .path == ".issues")' >/dev/null; then
+    die 1 "GitHub repository $LOC_TARGET already uses the reserved .issues path"
+  fi
+  if [[ $has_issues == true &&
+        ( $MATCH_REL == .issues/* ||
+          ( $MATCH_REL == .issues && $depth != 0 ) ||
+          ( -z $MATCH_REL && ( $depth == -1 || $depth -gt 1 ) ) ) ]]; then
+    issues=$(run_gh --paginate --slurp "$endpoint/issues?state=all&per_page=100") ||
+      die 1 "could not list GitHub issues for $LOC_TARGET"
+  fi
+
+  LENS_OUT=$(printf '{"tree":%s,"issues":%s}' "$tree" "$issues" | \
+    TROVE_ROOT="$MATCH_MOUNT" TROVE_REL="$MATCH_REL" TROVE_DEPTH="$depth" TROVE_REPO="$LOC_TARGET" \
+    TROVE_ISSUES="$has_issues" run_jq -c '
+      ($ENV.TROVE_REL) as $rel | ($ENV.TROVE_ROOT) as $root |
+      ($ENV.TROVE_DEPTH | tonumber) as $depth | ("gh:" + $ENV.TROVE_REPO) as $ref |
+      ([{path:"", type:"tree"}] + .tree.tree +
+       (if $ENV.TROVE_ISSUES == "true" then
+          [{path:".issues", type:"tree"}] +
+          [.issues[][] | select(has("pull_request") | not) |
+           {path:(".issues/" + (.number | tostring)), type:"issue", number, html_url, title, state}]
+        else [] end)) |
+      map(select((.path | contains("\n") | not) and
+                 (.path == $rel or $rel == "" or (.path | startswith($rel + "/"))))) |
+      if any(.[]; .path == $rel) then sort_by(.path)[] else error("not found") end |
+      (.path | if $rel == "" then . else ltrimstr($rel) | ltrimstr("/") end) as $suffix |
+      select($depth == -1 or $suffix == "" or ($suffix | split("/") | length) <= $depth) |
+      (.path | if . == "" then $root else $root + "/" + . end) as $path |
+      {path:$path, name:($path | split("/") | last), ref:($ref + (if .path == "" then "" else "/" + .path end)),
+       kind:(if .type == "tree" then "directory" else "file" end),
+       type:(if .type == "tree" then "inode/directory" elif .type == "issue" then "text/plain"
+             else "application/octet-stream" end),
+       attrs:(if .type == "issue" then {number, url:.html_url, title, state}
+              elif .type == "blob" then {sha}
+              elif .type == "commit" then {submodule:.sha} else {} end)}
+      + (if .size then {size} else {} end) + (if .mode then {mode} else {} end)
+    ') || die 1 "could not list GitHub path: $vpath"
+}
+
+run_mount_listing() {
+  local depth=$1 vpath=$2 target
+  case "$LOC_SCHEME" in
+    drive|gh)
+      depth=${depth:--1}
+      [[ $depth =~ ^(0|[1-9][0-9]*|-1)$ ]] || die 1 "invalid depth: $depth"
+      prepare_cloud
+      ;;
+  esac
+  case "$LOC_SCHEME" in
+    drive)
+      drive_resolve "$MATCH_REL"
+      LENS_OUT=$(drive_walk "$vpath" "$depth" "$DRIVE_ITEM") || die 1 "could not list $vpath"
+      ;;
+    gh)
+      gh_listing "$depth" "$vpath"
+      ;;
+    *)
+      target=$(build_target_locator "$MATCH_REL") || exit $?
+      run_lens_listing "$target" "$depth" "$vpath"
+      ;;
+  esac
+}
+
+gh_cat() {
+  local row=$1 endpoint="repos/$LOC_TARGET" number sha issue content
+  number=$(printf '%s' "$row" | run_jq -r '.attrs.number // ""')
+  if [[ $number =~ ^[1-9][0-9]*$ ]]; then
+    issue=$(run_gh "$endpoint/issues/$number") || return 1
+    content=$(printf '%s' "$issue" | run_jq -r '.title + "\n\n" + (.body // "") + "x"') || return 1
+    printf '%s' "${content%x}"
+  else
+    sha=$(printf '%s' "$row" | run_jq -r '.attrs.sha // ""')
+    [[ $sha =~ ^[0-9a-f]{40}$ ]] || die 1 "GitHub entry has no readable blob"
+    run_gh -H 'Accept: application/vnd.github.raw+json' "$endpoint/git/blobs/$sha"
   fi
 }
 
@@ -837,9 +1070,7 @@ cmd_ls() {
 
   resolve_mount "$layout" "$vpath"
   parse_locator "$MATCH_LOCATOR"
-  local target_loc
-  target_loc=$(build_target_locator "$MATCH_REL")
-  run_lens_listing "$target_loc" "1" "$vpath"
+  run_mount_listing "1" "$vpath"
   local rows
   rows=$(enrich_rows "$LENS_OUT" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "true" "")
   if [[ $AS_JSON == true ]]; then
@@ -847,6 +1078,7 @@ cmd_ls() {
   else
     print_rows_human "$rows" ls
   fi
+  return 0
 }
 
 cmd_find() {
@@ -865,9 +1097,7 @@ cmd_find() {
       [[ -n $mp ]] || continue
       resolve_mount "$layout" "$mp"
       parse_locator "$MATCH_LOCATOR"
-      local target_loc
-      target_loc=$(build_target_locator "")
-      run_lens_listing "$target_loc" "$DEPTH_OPT" "$mp"
+      run_mount_listing "$DEPTH_OPT" "$mp"
       local mrows
       mrows=$(enrich_rows "$LENS_OUT" "$mp" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "$NAME_GLOB")
       if [[ -n $mrows ]]; then
@@ -888,9 +1118,7 @@ cmd_find() {
 
   resolve_mount "$layout" "$vpath"
   parse_locator "$MATCH_LOCATOR"
-  local target_loc
-  target_loc=$(build_target_locator "$MATCH_REL")
-  run_lens_listing "$target_loc" "$DEPTH_OPT" "$vpath"
+  run_mount_listing "$DEPTH_OPT" "$vpath"
   local rows
   rows=$(enrich_rows "$LENS_OUT" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "$NAME_GLOB")
   if [[ $AS_JSON == true ]]; then
@@ -898,6 +1126,7 @@ cmd_find() {
   else
     print_rows_human "$rows" find
   fi
+  return 0
 }
 
 cmd_stat() {
@@ -937,9 +1166,7 @@ cmd_stat() {
 
   resolve_mount "$layout" "$vpath"
   parse_locator "$MATCH_LOCATOR"
-  local target_loc
-  target_loc=$(build_target_locator "$MATCH_REL")
-  run_lens_listing "$target_loc" "0" "$vpath"
+  run_mount_listing "0" "$vpath"
   local row
   row=$(enrich_rows "$LENS_OUT" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "")
   if [[ $AS_JSON == true ]]; then
@@ -959,20 +1186,28 @@ cmd_cat() {
 
   resolve_mount "$layout" "$vpath"
   parse_locator "$MATCH_LOCATOR"
-  local target_loc
-  target_loc=$(build_target_locator "$MATCH_REL")
-
-  # Stat via lens first so unknown path / directory / host-offline behave uniformly.
-  run_lens_listing "$target_loc" "0" "$vpath"
+  run_mount_listing "0" "$vpath"
   local row kind
   row=$(enrich_rows "$LENS_OUT" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "")
   kind=$(printf '%s' "$row" | run_jq -r '.kind // ""')
   [[ $kind != "directory" ]] || die 1 "$vpath: is a directory"
 
   local content_file
-  content_file=$(mktemp_tracked)
+  if [[ -n $CLOUD_TMP ]]; then
+    content_file="$CLOUD_TMP/content"
+  else
+    content_file=$(mktemp_tracked)
+  fi
 
   case "$LOC_SCHEME" in
+    drive)
+      run_google drive-get "fileId=$DRIVE_ID" "output=$content_file" >/dev/null ||
+        die 1 "could not download Drive file: $vpath"
+      [[ -f $content_file ]] || die 1 "Drive returned no file for $vpath"
+      ;;
+    gh)
+      gh_cat "$row" >"$content_file" || die 1 "could not read GitHub file: $vpath"
+      ;;
     dir)
       local base=$LOC_TARGET full
       if [[ -z $MATCH_REL ]]; then
@@ -1072,9 +1307,6 @@ resolve_writable_dest() {
   resolve_mount "$layout" "$vpath"
   parse_locator "$MATCH_LOCATOR"
 
-  if [[ $LOC_SCHEME == "drive" || $LOC_SCHEME == "gh" || $LOC_SCHEME == "app" || $LOC_SCHEME == "mail" || $LOC_SCHEME == "cal" ]]; then
-    die 3 "scheme ${LOC_SCHEME}: is not supported in this slice (see H6b)"
-  fi
   if [[ $LOC_SCHEME != "dir" ]]; then
     die 3 "mount $MATCH_MOUNT is read-only (${LOC_SCHEME}:)"
   fi
@@ -1104,15 +1336,12 @@ resolve_writable_dest() {
   WRITE_DEST_VPATH=$vpath
 }
 
-emit_written_row() {
-  local vpath=$1 dest_fs=$2 src_ref=$3 via=$4 digest=$5 owner=$6
+add_write_provenance() {
+  local row=$1 src_ref=$2 via=$3 digest=$4 owner=$5
   local producer
   producer=$(resolve_producer)
   local now
   now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  run_lens_listing "dir:$dest_fs" "0" "$vpath"
-  local row
-  row=$(enrich_rows "$LENS_OUT" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "")
   row=$(
     printf '%s' "$row" | \
     TROVE_PROD="$producer" \
@@ -1136,6 +1365,74 @@ emit_written_row() {
   printf '%s' "$row"
 }
 
+emit_written_row() {
+  local vpath=$1 dest_fs=$2 owner=$6 row
+  run_lens_listing "dir:$dest_fs" "0" "$vpath"
+  row=$(enrich_rows "$LENS_OUT" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "")
+  add_write_provenance "$row" "$3" "$4" "$5" "$owner"
+}
+
+put_drive() {
+  local src=$1 raw_dest=$2 vpath=$3 default_name=$4 owner=$5
+  local parent_rel="" name existing item file digest row upload_size
+  prepare_cloud
+  if [[ -z $MATCH_REL || $raw_dest == */ ]]; then
+    parent_rel=$MATCH_REL
+    name=$default_name
+    [[ -n $name ]] || die 1 "destination $vpath is a directory; specify a filename"
+    vpath="$vpath/$name"
+  else
+    [[ $MATCH_REL != */* ]] || parent_rel=${MATCH_REL%/*}
+    name=${MATCH_REL##*/}
+  fi
+  drive_resolve "$parent_rel"
+  [[ $DRIVE_MIME == "$DRIVE_FOLDER" ]] || die 1 "Drive destination parent is not a directory"
+  existing=$(drive_child "$DRIVE_ID" "$name") || die 1 "could not resolve Drive destination: $vpath"
+  if [[ -n $existing && -n $MATCH_REL && $raw_dest != */ ]] &&
+     [[ $(printf '%s' "$existing" | run_jq -r '.mimeType') == "$DRIVE_FOLDER" ]]; then
+    [[ -n $default_name ]] || die 1 "destination $vpath is a directory; specify a filename"
+    set_drive_item "$existing"
+    name=$default_name
+    vpath="$vpath/$name"
+    existing=$(drive_child "$DRIVE_ID" "$name") || die 1 "could not resolve Drive destination: $vpath"
+  fi
+  [[ -z $existing ]] || die 1 "Drive destination already exists: $vpath"
+  if [[ $DRY_RUN == true ]]; then
+    if [[ $AS_JSON == true ]]; then
+      TROVE_SRC="$src" TROVE_PATH="$vpath" TROVE_MP="$MATCH_MOUNT" \
+        run_jq -nc '{ok:true,dry_run:true,action:"put",src:$ENV.TROVE_SRC,path:$ENV.TROVE_PATH,mount:$ENV.TROVE_MP}'
+    else
+      printf 'dry-run: would put %s -> %s\n' "$src" "$vpath"
+    fi
+    return 0
+  fi
+
+  # Use an absolute path and the destination extension for stdin MIME detection.
+  file=$src
+  if [[ $src == "-" ]]; then
+    mkdir "$CLOUD_TMP/upload"
+    file="$CLOUD_TMP/upload/$name"
+    cat >"$file"
+  elif [[ $src != /* ]]; then
+    file="$PWD/$src"
+  fi
+  digest="sha256:$("$RUNNER" sha256sum "$file" | awk '{print $1}')"
+  upload_size=$("$RUNNER" wc -c <"$file")
+  item=$(run_google drive-upload "file=$file" "name=$name" "parent=$DRIVE_ID") ||
+    die 1 "could not upload to Drive: $vpath"
+  item=$(printf '%s' "$item" | TROVE_SIZE="$upload_size" run_jq -ce '
+    if (.id | type) != "string" or (.mimeType | type) != "string" then error("invalid upload result")
+    else .size //= ($ENV.TROVE_SIZE | tonumber) end') || die 1 "invalid Drive upload result for $vpath"
+
+  row=$(drive_row "$item" "$vpath")
+  row=$(enrich_rows "$row" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "")
+  if [[ $AS_JSON == true ]]; then
+    add_write_provenance "$row" "$src" "trove put" "$digest" "$owner"
+  else
+    printf 'put %s -> %s\n' "$src" "$vpath"
+  fi
+}
+
 cmd_put() {
   [[ $# -eq 2 ]] || die 1 "usage: trove put SRC PATH [--dry-run] [--json]"
   local src=$1 raw_dest=$2
@@ -1148,6 +1445,15 @@ cmd_put() {
     default_name=$(basename "$src")
   fi
 
+  local vpath
+  vpath=$(normalize_vpath "$raw_dest")
+  [[ $vpath != "/" ]] || die 3 "cannot write directly to virtual root '/'"
+  resolve_mount "$layout" "$vpath"
+  parse_locator "$MATCH_LOCATOR"
+  if [[ $LOC_SCHEME == drive ]]; then
+    put_drive "$src" "$raw_dest" "$vpath" "$default_name" "$owner"
+    return
+  fi
   resolve_writable_dest "$layout" "$raw_dest" "$default_name"
 
   if [[ $DRY_RUN == true ]]; then

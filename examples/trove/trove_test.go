@@ -161,7 +161,7 @@ func runTrove(t *testing.T, dir string, extraEnv map[string]string, args ...stri
 	}
 	// Scrub inherited ambient vault/trove state so tests stay hermetic.
 	for _, k := range []string{
-		"TROVE_LAYOUT_FILE", "TROVE_VAULT_ENTRY", "TROVE_OWNER", "TROVE_OUTPOST_BIN",
+		"TROVE_LAYOUT_FILE", "TROVE_VAULT_ENTRY", "TROVE_OWNER", "TROVE_OUTPOST_BIN", "TROVE_GH_BIN",
 		"BASHY_SECRETS_TOKEN", "BASHY_CLOUDBOX_URL", "BASHY_API_KEY", "BASHY_PRINCIPAL",
 		"BASHY_AGENT", "BASHY_AGENT_ID", "BASHY_AGENTIC",
 	} {
@@ -175,6 +175,13 @@ func runTrove(t *testing.T, dir string, extraEnv map[string]string, args ...stri
 			delete(envMap, k)
 		} else {
 			envMap[k] = v
+		}
+	}
+	// The secret client defaults to the production service when its URL is unset.
+	if envMap["BASHY_CLOUDBOX_URL"] == "" {
+		envMap["BASHY_CLOUDBOX_URL"] = "http://127.0.0.1:1"
+		if envMap["BASHY_SECRETS_TOKEN"] == "" {
+			envMap["BASHY_SECRETS_TOKEN"] = "trove-test-offline"
 		}
 	}
 	env := make([]string, 0, len(envMap))
@@ -361,11 +368,11 @@ func TestMountLifecycleAndVaultRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected /drive entry: %v", driveEntry)
 	}
 
-	// drive: and gh: return exit 3 (deferred to H6b).
+	// Cloud mounts require their named vault credentials.
 	for _, p := range []string{"/drive", "/repo"} {
 		_, errs, code = runTrove(t, dir, env, "ls", p, "--json")
-		if code != 3 {
-			t.Fatalf("ls %s: code=%d err=%q, want exit 3", p, code, errs)
+		if code != 1 || !strings.Contains(errs, "no such secret") {
+			t.Fatalf("ls %s without vault credential: code=%d err=%q", p, code, errs)
 		}
 	}
 

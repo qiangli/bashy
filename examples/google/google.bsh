@@ -1781,11 +1781,16 @@ def main(
         file_id = positionals[0] if positionals else shaped.pop("fileId", None)
         if not file_id:
             fail("USAGE", "drive-get requires <file-id>")
-        params = {
-            "fileId": str(file_id),
-            "fields": shaped.pop("fields", "id,name,mimeType,modifiedTime,size,webViewLink,parents"),
-        }
+        output = shaped.pop("output", None)
+        params = {"fileId": str(file_id)}
+        if output is None:
+            params["fields"] = shaped.pop("fields", "id,name,mimeType,modifiedTime,size,webViewLink,parents")
         params.update(shaped)
+        if output is not None:
+            path = os.path.abspath(os.path.expanduser(str(output)))
+            params["alt"] = "media"
+            run_gws(cred_info, ["drive", "files", "get", "--params", json.dumps(params),
+                                "--output", os.path.basename(path)], cwd=os.path.dirname(path))
         run_gws(cred_info, ["drive", "files", "get", "--params", json.dumps(params)])
 
     if verb == "drive-upload":

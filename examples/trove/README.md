@@ -41,9 +41,22 @@ This registers `bashy trove` and installs its embedded `trove` skill.
 - `trove put SRC PATH [--dry-run] [--json]`
 - `trove add URL PATH [--dry-run] [--json]`
 
-Supported mount schemes in this slice: `dir:`, `dir:@host` (outpost SFTP), and
-`git:`. `drive:` and `gh:` mounts can be added to the layout and return exit 3
-until H6b lands.
+Trove supports `dir:`, `dir:@host` (outpost SFTP), `git:`, `drive:`, and `gh:`.
+
+- **Drive.** Register the wrapper from `../google` and install `gws`.
+  Trove projects `google/<account>/credentials` from the vault for each
+  wrapper call. `drive:` and `drive:My Drive` mount the account root. A
+  locator such as `drive:My Drive/Project` mounts an existing folder. Paths use
+  exact names within each parent. Ambiguous names return an error.
+  `cat` downloads files that `gws` can save as raw media. Google Docs, Sheets,
+  and Slides require export, and `gws` renders JSON media as CLI output.
+  `put` creates a file in an existing folder, subject to the wrapper's upload
+  limits. It refuses an existing file at the destination. `--dry-run` resolves
+  the destination without uploading.
+- **GitHub.** `gh:OWNER/REPO` reads the default branch via `bashy gh api`
+  with `github/<account>/token` from the vault. For repositories with issues
+  enabled, `.issues/<number>` contains the issue title and body. The root name
+  `.issues` is reserved on these mounts. GitHub mounts are read-only.
 
 Exit codes: `0` done, `3` venue/availability refusal (peer host offline by
 name, read-only mount, deferred scheme), `1` error (not found, invalid input).
