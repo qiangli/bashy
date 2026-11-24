@@ -15,7 +15,11 @@ and serves visitors by tier:
 ```bash
 bashy --bashsharp website.bsh assess https://example.com
 bashy --bashsharp website.bsh enable ~/my-site-shaping --site https://example.com --title "My Name" --contact mailto:me@example.com
-# edit site.json (AI route, views) and fields/*.md (private facts + audience)
+# inspect or edit default visitor personalization wishes (fail-closed against declared properties)
+bashy --bashsharp website.bsh wishes ls ~/my-site-shaping --json
+bashy --bashsharp website.bsh wishes add ~/my-site-shaping --id even-larger --label "Even larger" --patch text_size=larger --json
+bashy --bashsharp website.bsh wishes rm ~/my-site-shaping --id even-larger --json
+# edit site.json (AI route, views, properties) and fields/*.md (private facts + audience)
 export SITE_AI_KEY=...            # any OpenAI-compatible route; or point base_url at `bashy llm`
 bashy --bashsharp website.bsh serve ~/my-site-shaping --name site
 bashy --bashsharp website.bsh register ~/my-site-shaping --name site   # owner shaping
@@ -43,6 +47,12 @@ Then link the engine face from the static site:
 - **Audience** per field uses the cloudbox rule grammar plus `signed_in`:
   circles AND (group OR email); a group never widens across circles; a field
   with no audience is owner-only.
+- **Personalization wishes**: `enable` writes a default `properties` schema
+  (`theme`, `text_size`, `density`, `contrast`, `motion`) and curated
+  `wishes` (`dark`, `light`, `larger-text`, `compact`, `high-contrast`,
+  `reduce-motion`) into `site.json`. Every visitor (including anonymous) can
+  apply them in `localStorage` with zero model calls; `website.bsh wishes
+  ls|add|rm` refuses any patch outside declared `properties`.
 - **Views** call one OpenAI-compatible route with only the caller's data
   (public page text + admitted fields). No anonymous model calls; a per-caller
   and a total daily cap protect the owner's free quota.

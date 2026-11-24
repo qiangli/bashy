@@ -6,6 +6,9 @@
 #
 #   website assess URL
 #   website enable DIR --site URL [--title T] [--contact URI]
+#   website wishes ls DIR [--json]
+#   website wishes add DIR --id ID --label LABEL --patch PROP=VAL [--patch ...] [--dry-run] [--json]
+#   website wishes rm DIR --id ID [--dry-run] [--json]
 #   website serve DIR [--name NAME] [--port PORT]
 #   website register DIR [--name NAME]
 #   website status [--name NAME]
@@ -42,9 +45,18 @@ site two ways: the static host, unchanged, and the engine face
 2. `website enable DIR --site URL` — writes the shaping layer into DIR (the
    private companion repo): the Go server, `site.json`, `fields/`,
    `public/shaping.{js,css}`, `shaped.json`, `contract.bsh`, `checks/`.
-   Edit `site.json` (title, contact, AI route, views) and `fields/*.md`
-   (one private fact each; `circles:` / `groups:` / `emails:` /
-   `signed_in:` front matter; no audience = owner only).
+   By default `site.json` includes declared personalization `properties`
+   and a common `wishes` list (dark, light, larger text, compact, high
+   contrast, reduce motion) that every visitor (including anonymous) can
+   apply locally in `localStorage` with zero model calls.
+   Edit `site.json` (title, contact, AI route, views, properties) and
+   `fields/*.md` (one private fact each; `circles:` / `groups:` /
+   `emails:` / `signed_in:` front matter; no audience = owner only).
+   Manage the wish list with:
+   - `website wishes ls DIR [--json]`
+   - `website wishes add DIR --id ID --label LABEL --patch PROP=VAL [--json]`
+     (refuses any entry outside `site.json`'s declared `properties`, fail-closed)
+   - `website wishes rm DIR --id ID [--json]`
 3. `website serve DIR --name NAME` — builds the server, registers the
    outpost app NAME (cloudbox public, trusted identity), reads its SSO
    secret, and runs it on loopback. Set the AI key first in the variable
@@ -74,12 +86,16 @@ set -e
 
 PROG=website
 DRY_RUN=0
+JSON_OUT=0
 NAME=site
 PORT=18930
 
 usage() {
     echo "Usage: $PROG assess URL" >&2
     echo "       $PROG enable DIR --site URL [--title T] [--contact URI]" >&2
+    echo "       $PROG wishes ls DIR [--json]" >&2
+    echo "       $PROG wishes add DIR [--id ID] --label LABEL --patch PROP=VAL [--patch ...] [--dry-run] [--json]" >&2
+    echo "       $PROG wishes rm DIR (--id ID | ID) [--dry-run] [--json]" >&2
     echo "       $PROG serve DIR [--name NAME] [--port PORT]" >&2
     echo "       $PROG register DIR [--name NAME]" >&2
     echo "       $PROG status [--name NAME]" >&2
@@ -88,7 +104,12 @@ usage() {
 }
 
 fail() {
-    echo "$PROG: $1" >&2
+    if [ "$JSON_OUT" = 1 ]; then
+        msg=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        printf '{"ok":false,"error":"%s"}\n' "$msg"
+    else
+        echo "$PROG: $1" >&2
+    fi
     exit "${2:-1}"
 }
 
@@ -193,7 +214,22 @@ cmd_enable() {
             echo '  "sign_in": "/cloud/signin",'
             echo '  "ai": {"base_url": "https://generativelanguage.googleapis.com/v1beta/openai", "model": "gemini-flash-lite-latest", "key_env": "SITE_AI_KEY", "daily_cap": 5, "daily_max": 50, "max_tokens": 900},'
             echo '  "views": [{"name": "recruiter-summary", "title": "Recruiter summary", "audience": {"signed_in": true},'
-            echo '    "prompt": "Write a one-page recruiter summary: a two-sentence headline, the strongest skills as bullets, the most relevant roles with years, and certifications. If contact details are among the facts, end with them; otherwise end with one line saying more details are shared on request."}]'
+            echo '    "prompt": "Write a one-page recruiter summary: a two-sentence headline, the strongest skills as bullets, the most relevant roles with years, and certifications. If contact details are among the facts, end with them; otherwise end with one line saying more details are shared on request."}],'
+            echo '  "properties": {'
+            echo '    "theme": {"values": ["default", "dark", "light"], "class_prefix": "ss-theme-", "description": "Color scheme"},'
+            echo '    "text_size": {"values": ["default", "large", "larger"], "class_prefix": "ss-text-", "description": "Text size"},'
+            echo '    "density": {"values": ["default", "compact"], "class_prefix": "ss-density-", "description": "Spacing density"},'
+            echo '    "contrast": {"values": ["default", "high"], "class_prefix": "ss-contrast-", "description": "Contrast level"},'
+            echo '    "motion": {"values": ["default", "reduce"], "class_prefix": "ss-motion-", "description": "Motion preference"}'
+            echo '  },'
+            echo '  "wishes": ['
+            echo '    {"id": "dark", "label": "Dark", "patch": {"theme": "dark"}},'
+            echo '    {"id": "light", "label": "Light", "patch": {"theme": "light"}},'
+            echo '    {"id": "larger-text", "label": "Larger text", "patch": {"text_size": "large"}},'
+            echo '    {"id": "compact", "label": "Compact", "patch": {"density": "compact"}},'
+            echo '    {"id": "high-contrast", "label": "High contrast", "patch": {"contrast": "high"}},'
+            echo '    {"id": "reduce-motion", "label": "Reduce motion", "patch": {"motion": "reduce"}}'
+            echo '  ]'
             echo '}'
         } >"$dir/site.json"
     fi
@@ -341,6 +377,206 @@ cmd_status() {
     echo "{\"name\":\"$NAME\",\"server_running\":\"$running\",\"sso_secret\":\"$secret\",\"log\":\"$(state_dir)/$NAME.log\"}"
 }
 
+cmd_wishes() {
+    sub="${1:-}"
+    [ -n "$sub" ] || usage
+    shift
+    case "$sub" in
+        ls | add | rm) ;;
+        *) usage ;;
+    esac
+    dir="" id="" label=""
+    set -- "$@"
+    # Collect patch args separately by rebuilding positional args after flags.
+    patch_count=0
+    dir_set=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --json) JSON_OUT=1; shift ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            --id)
+                [ $# -ge 2 ] || fail "--id requires a value" 2
+                id="$2"; shift 2 ;;
+            --label)
+                [ $# -ge 2 ] || fail "--label requires a value" 2
+                label="$2"; shift 2 ;;
+            --patch)
+                [ $# -ge 2 ] || fail "--patch requires a value" 2
+                patch_count=$((patch_count + 1))
+                eval "patch_${patch_count}=\$2"
+                shift 2 ;;
+            -*)
+                usage ;;
+            *)
+                if [ "$dir_set" = 0 ]; then
+                    dir="$1"
+                    dir_set=1
+                elif [ "$sub" = "rm" ] && [ -z "$id" ]; then
+                    id="$1"
+                else
+                    usage
+                fi
+                shift ;;
+        esac
+    done
+    [ -n "$dir" ] || usage
+    site_json="$dir/site.json"
+    [ -f "$site_json" ] || fail "no shaping layer in '$dir' (run: $PROG enable DIR --site URL)"
+    command -v python3 >/dev/null 2>&1 || fail "python3 is required for wishes"
+
+    set -- "$sub" "$site_json" "$JSON_OUT" "$DRY_RUN" "$id" "$label"
+    i=1
+    while [ "$i" -le "$patch_count" ]; do
+        eval "p=\$patch_${i}"
+        set -- "$@" "$p"
+        i=$((i + 1))
+    done
+
+    python3 - "$@" <<'PY'
+import json
+import os
+import re
+import sys
+
+sub, site_json, json_out_s, dry_run_s, wish_id, wish_label = sys.argv[1:7]
+patch_args = sys.argv[7:]
+json_out = json_out_s == "1"
+dry_run = dry_run_s == "1"
+
+def err(msg, code=1):
+    if json_out:
+        print(json.dumps({"ok": False, "error": msg}))
+    else:
+        print(f"website: {msg}", file=sys.stderr)
+    sys.exit(code)
+
+try:
+    with open(site_json, "r", encoding="utf-8") as f:
+        data = json.load(f)
+except Exception as exc:
+    err(f"cannot read {site_json}: {exc}")
+
+if not isinstance(data, dict):
+    err(f"invalid {site_json}: expected JSON object")
+
+props = data.get("properties")
+if props is None:
+    props = {}
+if not isinstance(props, dict):
+    err("invalid site.json: properties must be an object")
+
+wishes = data.get("wishes")
+if wishes is None:
+    wishes = []
+if not isinstance(wishes, list):
+    err("invalid site.json: wishes must be an array")
+
+def write_atomic(obj):
+    parent = os.path.dirname(os.path.abspath(site_json)) or "."
+    tmp = os.path.join(parent, f".site.json.tmp.{os.getpid()}")
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, indent=2)
+        f.write("\n")
+    os.replace(tmp, site_json)
+
+if sub == "ls":
+    if json_out:
+        print(json.dumps({"ok": True, "properties": props, "wishes": wishes}))
+    else:
+        if not wishes:
+            print("(no wishes)")
+        for w in wishes:
+            p = w.get("patch") or {}
+            patch_str = ", ".join(f"{k}={p[k]}" for k in sorted(p))
+            print(f"{w.get('id', '')}\t{w.get('label', '')}\t{patch_str}")
+        declared = ", ".join(sorted(props.keys())) if props else "none"
+        print(f"declared properties: {declared}")
+    sys.exit(0)
+
+if sub == "add":
+    if not patch_args:
+        err("at least one --patch PROPERTY=VALUE is required", 2)
+    patch = {}
+    for raw in patch_args:
+        s = raw.strip()
+        if s.startswith("{"):
+            try:
+                parsed = json.loads(s)
+            except Exception as exc:
+                err(f"invalid --patch JSON: {exc}", 2)
+            if not isinstance(parsed, dict) or not parsed:
+                err("invalid --patch JSON: expected non-empty object", 2)
+            for k, v in parsed.items():
+                if not isinstance(k, str) or not k.strip() or not isinstance(v, str) or v == "":
+                    err(f"invalid --patch entry for property {k!r}: values must be non-empty strings", 2)
+                patch[k.strip()] = v
+        elif "=" in raw:
+            k, v = raw.split("=", 1)
+            k = k.strip()
+            if not k or v == "":
+                err("invalid --patch: expected PROPERTY=VALUE", 2)
+            patch[k] = v
+        else:
+            err("invalid --patch: expected PROPERTY=VALUE or JSON object", 2)
+
+    if not wish_id:
+        wish_id = re.sub(r"[^a-z0-9]+", "-", wish_label.lower()).strip("-")
+    if not wish_label:
+        wish_label = wish_id
+    if not wish_id or not wish_label:
+        err("--id or --label is required", 2)
+
+    for existing in wishes:
+        if isinstance(existing, dict) and existing.get("id") == wish_id:
+            err(f"wish {wish_id!r} already exists")
+
+    declared_list = ", ".join(sorted(props.keys())) if props else "none"
+    for k in sorted(patch.keys()):
+        if k not in props:
+            err(f"refused: property {k!r} is not in declared properties (declared: {declared_list})")
+        spec = props[k]
+        allowed = spec.get("values") if isinstance(spec, dict) else None
+        if not isinstance(allowed, list) or len(allowed) == 0 or patch[k] not in allowed:
+            allowed_str = ", ".join(str(x) for x in allowed) if isinstance(allowed, list) and allowed else "none"
+            err(f"refused: value {patch[k]!r} is not allowed for property {k!r} (allowed: {allowed_str})")
+
+    entry = {"id": wish_id, "label": wish_label, "patch": patch}
+    new_wishes = list(wishes) + [entry]
+    if not dry_run:
+        data["wishes"] = new_wishes
+        write_atomic(data)
+
+    if json_out:
+        out = {"ok": True, "added": entry, "wishes": new_wishes}
+        if dry_run:
+            out["dry_run"] = True
+        print(json.dumps(out))
+    else:
+        verb_word = "would add" if dry_run else "added"
+        print(f"{verb_word}: {wish_id} ({wish_label})")
+    sys.exit(0)
+
+if sub == "rm":
+    if not wish_id:
+        err("--id is required", 2)
+    kept = [w for w in wishes if not (isinstance(w, dict) and w.get("id") == wish_id)]
+    if len(kept) == len(wishes):
+        err(f"wish {wish_id!r} not found")
+    if not dry_run:
+        data["wishes"] = kept
+        write_atomic(data)
+    if json_out:
+        out = {"ok": True, "removed": wish_id, "wishes": kept}
+        if dry_run:
+            out["dry_run"] = True
+        print(json.dumps(out))
+    else:
+        verb_word = "would remove" if dry_run else "removed"
+        print(f"{verb_word}: {wish_id}")
+    sys.exit(0)
+PY
+}
+
 while [ "${1:-}" = "--dry-run" ]; do
     DRY_RUN=1
     shift
@@ -351,6 +587,7 @@ shift
 case "$verb" in
     assess) cmd_assess "$@" ;;
     enable) cmd_enable "$@" ;;
+    wishes) cmd_wishes "$@" ;;
     serve) cmd_serve "$@" ;;
     register) cmd_register "$@" ;;
     status) cmd_status "$@" ;;

@@ -23,7 +23,22 @@ var fixture = fstest.MapFS{
 	"site.json": {Data: []byte(`{"site_url":"https://example.com","title":"Example Person","contact":"mailto:owner@example.com",
 	  "ai":{"base_url":"http://127.0.0.1:1","model":"m","key_env":"SITE_AI_KEY","daily_cap":5,"daily_max":50},
 	  "shape_url":"/matrix/h/host/app/apps/shape/site-shaping/",
-	  "views":[{"name":"recruiter-summary","title":"Recruiter summary","prompt":"Summarize.","audience":{"signed_in":true}}]}`)},
+	  "views":[{"name":"recruiter-summary","title":"Recruiter summary","prompt":"Summarize.","audience":{"signed_in":true}}],
+	  "properties":{
+	    "theme":{"values":["default","dark","light"],"class_prefix":"ss-theme-"},
+	    "text_size":{"values":["default","large","larger"],"class_prefix":"ss-text-"},
+	    "density":{"values":["default","compact"],"class_prefix":"ss-density-"},
+	    "contrast":{"values":["default","high"],"class_prefix":"ss-contrast-"},
+	    "motion":{"values":["default","reduce"],"class_prefix":"ss-motion-"}
+	  },
+	  "wishes":[
+	    {"id":"dark","label":"Dark","patch":{"theme":"dark"}},
+	    {"id":"light","label":"Light","patch":{"theme":"light"}},
+	    {"id":"larger-text","label":"Larger text","patch":{"text_size":"large"}},
+	    {"id":"compact","label":"Compact","patch":{"density":"compact"}},
+	    {"id":"high-contrast","label":"High contrast","patch":{"contrast":"high"}},
+	    {"id":"reduce-motion","label":"Reduce motion","patch":{"motion":"reduce"}}
+	  ]}`)},
 	"fields/contact.md":      {Data: []byte("---\nlabel: Contact\ncircles: recruiter\n---\nEmail: owner@example.com\n")},
 	"fields/certificates.md": {Data: []byte("---\nlabel: Certificates\ncircles: recruiter\n---\nExample Certified Professional\n")},
 	"fields/notes.md":        {Data: []byte("---\nlabel: Owner notes\n---\nowner only\n")},
@@ -310,5 +325,122 @@ func TestMeSaysWhetherVisitorsAreIdentified(t *testing.T) {
 	s.secret = ""
 	if _, me := do(t, s, "GET", "/_shaping/api/me", nobody); me["public"] != false {
 		t.Errorf("without a secret: public = %v", me["public"])
+	}
+}
+
+func TestAnonymousGetsWishesWithoutModelCall(t *testing.T) {
+	modelCalls := 0
+	model := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		modelCalls++
+		http.Error(w, "unexpected model call", http.StatusInternalServerError)
+	}))
+	defer model.Close()
+
+	// Even without an AI key, anonymous visitors get the curated wishes list.
+	s := newTestServer(t, "http://127.0.0.1:1", model.URL, "")
+	code, me := do(t, s, "GET", "/_shaping/api/me", nobody)
+	if code != http.StatusOK {
+		t.Fatalf("GET me: %d", code)
+	}
+	if views, _ := me["views"].([]any); len(views) != 0 {
+		t.Errorf("anonymous views = %v, want empty", views)
+	}
+	wishes, _ := me["wishes"].([]any)
+	if len(wishes) != 6 {
+		t.Fatalf("anonymous wishes len = %d, want 6 (%v)", len(wishes), wishes)
+	}
+	props, _ := me["properties"].(map[string]any)
+	for _, k := range []string{"theme", "text_size", "density", "contrast", "motion"} {
+		if _, ok := props[k]; !ok {
+			t.Errorf("properties missing %q", k)
+		}
+	}
+	if code, _ := do(t, s, "POST", "/_shaping/api/view?name=recruiter-summary", nobody); code != http.StatusForbidden {
+		t.Errorf("anonymous view status = %d, want 403", code)
+	}
+	if modelCalls != 0 {
+		t.Errorf("modelCalls = %d, want 0", modelCalls)
+	}
+}
+
+func TestWishesFailClosedOnUndeclaredPropertyOrValue(t *testing.T) {
+	props := map[string]Property{
+		"theme":       {Values: []string{"default", "dark", "light"}, ClassPrefix: "ss-theme-"},
+		"--ss-accent": {Values: []string{"#0f766e"}, CSSVar: "--ss-accent"},
+		"empty_prop":  {},
+	}
+	if err := validateWish(Wish{ID: "dark", Label: "Dark", Patch: map[string]string{"theme": "dark"}}, props); err != nil {
+		t.Errorf("valid class wish refused: %v", err)
+	}
+	if err := validateWish(Wish{ID: "teal", Label: "Teal", Patch: map[string]string{"--ss-accent": "#0f766e"}}, props); err != nil {
+		t.Errorf("valid css var wish refused: %v", err)
+	}
+	if err := validateWish(Wish{ID: "bad-prop", Label: "Bad", Patch: map[string]string{"font_family": "Comic"}}, props); err == nil || !strings.Contains(err.Error(), "font_family") {
+		t.Errorf("undeclared property error = %v, want error naming font_family", err)
+	}
+	if err := validateWish(Wish{ID: "bad-val", Label: "BadVal", Patch: map[string]string{"theme": "neon"}}, props); err == nil || !strings.Contains(err.Error(), "theme") {
+		t.Errorf("disallowed value error = %v, want error naming theme", err)
+	}
+	if err := validateWish(Wish{ID: "empty-vals", Label: "Empty", Patch: map[string]string{"empty_prop": "x"}}, props); err == nil || !strings.Contains(err.Error(), "empty_prop") {
+		t.Errorf("empty allowed values error = %v, want error naming empty_prop", err)
+	}
+
+	// Server /_shaping/api/me also drops invalid wishes fail-closed if site.json was hand-edited.
+	dirty := fstest.MapFS{
+		"site.json": {Data: []byte(`{"site_url":"https://example.com","title":"T",
+		  "properties":{"theme":{"values":["default","dark"]}},
+		  "wishes":[
+		    {"id":"dark","label":"Dark","patch":{"theme":"dark"}},
+		    {"id":"evil","label":"Evil","patch":{"custom_css":"red"}},
+		    {"id":"neon","label":"Neon","patch":{"theme":"neon"}}
+		  ]}`)},
+		"public/shaping.js": {Data: []byte("//")},
+	}
+	s, err := newServerFrom(dirty, func(k string) string {
+		if k == "SITE_SSO_SECRET" {
+			return testSecret
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, me := do(t, s, "GET", "/_shaping/api/me", nobody)
+	wishes, _ := me["wishes"].([]any)
+	if len(wishes) != 1 || wishes[0].(map[string]any)["id"] != "dark" {
+		t.Errorf("allowed wishes = %v, want only [dark]", wishes)
+	}
+}
+
+func TestEmbeddedTemplateHasValidDefaultWishesAndAssets(t *testing.T) {
+	s, err := newServer(func(k string) string {
+		if k == "SITE_SSO_SECRET" {
+			return testSecret
+		}
+		return ""
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(s.cfg.Wishes) != 6 {
+		t.Fatalf("embedded template wishes = %d, want 6", len(s.cfg.Wishes))
+	}
+	if got := s.allowedWishes(); len(got) != 6 {
+		t.Fatalf("embedded template allowedWishes = %d, want 6", len(got))
+	}
+	for _, tc := range []struct {
+		path, want string
+	}{
+		{"/_shaping/shaping.js", "localStorage"},
+		{"/_shaping/shaping.js", "renderWishes"},
+		{"/_shaping/shaping.css", "ss-theme-dark"},
+		{"/_shaping/shaping.css", "ss-motion-reduce"},
+	} {
+		req := httptest.NewRequest("GET", tc.path, nil)
+		rec := httptest.NewRecorder()
+		s.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), tc.want) {
+			t.Errorf("%s: status=%d missing %q", tc.path, rec.Code, tc.want)
+		}
 	}
 }

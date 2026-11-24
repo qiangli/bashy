@@ -14,6 +14,7 @@ package website
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -245,7 +246,20 @@ func TestEnableWritesLayerAndKeepsExistingFiles(t *testing.T) {
 	}
 	siteJSON, _ := os.ReadFile(filepath.Join(f.site, "site.json"))
 	wantAll(t, "site.json", string(siteJSON),
-		`"site_url": "https://example.com"`, `"title": "My Name"`, `"contact": "mailto:me@example.com"`)
+		`"site_url": "https://example.com"`, `"title": "My Name"`, `"contact": "mailto:me@example.com"`,
+		`"properties"`, `"wishes"`, `"dark"`, `"light"`, `"larger-text"`, `"compact"`, `"high-contrast"`, `"reduce-motion"`)
+	var cfg struct {
+		Properties map[string]any `json:"properties"`
+		Wishes     []struct {
+			ID string `json:"id"`
+		} `json:"wishes"`
+	}
+	if err := json.Unmarshal(siteJSON, &cfg); err != nil {
+		t.Fatalf("site.json invalid JSON: %v\n%s", err, siteJSON)
+	}
+	if len(cfg.Properties) != 5 || len(cfg.Wishes) != 6 {
+		t.Fatalf("enable wrote %d properties and %d wishes, want 5 and 6", len(cfg.Properties), len(cfg.Wishes))
+	}
 
 	// A second enable over a dir with its own main.go, site.json and fields/
 	// keeps them untouched.
@@ -405,5 +419,113 @@ func TestServeBuildsViaFakeGoAndStops(t *testing.T) {
 	out, code = f.website(nil, "stop", "--name", "site")
 	if code != 0 || !strings.Contains(out, "stopped: site") {
 		t.Errorf("stop: exit %d\n%s", code, out)
+	}
+}
+
+func TestWishesListAddRemoveJSONAndRefusals(t *testing.T) {
+	f := newFixture(t)
+	if out, code := f.website(nil, "enable", f.site, "--site", "https://example.com"); code != 0 {
+		t.Fatalf("enable: exit %d\n%s", code, out)
+	}
+
+	// ls --json returns the default wishes and declared properties.
+	out, code := f.website(nil, "wishes", "ls", f.site, "--json")
+	if code != 0 {
+		t.Fatalf("wishes ls --json: exit %d\n%s", code, out)
+	}
+	var lsResp struct {
+		OK         bool           `json:"ok"`
+		Error      string         `json:"error"`
+		Properties map[string]any `json:"properties"`
+		Wishes     []struct {
+			ID    string            `json:"id"`
+			Label string            `json:"label"`
+			Patch map[string]string `json:"patch"`
+		} `json:"wishes"`
+	}
+	if err := json.Unmarshal([]byte(out), &lsResp); err != nil || !lsResp.OK || len(lsResp.Wishes) != 6 {
+		t.Fatalf("wishes ls --json bad response (%v):\n%s", err, out)
+	}
+
+	// CLI parity without --json.
+	out, code = f.website(nil, "wishes", "ls", f.site)
+	if code != 0 {
+		t.Fatalf("wishes ls: exit %d\n%s", code, out)
+	}
+	wantAll(t, "wishes ls", out, "dark", "larger-text", "reduce-motion")
+
+	// add --json with a valid declared property and value succeeds and persists.
+	out, code = f.website(nil, "wishes", "add", f.site, "--id", "even-larger", "--label", "Even larger", "--patch", "text_size=larger", "--json")
+	if code != 0 {
+		t.Fatalf("wishes add --json: exit %d\n%s", code, out)
+	}
+	var addResp struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+		Added struct {
+			ID string `json:"id"`
+		} `json:"added"`
+		Wishes []struct {
+			ID string `json:"id"`
+		} `json:"wishes"`
+	}
+	if err := json.Unmarshal([]byte(out), &addResp); err != nil || !addResp.OK || addResp.Added.ID != "even-larger" || len(addResp.Wishes) != 7 {
+		t.Fatalf("wishes add --json bad response (%v):\n%s", err, out)
+	}
+
+	// --dry-run validates without mutating site.json.
+	out, code = f.website(nil, "wishes", "add", f.site, "--id", "dry", "--label", "Dry", "--patch", `{"theme":"dark"}`, "--dry-run", "--json")
+	if code != 0 || !strings.Contains(out, `"dry_run": true`) && !strings.Contains(out, `"dry_run":true`) {
+		t.Fatalf("wishes add --dry-run: exit %d\n%s", code, out)
+	}
+
+	// Entry outside declared properties is refused fail-closed, naming the property.
+	before, _ := os.ReadFile(filepath.Join(f.site, "site.json"))
+	out, code = f.website(nil, "wishes", "add", f.site, "--id", "bad-prop", "--label", "Bad prop", "--patch", "font_family=Comic", "--json")
+	if code == 0 {
+		t.Fatalf("undeclared property accepted:\n%s", out)
+	}
+	var errResp struct {
+		OK    bool   `json:"ok"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(out), &errResp); err != nil || errResp.OK || !strings.Contains(errResp.Error, "font_family") {
+		t.Fatalf("undeclared property refusal (%v) must be JSON ok=false naming font_family:\n%s", err, out)
+	}
+
+	// Disallowed value for a declared property is also refused, naming the property.
+	out, code = f.website(nil, "wishes", "add", f.site, "--id", "bad-val", "--label", "Bad val", "--patch", "theme=neon", "--json")
+	if code == 0 {
+		t.Fatalf("disallowed value accepted:\n%s", out)
+	}
+	if err := json.Unmarshal([]byte(out), &errResp); err != nil || errResp.OK || !strings.Contains(errResp.Error, "theme") {
+		t.Fatalf("disallowed value refusal (%v) must be JSON ok=false naming theme:\n%s", err, out)
+	}
+
+	// Non-JSON refusal also names the property.
+	out, code = f.website(nil, "wishes", "add", f.site, "--id", "bad-plain", "--label", "Bad plain", "--patch", "margin_left=99px")
+	if code == 0 || !strings.Contains(out, "margin_left") {
+		t.Fatalf("plain refusal exit=%d want margin_left:\n%s", code, out)
+	}
+	after, _ := os.ReadFile(filepath.Join(f.site, "site.json"))
+	if string(before) != string(after) {
+		t.Errorf("refused/dry-run commands modified site.json")
+	}
+
+	// rm --json removes the entry; removing an absent id fails cleanly.
+	out, code = f.website(nil, "wishes", "rm", f.site, "--id", "even-larger", "--json")
+	if code != 0 {
+		t.Fatalf("wishes rm --json: exit %d\n%s", code, out)
+	}
+	var rmResp struct {
+		OK      bool   `json:"ok"`
+		Removed string `json:"removed"`
+		Wishes  []any  `json:"wishes"`
+	}
+	if err := json.Unmarshal([]byte(out), &rmResp); err != nil || !rmResp.OK || rmResp.Removed != "even-larger" || len(rmResp.Wishes) != 6 {
+		t.Fatalf("wishes rm --json bad response (%v):\n%s", err, out)
+	}
+	if out, code = f.website(nil, "wishes", "rm", f.site, "missing-id", "--json"); code == 0 || !strings.Contains(out, "missing-id") {
+		t.Fatalf("missing rm exit=%d want missing-id:\n%s", code, out)
 	}
 }

@@ -20,5 +20,40 @@
         "signed_in": true
       }
     }
+  ],
+  "properties": {
+    "theme": {
+      "values": ["default", "dark", "light"],
+      "class_prefix": "ss-theme-",
+      "description": "Color scheme"
+    },
+    "text_size": {
+      "values": ["default", "large", "larger"],
+      "class_prefix": "ss-text-",
+      "description": "Text size"
+    },
+    "density": {
+      "values": ["default", "compact"],
+      "class_prefix": "ss-density-",
+      "description": "Spacing density"
+    },
+    "contrast": {
+      "values": ["default", "high"],
+      "class_prefix": "ss-contrast-",
+      "description": "Contrast level"
+    },
+    "motion": {
+      "values": ["default", "reduce"],
+      "class_prefix": "ss-motion-",
+      "description": "Motion preference"
+    }
+  },
+  "wishes": [
+    {"id": "dark", "label": "Dark", "patch": {"theme": "dark"}},
+    {"id": "light", "label": "Light", "patch": {"theme": "light"}},
+    {"id": "larger-text", "label": "Larger text", "patch": {"text_size": "large"}},
+    {"id": "compact", "label": "Compact", "patch": {"density": "compact"}},
+    {"id": "high-contrast", "label": "High contrast", "patch": {"contrast": "high"}},
+    {"id": "reduce-motion", "label": "Reduce motion", "patch": {"motion": "reduce"}}
   ]
 }

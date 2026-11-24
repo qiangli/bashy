@@ -114,6 +114,114 @@
     });
   }
 
+  // Personalization wishes map strictly to declared properties and are kept
+  // locally in localStorage — no model call, no server state.
+  var storageKey = "ss-prefs:" + new URL(base, location.origin).pathname;
+
+  function isAllowedPatch(prop, val, props) {
+    if (!props || !Object.prototype.hasOwnProperty.call(props, prop)) return false;
+    var spec = props[prop];
+    return !!(spec && Array.isArray(spec.values) && spec.values.indexOf(val) !== -1);
+  }
+
+  function loadPrefs(props) {
+    var clean = {};
+    try {
+      var raw = localStorage.getItem(storageKey);
+      if (!raw) return clean;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return clean;
+      Object.keys(parsed).forEach(function (k) {
+        if (isAllowedPatch(k, parsed[k], props)) clean[k] = parsed[k];
+      });
+    } catch (_) {}
+    return clean;
+  }
+
+  function savePrefs(prefs) {
+    try {
+      if (Object.keys(prefs).length === 0) localStorage.removeItem(storageKey);
+      else localStorage.setItem(storageKey, JSON.stringify(prefs));
+    } catch (_) {}
+  }
+
+  function applyPrefs(prefs, props) {
+    var rootEl = document.documentElement;
+    Object.keys(props || {}).forEach(function (prop) {
+      var spec = props[prop] || {};
+      var val = Object.prototype.hasOwnProperty.call(prefs, prop) ? prefs[prop] : null;
+      if (spec.css_var || prop.indexOf("--") === 0) {
+        var varName = spec.css_var || prop;
+        if (val !== null) rootEl.style.setProperty(varName, val);
+        else rootEl.style.removeProperty(varName);
+      }
+      if (spec.class_prefix || (!spec.css_var && prop.indexOf("--") !== 0)) {
+        var prefix = spec.class_prefix || ("ss-" + prop.replace(/_/g, "-") + "-");
+        (spec.values || []).forEach(function (v) { rootEl.classList.remove(prefix + v); });
+        if (val !== null) rootEl.classList.add(prefix + val);
+      }
+    });
+  }
+
+  function wishActive(wish, prefs) {
+    var keys = Object.keys(wish.patch || {});
+    if (!keys.length) return false;
+    return keys.every(function (k) { return prefs[k] === wish.patch[k]; });
+  }
+
+  function renderWishes(panel, info) {
+    var props = info.properties || {};
+    var wishes = (info.wishes || []).filter(function (w) {
+      var keys = Object.keys((w && w.patch) || {});
+      return keys.length > 0 && keys.every(function (k) { return isAllowedPatch(k, w.patch[k], props); });
+    });
+    if (!wishes.length) return;
+
+    var prefs = loadPrefs(props);
+    applyPrefs(prefs, props);
+
+    var box = el("div", { class: "ss-wishes" });
+    box.appendChild(el("p", { class: "ss-wishes-label" }, "Personalize"));
+    var list = el("div", { class: "ss-wish-list" });
+    var buttons = [];
+
+    function syncButtons() {
+      buttons.forEach(function (entry) {
+        var active = wishActive(entry.wish, prefs);
+        entry.btn.classList.toggle("is-active", active);
+        entry.btn.setAttribute("aria-pressed", String(active));
+      });
+    }
+
+    wishes.forEach(function (w) {
+      var wb = el("button", { type: "button", class: "ss-wish", "data-wish-id": w.id, "aria-pressed": "false" }, w.label);
+      wb.addEventListener("click", function () {
+        var active = wishActive(w, prefs);
+        Object.keys(w.patch).forEach(function (k) {
+          if (active) delete prefs[k];
+          else if (isAllowedPatch(k, w.patch[k], props)) prefs[k] = w.patch[k];
+        });
+        savePrefs(prefs);
+        applyPrefs(prefs, props);
+        syncButtons();
+      });
+      buttons.push({ wish: w, btn: wb });
+      list.appendChild(wb);
+    });
+
+    var reset = el("button", { type: "button", class: "ss-wish ss-wish-reset" }, "Reset");
+    reset.addEventListener("click", function () {
+      prefs = {};
+      savePrefs(prefs);
+      applyPrefs(prefs, props);
+      syncButtons();
+    });
+    list.appendChild(reset);
+    syncButtons();
+    box.appendChild(list);
+    panel.appendChild(box);
+  }
+
   var tierText = {
     anonymous: "You are browsing anonymously.",
     "signed-in": "Signed in.",
@@ -140,6 +248,8 @@
       shape.appendChild(document.createTextNode(" Shape this site"));
       panel.appendChild(shape);
     }
+
+    renderWishes(panel, info);
 
     if (info.tier !== "anonymous") {
       var out_p = el("p", { class: "ss-signout" });

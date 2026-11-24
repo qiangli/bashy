@@ -78,3 +78,87 @@
   text-decoration: none;
   font-weight: 600;
 }
+#ss-panel-root .ss-wishes {
+  margin: 12px 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--ss-line);
+  border-bottom: 1px solid var(--ss-line);
+}
+#ss-panel-root .ss-wishes-label {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ss-muted);
+}
+#ss-panel-root .ss-wish-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+#ss-panel-root .ss-wish {
+  padding: 4px 10px;
+  border: 1px solid var(--ss-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ss-fg);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+#ss-panel-root .ss-wish.is-active {
+  border-color: var(--ss-accent);
+  background: var(--ss-accent);
+  color: #fff;
+}
+#ss-panel-root .ss-wish-reset {
+  color: var(--ss-muted);
+}
+
+html.ss-theme-dark { color-scheme: dark; background-color: #141418; color: #ececf1; }
+html.ss-theme-dark body { background-color: #141418; color: #ececf1; }
+html.ss-theme-dark #ss-panel-root {
+  --ss-bg: #1c1c22;
+  --ss-fg: #ececf1;
+  --ss-muted: #a3a3b2;
+  --ss-accent: #8b85ff;
+  --ss-line: #33333d;
+}
+html.ss-theme-light { color-scheme: light; background-color: #ffffff; color: #1d1d1f; }
+html.ss-theme-light body { background-color: #ffffff; color: #1d1d1f; }
+html.ss-theme-light #ss-panel-root {
+  --ss-bg: #ffffff;
+  --ss-fg: #1d1d1f;
+  --ss-muted: #5b5b66;
+  --ss-accent: #4f46e5;
+  --ss-line: #e3e3ea;
+}
+html.ss-text-large { font-size: 118.75%; }
+html.ss-text-large #ss-panel-root { font-size: 16px; }
+html.ss-text-larger { font-size: 137.5%; }
+html.ss-text-larger #ss-panel-root { font-size: 18px; }
+html.ss-density-compact body { line-height: 1.35; }
+html.ss-density-compact #ss-panel-root { font-size: 13px; line-height: 1.35; }
+html.ss-density-compact #ss-panel-root .ss-panel { padding: 10px 12px; }
+html.ss-contrast-high { filter: contrast(1.2); }
+html.ss-contrast-high #ss-panel-root {
+  --ss-bg: #ffffff;
+  --ss-fg: #000000;
+  --ss-muted: #111111;
+  --ss-accent: #0000cc;
+  --ss-line: #000000;
+}
+html.ss-theme-dark.ss-contrast-high #ss-panel-root {
+  --ss-bg: #000000;
+  --ss-fg: #ffffff;
+  --ss-muted: #f0f0f0;
+  --ss-accent: #7dd3fc;
+  --ss-line: #ffffff;
+}
+html.ss-motion-reduce *, html.ss-motion-reduce *::before, html.ss-motion-reduce *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}

@@ -15,16 +15,37 @@ import (
 	"embed"
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io/fs"
 	"log"
 	"net/http"
 	"os"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 )
 
 //go:embed site.json public fields
 var assets embed.FS
+
+// Property declares one visitor-configurable visual or accessibility setting.
+// Only values in Values are accepted; entries outside declared Properties are
+// refused fail-closed.
+type Property struct {
+	Values      []string `json:"values,omitempty"`
+	CSSVar      string   `json:"css_var,omitempty"`
+	ClassPrefix string   `json:"class_prefix,omitempty"`
+	Description string   `json:"description,omitempty"`
+}
+
+// Wish is one curated, model-free personalization preset offered to all
+// visitors (including anonymous) in the panel and applied in localStorage.
+type Wish struct {
+	ID    string            `json:"id"`
+	Label string            `json:"label"`
+	Patch map[string]string `json:"patch"`
+}
 
 // Config is site.json, shaped source like the rest of this app.
 type Config struct {
@@ -40,9 +61,11 @@ type Config struct {
 	// ShapeURL is where the owner shapes this layer: the console's Shape page
 	// for the registered shaped app, relative to the mount's origin (e.g.
 	// /matrix/h/<host>/app/apps/shape/<app>/). Offered to the owner only.
-	ShapeURL string  `json:"shape_url,omitempty"`
-	AI       AIRoute `json:"ai"`
-	Views    []View  `json:"views"`
+	ShapeURL   string              `json:"shape_url,omitempty"`
+	AI         AIRoute             `json:"ai"`
+	Views      []View              `json:"views"`
+	Properties map[string]Property `json:"properties,omitempty"`
+	Wishes     []Wish              `json:"wishes,omitempty"`
 }
 
 type server struct {
@@ -173,6 +196,46 @@ func (s *server) views() []View {
 	return s.cfg.Views
 }
 
+// validateWish verifies that every entry in w.Patch targets a declared
+// property and one of its declared values, failing closed otherwise.
+func validateWish(w Wish, props map[string]Property) error {
+	if strings.TrimSpace(w.ID) == "" {
+		return fmt.Errorf("wish id is required")
+	}
+	if strings.TrimSpace(w.Label) == "" {
+		return fmt.Errorf("wish %q label is required", w.ID)
+	}
+	if len(w.Patch) == 0 {
+		return fmt.Errorf("wish %q patch must not be empty", w.ID)
+	}
+	keys := make([]string, 0, len(w.Patch))
+	for k := range w.Patch {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, prop := range keys {
+		val := w.Patch[prop]
+		spec, ok := props[prop]
+		if !ok {
+			return fmt.Errorf("property %q is not in declared properties", prop)
+		}
+		if len(spec.Values) == 0 || !slices.Contains(spec.Values, val) {
+			return fmt.Errorf("value %q is not allowed for property %q", val, prop)
+		}
+	}
+	return nil
+}
+
+func (s *server) allowedWishes() []Wish {
+	out := make([]Wish, 0, len(s.cfg.Wishes))
+	for _, w := range s.cfg.Wishes {
+		if validateWish(w, s.cfg.Properties) == nil {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
 type viewRef struct {
 	Name  string `json:"name"`
 	Title string `json:"title"`
@@ -184,15 +247,21 @@ func (s *server) me(w http.ResponseWriter, r *http.Request) {
 	for _, v := range s.allowedViews(c) {
 		refs = append(refs, viewRef{v.Name, v.Title})
 	}
+	props := s.cfg.Properties
+	if props == nil {
+		props = map[string]Property{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"tier":    c.Tier,
-		"title":   s.cfg.Title,
-		"contact": s.cfg.Contact,
-		"sign_in": s.cfg.SignIn,
-		"fields":  len(s.allowedFields(c)),
-		"more":    c.Tier != TierOwner && len(s.allowedFields(c)) < len(s.fields),
-		"views":   refs,
-		"shape":   ownerOnly(c, s.cfg.ShapeURL),
+		"tier":       c.Tier,
+		"title":      s.cfg.Title,
+		"contact":    s.cfg.Contact,
+		"sign_in":    s.cfg.SignIn,
+		"fields":     len(s.allowedFields(c)),
+		"more":       c.Tier != TierOwner && len(s.allowedFields(c)) < len(s.fields),
+		"views":      refs,
+		"properties": props,
+		"wishes":     s.allowedWishes(),
+		"shape":      ownerOnly(c, s.cfg.ShapeURL),
 		// Without the outpost secret nobody can be identified: this is the
 		// owner's shaping copy inside the console, not the visitors' engine.
 		"public": s.secret != "",
