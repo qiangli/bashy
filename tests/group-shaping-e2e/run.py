@@ -11,7 +11,7 @@ import uuid
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
-PASS = "PASS group shaping phase 1"
+PASS = "PASS scoped group shaping"
 
 
 def main():

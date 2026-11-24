@@ -1,13 +1,18 @@
 #!/bin/sh
-# Implements only the embedded Codex tool's login probe and the one test wish.
+# The Codex recipe probes login status, then runs one of two fixed edits.
 set -eu
 case " $* " in
   *" login status "*) echo "Logged in using ChatGPT" >&2 ;;
   *" exec "*"Publish the support greeting"*)
-    test -f site.json
-    sed -i 's/Original support greeting/Approved support greeting/' site.json
+    sed -i -e 's/Original support greeting/Approved support greeting/' \
+           -e '/"site_url":/s|",$|/published",|' site.json
     grep -q 'Approved support greeting' site.json
     echo "edit" >> "$HOME/stub-events"
-    echo "Updated the support greeting." ;;
+    echo "Published the support greeting." ;;
+  *" exec "*"Draft the alternate greeting"*)
+    sed -i 's/Original support greeting/Alternate support greeting/' site.json
+    grep -q 'Alternate support greeting' site.json
+    echo "alternate" >> "$HOME/stub-events"
+    echo "Drafted the alternate greeting." ;;
   *) echo "unexpected stub invocation: $*" >&2; exit 2 ;;
 esac

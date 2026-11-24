@@ -9,7 +9,7 @@ import subprocess
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
@@ -50,8 +50,9 @@ class Fixture(BaseHTTPRequestHandler):
                 {"path": "/", "title": "Support desk", "revision": "fixture-v1", "sections": []})
         elif self.path == "/index.md":
             mime, body = "text/markdown", "# Support desk\n"
-        elif self.path == "/":
-            mime, body = "text/html", "<html><body>Support desk</body></html>"
+        elif self.path in ("/", "/published/"):
+            greeting = "Original support greeting" if self.path == "/" else "Approved support greeting"
+            mime, body = "text/html", f"<html><body><h1>{greeting}</h1></body></html>"
         else:
             self.send_error(404)
             return
@@ -123,10 +124,10 @@ def success(user, tool, args):
     return result["structuredContent"]
 
 
-def shape(verb, args):
-    result = success(OWNER, "shape_" + verb, args)
-    check((result["principal"], result["app"], result["verb"]) == (OWNER, APP, verb),
-          f"{verb} attributed to owner on the mounted app")
+def shape(user, verb, args):
+    result = success(user, "shape_" + verb, args)
+    check((result["principal"], result["app"], result["verb"]) == (user, APP, verb),
+          f"{verb} attributed to {user} on the mounted app")
     return result["result"]
 
 
@@ -136,30 +137,62 @@ def member_refused(member, tool, result):
           f"{member} refused {tool} as a member")
 
 
-def active():
-    status = json.loads(subprocess.check_output(["bashy", "shape", "status", APP,
-                                                 "--user", OWNER, "--json"]))
-    return status["active"]
+def owner_cli(*args):
+    cmd = ["bashy", "shape", *args, "--json"]
+    print("+", *cmd, flush=True)
+    raw = subprocess.check_output(cmd, env=dict(os.environ, BASHY_PRINCIPAL=OWNER),
+                                  text=True, timeout=30)
+    print(raw, flush=True)
+    return json.loads(raw)
+
+
+def get_page(user, path):
+    with urlopen(Request(FRONT + MOUNT + path, headers=headers(user)), timeout=5) as response:
+        return response.read().decode()
+
+
+def wait_version(revision):
+    deadline = time.monotonic() + 60
+    last = None
+    while time.monotonic() < deadline:
+        try:
+            last = json.loads(get_page(C, "/_shaping/api/version"))["version"]
+            if last == revision:
+                return
+        except HTTPError as exc:
+            if exc.code not in (502, 503, 504):
+                raise
+            last = str(exc)
+        except (URLError, ConnectionError) as exc:
+            last = str(exc)
+        time.sleep(.5)
+    raise AssertionError(f"served version {last!r}, expected {revision}")
 
 
 def scenario():
     wish = {"request": "Publish the support greeting", "agent": BINDING}
-    with urlopen(Request(FRONT + MOUNT + "/_shaping/api/me", headers=headers(OWNER)),
-                 timeout=10) as response:
-        panel = json.load(response)
-    check(panel["tier"] == "owner" and panel["title"] == "Original support greeting",
-          "served website panel recognizes the owner and shows the base title")
-    for member in (A, C):
+    for scope, circle in (("edit", "company"), ("shape", "contractor")):
+        policy = owner_cli("scope", "set", "--app", APP, scope, "--circle", circle)
+        check(policy["scopes"][scope]["circles"] == [circle], f"owner set {scope} for {circle}")
+    panel = json.loads(get_page(OWNER, "/_shaping/api/me"))
+    before = json.loads(get_page(C, "/_shaping/api/version"))["version"]
+    check(panel["tier"] == "owner" and panel["title"] == "Original support greeting"
+          and before and before == panel["version"], "panel shows the owner's initial served version")
+    check("<h1>Original support greeting</h1>" in get_page(C, "/"), "mounted page shows the base greeting")
+    for member, scope in ((A, "edit"), (C, "shape")):
+        panel = json.loads(get_page(member, "/_shaping/api/me"))
+        check(panel["tier"] == "member" and panel["scope"] == scope, f"panel grants {member} {scope}")
         page = success(member, "read_page", {"path_or_url": "/", "format": "md"})
         check(page["content"].strip() == "# Support desk" and page["revision"] == "fixture-v1",
               f"{member} read the served page through MCP")
-        result = call(member, "shape_wish", wish)
-        member_refused(member, "shape_wish", result)
     for user in (NON_SUPPORT, ACCOUNT, None):
         check(call(user, "shape_wish", wish).get("challenge"),
               f"{user or 'anonymous'} refused by the mounted app grant gate")
-    candidate = shape("wish", wish)
+    candidate = shape(C, "wish", wish)
     cid, rev = candidate["id"], candidate["rev"]
+    base = candidate["base_rev"]
+    check(candidate["principal"] == C and candidate["activation_principal"] == OWNER,
+          "C created a candidate for the owner's line")
     check(cid and rev and candidate["base_rev"] != rev and candidate["status"] == "ready",
           "wish produced a new ready revision")
     check((HOME / "stub-events").read_text().splitlines() == ["edit"],
@@ -168,7 +201,7 @@ def scenario():
     print(diff, flush=True)
     check('-  "title": "Original support greeting"' in diff and
           '+  "title": "Approved support greeting"' in diff, "candidate contains the fixed edit")
-    verified = shape("verify", {"id": cid})
+    verified = shape(C, "verify", {"id": cid})
     check(verified["id"] == cid and verified["rev"] == rev and verified["status"] == "verified"
           and verified["verdict"]["pass"], "trusted verifier passed the candidate revision")
     evidence = json.loads(Path(verified["verdict"]["evidence"]).read_text())
@@ -176,18 +209,50 @@ def scenario():
     check(evidence["binding"]["candidate"] == rev and evidence["binding"]["principal"] == OWNER and
           any(c["name"] == "checks/build.bsh" and c["status"] == "pass" for c in evidence["checks"]),
           "sealed verifier evidence records the website check on the owner's revision")
-    for member in (A, C):
-        for tool in ("shape_verify", "shape_preview", "shape_approve"):
-            member_refused(member, tool, call(member, tool, {"id": cid}))
-    preview = shape("preview", {"id": cid})
+    for tool in ("shape_verify", "shape_preview", "shape_approve"):
+        member_refused(A, tool, call(A, tool, {"id": cid}))
+    member_refused(C, "shape_approve", call(C, "shape_approve", {"id": cid}))
+    preview = shape(C, "preview", {"id": cid})
     check(preview["candidate"]["rev"] == rev and
           urlsplit(preview["url"]).path == f"/shape/{APP}/preview/{cid}/",
-          "MCP returned the isolated preview for the verified candidate")
-    check(active() == candidate["base_rev"], "preview left the base revision active")
-    approved = shape("approve", {"id": cid})
+          "MCP returned the isolated preview for C's verified candidate")
+    check(owner_cli("status", APP)["active"] == base and
+          json.loads(get_page(C, "/_shaping/api/version"))["version"] == before,
+          "preview left the owner's active and served versions unchanged")
+
+    other = shape(OWNER, "wish", {"request": "Draft the alternate greeting", "agent": BINDING})
+    check(other["base_rev"] == base and other["id"] != cid and other["rev"] not in (base, rev)
+          and other["status"] == "ready", "second candidate contains a different edit on the same base")
+    approved = shape(OWNER, "approve", {"id": cid})
     check(approved["id"] == cid and approved["rev"] == rev and approved["status"] == "approved",
-          "owner approved the same revision")
-    check(active() == rev, "owner's active revision matches approval")
+          "owner approved C's verified revision")
+    history = owner_cli("history", APP)
+    entry, = history["versions"]
+    check(history["active"] == rev and entry["revision"] == rev and
+          entry["principal"] == OWNER and entry["author"] == C, "owner's history credits C")
+    wait_version(rev)
+    panel = json.loads(get_page(C, "/_shaping/api/me"))
+    check(rev != before and panel["version"] == rev and panel["title"] == "Approved support greeting",
+          "member panel follows the approved version")
+    check("<h1>Approved support greeting</h1>" in get_page(C, "/"),
+          "mounted page serves the approved greeting")
+
+    req = shape(A, "wish", {"request": "Change the support page footer", "agent": BINDING})
+    status = owner_cli("status", APP)
+    queued, = [item for item in status["candidates"] if item["id"] == req["id"]]
+    check(req == queued and queued["kind"] == "request" and queued["status"] == "requested"
+          and queued["principal"] == A and queued["activation_principal"] == OWNER,
+          "A's code wish is a request in O's queue")
+    request_dir = Path(candidate["workspace"]).parents[1] / req["id"]
+    check(not queued.get("workspace") and (request_dir / "candidate.json").is_file()
+          and not (request_dir / "work").exists(), "A's request has no workspace")
+    check((HOME / "stub-events").read_text().splitlines() == ["edit", "alternate"],
+          "only the two candidate wishes invoked the stub")
+
+    result = call(OWNER, "shape_approve", {"id": other["id"]})
+    check(result.get("isError") and f"active revision changed (base {base}, active {rev})"
+          in result["content"][0]["text"], "stale approval refused with both base and active revisions")
+    check(owner_cli("status", APP)["active"] == rev, "stale approval left C's revision active")
 
 
 def start_outpost():
@@ -217,7 +282,7 @@ def main():
     run("git", "config", "--global", "user.name", "Fixture")
     run("git", "config", "--global", "user.email", OWNER)
     CONFIG.parent.mkdir(parents=True, exist_ok=True)
-    config = {"agent_name": "test-host", "portal_url": ORIGIN, "access_token": TOKEN,
+    config = {"agent_name": "test-host", "oauth2_email": OWNER, "portal_url": ORIGIN, "access_token": TOKEN,
               "token": secrets.token_hex(24), "server_addr": "127.0.0.1",
               "server_port": 18885, "remote_port": 18886, "local_addr": "127.0.0.1:18880",
               "apps": []}
@@ -230,7 +295,7 @@ def main():
     src = str(HOME / "website")
     run(*WEBSITE, "enable", src, "--site", ORIGIN, "--title", "Original support greeting")
     run(*WEBSITE, "register", src, "--name", "site")
-    run(*WEBSITE, "serve", src, "--name", APP, "--port", str(PAGES))
+    run(*WEBSITE, "serve", src, "--name", APP, "--port", str(PAGES), "--app", APP, "--principal", OWNER)
     # website serve registers its page upstream. The CLI has no mcp-port
     # flag. Configure the app's documented mcp_port and reload the real daemon.
     proc.terminate()
@@ -247,7 +312,7 @@ def main():
                                "--outpost", "--site-app", APP, "--listen", f"127.0.0.1:{ENGINE}"])
     ready(engine, ENGINE)
     scenario()
-    print("PASS group shaping phase 1", flush=True)
+    print("PASS scoped group shaping", flush=True)
 
 
 if __name__ == "__main__":
