@@ -537,6 +537,24 @@ func (s RevisionStore) restoreWithApply(item, part, rev string, apply func(Revis
 	return res, data, nil
 }
 
+// Current returns the active pointer and its verified snapshot. An item
+// without revisions returns empty pointers so it can use its legacy body.
+func (s RevisionStore) Current(item, part string) (RevisionState, []byte, error) {
+	root, err := s.partDir(item, part)
+	if err != nil {
+		return RevisionState{}, nil, err
+	}
+	st, err := readState(root, item, part)
+	if err != nil {
+		return RevisionState{}, nil, err
+	}
+	if st.Active == nil {
+		return st.view(), nil, nil
+	}
+	body, err := readSnapshot(root, *st.Active)
+	return st.view(), body, err
+}
+
 // Read returns the verified snapshot bytes and metadata for any retained
 // revision without moving active or previous.
 func (s RevisionStore) Read(item, part, rev string) ([]byte, Revision, error) {

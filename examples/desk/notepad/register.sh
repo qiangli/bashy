@@ -19,7 +19,7 @@ EOF
 )
 
 atlas_args=()
-atlas_rows=$(cd "$here/../kit" && go run ./cmd/atlas notepad 0)
+atlas_rows=$(cd "$here/../kit" && GOWORK=off go run ./cmd/atlas notepad 0)
 while IFS= read -r row; do atlas_args+=(--set "$row"); done <<< "$atlas_rows"
 "$runner" commands add "$name" --force \
   --set "exec.0=$runner" --set exec.1=--bashsharp --set "exec.2=$here/notepad.bsh" \
@@ -40,9 +40,12 @@ while IFS= read -r row; do atlas_args+=(--set "$row"); done <<< "$atlas_rows"
   --set args.flags.10.name=break --set args.flags.10.type=string \
   --set args.flags.11.name=to --set args.flags.11.type=string \
   --set args.flags.12.name=output --set args.flags.12.shorthand=o --set args.flags.12.type=string \
+  --set args.flags.13.name=base-rev --set args.flags.13.type=string \
+  --set args.flags.14.name=rev --set args.flags.14.type=string \
   --set args.positionals.0.name=verb \
   "${atlas_args[@]}" \
-  --set args.positionals.1.name=id
+  --set args.positionals.1.name=id \
+  --set args.positionals.2.name=revision
 
 # Register skill
 tmp=$(mktemp -d)

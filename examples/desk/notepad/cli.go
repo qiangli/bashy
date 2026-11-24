@@ -26,10 +26,13 @@ type cliOptions struct {
 	asJSON     bool
 	title      string
 	body       string
+	bodySet    bool
 	fileFlag   string
 	format     string
 	toFlag     string
 	outputFlag string
+	baseRev    string
+	rev        string
 	idFlag     string
 	key        string
 	breakFlag  string
@@ -98,7 +101,7 @@ func parseCLIOptions(rawArgs []string) (*cliOptions, error) {
 				}
 			case "body":
 				if v, ok := setVal(); ok {
-					opts.body = v
+					opts.body, opts.bodySet = v, true
 				}
 			case "f", "file":
 				if v, ok := setVal(); ok {
@@ -107,6 +110,16 @@ func parseCLIOptions(rawArgs []string) (*cliOptions, error) {
 			case "format":
 				if v, ok := setVal(); ok {
 					opts.format = v
+				}
+			case "base-rev", "rev":
+				v, ok := setVal()
+				if !ok || v == "" || strings.HasPrefix(v, "-") {
+					return nil, fmt.Errorf("--%s requires a revision", name)
+				}
+				if name == "base-rev" {
+					opts.baseRev = v
+				} else {
+					opts.rev = v
 				}
 			case "to":
 				if v, ok := setVal(); ok {
@@ -176,11 +189,14 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 		opts.asJSON = opts.asJSON || common.JSON
 	}
 	if err != nil {
-		fmt.Fprintln(stdout, "Usage: notepad [serve|add|open|show|set|list|share|close|join|export] [--json] [-f FILE|-] [--to FORMAT] [-o FILE]")
+		if err != flag.ErrHelp {
+			return kit.UsageError(stdout, "notepad", common.JSON, err.Error())
+		}
+		fmt.Fprintln(stdout, "Usage: notepad [serve|add|open|show|set|list|share|close|join|export|history|undo|restore] [--json] [-f FILE|-] [--base-rev REV] [--rev REV] [--to FORMAT] [-o FILE]")
 		return 2
 	}
 	if opts.verb == "" {
-		fmt.Fprintln(stdout, "Usage: notepad [serve|add|open|show|set|list|share|close|join|export] [--json] [-f FILE|-] [--to FORMAT] [-o FILE]")
+		fmt.Fprintln(stdout, "Usage: notepad [serve|add|open|show|set|list|share|close|join|export|history|undo|restore] [--json] [-f FILE|-] [--base-rev REV] [--rev REV] [--to FORMAT] [-o FILE]")
 		return 2
 	}
 
@@ -294,6 +310,8 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 			fmt.Fprintf(stdout, "%v\n%v\n", obj["title"], obj["body"])
 		case "export":
 			fmt.Fprintf(stdout, "%v\n", obj["path"])
+		case "history", "undo", "restore":
+			fmt.Fprintln(stdout, kit.CanonicalJSON(obj))
 		default:
 			// new/open/put/share/close: id, URL, status only — never content.
 			fmt.Fprintf(stdout, "%v %v %v\n", obj["id"], obj["url"], obj["status"])
@@ -390,8 +408,33 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 				noteTitle = autoT
 			}
 		}
-		payload := map[string]any{"id": id, "title": noteTitle, "body": content}
+		payload := map[string]any{"id": id, "title": noteTitle}
+		if opts.bodySet || opts.fileFlag != "" {
+			payload["body"] = content
+		}
+		if opts.baseRev != "" {
+			payload["base_rev"] = noteRevision(opts.baseRev)
+		}
 		obj, _, code := call("set", payload)
+		if code != 0 {
+			return code
+		}
+		return emit(obj, nil)
+
+	case "history", "undo", "restore":
+		id, ok := needID()
+		if !ok {
+			return 2
+		}
+		resolveKey(id)
+		payload := map[string]any{"id": id}
+		if opts.verb == "restore" {
+			if len(opts.args) != 2 {
+				return kit.UsageError(stdout, "notepad", opts.asJSON, "Use notepad restore ID REV")
+			}
+			payload["revision"] = opts.args[1]
+		}
+		obj, _, code := call(opts.verb, payload)
 		if code != 0 {
 			return code
 		}
@@ -461,6 +504,9 @@ func runCLIWithIO(args []string, stdin io.Reader, stdout io.Writer) int {
 			"id":     id,
 			"to":     toFormat,
 			"output": outPath,
+		}
+		if opts.rev != "" {
+			payload["rev"] = opts.rev
 		}
 		obj, _, code := call("export", payload)
 		if code != 0 {

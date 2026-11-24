@@ -36,7 +36,7 @@ func (ps *participantMap) UnmarshalJSON(raw []byte) error {
 	for _, row := range rows {
 		key := row.Principal
 		if key == "" {
-			key = anonymousKey(row.Handle, row.Address)
+			key = kit.AnonymousKey(row.Handle, row.Address)
 		}
 		(*ps)[key] = &row
 	}
@@ -170,16 +170,16 @@ func (a *app) updateParticipant(r *http.Request, id string) func(func(*PageItem)
 func (a *app) knownParticipantLocked(w http.ResponseWriter, r *http.Request, it *item) (*http.Request, func(), bool) {
 	now := time.Now()
 	c := identifyParticipant(r, a.joinOptions.consolePrincipal, a.joinOptions.outpostSecret, now)
-	key := c.principal
+	key := c.Principal
 	if key == "" {
-		key = participantCookieKey(it, c)
+		key = kit.ParticipantCookieKey(it.Participants, c)
 	}
 	if p := it.Participants[key]; p != nil {
 		if p.Kicked {
 			if a.isOwner(r, it) {
 				return r, func() {}, true
 			}
-			kit.Fail(w, http.StatusForbidden, errKicked.Error())
+			kit.Fail(w, http.StatusForbidden, kit.ErrKicked.Error())
 			return r, func() {}, false
 		}
 		next := it.clone()

@@ -64,7 +64,7 @@ func ParseCommon(args []string) ([]string, CommonOptions, error) {
 // ToolVerbs is the common schema used by help, explain and dry-run.
 func ToolVerbs(tool string) []string {
 	verbs := map[string][]string{
-		"notepad":    {"serve", "add", "show", "set", "list", "open", "share", "close", "export", "join"},
+		"notepad":    {"serve", "add", "show", "set", "list", "open", "share", "close", "export", "join", "history", "undo", "restore"},
 		"form":       {"serve", "add", "show", "set", "list", "open", "share", "close", "reply", "ask", "wait", "answer", "join"},
 		"chart":      {"serve", "add", "show", "set", "list", "open", "share", "close", "revoke"},
 		"whiteboard": {"add", "show", "set", "list", "open", "share", "close"},

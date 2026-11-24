@@ -34,9 +34,9 @@ func requestParticipant(r *http.Request) (participantRequest, bool) {
 
 func joinStatus(err error) int {
 	switch {
-	case errors.Is(err, errJoinNeeded), errors.Is(err, errKicked), errors.Is(err, errTunnelAddress):
+	case errors.Is(err, kit.ErrJoinNeeded), errors.Is(err, kit.ErrKicked), errors.Is(err, kit.ErrTunnelAddress):
 		return http.StatusForbidden
-	case errors.Is(err, errHandleInUse):
+	case errors.Is(err, kit.ErrHandleInUse):
 		return http.StatusConflict
 	default:
 		return http.StatusBadRequest
@@ -132,7 +132,7 @@ func (o pageJoinOptions) pageJoin(w http.ResponseWriter, r *http.Request, mutate
 		}
 		handle = &value
 	}
-	if caller.principal != "" || submission {
+	if caller.Principal != "" || submission {
 		mintParticipantCookie(w, r, &caller)
 	}
 	var p participantRequest
@@ -150,7 +150,7 @@ func (o pageJoinOptions) pageJoin(w http.ResponseWriter, r *http.Request, mutate
 		if html {
 			status := joinStatus(participantErr)
 			hint := participantErr.Error()
-			if errors.Is(participantErr, errJoinNeeded) {
+			if errors.Is(participantErr, kit.ErrJoinNeeded) {
 				status, hint = http.StatusOK, ""
 			}
 			writeJoinScreen(w, status, joinScreenData{Page: title, Error: hint, Action: action, Home: home})

@@ -78,8 +78,8 @@ func (a *app) connectPresence(id string, p participantRequest) func() {
 	enrolled := it.Participants[p.Key]
 	if enrolled != nil && enrolled.Kicked && enrolled.Cookie == "" && p.Principal == "" {
 		// A rename can happen between identity resolution and stream admission.
-		key.participant = participantCookieKey(it, participantCaller{
-			address: p.Address, cookie: p.Cookie, fingerprint: p.Fingerprint,
+		key.participant = kit.ParticipantCookieKey(it.Participants, kit.ParticipantCaller{
+			Address: p.Address, Cookie: p.Cookie, Fingerprint: p.Fingerprint,
 		})
 		enrolled = it.Participants[key.participant]
 	}
@@ -148,7 +148,7 @@ func (a *app) followPresenceRenameLocked(before *item, req actionRequest) {
 		return
 	}
 	p := before.Participants[source]
-	target := anonymousKey(strings.TrimSpace(req.Target), p.Address)
+	target := kit.AnonymousKey(strings.TrimSpace(req.Target), p.Address)
 	oldKey := presenceKey{before.ID, source}
 	if group := a.presence[oldKey]; group != nil && after.Participants[source].Kicked &&
 		after.Participants[target] != nil && !after.Participants[target].Kicked {

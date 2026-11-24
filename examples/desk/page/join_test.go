@@ -94,12 +94,12 @@ func TestRefreshAndReclaimKeepOneVote(t *testing.T) {
 	}
 
 	other := joinRequest(http.MethodGet, "/blue-fox", "192.0.2.16:9003")
-	other.AddCookie(&http.Cookie{Name: pageParticipantCookie, Value: caller.cookie})
+	other.AddCookie(&http.Cookie{Name: pageParticipantCookie, Value: caller.Cookie})
 	other.Header.Set("X-Forwarded-For", "192.0.2.15")
-	if _, err := resolveParticipant(page, identifyParticipant(other, "", "", now), &handle, false, now); !errors.Is(err, errHandleInUse) {
+	if _, err := resolveParticipant(page, identifyParticipant(other, "", "", now), &handle, false, now); !errors.Is(err, kit.ErrHandleInUse) {
 		t.Fatalf("foreign peer error %v", err)
 	}
-	if _, err := resolveParticipant(page, identifyParticipant(other, "", "", now), nil, false, now); !errors.Is(err, errJoinNeeded) {
+	if _, err := resolveParticipant(page, identifyParticipant(other, "", "", now), nil, false, now); !errors.Is(err, kit.ErrJoinNeeded) {
 		t.Fatalf("foreign cookie error %v", err)
 	}
 	rows, err := json.Marshal(exportedParticipants(page))
@@ -126,16 +126,16 @@ func TestOutpostAddressesAndPrincipal(t *testing.T) {
 	signJoinHeaders(r, secret, []string{"", "", prefix, ts}, "X-Outpost-Identity-Sig")
 	for _, address := range []string{"192.0.2.34", "192.0.2.35"} {
 		r.Header.Set("X-Forwarded-For", "198.51.100.5, "+address+", 127.0.0.1")
-		if c := identifyParticipant(r, "", secret, now); c.address != address || c.auth != "anonymous" {
+		if c := identifyParticipant(r, "", secret, now); c.Address != address || c.Auth != "anonymous" {
 			t.Fatalf("anonymous tunnel caller %+v", c)
 		}
 	}
 	r.RemoteAddr = "192.0.2.36:9000"
-	if c := identifyParticipant(r, "", secret, now); c.address != "192.0.2.36" || c.principal != "" {
+	if c := identifyParticipant(r, "", secret, now); c.Address != "192.0.2.36" || c.Principal != "" {
 		t.Fatalf("direct peer %+v", c)
 	}
 	r.RemoteAddr = "127.0.0.1:9000"
-	if c := identifyParticipant(r, "", secret, now.Add(2*time.Minute)); c.address != "127.0.0.1" || c.principal != "" {
+	if c := identifyParticipant(r, "", secret, now.Add(2*time.Minute)); c.Address != "127.0.0.1" || c.Principal != "" {
 		t.Fatalf("stale stamp %+v", c)
 	}
 
@@ -143,18 +143,18 @@ func TestOutpostAddressesAndPrincipal(t *testing.T) {
 	r.Header.Set("Remote-User", "river@example.test")
 	signJoinHeaders(r, secret, []string{"v2", "member", "", "", "", "river@example.test", prefix, ts}, "X-Outpost-Relationship-Sig")
 	c := identifyParticipant(r, "", secret, now)
-	if c.auth != "member" || c.principal != "cloud:river@example.test" || c.handle != "river@example.test" {
+	if c.Auth != "member" || c.Principal != "cloud:river@example.test" || c.Handle != "river@example.test" {
 		t.Fatalf("member %+v", c)
 	}
 	page := &PageItem{}
-	if key, err := resolveParticipant(page, c, nil, false, now); err != nil || key != c.principal {
+	if key, err := resolveParticipant(page, c, nil, false, now); err != nil || key != c.Principal {
 		t.Fatalf("authenticated join %q: %v", key, err)
 	}
 	r.Header.Set("Remote-User", "forged@example.test")
-	if c := identifyParticipant(r, "", secret, now); c.auth != "anonymous" || c.address != "127.0.0.1" {
+	if c := identifyParticipant(r, "", secret, now); c.Auth != "anonymous" || c.Address != "127.0.0.1" {
 		t.Fatalf("modified stamp %+v", c)
 	}
-	if c := identifyParticipant(r, "os:operator", "", now); c.principal != "os:operator" || c.handle != "operator" {
+	if c := identifyParticipant(r, "os:operator", "", now); c.Principal != "os:operator" || c.Handle != "operator" {
 		t.Fatalf("console caller %+v", c)
 	}
 }
@@ -163,8 +163,8 @@ func TestParticipantModeration(t *testing.T) {
 	page := &PageItem{Votes: map[string]string{}}
 	now := time.Now()
 	handle := "River"
-	a := participantCaller{auth: "anonymous", address: "192.0.2.1", cookie: kit.NewToken()}
-	b := participantCaller{auth: "anonymous", address: "192.0.2.2", cookie: kit.NewToken()}
+	a := kit.ParticipantCaller{Auth: "anonymous", Address: "192.0.2.1", Cookie: kit.NewToken()}
+	b := kit.ParticipantCaller{Auth: "anonymous", Address: "192.0.2.2", Cookie: kit.NewToken()}
 	first, err := resolveParticipant(page, a, &handle, false, now)
 	if err != nil {
 		t.Fatal(err)
@@ -177,17 +177,17 @@ func TestParticipantModeration(t *testing.T) {
 	if err := moderateParticipant(page, "rename", first, "Lake"); err != nil {
 		t.Fatal(err)
 	}
-	first = anonymousKey("Lake", a.address)
+	first = kit.AnonymousKey("Lake", a.Address)
 	if err := moderateParticipant(page, "merge", second, first); err != nil || len(page.Votes) != 1 || page.Votes[first] != "A" {
 		t.Fatalf("merge votes %v: %v", page.Votes, err)
 	}
-	if _, err := resolveParticipant(page, b, nil, false, now); !errors.Is(err, errKicked) {
+	if _, err := resolveParticipant(page, b, nil, false, now); !errors.Is(err, kit.ErrKicked) {
 		t.Fatalf("merged participant got %v", err)
 	}
 	if err := moderateParticipant(page, "kick", first, ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := resolveParticipant(page, a, nil, false, now); !errors.Is(err, errKicked) {
+	if _, err := resolveParticipant(page, a, nil, false, now); !errors.Is(err, kit.ErrKicked) {
 		t.Fatalf("kicked participant got %v", err)
 	}
 	if err := moderateParticipant(page, "open", "", ""); err != nil || !page.OpenHandles {
@@ -270,7 +270,7 @@ func TestMissingTunnelAddressRefusesAnonymousJoin(t *testing.T) {
 	signJoinHeaders(r, secret, []string{"", "", prefix, ts}, "X-Outpost-Identity-Sig")
 	c := identifyParticipant(r, "", secret, now)
 	handle := "River"
-	if _, err := resolveParticipant(&PageItem{}, c, &handle, false, now); !errors.Is(err, errTunnelAddress) {
+	if _, err := resolveParticipant(&PageItem{}, c, &handle, false, now); !errors.Is(err, kit.ErrTunnelAddress) {
 		t.Fatalf("missing tunnel address returned %v", err)
 	}
 }

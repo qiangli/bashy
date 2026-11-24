@@ -9,15 +9,19 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"html"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -43,26 +47,31 @@ func renderMarkdown(src []byte) ([]byte, error) {
 	return render.Markdown(src, render.Options{})
 }
 
+const noteParticipantCookie = "notepad-participant"
+
 type note struct {
-	Version  int             `json:"version"`
-	ID       string          `json:"id"`
-	Title    string          `json:"title"`
-	Body     string          `json:"body"`
-	Fields   []kit.Field     `json:"fields,omitempty"`
-	Status   string          `json:"status"`
-	Revision int             `json:"revision"`
-	Owner    string          `json:"owner"`
-	Members  map[string]bool `json:"members"`
-	Invites  map[string]bool `json:"invites"`
+	Version      int                         `json:"version"`
+	ID           string                      `json:"id"`
+	Title        string                      `json:"title"`
+	Body         string                      `json:"body"`
+	Fields       []kit.Field                 `json:"fields,omitempty"`
+	Status       string                      `json:"status"`
+	Revision     int                         `json:"revision"`
+	Active       string                      `json:"-"`
+	Owner        string                      `json:"owner"`
+	Creator      string                      `json:"creator,omitempty"`
+	OwnerCookie  string                      `json:"owner_cookie,omitempty"`
+	Participants map[string]*kit.Participant `json:"participants,omitempty"`
+	Invites      map[string]bool             `json:"invites"`
 }
 
 type actionRequest struct {
-	Action   string      `json:"action"`
-	ID       string      `json:"id"`
+	kit.RevisionAction
 	Title    string      `json:"title"`
-	Body     string      `json:"body"`
+	Body     *string     `json:"body"`
 	Fields   []kit.Field `json:"fields,omitempty"`
 	Invite   string      `json:"invite,omitempty"`
+	Handle   *string     `json:"handle,omitempty"`
 	Format   string      `json:"format,omitempty"`
 	Filename string      `json:"filename,omitempty"`
 	To       string      `json:"to,omitempty"`
@@ -70,11 +79,13 @@ type actionRequest struct {
 }
 
 type app struct {
-	mu      sync.Mutex
-	dir     string
-	prefix  string
-	baseURL string // public origin, e.g. http://127.0.0.1:18095
-	notes   map[string]*note
+	mu               sync.Mutex
+	dir              string
+	prefix           string
+	baseURL          string // public origin, e.g. http://127.0.0.1:18095
+	notes            map[string]*note
+	outpostSecret    string
+	consolePrincipal string
 }
 
 func notePath(dir, id string) string { return filepath.Join(dir, "items", id+".json") }
@@ -100,11 +111,15 @@ func (a *app) loadLocked(id string) (*note, error) {
 	if n.Version != 1 || n.ID != id || !kit.ValidStatus(n.Status) {
 		return nil, fmt.Errorf("unsupported or invalid saved note %q", id)
 	}
-	if n.Members == nil {
-		n.Members = map[string]bool{}
-	}
 	if n.Invites == nil {
 		n.Invites = map[string]bool{}
+	}
+	active, body, err := a.revisions().Current(id, "")
+	if err != nil {
+		return nil, err
+	}
+	if active.Active != "" {
+		n.Active, n.Body = active.Active, string(body)
 	}
 	a.notes[id] = n
 	return n, nil
@@ -123,31 +138,104 @@ func (a *app) saveLocked(n *note) error {
 	return nil
 }
 
-func (a *app) isOwner(r *http.Request, n *note) bool {
-	return kit.Grant(kit.FacilitatorKey(r), n.Owner)
+func (a *app) revisions() kit.RevisionStore {
+	return kit.RevisionStore{Dir: a.dir}
 }
 
-func (a *app) hasReadAccess(r *http.Request, n *note, me string) bool {
-	if a.isOwner(r, n) || n.Members[me] {
-		return true
+func (a *app) caller(r *http.Request, allowBareMount bool) (kit.ParticipantCaller, bool) {
+	host, _, _ := net.SplitHostPort(r.RemoteAddr)
+	loopback := net.ParseIP(host).IsLoopback()
+	h := r.Header
+	hop := h.Get("X-Forwarded-For")
+	stamped := h.Get("X-Outpost-Identity-Ts") != "" || h.Get("X-Outpost-Relationship") != "" ||
+		h.Get("X-Outpost-Identity-Sig") != "" || h.Get("X-Outpost-Relationship-Sig") != "" || h.Get("Remote-User") != ""
+	// The local command contract uses a bare mount hint to generate the
+	// public URL on add. Existing notes still require the usual admission.
+	direct := loopback && !stamped && hop == "" && h.Get("Forwarded") == "" &&
+		(allowBareMount || h.Get("X-Forwarded-Prefix") == "") &&
+		h.Get("X-Forwarded-Host") == "" && h.Get("X-Forwarded-Proto") == ""
+	principal := ""
+	if direct || (loopback && !stamped && net.ParseIP(hop).IsLoopback()) {
+		principal = a.consolePrincipal
 	}
-	// Local caller without cross-site metadata: treat as member if on loopback
-	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil && net.ParseIP(remoteHost).IsLoopback() && r.Header.Get("Origin") == "" && r.Header.Get("Sec-Fetch-Site") == "" {
-		return true
+	caller := kit.IdentifyParticipant(r, noteParticipantCookie, principal, a.outpostSecret, time.Now())
+	if stamped && !caller.Tunnel {
+		// An unverified proxy must not bind a guest to its loopback address.
+		caller.Address = ""
 	}
-	return false
+	return caller, direct
 }
 
-func (a *app) hasWriteAccess(r *http.Request, n *note, me string) bool {
-	if a.isOwner(r, n) || n.Members[me] {
-		return true
+func isNoteOwner(r *http.Request, n *note, caller kit.ParticipantCaller, local bool) bool {
+	return kit.Grant(kit.FacilitatorKey(r), n.Owner) ||
+		(caller.Relationship == "owner" && caller.Auth == "member") ||
+		(caller.Principal != "" && caller.Principal == n.Creator) ||
+		(local && kit.Grant(caller.Cookie, n.OwnerCookie))
+}
+
+func noteAuthor(r *http.Request, n *note, caller kit.ParticipantCaller, local bool) (kit.Participant, bool) {
+	if caller.Auth == "member" {
+		return kit.Participant{Handle: caller.Handle, Auth: caller.Auth}, true
 	}
-	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err == nil && net.ParseIP(remoteHost).IsLoopback() && r.Header.Get("Origin") == "" && r.Header.Get("Sec-Fetch-Site") == "" {
-		return true
+	if isNoteOwner(r, n, caller, local) {
+		return kit.Participant{Handle: "owner", Auth: "anonymous"}, true
 	}
-	return false
+	key := caller.Principal
+	if key == "" {
+		key = kit.ParticipantCookieKey(n.Participants, caller)
+	}
+	if p := n.Participants[key]; p != nil && !p.Kicked {
+		return *p, true
+	}
+	if local {
+		return kit.Participant{Handle: "local", Auth: "anonymous"}, true
+	}
+	return kit.Participant{}, false
+}
+
+// Save the item and content under the same app lock. The item write can be
+// rolled back if publishing the revision fails.
+func (a *app) saveRevisionLocked(prev, next *note, base string, author kit.Participant) error {
+	store := a.revisions()
+	if base != "" && (prev == nil || base != prev.Active) {
+		active := ""
+		if prev != nil {
+			active = prev.Active
+		}
+		return &kit.RevisionConflictError{Item: next.ID, BaseRev: base, Active: active}
+	}
+	if prev != nil && prev.Active == "" {
+		// Keep the first undo available for notes saved before history existed.
+		// The old note has no author metadata.
+		seed, err := store.SaveRevision(kit.SaveInput{
+			Item: next.ID, Author: "legacy", Kind: "anonymous", Data: []byte(prev.Body),
+		})
+		if err != nil {
+			return err
+		}
+		base, prev.Active = seed.Active, seed.Active
+	}
+	if err := a.saveLocked(next); err != nil {
+		return err
+	}
+	state, err := store.SaveRevision(kit.SaveInput{
+		Item: next.ID, BaseRev: base, Author: author.Handle, Kind: author.Auth, Data: []byte(next.Body),
+	})
+	if err != nil {
+		if prev == nil {
+			_ = os.Remove(notePath(a.dir, next.ID))
+			delete(a.notes, next.ID)
+		} else {
+			raw, marshalErr := kit.MarshalIndent(*prev)
+			if marshalErr == nil {
+				_ = kit.AtomicWrite(notePath(a.dir, prev.ID), raw)
+			}
+			a.notes[prev.ID] = prev
+		}
+		return err
+	}
+	next.Active = state.Active
+	return nil
 }
 
 // base is the public URL of the tool root for r: its own address, or the app
@@ -184,9 +272,11 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if path == "/" && r.Method == "GET" {
-		kit.ParticipantCookie(w, r, "notepad-participant")
+		status, body := a.page(r)
+		kit.ParticipantCookie(w, r, noteParticipantCookie)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write(a.page(r))
+		w.WriteHeader(status)
+		w.Write(body)
 		return
 	}
 	if path == "/healthz" && r.Method == "GET" {
@@ -196,15 +286,16 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if path == "/api/state" && r.Method == "GET" {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		kit.ParticipantCookie(w, r, "notepad-participant")
+		kit.ParticipantCookie(w, r, noteParticipantCookie)
 		id := r.URL.Query().Get("id")
 		n, err := a.loadLocked(id)
 		if err != nil {
-			if os.IsNotExist(err) {
-				kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
-			} else {
-				kit.Fail(w, http.StatusBadRequest, err.Error())
-			}
+			respondNoteLoadError(w, err)
+			return
+		}
+		caller, local := a.caller(r, false)
+		if _, ok := noteAuthor(r, n, caller, local); !ok {
+			kit.Fail(w, http.StatusForbidden, "Join this note first; ask the owner for an invite.")
 			return
 		}
 		kit.WriteJSON(w, a.openView(r, n))
@@ -213,15 +304,14 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	if path == "/api/export" {
 		a.mu.Lock()
 		defer a.mu.Unlock()
-		me := kit.ParticipantCookie(w, r, "notepad-participant")
+		caller, local := a.caller(r, false)
 		var req actionRequest
 		if r.Method == "GET" {
 			req = actionRequest{
-				Action: "export",
-				ID:     r.URL.Query().Get("id"),
-				To:     r.URL.Query().Get("to"),
-				Format: r.URL.Query().Get("format"),
-				Output: r.URL.Query().Get("output"),
+				RevisionAction: kit.RevisionAction{Action: "export", ID: r.URL.Query().Get("id"), Rev: r.URL.Query().Get("rev")},
+				To:             r.URL.Query().Get("to"),
+				Format:         r.URL.Query().Get("format"),
+				Output:         r.URL.Query().Get("output"),
 			}
 			if req.Output == "" {
 				req.Output = r.URL.Query().Get("o")
@@ -235,7 +325,7 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			kit.Fail(w, http.StatusMethodNotAllowed, "Method not supported")
 			return
 		}
-		a.export(w, r, req, me)
+		a.export(w, r, req, caller, local)
 		return
 	}
 	if path == "/api/render" {
@@ -257,34 +347,40 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	me := kit.ParticipantCookie(w, r, "notepad-participant")
+	caller, local := a.caller(r, req.Action == "add")
 	switch req.Action {
 	case "add":
-		a.create(w, r, req, me)
+		a.create(w, r, req, caller, local)
 	case "open":
-		a.open(w, r, req)
+		a.open(w, r, req, caller, local)
 	case "show":
-		a.get(w, r, req, me)
+		a.get(w, r, req, caller, local)
 	case "set":
-		a.mutate(w, r, req, me, false)
+		a.mutate(w, r, req, caller, local, false)
 	case "close":
-		a.mutate(w, r, req, me, true)
+		a.mutate(w, r, req, caller, local, true)
 	case "list":
-		a.list(w, r)
+		a.list(w, r, caller, local)
 	case "share":
-		a.share(w, r, req)
+		a.share(w, r, req, caller, local)
 	case "join":
-		a.join(w, r, req, me)
+		a.join(w, r, req, caller)
+	case "history", "undo", "restore":
+		a.revisionAction(w, r, req, caller, local)
 	case "convert":
 		a.convert(w, req)
 	case "export":
-		a.export(w, r, req, me)
+		a.export(w, r, req, caller, local)
 	default:
 		kit.Fail(w, http.StatusBadRequest, "Unknown action")
 	}
 }
 
-func (a *app) create(w http.ResponseWriter, r *http.Request, req actionRequest, me string) {
+func (a *app) create(w http.ResponseWriter, r *http.Request, req actionRequest, caller kit.ParticipantCaller, local bool) {
+	if !local && caller.Auth != "member" {
+		kit.Fail(w, http.StatusForbidden, "Only roster members can create a note")
+		return
+	}
 	if breakMode != "allow-secret" && kit.SecretRefused(req.Fields) {
 		kit.Fail(w, http.StatusBadRequest, kit.ErrSecret)
 		return
@@ -309,13 +405,7 @@ func (a *app) create(w http.ResponseWriter, r *http.Request, req actionRequest, 
 	if title == "" {
 		title = "Untitled note"
 	}
-	body := req.Body
-	if req.Format != "" || req.Filename != "" {
-		conv, _, err := ConvertContent([]byte(body), req.Format+req.Filename)
-		if err == nil {
-			body = conv
-		}
-	}
+	body := noteBody(req)
 	status := kit.StatusPending
 	if strings.TrimSpace(body) != "" {
 		status = kit.StatusFilled
@@ -328,42 +418,47 @@ func (a *app) create(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		Fields:  req.Fields,
 		Status:  status,
 		Owner:   kit.NewToken(),
-		Members: map[string]bool{me: true},
+		Creator: caller.Principal,
 		Invites: map[string]bool{},
 	}
-	if err := a.saveLocked(n); err != nil {
+	if local {
+		kit.MintParticipantCookie(w, r, noteParticipantCookie, &caller)
+		n.OwnerCookie = caller.Cookie
+	}
+	author := kit.Participant{Handle: "owner", Auth: "anonymous"}
+	if caller.Auth == "member" {
+		author.Handle, author.Auth = caller.Handle, caller.Auth
+	}
+	if err := a.saveRevisionLocked(nil, n, "", author); err != nil {
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
 		return
 	}
 	v := a.openView(r, n)
 	v["ownerKey"] = n.Owner // revealed once, at creation
+	v["active"] = n.Active
 	kit.WriteJSON(w, v)
 }
 
-func (a *app) open(w http.ResponseWriter, r *http.Request, req actionRequest) {
+func (a *app) open(w http.ResponseWriter, r *http.Request, req actionRequest, caller kit.ParticipantCaller, local bool) {
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
-		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
-		} else {
-			kit.Fail(w, http.StatusBadRequest, err.Error())
-		}
+		respondNoteLoadError(w, err)
+		return
+	}
+	if _, ok := noteAuthor(r, n, caller, local); !ok {
+		kit.Fail(w, http.StatusForbidden, "Join this note first; ask the owner for an invite.")
 		return
 	}
 	kit.WriteJSON(w, a.openView(r, n))
 }
 
-func (a *app) get(w http.ResponseWriter, r *http.Request, req actionRequest, me string) {
+func (a *app) get(w http.ResponseWriter, r *http.Request, req actionRequest, caller kit.ParticipantCaller, local bool) {
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
-		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
-		} else {
-			kit.Fail(w, http.StatusBadRequest, err.Error())
-		}
+		respondNoteLoadError(w, err)
 		return
 	}
-	if !a.hasReadAccess(r, n, me) {
+	if _, ok := noteAuthor(r, n, caller, local); !ok {
 		kit.Fail(w, http.StatusForbidden, "Join this note first; ask the owner for an invite.")
 		return
 	}
@@ -375,20 +470,18 @@ func (a *app) get(w http.ResponseWriter, r *http.Request, req actionRequest, me 
 		"body":     n.Body,
 		"fields":   n.Fields,
 		"revision": n.Revision,
+		"active":   n.Active,
 	})
 }
 
-func (a *app) mutate(w http.ResponseWriter, r *http.Request, req actionRequest, me string, closing bool) {
+func (a *app) mutate(w http.ResponseWriter, r *http.Request, req actionRequest, caller kit.ParticipantCaller, local, closing bool) {
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
-		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
-		} else {
-			kit.Fail(w, http.StatusBadRequest, err.Error())
-		}
+		respondNoteLoadError(w, err)
 		return
 	}
-	if !a.hasWriteAccess(r, n, me) {
+	author, ok := noteAuthor(r, n, caller, local)
+	if !ok {
 		kit.Fail(w, http.StatusForbidden, "Only members or the owner can change this note")
 		return
 	}
@@ -397,6 +490,7 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		return
 	}
 	next := *n
+	req.BaseRev = noteRevision(req.BaseRev)
 	if closing {
 		next.Status = kit.StatusClosed
 	} else {
@@ -404,15 +498,8 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req actionRequest, 
 			kit.Fail(w, http.StatusBadRequest, kit.ErrSecret)
 			return
 		}
-		if req.Body != "" {
-			body := req.Body
-			if req.Format != "" || req.Filename != "" {
-				conv, _, err := ConvertContent([]byte(body), req.Format+req.Filename)
-				if err == nil {
-					body = conv
-				}
-			}
-			next.Body = body
+		if req.Body != nil {
+			next.Body = noteBody(req)
 		}
 		if req.Fields != nil {
 			next.Fields = req.Fields
@@ -422,14 +509,85 @@ func (a *app) mutate(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		}
 		next.Status = kit.StatusFilled
 	}
-	if err := a.saveLocked(&next); err != nil {
-		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
+	var errSave error
+	switch {
+	case !closing && req.Body != nil:
+		errSave = a.saveRevisionLocked(n, &next, req.BaseRev, author)
+	case !closing && req.BaseRev != "" && req.BaseRev != n.Active:
+		errSave = &kit.RevisionConflictError{Item: n.ID, BaseRev: req.BaseRev, Active: n.Active}
+	default:
+		errSave = a.saveLocked(&next)
+	}
+	if errSave != nil {
+		if !kit.WriteRevisionConflict(w, errSave) {
+			kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
+		}
 		return
 	}
-	kit.WriteJSON(w, a.openView(r, &next))
+	view := a.openView(r, &next)
+	if !closing {
+		view["active"] = next.Active
+	}
+	kit.WriteJSON(w, view)
 }
 
-func (a *app) list(w http.ResponseWriter, r *http.Request) {
+func noteBody(req actionRequest) string {
+	if req.Body == nil {
+		return ""
+	}
+	body := *req.Body
+	if req.Format != "" || req.Filename != "" {
+		if converted, _, err := ConvertContent([]byte(body), req.Format+req.Filename); err == nil {
+			return converted
+		}
+	}
+	return body
+}
+
+func (a *app) revisionAction(w http.ResponseWriter, r *http.Request, req actionRequest, caller kit.ParticipantCaller, local bool) {
+	n, err := a.loadLocked(req.ID)
+	if err != nil {
+		respondNoteLoadError(w, err)
+		return
+	}
+	if _, ok := noteAuthor(r, n, caller, local); !ok {
+		kit.Fail(w, http.StatusForbidden, "Join this note first; ask the owner for an invite.")
+		return
+	}
+	if req.Action != "history" && n.Status == kit.StatusClosed {
+		kit.Fail(w, http.StatusConflict, "This note is closed")
+		return
+	}
+	if req.Part != "" {
+		kit.Fail(w, http.StatusBadRequest, "Notepad tracks revisions for the whole note body")
+		return
+	}
+	req.Rev = noteRevision(req.Rev)
+	req.Revision = noteRevision(req.Revision)
+	a.revisions().ServeAction(w, req.RevisionAction, func(state kit.RevisionState, body []byte) error {
+		next := *n
+		next.Body, next.Active = string(body), state.Active
+		return a.saveLocked(&next)
+	})
+}
+
+func noteRevision(value string) string {
+	value = strings.TrimSpace(value)
+	if n, err := strconv.Atoi(value); err == nil && n > 0 {
+		return "r" + strconv.Itoa(n)
+	}
+	return value
+}
+
+func respondNoteLoadError(w http.ResponseWriter, err error) {
+	if os.IsNotExist(err) {
+		kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
+	} else {
+		kit.Fail(w, http.StatusBadRequest, err.Error())
+	}
+}
+
+func (a *app) list(w http.ResponseWriter, r *http.Request, caller kit.ParticipantCaller, local bool) {
 	names, err := filepath.Glob(filepath.Join(a.dir, "items", "*.json"))
 	if err != nil {
 		kit.Fail(w, http.StatusInternalServerError, "Could not list")
@@ -442,30 +600,27 @@ func (a *app) list(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+		if _, ok := noteAuthor(r, n, caller, local); !ok {
+			continue
+		}
 		out = append(out, a.openView(r, n)) // ids + statuses, never content
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i]["id"].(string) < out[j]["id"].(string) })
 	kit.WriteJSON(w, out)
 }
 
-func (a *app) share(w http.ResponseWriter, r *http.Request, req actionRequest) {
+func (a *app) share(w http.ResponseWriter, r *http.Request, req actionRequest, caller kit.ParticipantCaller, local bool) {
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
-		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
-		} else {
-			kit.Fail(w, http.StatusBadRequest, err.Error())
-		}
+		respondNoteLoadError(w, err)
 		return
 	}
-	if !a.isOwner(r, n) {
+	if !isNoteOwner(r, n, caller, local) {
 		kit.Fail(w, http.StatusForbidden, "Only the owner can share this note")
 		return
 	}
 	next := *n
-	if next.Invites == nil {
-		next.Invites = map[string]bool{}
-	}
+	next.Invites = maps.Clone(n.Invites)
 	code := kit.NewToken()
 	next.Invites[code] = true
 	if err := a.saveLocked(&next); err != nil {
@@ -478,22 +633,47 @@ func (a *app) share(w http.ResponseWriter, r *http.Request, req actionRequest) {
 	kit.WriteJSON(w, v)
 }
 
-func (a *app) join(w http.ResponseWriter, r *http.Request, req actionRequest, me string) {
+func (a *app) join(w http.ResponseWriter, r *http.Request, req actionRequest, caller kit.ParticipantCaller) {
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
-		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
-		} else {
-			kit.Fail(w, http.StatusBadRequest, err.Error())
-		}
+		respondNoteLoadError(w, err)
 		return
 	}
 	if !kit.ValidToken(req.Invite) || !n.Invites[req.Invite] {
 		kit.Fail(w, http.StatusForbidden, "This invite is invalid. Ask the owner for a new one.")
 		return
 	}
+	if req.Handle == nil {
+		kit.Fail(w, http.StatusForbidden, "Enter a name or email to join this note.")
+		return
+	}
+	handle, err := kit.CleanHandle(*req.Handle)
+	if err != nil {
+		kit.Fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
 	next := *n
-	next.Members[me] = true
+	next.Participants = maps.Clone(n.Participants)
+	if caller.Principal == "" {
+		kit.MintParticipantCookie(w, r, noteParticipantCookie, &caller)
+	}
+	// ResolveParticipant updates the row in place. Copy existing rows so a
+	// failed invite acceptance keeps the prior bindings and the invite.
+	for key, p := range next.Participants {
+		if p != nil {
+			copy := *p
+			next.Participants[key] = &copy
+		}
+	}
+	if _, err := kit.ResolveParticipant(&next.Participants, false, caller, &handle, false, time.Now()); err != nil {
+		status := http.StatusForbidden
+		if errors.Is(err, kit.ErrHandleInUse) {
+			status = http.StatusConflict
+		}
+		kit.Fail(w, status, err.Error())
+		return
+	}
+	next.Invites = maps.Clone(n.Invites)
 	delete(next.Invites, req.Invite) // single use
 	if err := a.saveLocked(&next); err != nil {
 		kit.Fail(w, http.StatusInternalServerError, "Could not save. Your change was not accepted.")
@@ -503,7 +683,11 @@ func (a *app) join(w http.ResponseWriter, r *http.Request, req actionRequest, me
 }
 
 func (a *app) convert(w http.ResponseWriter, req actionRequest) {
-	conv, format, err := ConvertContent([]byte(req.Body), req.Format+req.Filename)
+	var body string
+	if req.Body != nil {
+		body = *req.Body
+	}
+	conv, format, err := ConvertContent([]byte(body), req.Format+req.Filename)
 	if err != nil {
 		kit.Fail(w, http.StatusBadRequest, fmt.Sprintf("Conversion failed: %v", err))
 		return
@@ -511,21 +695,17 @@ func (a *app) convert(w http.ResponseWriter, req actionRequest) {
 	kit.WriteJSON(w, map[string]any{"text": conv, "format": format})
 }
 
-func (a *app) export(w http.ResponseWriter, r *http.Request, req actionRequest, me string) {
+func (a *app) export(w http.ResponseWriter, r *http.Request, req actionRequest, caller kit.ParticipantCaller, local bool) {
 	if req.ID == "" {
 		kit.Fail(w, http.StatusBadRequest, "Note id required for export")
 		return
 	}
 	n, err := a.loadLocked(req.ID)
 	if err != nil {
-		if os.IsNotExist(err) {
-			kit.Fail(w, http.StatusNotFound, "Note not found. Create it with notepad add first.")
-		} else {
-			kit.Fail(w, http.StatusBadRequest, err.Error())
-		}
+		respondNoteLoadError(w, err)
 		return
 	}
-	if !a.hasReadAccess(r, n, me) {
+	if _, ok := noteAuthor(r, n, caller, local); !ok {
 		kit.Fail(w, http.StatusForbidden, "Join this note first; ask the owner for an invite.")
 		return
 	}
@@ -537,7 +717,25 @@ func (a *app) export(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		kit.Fail(w, http.StatusBadRequest, "Specify export format with --to pdf|png|html|txt")
 		return
 	}
-	data, err := ExportContent(n.Title, n.Body, toFormat)
+	if req.Output != "" && !local && !kit.Grant(kit.FacilitatorKey(r), n.Owner) {
+		kit.Fail(w, http.StatusForbidden, "A custom export path requires local access or the owner key")
+		return
+	}
+	rev := noteRevision(req.Rev)
+	body := n.Body
+	if rev != "" {
+		snapshot, _, err := a.revisions().Read(n.ID, "", rev)
+		if err != nil {
+			status := http.StatusInternalServerError
+			if errors.Is(err, kit.ErrUnknownRevision) {
+				status = http.StatusNotFound
+			}
+			kit.Fail(w, status, err.Error())
+			return
+		}
+		body = string(snapshot)
+	}
+	data, err := ExportContent(n.Title, body, toFormat)
 	if err != nil {
 		kit.Fail(w, http.StatusBadRequest, err.Error())
 		return
@@ -557,7 +755,11 @@ func (a *app) export(w http.ResponseWriter, r *http.Request, req actionRequest, 
 			kit.Fail(w, http.StatusInternalServerError, fmt.Sprintf("Could not create exports directory: %v", err))
 			return
 		}
-		outPath = filepath.Join(exportDir, fmt.Sprintf("%s.%s", n.ID, normFormat))
+		name := n.ID
+		if rev != "" {
+			name += "-" + rev
+		}
+		outPath = filepath.Join(exportDir, fmt.Sprintf("%s.%s", name, normFormat))
 	} else {
 		if err := os.MkdirAll(filepath.Dir(outPath), 0755); err != nil {
 			kit.Fail(w, http.StatusInternalServerError, fmt.Sprintf("Could not create directory for %s: %v", outPath, err))
@@ -570,27 +772,30 @@ func (a *app) export(w http.ResponseWriter, r *http.Request, req actionRequest, 
 		return
 	}
 
-	kit.WriteJSON(w, map[string]any{
-		"id":     n.ID,
-		"format": normFormat,
-		"path":   outPath,
-	})
+	view := map[string]any{"id": n.ID, "format": normFormat, "path": outPath}
+	if rev != "" {
+		view["revision"] = rev
+	}
+	kit.WriteJSON(w, view)
 }
 
 // page renders the human door: item header, status badges, copy buttons,
 // markdown editor, file converter and theme toggle, from the kit components.
-func (a *app) page(r *http.Request) []byte {
+func (a *app) page(r *http.Request) (int, []byte) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	caller, local := a.caller(r, false)
 	id := r.URL.Query().Get("id")
 	header := kit.EmptyItemHeader("new note")
-	noteTitle := ""
-	noteBody := ""
+	noteTitle, noteBody, active := "", "", ""
 	if id != "" {
-		if n, err := a.loadLocked(id); err == nil {
+		n, err := a.loadLocked(id)
+		if err == nil {
+			if _, ok := noteAuthor(r, n, caller, local); !ok {
+				return http.StatusForbidden, joinNotePage(id)
+			}
 			header = kit.ItemHeader(n.ID, n.Status, a.urlFor(r, n.ID))
-			noteTitle = n.Title
-			noteBody = n.Body
+			noteTitle, noteBody, active = n.Title, n.Body, n.Active
 		}
 	}
 
@@ -602,6 +807,13 @@ func (a *app) page(r *http.Request) []byte {
 		noteLinks.WriteString(`<ul class="np-notes">`)
 		for _, p := range names {
 			nid := strings.TrimSuffix(filepath.Base(p), ".json")
+			n, err := a.loadLocked(nid)
+			if err != nil {
+				continue
+			}
+			if _, ok := noteAuthor(r, n, caller, local); !ok {
+				continue
+			}
 			u := kit.ItemURL(a.base(r)+"/", "id", nid)
 			noteLinks.WriteString(`<li><a href="` + html.EscapeString(u) + `">` + html.EscapeString(nid) + `</a></li>`)
 		}
@@ -639,6 +851,7 @@ func (a *app) page(r *http.Request) []byte {
 		`<script>
 (function() {
   let currentId = ` + jsonString(id) + `;
+  let activeRevision = ` + jsonString(active) + `;
   const titleInput = document.querySelector('input[name="title"]');
   const bodyInput = document.querySelector('textarea[name="body"]');
   const alertBox = document.querySelector('[data-desk-alert]');
@@ -699,14 +912,16 @@ func (a *app) page(r *http.Request) []byte {
             action: action,
             id: currentId || undefined,
             title: titleInput ? titleInput.value : '',
-            body: bodyInput ? bodyInput.value : ''
+            body: bodyInput ? bodyInput.value : '',
+            base_rev: activeRevision || undefined
           })
         });
         const data = await res.json();
         if (!res.ok) {
-          showAlert(data.error?.message || 'Failed to save', true);
+          showAlert(typeof data.error === 'string' ? data.error : data.error?.message || 'Failed to save', true);
           return;
         }
+        activeRevision = data.active || '';
         showAlert('Saved successfully: ' + data.id, false);
         if (!currentId && data.id) {
           currentId = data.id;
@@ -776,7 +991,52 @@ func (a *app) page(r *http.Request) []byte {
 })();
 </script>`
 
-	return kit.Page("notepad", "Notepad · bashy desk", body)
+	return http.StatusOK, kit.Page("notepad", "Notepad · bashy desk", body)
+}
+
+func joinNotePage(id string) []byte {
+	body := `<main class="desk-main"><section class="desk-panel">
+<h1>Join this note</h1>
+<p id="inviteMessage">Ask the owner for an invite.</p>
+<form id="inviteForm" hidden>
+<label for="handle">Name or email</label>
+<input id="handle" name="handle" type="text" maxlength="80" required>
+<button type="submit">Join</button>
+</form>
+</section></main>
+<script>
+(function() {
+  const invite = new URLSearchParams(window.location.hash.slice(1)).get('invite');
+  if (!invite) return;
+  const form = document.getElementById('inviteForm');
+  const message = document.getElementById('inviteMessage');
+  form.hidden = false;
+  message.textContent = '';
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    try {
+      const res = await fetch('api/action', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          action: 'join', id: ` + jsonString(id) + `, invite: invite, handle: form.elements.handle.value
+        })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        message.textContent = data.error?.message || 'Could not join this note';
+        return;
+      }
+      const url = new URL(window.location.href);
+      url.hash = '';
+      window.location.replace(url);
+    } catch (err) {
+      message.textContent = 'Could not join this note';
+    }
+  });
+})();
+</script>`
+	return kit.Page("notepad", "Join this note", body)
 }
 
 func jsonString(s string) string {
@@ -798,10 +1058,14 @@ func serve(addr, data, prefix string) {
 	_, port, _ := net.SplitHostPort(ln.Addr().String())
 	origin := "http://" + net.JoinHostPort("127.0.0.1", port)
 	a := &app{
-		dir:     data,
-		prefix:  prefix,
-		baseURL: origin + prefix,
-		notes:   map[string]*note{},
+		dir:           data,
+		prefix:        prefix,
+		baseURL:       origin + prefix,
+		notes:         map[string]*note{},
+		outpostSecret: notepadOutpostSecret(),
+	}
+	if os.Getenv("BASHY_APP") == "notepad" && os.Getenv("BASHY_APP_ADDR") == addr {
+		a.consolePrincipal = strings.TrimSpace(os.Getenv("BASHY_PRINCIPAL"))
 	}
 	fmt.Printf("\nDesk notepad — keep this terminal running\nParticipant: %s/\nSaved notes: %s\nCtrl-C stops the server.\n\n",
 		a.baseURL, filepath.Join(data, "items"))
@@ -823,6 +1087,23 @@ func serve(addr, data, prefix string) {
 	if err = srv.Serve(ln); err != nil && err != http.ErrServerClosed {
 		log.Fatal(err)
 	}
+}
+
+func notepadOutpostSecret() string {
+	if secret := strings.TrimSpace(os.Getenv("NOTEPAD_SSO_SECRET")); secret != "" {
+		return secret
+	}
+	bin := os.Getenv("OUTPOST_BIN")
+	if bin == "" {
+		bin = "outpost"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	raw, err := exec.CommandContext(ctx, bin, "apps", "secret", "notepad").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(raw))
 }
 
 func main() {

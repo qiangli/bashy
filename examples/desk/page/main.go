@@ -69,19 +69,7 @@ func renderMarkdown(src []byte) ([]byte, error) {
 	return render.Markdown(src, render.Options{})
 }
 
-// Participant contains the private fields used to bind an identity.
-// Public views and exports use exportedParticipants.
-type Participant struct {
-	Handle      string `json:"handle"`
-	Principal   string `json:"principal,omitempty"`
-	Address     string `json:"address,omitempty"`
-	Fingerprint string `json:"fingerprint,omitempty"`
-	Cookie      string `json:"cookie,omitempty"`
-	Auth        string `json:"auth"` // member | signed-in | anonymous
-	JoinedAt    string `json:"joined_at,omitempty"`
-	LastSeen    string `json:"last_seen,omitempty"`
-	Kicked      bool   `json:"kicked,omitempty"`
-}
+type Participant = kit.Participant
 
 type item struct {
 	Version      int               `json:"version"`
@@ -319,8 +307,8 @@ func (a *app) organizerAuthor(r *http.Request, req actionRequest) (author, kind,
 		return p.Handle, p.Auth, assistant
 	}
 	c := identifyParticipant(r, a.joinOptions.consolePrincipal, a.joinOptions.outpostSecret, time.Now())
-	if c.principal != "" && c.handle != "" {
-		return c.handle, c.auth, assistant
+	if c.Principal != "" && c.Handle != "" {
+		return c.Handle, c.Auth, assistant
 	}
 	return "organizer", "", assistant
 }

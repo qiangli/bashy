@@ -14,8 +14,8 @@ github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUq
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
 github.com/microcosm-cc/bluemonday v1.0.27 h1:MpEUotklkwCSLeH+Qdx1VJgNqLlpY2KXwXFM08ygZfk=
 github.com/microcosm-cc/bluemonday v1.0.27/go.mod h1:jFi9vgW+H7c3V0lb6nR74Ib/DIB5OBs92Dimizgw2cA=
-github.com/qiangli/bashy/examples/desk/kit v0.2.0 h1:7r2wl+KNJltcgjyR/EyNMEtZSYr0MFoE536Y3a8dylI=
-github.com/qiangli/bashy/examples/desk/kit v0.2.0/go.mod h1:su+lTUIe8p0MNo8cmSOXRC5r9TLtqJHpnLB5+RgSWpE=
+github.com/qiangli/bashy/examples/desk/kit v0.3.0 h1:Lz4Noi2ZBqVxhGTJ1QBUG5hnfkp6/jVSVnaa/kK/Iec=
+github.com/qiangli/bashy/examples/desk/kit v0.3.0/go.mod h1:su+lTUIe8p0MNo8cmSOXRC5r9TLtqJHpnLB5+RgSWpE=
 github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e h1:MRM5ITcdelLK2j1vwZ3Je0FKVCfqOLp5zO6trqMLYs0=
 github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e/go.mod h1:XV66xRDqSt+GTGFMVlhk3ULuV0y9ZmzeVGR4mloJI3M=
 github.com/yuin/goldmark v1.8.2 h1:kEGpgqJXdgbkhcOgBxkC0X0PmoPG1ZyoZ117rDVp4zE=
