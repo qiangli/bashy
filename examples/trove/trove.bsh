@@ -1,0 +1,1336 @@
+#!/usr/bin/env -S bashy --bashsharp
+# trove — virtual drive of path-keyed mount points over bashy lens and vault.
+# One body, two orientations: executable Bash# and its embedded agent skill.
+
+~~~skill as guide
+---
+name: trove
+description: "Virtual drive of path-keyed mount points (bashy-trove-v1) stored in the cloudbox vault entry trove/layout (with local file override for tests and offline outposts). Mount, list, find, stat, cat, put, and add across dir:, dir:@host (outpost sftp), and git: mounts with bashy-node-v1 rows and trove provenance attributes."
+metadata:
+  requires: "has=bashy"
+---
+# Trove — the virtual drive
+
+A trove is one small JSON document of path-keyed mount points (`bashy-trove-v1`)
+with no storage of its own. Values reuse the `bashy lens` locator grammar
+(`yoke/pkg/ref/locator.go`), and `account` names the vault entry holding the
+credential for cloud/API mounts.
+
+```json
+{
+  "schema_version": "bashy-trove-v1",
+  "/home":  {"locator": "dir:home@studio-host"},
+  "/drive": {"locator": "drive:My Drive/bashy", "account": "me@example.com"},
+  "/repo":  {"locator": "gh:owner/repo",        "account": "owner"}
+}
+```
+
+## Layout store
+
+- Default: cloudbox vault entry `trove/layout` via the `bashy secret` client
+  (`secret exec --stdin trove/layout` on reads, `secret set trove/layout` on writes;
+  no local disk cache, safe for stateless hosted calls).
+- Override: `--layout FILE` or `TROVE_LAYOUT_FILE=FILE` reads and writes a local
+  JSON file instead of the vault (for tests and offline outposts).
+- Vault entry override: `TROVE_VAULT_ENTRY` (default `trove/layout`).
+- Owner label: `--owner NAME` > `$TROVE_OWNER` > `$BASHY_PRINCIPAL` > `$USER`.
+
+## Verbs
+
+- `trove mount add PATH LOCATOR [account=ACCOUNT] [--dry-run] [--json]`
+  Register or update a mount point in the layout.
+- `trove mount ls [--json]`
+  Show configured mount points (`--json` emits the `bashy-trove-v1` layout).
+- `trove mount rm PATH [--dry-run] [--json]`
+  Remove a mount point from the layout.
+- `trove ls [PATH] [--json]`
+  List mounts at `/` or entries under `PATH` as `bashy-node-v1` JSONL rows
+  with `attrs.{mount, owner, provenance}`.
+- `trove find [PATH] [--depth N] [--name GLOB] [--json]`
+  Walk `PATH` recursively via `bashy lens -t listing` and emit `bashy-node-v1` rows.
+- `trove stat PATH [--json]`
+  Inspect one entry as a `bashy-node-v1` row with trove attributes.
+- `trove cat PATH [--json]`
+  Print raw file bytes verbatim (peer-host files read through outpost SFTP,
+  matching `lens`). With `--json`, emit a `bashy-node-v1` row with `attrs.content`.
+- `trove put SRC PATH [--dry-run] [--json]`
+  Write local file `SRC` (or `-` for stdin) to `PATH` on a writable `dir:` mount.
+- `trove add URL PATH [--dry-run] [--json]`
+  Fetch `URL` as Markdown (`bashy fetch --md`) into `PATH` on a writable `dir:` mount.
+
+## Exit codes
+
+- `0` — done
+- `3` — refused by venue or availability (peer host offline by name, read-only mount,
+  or mount scheme deferred to a later slice such as `drive:` / `gh:`)
+- `1` — error (unknown path / not found, invalid locator or arguments, vault error)
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+shopt -u patsub_replacement 2>/dev/null || true
+
+RUNNER=${BASHY_BIN:-${BASHY_EXE:-${BASHY:-bashy}}}
+OUTPOST_BIN=${TROVE_OUTPOST_BIN:-outpost}
+VAULT_ENTRY=${TROVE_VAULT_ENTRY:-trove/layout}
+LAYOUT_FILE=${TROVE_LAYOUT_FILE:-}
+OWNER_OPT=${TROVE_OWNER:-}
+AS_JSON=false
+DRY_RUN=false
+DEPTH_OPT=""
+NAME_GLOB=""
+
+TROVE_TMPFILES=()
+cleanup_tmp() {
+  if [[ ${#TROVE_TMPFILES[@]} -gt 0 ]]; then
+    rm -f "${TROVE_TMPFILES[@]}" 2>/dev/null || true
+  fi
+}
+trap cleanup_tmp EXIT
+
+mktemp_tracked() {
+  local f
+  f=$(mktemp)
+  TROVE_TMPFILES+=("$f")
+  printf '%s' "$f"
+}
+
+print_skill() {
+  local inside=false line
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then inside=true; continue; fi
+    if [[ $inside == true && $line == '~~~' ]]; then break; fi
+    if [[ $inside == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+}
+
+die() {
+  local code=$1; shift
+  printf 'trove: %s\n' "$*" >&2
+  exit "$code"
+}
+
+run_jq() {
+  "$RUNNER" jq "$@"
+}
+
+# Resolve owner label without touching disk.
+resolve_owner() {
+  if [[ -n $OWNER_OPT ]]; then printf '%s' "$OWNER_OPT"
+  elif [[ -n ${BASHY_PRINCIPAL:-} ]]; then printf '%s' "$BASHY_PRINCIPAL"
+  elif [[ -n ${USER:-} ]]; then printf '%s' "$USER"
+  else printf 'unknown'
+  fi
+}
+
+# Resolve producer label for write provenance.
+resolve_producer() {
+  if [[ -n ${BASHY_AGENT:-} || -n ${BASHY_AGENT_ID:-} ]]; then
+    printf 'agent'
+  else
+    printf 'human'
+  fi
+}
+
+# Normalize a virtual trove path: accepts /a/b or trove:/a/b or trove:a/b.
+# Rejects empty paths, NULs, and ".." traversal segments.
+normalize_vpath() {
+  local raw=$1
+  raw=${raw#trove:}
+  [[ -n $raw ]] || die 1 "invalid path: empty"
+  [[ $raw == /* ]] || raw="/$raw"
+  local IFS=/ part out=""
+  local -a parts
+  read -r -a parts <<< "$raw"
+  for part in "${parts[@]}"; do
+    [[ -z $part || $part == "." ]] && continue
+    [[ $part == ".." ]] && die 1 "invalid path: $raw escapes mount"
+    out+="/$part"
+  done
+  if [[ -z $out ]]; then
+    printf '/'
+  else
+    printf '%s' "$out"
+  fi
+}
+
+# Validate a mount key: normalized virtual path, not "/".
+validate_mount_path() {
+  local raw=$1
+  [[ $raw == /* ]] || die 1 "mount path must start with '/': $raw"
+  local norm
+  norm=$(normalize_vpath "$raw")
+  [[ $norm != "/" ]] || die 1 "mount path cannot be root '/'"
+  printf '%s' "$norm"
+}
+
+# Validate locator syntax reusing yoke/pkg/ref/locator.go grammar plus trove schemes.
+validate_locator() {
+  local loc=$1
+  [[ -n $loc ]] || die 1 "locator: empty resource"
+
+  # Split optional single @scope
+  local resource=$loc scope=""
+  if [[ $loc == *"@"* ]]; then
+    resource=${loc%%@*}
+    scope=${loc#*@}
+    if [[ -z $scope || $scope == *"@"* ]]; then
+      die 1 "locator: multiple or empty location scopes: $loc"
+    fi
+    if [[ $scope == *":"* ]]; then
+      local skind=${scope%%:*} sval=${scope#*:}
+      case "$skind" in
+        ws|sandbox|k8s|cloud) ;;
+        *) die 1 "locator: unknown location scope '$skind': $loc" ;;
+      esac
+      [[ -n $sval && $sval != *":"* && $sval != *"!"* && $sval != *"\\"* ]] || die 1 "locator: invalid location scope: $loc"
+    else
+      [[ $scope != *"!"* && $scope != *"\\"* ]] || die 1 "locator: invalid host scope: $loc"
+    fi
+  fi
+
+  # Must have scheme:target
+  if [[ $resource != *":"* ]]; then
+    die 1 "locator: scheme required (e.g. dir:, git:, drive:, gh:): $loc"
+  fi
+  local scheme=${resource%%:*}
+  local rest=${resource#*:}
+
+  case "$scheme" in
+    dir|tar|zip|gzip|git|ast|graph|json|yaml|md|pdf|proc|net|peer|sphere|story|claim|oci|k8s|cloud|dag|drive|gh|app|mail|cal)
+      ;;
+    *)
+      die 1 "locator: unsupported scheme '$scheme': $loc"
+      ;;
+  esac
+
+  if [[ $scheme == "git" ]]; then
+    if [[ $rest != *":"* ]]; then
+      die 1 "locator: git requires git:<rev>:<path>: $loc"
+    fi
+    local rev=${rest%%:*}
+    [[ -n $rev ]] || die 1 "locator: git requires non-empty revision: $loc"
+  elif [[ $scheme == "dir" ]]; then
+    [[ -n $rest ]] || die 1 "locator: dir requires a target path: $loc"
+  fi
+}
+
+# Parse a locator into scheme, target, rev (for git), scope_kind, scope_val.
+LOC_SCHEME=""
+LOC_TARGET=""
+LOC_REV=""
+LOC_SCOPE_KIND=""
+LOC_SCOPE_VAL=""
+
+parse_locator() {
+  local loc=$1
+  LOC_SCHEME=""
+  LOC_TARGET=""
+  LOC_REV=""
+  LOC_SCOPE_KIND=""
+  LOC_SCOPE_VAL=""
+
+  local resource=$loc
+  if [[ $loc == *"@"* ]]; then
+    resource=${loc%%@*}
+    local scope=${loc#*@}
+    if [[ $scope == *":"* ]]; then
+      LOC_SCOPE_KIND=${scope%%:*}
+      LOC_SCOPE_VAL=${scope#*:}
+    else
+      LOC_SCOPE_KIND="host"
+      LOC_SCOPE_VAL=$scope
+    fi
+  fi
+
+  LOC_SCHEME=${resource%%:*}
+  local rest=${resource#*:}
+  if [[ $LOC_SCHEME == "git" ]]; then
+    LOC_REV=${rest%%:*}
+    LOC_TARGET=${rest#*:}
+  else
+    LOC_TARGET=$rest
+  fi
+}
+
+# Validate layout JSON string and ensure schema_version == bashy-trove-v1.
+validate_layout_json() {
+  local raw=$1
+  local checked
+  if ! checked=$(printf '%s' "$raw" | run_jq -c '
+    if type != "object" then error("layout must be a JSON object")
+    elif .schema_version != "bashy-trove-v1" then error("unsupported schema_version: " + (.schema_version | tostring))
+    else . end
+  ' 2>&1); then
+    die 1 "invalid layout JSON: $checked"
+  fi
+  printf '%s' "$checked"
+}
+
+# Read layout JSON from local override file or vault entry trove/layout.
+read_layout() {
+  local raw=""
+  if [[ -n $LAYOUT_FILE ]]; then
+    if [[ -f $LAYOUT_FILE ]]; then
+      raw=$(cat "$LAYOUT_FILE")
+      if [[ -z $raw ]]; then
+        printf '{"schema_version":"bashy-trove-v1"}'
+        return 0
+      fi
+      validate_layout_json "$raw"
+    else
+      printf '{"schema_version":"bashy-trove-v1"}'
+    fi
+    return 0
+  fi
+
+  local err_file rc=0
+  err_file=$(mktemp_tracked)
+  if raw=$("$RUNNER" secret exec --stdin "$VAULT_ENTRY" -- "$RUNNER" -c 'cat' 2>"$err_file"); then
+    rc=0
+  else
+    rc=$?
+  fi
+  local err_msg=""
+  [[ -f $err_file ]] && err_msg=$(cat "$err_file")
+  rm -f "$err_file"
+
+  if [[ $rc -ne 0 ]]; then
+    if [[ $err_msg == *"no such secret"* || $err_msg == *"404"* ]]; then
+      printf '{"schema_version":"bashy-trove-v1"}'
+      return 0
+    fi
+    die 1 "vault read $VAULT_ENTRY: $err_msg (set --layout FILE or TROVE_LAYOUT_FILE for offline use)"
+  fi
+  if [[ -z $raw ]]; then
+    printf '{"schema_version":"bashy-trove-v1"}'
+    return 0
+  fi
+  validate_layout_json "$raw"
+}
+
+# Write layout JSON to local override file or vault entry trove/layout.
+write_layout() {
+  local content=$1
+  content=$(validate_layout_json "$content")
+  if [[ -n $LAYOUT_FILE ]]; then
+    local parent
+    parent=$(dirname "$LAYOUT_FILE")
+    mkdir -p "$parent"
+    local tmp="${LAYOUT_FILE}.tmp.$$"
+    printf '%s\n' "$content" > "$tmp"
+    chmod 600 "$tmp" 2>/dev/null || true
+    mv -f "$tmp" "$LAYOUT_FILE"
+    return 0
+  fi
+
+  local err_file rc=0
+  err_file=$(mktemp_tracked)
+  if printf '%s\n' "$content" | "$RUNNER" secret set "$VAULT_ENTRY" >/dev/null 2>"$err_file"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  local err_msg=""
+  [[ -f $err_file ]] && err_msg=$(cat "$err_file")
+  rm -f "$err_file"
+  if [[ $rc -ne 0 ]]; then
+    die 1 "vault write $VAULT_ENTRY: $err_msg"
+  fi
+}
+
+# Resolve virtual path against layout using longest-prefix mount match.
+# Sets MATCH_MOUNT, MATCH_LOCATOR, MATCH_ACCOUNT, MATCH_DIR, MATCH_REL.
+MATCH_MOUNT=""
+MATCH_LOCATOR=""
+MATCH_ACCOUNT=""
+MATCH_DIR=""
+MATCH_REL=""
+
+resolve_mount() {
+  local layout=$1 vpath=$2
+  MATCH_MOUNT=""
+  MATCH_LOCATOR=""
+  MATCH_ACCOUNT=""
+  MATCH_DIR=""
+  MATCH_REL=""
+
+  local match_json
+  match_json=$(printf '%s' "$layout" | TROVE_VPATH="$vpath" run_jq -c '
+    ($ENV.TROVE_VPATH) as $vp |
+    [to_entries[] | select(.key != "schema_version" and (.value | type == "object")) |
+     select(.key as $k | $vp == $k or ($vp | startswith($k + "/")))] |
+    sort_by(.key | length) | reverse | .[0] // empty
+  ')
+  [[ -n $match_json ]] || die 1 "not found: $vpath"
+
+  MATCH_MOUNT=$(printf '%s' "$match_json" | run_jq -r '.key')
+  MATCH_LOCATOR=$(printf '%s' "$match_json" | run_jq -r '.value.locator // ""')
+  MATCH_ACCOUNT=$(printf '%s' "$match_json" | run_jq -r '.value.account // ""')
+  MATCH_DIR=$(printf '%s' "$match_json" | run_jq -r '.value.dir // ""')
+
+  if [[ $vpath == "$MATCH_MOUNT" ]]; then
+    MATCH_REL=""
+  else
+    MATCH_REL=${vpath#"$MATCH_MOUNT"/}
+  fi
+  [[ -n $MATCH_LOCATOR ]] || die 1 "mount $MATCH_MOUNT has no locator"
+}
+
+# Build the underlying lens locator for (parsed mount locator, rel).
+build_target_locator() {
+  local rel=$1
+  case "$LOC_SCHEME" in
+    dir)
+      local base=$LOC_TARGET
+      local full=""
+      if [[ -z $rel ]]; then
+        full=$base
+      elif [[ $base == "." ]]; then
+        full=$rel
+      elif [[ $base == "/" ]]; then
+        full="/$rel"
+      else
+        full="${base%/}/$rel"
+      fi
+      if [[ -n $LOC_SCOPE_KIND ]]; then
+        if [[ $LOC_SCOPE_KIND == "host" ]]; then
+          printf 'dir:%s@%s' "$full" "$LOC_SCOPE_VAL"
+        else
+          printf 'dir:%s@%s:%s' "$full" "$LOC_SCOPE_KIND" "$LOC_SCOPE_VAL"
+        fi
+      else
+        printf 'dir:%s' "$full"
+      fi
+      ;;
+    git)
+      local base=${LOC_TARGET#/}
+      base=${base%/}
+      local full=""
+      if [[ -z $base && -z $rel ]]; then
+        full=""
+      elif [[ -z $base ]]; then
+        full=$rel
+      elif [[ -z $rel ]]; then
+        full=$base
+      else
+        full="$base/$rel"
+      fi
+      printf 'git:%s:%s' "$LOC_REV" "$full"
+      ;;
+    drive|gh|app|mail|cal)
+      die 3 "scheme ${LOC_SCHEME}: is not supported in this slice (see H6b)"
+      ;;
+    *)
+      die 3 "unsupported mount scheme ${LOC_SCHEME}:"
+      ;;
+  esac
+}
+
+# Classify lens stderr failures into exit 3 (host offline) vs exit 1 (not found / error).
+handle_lens_error() {
+  local vpath=$1 err_msg=$2
+  if [[ $LOC_SCOPE_KIND == "host" ]]; then
+    case "$err_msg" in
+      *"peer is offline"*|*"offline"*|*"unknown peer"*|*"executable file not found"*|*"connection refused"*|*"unreachable"*|*"no route"*|*"not paired"*|*"outpost"*"not found"*)
+        die 3 "host offline: $LOC_SCOPE_VAL ($err_msg)"
+        ;;
+    esac
+  fi
+  case "$err_msg" in
+    *"no such file"*|*"does not exist"*|*"no such dir"*|*"not exist"*)
+      die 1 "not found: $vpath"
+      ;;
+  esac
+  die 1 "$vpath: $err_msg"
+}
+
+# Run `bashy lens -t listing` with optional depth; captures stdout in LENS_OUT.
+LENS_OUT=""
+run_lens_listing() {
+  local target_loc=$1 depth=$2 vpath=$3
+  local -a args=(-t listing)
+  if [[ -n $depth ]]; then
+    args+=(--depth "$depth")
+  fi
+  args+=("$target_loc")
+
+  local err_file rc=0
+  err_file=$(mktemp_tracked)
+  if [[ -n $MATCH_DIR ]]; then
+    if LENS_OUT=$(cd "$MATCH_DIR" && "$RUNNER" lens "${args[@]}" 2>"$err_file"); then
+      rc=0
+    else
+      rc=$?
+    fi
+  else
+    if LENS_OUT=$("$RUNNER" lens "${args[@]}" 2>"$err_file"); then
+      rc=0
+    else
+      rc=$?
+    fi
+  fi
+  local err_msg=""
+  [[ -f $err_file ]] && err_msg=$(cat "$err_file")
+  rm -f "$err_file"
+  if [[ $rc -ne 0 ]]; then
+    handle_lens_error "$vpath" "$err_msg"
+  fi
+}
+
+# Rewrite bashy-node-v1 JSONL rows from lens to virtual trove paths and add
+# trove attrs (mount, owner, provenance, locator, optional account).
+# Args: lens_jsonl, vpath, mount_path, owner, account, drop_root_if_dir (true|false), name_glob
+enrich_rows() {
+  local raw=$1 vpath=$2 mount_path=$3 owner=$4 account=$5 drop_root_if_dir=$6 name_glob=$7
+  [[ -n $raw ]] || return 0
+
+  local first_line root_path root_kind
+  first_line=$(printf '%s\n' "$raw" | head -n 1)
+  root_path=$(printf '%s' "$first_line" | run_jq -r '.path // ""')
+  root_kind=$(printf '%s' "$first_line" | run_jq -r '.kind // ""')
+
+  local stream=$raw
+  if [[ $drop_root_if_dir == "true" && $root_kind == "directory" ]]; then
+    stream=$(printf '%s\n' "$raw" | tail -n +2)
+    [[ -n $stream ]] || return 0
+  fi
+
+  local enriched
+  enriched=$(
+    printf '%s\n' "$stream" | \
+    TROVE_VPATH="$vpath" \
+    TROVE_ROOT_PATH="$root_path" \
+    TROVE_MOUNT="$mount_path" \
+    TROVE_OWNER="$owner" \
+    TROVE_ACCOUNT="$account" \
+    run_jq -c '
+      ($ENV.TROVE_VPATH) as $vp |
+      ($ENV.TROVE_ROOT_PATH) as $rp |
+      ($ENV.TROVE_MOUNT) as $mp |
+      ($ENV.TROVE_OWNER) as $ow |
+      ($ENV.TROVE_ACCOUNT) as $ac |
+      . as $n |
+      ($n.path // "") as $p |
+      (if $p == $rp then $vp
+       elif $rp == "" or $rp == "." then
+         ($vp + "/" + ($p | sub("^/+"; "")))
+       elif ($p | startswith($rp + "/")) then
+         ($vp + "/" + ($p[($rp | length) + 1:]))
+       else
+         ($vp + "/" + ($n.name // ($p | split("/") | last)))
+       end) as $np |
+      ($np | split("/") | last) as $base |
+      ($n.ref // $p) as $orig_ref |
+      {
+        schema_version: "bashy-node-v1",
+        ref: ("trove:" + $np),
+        path: $np,
+        name: (if ($n.name // "") == "" or $n.name == "." or ($p == $rp and $np == $mp) then (if $base == "" then "/" else $base end) else $n.name end),
+        kind: $n.kind,
+        type: $n.type
+      }
+      + (if $n.size != null then {size: $n.size} else {} end)
+      + (if ($n.mode // "") != "" then {mode: $n.mode} else {} end)
+      + (if ($n.mtime // "") != "" then {mtime: $n.mtime} else {} end)
+      + (if ($n.rev // "") != "" then {rev: $n.rev} else {} end)
+      + (if $n.children != null then {children: $n.children} else {} end)
+      + {
+        attrs: (
+          ($n.attrs // {})
+          + {
+              mount: $mp,
+              owner: $ow,
+              locator: $orig_ref,
+              provenance: {
+                producer: "human",
+                source: $orig_ref
+              }
+            }
+          + (if $ac != "" then {account: $ac} else {} end)
+        )
+      }
+    '
+  )
+
+  if [[ -n $name_glob ]]; then
+    local line nname
+    while IFS= read -r line; do
+      [[ -n $line ]] || continue
+      nname=$(printf '%s' "$line" | run_jq -r '.name')
+      # shellcheck disable=SC2053
+      if [[ $nname == $name_glob ]]; then
+        printf '%s\n' "$line"
+      fi
+    done <<< "$enriched"
+  else
+    printf '%s\n' "$enriched"
+  fi
+}
+
+# Format bashy-node-v1 JSONL rows for human text output.
+print_rows_human() {
+  local rows=$1 mode=$2
+  [[ -n $rows ]] || return 0
+  case "$mode" in
+    ls)
+      printf '%s\n' "$rows" | run_jq -r '
+        [
+          (.kind // "-"),
+          (if .size != null then (.size | tostring) else "-" end),
+          .path
+        ] | join("\t")
+      '
+      ;;
+    find)
+      printf '%s\n' "$rows" | run_jq -r '.path'
+      ;;
+    stat)
+      printf '%s\n' "$rows" | run_jq -r '
+        "path: " + .path + "\n" +
+        "ref: " + .ref + "\n" +
+        "kind: " + .kind + "\n" +
+        "type: " + .type + "\n" +
+        (if .size != null then "size: " + (.size | tostring) + "\n" else "" end) +
+        (if (.mode // "") != "" then "mode: " + .mode + "\n" else "" end) +
+        (if (.mtime // "") != "" then "mtime: " + .mtime + "\n" else "" end) +
+        (if (.rev // "") != "" then "rev: " + .rev + "\n" else "" end) +
+        "mount: " + (.attrs.mount // "") + "\n" +
+        "owner: " + (.attrs.owner // "") + "\n" +
+        "source: " + (.attrs.provenance.source // "")
+      '
+      ;;
+  esac
+}
+
+# Emit root mount rows for `ls /`.
+root_mount_rows() {
+  local layout=$1 owner=$2
+  printf '%s' "$layout" | TROVE_OWNER="$owner" run_jq -c '
+    ($ENV.TROVE_OWNER) as $ow |
+    [to_entries[] | select(.key != "schema_version" and (.value | type == "object"))] |
+    sort_by(.key)[] |
+    (.key) as $mp |
+    (.value.locator // "") as $loc |
+    (.value.account // "") as $ac |
+    {
+      schema_version: "bashy-node-v1",
+      ref: ("trove:" + $mp),
+      path: $mp,
+      name: ($mp | split("/") | last),
+      kind: "directory",
+      type: "inode/directory",
+      attrs: (
+        {
+          mount: $mp,
+          owner: $ow,
+          locator: $loc,
+          provenance: {
+            producer: "human",
+            source: $loc
+          }
+        }
+        + (if $ac != "" then {account: $ac} else {} end)
+      )
+    }
+  '
+}
+
+# Resolve peer host SSH target via outpost, mirroring yoke/cmds/lens/hostscope.go.
+# Sets PEER_SSH_TARGET.
+PEER_SSH_TARGET=""
+resolve_outpost_target() {
+  local host_id=$1
+  command -v "$OUTPOST_BIN" >/dev/null 2>&1 || die 3 "host offline: $host_id (outpost unavailable)"
+
+  local peers_json err_file rc=0
+  err_file=$(mktemp_tracked)
+  if peers_json=$("$OUTPOST_BIN" peers status --json 2>"$err_file"); then
+    rc=0
+  else
+    rc=$?
+  fi
+  local err_msg=""
+  [[ -f $err_file ]] && err_msg=$(cat "$err_file")
+  rm -f "$err_file"
+  if [[ $rc -ne 0 ]]; then
+    die 3 "host offline: $host_id ($err_msg)"
+  fi
+
+  local match_info
+  match_info=$(printf '%s' "$peers_json" | TROVE_HOST="$host_id" run_jq -c '
+    ($ENV.TROVE_HOST) as $id |
+    [ .[] | select(.host == $id or .alias == $id) ] |
+    { count: length, first: (.[0] // null), hosts: [.[].host] }
+  ' 2>/dev/null) || die 3 "host offline: $host_id (invalid outpost peers output)"
+
+  local count
+  count=$(printf '%s' "$match_info" | run_jq -r '.count')
+  if [[ $count == "0" ]]; then
+    die 3 "host offline: $host_id (unknown peer)"
+  elif [[ $count != "1" ]]; then
+    local hosts
+    hosts=$(printf '%s' "$match_info" | run_jq -r '.hosts | join(", ")')
+    die 1 "ambiguous peer '$host_id': matches $hosts"
+  fi
+
+  local online peer_host
+  online=$(printf '%s' "$match_info" | run_jq -r '.first.online')
+  peer_host=$(printf '%s' "$match_info" | run_jq -r '.first.host')
+  if [[ $online != "true" ]]; then
+    die 3 "host offline: $host_id (peer $peer_host is offline)"
+  fi
+  if [[ $peer_host == -* ]]; then
+    die 1 "invalid peer host: $peer_host"
+  fi
+
+  local targets_json
+  err_file=$(mktemp_tracked)
+  if targets_json=$("$OUTPOST_BIN" ssh list --json 2>"$err_file"); then
+    rc=0
+  else
+    rc=$?
+  fi
+  err_msg=""
+  [[ -f $err_file ]] && err_msg=$(cat "$err_file")
+  rm -f "$err_file"
+  if [[ $rc -ne 0 ]]; then
+    die 3 "host offline: $host_id (list SSH targets: $err_msg)"
+  fi
+
+  local tinfo
+  tinfo=$(printf '%s' "$targets_json" | TROVE_PEER_HOST="$peer_host" run_jq -c '
+    ($ENV.TROVE_PEER_HOST) as $h |
+    [ .[] | select(.host == $h and (.name // "") != "" and ((.name | startswith("-")) | not)) | .name ] |
+    { count: length, name: (.[0] // "") }
+  ' 2>/dev/null) || die 1 "failed to decode outpost SSH targets"
+
+  local tcount
+  tcount=$(printf '%s' "$tinfo" | run_jq -r '.count')
+  if [[ $tcount != "1" ]]; then
+    die 1 "need exactly one saved SSH target for peer $peer_host (found $tcount)"
+  fi
+  PEER_SSH_TARGET=$(printf '%s' "$tinfo" | run_jq -r '.name')
+}
+
+# ---- Verb implementations --------------------------------------------------
+
+cmd_mount() {
+  local sub=${1:-ls}
+  shift || true
+  case "$sub" in
+    ls|list)
+      local layout
+      layout=$(read_layout)
+      if [[ $AS_JSON == true ]]; then
+        printf '%s\n' "$layout"
+      else
+        local lines
+        lines=$(printf '%s' "$layout" | run_jq -r '
+          [to_entries[] | select(.key != "schema_version" and (.value | type == "object"))] |
+          sort_by(.key)[] |
+          .key + "\t" + (.value.locator // "") + (if (.value.account // "") != "" then "\taccount=" + .value.account else "" end)
+        ')
+        if [[ -n $lines ]]; then
+          printf '%s\n' "$lines"
+        fi
+      fi
+      ;;
+    add)
+      [[ $# -ge 2 ]] || die 1 "usage: trove mount add PATH LOCATOR [account=ACCOUNT] [--dry-run] [--json]"
+      local mpath loc account="" extra_arg
+      mpath=$(validate_mount_path "$1")
+      loc=$2
+      shift 2
+      while [[ $# -gt 0 ]]; do
+        extra_arg=$1; shift
+        case "$extra_arg" in
+          account=*) account=${extra_arg#account=} ;;
+          --account)
+            [[ $# -ge 1 ]] || die 1 "--account requires a value"
+            account=$1; shift ;;
+          --account=*) account=${extra_arg#--account=} ;;
+          *) die 1 "unexpected argument to mount add: $extra_arg" ;;
+        esac
+      done
+      validate_locator "$loc"
+      local layout new_layout
+      layout=$(read_layout)
+      new_layout=$(
+        printf '%s' "$layout" | TROVE_MP="$mpath" TROVE_LOC="$loc" TROVE_AC="$account" run_jq -c '
+          .schema_version = "bashy-trove-v1" |
+          .[$ENV.TROVE_MP] = (
+            {locator: $ENV.TROVE_LOC} +
+            (if $ENV.TROVE_AC != "" then {account: $ENV.TROVE_AC} else {} end)
+          )
+        '
+      )
+      if [[ $DRY_RUN == false ]]; then
+        write_layout "$new_layout"
+      fi
+      if [[ $AS_JSON == true ]]; then
+        TROVE_MP="$mpath" TROVE_LOC="$loc" TROVE_AC="$account" TROVE_DR="$DRY_RUN" \
+        run_jq -nc '
+          {
+            ok: true,
+            action: "mount add",
+            path: $ENV.TROVE_MP,
+            locator: $ENV.TROVE_LOC,
+            dry_run: ($ENV.TROVE_DR == "true")
+          } + (if $ENV.TROVE_AC != "" then {account: $ENV.TROVE_AC} else {} end)
+        '
+      else
+        if [[ $DRY_RUN == true ]]; then
+          printf 'dry-run: would mount %s -> %s\n' "$mpath" "$loc"
+        else
+          printf 'mounted %s -> %s\n' "$mpath" "$loc"
+        fi
+      fi
+      ;;
+    rm|remove)
+      [[ $# -eq 1 ]] || die 1 "usage: trove mount rm PATH [--dry-run] [--json]"
+      local mpath
+      mpath=$(validate_mount_path "$1")
+      local layout exists
+      layout=$(read_layout)
+      exists=$(printf '%s' "$layout" | TROVE_MP="$mpath" run_jq -r 'has($ENV.TROVE_MP)')
+      [[ $exists == "true" ]] || die 1 "not found: mount $mpath"
+      local new_layout
+      new_layout=$(printf '%s' "$layout" | TROVE_MP="$mpath" run_jq -c 'del(.[$ENV.TROVE_MP])')
+      if [[ $DRY_RUN == false ]]; then
+        write_layout "$new_layout"
+      fi
+      if [[ $AS_JSON == true ]]; then
+        TROVE_MP="$mpath" TROVE_DR="$DRY_RUN" \
+        run_jq -nc '{ok:true, action:"mount rm", path:$ENV.TROVE_MP, dry_run:($ENV.TROVE_DR=="true")}'
+      else
+        if [[ $DRY_RUN == true ]]; then
+          printf 'dry-run: would unmount %s\n' "$mpath"
+        else
+          printf 'unmounted %s\n' "$mpath"
+        fi
+      fi
+      ;;
+    *)
+      die 1 "unknown mount verb: $sub (expected add, ls, rm)"
+      ;;
+  esac
+}
+
+cmd_ls() {
+  local raw_path=${1:-/}
+  local vpath owner layout
+  vpath=$(normalize_vpath "$raw_path")
+  owner=$(resolve_owner)
+  layout=$(read_layout)
+
+  if [[ $vpath == "/" ]]; then
+    local rows
+    rows=$(root_mount_rows "$layout" "$owner")
+    if [[ $AS_JSON == true ]]; then
+      [[ -n $rows ]] && printf '%s\n' "$rows"
+    else
+      print_rows_human "$rows" ls
+    fi
+    return 0
+  fi
+
+  resolve_mount "$layout" "$vpath"
+  parse_locator "$MATCH_LOCATOR"
+  local target_loc
+  target_loc=$(build_target_locator "$MATCH_REL")
+  run_lens_listing "$target_loc" "1" "$vpath"
+  local rows
+  rows=$(enrich_rows "$LENS_OUT" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "true" "")
+  if [[ $AS_JSON == true ]]; then
+    [[ -n $rows ]] && printf '%s\n' "$rows"
+  else
+    print_rows_human "$rows" ls
+  fi
+}
+
+cmd_find() {
+  local raw_path=${1:-/}
+  local vpath owner layout
+  vpath=$(normalize_vpath "$raw_path")
+  owner=$(resolve_owner)
+  layout=$(read_layout)
+
+  if [[ $vpath == "/" ]]; then
+    local mount_keys mp all_rows=""
+    mount_keys=$(printf '%s' "$layout" | run_jq -r '
+      [to_entries[] | select(.key != "schema_version" and (.value | type == "object")) | .key] | sort[]
+    ')
+    while IFS= read -r mp; do
+      [[ -n $mp ]] || continue
+      resolve_mount "$layout" "$mp"
+      parse_locator "$MATCH_LOCATOR"
+      local target_loc
+      target_loc=$(build_target_locator "")
+      run_lens_listing "$target_loc" "$DEPTH_OPT" "$mp"
+      local mrows
+      mrows=$(enrich_rows "$LENS_OUT" "$mp" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "$NAME_GLOB")
+      if [[ -n $mrows ]]; then
+        if [[ -n $all_rows ]]; then
+          all_rows+=$'\n'"$mrows"
+        else
+          all_rows=$mrows
+        fi
+      fi
+    done <<< "$mount_keys"
+    if [[ $AS_JSON == true ]]; then
+      [[ -n $all_rows ]] && printf '%s\n' "$all_rows"
+    else
+      print_rows_human "$all_rows" find
+    fi
+    return 0
+  fi
+
+  resolve_mount "$layout" "$vpath"
+  parse_locator "$MATCH_LOCATOR"
+  local target_loc
+  target_loc=$(build_target_locator "$MATCH_REL")
+  run_lens_listing "$target_loc" "$DEPTH_OPT" "$vpath"
+  local rows
+  rows=$(enrich_rows "$LENS_OUT" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "$NAME_GLOB")
+  if [[ $AS_JSON == true ]]; then
+    [[ -n $rows ]] && printf '%s\n' "$rows"
+  else
+    print_rows_human "$rows" find
+  fi
+}
+
+cmd_stat() {
+  [[ $# -ge 1 ]] || die 1 "usage: trove stat PATH [--json]"
+  local vpath owner layout
+  vpath=$(normalize_vpath "$1")
+  owner=$(resolve_owner)
+  layout=$(read_layout)
+
+  if [[ $vpath == "/" ]]; then
+    local count
+    count=$(printf '%s' "$layout" | run_jq -r '[to_entries[] | select(.key != "schema_version" and (.value | type == "object"))] | length')
+    local row
+    row=$(TROVE_OWNER="$owner" TROVE_CNT="$count" run_jq -nc '
+      {
+        schema_version: "bashy-node-v1",
+        ref: "trove:/",
+        path: "/",
+        name: "/",
+        kind: "directory",
+        type: "inode/directory",
+        children: ($ENV.TROVE_CNT | tonumber),
+        attrs: {
+          mount: "/",
+          owner: $ENV.TROVE_OWNER,
+          provenance: {producer: "human", source: "trove/layout"}
+        }
+      }
+    ')
+    if [[ $AS_JSON == true ]]; then
+      printf '%s\n' "$row"
+    else
+      print_rows_human "$row" stat
+    fi
+    return 0
+  fi
+
+  resolve_mount "$layout" "$vpath"
+  parse_locator "$MATCH_LOCATOR"
+  local target_loc
+  target_loc=$(build_target_locator "$MATCH_REL")
+  run_lens_listing "$target_loc" "0" "$vpath"
+  local row
+  row=$(enrich_rows "$LENS_OUT" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "")
+  if [[ $AS_JSON == true ]]; then
+    printf '%s\n' "$row"
+  else
+    print_rows_human "$row" stat
+  fi
+}
+
+cmd_cat() {
+  [[ $# -ge 1 ]] || die 1 "usage: trove cat PATH [--json]"
+  local vpath owner layout
+  vpath=$(normalize_vpath "$1")
+  [[ $vpath != "/" ]] || die 1 "/: is a directory"
+  owner=$(resolve_owner)
+  layout=$(read_layout)
+
+  resolve_mount "$layout" "$vpath"
+  parse_locator "$MATCH_LOCATOR"
+  local target_loc
+  target_loc=$(build_target_locator "$MATCH_REL")
+
+  # Stat via lens first so unknown path / directory / host-offline behave uniformly.
+  run_lens_listing "$target_loc" "0" "$vpath"
+  local row kind
+  row=$(enrich_rows "$LENS_OUT" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "")
+  kind=$(printf '%s' "$row" | run_jq -r '.kind // ""')
+  [[ $kind != "directory" ]] || die 1 "$vpath: is a directory"
+
+  local content_file
+  content_file=$(mktemp_tracked)
+
+  case "$LOC_SCHEME" in
+    dir)
+      local base=$LOC_TARGET full
+      if [[ -z $MATCH_REL ]]; then
+        full=$base
+      elif [[ $base == "." ]]; then
+        full=$MATCH_REL
+      elif [[ $base == "/" ]]; then
+        full="/$MATCH_REL"
+      else
+        full="${base%/}/$MATCH_REL"
+      fi
+
+      if [[ $LOC_SCOPE_KIND == "host" ]]; then
+        resolve_outpost_target "$LOC_SCOPE_VAL"
+        local err_file rc=0
+        err_file=$(mktemp_tracked)
+        if "$OUTPOST_BIN" ssh sftp get "$PEER_SSH_TARGET" "$full" >"$content_file" 2>"$err_file"; then
+          rc=0
+        else
+          rc=$?
+        fi
+        local err_msg=""
+        [[ -f $err_file ]] && err_msg=$(cat "$err_file")
+        rm -f "$err_file"
+        if [[ $rc -ne 0 ]]; then
+          handle_lens_error "$vpath" "$err_msg"
+        fi
+      elif [[ -n $LOC_SCOPE_KIND ]]; then
+        die 3 "cat not supported for scope @${LOC_SCOPE_KIND}:"
+      else
+        [[ -f $full ]] || die 1 "not found: $vpath"
+        cat "$full" >"$content_file"
+      fi
+      ;;
+    git)
+      local base=${LOC_TARGET#/}
+      base=${base%/}
+      local gpath=""
+      if [[ -z $base ]]; then
+        gpath=$MATCH_REL
+      elif [[ -z $MATCH_REL ]]; then
+        gpath=$base
+      else
+        gpath="$base/$MATCH_REL"
+      fi
+      local err_file rc=0
+      err_file=$(mktemp_tracked)
+      if [[ -n $MATCH_DIR ]]; then
+        if (cd "$MATCH_DIR" && "$RUNNER" git --external=true show "${LOC_REV}:${gpath}") >"$content_file" 2>"$err_file"; then
+          rc=0
+        else
+          rc=$?
+        fi
+      else
+        if "$RUNNER" git --external=true show "${LOC_REV}:${gpath}" >"$content_file" 2>"$err_file"; then
+          rc=0
+        else
+          rc=$?
+        fi
+      fi
+      local err_msg=""
+      [[ -f $err_file ]] && err_msg=$(cat "$err_file")
+      rm -f "$err_file"
+      if [[ $rc -ne 0 ]]; then
+        die 1 "git show ${LOC_REV}:${gpath}: $err_msg"
+      fi
+      ;;
+    *)
+      die 3 "scheme ${LOC_SCHEME}: is not supported in this slice"
+      ;;
+  esac
+
+  if [[ $AS_JSON == true ]]; then
+    local body
+    body=$(cat "$content_file"; printf x)
+    body=${body%x}
+    printf '%s' "$row" | TROVE_CONTENT="$body" run_jq -c '.attrs.content = $ENV.TROVE_CONTENT'
+  else
+    cat "$content_file"
+  fi
+  rm -f "$content_file"
+}
+
+# Check mount is a writable local dir: mount and resolve destination path.
+# Sets WRITE_DEST_FS and WRITE_DEST_VPATH.
+WRITE_DEST_FS=""
+WRITE_DEST_VPATH=""
+
+resolve_writable_dest() {
+  local layout=$1 raw_dest=$2 default_name=$3
+  local trailing_slash=false
+  [[ $raw_dest == */ && $raw_dest != "/" ]] && trailing_slash=true
+  local vpath
+  vpath=$(normalize_vpath "$raw_dest")
+  [[ $vpath != "/" ]] || die 3 "cannot write directly to virtual root '/'"
+
+  resolve_mount "$layout" "$vpath"
+  parse_locator "$MATCH_LOCATOR"
+
+  if [[ $LOC_SCHEME == "drive" || $LOC_SCHEME == "gh" || $LOC_SCHEME == "app" || $LOC_SCHEME == "mail" || $LOC_SCHEME == "cal" ]]; then
+    die 3 "scheme ${LOC_SCHEME}: is not supported in this slice (see H6b)"
+  fi
+  if [[ $LOC_SCHEME != "dir" ]]; then
+    die 3 "mount $MATCH_MOUNT is read-only (${LOC_SCHEME}:)"
+  fi
+  if [[ -n $LOC_SCOPE_KIND ]]; then
+    die 3 "mount $MATCH_MOUNT is read-only (dir:@${LOC_SCOPE_KIND})"
+  fi
+
+  local base=$LOC_TARGET full
+  if [[ -z $MATCH_REL ]]; then
+    full=$base
+  elif [[ $base == "." ]]; then
+    full=$MATCH_REL
+  elif [[ $base == "/" ]]; then
+    full="/$MATCH_REL"
+  else
+    full="${base%/}/$MATCH_REL"
+  fi
+
+  if [[ $trailing_slash == true || -d $full || -z $MATCH_REL ]]; then
+    [[ -n $default_name ]] || die 1 "destination $vpath is a directory; specify a filename"
+    full="${full%/}/$default_name"
+    vpath="${vpath%/}/$default_name"
+    vpath=$(normalize_vpath "$vpath")
+  fi
+
+  WRITE_DEST_FS=$full
+  WRITE_DEST_VPATH=$vpath
+}
+
+emit_written_row() {
+  local vpath=$1 dest_fs=$2 src_ref=$3 via=$4 digest=$5 owner=$6
+  local producer
+  producer=$(resolve_producer)
+  local now
+  now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+  run_lens_listing "dir:$dest_fs" "0" "$vpath"
+  local row
+  row=$(enrich_rows "$LENS_OUT" "$vpath" "$MATCH_MOUNT" "$owner" "$MATCH_ACCOUNT" "false" "")
+  row=$(
+    printf '%s' "$row" | \
+    TROVE_PROD="$producer" \
+    TROVE_SRC="$src_ref" \
+    TROVE_VIA="$via" \
+    TROVE_DIGEST="$digest" \
+    TROVE_TIME="$now" \
+    TROVE_OWNER="$owner" \
+    run_jq -c '
+      .attrs.provenance = (
+        {
+          producer: $ENV.TROVE_PROD,
+          principal: $ENV.TROVE_OWNER,
+          source: $ENV.TROVE_SRC,
+          time: $ENV.TROVE_TIME,
+          digest: $ENV.TROVE_DIGEST
+        } + (if $ENV.TROVE_VIA != "" then {via: $ENV.TROVE_VIA} else {} end)
+      )
+    '
+  )
+  printf '%s' "$row"
+}
+
+cmd_put() {
+  [[ $# -eq 2 ]] || die 1 "usage: trove put SRC PATH [--dry-run] [--json]"
+  local src=$1 raw_dest=$2
+  local owner layout default_name=""
+  owner=$(resolve_owner)
+  layout=$(read_layout)
+
+  if [[ $src != "-" ]]; then
+    [[ -f $src ]] || die 1 "not found: source file $src"
+    default_name=$(basename "$src")
+  fi
+
+  resolve_writable_dest "$layout" "$raw_dest" "$default_name"
+
+  if [[ $DRY_RUN == true ]]; then
+    if [[ $AS_JSON == true ]]; then
+      TROVE_SRC="$src" TROVE_VP="$WRITE_DEST_VPATH" TROVE_FS="$WRITE_DEST_FS" TROVE_MP="$MATCH_MOUNT" \
+      run_jq -nc '{
+        ok: true,
+        dry_run: true,
+        action: "put",
+        src: $ENV.TROVE_SRC,
+        path: $ENV.TROVE_VP,
+        dest: $ENV.TROVE_FS,
+        mount: $ENV.TROVE_MP
+      }'
+    else
+      printf 'dry-run: would put %s -> %s (%s)\n' "$src" "$WRITE_DEST_VPATH" "$WRITE_DEST_FS"
+    fi
+    return 0
+  fi
+
+  mkdir -p "$(dirname "$WRITE_DEST_FS")"
+  if [[ $src == "-" ]]; then
+    cat > "$WRITE_DEST_FS"
+  else
+    cp "$src" "$WRITE_DEST_FS"
+  fi
+  local digest
+  digest="sha256:$("$RUNNER" sha256sum "$WRITE_DEST_FS" | awk '{print $1}')"
+  local row
+  row=$(emit_written_row "$WRITE_DEST_VPATH" "$WRITE_DEST_FS" "$src" "trove put" "$digest" "$owner")
+  if [[ $AS_JSON == true ]]; then
+    printf '%s\n' "$row"
+  else
+    printf 'put %s -> %s\n' "$src" "$WRITE_DEST_VPATH"
+  fi
+}
+
+slug_from_url() {
+  local url=$1
+  local stripped=${url#*://}
+  stripped=${stripped%%\?*}
+  stripped=${stripped%%#*}
+  stripped=${stripped%/}
+  local last=${stripped##*/}
+  if [[ -z $last || $last == "$stripped" ]]; then
+    last=${stripped%%/*}
+  fi
+  # Sanitize to [A-Za-z0-9._-]
+  local clean="" i ch
+  for ((i = 0; i < ${#last}; i++)); do
+    ch=${last:i:1}
+    case "$ch" in
+      [A-Za-z0-9._-]) clean+="$ch" ;;
+      *) clean+="-" ;;
+    esac
+  done
+  clean=${clean%.html}
+  clean=${clean%.htm}
+  clean=${clean%.md}
+  [[ -n $clean ]] || clean="page"
+  printf '%s.md' "$clean"
+}
+
+cmd_add() {
+  [[ $# -eq 2 ]] || die 1 "usage: trove add URL PATH [--dry-run] [--json]"
+  local url=$1 raw_dest=$2
+  case "$url" in
+    http://*|https://*) ;;
+    *) die 1 "invalid URL (must start with http:// or https://): $url" ;;
+  esac
+
+  local owner layout default_name
+  owner=$(resolve_owner)
+  layout=$(read_layout)
+  default_name=$(slug_from_url "$url")
+
+  resolve_writable_dest "$layout" "$raw_dest" "$default_name"
+
+  if [[ $DRY_RUN == true ]]; then
+    if [[ $AS_JSON == true ]]; then
+      TROVE_URL="$url" TROVE_VP="$WRITE_DEST_VPATH" TROVE_FS="$WRITE_DEST_FS" TROVE_MP="$MATCH_MOUNT" \
+      run_jq -nc '{
+        ok: true,
+        dry_run: true,
+        action: "add",
+        url: $ENV.TROVE_URL,
+        path: $ENV.TROVE_VP,
+        dest: $ENV.TROVE_FS,
+        mount: $ENV.TROVE_MP,
+        command: ["bashy", "fetch", "-f", "--md", "--json=false", $ENV.TROVE_URL]
+      }'
+    else
+      printf 'dry-run: would fetch --md %s -> %s (%s)\n' "$url" "$WRITE_DEST_VPATH" "$WRITE_DEST_FS"
+    fi
+    return 0
+  fi
+
+  local tmp_md err_file rc=0
+  tmp_md=$(mktemp_tracked)
+  err_file=$(mktemp_tracked)
+  if BASHY_AGENTIC=0 "$RUNNER" fetch -f --md --json=false "$url" >"$tmp_md" 2>"$err_file"; then
+    rc=0
+  else
+    rc=$?
+  fi
+  if [[ $rc -ne 0 ]]; then
+    local err_msg
+    err_msg=$(cat "$err_file")
+    die 1 "fetch $url: $err_msg"
+  fi
+
+  mkdir -p "$(dirname "$WRITE_DEST_FS")"
+  cp "$tmp_md" "$WRITE_DEST_FS"
+  local digest
+  digest="sha256:$("$RUNNER" sha256sum "$WRITE_DEST_FS" | awk '{print $1}')"
+  local row
+  row=$(emit_written_row "$WRITE_DEST_VPATH" "$WRITE_DEST_FS" "$url" "bashy fetch --md" "$digest" "$owner")
+  if [[ $AS_JSON == true ]]; then
+    printf '%s\n' "$row"
+  else
+    printf 'added %s -> %s\n' "$url" "$WRITE_DEST_VPATH"
+  fi
+}
+
+# ---- Argument parsing (global flags accepted anywhere) ---------------------
+
+if [[ $# -eq 0 ]]; then
+  print_skill
+  exit 0
+fi
+
+case "$1" in
+  --skill|--help|-h|help)
+    print_skill
+    exit 0
+    ;;
+esac
+
+POSITIONALS=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --json) AS_JSON=true; shift ;;
+    --dry-run) DRY_RUN=true; shift ;;
+    --layout)
+      [[ $# -ge 2 ]] || die 1 "--layout requires a file path"
+      LAYOUT_FILE=$2; shift 2 ;;
+    --layout=*) LAYOUT_FILE=${1#--layout=}; shift ;;
+    --owner)
+      [[ $# -ge 2 ]] || die 1 "--owner requires a value"
+      OWNER_OPT=$2; shift 2 ;;
+    --owner=*) OWNER_OPT=${1#--owner=}; shift ;;
+    --depth)
+      [[ $# -ge 2 ]] || die 1 "--depth requires an integer"
+      DEPTH_OPT=$2; shift 2 ;;
+    --depth=*) DEPTH_OPT=${1#--depth=}; shift ;;
+    --name)
+      [[ $# -ge 2 ]] || die 1 "--name requires a glob pattern"
+      NAME_GLOB=$2; shift 2 ;;
+    --name=*) NAME_GLOB=${1#--name=}; shift ;;
+    --help|-h)
+      print_skill
+      exit 0 ;;
+    --)
+      shift
+      while [[ $# -gt 0 ]]; do POSITIONALS+=("$1"); shift; done
+      ;;
+    *)
+      POSITIONALS+=("$1"); shift ;;
+  esac
+done
+
+[[ ${#POSITIONALS[@]} -gt 0 ]] || { print_skill; exit 0; }
+
+VERB=${POSITIONALS[0]}
+ARGS=("${POSITIONALS[@]:1}")
+
+case "$VERB" in
+  mount) cmd_mount "${ARGS[@]}" ;;
+  ls)    cmd_ls "${ARGS[@]}" ;;
+  find)  cmd_find "${ARGS[@]}" ;;
+  stat)  cmd_stat "${ARGS[@]}" ;;
+  cat)   cmd_cat "${ARGS[@]}" ;;
+  put)   cmd_put "${ARGS[@]}" ;;
+  add)   cmd_add "${ARGS[@]}" ;;
+  *)     die 1 "unknown verb: $VERB (expected mount, ls, find, stat, cat, put, add)" ;;
+esac
