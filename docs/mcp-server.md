@@ -196,10 +196,18 @@ Each request gets its own server bound to the verified caller. An executing
   directory, and a `dir` argument must stay inside that;
 - inherits only `PATH`, locale and time zone from the runner. The call sees
   `BASHY_PRINCIPAL` (the caller), `BASHY_SESSION` and `BASHY_HOSTED_TASK_ID`
-  (the task), `BASHY_HOSTED_IDEMPOTENCY_KEY`, `BASHY_HOSTED_SCRATCH` and
-  `BASHY_SECRETS_TOKEN` (the identity's token, empty when it has none). A
-  client `env` argument cannot override any of them. The runner's registered
+  (the task), `BASHY_HOSTED_IDEMPOTENCY_KEY` and `BASHY_HOSTED_SCRATCH`. A
+  client `env` argument cannot override these values. The runner's registered
   commands stay callable through a read-only `BASHY_COMMANDS_PATH`;
+- with a signed `secrets_token`, lists connected credentials and uses the
+  `secret exec --no-cache` projection path. Google Workspace files are
+  written with mode 0600 under the call's `GWS_CONFIG_ROOT` and removed
+  with the scratch tree. `bashy google auth-status --vault` uses the
+  call's vault listing. GitHub, AWS and gcloud environment variables are
+  supplied when the vault names identify one account for that provider.
+  The signed vault token stays in the runner for general tools. The
+  registered `trove` tool receives it in `BASHY_SECRETS_TOKEN` to read
+  its layout from the caller's vault;
 - stops at `--timeout` (default 1m): the child's process group is killed and
   the call answers exit 124;
 - returns at most `--max-output` bytes of each stream; stderr names what was

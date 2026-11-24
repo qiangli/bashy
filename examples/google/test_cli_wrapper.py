@@ -6,6 +6,7 @@ import hashlib
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
+import shutil
 import stat
 import subprocess
 import sys
@@ -164,6 +165,9 @@ class GoogleWrapperTest(unittest.TestCase):
         self.tempdir = tempfile.TemporaryDirectory()
         self.root = self.tempdir.name
         self.config_root = os.path.join(self.root, "config")
+        self.python_env = os.path.join(self.root, "venv")
+        os.makedirs(os.path.join(self.python_env, "bin"))
+        os.symlink(sys.executable, os.path.join(self.python_env, "bin", "python"))
         self.log_file = os.path.join(self.root, "gws_calls.jsonl")
         self.fake_gws = os.path.join(self.root, "fake-gws")
         with open(self.fake_gws, "w", encoding="utf-8") as fh:
@@ -199,12 +203,25 @@ class GoogleWrapperTest(unittest.TestCase):
             "GWS_SERVICE_ACCOUNT_KEY_FILE",
             "GOOGLE_APPLICATION_CREDENTIALS",
             "GOOGLE_WORKSPACE_CLI_TOKEN",
+            "BASHY_API_KEY",
+            "BASHY_HOSTED",
+            "BASHY_HOSTED_GOOGLE_NAMES",
         ):
             env.pop(k, None)
         env["GWS_CONFIG_ROOT"] = self.config_root
         env["GWS_BIN"] = self.fake_gws
         env["FAKE_GWS_LOG"] = self.log_file
         env["GWS_GCLOUD_BIN"] = self.fake_gcloud
+        env.update(
+            HOME=self.root,
+            VIRTUAL_ENV=self.python_env,
+            BASHY_SELF=BASHY_BIN,
+            BASHY_CLOUDBOX_URL="http://127.0.0.1:1",
+            BASHY_SECRETS_TOKEN="test-vault-token",
+            HTTP_PROXY="http://127.0.0.1:1",
+            HTTPS_PROXY="http://127.0.0.1:1",
+            NO_PROXY="",
+        )
         if os.path.exists(BASHY_BIN):
             env["PATH"] = os.path.dirname(BASHY_BIN) + os.pathsep + env.get("PATH", "")
         if env_overrides:
@@ -273,9 +290,48 @@ class GoogleWrapperTest(unittest.TestCase):
         self.assertEqual(guide["mode"], "byop-onboarding-guide")
 
     # --- 2. Self-Service BYOP Onboarding ---
+    def test_auth_status_uses_default_local_root(self):
+        account = "local-test@example.test"
+        directory = os.path.join(self.root, ".config", "bashy", "google", account)
+        os.makedirs(directory)
+        credential = os.path.join(directory, "credentials.json")
+        shutil.copyfile(self.cred_file, credential)
+        os.chmod(credential, 0o600)
+        status = self.run_wrapper(["auth-status", f"account={account}"], {"GWS_CONFIG_ROOT": None})
+        self.assertEqual(status.returncode, 0, (status.stdout, status.stderr))
+        info = json.loads(status.stdout)
+        self.assertTrue(info["ready"])
+        self.assertEqual(info["source"], "per_account_store")
+        self.assertEqual(info["credentials_file"].replace("$HOME", self.root, 1), credential)
+        self.assertEqual(info["permissions"], "0o600")
+
+    def test_hosted_auth_status_uses_the_call_vault_listing(self):
+        account = "hosted-test@example.test"
+        env = {
+            "BASHY_HOSTED": "1",
+            "BASHY_HOSTED_GOOGLE_NAMES": f"google/{account}/credentials",
+        }
+        status = self.run_wrapper(["auth-status", "--vault", f"account={account}"], env)
+        self.assertEqual(status.returncode, 0, (status.stdout, status.stderr))
+        self.assertEqual(json.loads(status.stdout)["accounts"], [account])
+
     def test_auth_export_round_trips_through_vault(self):
+        # Prebuild the real secrets adapter so its lazy bootstrap cannot use
+        # the network once vault testing is under the deny proxy.
+        adapter_cache = os.path.join(self.root, "adapters")
+        adapter = os.path.join(adapter_cache, "yoke", "secret")
+        os.makedirs(os.path.dirname(adapter))
+        build = subprocess.run(
+            ["go", "build", "-o", adapter, "./secret"],
+            cwd=os.path.join(REPO_ROOT, "yoke"),
+            env=dict(os.environ, GOWORK="off", GOPROXY="off", CGO_ENABLED="0"),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(build.returncode, 0, build.stderr)
         vault = {}
         requests = []
+        blocked_egress = []
         prefix = "/api/v1/secrets"
 
         class VaultHandler(BaseHTTPRequestHandler):
@@ -289,6 +345,8 @@ class GoogleWrapperTest(unittest.TestCase):
                 self.wfile.write(json.dumps(doc).encode())
 
             def do_POST(self):
+                if not self.path.startswith("/"):
+                    blocked_egress.append(self.path)
                 if self.headers.get("Authorization") != "Bearer test-vault-token" or self.path != prefix:
                     self.send_error(403)
                     return
@@ -296,8 +354,16 @@ class GoogleWrapperTest(unittest.TestCase):
                 vault[record["name"]] = record["value"]
                 self.send_json({"status": "ok"})
 
+            def do_CONNECT(self):
+                blocked_egress.append(self.path)
+                self.send_error(403)
+
             def do_GET(self):
                 requests.append(self.path)
+                if not self.path.startswith("/"):
+                    blocked_egress.append(self.path)
+                    self.send_error(403)
+                    return
                 if self.headers.get("Authorization") != "Bearer test-vault-token":
                     self.send_error(403)
                     return
@@ -310,28 +376,31 @@ class GoogleWrapperTest(unittest.TestCase):
                     return
                 self.send_json({"name": name, "value": vault[name]})
 
-        server = HTTPServer(("localhost", 0), VaultHandler)
+        server = HTTPServer(("127.0.0.1", 0), VaultHandler)
         worker = threading.Thread(target=server.serve_forever, daemon=True)
         worker.start()
         self.addCleanup(server.server_close)
         self.addCleanup(worker.join)
         self.addCleanup(server.shutdown)
-        python_env = os.path.join(self.root, "venv")
-        os.makedirs(os.path.join(python_env, "bin"))
-        os.symlink(sys.executable, os.path.join(python_env, "bin", "python"))
+        self.addCleanup(self.assertEqual, blocked_egress, [])
+        loopback = f"http://127.0.0.1:{server.server_port}"
         env = {
             "HOME": self.root,
-            "VIRTUAL_ENV": python_env,
-            "BASHY_CLOUDBOX_URL": f"http://localhost:{server.server_port}",
+            "VIRTUAL_ENV": self.python_env,
+            "BASHY_CLOUDBOX_URL": loopback,
             "BASHY_SECRETS_TOKEN": "test-vault-token",
+            "BASHY_ADAPTER_CACHE": adapter_cache,
             "BASHY_HOME": os.path.join(self.root, "bashy"),
             "XDG_CACHE_HOME": os.path.join(self.root, "cache"),
             "XDG_CONFIG_HOME": os.path.join(self.root, "xdg"),
             "GWS_CONFIG_ROOT": None,
+            "HTTP_PROXY": loopback,
+            "HTTPS_PROXY": loopback,
+            "NO_PROXY": "",
         }
         account = "vault-test@example.test"
         path = f"google/{account}/credentials"
-        missing = self.run_wrapper(["auth-status", f"account={account}"], env)
+        missing = self.run_wrapper(["auth-status", "--vault", f"account={account}"], env)
         self.assertEqual(missing.returncode, 1, (missing.stdout, missing.stderr, requests))
         self.assertEqual(missing.stderr, "")
         self.assertEqual(json.loads(missing.stdout)["message"], f"Set vault secret {path}.")
@@ -347,7 +416,7 @@ class GoogleWrapperTest(unittest.TestCase):
         self.assertEqual(json.loads(exported.stdout)["vault_path"], path)
         self.assertNotIn("test-refresh", exported.stdout + exported.stderr)
 
-        status = self.run_wrapper(["auth-status"], env)
+        status = self.run_wrapper(["auth-status", "--vault"], dict(env, GWS_CONFIG_ROOT=self.config_root))
         self.assertEqual(status.returncode, 0, status.stderr)
         self.assertEqual(json.loads(status.stdout)["accounts"], [account])
         with open(self.cred_file, "rb") as source:

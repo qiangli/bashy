@@ -23,6 +23,7 @@ Cloud project:
   bashy google auth-setup account=alice@example.com project=my-bashy-gws
   bashy google auth-import ~/Downloads/client_secret.json account=alice@example.com
   bashy google auth-status account=alice@example.com
+  bashy google auth-status --vault [account=alice@example.com]
   bashy google auth-export --to-vault account=alice@example.com
   bashy google auth-login account=alice@example.com [scopes=...]   # re-consent, refresh credentials
   bashy google auth-enable-apis account=alice@example.com [project=ID]
@@ -43,8 +44,9 @@ compose and send (no modify or delete), Calendar events, Tasks. Bare service nam
 - GWS_CREDENTIALS_FILE: Explicit path to OAuth authorized_user JSON file (optional if imported via auth-import).
 - GWS_SERVICE_ACCOUNT_KEY_FILE: Explicit path to Service Account JSON key file.
 - GWS_CONFIG_ROOT: Base directory for per-account credentials (default: ~/.config/bashy/google).
-  When unset, auth-status reports vault presence. auth-export --to-vault
-  stores the local file as google/<account>/credentials via standard input.
+  auth-status checks the local file. Use auth-status --vault to check vault
+  presence. auth-export --to-vault stores the local file as
+  google/<account>/credentials via standard input.
 - GWS_BIN: Override path to the gws executable (default: gws on PATH, else bashy's cached copy).
 - GWS_DRIVE_HOME: Default Drive folder name (default: bashy; none = My Drive root).
 - GWS_NO_BROWSER: Set to print the consent link instead of opening the browser.
@@ -464,10 +466,13 @@ def inspect_credentials(account):
 
     if not chosen_path:
         acct_hint = account or "you@example.com"
+        message = "No credentials file configured for account. Set GWS_CREDENTIALS_FILE, GWS_SERVICE_ACCOUNT_KEY_FILE, or run auth-import / auth-setup."
+        if account and os.environ.get("BASHY_HOSTED") == "1":
+            message = f"Set vault secret {google_vault_path(account)}."
         return {
             "ready": False,
             "error_code": "MISSING_CREDENTIALS",
-            "message": "No credentials file configured for account. Set GWS_CREDENTIALS_FILE, GWS_SERVICE_ACCOUNT_KEY_FILE, or run auth-import / auth-setup.",
+            "message": message,
             "account": account,
             "source": "none",
             "remediation": f"bashy google auth-guide account={acct_hint}",
@@ -693,6 +698,8 @@ def google_vault_path(account):
 
 
 def handle_vault_status(parsed, list_names):
+    if parsed["positionals"] != ["--vault"]:
+        fail("USAGE", "Use auth-status --vault [account=<email>].")
     account = resolve_account(parsed["shaped"], required=False)
     path = google_vault_path(account) if account else None
     try:
@@ -1390,6 +1397,7 @@ def main(
     env_drive_home="",
     env_no_browser="",
     env_gcloud="",
+    env_hosted="",
     *args,
 ):
     apply_caller_env(
@@ -1411,6 +1419,7 @@ def main(
             "GWS_DRIVE_HOME": str(env_drive_home),
             "GWS_NO_BROWSER": str(env_no_browser),
             "GWS_GCLOUD_BIN": str(env_gcloud),
+            "BASHY_HOSTED": str(env_hosted),
         }
     )
     raw_args = [str(a) for a in args]
@@ -2166,6 +2175,10 @@ def main(
 # settings and credential file contents in the calling shell and its child.
 func vaultList() string {
   local names
+  if [[ "${BASHY_HOSTED:-}" == "1" ]]; then
+    names=${BASHY_HOSTED_GOOGLE_NAMES:-}
+    return names
+  fi
   if names=$("${BASHY_SELF:-bashy}" secret list google/ 2>/dev/null); then
     return names
   fi
@@ -2173,6 +2186,9 @@ func vaultList() string {
 }
 
 func vaultSet(path string, source string) int {
+  if [[ "${BASHY_HOSTED:-}" == "1" ]]; then
+    return 1
+  fi
   if "${BASHY_SELF:-bashy}" secret set "$path" 2>/dev/null < "$source" >/dev/null; then
     return 0
   fi
@@ -2180,7 +2196,18 @@ func vaultSet(path string, source string) int {
 }
 
 google_root=${GWS_CONFIG_ROOT:-}
-if [[ "${1:-}" == "auth-export" || ( "${1:-}" == "auth-status" && -z "${google_root//[[:space:]]/}" ) ]]; then
+vault_mode=
+if [[ "${1:-}" == "auth-export" ]]; then
+  vault_mode=1
+elif [[ "${1:-}" == "auth-status" ]]; then
+  for arg in "${@:2}"; do
+    if [[ "$arg" == "--vault" ]]; then
+      vault_mode=1
+      break
+    fi
+  done
+fi
+if [[ -n "$vault_mode" ]]; then
   vaultArgs := []string{}
   for arg in "$@"; do
     vaultArgs = append(vaultArgs, "$arg")
@@ -2207,6 +2234,7 @@ py.main \
   "${GWS_DRIVE_HOME:-}" \
   "${GWS_NO_BROWSER:-}" \
   "${GWS_GCLOUD_BIN:-}" \
+  "${BASHY_HOSTED:-}" \
   "$@"
 
 

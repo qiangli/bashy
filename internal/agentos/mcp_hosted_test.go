@@ -18,6 +18,7 @@ import (
 	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/qiangli/yoke/pkg/fleet"
 )
 
 const mcpHostedFixtureKey = "unit-test-hosted-runner-key"
@@ -25,7 +26,7 @@ const mcpHostedFixtureKey = "unit-test-hosted-runner-key"
 func mcpHostedFixtureIdentity(key string) mcpHostedIdentity {
 	now := time.Now()
 	return mcpHostedIdentity{Schema: mcpHostedSchema, Caller: "caller@example.test", TaskID: "task-1",
-		IdempotencyKey: key, SecretsToken: "fixture-secrets-token", IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix()}
+		IdempotencyKey: key, IssuedAt: now.Unix(), ExpiresAt: now.Add(time.Minute).Unix()}
 }
 
 func mcpHostedToken(t *testing.T, id mcpHostedIdentity, key string) string {
@@ -57,6 +58,7 @@ func mcpHostedFixture(t *testing.T, timeout time.Duration, maxOutput int) (*mcpH
 	t.Setenv(mcpHostedKeyEnv, keyPath)
 	t.Setenv(mcpHostedScratchEnv, scratch)
 	t.Setenv("BASHY_AUDIT", auditLog)
+	t.Setenv("BASHY_CLOUDBOX_URL", "http://127.0.0.1:1")
 	h, err := newMCPHosted("", "default", "test", timeout, maxOutput)
 	if err != nil {
 		t.Fatal(err)
@@ -329,7 +331,7 @@ echo "` + mcpHostedKeyEnv + `=${` + mcpHostedKeyEnv + `-unset}"
 	}
 	for key, want := range map[string]string{
 		"HOME": "scratch", "BASHY_HOME": "scratch", "TMPDIR": "scratch", "PWD": "scratch", mcpHostedKeyEnv: "unset",
-		"BASHY_PRINCIPAL": second.Caller, "BASHY_HOSTED_TASK_ID": second.TaskID, "BASHY_SECRETS_TOKEN": second.SecretsToken,
+		"BASHY_PRINCIPAL": second.Caller, "BASHY_HOSTED_TASK_ID": second.TaskID, "BASHY_SECRETS_TOKEN": "",
 	} {
 		if got[key] != want {
 			t.Errorf("%s = %q, want %q", key, got[key], want)
@@ -380,6 +382,112 @@ echo "` + mcpHostedKeyEnv + `=${` + mcpHostedKeyEnv + `-unset}"
 	if decisions["rm"] != "deny" || decisions["echo"] != "allow" {
 		t.Fatalf("audit decisions = %v", decisions)
 	}
+}
+
+func TestMCPHostedVaultProjection(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the child process of this test is the unix test binary")
+	}
+	const prefix = "/api/v1/secrets"
+	const googlePath = "google/google-test@example.test/credentials"
+	vault := map[string]string{
+		googlePath: "{}",
+		"google/google-test@example.test/access-token": "gcloud-fixture",
+		"github/test/token":                            "github-fixture",
+		"aws/test/access-key-id":                       "access-fixture",
+		"aws/test/secret-access-key":                   "secret-fixture",
+		"aws/test/session-token":                       "session-fixture",
+	}
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		token := r.Header.Get("Authorization")
+		if r.Method != http.MethodGet || (token != "Bearer fixture-vault" && token != "Bearer fixture-missing") {
+			t.Error("unexpected request to the fake vault")
+			w.WriteHeader(http.StatusForbidden)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == prefix {
+			var names []map[string]string
+			for name := range vault {
+				names = append(names, map[string]string{"name": name})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"secrets": names})
+			return
+		}
+		name := strings.TrimPrefix(r.URL.Path, prefix+"/")
+		value, ok := vault[name]
+		if !ok || (token == "Bearer fixture-missing" && name == googlePath) {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"name": name, "value": value})
+	}))
+	defer fake.Close()
+	h, _ := mcpHostedFixture(t, time.Minute, defaultMCPMaxOutput)
+	t.Setenv("BASHY_CLOUDBOX_URL", fake.URL)
+	t.Setenv("BASHY_SECRETS_TOKEN", "runner-fixture")
+	t.Setenv("GH_TOKEN", "runner-github-fixture")
+	writeRecord(t, fleet.Command{Name: "trove", Synopsis: "vault-aware fixture",
+		Script: `[ "$BASHY_SECRETS_TOKEN" = fixture-vault ] && echo vault-reader`, Effects: []string{"read"}})
+	server := httptest.NewServer(h)
+	defer server.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	transport := &mcpHostedTransport{}
+	id := mcpHostedFixtureIdentity("vault-projection")
+	id.SecretsToken = "fixture-vault"
+	transport.set(mcpHostedToken(t, id, mcpHostedFixtureKey))
+	cs, err := mcpsdk.NewClient(&mcpsdk.Implementation{Name: "test", Version: "1"}, nil).Connect(ctx,
+		&mcpsdk.StreamableClientTransport{Endpoint: server.URL, HTTPClient: &http.Client{Transport: transport}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cs.Close()
+
+	const script = `set -e
+[ "$GH_TOKEN" = github-fixture ]
+[ "$CLOUDSDK_AUTH_ACCESS_TOKEN" = gcloud-fixture ]
+[ "$AWS_ACCESS_KEY_ID" = access-fixture ]
+[ "$AWS_SECRET_ACCESS_KEY" = secret-fixture ]
+[ "$AWS_SESSION_TOKEN" = session-fixture ]
+[ -z "$BASHY_SECRETS_TOKEN" ]
+[ "$BASHY_HOSTED_GOOGLE_NAMES" = "google/google-test@example.test/credentials" ]
+[ "$GWS_CONFIG_ROOT" = "$HOME/.config/bashy/google" ]
+file="$GWS_CONFIG_ROOT/google-test@example.test/credentials.json"
+[ "$(stat -c %a "$file")" = 600 ]
+[ "$(cat "$file")" = '{}' ]
+echo projected
+`
+	if got := mcpHostedCallTool(t, ctx, cs, "bashy", map[string]any{"script": script}); got.ExitCode != 0 || got.Stdout != "projected\n" {
+		t.Fatalf("projection call = %+v", got)
+	}
+	mcpHostedScratchEmpty(t, h)
+
+	id.IdempotencyKey = "vault-reader"
+	transport.set(mcpHostedToken(t, id, mcpHostedFixtureKey))
+	if got := mcpHostedCallTool(t, ctx, cs, "trove", map[string]any{}); got.ExitCode != 0 || got.Stdout != "vault-reader\n" {
+		t.Fatalf("registered trove call = %+v", got)
+	}
+	mcpHostedScratchEmpty(t, h)
+
+	id.IdempotencyKey, id.SecretsToken = "vault-missing", "fixture-missing"
+	transport.set(mcpHostedToken(t, id, mcpHostedFixtureKey))
+	if got := mcpHostedCallTool(t, ctx, cs, "bashy", map[string]any{"script": "echo should-not-run"}); got.ExitCode != 1 ||
+		got.Stdout != "" || got.Stderr != "no such secret: "+googlePath+"\n" {
+		t.Fatalf("missing secret call = %+v", got)
+	}
+	mcpHostedScratchEmpty(t, h)
+
+	id.IdempotencyKey, id.SecretsToken = "vault-none", ""
+	transport.set(mcpHostedToken(t, id, mcpHostedFixtureKey))
+	if got := mcpHostedCallTool(t, ctx, cs, "bashy", map[string]any{"script": `set -e
+[ -z "${GH_TOKEN:-}${AWS_ACCESS_KEY_ID:-}${CLOUDSDK_AUTH_ACCESS_TOKEN:-}${BASHY_SECRETS_TOKEN:-}" ]
+[ ! -e "$GWS_CONFIG_ROOT/google-test@example.test/credentials.json" ]
+echo clean
+`}); got.ExitCode != 0 || got.Stdout != "clean\n" {
+		t.Fatalf("call without a token = %+v", got)
+	}
+	mcpHostedScratchEmpty(t, h)
 }
 
 func TestMCPHostedLimits(t *testing.T) {

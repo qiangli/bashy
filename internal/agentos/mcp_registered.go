@@ -10,12 +10,12 @@ import (
 	"strings"
 	"time"
 
-	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/bashsharp/bashsharp/cli"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/qiangli/bash/syntax"
 	"github.com/qiangli/coreutils/tool"
 	yokemcp "github.com/qiangli/yoke/mcp"
 	"github.com/qiangli/yoke/pkg/fleet"
-	"github.com/qiangli/bash/syntax"
 )
 
 // Use the same request-local interpreter and exec ladder as the shell front
@@ -24,7 +24,7 @@ func mcpRunScript(ctx context.Context, script, stdin, dir string) (string, strin
 	if call := mcpHostedFrom(ctx); call != nil {
 		// A hosted call never evaluates in the server process: the script
 		// runs in a child with the call's scratch home, deadline and cap.
-		stdout, stderr, exit := call.exec(ctx, []string{call.runner.self, "-c", script}, stdin, dir, nil)
+		stdout, stderr, exit := call.exec(ctx, []string{call.runner.self, "-c", script}, stdin, dir, nil, false)
 		return stdout, stderr, exit, nil
 	}
 	var stdout, stderr bytes.Buffer
@@ -77,7 +77,12 @@ func mcpRegisteredCommands() []yokemcp.RegisteredCommand {
 					}
 					words = append(words, quoted)
 				}
-				stdout, stderr, exit, _ := mcpRunScript(ctx, strings.Join(words, " "), stdin, dir)
+				script := strings.Join(words, " ")
+				if call := mcpHostedFrom(ctx); call != nil && name == "trove" {
+					// Trove reads its layout via the vault client.
+					return call.exec(ctx, []string{call.runner.self, "-c", script}, stdin, dir, nil, true)
+				}
+				stdout, stderr, exit, _ := mcpRunScript(ctx, script, stdin, dir)
 				return stdout, stderr, exit
 			},
 		})

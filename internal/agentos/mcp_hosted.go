@@ -30,6 +30,7 @@ import (
 	"github.com/qiangli/yoke/pkg/coopauth"
 	"github.com/qiangli/yoke/pkg/kbmemory"
 	"github.com/qiangli/yoke/pkg/policy/audit"
+	"github.com/qiangli/yoke/pkg/secrets"
 )
 
 // The hosted profile (`bashy mcp serve --transport http --hosted`) serves a
@@ -374,7 +375,7 @@ func (c *mcpHostedCall) execute(ctx context.Context, call *mcpsdk.CallToolReques
 	if strings.TrimSpace(in.Name) == "" || strings.HasPrefix(in.Name, "-") {
 		return mcpHostedOutput("", "run_tool: name is required\n", 2), nil
 	}
-	stdout, stderr, exit := run.exec(ctx, append([]string{h.self, in.Name}, in.Args...), in.Stdin, in.Dir, in.Env)
+	stdout, stderr, exit := run.exec(ctx, append([]string{h.self, in.Name}, in.Args...), in.Stdin, in.Dir, in.Env, false)
 	return mcpHostedOutput(stdout, stderr, exit), nil
 }
 
@@ -388,7 +389,11 @@ func (c *mcpHostedCall) home() string { return filepath.Join(c.root, "home") }
 func (c *mcpHostedCall) work() string { return filepath.Join(c.root, "work") }
 func (c *mcpHostedCall) tmp() string  { return filepath.Join(c.root, "tmp") }
 func (c *mcpHostedCall) dirs() []string {
-	return []string{c.home(), filepath.Join(c.home(), ".bashy"), c.work(), c.tmp()}
+	return []string{c.home(), filepath.Join(c.home(), ".bashy"), c.work(), c.tmp(), c.googleRoot()}
+}
+
+func (c *mcpHostedCall) googleRoot() string {
+	return filepath.Join(c.home(), ".config", "bashy", "google")
 }
 
 // dir keeps a call's working directory inside its scratch work tree.
@@ -445,15 +450,47 @@ func (c *mcpHostedCall) env(extra map[string]string) ([]string, error) {
 		// The runner's registered commands stay callable, read-only; the
 		// call's own command store is the empty one in its scratch home.
 		"BASHY_COMMANDS_PATH=" + strings.Join(registeredCatalog().CommandDirs(), string(os.PathListSeparator)),
-		// Always set, so a call without a token can never fall back to a
-		// credential of the runner.
-		"BASHY_SECRETS_TOKEN=" + c.id.SecretsToken,
+		"GWS_CONFIG_ROOT=" + c.googleRoot(),
+		"BASHY_HOSTED_GOOGLE_NAMES=",
+		// Credentials are projected in the runner using the signed token.
+		"BASHY_SECRETS_TOKEN=",
 	}
 	if runtime.GOOS == "windows" {
 		own = append(own, "USERPROFILE="+home, "APPDATA="+filepath.Join(home, "AppData", "Roaming"),
 			"LOCALAPPDATA="+filepath.Join(home, "AppData", "Local"), "TEMP="+c.tmp(), "TMP="+c.tmp())
 	}
 	return append(env, own...), nil
+}
+
+func (c *mcpHostedCall) runChild(ctx context.Context, cmd *exec.Cmd, vaultAware bool) error {
+	token := strings.TrimSpace(c.id.SecretsToken)
+	if token == "" {
+		return cmd.Run()
+	}
+	client, err := (secrets.Config{Token: token}).ResolveContext(ctx)
+	if err != nil {
+		return errors.New("vault credentials: could not configure the caller's vault")
+	}
+	items, err := client.ListContext(ctx)
+	if err != nil {
+		return errors.New("vault credentials: could not list the caller's vault")
+	}
+	bindings, googleFiles := secrets.CredentialBindings(items)
+	cmd.Env = append(cmd.Env, "BASHY_HOSTED_GOOGLE_NAMES="+strings.Join(googleFiles, "\n"))
+	if vaultAware {
+		cmd.Env = append(cmd.Env, "BASHY_CLOUDBOX_URL="+client.BaseURL, "BASHY_SECRETS_TOKEN="+token)
+	}
+	// Use the same no-cache execution path as secret exec. The runner
+	// owns the child's deadline and exit status.
+	err = client.RunProjected(ctx, cmd, c.googleRoot(), bindings)
+	if err == nil || cmd.ProcessState != nil || cmd.Err != nil {
+		return err
+	}
+	var startErr *os.PathError
+	if (errors.As(err, &startErr) && startErr.Op == "fork/exec") || strings.HasPrefix(err.Error(), "no such secret: ") {
+		return err
+	}
+	return errors.New("vault credentials: could not project the caller's credentials")
 }
 
 // mcpHostedCapture keeps the first limit bytes of a stream and counts the rest.
@@ -475,7 +512,7 @@ func (w *mcpHostedCapture) Write(p []byte) (int, error) {
 
 // exec runs one command of the call as a child process and waits for it. The
 // deadline kills the child's whole process group and answers exit 124.
-func (c *mcpHostedCall) exec(ctx context.Context, argv []string, stdin, dir string, extra map[string]string) (string, string, int) {
+func (c *mcpHostedCall) exec(ctx context.Context, argv []string, stdin, dir string, extra map[string]string, vaultAware bool) (string, string, int) {
 	h := c.runner
 	if c.root == "" || len(argv) == 0 || argv[0] == "" {
 		return "", "hosted call has no scratch directory\n", 126
@@ -497,8 +534,9 @@ func (c *mcpHostedCall) exec(ctx context.Context, argv []string, stdin, dir stri
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	cmd.WaitDelay = 2 * time.Second
 	mcpHostedContain(cmd)
-	runErr := cmd.Run()
+	runErr := c.runChild(ctx, cmd, vaultAware)
 	exit, note := 0, ""
+	var startErr *os.PathError
 	switch {
 	case ctx.Err() != nil:
 		exit = mcpHostedTimeoutExit
@@ -506,8 +544,10 @@ func (c *mcpHostedCall) exec(ctx context.Context, argv []string, stdin, dir stri
 		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			note = "bashy mcp: call cancelled\n"
 		}
-	case runErr != nil && cmd.ProcessState == nil:
+	case cmd.Err != nil || (errors.As(runErr, &startErr) && startErr.Op == "fork/exec"):
 		exit, note = 126, "bashy mcp: cannot start the command\n"
+	case runErr != nil && cmd.ProcessState == nil:
+		exit, note = 1, runErr.Error()+"\n"
 	case runErr != nil:
 		exit = cmd.ProcessState.ExitCode()
 		if exit <= 0 {
