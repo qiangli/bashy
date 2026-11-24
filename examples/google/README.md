@@ -38,12 +38,19 @@ bashy google auth-setup account=alice@example.com project=my-bashy-gws
 # Option B: Browser-only setup (download Desktop OAuth client_secret.json from Console)
 bashy google auth-import ~/Downloads/client_secret.json account=alice@example.com
 
-# Check credential status and permissions:
+# Check whether the account credential is in the vault:
 bashy google auth-status account=alice@example.com
+
+# Store a locally obtained credential in the vault:
+bashy google auth-export --to-vault account=alice@example.com
 
 # Re-consent later (to narrow or widen permissions); refreshes credentials.json:
 bashy google auth-login account=alice@example.com
 ```
+
+Set `GWS_CONFIG_ROOT` when checking a local credentials directory and its file
+permissions. With the variable unset, `auth-status` checks vault presence for
+the selected account or lists the Google accounts with a stored credential.
 
 #### Default permissions
 

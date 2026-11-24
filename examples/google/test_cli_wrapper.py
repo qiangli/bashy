@@ -2,13 +2,18 @@
 """Hermetic offline unit tests for bashy/examples/google/google.bsh."""
 
 import base64
+import hashlib
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import os
 import stat
 import subprocess
+import sys
 import tempfile
 import textwrap
+import threading
 import unittest
+from urllib.parse import unquote
 
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -268,6 +273,95 @@ class GoogleWrapperTest(unittest.TestCase):
         self.assertEqual(guide["mode"], "byop-onboarding-guide")
 
     # --- 2. Self-Service BYOP Onboarding ---
+    def test_auth_export_round_trips_through_vault(self):
+        vault = {}
+        requests = []
+        prefix = "/api/v1/secrets"
+
+        class VaultHandler(BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def send_json(self, doc):
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.end_headers()
+                self.wfile.write(json.dumps(doc).encode())
+
+            def do_POST(self):
+                if self.headers.get("Authorization") != "Bearer test-vault-token" or self.path != prefix:
+                    self.send_error(403)
+                    return
+                record, = json.loads(self.rfile.read(int(self.headers["Content-Length"])))["secrets"]
+                vault[record["name"]] = record["value"]
+                self.send_json({"status": "ok"})
+
+            def do_GET(self):
+                requests.append(self.path)
+                if self.headers.get("Authorization") != "Bearer test-vault-token":
+                    self.send_error(403)
+                    return
+                if self.path == prefix:
+                    self.send_json({"secrets": [{"name": name, "value": value} for name, value in vault.items()]})
+                    return
+                name = unquote(self.path.removeprefix(prefix + "/"))
+                if name not in vault:
+                    self.send_error(404)
+                    return
+                self.send_json({"name": name, "value": vault[name]})
+
+        server = HTTPServer(("localhost", 0), VaultHandler)
+        worker = threading.Thread(target=server.serve_forever, daemon=True)
+        worker.start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(worker.join)
+        self.addCleanup(server.shutdown)
+        python_env = os.path.join(self.root, "venv")
+        os.makedirs(os.path.join(python_env, "bin"))
+        os.symlink(sys.executable, os.path.join(python_env, "bin", "python"))
+        env = {
+            "HOME": self.root,
+            "VIRTUAL_ENV": python_env,
+            "BASHY_CLOUDBOX_URL": f"http://localhost:{server.server_port}",
+            "BASHY_SECRETS_TOKEN": "test-vault-token",
+            "BASHY_HOME": os.path.join(self.root, "bashy"),
+            "XDG_CACHE_HOME": os.path.join(self.root, "cache"),
+            "XDG_CONFIG_HOME": os.path.join(self.root, "xdg"),
+            "GWS_CONFIG_ROOT": None,
+        }
+        account = "vault-test@example.test"
+        path = f"google/{account}/credentials"
+        missing = self.run_wrapper(["auth-status", f"account={account}"], env)
+        self.assertEqual(missing.returncode, 1, (missing.stdout, missing.stderr, requests))
+        self.assertEqual(missing.stderr, "")
+        self.assertEqual(json.loads(missing.stdout)["message"], f"Set vault secret {path}.")
+
+        export_env = dict(env, GWS_CREDENTIALS_FILE=self.cred_file, GWS_ACCOUNT=account)
+        refused = self.run_wrapper(["auth-export", "--to-vault", "refresh_token=synthetic"], export_env)
+        self.assertEqual(refused.returncode, 2)
+        self.assertEqual(json.loads(refused.stderr)["error"]["code"], "SECRET_VIA_ARGV")
+        self.assertEqual(vault, {})
+
+        exported = self.run_wrapper(["auth-export", "--to-vault"], export_env)
+        self.assertEqual(exported.returncode, 0, exported.stderr)
+        self.assertEqual(json.loads(exported.stdout)["vault_path"], path)
+        self.assertNotIn("test-refresh", exported.stdout + exported.stderr)
+
+        status = self.run_wrapper(["auth-status"], env)
+        self.assertEqual(status.returncode, 0, status.stderr)
+        self.assertEqual(json.loads(status.stdout)["accounts"], [account])
+        with open(self.cred_file, "rb") as source:
+            expected = hashlib.sha256(source.read()).hexdigest()
+        consumed = subprocess.run(
+            [BASHY_BIN, "secret", "exec", "--stdin", path, "--", sys.executable, "-c",
+             "import hashlib, sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())"],
+            env=dict(os.environ, **{k: v for k, v in env.items() if v is not None}),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(consumed.returncode, 0, (consumed.stderr, requests))
+        self.assertEqual(consumed.stdout.strip(), expected)
+
     def test_auth_guide_emits_console_links_and_byop_rationale(self):
         res = self.run_wrapper(["auth-guide", "account=alice@example.com", "project=alice-gws-proj"])
         self.assertEqual(res.returncode, 0, res.stderr)

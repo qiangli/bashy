@@ -23,6 +23,7 @@ Cloud project:
   bashy google auth-setup account=alice@example.com project=my-bashy-gws
   bashy google auth-import ~/Downloads/client_secret.json account=alice@example.com
   bashy google auth-status account=alice@example.com
+  bashy google auth-export --to-vault account=alice@example.com
   bashy google auth-login account=alice@example.com [scopes=...]   # re-consent, refresh credentials
   bashy google auth-enable-apis account=alice@example.com [project=ID]
 
@@ -42,6 +43,8 @@ compose and send (no modify or delete), Calendar events, Tasks. Bare service nam
 - GWS_CREDENTIALS_FILE: Explicit path to OAuth authorized_user JSON file (optional if imported via auth-import).
 - GWS_SERVICE_ACCOUNT_KEY_FILE: Explicit path to Service Account JSON key file.
 - GWS_CONFIG_ROOT: Base directory for per-account credentials (default: ~/.config/bashy/google).
+  When unset, auth-status reports vault presence. auth-export --to-vault
+  stores the local file as google/<account>/credentials via standard input.
 - GWS_BIN: Override path to the gws executable (default: gws on PATH, else bashy's cached copy).
 - GWS_DRIVE_HOME: Default Drive folder name (default: bashy; none = My Drive root).
 - GWS_NO_BROWSER: Set to print the consent link instead of opening the browser.
@@ -93,11 +96,13 @@ fi
 
 ~~~python as py
 import base64
+from collections.abc import Callable
 import glob
 from email.message import EmailMessage
 import json
 import mimetypes
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -590,7 +595,7 @@ def handle_contract():
             "secret_via_argv": "refused",
         },
         "verbs": {
-            "onboarding": ["auth-guide", "auth-setup", "auth-import", "auth-login", "auth-enable-apis", "auth-status"],
+            "onboarding": ["auth-guide", "auth-setup", "auth-import", "auth-login", "auth-enable-apis", "auth-status", "auth-export"],
             "gmail": ["gmail-list", "gmail-get", "gmail-send", "gmail-draft"],
             "calendar": [
                 "calendar-list",
@@ -679,6 +684,63 @@ def handle_auth_status(parsed):
     info = inspect_credentials(account)
     emit_json(info)
     sys.exit(0 if info.get("ready") else 1)
+
+
+def google_vault_path(account):
+    if not isinstance(account, str) or account in (".", "..") or not re.fullmatch(r"[A-Za-z0-9_.@+-]+", account):
+        fail("INVALID_ACCOUNT", "Use a Google account with letters, digits, or one of ._@+-")
+    return f"google/{account}/credentials"
+
+
+def handle_vault_status(parsed, list_names):
+    account = resolve_account(parsed["shaped"], required=False)
+    path = google_vault_path(account) if account else None
+    try:
+        names = list_names().splitlines()
+    except BashCallbackError:
+        fail("VAULT_UNAVAILABLE", "Could not list vault credentials. Check the vault connection and token scope.")
+    accounts = sorted({
+        match.group(1) for name in names
+        if (match := re.fullmatch(r"google/([A-Za-z0-9_.@+-]+)/credentials", name))
+        and match.group(1) not in (".", "..")
+    })
+    ready = account in accounts if account else bool(accounts)
+    info = {"ready": ready, "account": account, "accounts": accounts, "source": "vault"}
+    if path and not ready:
+        info.update(error_code="MISSING_CREDENTIALS", message=f"Set vault secret {path}.")
+    emit_json(info)
+    sys.exit(0 if ready else 1)
+
+
+def handle_auth_export(parsed, set_file):
+    shaped = parsed["shaped"]
+    if parsed["positionals"] != ["--to-vault"] or shaped.keys() - {"account"}:
+        fail("USAGE", "Use auth-export --to-vault [account=<email>].")
+    account = resolve_account(shaped)
+    path = google_vault_path(account)
+    info = inspect_credentials(account)
+    if not info.get("ready"):
+        fail(info["error_code"], info["message"])
+    if not parsed["dry_run"] and set_file(path, info["credentials_file"]) != 0:
+        fail("VAULT_UNAVAILABLE", f"Could not set vault secret {path}. Check the vault connection, token scope, and local file permissions.")
+    emit_json({"ok": True, "verb": "auth-export", "account": account, "vault_path": path, "dry_run": parsed["dry_run"]})
+    sys.exit(0)
+
+
+def vault_main(list_names: Callable[[], str], set_file: Callable[[str, str], int],
+               account: str, cred: str, sa: str, root: str, home: str, raw_args: str) -> int:
+    apply_caller_env({
+        "GWS_ACCOUNT": account, "GWS_CREDENTIALS_FILE": cred,
+        "GWS_SERVICE_ACCOUNT_KEY_FILE": sa, "GWS_CONFIG_ROOT": root, "HOME": home,
+    })
+    try:
+        verb, *args = json.loads(raw_args)
+        parsed = parse_shaped_args(args)
+        if verb == "auth-export":
+            handle_auth_export(parsed, set_file)
+        handle_vault_status(parsed, list_names)
+    except SystemExit as exc:
+        return exc.code
 
 
 def handle_auth_import(parsed):
@@ -2100,6 +2162,33 @@ def main(
 
     fail("UNKNOWN_VERB", f"Unknown google verb: {verb}. Run with --help for usage.", exit_code=2)
 ~~~
+# The Python worker has a sanitized environment. Keep the vault connection
+# settings and credential file contents in the calling shell and its child.
+func vaultList() string {
+  local names
+  if names=$("${BASHY_SELF:-bashy}" secret list google/ 2>/dev/null); then
+    return names
+  fi
+  exit 1
+}
+
+func vaultSet(path string, source string) int {
+  if "${BASHY_SELF:-bashy}" secret set "$path" 2>/dev/null < "$source" >/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
+google_root=${GWS_CONFIG_ROOT:-}
+if [[ "${1:-}" == "auth-export" || ( "${1:-}" == "auth-status" && -z "${google_root//[[:space:]]/}" ) ]]; then
+  vaultArgs := []string{}
+  for arg in "$@"; do
+    vaultArgs = append(vaultArgs, "$arg")
+  done
+  vaultStatus := py.vault_main(vaultList, vaultSet, "${GWS_ACCOUNT:-}", "${GWS_CREDENTIALS_FILE:-}", "${GWS_SERVICE_ACCOUNT_KEY_FILE:-}", "$google_root", "${HOME:-}", vaultArgs)
+  exit "$vaultStatus"
+fi
+
 py.main \
   "${GWS_ACCOUNT:-}" \
   "${GWS_CREDENTIALS_FILE:-}" \
