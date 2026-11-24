@@ -545,7 +545,7 @@ replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.
 
 replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261124074129-2d0a6b403b14
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261124074753-8ad8cd19bdba
 
 tool (
 	github.com/qiangli/bash/cmd/bash
@@ -591,7 +591,7 @@ require (
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136
 	github.com/qiangli/coreutils v0.0.0-20261123172741-e0184192020b
-	github.com/qiangli/ycode v0.3.1-dev.0.20261124074129-2d0a6b403b14
+	github.com/qiangli/ycode v0.3.1-dev.0.20261124074753-8ad8cd19bdba
 	github.com/qiangli/ycode/examples/genie v0.0.0
 	github.com/qiangli/yoke v0.0.0-20261124003742-dcccc0fa4004
 	github.com/qiangli/yoke/external/otel v0.0.0-20261124003742-dcccc0fa4004
