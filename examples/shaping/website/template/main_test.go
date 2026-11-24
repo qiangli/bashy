@@ -7,11 +7,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -72,17 +77,17 @@ func stamp(r *http.Request, kind, circle, groups, visitor, user string, now time
 }
 
 type who struct {
-	name                        string
-	kind, circle, visitor, user string
+	name                                string
+	kind, circle, groups, visitor, user string
 }
 
 var (
-	owner          = who{"owner", "owner", "", "", "owner@example.com"}
-	recruiter      = who{"recruiter", "member", "recruiter", "", "rec@example.com"}
-	friend         = who{"friend", "member", "friend", "", "pal@example.com"}
-	stranger       = who{"account", "account", "", "0123456789abcdef0123456789abcdef", ""}
-	strangerLegacy = who{"signed-in alias", "signed-in", "", "0123456789abcdef0123456789abcdef", ""}
-	nobody         = who{"anonymous", "", "", "", ""}
+	owner          = who{"owner", "owner", "", "", "", "owner@example.com"}
+	recruiter      = who{"recruiter", "member", "recruiter", "", "", "rec@example.com"}
+	friend         = who{"friend", "member", "friend", "", "", "pal@example.com"}
+	stranger       = who{"account", "account", "", "", "0123456789abcdef0123456789abcdef", ""}
+	strangerLegacy = who{"signed-in alias", "signed-in", "", "", "0123456789abcdef0123456789abcdef", ""}
+	nobody         = who{"anonymous", "", "", "", "", ""}
 )
 
 func newTestServer(t *testing.T, site, model string, key string) *server {
@@ -101,7 +106,7 @@ func do(t *testing.T, s *server, method, path string, w who) (int, map[string]an
 	t.Helper()
 	req := httptest.NewRequest(method, path, nil)
 	if w.kind != "" {
-		stamp(req, w.kind, w.circle, "", w.visitor, w.user, time.Now())
+		stamp(req, w.kind, w.circle, w.groups, w.visitor, w.user, time.Now())
 	}
 	rec := httptest.NewRecorder()
 	s.ServeHTTP(rec, req)
@@ -498,8 +503,10 @@ func TestEmbeddedTemplateHasValidDefaultWishesAndAssets(t *testing.T) {
 	}{
 		{"/_shaping/shaping.js", "localStorage"},
 		{"/_shaping/shaping.js", "renderWishes"},
+		{"/_shaping/shaping.js", "renderShapeBox"},
 		{"/_shaping/shaping.css", "ss-theme-dark"},
 		{"/_shaping/shaping.css", "ss-motion-reduce"},
+		{"/_shaping/shaping.css", "ss-shape-box"},
 	} {
 		req := httptest.NewRequest("GET", tc.path, nil)
 		rec := httptest.NewRecorder()
@@ -507,5 +514,582 @@ func TestEmbeddedTemplateHasValidDefaultWishesAndAssets(t *testing.T) {
 		if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), tc.want) {
 			t.Errorf("%s: status=%d missing %q", tc.path, rec.Code, tc.want)
 		}
+	}
+}
+
+func TestShapedJSONScopesParser(t *testing.T) {
+	// Default embedded shaped.json has server config and no scopes.
+	rawDefault, err := fs.ReadFile(assets, "shaped.json")
+	if err != nil {
+		t.Fatalf("read embedded shaped.json: %v", err)
+	}
+	if got, err := parseShapedScopes(rawDefault); err != nil || !got.Edit.Empty() || !got.Shape.Empty() {
+		t.Fatalf("default shaped.json = %+v, err=%v", got, err)
+	}
+
+	// Valid scopes with circles, groups and emails.
+	valid := `{
+	  "server": {"main": ".", "args": ["-addr", "$ADDR"]},
+	  "scopes": {
+	    "edit": {"circles": [" company "], "groups": ["support"], "emails": ["A@Example.com"]},
+	    "shape": {"circles": ["contractor"], "groups": ["support"]}
+	  }
+	}`
+	scopes, err := parseShapedScopes([]byte(valid))
+	if err != nil {
+		t.Fatalf("valid scopes refused: %v", err)
+	}
+	if len(scopes.Edit.Emails) != 1 || scopes.Edit.Emails[0] != "a@example.com" {
+		t.Errorf("emails normalization = %v", scopes.Edit.Emails)
+	}
+
+	// Unknown scope names, non-member audience keys, and invalid values fail closed.
+	for name, bad := range map[string]string{
+		"unknown scope":        `{"scopes":{"admin":{"circles":["c"]}}}`,
+		"view scope forbidden": `{"scopes":{"view":{"circles":["c"]}}}`,
+		"account key":          `{"scopes":{"shape":{"account":true}}}`,
+		"signed_in key":        `{"scopes":{"shape":{"signed_in":true}}}`,
+		"unknown manifest key": `{"unknown_top":true}`,
+		"empty circle":         `{"scopes":{"shape":{"circles":[""]}}}`,
+		"space in circle":      `{"scopes":{"shape":{"circles":["bad circle"]}}}`,
+		"empty group":          `{"scopes":{"edit":{"groups":[" "]}}}`,
+		"bad email":            `{"scopes":{"edit":{"emails":["not-an-email"]}}}`,
+		"trailing data":        `{"scopes":{}}{"extra":1}`,
+	} {
+		if _, err := parseShapedScopes([]byte(bad)); err == nil {
+			t.Errorf("%s: expected error for %s", name, bad)
+		}
+	}
+
+	// Live managed checkout (<home>/src/<app>/shaped.json) updates take effect immediately.
+	home := t.TempDir()
+	appDir := filepath.Join(home, "src", "site-shaping")
+	if err := os.MkdirAll(appDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	shapedPath := filepath.Join(appDir, "shaped.json")
+	if err := os.WriteFile(shapedPath, []byte(`{"server":{"args":["-addr","$ADDR"]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{
+		"SITE_SSO_SECRET": testSecret,
+		"SITE_SHAPE_APP":  "site-shaping,site",
+		"SITE_SHAPE_HOME": home,
+	}
+	s, err := newServerFrom(fixture, func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatal(err)
+	}
+	memberC := who{"member-shape", "member", "contractor", "support", "", "c@example.com"}
+	if _, me := do(t, s, "GET", "/_shaping/api/me", memberC); me["scope"] != "" {
+		t.Fatalf("before scope grant: scope = %v, want empty", me["scope"])
+	}
+	if err := os.WriteFile(shapedPath, []byte(valid), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, me := do(t, s, "GET", "/_shaping/api/me", memberC); me["scope"] != ScopeShape {
+		t.Fatalf("after scope grant: scope = %v, want %q", me["scope"], ScopeShape)
+	}
+	// Corrupt shaped.json on disk fails closed to empty scope.
+	if err := os.WriteFile(shapedPath, []byte(`{"scopes":{"bogus":{}}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, me := do(t, s, "GET", "/_shaping/api/me", memberC); me["scope"] != "" {
+		t.Fatalf("corrupt shaped.json: scope = %v, want empty", me["scope"])
+	}
+}
+
+func TestMeScopeMatrix(t *testing.T) {
+	scopedFS := fstest.MapFS{}
+	for k, v := range fixture {
+		scopedFS[k] = v
+	}
+	scopedFS["shaped.json"] = &fstest.MapFile{Data: []byte(`{
+	  "server": {"main": ".", "args": ["-addr", "$ADDR", "-data", "$DATA"]},
+	  "scopes": {
+	    "edit": {"circles": ["company"], "groups": ["support"]},
+	    "shape": {"circles": ["contractor"], "groups": ["support"], "emails": ["lead@example.com"]}
+	  }
+	}`)}
+	env := map[string]string{"SITE_SSO_SECRET": testSecret, "SITE_AI_KEY": "k"}
+	s, err := newServerFrom(scopedFS, func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	memberShape := who{"member with shape", "member", "contractor", "support", "", "c@example.com"}
+	memberShapeByEmail := who{"member with shape by email", "member", "contractor", "", "", "lead@example.com"}
+	memberEdit := who{"member with edit", "member", "company", "support", "", "a@example.com"}
+	memberNoScope := who{"member without scope", "member", "company", "", "", "m@example.com"}
+	memberWrongCircle := who{"member wrong circle", "member", "guest", "support", "", "g@example.com"}
+
+	for _, tc := range []struct {
+		w         who
+		wantTier  string
+		wantScope string
+		wantShape bool
+	}{
+		{owner, TierOwner, ScopeShape, true},
+		{memberShape, TierMember, ScopeShape, false},
+		{memberShapeByEmail, TierMember, ScopeShape, false},
+		{memberEdit, TierMember, ScopeEdit, false},
+		{memberNoScope, TierMember, "", false},
+		{memberWrongCircle, TierMember, "", false},
+		{stranger, TierAccount, "", false},
+		{strangerLegacy, TierAccount, "", false},
+		{nobody, TierAnonymous, "", false},
+	} {
+		code, me := do(t, s, "GET", "/_shaping/api/me", tc.w)
+		if code != http.StatusOK {
+			t.Fatalf("%s: status %d", tc.w.name, code)
+		}
+		if me["tier"] != tc.wantTier {
+			t.Errorf("%s: tier = %v, want %q", tc.w.name, me["tier"], tc.wantTier)
+		}
+		if me["scope"] != tc.wantScope {
+			t.Errorf("%s: scope = %v, want %q", tc.w.name, me["scope"], tc.wantScope)
+		}
+		shapeLink, _ := me["shape"].(string)
+		if (shapeLink != "") != tc.wantShape {
+			t.Errorf("%s: shape = %q, wantPresent=%v", tc.w.name, shapeLink, tc.wantShape)
+		}
+	}
+}
+
+func TestPanelWishBoxByScopeAndMCPFlow(t *testing.T) {
+	nodeBin, err := exec.LookPath("node")
+	if err != nil {
+		t.Skip("node is not on PATH")
+	}
+
+	shapingJS, err := fs.ReadFile(assets, "public/shaping.js")
+	if err != nil {
+		t.Fatalf("read embedded shaping.js: %v", err)
+	}
+
+	scopedFS := fstest.MapFS{}
+	for k, v := range fixture {
+		scopedFS[k] = v
+	}
+	scopedFS["public/shaping.js"] = &fstest.MapFile{Data: shapingJS}
+	scopedFS["shaped.json"] = &fstest.MapFile{Data: []byte(`{
+	  "server": {"main": ".", "args": ["-addr", "$ADDR", "-data", "$DATA"]},
+	  "scopes": {
+	    "edit": {"circles": ["company"], "groups": ["support"]},
+	    "shape": {"circles": ["contractor"], "groups": ["support"]}
+	  }
+	}`)}
+
+	env := map[string]string{"SITE_SSO_SECRET": testSecret, "SITE_AI_KEY": "k"}
+	s, err := newServerFrom(scopedFS, func(k string) string { return env[k] })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	const mount = "/matrix/h/host/app/site"
+
+	type mcpCall struct {
+		Caller      string         `json:"caller"`
+		Tool        string         `json:"tool"`
+		Args        map[string]any `json:"args"`
+		AuthHeader  string         `json:"auth_header"`
+		CSRFHeader  string         `json:"csrf_header"`
+		ProtoHeader string         `json:"proto_header"`
+	}
+	var (
+		mu       sync.Mutex
+		curWho   = nobody
+		mcpCalls []mcpCall
+		useSSE   bool
+		candSeq  int
+	)
+
+	callers := map[string]who{
+		"owner":     owner,
+		"shape":     {"member with shape", "member", "contractor", "support", "", "c@example.com"},
+		"edit":      {"member with edit", "member", "company", "support", "", "a@example.com"},
+		"unscoped":  {"member without scope", "member", "company", "", "", "m@example.com"},
+		"account":   stranger,
+		"anonymous": nobody,
+	}
+
+	// Front simulates outpost mounted at /matrix/h/host/app/site: stamps
+	// every request from the caller's cloudbox login and proxies <mount>/mcp
+	// on the same origin to the site MCP server.
+	front := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/_test/select" {
+			mu.Lock()
+			curWho = callers[r.URL.Query().Get("who")]
+			useSSE = r.URL.Query().Get("sse") == "1"
+			mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.URL.Path == "/_test/calls" {
+			mu.Lock()
+			snapshot := append([]mcpCall(nil), mcpCalls...)
+			mu.Unlock()
+			writeJSON(w, http.StatusOK, map[string]any{"calls": snapshot})
+			return
+		}
+		if !strings.HasPrefix(r.URL.Path, mount) {
+			http.NotFound(w, r)
+			return
+		}
+		mu.Lock()
+		activeWho := curWho
+		sseMode := useSSE
+		mu.Unlock()
+
+		sub := strings.TrimPrefix(r.URL.Path, mount)
+		if sub == "" {
+			sub = "/"
+		}
+		if sub == "/mcp" {
+			if r.Method != http.MethodPost {
+				http.Error(w, "POST only", http.StatusMethodNotAllowed)
+				return
+			}
+			var rpc struct {
+				ID     any    `json:"id"`
+				Method string `json:"method"`
+				Params struct {
+					Name      string         `json:"name"`
+					Arguments map[string]any `json:"arguments"`
+				} `json:"params"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&rpc); err != nil || rpc.Method != "tools/call" {
+				http.Error(w, "bad jsonrpc", http.StatusBadRequest)
+				return
+			}
+			mu.Lock()
+			mcpCalls = append(mcpCalls, mcpCall{
+				Caller:      activeWho.name,
+				Tool:        rpc.Params.Name,
+				Args:        rpc.Params.Arguments,
+				AuthHeader:  r.Header.Get("Authorization"),
+				CSRFHeader:  r.Header.Get("X-CSRF-Token"),
+				ProtoHeader: r.Header.Get("MCP-Protocol-Version"),
+			})
+			var resultObj any
+			isErr := false
+			errText := ""
+			switch rpc.Params.Name {
+			case "shape_wish":
+				candSeq++
+				cid := "cand-" + strconv.Itoa(candSeq)
+				resultObj = map[string]any{
+					"app":       "site",
+					"verb":      "wish",
+					"principal": activeWho.user,
+					"result":    map[string]any{"id": cid, "status": "ready", "rev": "abc123def456"},
+				}
+			case "shape_verify":
+				cid, _ := rpc.Params.Arguments["id"].(string)
+				resultObj = map[string]any{
+					"app":       "site",
+					"verb":      "verify",
+					"principal": activeWho.user,
+					"result":    map[string]any{"id": cid, "status": "verified", "verdict": map[string]any{"pass": true}},
+				}
+			case "shape_preview":
+				cid, _ := rpc.Params.Arguments["id"].(string)
+				resultObj = map[string]any{
+					"app":       "site",
+					"verb":      "preview",
+					"principal": activeWho.user,
+					"result":    map[string]any{"id": cid, "url": "http://127.0.0.1:7685/shape/site/preview/" + cid + "/"},
+				}
+			case "shape_approve":
+				if activeWho.kind != "owner" {
+					isErr = true
+					errText = "refused: owner tier required"
+				} else {
+					cid, _ := rpc.Params.Arguments["id"].(string)
+					resultObj = map[string]any{
+						"app":       "site",
+						"verb":      "approve",
+						"principal": activeWho.user,
+						"result":    map[string]any{"id": cid, "status": "approved", "rev": "abc123def456"},
+					}
+				}
+			default:
+				isErr = true
+				errText = "unknown tool"
+			}
+			mu.Unlock()
+
+			var mcpResult map[string]any
+			if isErr {
+				mcpResult = map[string]any{
+					"isError": true,
+					"content": []map[string]string{{"type": "text", "text": errText}},
+				}
+			} else {
+				mcpResult = map[string]any{
+					"structuredContent": resultObj,
+				}
+			}
+			envelope := map[string]any{
+				"jsonrpc": "2.0",
+				"id":      rpc.ID,
+				"result":  mcpResult,
+			}
+			raw, _ := json.Marshal(envelope)
+			if sseMode {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = io.WriteString(w, "event: message\ndata: "+string(raw)+"\n\n")
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write(raw)
+			return
+		}
+
+		// Forward page/API request to site-shaping with outpost's signed stamp.
+		fwd := r.Clone(r.Context())
+		fwd.URL.Path = sub
+		if activeWho.kind != "" {
+			stamp(fwd, activeWho.kind, activeWho.circle, activeWho.groups, activeWho.visitor, activeWho.user, time.Now())
+		} else {
+			fwd.Header.Set("X-Forwarded-Prefix", mount)
+		}
+		s.ServeHTTP(w, fwd)
+	}))
+	defer front.Close()
+
+	scriptTmp := filepath.Join(t.TempDir(), "shaping.js")
+	if err := os.WriteFile(scriptTmp, shapingJS, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	const domHarness = `
+const fs = require("fs");
+const vm = require("vm");
+const assert = require("assert");
+
+const scriptPath = process.argv[1];
+const origin = process.argv[2];
+const mount = process.argv[3];
+const code = fs.readFileSync(scriptPath, "utf8");
+
+function makeNode(tag, ns) {
+  const attrs = {};
+  const listeners = {};
+  const classes = new Set();
+  const styleMap = {};
+  const node = {
+    tagName: (tag || "").toUpperCase(),
+    namespaceURI: ns || null,
+    children: [],
+    parentNode: null,
+    value: "",
+    disabled: false,
+    isContentEditable: false,
+    _text: "",
+    style: {
+      setProperty(k, v) { styleMap[k] = String(v); },
+      removeProperty(k) { delete styleMap[k]; }
+    },
+    classList: {
+      add(c) { classes.add(c); syncClass(); },
+      remove(c) { classes.delete(c); syncClass(); },
+      toggle(c, force) {
+        const on = force === undefined ? !classes.has(c) : !!force;
+        if (on) classes.add(c); else classes.delete(c);
+        syncClass();
+        return on;
+      }
+    },
+    get textContent() {
+      return this._text + this.children.map(c => c.textContent).join("");
+    },
+    set textContent(v) {
+      this._text = String(v == null ? "" : v);
+      this.children = [];
+    },
+    get firstChild() { return this.children[0] || null; },
+    setAttribute(k, v) {
+      attrs[k] = String(v);
+      if (k === "class") {
+        classes.clear();
+        String(v).split(/\s+/).filter(Boolean).forEach(c => classes.add(c));
+      }
+    },
+    getAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k) ? attrs[k] : null; },
+    hasAttribute(k) { return Object.prototype.hasOwnProperty.call(attrs, k); },
+    removeAttribute(k) { delete attrs[k]; },
+    appendChild(c) { c.parentNode = this; this.children.push(c); return c; },
+    insertBefore(c, ref) {
+      c.parentNode = this;
+      const i = this.children.indexOf(ref);
+      if (i >= 0) this.children.splice(i, 0, c);
+      else this.children.push(c);
+      return c;
+    },
+    remove() {
+      if (!this.parentNode) return;
+      const i = this.parentNode.children.indexOf(this);
+      if (i >= 0) this.parentNode.children.splice(i, 1);
+      this.parentNode = null;
+    },
+    addEventListener(ev, fn) { (listeners[ev] = listeners[ev] || []).push(fn); },
+    click() { (listeners.click || []).forEach(fn => fn({ preventDefault() {} })); },
+    querySelectorAll(sel) {
+      const want = sel.split(",").map(s => s.trim());
+      const out = [];
+      (function walk(n) {
+        for (const c of n.children) {
+          for (const w of want) {
+            if (w.startsWith(".") && (c.getAttribute("class") || "").split(/\s+/).includes(w.slice(1))) out.push(c);
+            else if (c.tagName && c.tagName.toLowerCase() === w.toLowerCase()) out.push(c);
+          }
+          walk(c);
+        }
+      })(this);
+      return out;
+    },
+    querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
+  };
+  function syncClass() { attrs["class"] = Array.from(classes).join(" "); }
+  return node;
+}
+
+async function waitUntil(pred, msg) {
+  const deadline = Date.now() + 5000;
+  while (Date.now() < deadline) {
+    if (pred()) return;
+    await new Promise(r => setTimeout(r, 15));
+  }
+  throw new Error("timeout: " + msg);
+}
+
+async function openFor(who, sse) {
+  const sel = await fetch(origin + "/_test/select?who=" + encodeURIComponent(who) + "&sse=" + (sse ? "1" : "0"));
+  assert.strictEqual(sel.status, 204);
+
+  const docEl = makeNode("html");
+  const body = makeNode("body");
+  docEl.appendChild(body);
+  const store = {};
+  const document = {
+    documentElement: docEl,
+    body,
+    cookie: "csrf_token=csrf-abc",
+    hidden: false,
+    activeElement: null,
+    currentScript: { src: origin + mount + "/_shaping/shaping.js" },
+    createElement: (tag) => makeNode(tag),
+    createElementNS: (ns, tag) => makeNode(tag, ns),
+    createTextNode: (t) => { const n = makeNode("#text"); n._text = String(t); return n; },
+    getElementById(id) {
+      let found = null;
+      (function walk(n) {
+        if (found) return;
+        for (const c of n.children) {
+          if (c.getAttribute("id") === id) { found = c; return; }
+          walk(c);
+        }
+      })(body);
+      return found;
+    },
+    querySelector: (s) => body.querySelector(s),
+    querySelectorAll: (s) => body.querySelectorAll(s),
+    addEventListener() {}
+  };
+  const sandbox = {
+    document,
+    location: { origin, pathname: mount + "/about", search: "", reload() {} },
+    localStorage: {
+      getItem: (k) => Object.prototype.hasOwnProperty.call(store, k) ? store[k] : null,
+      setItem: (k, v) => { store[k] = String(v); },
+      removeItem: (k) => { delete store[k]; }
+    },
+    URL,
+    fetch,
+    setInterval: () => 1,
+    clearInterval: () => {},
+    console
+  };
+  vm.runInNewContext(code, sandbox, { filename: scriptPath });
+  await waitUntil(() => document.getElementById("ss-panel-root") !== null, "panel root mount for " + who);
+  return document;
+}
+
+(async () => {
+  // 1. Non-shape callers (edit-only member, unscoped member, account, anonymous) get NO wish box and NO console link.
+  for (const who of ["edit", "unscoped", "account", "anonymous"]) {
+    const doc = await openFor(who, false);
+    assert.strictEqual(doc.querySelector(".ss-shape"), null, who + " must not see owner shape link");
+    assert.strictEqual(doc.querySelector(".ss-shape-box"), null, who + " must not see shape wish box");
+    assert.strictEqual(doc.querySelector(".ss-shape-approve"), null, who + " must not see approve");
+  }
+
+  // 2. Member with shape scope: gets wish box (no console shape link, no approve),
+  //    posts wish/verify/preview to <mount>/mcp (including SSE framing), shows status + preview.
+  const memberDoc = await openFor("shape", true);
+  assert.strictEqual(memberDoc.querySelector(".ss-shape"), null, "member with shape must not see owner console link");
+  const memberBox = memberDoc.querySelector(".ss-shape-box");
+  assert.ok(memberBox, "member with shape must see wish box");
+  const memberInput = memberBox.querySelector(".ss-wish-input");
+  const memberSubmit = memberBox.querySelector(".ss-wish-submit");
+  memberInput.value = "Add FAQ hours";
+  memberSubmit.click();
+
+  const memberStatus = memberBox.querySelector(".ss-shape-status");
+  await waitUntil(() => /Verified \(cand-1\) · Preview ready/.test(memberStatus.textContent), "member verify/preview status: " + memberStatus.textContent);
+  assert.ok(/awaiting owner approval/i.test(memberStatus.textContent), "member status should note owner approval: " + memberStatus.textContent);
+  const memberPreview = memberBox.querySelector(".ss-shape-preview");
+  assert.ok(memberPreview && /\/preview\/cand-1\/$/.test(memberPreview.getAttribute("href")), "member missing preview link");
+  assert.strictEqual(memberBox.querySelector(".ss-shape-approve"), null, "member must NOT see approve button");
+
+  // 3. Owner: sees console shape link, sees wish box, sees verify/preview status AND approve button, and approves.
+  const ownerDoc = await openFor("owner", false);
+  assert.ok(ownerDoc.querySelector(".ss-shape"), "owner must see console shape link");
+  const ownerBox = ownerDoc.querySelector(".ss-shape-box");
+  assert.ok(ownerBox, "owner must see wish box");
+  ownerBox.querySelector(".ss-wish-input").value = "Publish holiday banner";
+  ownerBox.querySelector(".ss-wish-submit").click();
+
+  const ownerStatus = ownerBox.querySelector(".ss-shape-status");
+  await waitUntil(() => /Verified \(cand-2\) · Preview ready/.test(ownerStatus.textContent), "owner verify/preview status: " + ownerStatus.textContent);
+  const approveBtn = ownerBox.querySelector(".ss-shape-approve");
+  assert.ok(approveBtn, "owner must additionally see approve button");
+  approveBtn.click();
+  await waitUntil(() => /Approved \(cand-2\)/.test(ownerStatus.textContent), "owner approve status: " + ownerStatus.textContent);
+  assert.strictEqual(ownerBox.querySelector(".ss-shape-approve"), null, "approve button removed after approval");
+  assert.strictEqual(ownerBox.querySelector(".ss-wish-input").value, "", "wish input cleared after approval");
+
+  // 4. Inspect recorded MCP calls: only shape member + owner reached <mount>/mcp,
+  //    no Authorization header/token/password was sent, CSRF header was echoed, page was "/about".
+  const callsResp = await (await fetch(origin + "/_test/calls")).json();
+  const calls = callsResp.calls;
+  assert.deepStrictEqual(
+    calls.map(c => c.caller + ":" + c.tool),
+    [
+      "member with shape:shape_wish",
+      "member with shape:shape_verify",
+      "member with shape:shape_preview",
+      "owner:shape_wish",
+      "owner:shape_verify",
+      "owner:shape_preview",
+      "owner:shape_approve"
+    ]
+  );
+  for (const c of calls) {
+    assert.strictEqual(c.auth_header, "", "must not send Authorization token/password: " + JSON.stringify(c));
+    assert.strictEqual(c.csrf_header, "csrf-abc", "must echo X-CSRF-Token: " + JSON.stringify(c));
+    assert.strictEqual(c.proto_header, "2025-06-18", "unexpected MCP-Protocol-Version");
+  }
+  assert.strictEqual(calls[0].args.request, "Add FAQ hours");
+  assert.strictEqual(calls[0].args.page, "/about");
+  assert.strictEqual(calls[3].args.request, "Publish holiday banner");
+  assert.strictEqual(calls[3].args.page, "/about");
+})().catch(err => { console.error(err); process.exit(1); });
+`
+
+	cmd := exec.Command(nodeBin, "-e", domHarness, "--", scriptTmp, front.URL, mount)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("DOM wish box test failed: %v\n%s", err, out)
 	}
 }

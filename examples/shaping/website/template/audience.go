@@ -2,12 +2,174 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"io/fs"
 	"path"
 	"slices"
 	"sort"
 	"strings"
 )
+
+// Shaping scope names in shaped.json (matching R5a appserver.Scopes).
+// "view" is the existing cloudbox share itself and is not stored here.
+const (
+	ScopeEdit  = "edit"
+	ScopeShape = "shape"
+)
+
+// ScopeAudience is the member-only audience grammar used inside shaped.json's
+// scopes: circles AND (groups OR emails). An empty audience admits nobody.
+type ScopeAudience struct {
+	Circles []string `json:"circles,omitempty"`
+	Groups  []string `json:"groups,omitempty"`
+	Emails  []string `json:"emails,omitempty"`
+}
+
+// Empty reports whether the scope audience names nothing.
+func (a *ScopeAudience) Empty() bool {
+	return a == nil || (len(a.Circles) == 0 && len(a.Groups) == 0 && len(a.Emails) == 0)
+}
+
+// AdmitsMember reports whether a verified member stamp matches this scope
+// audience: circles AND (groups OR emails). Fail-closed when empty or non-member.
+func (a *ScopeAudience) AdmitsMember(c Caller) bool {
+	if c.Tier != TierMember || a.Empty() {
+		return false
+	}
+	circle := strings.TrimSpace(c.Circle)
+	email := strings.TrimSpace(c.Email)
+	if len(a.Circles) > 0 && !slices.Contains(a.Circles, circle) {
+		return false
+	}
+	if len(a.Groups) == 0 && len(a.Emails) == 0 {
+		return true
+	}
+	for _, g := range c.Groups {
+		if g = strings.TrimSpace(g); g != "" && slices.Contains(a.Groups, g) {
+			return true
+		}
+	}
+	if email == "" {
+		return false
+	}
+	return slices.ContainsFunc(a.Emails, func(e string) bool {
+		return strings.EqualFold(strings.TrimSpace(e), email)
+	})
+}
+
+// Scopes maps recognized shaping scopes ("edit", "shape") to member audiences.
+type Scopes struct {
+	Edit  *ScopeAudience `json:"edit,omitempty"`
+	Shape *ScopeAudience `json:"shape,omitempty"`
+}
+
+// ScopeFor returns the caller's effective shaping scope ("shape", "edit", or ""):
+// the owner always holds "shape"; a verified member gets the highest scope their
+// stamp matches ("shape" includes "edit"); account and anonymous get "".
+func (s Scopes) ScopeFor(c Caller) string {
+	switch c.Tier {
+	case TierOwner:
+		return ScopeShape
+	case TierMember:
+		if s.Shape.AdmitsMember(c) {
+			return ScopeShape
+		}
+		if s.Edit.AdmitsMember(c) {
+			return ScopeEdit
+		}
+		return ""
+	default:
+		return ""
+	}
+}
+
+type shapedManifest struct {
+	Server     json.RawMessage `json:"server,omitempty"`
+	Repair     json.RawMessage `json:"repair,omitempty"`
+	Tidy       json.RawMessage `json:"tidy,omitempty"`
+	Properties json.RawMessage `json:"properties,omitempty"`
+	Genie      json.RawMessage `json:"genie,omitempty"`
+	Scopes     *Scopes         `json:"scopes,omitempty"`
+}
+
+// parseShapedScopes decodes and validates the "scopes" section of shaped.json,
+// refusing unknown scope names and malformed entries fail-closed.
+func parseShapedScopes(raw []byte) (Scopes, error) {
+	var m shapedManifest
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&m); err != nil {
+		return Scopes{}, fmt.Errorf("shaped.json: %w", err)
+	}
+	if dec.More() {
+		return Scopes{}, errors.New("shaped.json: trailing data after manifest")
+	}
+	if m.Scopes == nil {
+		return Scopes{}, nil
+	}
+	if err := cleanScopeAudience(ScopeEdit, m.Scopes.Edit); err != nil {
+		return Scopes{}, err
+	}
+	if err := cleanScopeAudience(ScopeShape, m.Scopes.Shape); err != nil {
+		return Scopes{}, err
+	}
+	return *m.Scopes, nil
+}
+
+func cleanScopeAudience(scope string, a *ScopeAudience) error {
+	if a == nil {
+		return nil
+	}
+	circles := make([]string, 0, len(a.Circles))
+	for i, c := range a.Circles {
+		c = strings.TrimSpace(c)
+		if c == "" || strings.ContainsAny(c, " \t\r\n,<>") {
+			return fmt.Errorf("shaped.json: scopes.%s.circles[%d] must be a non-empty circle name", scope, i)
+		}
+		if !slices.Contains(circles, c) {
+			circles = append(circles, c)
+		}
+	}
+	a.Circles = circles
+	groups := make([]string, 0, len(a.Groups))
+	for i, g := range a.Groups {
+		g = strings.TrimSpace(g)
+		if g == "" || strings.ContainsAny(g, ",\r\n<>") {
+			return fmt.Errorf("shaped.json: scopes.%s.groups[%d] must be a non-empty group name", scope, i)
+		}
+		if !slices.Contains(groups, g) {
+			groups = append(groups, g)
+		}
+	}
+	a.Groups = groups
+	emails := make([]string, 0, len(a.Emails))
+	for i, e := range a.Emails {
+		e = strings.ToLower(strings.TrimSpace(e))
+		local, domain, ok := strings.Cut(e, "@")
+		if !ok || local == "" || domain == "" || strings.ContainsAny(e, " \t\r\n,<>") {
+			return fmt.Errorf("shaped.json: scopes.%s.emails[%d] %q must be a valid email address", scope, i, e)
+		}
+		if !slices.Contains(emails, e) {
+			emails = append(emails, e)
+		}
+	}
+	a.Emails = emails
+	return nil
+}
+
+func loadScopes(fsys fs.FS) (Scopes, error) {
+	raw, err := fs.ReadFile(fsys, "shaped.json")
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return Scopes{}, nil
+		}
+		return Scopes{}, err
+	}
+	return parseShapedScopes(raw)
+}
 
 // Audience is the cloudbox rule grammar plus account: circles AND (group OR
 // email) for members, or any logged-in cloudbox account. The legacy config key

@@ -78,6 +78,62 @@
   text-decoration: none;
   font-weight: 600;
 }
+#ss-panel-root .ss-shape-box {
+  margin: 12px 0;
+  padding: 10px 0;
+  border-top: 1px solid var(--ss-line);
+}
+#ss-panel-root .ss-wish-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+#ss-panel-root .ss-wish-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 10px;
+  border: 1px solid var(--ss-line);
+  border-radius: 8px;
+  background: var(--ss-bg);
+  color: var(--ss-fg);
+  font: inherit;
+  resize: vertical;
+}
+#ss-panel-root .ss-wish-submit,
+#ss-panel-root .ss-shape-approve {
+  align-self: flex-start;
+  padding: 6px 12px;
+  border: 1px solid var(--ss-accent);
+  border-radius: 8px;
+  background: var(--ss-accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+#ss-panel-root .ss-wish-submit:disabled,
+#ss-panel-root .ss-shape-approve:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+#ss-panel-root .ss-shape-status {
+  margin: 6px 0 0;
+  font-size: 13px;
+  color: var(--ss-muted);
+}
+#ss-panel-root .ss-shape-status:empty,
+#ss-panel-root .ss-shape-actions:empty {
+  display: none;
+}
+#ss-panel-root .ss-shape-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+#ss-panel-root .ss-shape-preview {
+  font-weight: 600;
+}
 #ss-panel-root .ss-wishes {
   margin: 12px 0;
   padding: 10px 0;

@@ -23,13 +23,14 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 )
 
-//go:embed site.json public fields
+//go:embed site.json shaped.json public fields
 var assets embed.FS
 
 // Property declares one visitor-configurable visual or accessibility setting.
@@ -72,16 +73,19 @@ type Config struct {
 }
 
 type server struct {
-	cfg     Config
-	fields  []Field
-	secret  string
-	key     string
-	version string
-	site    *upstream
-	public  http.Handler
-	allow   allowance
-	client  *http.Client
-	now     func() time.Time
+	cfg       Config
+	fields    []Field
+	scopes    Scopes
+	shapeHome string
+	shapeApps []string
+	secret    string
+	key       string
+	version   string
+	site      *upstream
+	public    http.Handler
+	allow     allowance
+	client    *http.Client
+	now       func() time.Time
 }
 
 func main() {
@@ -163,6 +167,11 @@ func newServerFrom(fsys fs.FS, getenv func(string) string) (*server, error) {
 	if err != nil {
 		return nil, err
 	}
+	scopes, err := loadScopes(fsys)
+	if err != nil {
+		return nil, err
+	}
+	shapeHome, shapeApps := resolveShapeSourceLookup(getenv)
 	pub, _ := fs.Sub(fsys, "public")
 	keyEnv := cfg.AI.KeyEnv
 	if keyEnv == "" {
@@ -173,16 +182,73 @@ func newServerFrom(fsys fs.FS, getenv func(string) string) (*server, error) {
 		ver = computeAssetsVersion(fsys)
 	}
 	return &server{
-		cfg:     cfg,
-		fields:  fields,
-		secret:  getenv("SITE_SSO_SECRET"),
-		key:     getenv(keyEnv),
-		version: ver,
-		site:    newUpstreamFor(cfg),
-		public:  http.StripPrefix("/_shaping/", http.FileServer(http.FS(pub))),
-		client:  &http.Client{Timeout: 90 * time.Second},
-		now:     time.Now,
+		cfg:       cfg,
+		fields:    fields,
+		scopes:    scopes,
+		shapeHome: shapeHome,
+		shapeApps: shapeApps,
+		secret:    getenv("SITE_SSO_SECRET"),
+		key:       getenv(keyEnv),
+		version:   ver,
+		site:      newUpstreamFor(cfg),
+		public:    http.StripPrefix("/_shaping/", http.FileServer(http.FS(pub))),
+		client:    &http.Client{Timeout: 90 * time.Second},
+		now:       time.Now,
 	}, nil
+}
+
+func resolveShapeSourceLookup(getenv func(string) string) (string, []string) {
+	rawApps := strings.TrimSpace(getenv("SITE_SHAPE_APP"))
+	if rawApps == "" {
+		return "", nil
+	}
+	var apps []string
+	for _, part := range strings.Split(rawApps, ",") {
+		if a := strings.TrimSpace(part); a != "" {
+			apps = append(apps, a)
+		}
+	}
+	if len(apps) == 0 {
+		return "", nil
+	}
+	home := strings.TrimSpace(getenv("SITE_SHAPE_HOME"))
+	if home == "" {
+		home = strings.TrimSpace(getenv("BASHY_HOME"))
+	}
+	if home == "" {
+		if h, err := os.UserHomeDir(); err == nil && h != "" {
+			home = filepath.Join(h, ".bashy")
+		}
+	}
+	return home, apps
+}
+
+// currentScopes returns the app's active shaping scopes: when running against
+// a managed shaped checkout (SITE_SHAPE_APP), live edits from `bashy shape scope`
+// in <home>/src/<app>/shaped.json take effect immediately (failing closed on
+// invalid JSON); otherwise the embedded/fixture shaped.json scopes apply.
+func (s *server) currentScopes() Scopes {
+	if s.shapeHome != "" {
+		for _, app := range s.shapeApps {
+			dir := filepath.Join(s.shapeHome, "src", app)
+			if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+				continue
+			}
+			raw, err := os.ReadFile(filepath.Join(dir, "shaped.json"))
+			if err != nil {
+				if os.IsNotExist(err) {
+					return Scopes{}
+				}
+				return Scopes{}
+			}
+			parsed, err := parseShapedScopes(raw)
+			if err != nil {
+				return Scopes{}
+			}
+			return parsed
+		}
+	}
+	return s.scopes
 }
 
 func isLoopbackRoute(u string) bool {
@@ -308,6 +374,7 @@ func (s *server) me(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"tier":       c.Tier,
+		"scope":      s.currentScopes().ScopeFor(c),
 		"title":      s.cfg.Title,
 		"contact":    s.cfg.Contact,
 		"sign_in":    s.cfg.SignIn,

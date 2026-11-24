@@ -8,6 +8,10 @@
   var me = document.currentScript || document.querySelector('script[src$="_shaping/shaping.js"]');
   var base = me ? me.src.replace(/shaping\.js(\?.*)?$/, "") : "./_shaping/";
   var api = base + "api/";
+  var baseResolved = new URL(base, location.origin + (location.pathname || "/"));
+  var mountPath = baseResolved.pathname.replace(/\/_shaping\/?$/, "");
+  var mcpURL = location.origin + (mountPath ? mountPath : "") + "/mcp";
+  var mcpSeq = 0;
 
   function el(tag, attrs, text) {
     var e = document.createElement(tag);
@@ -112,6 +116,210 @@
       if (!r.ok) throw new Error("HTTP " + r.status);
       return r.json();
     });
+  }
+
+  function currentSitePage() {
+    var p = location.pathname || "/";
+    if (mountPath && (p === mountPath || p.indexOf(mountPath + "/") === 0)) {
+      p = p.slice(mountPath.length) || "/";
+    }
+    return p.charAt(0) === "/" ? p : "/" + p;
+  }
+
+  function safeHTTPURL(raw) {
+    if (typeof raw !== "string" || !raw.trim()) return null;
+    try {
+      var u = new URL(raw, location.origin);
+      if (u.protocol === "http:" || u.protocol === "https:") return u.href;
+    } catch (_) {}
+    return null;
+  }
+
+  function firstText(content) {
+    if (!Array.isArray(content)) return "";
+    for (var i = 0; i < content.length; i++) {
+      if (content[i] && typeof content[i].text === "string") return content[i].text;
+    }
+    return "";
+  }
+
+  function parseMCPEnvelope(raw, ctype) {
+    var text = String(raw || "").trim();
+    if ((ctype && ctype.indexOf("text/event-stream") !== -1) || /^event:|^data:/m.test(text)) {
+      var lines = text.split(/\r?\n/);
+      var last = null;
+      for (var i = 0; i < lines.length; i++) {
+        if (lines[i].indexOf("data:") === 0) {
+          var chunk = lines[i].slice(5).trim();
+          if (!chunk) continue;
+          try {
+            var parsed = JSON.parse(chunk);
+            if (parsed && (parsed.result !== undefined || parsed.error !== undefined)) last = parsed;
+          } catch (_) {}
+        }
+      }
+      if (last) return last;
+    }
+    return JSON.parse(text);
+  }
+
+  // Call one tool on the app's same-origin site MCP (<mount>/mcp) through
+  // outpost: the caller's cloudbox session cookie identifies them — no token,
+  // no Authorization header, no OS password.
+  function callMCP(tool, args) {
+    var headers = Object.assign({
+      "Content-Type": "application/json",
+      "Accept": "application/json, text/event-stream",
+      "MCP-Protocol-Version": "2025-06-18"
+    }, csrfHeaders());
+    var body = JSON.stringify({
+      jsonrpc: "2.0",
+      id: ++mcpSeq,
+      method: "tools/call",
+      params: { name: tool, arguments: args || {} }
+    });
+    return fetch(mcpURL, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: headers,
+      body: body
+    }).then(function (r) {
+      var ctype = (r.headers && r.headers.get && r.headers.get("Content-Type")) || "";
+      return r.text().then(function (raw) {
+        if (!r.ok) {
+          throw new Error(r.status === 401 ? "Sign in required." : ("HTTP " + r.status));
+        }
+        var env = parseMCPEnvelope(raw, ctype);
+        if (env.error) {
+          throw new Error(env.error.message || "MCP call failed.");
+        }
+        var res = env.result || {};
+        if (res.isError) {
+          throw new Error(firstText(res.content) || "Not authorized.");
+        }
+        if (res.structuredContent && typeof res.structuredContent === "object") {
+          return res.structuredContent;
+        }
+        var txt = firstText(res.content);
+        if (txt) {
+          try { return JSON.parse(txt); } catch (_) {}
+        }
+        return {};
+      });
+    });
+  }
+
+  function renderShapeBox(panel, info) {
+    if (info.scope !== "shape") return;
+    var isOwner = info.tier === "owner";
+    var box = el("div", { class: "ss-shape-box" });
+    box.appendChild(el("p", { class: "ss-wishes-label" }, "Shape this site"));
+    var form = el("div", { class: "ss-wish-form" });
+    var input = el("textarea", {
+      class: "ss-wish-input",
+      rows: "2",
+      placeholder: "Describe a change to this site…"
+    });
+    var submit = el("button", { type: "button", class: "ss-wish-submit" }, "Send wish");
+    form.appendChild(input);
+    form.appendChild(submit);
+    box.appendChild(form);
+
+    var status = el("div", { class: "ss-shape-status", role: "status", "aria-live": "polite" });
+    var actions = el("div", { class: "ss-shape-actions" });
+    box.appendChild(status);
+    box.appendChild(actions);
+
+    submit.addEventListener("click", function () {
+      var request = (input.value || "").trim();
+      if (!request || submit.disabled) return;
+      submit.disabled = true;
+      actions.textContent = "";
+      status.textContent = "Sending wish…";
+
+      var cid = "";
+      callMCP("shape_wish", { request: request, page: currentSitePage() })
+        .then(function (wishOut) {
+          var cand = (wishOut && wishOut.result) || wishOut || {};
+          cid = typeof cand.id === "string" ? cand.id : "";
+          if (cand.kind === "request" || cand.status === "requested") {
+            status.textContent = "Queued as a request for the owner" + (cid ? " (" + cid + ")." : ".");
+            return null;
+          }
+          if (!cid) throw new Error("No candidate returned.");
+          status.textContent = "Verifying candidate…";
+          return callMCP("shape_verify", { id: cid }).then(function (verOut) {
+            var ver = (verOut && verOut.result) || verOut || {};
+            if (ver.verdict && ver.verdict.pass === false) {
+              throw new Error(ver.verdict.detail || "Verification failed.");
+            }
+            status.textContent = "Verified. Preparing preview…";
+            return callMCP("shape_preview", { id: cid })
+              .then(function (prevOut) {
+                var prev = (prevOut && prevOut.result) || prevOut || {};
+                return { verified: ver, preview: prev, previewErr: null };
+              })
+              .catch(function (perr) {
+                return { verified: ver, preview: null, previewErr: perr };
+              });
+          });
+        })
+        .then(function (outcome) {
+          if (!outcome) return;
+          var summary = "Verified (" + cid + ")";
+          if (outcome.previewErr) {
+            summary += " · Preview unavailable";
+          } else {
+            summary += " · Preview ready";
+          }
+          if (!isOwner) {
+            summary += " — awaiting owner approval.";
+          }
+          status.textContent = summary;
+
+          var href = outcome.preview && safeHTTPURL(outcome.preview.url);
+          if (href) {
+            actions.appendChild(el("a", {
+              class: "ss-shape-preview",
+              href: href,
+              target: "_blank",
+              rel: "noopener"
+            }, "Preview"));
+          }
+
+          if (isOwner) {
+            var approve = el("button", { type: "button", class: "ss-shape-approve" }, "Approve");
+            approve.addEventListener("click", function () {
+              if (approve.disabled) return;
+              approve.disabled = true;
+              submit.disabled = true;
+              status.textContent = "Approving…";
+              callMCP("shape_approve", { id: cid })
+                .then(function () {
+                  input.value = "";
+                  approve.remove();
+                  status.textContent = "Approved (" + cid + ").";
+                })
+                .catch(function (aerr) {
+                  approve.disabled = false;
+                  status.textContent = (aerr && aerr.message) || "Approval failed.";
+                })
+                .finally(function () {
+                  submit.disabled = false;
+                });
+            });
+            actions.appendChild(approve);
+          }
+        })
+        .catch(function (err) {
+          status.textContent = (err && err.message) || "Wish could not be completed.";
+        })
+        .finally(function () {
+          submit.disabled = false;
+        });
+    });
+
+    panel.appendChild(box);
   }
 
   // Personalization wishes map strictly to declared properties and are kept
@@ -320,6 +528,8 @@
       shape.appendChild(document.createTextNode(" Shape this site"));
       panel.appendChild(shape);
     }
+
+    renderShapeBox(panel, info);
 
     renderWishes(panel, info);
 
