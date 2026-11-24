@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+ARG BASE_IMAGE=localhost/bashy-hosted-base:latest
+FROM ${BASE_IMAGE}
+
+USER 0:0
+
+COPY --chown=0:0 adapters /var/cache/bashy/adapters
+COPY --chown=0:0 examples/google /opt/bashy/examples/google
+COPY --chown=0:0 examples/trove /opt/bashy/examples/trove
+
+RUN set -eux; \
+    chmod -R a+rX /var/cache/bashy/adapters /opt/bashy/examples; \
+    chmod 0755 /opt/bashy/examples/google/google.bsh /opt/bashy/examples/google/google-rod.bsh /opt/bashy/examples/google/register.sh /opt/bashy/examples/trove/trove.bsh /opt/bashy/examples/trove/register.sh; \
+    install -d -o 10001 -g 10001 -m 0700 /tmp/hosted-scratch
+
+ENV BASHY_ADAPTER_CACHE=/var/cache/bashy/adapters \
+    BASHY_HOSTED_SCRATCH_DIR=/tmp/hosted-scratch \
+    BASHY_HINTS=off \
+    BASHY_TELEMETRY_QUIET=1
+
+USER 10001:10001
+
+RUN set -eu; \
+    BASHY_BIN=/bashy /bashy /opt/bashy/examples/google/register.sh; \
+    BASHY_BIN=/bashy /bashy /opt/bashy/examples/trove/register.sh; \
+    /bashy commands list | grep -q '^google'; \
+    /bashy commands list | grep -q '^trove'; \
+    test -x /var/cache/bashy/adapters/yoke/secret; \
+    test -x /var/cache/bashy/adapters/optional/jq; \
+    test -x /var/cache/bashy/adapters/yoke/lens; \
+    test -x /var/cache/bashy/adapters/optional/sha256sum
+
+WORKDIR /work
+ENTRYPOINT ["/bashy"]
+CMD ["mcp", "serve", "--transport", "http", "--hosted", "--listen", "127.0.0.1:22751"]
