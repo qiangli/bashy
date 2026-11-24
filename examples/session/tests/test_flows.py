@@ -129,6 +129,12 @@ class Flows(TempBashy):
         env_dirs = [self.root / "home", self.root / "xdg", self.root / "coord", self.root / "room"]
         for d in env_dirs:
             d.mkdir(exist_ok=True)
+        # Warm the DAG adapter in this throwaway home first: the first
+        # `bashy dag` call builds it with Go, and that build's telemetry
+        # files under the home are not demo output.
+        warm = subprocess.run(["bashy", "dag", "--plain", str(HERE / "dag.md"), "--list"],
+                              env=dict(os.environ), text=True, capture_output=True, timeout=300)
+        self.assertEqual(warm.returncode, 0, warm.stderr)
         before = snapshot(self.root)
         verbs = [["bashy", "--bashsharp", str(HERE / "session.bsh"), "demo"],
                  ["bashy", "dag", "--plain", str(HERE / "dag.md"), "demo", "SESSION_DIR=%s" % HERE]]
