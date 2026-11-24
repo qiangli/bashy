@@ -148,7 +148,7 @@ shared Bashy Calendar web app. Its Bash# registration is in
 calendar list/get/create/update/delete/freebusy with per-account credential
 preflight (`examples/google/README.md:1-15`). It is not installed on this host
 (`bashy commands google --features`: not-found). S8 should assess the human web
-surface and full user/admin CLI parity; S7 does the same for Memos/Notes.
+surface and full caller/admin CLI parity; S7 does the same for Memos/Notes.
 
 **Shaping hook:** compose existing `bashy <app> --json`, `bashy kb`, `bashy
 define`, `bashy git` and exporter verbs in a reusable Bash# `.bsh` command or
@@ -245,10 +245,10 @@ success, 3 refusal with a reason, 1 other).
 | History | `desktop history --json` |
 | Wishes left today, or why they are unavailable | `desktop allowance --json` (`reason`) |
 | Live page actions | `desktop pages --json`, `desktop invoke PAGE ACTION [JSON]`, `desktop result ID` |
-| Set the daily wish allowance (superadmin; satellite owner) | `desktop policy ls\|set OWNER LIMIT\|unset OWNER` (signed-in session only) |
-| Set the wish route: URL, model, key (superadmin; satellite owner; CLI only, no web UI) | `desktop policy route get\|set --url URL --model M [--token-stdin] [--no-probe]\|unset\|test [--wish W]` (signed-in session only; the key only from stdin; applies to the next wish with no redeploy) |
+| Set the daily wish allowance (superadmin; satellite owner) | `desktop policy ls\|set OWNER LIMIT\|unset OWNER` (account session only) |
+| Set the wish route: URL, model, key (superadmin; satellite owner; CLI only, no web UI) | `desktop policy route get\|set --url URL --model M [--token-stdin] [--no-probe]\|unset\|test [--wish W]` (account session only; the key only from stdin; applies to the next wish with no redeploy) |
 | Suggest a refused wish to the owner (people in the owner's circles only) | `desktop request WORDS... [--reason R]` (words only; nothing applied) |
-| Read and dismiss suggested wishes (superadmin; satellite owner; CLI only) | `desktop policy requests ls\|rm ID` (counts only, never who asked; signed-in session only) |
+| Read and dismiss suggested wishes (superadmin; satellite owner; CLI only) | `desktop policy requests ls\|rm ID` (counts only, never who asked; account session only) |
 
 Walkthrough skill-script: `examples/desktop/desktop.bsh walkthrough`.
 
@@ -373,7 +373,7 @@ Parity is **one-way**: every web, page, and HTTP action of a catalog app must ha
 | **whiteboard** | Insert shape/arrow/text tool | Client-side React state; no server REST API | `examples/whiteboard/server/collab.go` |
 | **whiteboard** | Move/resize/rotate element | Client-side React state; no server REST API | In-browser canvas event |
 | **whiteboard** | Clear canvas | Client-side canvas reset; no server REST API | In-browser canvas event |
-| **whiteboard** | Zoom, pan, grid, theme toggle | Client-side user display preference; no server state | In-browser canvas event |
+| **whiteboard** | Zoom, pan, grid, theme toggle | Client-side display preference; no server state | In-browser canvas event |
 | **table** | Install pinned source build | `bashy table install` | `examples/table/table.bsh:47-102` |
 | **table** | Start console and Grist runtime | `bashy table start` | `examples/table/table.bsh:117-133` |
 | **table** | Stop app console | `bashy table stop` | `examples/table/table.bsh:134-142` |
@@ -481,7 +481,7 @@ still open.
 | Download table as CSV / JSON | `table export DOC TABLE --format csv\|json` |
 | Import CSV into a table | `table import DOC TABLE --file PATH.csv --json` (batches of 500, not transactional) |
 | Rename / delete / reorder columns, tables, documents; column type change | Deferred: separate schema-action endpoints, outside the requested verbs; no direct database edit is offered |
-| Create / edit views, pages, widgets, sorts and filters saved in a view | Deferred: view layout is edited through document user actions, not a stable REST resource; `views list` is read-only |
+| Create / edit views, pages, widgets, sorts and filters saved in a view | Deferred: view layout is edited through document UI actions, not a stable REST resource; `views list` is read-only |
 | Formulas, conditional rules, access rules, sharing and permissions, webhooks | Deferred: administration/ACL scope; the app stays the authority |
 | Import from Excel/Google Sheets/JSON, full document download or restore | Deferred: staged upload API; only CSV rows import is claimed |
 | Shape wish / verify / preview / approve / undo | Existing `bashy shape` lifecycle, as documented in `examples/table/README.md` |
@@ -530,7 +530,7 @@ no-phone-home proof remain open (see `examples/board/docs/s632-a3.md`).
 | Export project tasks JSON/CSV | `board export PROJECT_ID --format json\|csv` | `GET /task/export/PROJECT_ID`; CSV serializes the complete export response's tasks, not a paginated task list; `--json` always returns original API JSON |
 
 CSV contains title, description, status, priority, startDate, dueDate, userId,
-and labels (JSON in one quoted field). It preserves user content, commas,
+and labels (JSON in one quoted field). It preserves task content, commas,
 quotes and newlines. Export is a project-task snapshot, not a database backup.
 Task list additionally accepts status, priority, assignee, related-page,
 sort-by, sort-order, due-before and due-after. Empty single-field assignee

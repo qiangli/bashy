@@ -38,7 +38,7 @@ Get a one-time code (short-lived, single use) from the satellite owner console: 
 outpost register --code "$PAIRING_CODE" --server "$SATELLITE_URL" --name "$(hostname)"
 ```
 
-`--server` defaults to the official portal and `--name` to this machine's hostname. Pairing into the default config dir installs the per-user service and starts the daemon. Save the printed recovery code (also stored under `${XDG_CONFIG_HOME:-$HOME/.config}/matrix/`); it is the only way to re-pair if both the access token and the tunnel are lost. For start-at-boot without login, run `outpost service install` (admin).
+`--server` defaults to the official portal and `--name` to this machine's hostname. Pairing into the default config dir installs the per-user OS service and starts the daemon. Save the printed recovery code (also stored under `${XDG_CONFIG_HOME:-$HOME/.config}/matrix/`); it is the only way to re-pair if both the access token and the tunnel are lost. For start-at-boot without login, run `outpost service install` (admin).
 
 ## Check
 
@@ -56,8 +56,8 @@ outpost apps list                 # this host;  outpost apps list "$HOST_NAME" f
 outpost apps rm "$APP"
 ```
 
-- `--require-login` limits the app to signed-in, authorized users (owner or sharee). Without it the app is not gated by sign-in; leave it off only for something meant to be public.
-- `--trust-cloud-identity` forwards the vouched user as `Remote-User`/`Remote-Email` (an app with its own SSO reads it; `outpost apps secret "$APP"` prints the HMAC secret it needs).
+- `--require-login` limits the app to authenticated, authorized accounts (owner or sharee). Without it the app is not gated by sign-in; leave it off only for something meant to be public.
+- `--trust-cloud-identity` forwards the vouched account as `Remote-User`/`Remote-Email` (an app with its own SSO reads it; `outpost apps secret "$APP"` prints the HMAC secret it needs).
 - `--elevation-required` additionally demands the host's OS password.
 - App URL on a satellite: `$SATELLITE_URL/matrix/h/$HOST_NAME/app/$APP/`; it needs sign-in and elevation.
 

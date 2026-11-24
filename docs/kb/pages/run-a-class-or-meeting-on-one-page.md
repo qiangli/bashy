@@ -37,12 +37,13 @@ page add -f templates/meeting.md --title "Weekly sync" --audience lan --code blu
 ```
 
 `--audience host` (default) and `satellite` serve only this host and
-signed-in outpost visitors; `lan` also admits peers on the local network.
+logged-in outpost callers (`account`, `member`, or `owner`); `lan` also admits
+peers on the local network.
 
 ## 2. Open both doors on one fixed port
 
 ```bash
-page publish-outpost --port 8090   # satellite door: signed-in visitors
+page publish-outpost --port 8090   # satellite door: logged-in callers
 page serve --lan --port 8090       # LAN door: same listener
 page open PAGE                     # join links, QR codes, the bare code
 ```
@@ -112,5 +113,5 @@ Markdown is safe to commit next to the code it discussed.
 - Keep the faces import (`--faces faces.json`) and the organizer link
   private: they carry facilitator keys.
 - The default outpost Unix tunnel omits the client address; anonymous
-  joins through it need that address, signed-in participants join by
-  principal.
+  joins through it need that address, logged-in participants (`account` or
+  `member`) join by principal.
