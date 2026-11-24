@@ -163,8 +163,8 @@ require (
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
 	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261123172747-32d78887eb27 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261124115700-c2d6591f6d4f // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261124115700-c2d6591f6d4f // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261124123053-25ec97b56fde // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261124123053-25ec97b56fde // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
@@ -253,7 +253,7 @@ require (
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261121101804-c5832f99ccf6
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261124121700-f9833f726fac
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 
@@ -287,7 +287,7 @@ replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.
 
 replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261121101805-4c6cee72ad8a
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261124125342-fe55c2d35544
 
 // viper v1.4.0 (via the umbrella workspace) requires the pre-split monolithic
 // github.com/ugorji/go v1.1.4, which still contains the codec package that
@@ -315,11 +315,11 @@ replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/externa
 replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402
 
 require (
-	github.com/bashsharp/bashsharp v0.0.0-20261121160731-621e369d910d
+	github.com/bashsharp/bashsharp v0.0.0-20261124123418-08fabb33d718
 	github.com/itchyny/gojq v0.12.19
-	github.com/qiangli/coreutils v0.0.0-20261123172741-e0184192020b
+	github.com/qiangli/coreutils v0.0.0-20261124121700-f9833f726fac
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be
-	github.com/qiangli/yoke v0.0.0-20261124115700-c2d6591f6d4f
+	github.com/qiangli/yoke v0.0.0-20261124123053-25ec97b56fde
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10

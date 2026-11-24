@@ -348,11 +348,11 @@ require (
 	github.com/qiangli/bash/cmd v0.0.0-20261121101805-42efe30317c4 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261123172747-32d78887eb27 // indirect
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261124120656-0ccea26123a5 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261124123421-48b151061b3b // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261124115700-c2d6591f6d4f // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261124115700-c2d6591f6d4f // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261124115700-c2d6591f6d4f // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261124123053-25ec97b56fde // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261124123053-25ec97b56fde // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261124123053-25ec97b56fde // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.60.0 // indirect
 	github.com/quic-go/webtransport-go v0.11.1 // indirect
@@ -511,7 +511,7 @@ require (
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261123172741-e0184192020b
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261124121700-f9833f726fac
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 
@@ -545,7 +545,7 @@ replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.
 
 replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
 
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261124111911-02d8930cade4
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261124125342-fe55c2d35544
 
 tool (
 	github.com/qiangli/bash/cmd/bash
@@ -579,7 +579,7 @@ replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewi
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261124120902-fa2401afd086
+	github.com/bashsharp/bashsharp v0.0.0-20261124123418-08fabb33d718
 	github.com/benhoyt/goawk v1.31.0
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
@@ -590,11 +590,11 @@ require (
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136
-	github.com/qiangli/coreutils v0.0.0-20261123172741-e0184192020b
-	github.com/qiangli/ycode v0.3.1-dev.0.20261124111911-02d8930cade4
+	github.com/qiangli/coreutils v0.0.0-20261124121700-f9833f726fac
+	github.com/qiangli/ycode v0.3.1-dev.0.20261124125342-fe55c2d35544
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261124115700-c2d6591f6d4f
-	github.com/qiangli/yoke/external/otel v0.0.0-20261124115700-c2d6591f6d4f
+	github.com/qiangli/yoke v0.0.0-20261124123053-25ec97b56fde
+	github.com/qiangli/yoke/external/otel v0.0.0-20261124123053-25ec97b56fde
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
