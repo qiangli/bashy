@@ -82,6 +82,14 @@ OCI=${HOSTED_RUNNER_OCI:-podman}
 AS_JSON=false
 DRY_RUN=false
 VERB=""
+STAGE_DIR=""
+
+cleanup_stage() {
+  if [[ -n ${STAGE_DIR:-} ]]; then
+    rm -rf "$STAGE_DIR" 2>/dev/null || true
+  fi
+}
+trap cleanup_stage EXIT
 
 die() {
   printf 'hosted-runner: %s\n' "$1" >&2
@@ -306,9 +314,8 @@ EOF
   require_linux_host
   command -v go >/dev/null 2>&1 || die "go toolchain not found on PATH"
 
-  local stage ver built_with
-  stage=$(mktemp -d)
-  trap 'rm -rf "$stage"' EXIT
+  STAGE_DIR=$(mktemp -d)
+  local stage="$STAGE_DIR" ver built_with
   mkdir -p "$stage/base" "$stage/runner/examples" "$stage/runner/adapters"
 
   ver=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo dev)
