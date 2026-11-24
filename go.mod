@@ -348,7 +348,7 @@ require (
 	github.com/qiangli/bash/cmd v0.0.0-20261121101805-42efe30317c4 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261123172747-32d78887eb27 // indirect
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261124123421-48b151061b3b // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261124222926-86b50e66446a // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
 	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261124221831-2615421df628 // indirect
 	github.com/qiangli/yoke/pkg/oci v0.0.0-20261124221831-2615421df628 // indirect
