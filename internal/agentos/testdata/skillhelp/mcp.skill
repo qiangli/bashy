@@ -7,7 +7,7 @@ description: "serve bashy commands to agents over the Model Context Protocol (st
 ## Usage
   bashy mcp serve [--transport stdio|http] [--listen ADDR] [--allow EFFECTS]
                        [--tools default|all|site|NAME,...] [--max-output BYTES] [--outpost]
-                       [--site-dir DIR] [--site-app APP]
+                       [--hosted] [--timeout DURATION] [--site-dir DIR] [--site-app APP]
        bashy mcp tools [--tools default|all|site|NAME,...] [--json]
 
 Serve bashy commands to agents over the Model Context Protocol.
@@ -15,6 +15,10 @@ Serve bashy commands to agents over the Model Context Protocol.
   serve --transport stdio   run the MCP server over stdio (default)
   serve --transport http    loopback HTTP at /mcp (default 127.0.0.1:0)
   --outpost                 require the bashy-mcp outpost app identity signature (HTTP only)
+  --hosted                  serve callers who have no host (HTTP only): every request carries
+                            a master-signed per-call identity; each call runs in a scratch
+                            home removed after it, under --timeout (default 1m) and
+                            --max-output; no shell sessions
   tools                     print the tools a profile would serve, without serving
                             (--json: the bashy-mcp-tools-v1 envelope)
   --tools default           registered tools plus available core commands
