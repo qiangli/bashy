@@ -36,15 +36,22 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Under `bashy src pr verify`, HOME is the clone root: isolate HOME/TMPDIR and
-# expose the running interpreter on PATH as bashy, matching checks/go.bsh.
-mkdir -p "$scratch/bin" "$scratch/home" "$scratch/data"
+# Under `bashy src pr verify`, HOME and TMPDIR are the clone root, and Go
+# ignores a go.mod in the system temp root ("go: warning: ignoring go.mod in
+# system temp root"). Isolate TMPDIR always and HOME when it is the app folder
+# or the temp root, and expose the running interpreter on PATH as bashy,
+# matching checks/go.bsh.
+orig_tmp=$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P || true)
+mkdir -p "$scratch/bin" "$scratch/home" "$scratch/data" "$scratch/tmp"
+export TMPDIR="$scratch/tmp"
 if [[ -x "$runner" ]]; then
   ln -s "$runner" "$scratch/bin/bashy"
   export PATH="$scratch/bin:$PATH"
   runner="$scratch/bin/bashy"
 fi
-if [[ "${HOME:-}" == "$here" || -z "${HOME:-}" ]]; then
+home_real=$(cd "${HOME:-/nonexistent}" 2>/dev/null && pwd -P || true)
+here_real=$(cd "$here" && pwd -P)
+if [[ -z "${HOME:-}" || "$home_real" == "$here_real" || "$home_real" == "$orig_tmp" ]]; then
   export HOME="$scratch/home"
 fi
 
