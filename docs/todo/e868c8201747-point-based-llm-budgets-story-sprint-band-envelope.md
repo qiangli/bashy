@@ -8,10 +8,9 @@ priority: p2
 labels:
     - budget
 created: 2026-11-21T10:28:35.176524Z
-sprint: 688
-sprint_id: b6d0bf82-bf8a-5ba7-bbab-90b24be56deb
-sprint_title: 'Worker supervision round 2: session state, rate-limit handoff, spend watermarks, board performance'
 ---
+
+Deferred from Sprint 688 on 2026-11-25. This remains an open standalone item. The original scope and evidence follow.
 
 Operator request 2026-11-21 (quota-exhaustion review, umbrella docs/sprint-688-master-execution-plan.md §2a). General bashy feature for every user, not one fleet.
 
