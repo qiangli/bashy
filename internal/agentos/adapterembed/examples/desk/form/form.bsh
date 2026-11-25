@@ -61,6 +61,9 @@ guidance have one source in this file. `--skill` projects the guidance and
 set -euo pipefail
 export BASHY_HINTS=off
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Shared desk modules resolve from the local Go module proxy (desk/register-modules.sh publishes them).
+export GOPROXY="file://${BASHY_GOMOD_PROXY:-${BASHY_HOME:-$HOME/.bashy}/gomod-proxy},${GOPROXY:-https://proxy.golang.org,direct}"
+export GONOSUMDB="${GONOSUMDB:+$GONOSUMDB,}github.com/qiangli/bashy/examples"
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/form
 exe=$(go env GOEXE)
 bin=$cache/form$exe

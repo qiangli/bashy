@@ -1,0 +1,753 @@
+#!/usr/bin/env -S bashy --bashsharp
+# site: generate, render, check, serve and shape an <owner>/site content module.
+# Every site owner gets a public or private <owner>/site Go module from one
+# template: importable root package `site` + `cmd/server/main.go`, Markdown
+# content with declared section ids (and optional `summary:`), deterministic
+# HTML, Markdown and JSON rendering under one canonical content SHA-256
+# revision, a per-instance <owner>-site SKILL.md, and a shaped-app face.
+#
+#   site init DIR --title TITLE --origin ORIGIN [--owner OWNER] [--module PATH] [--dry-run] [--json]
+#   site render DIR [--format html|md|json] PATH [--dry-run] [--json]
+#   site serve DIR [--addr ADDR] [--port PORT] [--name NAME] [--foreground] [--dry-run] [--json]
+#   site check DIR [--page PATH] [--element ELEMENT] [--dry-run] [--json]
+#   site register DIR [--name NAME] [--dry-run] [--json]
+#   site status [--name NAME] [--dry-run] [--json]
+#   site stop [--name NAME] [--dry-run] [--json]
+
+~~~skill as guide
+---
+name: site
+description: Generate, render, check, serve and shape an importable <owner>/site Go content module (root package site + cmd/server, HTML/Markdown/JSON under one revision, optional front-matter summary, Accept negotiation, .md/.json twins, frozen checks, and a per-instance <owner>-site SKILL.md). Run it with bashy --bashsharp.
+metadata:
+  requires: "has=bashy"
+---
+# site — generic `<owner>/site` content module and shaped-app template
+
+Every site owner gets a `<owner>/site` Go repository generated from one
+template. The module root is importable `package site` (`Page`, `Section`,
+`NavItem`, `Load`/`LoadFS`/`LoadEmbedded`, `RenderHTMLFragment`/`RenderMarkdown`/`RenderJSON`,
+`TwinPaths`, `CanonicalDocument`/`ComputeRevision`/`ComputeSectionHash`,
+`NegotiateAccept`/`NegotiateRequest`, `NewHandler`/`NewHandlerFS`), and
+`cmd/server/main.go` runs the HTTP server and verification checks
+(`shaped.json` `server.main: "cmd/server"`).
+
+One Markdown source per page (`content/*.md`, front matter `title`, `path`, and
+optional one-paragraph `summary`, plus declared `{#id}` section identifiers;
+unknown `key: value` front matter keys are ignored and lines without `:` are
+rejected) renders deterministically into server-rendered HTML, Markdown and JSON
+under one short SHA-256 content revision.
+
+## Verbs
+
+1. `site init DIR --title TITLE --origin ORIGIN [--owner OWNER] [--module PATH]` —
+   writes `go.mod` with `--module PATH` (defaults to `github.com/<owner>/site`
+   when `--owner` is given; required otherwise), rewrites internal imports in
+   `cmd/server/main.go`, and writes `content/*.md`, `site.json`, the `package
+   site` library, `shaped.json`, `contract.bsh`, `checks/`, and a per-instance
+   `<owner>-site` `SKILL.md` (`SKILL.md` and `skills/<owner>-site/SKILL.md`).
+   Existing files are kept untouched.
+2. `site render DIR [--format html|md|json] PATH` — renders one page (`/` or
+   `/about`, etc.) as an HTML fragment (`<section id>`, optional `<p>` summary
+   under `<h1>`), Markdown (front matter `path`/`title`/`revision`/`alternates`,
+   nav links, optional summary paragraph under `# Title`, `{#id}` headings), or
+   JSON (`{path,title,summary?,revision,nav,sections[{id,heading,html,markdown,sha256}]}`).
+3. `site check DIR [--page PATH] [--element 'section=ID revision=REV']` — runs
+   the four checks (`render-determinism`, `unique-ids`, `links-resolve`,
+   `stale-base`).
+4. `site serve DIR [--port PORT] [--name NAME]` — builds `./cmd/server`
+   (`GOWORK=off CGO_ENABLED=0`) and serves HTML by default, Markdown on
+   `Accept: text/markdown` and `PATH.md` (`/index.md` for `/`), JSON on
+   `Accept: application/json` and `PATH.json` (`/index.json` for `/`), with
+   `Vary: Accept`, strong `ETag` = revision, `Link` `rel="alternate"`,
+   `/robots.txt` and `/llms.txt`.
+5. `site register DIR [--name NAME]` — registers the repository as a shaped app
+   with `bashy app add NAME --type shaped --source DIR`.
+
+All verbs accept `--dry-run` and `--json`.
+
+## Environment overrides
+
+- `SITE_GO_BIN` / `SITE_BASHY_BIN`: override the `go` and `bashy` executables.
+- `SITE_STATE`: server state directory (default `~/.bashy/site`).
+~~~
+
+set -e
+export LC_ALL=C
+
+PROG=site
+DRY_RUN=0
+JSON_OUT=0
+NAME=site
+PORT=18940
+
+usage() {
+    echo "Usage: $PROG init DIR --title TITLE --origin ORIGIN [--owner OWNER] [--module PATH] [--dry-run] [--json]" >&2
+    echo "       $PROG render DIR [--format html|md|json] PATH [--dry-run] [--json]" >&2
+    echo "       $PROG serve DIR [--addr ADDR] [--port PORT] [--name NAME] [--foreground] [--dry-run] [--json]" >&2
+    echo "       $PROG check DIR [--page PATH] [--element ELEMENT] [--dry-run] [--json]" >&2
+    echo "       $PROG register DIR [--name NAME] [--dry-run] [--json]" >&2
+    echo "       $PROG status [--name NAME] [--dry-run] [--json]" >&2
+    echo "       $PROG stop [--name NAME] [--dry-run] [--json]" >&2
+    exit 2
+}
+
+fail() {
+    if [ "$JSON_OUT" = 1 ]; then
+        msg=$(printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g')
+        printf '{"ok":false,"error":"%s"}\n' "$msg"
+    else
+        echo "$PROG: $1" >&2
+    fi
+    exit "${2:-1}"
+}
+
+bashy_bin() { printf '%s\n' "${SITE_BASHY_BIN:-bashy}"; }
+state_dir() { printf '%s\n' "${SITE_STATE:-$HOME/.bashy/site}"; }
+
+resolve_go() {
+    if [ -n "${SITE_GO_BIN:-}" ]; then
+        printf '%s\n' "$SITE_GO_BIN"
+        return 0
+    fi
+    if command -v go >/dev/null 2>&1; then
+        command -v go
+        return 0
+    fi
+    for cand in /usr/local/go/bin/go /opt/homebrew/bin/go /usr/local/bin/go; do
+        if [ -x "$cand" ]; then
+            printf '%s\n' "$cand"
+            return 0
+        fi
+    done
+    printf '%s\n' "bashy-go"
+}
+
+exec_go() {
+    g=$(resolve_go)
+    if [ "$g" = "bashy-go" ]; then
+        env GOWORK=off CGO_ENABLED=0 "$(bashy_bin)" go "$@"
+    else
+        env GOWORK=off GOTOOLCHAIN=local CGO_ENABLED=0 "$g" "$@"
+    fi
+}
+
+template_dir() {
+    t="$(cd "$(dirname "$0")" && pwd)/template"
+    [ -f "$t/render.go" ] && [ -f "$t/cmd/server/main.go" ] || fail "template not found next to $0"
+    printf '%s\n' "$t"
+}
+
+# json_safe refuses characters this script does not escape in generated JSON/YAML.
+json_safe() {
+    case "$1" in
+        *'"'* | *'\'*) fail "value must not contain a quote or backslash: $1" ;;
+    esac
+}
+
+json_escape() {
+    printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+slugify() {
+    s=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9]/-/g; s/-\{2,\}/-/g; s/^-//; s/-$//')
+    printf '%s\n' "$s"
+}
+
+derive_owner() {
+    raw_owner="$1"
+    raw_title="$2"
+    raw_origin="$3"
+    if [ -n "$raw_owner" ]; then
+        o=$(slugify "$raw_owner")
+    else
+        o=$(slugify "$raw_title")
+    fi
+    if [ -z "$o" ]; then
+        host=$(printf '%s' "$raw_origin" | sed 's#^[a-zA-Z]*://##; s#/.*##; s#:.*##')
+        o=$(slugify "${host%%.*}")
+    fi
+    o="${o%-site}"
+    [ -n "$o" ] || o="owner"
+    printf '%s\n' "$o"
+}
+
+write_skill_md() {
+    dst="$1"
+    skill_name="$2"
+    title="$3"
+    origin="$4"
+    mkdir -p "$(dirname "$dst")"
+    cat >"$dst" <<EOF
+---
+name: $skill_name
+description: Read and cite pages on $title ($origin) via Accept content negotiation, .md/.json twins, and revision-pinned section citations.
+metadata:
+  requires: "has=bashy"
+---
+# $skill_name — reading and citing $title
+
+Origin: \`$origin\`
+
+Start at \`$origin/agents.txt\` (the agent entry point) and connect to MCP at \`$origin/mcp\`.
+
+Every page on \`$origin\` renders server-side from one Markdown source under a
+single short SHA-256 content \`revision\`, with an optional lead \`summary\`
+paragraph, explicit section identifiers (\`#id\`), and per-section SHA-256
+digests.
+
+## Reading pages
+
+1. **Content negotiation (\`Accept\` header)** on any page URL (for example \`$origin/\` or \`$origin/about\`):
+   - \`Accept: text/markdown\` — Markdown with front matter (\`path\`, \`title\`, \`revision\`, \`alternates\`), shared navigation links, optional lead summary paragraph under \`# Title\`, and \`## Heading {#id}\` sections.
+   - \`Accept: application/json\` — JSON \`{path, title, summary?, revision, nav, sections: [{id, heading, html, markdown, sha256}]}\`.
+   - Default (\`text/html\` or \`*/*\`) — server-rendered HTML with optional lead \`<p>\` summary under \`<h1>\`, \`<section id="...">\`, \`<link rel="canonical">\`, \`<link rel="alternate">\`, and \`<meta name="revision">\`.
+2. **Direct twins** (no custom header needed):
+   - \`/\` -> \`$origin/index.md\` and \`$origin/index.json\`
+   - \`<path>\` (e.g. \`/about\`) -> \`$origin/about.md\` and \`$origin/about.json\`
+   - Discovery: \`$origin/llms.txt\` lists every published page, its twins, and its current \`revision\`; \`$origin/robots.txt\` declares crawler policy.
+3. **Response headers**: every representation sends \`Vary: Accept\`, a strong \`ETag\` equal to \`"<revision>"\`, and \`Link\` \`rel="alternate"\` headers for both twins.
+
+\`\`\`sh
+bashy fetch -H 'Accept: text/markdown' $origin/about
+bashy fetch -H 'Accept: application/json' $origin/about
+curl -fsSL $origin/about.json
+\`\`\`
+
+## Citation record
+
+When quoting or referencing a section, emit this exact citation record so the
+section and revision can be verified later:
+
+\`\`\`json
+{
+  "url": "$origin/about#team",
+  "section_id": "team",
+  "revision": "<page revision>",
+  "section_sha256": "<sections[].sha256>",
+  "quote": "<exact quoted text>"
+}
+\`\`\`
+
+Human shorthand: \`$origin/about#team @ <revision>\`.
+
+## Shaping handoff (compare-and-set)
+
+Pass the observed section id and page revision on \`bashy shape wish\`:
+
+\`\`\`sh
+bashy shape wish site --page /about --element 'section=team revision=<revision>' "<requested edit>"
+\`\`\`
+
+If the base page moved since \`<revision>\` was read, the frozen \`stale-base\`
+check refuses the candidate with \`stale, re-read\`.
+EOF
+}
+
+write_sample_content() {
+    cdir="$1"
+    title="$2"
+    mkdir -p "$cdir"
+    cat >"$cdir/home.md" <<EOF
+---
+title: $title
+path: /
+---
+
+## Overview {#overview}
+
+$title publishes one canonical source for visitors and agents. Read the [About page](/about) or jump to [Getting started](#start).
+
+## Getting started {#start}
+
+Fetch any page as server-rendered HTML, Markdown (\`Accept: text/markdown\` or \`/index.md\`), or JSON (\`Accept: application/json\` or \`/index.json\`).
+EOF
+    cat >"$cdir/about.md" <<EOF
+---
+title: About
+path: /about
+---
+
+## About {#about}
+
+Every page on [$title](/) renders deterministically from Markdown with declared section identifiers and one content revision.
+
+## Team {#team}
+
+Maintained by the site owner and shaped through verified candidates before publication.
+
+## Contact {#contact}
+
+See [Getting started](/#start) or write to [hello@example.com](mailto:hello@example.com).
+EOF
+}
+
+cmd_init() {
+    dir="" title="" origin="" owner_arg="" module_arg=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --title) [ $# -ge 2 ] || usage; title="$2"; shift 2 ;;
+            --origin) [ $# -ge 2 ] || usage; origin="$2"; shift 2 ;;
+            --owner) [ $# -ge 2 ] || usage; owner_arg="$2"; shift 2 ;;
+            --module) [ $# -ge 2 ] || usage; module_arg="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            --json) JSON_OUT=1; shift ;;
+            -*) usage ;;
+            *)
+                if [ -z "$dir" ]; then
+                    dir="$1"; shift
+                else
+                    usage
+                fi
+                ;;
+        esac
+    done
+    [ -n "$dir" ] && [ -n "$title" ] && [ -n "$origin" ] || usage
+    json_safe "$title"; json_safe "$origin"; json_safe "$owner_arg"; json_safe "$module_arg"
+    origin="${origin%/}"
+    case "$origin" in
+        http://* | https://*) ;;
+        *) fail "origin must start with http:// or https://: $origin" ;;
+    esac
+
+    owner_trimmed=$(printf '%s' "$owner_arg" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    mod_trimmed=$(printf '%s' "$module_arg" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    if [ -n "$mod_trimmed" ]; then
+        module_path="$mod_trimmed"
+    elif [ -n "$owner_trimmed" ]; then
+        case "$owner_trimmed" in
+            */* | *" "* | *"	"* | *"&"*) fail "invalid --owner for default module path: $owner_trimmed" 2 ;;
+        esac
+        module_path="github.com/$owner_trimmed/site"
+    else
+        fail "init requires --module PATH (or --owner OWNER)" 2
+    fi
+    case "$module_path" in
+        "" | /* | */ | *" "* | *"	"* | *"&"*) fail "invalid --module path: $module_path" 2 ;;
+    esac
+
+    owner=$(derive_owner "$owner_trimmed" "$title" "$origin")
+    skill_name="${owner}-site"
+    t=$(template_dir)
+
+    if [ "$DRY_RUN" = 1 ]; then
+        if [ "$JSON_OUT" = 1 ]; then
+            printf '{"ok":true,"dry_run":true,"verb":"init","dir":"%s","title":"%s","origin":"%s","owner":"%s","module":"%s","skill":"%s"}\n' \
+                "$(json_escape "$dir")" "$(json_escape "$title")" "$(json_escape "$origin")" "$owner" "$(json_escape "$module_path")" "$skill_name"
+        else
+            echo "would create: $dir (title=$title, origin=$origin, module=$module_path, skill=$skill_name)"
+            echo "would copy: template package site, cmd/server, shaped.json, contract.bsh, checks/"
+            echo "would write: $dir/go.mod, $dir/site.json, $dir/content/*.md, $dir/SKILL.md, $dir/skills/$skill_name/SKILL.md"
+        fi
+        return 0
+    fi
+
+    mkdir -p "$dir"
+    if [ -e "$dir/go.mod" ]; then
+        [ "$JSON_OUT" = 1 ] || echo "keep: go.mod (exists)"
+    else
+        {
+            printf 'module %s\n' "$module_path"
+            tail -n +2 "$t/go.mod"
+        } >"$dir/go.mod"
+    fi
+
+    for f in render.go server.go check.go site_test.go standalone_deps_test.go shaped.json contract.bsh AGENTS.md CLAUDE.md; do
+        if [ -e "$dir/$f" ]; then
+            [ "$JSON_OUT" = 1 ] || echo "keep: $f (exists)"
+        else
+            cp "$t/$f" "$dir/$f"
+        fi
+    done
+
+    if [ -e "$dir/cmd/server/main.go" ]; then
+        [ "$JSON_OUT" = 1 ] || echo "keep: cmd/server/main.go (exists)"
+    else
+        mkdir -p "$dir/cmd/server"
+        awk -v mod="$module_path" '{
+            gsub(/"site"/, "\"" mod "\"")
+            gsub(/"site\//, "\"" mod "/")
+            print
+        }' "$t/cmd/server/main.go" >"$dir/cmd/server/main.go"
+    fi
+
+    if [ -e "$dir/checks" ]; then
+        [ "$JSON_OUT" = 1 ] || echo "keep: checks/ (exists)"
+    else
+        cp -R "$t/checks" "$dir/checks"
+        chmod +x "$dir/checks/"*.bsh 2>/dev/null || true
+    fi
+
+    if [ -e "$dir/content" ]; then
+        [ "$JSON_OUT" = 1 ] || echo "keep: content/ (exists)"
+    else
+        write_sample_content "$dir/content" "$title"
+    fi
+
+    if [ -e "$dir/site.json" ]; then
+        [ "$JSON_OUT" = 1 ] || echo "keep: site.json (exists)"
+    else
+        {
+            echo '{'
+            echo "  \"title\": \"$title\","
+            echo "  \"origin\": \"$origin\","
+            echo "  \"owner\": \"$owner\","
+            echo '  "nav": ['
+            echo '    {"label": "Home", "href": "/"},'
+            echo '    {"label": "About", "href": "/about"}'
+            echo '  ]'
+            echo '}'
+        } >"$dir/site.json"
+    fi
+
+    if [ -e "$dir/SKILL.md" ]; then
+        [ "$JSON_OUT" = 1 ] || echo "keep: SKILL.md (exists)"
+    else
+        write_skill_md "$dir/SKILL.md" "$skill_name" "$title" "$origin"
+    fi
+    if [ ! -e "$dir/skills/$skill_name/SKILL.md" ]; then
+        write_skill_md "$dir/skills/$skill_name/SKILL.md" "$skill_name" "$title" "$origin"
+    fi
+
+    mkdir -p "$dir/bin"
+    if [ -f "$0" ] && [ ! -e "$dir/bin/site.bsh" ]; then
+        cp "$0" "$dir/bin/site.bsh"
+        chmod +x "$dir/bin/site.bsh"
+    fi
+
+    if [ ! -e "$dir/.gitignore" ]; then
+        printf '.build/\n.check.*\n' >"$dir/.gitignore"
+    fi
+
+    if [ ! -d "$dir/.git" ]; then
+        (cd "$dir" && git init -q)
+    fi
+    if ! (cd "$dir" && git rev-parse HEAD >/dev/null 2>&1); then
+        (
+            cd "$dir"
+            git config user.name site
+            git config user.email site@localhost
+            git add .
+            git commit -q -m "init site"
+        )
+    fi
+
+    abs_dir=$(cd "$dir" && pwd)
+    if [ "$JSON_OUT" = 1 ]; then
+        printf '{"ok":true,"dir":"%s","title":"%s","origin":"%s","owner":"%s","module":"%s","skill":"%s","skill_path":"%s/skills/%s/SKILL.md"}\n' \
+            "$(json_escape "$abs_dir")" "$(json_escape "$title")" "$(json_escape "$origin")" \
+            "$owner" "$(json_escape "$module_path")" "$skill_name" "$(json_escape "$abs_dir")" "$skill_name"
+    else
+        echo "initialized: $dir (module $module_path, skill $skill_name)"
+    fi
+}
+
+cmd_render() {
+    dir="" page_path="" fmt_arg="" fmt_set=0 origin_arg=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --format | -f) [ $# -ge 2 ] || usage; fmt_arg="$2"; fmt_set=1; shift 2 ;;
+            --origin) [ $# -ge 2 ] || usage; origin_arg="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            --json) JSON_OUT=1; shift ;;
+            -*) usage ;;
+            *)
+                if [ -z "$dir" ]; then
+                    dir="$1"; shift
+                elif [ -z "$page_path" ]; then
+                    page_path="$1"; shift
+                else
+                    usage
+                fi
+                ;;
+        esac
+    done
+    [ -n "$dir" ] && [ -n "$page_path" ] || usage
+    if [ "$fmt_set" = 0 ]; then
+        if [ "$JSON_OUT" = 1 ]; then
+            fmt_arg="json"
+        else
+            fmt_arg="html"
+        fi
+    fi
+    case "$fmt_arg" in
+        html | html-doc | md | markdown | json) ;;
+        *) fail "unsupported format '$fmt_arg' (want html, md, or json)" 2 ;;
+    esac
+
+    if [ "$DRY_RUN" = 1 ]; then
+        if [ "$JSON_OUT" = 1 ]; then
+            printf '{"ok":true,"dry_run":true,"verb":"render","dir":"%s","path":"%s","format":"%s"}\n' \
+                "$(json_escape "$dir")" "$(json_escape "$page_path")" "$fmt_arg"
+        else
+            echo "would run: go -C $dir run ./cmd/server -render $page_path -format $fmt_arg"
+        fi
+        return 0
+    fi
+
+    [ -f "$dir/site.json" ] || fail "no site.json in '$dir' (run: $PROG init DIR --title T --origin URL --owner OWNER)"
+    abs_dir=$(cd "$dir" && pwd)
+    set -- -C "$abs_dir" run ./cmd/server -dir "$abs_dir" -render "$page_path" -format "$fmt_arg"
+    if [ -n "$origin_arg" ]; then
+        set -- "$@" -origin "$origin_arg"
+    fi
+    if [ "$JSON_OUT" = 1 ] && [ "$fmt_arg" != "json" ]; then
+        set -- "$@" -json
+    fi
+    exec_go "$@"
+}
+
+cmd_check() {
+    dir="" page_arg="" elem_arg="" base_arg=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --page) [ $# -ge 2 ] || usage; page_arg="$2"; shift 2 ;;
+            --element) [ $# -ge 2 ] || usage; elem_arg="$2"; shift 2 ;;
+            --base-dir) [ $# -ge 2 ] || usage; base_arg="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            --json) JSON_OUT=1; shift ;;
+            -*) usage ;;
+            *)
+                if [ -z "$dir" ]; then
+                    dir="$1"; shift
+                else
+                    usage
+                fi
+                ;;
+        esac
+    done
+    [ -n "$dir" ] || usage
+
+    if [ "$DRY_RUN" = 1 ]; then
+        if [ "$JSON_OUT" = 1 ]; then
+            printf '{"ok":true,"dry_run":true,"verb":"check","dir":"%s","checks":["render-determinism","unique-ids","links-resolve","stale-base"]}\n' \
+                "$(json_escape "$dir")"
+        else
+            echo "would run: go -C $dir run ./cmd/server -check all (render-determinism, unique-ids, links-resolve, stale-base)"
+        fi
+        return 0
+    fi
+
+    [ -f "$dir/site.json" ] || fail "no site.json in '$dir' (run: $PROG init DIR --title T --origin URL --owner OWNER)"
+    abs_dir=$(cd "$dir" && pwd)
+    abs_base="$abs_dir"
+    if [ -n "$base_arg" ]; then
+        abs_base=$(cd "$base_arg" && pwd)
+    fi
+    set -- -C "$abs_dir" run ./cmd/server -dir "$abs_dir" -base-dir "$abs_base" -check all
+    if [ -n "$page_arg" ]; then
+        set -- "$@" -page "$page_arg"
+    fi
+    if [ -n "$elem_arg" ]; then
+        set -- "$@" -element "$elem_arg"
+    fi
+    if [ "$JSON_OUT" = 1 ]; then
+        set -- "$@" -json
+    fi
+    exec_go "$@"
+}
+
+have_pkill() { command -v pkill >/dev/null 2>&1; }
+
+cmd_stop_quiet() {
+    st=$(state_dir)
+    pidf="$st/$NAME.pid"
+    if [ -f "$pidf" ]; then
+        kill "$(cat "$pidf")" 2>/dev/null || true
+        rm -f "$pidf"
+    fi
+    addr_f="$st/$NAME.addr"
+    if [ -f "$addr_f" ] && have_pkill; then
+        pkill -f "[s]ite -addr $(cat "$addr_f")" 2>/dev/null || true
+        rm -f "$addr_f"
+    fi
+}
+
+cmd_serve() {
+    dir="" addr="" foreground=0
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) [ $# -ge 2 ] || usage; NAME="$2"; shift 2 ;;
+            --port) [ $# -ge 2 ] || usage; PORT="$2"; shift 2 ;;
+            --addr) [ $# -ge 2 ] || usage; addr="$2"; shift 2 ;;
+            --foreground) foreground=1; shift ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            --json) JSON_OUT=1; shift ;;
+            -*) usage ;;
+            *)
+                if [ -z "$dir" ]; then
+                    dir="$1"; shift
+                else
+                    usage
+                fi
+                ;;
+        esac
+    done
+    [ -n "$dir" ] || usage
+    [ -n "$addr" ] || addr="127.0.0.1:$PORT"
+
+    if [ "$DRY_RUN" = 1 ]; then
+        if [ "$JSON_OUT" = 1 ]; then
+            printf '{"ok":true,"dry_run":true,"verb":"serve","dir":"%s","name":"%s","addr":"%s"}\n' \
+                "$(json_escape "$dir")" "$(json_escape "$NAME")" "$(json_escape "$addr")"
+        else
+            echo "would run: GOWORK=off CGO_ENABLED=0 go -C $dir build -trimpath -o .build/site ./cmd/server"
+            echo "would run: $dir/.build/site -addr $addr"
+        fi
+        return 0
+    fi
+
+    [ -f "$dir/site.json" ] || fail "no site.json in '$dir' (run: $PROG init DIR --title T --origin URL --owner OWNER)"
+    abs_dir=$(cd "$dir" && pwd)
+    st=$(state_dir)
+    mkdir -p "$st" "$abs_dir/.build"
+    exec_go -C "$abs_dir" build -trimpath -o .build/site ./cmd/server
+
+    if [ "$foreground" = 1 ]; then
+        exec "$abs_dir/.build/site" -addr "$addr"
+    fi
+
+    cmd_stop_quiet
+    if command -v setsid >/dev/null 2>&1; then
+        setsid nohup "$abs_dir/.build/site" -addr "$addr" >"$st/$NAME.log" 2>&1 </dev/null &
+    else
+        nohup "$abs_dir/.build/site" -addr "$addr" >"$st/$NAME.log" 2>&1 </dev/null &
+    fi
+    pid=$!
+    echo "$pid" >"$st/$NAME.pid"
+    echo "$addr" >"$st/$NAME.addr"
+    # Wait briefly so the in-process background goroutine finishes fork/exec
+    # before this script's process exits.
+    i=0
+    while [ "$i" -lt 40 ]; do
+        if [ -s "$st/$NAME.log" ]; then
+            break
+        fi
+        if have_pkill && pkill -0 -f "[s]ite -addr $addr" 2>/dev/null; then
+            break
+        fi
+        sleep 0.05
+        i=$((i + 1))
+    done
+
+    if [ "$JSON_OUT" = 1 ]; then
+        printf '{"ok":true,"name":"%s","addr":"%s","pid":%s,"log":"%s"}\n' \
+            "$(json_escape "$NAME")" "$(json_escape "$addr")" "$pid" "$(json_escape "$st/$NAME.log")"
+    else
+        echo "serving: $NAME on $addr (pid $pid, log $st/$NAME.log)"
+    fi
+}
+
+cmd_stop() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) [ $# -ge 2 ] || usage; NAME="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            --json) JSON_OUT=1; shift ;;
+            *) usage ;;
+        esac
+    done
+    if [ "$DRY_RUN" = 1 ]; then
+        if [ "$JSON_OUT" = 1 ]; then
+            printf '{"ok":true,"dry_run":true,"verb":"stop","name":"%s"}\n' "$(json_escape "$NAME")"
+        else
+            echo "would stop: $NAME"
+        fi
+        return 0
+    fi
+    cmd_stop_quiet
+    if [ "$JSON_OUT" = 1 ]; then
+        printf '{"ok":true,"stopped":"%s"}\n' "$(json_escape "$NAME")"
+    else
+        echo "stopped: $NAME"
+    fi
+}
+
+cmd_register() {
+    dir=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) [ $# -ge 2 ] || usage; NAME="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            --json) JSON_OUT=1; shift ;;
+            -*) usage ;;
+            *)
+                if [ -z "$dir" ]; then
+                    dir="$1"; shift
+                else
+                    usage
+                fi
+                ;;
+        esac
+    done
+    [ -n "$dir" ] && [ -f "$dir/shaped.json" ] || fail "no shaped app in '$dir'"
+    abs_dir=$(cd "$dir" && pwd)
+    if [ "$DRY_RUN" = 1 ]; then
+        if [ "$JSON_OUT" = 1 ]; then
+            printf '{"ok":true,"dry_run":true,"verb":"register","name":"%s","source":"%s"}\n' \
+                "$(json_escape "$NAME")" "$(json_escape "$abs_dir")"
+        else
+            echo "would run: $(bashy_bin) app add $NAME --type shaped --source $abs_dir --label Site $NAME"
+        fi
+        return 0
+    fi
+    "$(bashy_bin)" app add "$NAME" --type shaped --source "$abs_dir" --label "Site $NAME" >/dev/null
+    if [ "$JSON_OUT" = 1 ]; then
+        printf '{"ok":true,"registered":"%s","source":"%s"}\n' "$(json_escape "$NAME")" "$(json_escape "$abs_dir")"
+    else
+        echo "registered: $NAME ($abs_dir)"
+    fi
+}
+
+cmd_status() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --name) [ $# -ge 2 ] || usage; NAME="$2"; shift 2 ;;
+            --dry-run) DRY_RUN=1; shift ;;
+            --json) JSON_OUT=1; shift ;;
+            *) usage ;;
+        esac
+    done
+    st=$(state_dir)
+    if [ "$DRY_RUN" = 1 ]; then
+        if [ "$JSON_OUT" = 1 ]; then
+            printf '{"ok":true,"dry_run":true,"verb":"status","name":"%s"}\n' "$(json_escape "$NAME")"
+        else
+            echo "would check status: $NAME"
+        fi
+        return 0
+    fi
+    running=no
+    addr=""
+    if [ -f "$st/$NAME.addr" ]; then
+        addr=$(cat "$st/$NAME.addr")
+    fi
+    if [ -n "$addr" ] && curl -fs -m 3 -o /dev/null "http://$addr/robots.txt" 2>/dev/null; then
+        running=yes
+    elif [ -f "$st/$NAME.pid" ] && kill -0 "$(cat "$st/$NAME.pid")" 2>/dev/null; then
+        running=yes
+    fi
+    printf '{"name":"%s","server_running":"%s","addr":"%s","log":"%s"}\n' \
+        "$(json_escape "$NAME")" "$running" "$(json_escape "$addr")" "$(json_escape "$st/$NAME.log")"
+}
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --dry-run) DRY_RUN=1; shift ;;
+        --json) JSON_OUT=1; shift ;;
+        *) break ;;
+    esac
+done
+[ $# -gt 0 ] || usage
+verb="$1"
+shift
+case "$verb" in
+    init) cmd_init "$@" ;;
+    render) cmd_render "$@" ;;
+    serve) cmd_serve "$@" ;;
+    check) cmd_check "$@" ;;
+    register) cmd_register "$@" ;;
+    status) cmd_status "$@" ;;
+    stop) cmd_stop "$@" ;;
+    -h | --help | help) usage ;;
+    *) usage ;;
+esac

@@ -1,0 +1,610 @@
+#!/usr/bin/env -S bashy --bashsharp
+# hosted-runner — build and manage the containerized `bashy mcp serve --hosted` pilot runner.
+# One body, two orientations: executable Bash# and its embedded agent skill.
+
+~~~skill as guide
+---
+name: hosted-runner
+description: "Build, start, stop, and inspect the containerized bashy mcp serve --hosted pilot runner (from tools/bashy-build/Containerfile.base with bashy from main, google + trove registered, pre-warmed adapter cache, and 0600 host-generated runner key)."
+metadata:
+  requires: "has=bashy"
+---
+# Hosted Runner Pilot (`hosted-runner`)
+
+Builds and manages a containerized `bashy mcp serve --transport http --hosted`
+pilot runner on a Linux build host (never the dev box).
+
+## Verbs
+
+- `hosted-runner build [--with-fakes] [--json] [--dry-run]`
+  Builds `bashy` from `main`, packages it with `tools/bashy-build/Containerfile.base`,
+  pre-warms `BASHY_ADAPTER_CACHE` (`secret`, `jq`, `lens`, `sha256sum`, `custom/gh`),
+  registers `examples/google` and `examples/trove`, and tags the runner image.
+  `--with-fakes` also installs pre-warmed fake `gws` and `gh` test binaries for load testing.
+- `hosted-runner start [--port PORT] [--cloudbox-url URL] [--allow EFFECTS] [--json] [--dry-run]`
+  Generates a `0600` test key on the host if missing (never committed) and starts
+  the container with `bashy mcp serve --transport http --hosted --listen 127.0.0.1:PORT`.
+- `hosted-runner stop [--json] [--dry-run]`
+  Stops and removes the pilot runner container.
+- `hosted-runner status [--port PORT] [--json] [--dry-run]`
+  Reports container state, PID, RSS/VmHWM (KiB/bytes), cgroup CPU/memory metrics,
+  scratch directory entry count, and loopback `/mcp` unsigned-401 health.
+
+## Options
+
+| Flag | Env | Default |
+|---|---|---|
+| `--port` | `HOSTED_RUNNER_PORT` | `22751` |
+| `--name` | `HOSTED_RUNNER_NAME` | `bashy-hosted-runner` |
+| `--repo` | `HOSTED_RUNNER_REPO` | `../..` (bashy root) |
+| `--image` | `HOSTED_RUNNER_IMAGE` | `localhost/bashy-hosted-runner:latest` |
+| `--base-image` | `HOSTED_RUNNER_BASE_IMAGE` | `localhost/bashy-hosted-base:latest` |
+| `--key-file` | `HOSTED_RUNNER_KEY_FILE` | `${XDG_STATE_HOME:-$HOME/.local/state}/bashy/hosted-runner.key` |
+| `--scratch-dir` | `HOSTED_RUNNER_SCRATCH_DIR` | `${XDG_STATE_HOME:-$HOME/.local/state}/bashy/hosted-scratch` |
+| `--memory` | `HOSTED_RUNNER_MEMORY` | `512m` |
+| `--cpus` | `HOSTED_RUNNER_CPUS` | `2` |
+| `--pids-limit` | `HOSTED_RUNNER_PIDS_LIMIT` | `8192` |
+| `--timeout` | `HOSTED_RUNNER_TIMEOUT` | `1m` |
+| `--max-output` | `HOSTED_RUNNER_MAX_OUTPUT` | `65536` |
+| `--cloudbox-url` | `HOSTED_RUNNER_CLOUDBOX_URL` | `` |
+| `--allow` | `HOSTED_RUNNER_ALLOW` | `` |
+| `--with-fakes` | `HOSTED_RUNNER_WITH_FAKES` | `false` |
+| `--oci` | `HOSTED_RUNNER_OCI` | `podman` |
+| `--json` | — | `false` |
+| `--dry-run` | — | `false` |
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+export BASHY_TELEMETRY_QUIET=1
+shopt -u patsub_replacement 2>/dev/null || true
+
+print_skill() {
+  local inside=false line
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then inside=true; continue; fi
+    if [[ $inside == true && $line == '~~~' ]]; then break; fi
+    if [[ $inside == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+}
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+DEFAULT_REPO=$(cd "$SCRIPT_DIR/../.." && pwd)
+STATE_ROOT=${XDG_STATE_HOME:-$HOME/.local/state}/bashy
+
+PORT=${HOSTED_RUNNER_PORT:-22751}
+NAME=${HOSTED_RUNNER_NAME:-bashy-hosted-runner}
+REPO=${HOSTED_RUNNER_REPO:-$DEFAULT_REPO}
+IMAGE=${HOSTED_RUNNER_IMAGE:-localhost/bashy-hosted-runner:latest}
+BASE_IMAGE=${HOSTED_RUNNER_BASE_IMAGE:-localhost/bashy-hosted-base:latest}
+KEY_FILE=${HOSTED_RUNNER_KEY_FILE:-$STATE_ROOT/hosted-runner.key}
+SCRATCH_DIR=${HOSTED_RUNNER_SCRATCH_DIR:-$STATE_ROOT/hosted-scratch}
+MEMORY=${HOSTED_RUNNER_MEMORY:-512m}
+CPUS=${HOSTED_RUNNER_CPUS:-2}
+PIDS_LIMIT=${HOSTED_RUNNER_PIDS_LIMIT:-8192}
+TIMEOUT=${HOSTED_RUNNER_TIMEOUT:-1m}
+MAX_OUTPUT=${HOSTED_RUNNER_MAX_OUTPUT:-65536}
+CLOUDBOX_URL=${HOSTED_RUNNER_CLOUDBOX_URL:-}
+ALLOW=${HOSTED_RUNNER_ALLOW:-}
+WITH_FAKES=${HOSTED_RUNNER_WITH_FAKES:-false}
+OCI=${HOSTED_RUNNER_OCI:-podman}
+AS_JSON=false
+DRY_RUN=false
+VERB=""
+STAGE_DIR=""
+
+cleanup_stage() {
+  if [[ -n ${STAGE_DIR:-} ]]; then
+    rm -rf "$STAGE_DIR" 2>/dev/null || true
+  fi
+}
+trap cleanup_stage EXIT
+
+die() {
+  printf 'hosted-runner: %s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+json_escape() {
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
+  printf '%s' "$s"
+}
+
+usage() {
+  cat >&2 <<'USAGE_EOF'
+Usage: hosted-runner [--json] [--dry-run] [--with-fakes] [--port PORT] [--name NAME]
+                     [--repo DIR] [--image TAG] [--base-image TAG] [--key-file PATH]
+                     [--scratch-dir PATH] [--memory MEM] [--cpus CPUS] [--pids-limit N] [--timeout DUR]
+                     [--max-output BYTES] [--cloudbox-url URL] [--allow EFFECTS]
+                     [--oci BIN] <build|start|stop|status>
+USAGE_EOF
+  exit 2
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --skill)
+      print_skill
+      exit 0
+      ;;
+    --json)
+      AS_JSON=true
+      shift
+      ;;
+    --dry-run)
+      DRY_RUN=true
+      shift
+      ;;
+    --with-fakes)
+      WITH_FAKES=true
+      shift
+      ;;
+    --port)
+      [[ $# -ge 2 ]] || usage
+      PORT=$2; shift 2
+      ;;
+    --port=*)
+      PORT=${1#*=}; shift
+      ;;
+    --name)
+      [[ $# -ge 2 ]] || usage
+      NAME=$2; shift 2
+      ;;
+    --name=*)
+      NAME=${1#*=}; shift
+      ;;
+    --repo)
+      [[ $# -ge 2 ]] || usage
+      REPO=$2; shift 2
+      ;;
+    --repo=*)
+      REPO=${1#*=}; shift
+      ;;
+    --image)
+      [[ $# -ge 2 ]] || usage
+      IMAGE=$2; shift 2
+      ;;
+    --image=*)
+      IMAGE=${1#*=}; shift
+      ;;
+    --base-image)
+      [[ $# -ge 2 ]] || usage
+      BASE_IMAGE=$2; shift 2
+      ;;
+    --base-image=*)
+      BASE_IMAGE=${1#*=}; shift
+      ;;
+    --key-file)
+      [[ $# -ge 2 ]] || usage
+      KEY_FILE=$2; shift 2
+      ;;
+    --key-file=*)
+      KEY_FILE=${1#*=}; shift
+      ;;
+    --scratch-dir)
+      [[ $# -ge 2 ]] || usage
+      SCRATCH_DIR=$2; shift 2
+      ;;
+    --scratch-dir=*)
+      SCRATCH_DIR=${1#*=}; shift
+      ;;
+    --memory)
+      [[ $# -ge 2 ]] || usage
+      MEMORY=$2; shift 2
+      ;;
+    --memory=*)
+      MEMORY=${1#*=}; shift
+      ;;
+    --cpus)
+      [[ $# -ge 2 ]] || usage
+      CPUS=$2; shift 2
+      ;;
+    --cpus=*)
+      CPUS=${1#*=}; shift
+      ;;
+    --pids-limit)
+      [[ $# -ge 2 ]] || usage
+      PIDS_LIMIT=$2; shift 2
+      ;;
+    --pids-limit=*)
+      PIDS_LIMIT=${1#*=}; shift
+      ;;
+    --timeout)
+      [[ $# -ge 2 ]] || usage
+      TIMEOUT=$2; shift 2
+      ;;
+    --timeout=*)
+      TIMEOUT=${1#*=}; shift
+      ;;
+    --max-output)
+      [[ $# -ge 2 ]] || usage
+      MAX_OUTPUT=$2; shift 2
+      ;;
+    --max-output=*)
+      MAX_OUTPUT=${1#*=}; shift
+      ;;
+    --cloudbox-url)
+      [[ $# -ge 2 ]] || usage
+      CLOUDBOX_URL=$2; shift 2
+      ;;
+    --cloudbox-url=*)
+      CLOUDBOX_URL=${1#*=}; shift
+      ;;
+    --allow)
+      [[ $# -ge 2 ]] || usage
+      ALLOW=$2; shift 2
+      ;;
+    --allow=*)
+      ALLOW=${1#*=}; shift
+      ;;
+    --oci)
+      [[ $# -ge 2 ]] || usage
+      OCI=$2; shift 2
+      ;;
+    --oci=*)
+      OCI=${1#*=}; shift
+      ;;
+    -h|--help|help)
+      usage
+      ;;
+    build|start|stop|status)
+      [[ -z $VERB ]] || usage
+      VERB=$1
+      shift
+      ;;
+    *)
+      usage
+      ;;
+  esac
+done
+
+[[ -n $VERB ]] || usage
+
+emit_kv_json() {
+  local first=true kv k v type
+  printf '{'
+  for kv in "$@"; do
+    k=${kv%%=*}
+    v=${kv#*=}
+    type=str
+    if [[ $k == *:* ]]; then
+      type=${k#*:}
+      k=${k%%:*}
+    fi
+    if [[ $first == true ]]; then first=false; else printf ','; fi
+    printf '"%s":' "$(json_escape "$k")"
+    case "$type" in
+      num|bool) printf '%s' "$v" ;;
+      *) printf '"%s"' "$(json_escape "$v")" ;;
+    esac
+  done
+  printf '}\n'
+}
+
+require_linux_host() {
+  local os
+  os=$(uname -s 2>/dev/null || echo unknown)
+  [[ $os == Linux ]] || die "refusing $VERB on $os: build/run only on the Linux build host, never the dev box"
+  command -v "$OCI" >/dev/null 2>&1 || die "$OCI not found on PATH"
+}
+
+http_probe_status() {
+  local url="http://127.0.0.1:${PORT}/mcp" code=""
+  if command -v curl >/dev/null 2>&1; then
+    code=$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+      -H 'Content-Type: application/json' \
+      -H 'Accept: application/json, text/event-stream' \
+      -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
+      "$url" 2>/dev/null || true)
+  elif command -v python3 >/dev/null 2>&1; then
+    code=$(python3 -c '
+import urllib.request, urllib.error, sys
+req = urllib.request.Request(sys.argv[1], data=b"{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/list\"}", headers={"Content-Type":"application/json","Accept":"application/json, text/event-stream"}, method="POST")
+try:
+    with urllib.request.urlopen(req, timeout=2) as r: print(r.status)
+except urllib.error.HTTPError as e:
+    print(e.code)
+except Exception:
+    print(0)
+' "$url" 2>/dev/null || true)
+  fi
+  printf '%s' "${code:-000}"
+}
+
+cmd_build() {
+  local base_cf="$REPO/tools/bashy-build/Containerfile.base"
+  local runner_cf="$SCRIPT_DIR/Containerfile"
+  [[ -f $base_cf ]] || die "missing base Containerfile: $base_cf"
+  [[ -f $runner_cf ]] || die "missing runner Containerfile: $runner_cf"
+
+  if [[ $DRY_RUN == true ]]; then
+    if [[ $AS_JSON == true ]]; then
+      emit_kv_json \
+        "action=build" \
+        "dry_run:bool=true" \
+        "repo=$REPO" \
+        "base_containerfile=$base_cf" \
+        "runner_containerfile=$runner_cf" \
+        "base_image=$BASE_IMAGE" \
+        "image=$IMAGE" \
+        "with_fakes:bool=$WITH_FAKES" \
+        "oci=$OCI"
+    else
+      cat <<DRY_EOF
+dry-run build:
+  1. GOWORK=off CGO_ENABLED=0 go -C "$REPO" build -buildvcs=false -trimpath -o <stage>/base/bashy ./cmd/bashy
+  2. $OCI build -t "$BASE_IMAGE" -f "$base_cf" <stage>/base
+  3. pre-warm BASHY_ADAPTER_CACHE (secret, jq, lens, sha256sum, custom/gh) -> <stage>/runner/adapters
+  4. with_fakes=$WITH_FAKES (fake gws + gh if true)
+  5. $OCI build -t "$IMAGE" --build-arg BASE_IMAGE="$BASE_IMAGE" --build-arg WITH_FAKES=$([[ $WITH_FAKES == true ]] && echo 1 || echo 0) -f "$runner_cf" <stage>/runner
+DRY_EOF
+    fi
+    return 0
+  fi
+
+  require_linux_host
+  command -v go >/dev/null 2>&1 || die "go toolchain not found on PATH"
+
+  STAGE_DIR=$(mktemp -d)
+  local stage="$STAGE_DIR" ver built_with with_fakes_arg=0
+  mkdir -p "$stage/base" "$stage/runner/examples" "$stage/runner/adapters/custom" "$stage/runner/fake-bin"
+
+  ver=$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo dev)
+  built_with="hosted-runner-main-$ver"
+
+  (cd "$REPO" && GOWORK=off CGO_ENABLED=0 go build -buildvcs=false -trimpath -o "$stage/base/bashy" ./cmd/bashy) >&2
+  cp "$base_cf" "$stage/base/Containerfile"
+
+  "$OCI" build -t "$BASE_IMAGE" \
+    --build-arg "VERSION=$ver" \
+    --build-arg "BUILT_WITH=$built_with" \
+    "$stage/base" >&2
+
+  local bashy_bin="$stage/base/bashy"
+  BASHY_ADAPTER_CACHE="$stage/runner/adapters" BASHY_HINTS=off BASHY_TELEMETRY_QUIET=1 "$bashy_bin" secret gen >/dev/null
+  BASHY_ADAPTER_CACHE="$stage/runner/adapters" BASHY_HINTS=off BASHY_TELEMETRY_QUIET=1 "$bashy_bin" jq -n '1' >/dev/null
+  BASHY_ADAPTER_CACHE="$stage/runner/adapters" BASHY_HINTS=off BASHY_TELEMETRY_QUIET=1 "$bashy_bin" lens -l >/dev/null
+  BASHY_ADAPTER_CACHE="$stage/runner/adapters" BASHY_HINTS=off BASHY_TELEMETRY_QUIET=1 "$bashy_bin" sha256sum /dev/null >/dev/null
+  (cd "$REPO/custom" && GOWORK=off CGO_ENABLED=0 go build -buildvcs=false -trimpath -o "$stage/runner/adapters/custom/gh" ./gh) >&2
+
+  if [[ $WITH_FAKES == true ]]; then
+    with_fakes_arg=1
+    (cd "$SCRIPT_DIR" && GOWORK=off CGO_ENABLED=0 go build -buildvcs=false -trimpath -o "$stage/runner/fake-bin/fakecli" ./cmd/fakecli) >&2
+  fi
+
+  cp -a "$REPO/examples/google" "$stage/runner/examples/google"
+  cp -a "$REPO/examples/trove" "$stage/runner/examples/trove"
+  cp "$runner_cf" "$stage/runner/Containerfile"
+
+  "$OCI" build -t "$IMAGE" \
+    --build-arg "BASE_IMAGE=$BASE_IMAGE" \
+    --build-arg "WITH_FAKES=$with_fakes_arg" \
+    "$stage/runner" >&2
+
+  if [[ $AS_JSON == true ]]; then
+    emit_kv_json \
+      "action=build" \
+      "ok:bool=true" \
+      "version=$ver" \
+      "base_image=$BASE_IMAGE" \
+      "image=$IMAGE" \
+      "with_fakes:bool=$WITH_FAKES"
+  else
+    printf 'Built %s (base %s, bashy %s, with_fakes=%s, pre-warmed adapters: secret jq lens sha256sum custom/gh)\n' \
+      "$IMAGE" "$BASE_IMAGE" "$ver" "$WITH_FAKES"
+  fi
+}
+
+ensure_host_key_and_scratch() {
+  mkdir -p "$(dirname "$KEY_FILE")" "$SCRATCH_DIR"
+  chmod 0700 "$SCRATCH_DIR"
+  if [[ ! -s $KEY_FILE ]]; then
+    head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' > "$KEY_FILE"
+    printf '\n' >> "$KEY_FILE"
+  fi
+  chmod 0600 "$KEY_FILE"
+  if [[ $(id -u) -eq 0 ]]; then
+    chown 10001:10001 "$KEY_FILE" "$SCRATCH_DIR"
+  fi
+}
+
+cmd_start() {
+  if [[ $DRY_RUN == true ]]; then
+    if [[ $AS_JSON == true ]]; then
+      emit_kv_json \
+        "action=start" \
+        "dry_run:bool=true" \
+        "container=$NAME" \
+        "image=$IMAGE" \
+        "listen=127.0.0.1:$PORT" \
+        "key_file=$KEY_FILE" \
+        "scratch_dir=$SCRATCH_DIR" \
+        "memory=$MEMORY" \
+        "cpus=$CPUS" \
+        "pids_limit:num=$PIDS_LIMIT" \
+        "timeout=$TIMEOUT" \
+        "max_output:num=$MAX_OUTPUT" \
+        "cloudbox_url=$CLOUDBOX_URL" \
+        "allow=$ALLOW"
+    else
+      cat <<START_DRY_EOF
+dry-run start:
+  key_file=$KEY_FILE (mode 0600, generated if absent)
+  scratch_dir=$SCRATCH_DIR (mode 0700)
+  $OCI run -d --name "$NAME" --replace --network=host --memory "$MEMORY" --cpus "$CPUS" --pids-limit "$PIDS_LIMIT" \\
+    -v "$KEY_FILE:/run/secrets/hosted-runner.key:ro" \\
+    -v "$SCRATCH_DIR:/tmp/hosted-scratch:rw" \\
+    -e BASHY_HOSTED_KEY_FILE=/run/secrets/hosted-runner.key \\
+    -e BASHY_HOSTED_SCRATCH_DIR=/tmp/hosted-scratch \\
+    $([[ -n $CLOUDBOX_URL ]] && printf '%s ' "-e BASHY_CLOUDBOX_URL=$CLOUDBOX_URL") \\
+    "$IMAGE" mcp serve --transport http --hosted --listen "127.0.0.1:$PORT" --timeout "$TIMEOUT" --max-output "$MAX_OUTPUT"$([[ -n $ALLOW ]] && printf ' --allow %s' "$ALLOW")
+START_DRY_EOF
+    fi
+    return 0
+  fi
+
+  require_linux_host
+  ensure_host_key_and_scratch
+
+  local extra_args=() cmd_args=()
+  if [[ $(id -u) -ne 0 ]]; then
+    extra_args+=(--userns=keep-id:uid=10001,gid=10001)
+  fi
+  if [[ -n $CLOUDBOX_URL ]]; then
+    extra_args+=(-e "BASHY_CLOUDBOX_URL=$CLOUDBOX_URL")
+  fi
+  if [[ -n $ALLOW ]]; then
+    cmd_args+=(--allow "$ALLOW")
+  fi
+
+  "$OCI" rm -f "$NAME" >/dev/null 2>&1 || true
+  "$OCI" run -d \
+    --name "$NAME" \
+    --network=host \
+    --memory "$MEMORY" \
+    --cpus "$CPUS" \
+    --pids-limit "$PIDS_LIMIT" \
+    "${extra_args[@]}" \
+    -v "$KEY_FILE:/run/secrets/hosted-runner.key:ro" \
+    -v "$SCRATCH_DIR:/tmp/hosted-scratch:rw" \
+    -e BASHY_HOSTED_KEY_FILE=/run/secrets/hosted-runner.key \
+    -e BASHY_HOSTED_SCRATCH_DIR=/tmp/hosted-scratch \
+    "$IMAGE" \
+    mcp serve --transport http --hosted --listen "127.0.0.1:${PORT}" --timeout "$TIMEOUT" --max-output "$MAX_OUTPUT" "${cmd_args[@]}" >/dev/null
+
+  local ready=false code="" i
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    code=$(http_probe_status)
+    if [[ $code == 401 ]]; then
+      ready=true
+      break
+    fi
+    sleep 0.25
+  done
+  [[ $ready == true ]] || die "runner failed readiness probe (HTTP $code on http://127.0.0.1:${PORT}/mcp)"
+
+  cmd_status
+}
+
+cmd_stop() {
+  if [[ $DRY_RUN == true ]]; then
+    if [[ $AS_JSON == true ]]; then
+      emit_kv_json "action=stop" "dry_run:bool=true" "container=$NAME"
+    else
+      printf 'dry-run stop: %s rm -f %s\n' "$OCI" "$NAME"
+    fi
+    return 0
+  fi
+
+  require_linux_host
+  "$OCI" rm -f "$NAME" >/dev/null 2>&1 || true
+  if [[ $AS_JSON == true ]]; then
+    emit_kv_json "action=stop" "ok:bool=true" "container=$NAME" "running:bool=false"
+  else
+    printf 'Stopped %s\n' "$NAME"
+  fi
+}
+
+cmd_status() {
+  if [[ $DRY_RUN == true ]]; then
+    if [[ $AS_JSON == true ]]; then
+      emit_kv_json "action=status" "dry_run:bool=true" "container=$NAME" "listen=127.0.0.1:$PORT"
+    else
+      printf 'dry-run status: %s inspect %s + probe http://127.0.0.1:%s/mcp\n' "$OCI" "$NAME" "$PORT"
+    fi
+    return 0
+  fi
+
+  require_linux_host
+  local running=false pid=0 rss_kb=0 rss_bytes=0 vmhwm_kb=0 vmhwm_bytes=0
+  local cpu_usage_usec=0 mem_current_bytes=0 mem_peak_bytes=0
+  local scratch_entries=0 probe_code="000" healthy=false
+  local info
+  if info=$("$OCI" inspect --format '{{.State.Running}} {{.State.Pid}}' "$NAME" 2>/dev/null); then
+    local st p
+    read -r st p <<< "$info"
+    if [[ $st == true ]]; then
+      running=true
+      pid=${p:-0}
+    fi
+  fi
+  if [[ $running == true && $pid -gt 0 && -r /proc/$pid/status ]]; then
+    local line
+    while IFS= read -r line; do
+      if [[ $line == VmRSS:* ]]; then
+        line=${line#VmRSS:}
+        line=${line%kB}
+        line=${line//[ $'\t']/}
+        rss_kb=${line:-0}
+        rss_bytes=$((rss_kb * 1024))
+      elif [[ $line == VmHWM:* ]]; then
+        line=${line#VmHWM:}
+        line=${line%kB}
+        line=${line//[ $'\t']/}
+        vmhwm_kb=${line:-0}
+        vmhwm_bytes=$((vmhwm_kb * 1024))
+      fi
+    done < "/proc/$pid/status"
+  fi
+  if [[ $running == true && $pid -gt 0 && -r /proc/$pid/cgroup ]]; then
+    local cg_rel cg_dir val
+    cg_rel=$(awk -F: 'NR==1{print $3}' "/proc/$pid/cgroup" 2>/dev/null || true)
+    cg_dir="/sys/fs/cgroup${cg_rel}"
+    if [[ -r "$cg_dir/cpu.stat" ]]; then
+      val=$(awk '/^usage_usec /{print $2; exit}' "$cg_dir/cpu.stat" 2>/dev/null || true)
+      cpu_usage_usec=${val:-0}
+    fi
+    if [[ -r "$cg_dir/memory.current" ]]; then
+      val=$(cat "$cg_dir/memory.current" 2>/dev/null || true)
+      mem_current_bytes=${val:-0}
+    fi
+    if [[ -r "$cg_dir/memory.peak" ]]; then
+      val=$(cat "$cg_dir/memory.peak" 2>/dev/null || true)
+      mem_peak_bytes=${val:-0}
+    fi
+  fi
+  if [[ -d $SCRATCH_DIR ]]; then
+    scratch_entries=$(ls -A "$SCRATCH_DIR" 2>/dev/null | wc -l | tr -d ' ')
+  fi
+  if [[ $running == true ]]; then
+    probe_code=$(http_probe_status)
+    [[ $probe_code == 401 ]] && healthy=true
+  fi
+
+  if [[ $AS_JSON == true ]]; then
+    emit_kv_json \
+      "action=status" \
+      "container=$NAME" \
+      "image=$IMAGE" \
+      "running:bool=$running" \
+      "healthy:bool=$healthy" \
+      "http_probe_status=$probe_code" \
+      "listen=127.0.0.1:$PORT" \
+      "pid:num=$pid" \
+      "rss_kb:num=$rss_kb" \
+      "rss_bytes:num=$rss_bytes" \
+      "vmhwm_kb:num=$vmhwm_kb" \
+      "vmhwm_bytes:num=$vmhwm_bytes" \
+      "cpu_usage_usec:num=$cpu_usage_usec" \
+      "mem_current_bytes:num=$mem_current_bytes" \
+      "mem_peak_bytes:num=$mem_peak_bytes" \
+      "key_file=$KEY_FILE" \
+      "scratch_dir=$SCRATCH_DIR" \
+      "scratch_entries:num=${scratch_entries:-0}"
+  else
+    printf 'container=%s running=%s healthy=%s http=%s listen=127.0.0.1:%s pid=%s rss_kb=%s vmhwm_kb=%s cpu_usage_usec=%s mem_peak_bytes=%s scratch_entries=%s\n' \
+      "$NAME" "$running" "$healthy" "$probe_code" "$PORT" "$pid" "$rss_kb" "$vmhwm_kb" "$cpu_usage_usec" "$mem_peak_bytes" "${scratch_entries:-0}"
+  fi
+}
+
+case "$VERB" in
+  build) cmd_build ;;
+  start) cmd_start ;;
+  stop) cmd_stop ;;
+  status) cmd_status ;;
+esac

@@ -1,0 +1,265 @@
+#!/usr/bin/env -S bashy --bashsharp
+# release-mirror - bashy as the LAN install server: a GitHub-shaped mirror of
+# bashy releases and local builds, served over plain HTTP, for humans (curl,
+# browser) and agents (the served README is the live bashy skill).
+#
+# Usage: bashy release-mirror <verb> [options]
+#   fetch   [--tag TAG] [--dir DIR]           mirror an upstream release (all platforms)
+#   build   --tag TAG [--bashy-src DIR] [--outpost-src DIR] [--latest]
+#                                              build bashy AND outpost from source checkouts with
+#                                              one pairing stamp (self install pairs them), publish
+#   publish SRC [--id ID] [--outpost PATH] [--platform OS-ARCH] [--latest] [--dir DIR]
+#                                              SRC: a dist assets dir, one archive, or a
+#                                              build dir holding bashy[.exe] (+ outpost beside
+#                                              it); --platform names a cross-built dir's target
+#   serve   [--addr HOST:PORT] [--dir DIR]    write install.sh/install.ps1/README.md pre-baked
+#                                              to this mirror, then serve DIR (rclone http)
+#   index   [--dir DIR] [--json]              what the mirror holds (latest, tags, assets)
+#   mcp     [--port PORT]                     bashy's own MCP (loopback) for the organizer host
+#
+# Layout (== the GitHub release download base, so one env var serves every path):
+#   DIR/latest                       the tag participants install by default
+#   DIR/<tag>/bashy-<os>-<arch>.tar.gz|.zip
+#   DIR/<tag>/checksums.txt          "<sha256>  <asset>"
+#   DIR/install.sh DIR/install.ps1   the outpost installers with BASHY_RELEASE_BASE pre-set
+#   DIR/README.md                    one-liners + the live `bashy skill show bashy`
+# Defaults: DIR=${BASHY_RELEASE_MIRROR:-~/.bashy/release-mirror}, addr :8080,
+# repo ${BASHY_RELEASE_REPO:-qiangli/bashy}.
+set -euo pipefail
+
+repo=${BASHY_RELEASE_REPO:-qiangli/bashy}
+dir=${BASHY_RELEASE_MIRROR:-${BASHY_HOME:-$HOME/.bashy}/release-mirror}
+bashy=${BASHY_BIN:-bashy}
+platforms="linux-amd64 linux-arm64 darwin-arm64 windows-amd64 windows-arm64"
+here=$(cd "$(dirname "$0")" && pwd)
+
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; }
+die() { echo "release-mirror: $*" >&2; exit 1; }
+need_tag() { case "$1" in ''|*[!A-Za-z0-9._-]*) die "invalid tag/id: '$1'" ;; esac; }
+asset_name() { case "$1" in windows-*) echo "bashy-$1.zip" ;; *) echo "bashy-$1.tar.gz" ;; esac; }
+sha256_of() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'; else shasum -a 256 "$1" | awk '{print $1}'; fi; }
+host_platform() {
+	local os arch
+	case "$(uname -s)" in Darwin) os=darwin ;; Linux) os=linux ;; MINGW*|MSYS*|CYGWIN*|Windows_NT) os=windows ;; *) os=$(uname -s | tr 'A-Z' 'a-z') ;; esac
+	case "$(uname -m)" in x86_64|amd64) arch=amd64 ;; arm64|aarch64) arch=arm64 ;; *) arch=$(uname -m) ;; esac
+	echo "$os-$arch"
+}
+write_checksums() { # DIR/<tag>: regenerate checksums.txt from the archives present
+	local d=$1 f
+	: > "$d/checksums.txt.new"
+	for f in "$d"/bashy-*.tar.gz "$d"/bashy-*.zip; do
+		[ -f "$f" ] || continue
+		printf '%s  %s\n' "$(sha256_of "$f")" "$(basename "$f")" >> "$d/checksums.txt.new"
+	done
+	mv "$d/checksums.txt.new" "$d/checksums.txt"
+}
+lan_host() {
+	local ip=""
+	if command -v ipconfig >/dev/null 2>&1; then ip=$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true); fi
+	[ -n "$ip" ] || ip=$(hostname -I 2>/dev/null | awk '{print $1}' || true)
+	[ -n "$ip" ] || ip=$(hostname)
+	echo "$ip"
+}
+
+cmd_fetch() {
+	local tag=latest
+	while [ $# -gt 0 ]; do case "$1" in
+		--tag) tag=${2:?}; shift 2 ;; --dir) dir=${2:?}; shift 2 ;;
+		-h|--help) usage; exit 0 ;; *) die "fetch: unknown argument $1" ;; esac; done
+	if [ "$tag" = latest ]; then
+		tag=$("$bashy" fetch -f "https://api.github.com/repos/$repo/releases/latest" | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n1)
+	fi
+	need_tag "$tag"
+	local base="https://github.com/$repo/releases/download/$tag" d="$dir/$tag" p a
+	mkdir -p "$d"
+	echo "release-mirror: fetching $repo $tag -> $d"
+	"$bashy" fetch -f -o "$d/checksums.upstream.txt" "$base/checksums.txt"
+	for p in $platforms; do
+		a=$(asset_name "$p")
+		if [ -f "$d/$a" ] && grep -q "^$(sha256_of "$d/$a")  $a\$" "$d/checksums.upstream.txt"; then echo "  $a (cached, verified)"; continue; fi
+		echo "  $a"
+		"$bashy" fetch -f -o "$d/$a.part" "$base/$a"
+		grep -q "^$(sha256_of "$d/$a.part")  $a\$" "$d/checksums.upstream.txt" || die "sha256 mismatch for $a"
+		mv "$d/$a.part" "$d/$a"
+	done
+	write_checksums "$d"
+	printf '%s\n' "$tag" > "$dir/latest"
+	echo "release-mirror: latest -> $tag (upstream digests verified; checksums.txt regenerated for the mirror)"
+}
+
+cmd_publish() {
+	local src="" id="" setlatest=0 outpost_bin=${OUTPOST_BIN:-} platform=""
+	while [ $# -gt 0 ]; do case "$1" in
+		--id) id=${2:?}; shift 2 ;; --latest) setlatest=1; shift ;; --dir) dir=${2:?}; shift 2 ;; --outpost) outpost_bin=${2:?}; shift 2 ;;
+		--platform) platform=${2:?}; shift 2 ;;
+		-h|--help) usage; exit 0 ;; -*) die "publish: unknown option $1" ;; *) src=$1; shift ;; esac; done
+	[ -n "$src" ] || die "publish: SRC required (dist assets dir, one archive, or a build dir with bashy)"
+	[ -n "$id" ] || id="local-$(date +%Y%m%d-%H%M%S)"
+	need_tag "$id"
+	local d="$dir/$id" n=0 f
+	mkdir -p "$d"
+	if [ -f "$src" ]; then
+		case "$src" in *.tar.gz|*.zip) cp -- "$src" "$d/"; n=1 ;; *) die "publish: a single file must be a bashy-<os>-<arch>.tar.gz|.zip archive" ;; esac
+	elif [ -d "$src" ]; then
+		for f in "$src"/bashy-*-*.tar.gz "$src"/bashy-*-*.zip; do [ -f "$f" ] && { cp -- "$f" "$d/"; n=$((n+1)); }; done
+		local ext=""; case "$platform" in windows-*) ext=.exe ;; esac
+		if [ "$n" = 0 ] && [ -f "$src/bashy$ext" ]; then
+			# A build dir: pack this platform's archive the way a release ships it
+			# (bashy, bash, sh, outpost at the top level; bash and sh are bashy by name).
+			local p=${platform:-$(host_platform)}
+			local stage; stage=$(mktemp -d)
+			# Ship the Go payload, never the host C launcher pair (bashy.real/bash.real).
+			if [ -z "$ext" ] && [ -f "$src/bashy.real" ]; then cp -- "$src/bashy.real" "$stage/bashy"; else cp -- "$src/bashy$ext" "$stage/bashy$ext"; fi
+			cp -- "$stage/bashy$ext" "$stage/bash$ext"; cp -- "$stage/bashy$ext" "$stage/sh$ext"
+			# self install pairs bashy with a RELEASE-STAMPED outpost whose version matches the
+			# bashy banner; a plain dev outpost is refused. Use `release-mirror build --tag T`.
+			local op=$outpost_bin
+			[ -n "$op" ] || { [ -f "$src/outpost$ext" ] && op=$src/outpost$ext; }
+			[ -n "$op" ] || [ -n "$ext" ] || op=$(command -v outpost || true)
+			[ -n "$op" ] || die "publish: no outpost beside $src/bashy$ext (--outpost PATH)"
+			cp -- "$op" "$stage/outpost$ext"
+			chmod 755 "$stage"/*
+			case "$p" in
+			windows-*)
+				if command -v zip >/dev/null 2>&1; then (cd "$stage" && zip -q -j "$d/$(asset_name "$p")" bashy.exe bash.exe sh.exe outpost.exe)
+				else python3 -c 'import sys,zipfile; z=zipfile.ZipFile(sys.argv[1],"w",zipfile.ZIP_DEFLATED); [z.write(sys.argv[2]+"/"+n,n) for n in sys.argv[3:]]; z.close()' "$d/$(asset_name "$p")" "$stage" bashy.exe bash.exe sh.exe outpost.exe; fi ;;
+			*) tar -C "$stage" -czf "$d/$(asset_name "$p")" bashy bash sh outpost ;;
+			esac
+			rm -rf "$stage"; n=1
+			if [ -z "$ext" ]; then echo "release-mirror: packed $src/bashy as $(asset_name "$p") ($("$src/bashy" --version 2>/dev/null | head -1))"; else echo "release-mirror: packed $src/bashy$ext as $(asset_name "$p")"; fi
+		fi
+	else
+		die "publish: $src not found"
+	fi
+	[ "$n" -gt 0 ] || die "publish: nothing to publish in $src"
+	write_checksums "$d"
+	echo "release-mirror: published $n archive(s) as $id -> $d"
+	if [ "$setlatest" = 1 ] || [ ! -f "$dir/latest" ]; then printf '%s\n' "$id" > "$dir/latest"; echo "release-mirror: latest -> $id"; fi
+}
+
+cmd_build() {
+	local tag="" bsrc="" osrc="" setlatest=0
+	while [ $# -gt 0 ]; do case "$1" in
+		--tag) tag=${2:?}; shift 2 ;; --bashy-src) bsrc=${2:?}; shift 2 ;; --outpost-src) osrc=${2:?}; shift 2 ;;
+		--latest) setlatest=1; shift ;; --dir) dir=${2:?}; shift 2 ;;
+		-h|--help) usage; exit 0 ;; *) die "build: unknown argument $1" ;; esac; done
+	[ -n "$tag" ] || die "build: --tag TAG required (one pairing stamp for bashy and outpost, e.g. 1.0.0-rc.40-lan.1)"
+	need_tag "$tag"; tag=${tag#v}
+	[ -n "$bsrc" ] || for bsrc in "$here/../.." "${BASHY_HOME:-$HOME/.bashy}/src/bashy"; do [ -f "$bsrc/dag.md" ] && break; done
+	[ -n "$osrc" ] || for osrc in "$bsrc/../outpost" "${BASHY_HOME:-$HOME/.bashy}/src/outpost"; do [ -f "$osrc/scripts/build.sh" ] && break; done
+	[ -f "$bsrc/dag.md" ] || die "build: no bashy checkout (--bashy-src)"
+	[ -f "$osrc/scripts/build.sh" ] || die "build: no outpost checkout (--outpost-src)"
+	echo "release-mirror: building bashy $(git -C "$bsrc" rev-parse --short HEAD 2>/dev/null || echo ?) and outpost $(git -C "$osrc" rev-parse --short HEAD 2>/dev/null || echo ?) as $tag"
+	( cd "$bsrc" && GOWORK=off "$bashy" dag build-bashy VERSION="$tag" ) || die "build: bashy build failed"
+	( cd "$osrc" && GOWORK=off RELEASE_TAG="v$tag" ./scripts/build.sh ) || die "build: outpost build failed"
+	local args=("$bsrc/bin" --id "$tag" --outpost "$osrc/bin/outpost" --dir "$dir")
+	[ "$setlatest" = 1 ] && args+=(--latest)
+	cmd_publish "${args[@]}"
+}
+
+installer_source() { # NAME -> path of outpost's install script (sibling checkout, else raw GitHub)
+	local name=$1 f
+	for f in "${OUTPOST_SCRIPTS_DIR:-}/$name" "$here/$name" "$here/../../../outpost/scripts/$name" "$here/../../outpost/scripts/$name"; do
+		[ -f "$f" ] && { echo "$f"; return; }
+	done
+	f=$(mktemp); "$bashy" fetch -f -o "$f" "https://raw.githubusercontent.com/qiangli/outpost/main/scripts/$name" || die "cannot obtain $name"; echo "$f"
+}
+write_site() { # BASEURL: pre-baked installers + README into DIR
+	local base=$1 src tag
+	src=$(installer_source install.sh)
+	grep -q 'BASHY_RELEASE_BASE' "$src" || die "install.sh at $src predates the BASHY_RELEASE_BASE knob"
+	{ sed -n '1,/^set -eu$/p' "$src"; printf ': "${BASHY_RELEASE_BASE:=%s}"; export BASHY_RELEASE_BASE\n' "$base"; sed '1,/^set -eu$/d' "$src"; } > "$dir/install.sh"
+	src=$(installer_source install.ps1)
+	{ sed -n '1,/^\$ErrorActionPreference/p' "$src" | sed '$d'; printf "if (-not \$env:BASHY_RELEASE_BASE) { \$env:BASHY_RELEASE_BASE = '%s' }\n" "$base"; sed -n '/^\$ErrorActionPreference/,$p' "$src"; } > "$dir/install.ps1"
+	tag=$(cat "$dir/latest" 2>/dev/null || echo "(none)")
+	{
+		cat <<EOF
+# bashy on this LAN — install or update from $base
+
+Latest here: **$tag**. This page is for people and for their AI agents.
+
+**Agent reading this?** Tell your user what you will do, then: check \`bashy --version\`;
+if bashy is missing or its version is not $tag, run the one-liner for this OS below;
+then \`bashy skill export bashy --user --tool <your-tool> --mcp\` and
+\`bashy install-agent <your-tool>\`; report the installed version. The skill you will
+be working with follows this page.
+
+## Install or update (humans: paste one line)
+
+macOS / Linux:
+
+    curl -fsSL $base/install.sh | sh
+
+Windows (PowerShell):
+
+    irm $base/install.ps1 | iex
+
+Same lines upgrade an existing bashy in place (atomic; a downgrade is refused,
+set BASHY_SELF_ALLOW_DOWNGRADE=1 to force). Browse the files at $base/ .
+Already have bashy and no curl? \`bashy fetch -o bashy.tar.gz $base/$tag/bashy-<os>-<arch>.tar.gz\`,
+extract, \`./bashy self install\`.
+
+Upstream installers with this mirror: \`BASHY_RELEASE_BASE=$base curl -fsSL https://dhnt.io/install.sh | sh\`.
+Source: \`bashy git clone https://github.com/$repo\` (or the organizer's loom), then \`bashy dag build && bashy dag install\`.
+
+## Contents
+
+EOF
+		cmd_index
+		echo
+		echo '---'
+		echo
+		"$bashy" skill show bashy 2>/dev/null || echo "(bashy skill show bashy unavailable on the organizer host)"
+	} > "$dir/README.md"
+}
+cmd_index() {
+	local json=0 t
+	while [ $# -gt 0 ]; do case "$1" in --json) json=1; shift ;; --dir) dir=${2:?}; shift 2 ;; *) die "index: unknown argument $1" ;; esac; done
+	[ -d "$dir" ] || die "no mirror at $dir (run fetch or publish)"
+	if [ "$json" = 1 ]; then
+		printf '{"schema_version":"bashy-release-mirror-v1","repo":"%s","dir":"%s","latest":"%s","tags":{' "$repo" "$dir" "$(cat "$dir/latest" 2>/dev/null || true)"
+		local first=1
+		for t in "$dir"/*/; do t=${t%/}; [ -f "$t/checksums.txt" ] || continue
+			[ "$first" = 1 ] || printf ','; first=0
+			printf '"%s":[' "$(basename "$t")"; awk 'NR>1{printf ","} {printf "{\"asset\":\"%s\",\"sha256\":\"%s\"}", $2, $1}' "$t/checksums.txt"; printf ']'
+		done
+		printf '}}\n'
+	else
+		echo "latest: $(cat "$dir/latest" 2>/dev/null || echo '(none)')"
+		for t in "$dir"/*/; do t=${t%/}; [ -f "$t/checksums.txt" ] || continue
+			echo "- $(basename "$t")"; sed 's/^/    /' "$t/checksums.txt"
+		done
+	fi
+}
+cmd_serve() {
+	local addr=":8080" hostname=""
+	while [ $# -gt 0 ]; do case "$1" in
+		--addr) addr=${2:?}; shift 2 ;; --host) hostname=${2:?}; shift 2 ;; --dir) dir=${2:?}; shift 2 ;;
+		-h|--help) usage; exit 0 ;; *) die "serve: unknown argument $1" ;; esac; done
+	[ -f "$dir/latest" ] || die "nothing to serve at $dir: run 'release-mirror fetch' or 'release-mirror publish SRC' first"
+	local port=${addr##*:}; [ -n "$hostname" ] || hostname=$(lan_host)
+	local base="http://$hostname:$port"
+	write_site "$base"
+	echo "release-mirror: serving $dir at $base (latest: $(cat "$dir/latest"))"
+	echo
+	echo "Tell participants (or their agent): \"Set up bashy from $base\""
+	echo "  macOS/Linux:  curl -fsSL $base/install.sh | sh"
+	echo "  Windows:      irm $base/install.ps1 | iex"
+	echo "  browse:       $base/"
+	if command -v outpost >/dev/null 2>&1; then echo "  mesh peers:   outpost mesh service add bashy-release 127.0.0.1:$port"; fi
+	echo
+	exec "$bashy" rclone serve http "$dir" --addr "$addr" --read-only --dir-cache-time 1s --no-modtime
+}
+cmd_mcp() {
+	local port=8765
+	while [ $# -gt 0 ]; do case "$1" in --port) port=${2:?}; shift 2 ;; -h|--help) usage; exit 0 ;; *) die "mcp: unknown argument $1" ;; esac; done
+	echo "release-mirror: bashy MCP (loopback) on 127.0.0.1:$port — LAN bind with a bearer token is the follow-up story;"
+	echo "  until then reach it through an ssh forward or 'outpost mesh service add bashy-mcp 127.0.0.1:$port'."
+	exec "$bashy" mcp serve --transport http --listen "127.0.0.1:$port" --tools skill,self,kb
+}
+
+verb=${1:-}; [ $# -gt 0 ] && shift
+case "$verb" in
+	fetch) cmd_fetch "$@" ;; build) cmd_build "$@" ;; publish) cmd_publish "$@" ;; serve) cmd_serve "$@" ;; index) cmd_index "$@" ;; mcp) cmd_mcp "$@" ;;
+	''|-h|--help) usage ;; *) die "unknown verb '$verb' (fetch|build|publish|serve|index|mcp)" ;;
+esac

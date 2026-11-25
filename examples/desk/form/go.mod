@@ -5,8 +5,8 @@ go 1.27
 toolchain go1.27.4
 
 require (
-	github.com/qiangli/bashy/examples/desk/chart v0.1.2
-	github.com/qiangli/bashy/examples/desk/kit v0.3.0
+	github.com/qiangli/bashy/examples/desk/chart v0.1.3
+	github.com/qiangli/bashy/examples/desk/kit v0.5.0
 )
 
 require (

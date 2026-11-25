@@ -1,0 +1,87 @@
+#!/usr/bin/env -S bashy --bashsharp
+# One body, two orientations: executable Bash# and its embedded agent skill.
+
+~~~skill as guide
+---
+name: page
+description: One fixed, live page for a group. Markdown plus ```block fences that show live items other desk apps own; one URL, one audience, one record. Agent drives via command/API; the group opens the page.
+metadata:
+  requires: "has=bashy"
+  step-porota: 'bashy page list'
+  check-tests: 'bashy page list'
+---
+# Page
+
+This is the prose face of `page.bsh`, the same executable body used by the
+registered `page` command. `bashy commands show page` exposes the
+executable argv and source path; `bashy skill show page` reads this face.
+
+A page is Markdown written by the organizer plus blocks, one line each in a
+` ```block ` fence: `kind:ref [id=NAME] [key=value ...]`, for example
+` ```block poll:form-9f3a ` or ` ```block embed:/whiteboard/?room=r1 `.
+Kinds: poll, form, book, note, board, chart (an item another desk app owns),
+timer, here, hands (page-local) and embed (a same-origin path or URL).
+
+- `bashy page add [-f FILE|-] [--faces FILE] [--title T] [--audience host|lan|satellite] [--id ID] [--code CODE]` creates a page and prints the private organizer link once.
+- `bashy page open ID` prints the available join links, a QR for each, and the bare code.
+- `bashy page show ID` reads title, Markdown, blocks, audience, participants (handle and auth only) and revision.
+- `bashy page set ID [-f FILE|-] [--faces FILE] [--title T] [--audience A]` changes the page; every save bumps the revision and pushes a live frame.
+- `bashy page list` lists pages; `bashy page share ID` mints a single-use invite link; `bashy page close ID` ends the page.
+- `bashy page export ID --to md|markdown|html|pdf [-o FILE]` writes the session record (handles, never addresses; pdf via headless Chrome, `CHROME_PATH` overrides discovery).
+- `bashy page serve --lan --port PORT` listens on a fixed LAN port. Without `--lan`, the default is loopback port 18113.
+- `bashy page participant ID --open|list|kick HANDLE|rename HANDLE NAME|merge HANDLE INTO` is the organizer's participant command.
+- A `here` block shows who is online and when they were last seen. The organizer view also shows address and fingerprint.
+- A `hands` block lets joined participants raise or lower their hand. Use `bashy page hands next|clear|list PAGE` to manage the speaking queue.
+- `bashy page block add poll ID --options a,b,c [--title Q] [--votes N] [--anonymous] [--results-visible] [--closed]` and `bashy page block add form ID --def FILE` create the item in the form app and add its block; each page identity is one respondent, a re-vote replaces.
+- `bashy page block add board ID [--session S] [--title T]` adds a brainstorm board (a new session, or an existing one by name); page participants write cards and vote as one brainstorm identity each; phases and rounds stay in brainstorm (organizer link-out).
+- `bashy page block open|close|show-results|hide-results ID BLOCK` controls a poll or form block; `bashy page block results ID BLOCK` prints option -> votes (handles) and handle -> answer.
+- `templates/{agenda,meeting,retro}.md` are ready pages for `bashy page add -f`; the kb runbook `run-a-class-or-meeting-on-one-page` covers both doors, the two speeds and the record.
+- `bashy page publish-outpost [--public] [--dry-run] [--json]` registers the fixed page listener with outpost identity enabled. Publish before starting the shared listener.
+
+Put participant URLs in the Markdown fences. Keep private organizer and
+projector URLs in the `--faces` JSON file, keyed by block id, using
+`organizer_url` and `display_url`. Open the organizer link for all faces
+and the participant preview. Append `?view=display` to the join link for the
+projector page.
+~~~
+
+set -euo pipefail
+export BASHY_HINTS=off
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# Shared desk modules resolve from the local Go module proxy (desk/register-modules.sh publishes them).
+export GOPROXY="file://${BASHY_GOMOD_PROXY:-${BASHY_HOME:-$HOME/.bashy}/gomod-proxy},${GOPROXY:-https://proxy.golang.org,direct}"
+export GONOSUMDB="${GONOSUMDB:+$GONOSUMDB,}github.com/qiangli/bashy/examples"
+cache=${XDG_CACHE_HOME:-$HOME/.cache}/bashy/desk-page
+exe=$(go env GOEXE)
+bin="$cache/page$exe"
+build() {
+  stale=false
+  [[ -f "$bin" ]] || stale=true
+  for src in "$here"/*.go "$here"/go.mod "$here"/go.sum "$here"/shaped.json "$here"/../kit/*.go "$here"/../kit/render/*.go; do
+    [[ "$src" -nt "$bin" ]] && stale=true
+  done
+  if [[ $stale == true ]]; then
+    mkdir -p "$here/.desk-build" "$cache"
+    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -buildvcs=false -trimpath -o ".desk-build/page$exe" . && { mv -f ".desk-build/page$exe" "$bin" || [[ -f "$bin" ]]; })
+  fi
+}
+
+case ${1:-serve} in
+--skill)
+  copying=false
+  while IFS= read -r line; do
+    if [[ $line == '~~~skill as guide' ]]; then copying=true; continue; fi
+    if [[ $copying == true && $line == '~~~' ]]; then break; fi
+    if [[ $copying == true ]]; then printf '%s\n' "$line"; fi
+  done < "${BASH_SOURCE[0]}"
+  ;;
+--contract) echo 'sokilili page efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
+-h|--help) echo 'page [serve|add|open|show|set|list|share|close|export|participant|hands|publish-outpost|unpublish-outpost|test] — one fixed, live page for a group; --skill prints its embedded skill' ;;
+test)
+  cd "$here" && GOWORK=off go test ./...
+  ;;
+*)
+  build
+  exec "$bin" "$@"
+  ;;
+esac

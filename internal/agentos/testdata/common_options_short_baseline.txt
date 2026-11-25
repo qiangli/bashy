@@ -302,6 +302,7 @@ expand	-i	--initial
 expand	-t	--tabs
 factor	-V	--version
 factor	-h	--help
+fetch	-A	--user-agent
 fetch	-H	--header
 fetch	-V	--version
 fetch	-X	--method

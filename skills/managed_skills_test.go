@@ -1,6 +1,7 @@
 package skills
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -103,13 +104,39 @@ func TestDeskSkillDocumentedVerbsValid(t *testing.T) {
 		"viewer":  {"../examples/desk/viewer", []string{"go", "run", "."}},
 	}
 
+	// The desk apps require the shared kit/chart modules by version from the
+	// local module proxy; fill a private one the way each app's register.sh
+	// does (examples/desk/register-modules.sh), with the bashy under test.
+	runner := os.Getenv("BASHY")
+	if runner == "" {
+		runner = "bashy"
+	}
+	reg := exec.Command("bash", "-c", `. ../examples/desk/register-modules.sh >&2 && printf '%s\n%s' "$GOPROXY" "$GONOSUMDB"`)
+	reg.Env = append(os.Environ(), "BASHY_BIN="+runner, "BASHY_GOMOD_PROXY="+t.TempDir())
+	var regErr bytes.Buffer
+	reg.Stderr = &regErr
+	regOut, err := reg.Output()
+	if err != nil {
+		t.Fatalf("register-modules.sh with %s: %v\n%s", runner, err, regErr.String())
+	}
+	proxyEnv := strings.SplitN(string(regOut), "\n", 2)
+	if len(proxyEnv) != 2 {
+		t.Fatalf("register-modules.sh exported no GOPROXY/GONOSUMDB: %q", regOut)
+	}
+	goEnv := append(os.Environ(), "GOPROXY="+proxyEnv[0], "GONOSUMDB="+proxyEnv[1], "GOWORK=off")
+
 	mcpVerbs := make(map[string]map[string]bool)
 	for tool, target := range cliTargets {
 		cmd := exec.Command(target.args[0], append(target.args[1:], "--help=mcp")...)
 		cmd.Dir = target.dir
+		cmd.Env = goEnv
 		out, err := cmd.Output()
 		if err != nil {
-			t.Fatalf("failed to run --help=mcp for %s: %v", tool, err)
+			stderr := ""
+			if ee, ok := err.(*exec.ExitError); ok {
+				stderr = string(ee.Stderr)
+			}
+			t.Fatalf("failed to run --help=mcp for %s: %v\n%s", tool, err, stderr)
 		}
 		var help struct {
 			Verbs []string `json:"verbs"`
