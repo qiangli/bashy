@@ -231,4 +231,6 @@ jobs:
           DIST: dist
           URL: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_URL }}
           SECRET: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_SECRET }}
+          # Authenticates the outpost commit lookup (unauthenticated calls hit the shared rate limit: 403).
+          GITHUB_TOKEN: ${{ github.token }}
         run: ./scripts/register-product-release.sh

@@ -31,12 +31,29 @@ frozen release candidate before the tag.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Release registration.** The release and promote workflows register each
+  release with the hosted release index, so outposts update to it. The
+  registration step required a macOS Intel outpost build, which is no longer
+  built, and looked up the outpost commit on the GitHub API without a token.
+  It failed for rc.40 and rc.41, so outposts were not told about either
+  release. It now registers the five built platforms and passes the
+  workflow token.
+
 ## [1.0.0-rc.41] — 2026-11-25
 
 The first promoted release since `v1.0.0-rc.37`. `v1.0.0-rc.40-dev` was
 published as a pre-release and never promoted (its Windows tier check
 failed); its candidate notes below ship in this release together with the
 fix. Build coordinate: Go 1.27, toolchain go1.27.4; Bash compatibility 5.3.
+
+### Security
+
+- Dependency bumps for advisories published after the rc.40 receipt:
+  OpenTelemetry Go v1.47.0 (GO-2026-6974, GO-2026-6975), gobwas/ws v1.5.0
+  (GO-2026-6940) and gorilla/websocket at the fixed 2025 revision
+  (GO-2026-6278), in bashy, outpost, yoke and ycode.
 
 ### Fixed since the rc.40 candidate
 

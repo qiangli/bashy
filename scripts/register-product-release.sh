@@ -18,6 +18,8 @@ base=${TAG%-dev}
 artifacts='{}'
 for os in darwin linux windows; do
  for arch in amd64 arm64; do
+  # darwin/amd64 is not built (since rc.40); keep in step with verify-release-asset-set.sh.
+  [[ $os != darwin || $arch != amd64 ]] || continue
   name="outpost-$base-$os-$arch"; [[ $os != windows ]] || name+=.exe
   [[ -s "$DIST/$name" ]] || { echo "missing $name" >&2; exit 1; }
   sha=$(shasum -a 256 "$DIST/$name" | awk '{print $1}')
