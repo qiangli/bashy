@@ -67,16 +67,16 @@ var graphStreamFixtures = map[string]struct {
 	},
 	"todo list": {
 		doc: `{"schema_version":"loom-v2","command":"todo list","status":"ok","result":{"scope":"repo /r","folder":"/r/docs/todo","count":2,"items":[
-		  {"id":"bbbbbbbbbbbb","seq":2,"title":"Two","state":"todo","age":"3d","sprint":446},
+		  {"id":"bbbbbbbbbbbb","seq":2,"title":"Two","state":"known","age":"3d","workaround":"retry once","expires":"2026-12-25","expired":true,"sprint":446},
 		  {"id":"aaaaaaaaaaaa","seq":1,"title":"One","state":"doing","age":"93d","overdue":true,"assignee":"codex"}]}}`,
 		source:    "todo:/r/docs/todo",
 		nodes:     []string{"todo:aaaaaaaaaaaa", "todo:bbbbbbbbbbbb"},
 		edges:     []string{"todo:aaaaaaaaaaaa assigned-to agent:codex", "todo:bbbbbbbbbbbb story-of sprint:446"},
-		forbidden: []string{`"age"`, "overdue"},
+		forbidden: []string{`"age"`, "overdue", "expired"},
 	},
 	"todo show": {
-		doc: `{"id":"aaaaaaaaaaaa","kind":"bug","title":"One","seq":1,"status":"doing","assignee":"person:qiangli","body":"text",
-		  "ref":"todo:aaaaaaaaaaaa","overdue":false,
+		doc: `{"id":"aaaaaaaaaaaa","kind":"bug","title":"One","seq":1,"status":"known","workaround":"retry once","expires":"2026-12-25","assignee":"person:qiangli","body":"text",
+		  "ref":"todo:aaaaaaaaaaaa","overdue":false,"expired":true,
 		  "outbound":[{"ref":"kb:lesson","status":"resolved"}],"inbound":[{"ref":"todo:cccccccccccc","status":"resolved"}]}`,
 		source: "todo:aaaaaaaaaaaa",
 		nodes:  []string{"todo:aaaaaaaaaaaa"},
@@ -85,7 +85,7 @@ var graphStreamFixtures = map[string]struct {
 			"todo:aaaaaaaaaaaa links kb:lesson",
 			"todo:cccccccccccc links todo:aaaaaaaaaaaa",
 		},
-		forbidden: []string{"overdue"},
+		forbidden: []string{"overdue", "expired"},
 	},
 	"agent list": {
 		doc: `{"schema_version":"bashy-registry-list-v1","kind":"agent","view":"default","items":[

@@ -367,7 +367,7 @@ func projectSprintShow(raw []byte) (*stream.Graph, error) {
 	return b.graph()
 }
 
-var todoFields = []string{"id", "seq", "title", "state", "status", "priority", "kind", "labels", "scope", "created", "due", "closed", "recurring", "assignee", "sprint", "sprint_id"}
+var todoFields = []string{"id", "seq", "title", "state", "status", "priority", "kind", "labels", "scope", "created", "due", "workaround", "expires", "closed", "recurring", "assignee", "sprint", "sprint_id"}
 
 func todoNode(b *graphBuilder, it jsonObj, extra ...string) string {
 	id := str(it, "id")
