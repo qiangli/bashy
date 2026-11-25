@@ -95,3 +95,17 @@ No reinventing the wheel: when the UI face is written as restricted semantic HTM
 3. Every defect above is a known issue (symptom → action) until fixed, so an agent that hits one recovers in one step with no probing. Example: "`unknown flag --def` → run `<path to core> add --def …`".
 4. Waiting is one step: `wait --timeout DURATION` documented in the skill, and the key resolved automatically for the creating agent.
 5. Measure: tool calls and probes to the first shown form, and to the first answer read. Target: 1 call to show it, 1 to read it. Compare with this baseline on the same task.
+
+## Sprint 721 P1 instruction (conductor, 2026-11-25) — implementation only
+
+Scope is the approved Sprint 721 acceptance, NOT every addendum above. Out of scope for this run: addendum (a) bashy-ui-v1 envelope + contracttest, (b) `lens -f bsh` converter / raw view, (c) hello-world companion case, (d) restricted-HTML allowlist. The measurement (3 arms x 3 cold runs) is P2, planned separately; do not run agents.
+
+Start from current bashy origin/main (form flags and the four addenda are fixed: 64ef2626). Read umbrella `docs/shapeware-spec-v0.md` v0.1 (sections 2-12 and Appendix A, the `hello` example, as the template). Then, in `examples/desk/form` only:
+1. SKILL.md with `metadata.type: shapeware` (no top-level `type`), min-band L2, body order per section 4.1, the standard run block by intent (section 4.3): ONE command that creates AND opens a form for the human (add `--open` to `form add`/`ask`; printing a URL is not showing it), plus `wait --timeout DURATION` to read the answer.
+2. Known issues in the SKILL.md body (section 4.2): seed exactly one realistic known issue (symptom -> action, class, expiry) so the pilot can test recovery; it must not hide a real open defect.
+3. `dag.md` lifecycle (section 5a): source, build, test, install, run targets that work on a fresh HOME (bashy dag now runs in-process).
+4. `features.yaml` (section 5) with ONE `tbd` feature taken from the shaped.json genie example "Group unanswered required fields at the top"; `checks/acceptance.bsh` (fails today because of that tbd) and `checks/candidate.bsh` per section 6.
+5. `shaped.json`: core digest pinning the prebuilt server (section 9) so use never rebuilds from source.
+6. Keep `form.bsh`, the registered command and existing behaviour working; existing desk tests stay green.
+
+Verify: `GOWORK=off go test ./...` in examples/desk/form and the examples/desk module tests; `bashy skill validate`-style frontmatter check (metadata.type read via yoke cb1a95c4); a fresh-HOME run of `bashy dag -f examples/desk/form/dag.md test`; `checks/acceptance.bsh` fails ONLY on the tbd. Record the commands and results. No new verbs beyond `--open`, no framework, no browser tests on the dev box.
