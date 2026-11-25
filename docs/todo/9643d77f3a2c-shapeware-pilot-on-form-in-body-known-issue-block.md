@@ -35,3 +35,17 @@ Viewing a `.bsh` as a page reuses existing pieces; there is no new verb.
 - **Render:** kit/render (goldmark + fence overrides, as charts already do) gets `feature` and `ui` block renderers; then `lens -f bsh -t md F | viewer`.
 - **Rule: rendering is not running.** A raw view never executes runners; the ui face is a static preview with no working actions. HTML/CSS/JS is output only (the default fish, sanitized); the source stays `.bsh`.
 - Reference artifact: the hello-world walkthrough (sprint 712 thread, 2026-11-25): hello.bsh with script/skill/ui/feature faces, verified-with-tbd release, field shaping, undo, upstream.
+
+## Addendum 2026-11-25 (c): second case, a web app with a companion .bsh (operator agreed)
+
+Pure Bash# must mesh with existing web technology, not replace it. Case 2 tests the **companion file** model on `examples/shaping/hello-world` (plain `public/index.html`, a static shaped app):
+- Add `public/hello.bsh` as a companion carrying the skill, `~~~feature` specs with acceptance, and known issues. Add an optional `~~~ui` only if needed.
+- Add one line to `index.html`: `<link rel="bashsharp" href="hello.bsh">`. The HTML is otherwise untouched; web developers keep their tools. Analogy: `.d.ts` beside `.js`, source maps beside minified code.
+- Check: with no hints, a `bashy shape wish` (or Genie) on the app finds and uses the companion: it follows the skill, keeps the feature acceptance passing, and respects the known issues. Compare with the same wish and no companion.
+- Measure: whether the companion was read, whether acceptance passes, and the steps/tool calls compared with the no-companion run.
+
+Other mesh patterns are recorded as future input; they are not part of this pilot:
+- a `~~~html`/`~~~ts as view` override fence built with the ecosystem's own tools via `~~~package`
+- a `<bashy-face src=… face=ui>` web component consuming bashy-ui-v1
+- the bashy-ui-v1 wire as the integration point for any framework, plus MCP
+- the browser extension's Shape button reading the page's companion
