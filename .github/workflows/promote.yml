@@ -47,6 +47,11 @@ on:
       tier_verdict:
         description: 'Location (https URL or repo-relative file) of the dhnt.tier-smoke/v1 verdict record for the candidate commit; defaults to the TIER_VERDICT repository variable'
         required: false
+      register_only:
+        description: 'Only (re)register an already-promoted version with the hosted release index, using this workflow ref''s registration script; no promotion'
+        type: boolean
+        required: false
+        default: false
 
 permissions:
   contents: write
@@ -54,6 +59,7 @@ permissions:
 jobs:
   promote:
     name: byte-promote + notify fleet
+    if: ${{ inputs.register_only != true }}
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release + read/write refs (belt-and-suspenders over the workflow-level grant)
@@ -234,3 +240,62 @@ jobs:
           # Authenticates the outpost commit lookup (unauthenticated calls hit the shared rate limit: 403).
           GITHUB_TOKEN: ${{ github.token }}
         run: ./scripts/register-product-release.sh
+
+  # Registration retry for a version that is already promoted (the promote job
+  # refuses to double-promote, and runs the candidate's own copy of the script,
+  # so a registration defect fixed after promotion could never be retried).
+  # Runs THIS ref's script against the candidate's go.mod outpost pin and the
+  # published outpost assets, checked against the release's checksums.txt.
+  register:
+    name: re-register a promoted release
+    if: ${{ inputs.register_only == true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: resolve the promoted release and its source commit
+        id: src
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          IN: ${{ inputs.version }}
+        run: |
+          v="${IN#v}"; v="${v%-dev}"
+          [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || {
+            echo "::error::version must look like v1.2.3 or v1.2.3-rc.4 (got '${IN}')"; exit 1; }
+          ver="v${v}"
+          ispre=$(gh api "repos/${REPO}/releases/tags/${ver}" --jq '.prerelease' 2>/dev/null || echo missing)
+          [ "$ispre" = "false" ] || { echo "::error::${ver} is not a promoted release (got: ${ispre})"; exit 1; }
+          obj=$(gh api "repos/${REPO}/git/ref/tags/${ver}" --jq '.object')
+          otype=$(echo "$obj" | jq -r '.type'); commit=$(echo "$obj" | jq -r '.sha')
+          if [ "$otype" = "tag" ]; then
+            commit=$(gh api "repos/${REPO}/git/tags/${commit}" --jq '.object.sha')
+          fi
+          echo "ver=${ver}" >> "$GITHUB_OUTPUT"
+          echo "commit=${commit}" >> "$GITHUB_OUTPUT"
+      - name: candidate source (for its outpost pin)
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.src.outputs.commit }}
+          path: candidate
+      - name: download and verify the published outpost assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          VER: ${{ steps.src.outputs.ver }}
+        run: |
+          gh release download "${VER}" -R "${REPO}" -D dist -p 'outpost-*' -p checksums.txt
+          cd dist && grep -E ' outpost-' checksums.txt | sha256sum -c -
+      - name: register stable product release
+        working-directory: candidate
+        env:
+          REPO: ${{ github.repository }}
+          TAG: ${{ steps.src.outputs.ver }}
+          PRERELEASE: "false"
+          DIST: ../dist
+          URL: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_URL }}
+          SECRET: ${{ secrets.CLOUDBOX_RELEASE_WEBHOOK_SECRET }}
+          # Authenticates the outpost commit lookup (unauthenticated calls hit the shared rate limit: 403).
+          GITHUB_TOKEN: ${{ github.token }}
+        run: ../scripts/register-product-release.sh

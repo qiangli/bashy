@@ -66,19 +66,23 @@ func TestRegisterProductReleaseRegistersBuiltPlatforms(t *testing.T) {
 		t.Fatal("missing linux/arm64 outpost accepted")
 	}
 
-	// Both workflow steps that run the script pass a token for the commit lookup.
-	step := regexp.MustCompile(`(?s)- name: register (stable|development) product release\n(.*?)run: \./scripts/register-product-release\.sh`)
-	for _, wf := range []string{".github/workflows/release.yml", ".github/workflows/promote.yml"} {
+	// Every workflow step that runs the script passes a token for the commit
+	// lookup. promote.yml has two: the promotion itself, and the register_only
+	// retry, which runs this ref's script (a fix made after promotion applies).
+	step := regexp.MustCompile(`(?s)- name: register (stable|development) product release\n(.*?)run: (\.\.?)/scripts/register-product-release\.sh`)
+	for wf, want := range map[string]int{".github/workflows/release.yml": 1, ".github/workflows/promote.yml": 2} {
 		data, err := os.ReadFile(filepath.Join(root, wf))
 		if err != nil {
 			t.Fatal(err)
 		}
-		m := step.FindSubmatch(data)
-		if m == nil {
-			t.Fatalf("%s: no registration step", wf)
+		ms := step.FindAllSubmatch(data, -1)
+		if len(ms) != want {
+			t.Fatalf("%s: %d registration steps, want %d", wf, len(ms), want)
 		}
-		if !strings.Contains(string(m[2]), "GITHUB_TOKEN: ${{ github.token }}") {
-			t.Errorf("%s: registration step passes no GITHUB_TOKEN", wf)
+		for _, m := range ms {
+			if !strings.Contains(string(m[2]), "GITHUB_TOKEN: ${{ github.token }}") {
+				t.Errorf("%s: registration step passes no GITHUB_TOKEN", wf)
+			}
 		}
 	}
 }
