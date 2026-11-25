@@ -61,3 +61,34 @@ No reinventing the wheel: when the UI face is written as restricted semantic HTM
 - **Shared foundation:**
   - the face split, using the sh/syntax `SourceBlock` (replace the hand-rolled loops)
   - the restricted-HTML profile check: a tightened kit bluemonday allowlist plus the self-only CSP; semantic elements only, no inline style or handlers, no page JS beyond kit.js. The converter emits this profile too, so both paths meet in the same HTML.
+
+## Addendum 2026-11-25 (e): baseline, launching a form with today's `bashy form` (operator request)
+
+**Goal (operator):** evaluate a shapeware-enabled `form` against today's. Launching a form should take a few steps, ideally one, with little probing.
+
+**Task:** the agent had 9 decisions for the operator (umbrella Sprint 712 review) and was asked "show with bashy form". The agent was Claude Opus 5.5 on the dev box, with installed bashy (98a460a). The steps below are exactly as they happened. Tool calls are numbered; the elapsed time was not measured.
+
+| # | Step | Result | Kind |
+|---|---|---|---|
+| 1 | `ls examples/`, read `examples/contact.json` (schema), `bashy commands show form` | schema found | probe |
+| 2 | wrote the definition JSON; `bashy form add --def FILE --title T` | **FAIL** `unknown flag --def` (bug 64ef2626) | defect |
+| 3 | ran `bashy --bashsharp examples/desk/form/form.bsh add …` directly (the workaround recorded in this pilot) | **FAIL** the server rebuild fetched `examples/desk/kit/v0.5.0` and `examples/desk/chart/v0.1.3`, unknown revisions (local Go proxy) | defect |
+| 4–8 | `bashy commands show form` (text: no argv); `bashy adapt --json -- …` (nothing); `ls ~/.bashy`; `bashy commands list`; `bashy commands --help`; `bashy commands show form --yaml` | found `exec: bashy --bashsharp <checkout>/form.bsh`: the registered command runs the same source as step 3 | probe |
+| 9–10 | read `form.bsh`: `build()` and the dispatch | found the cached server `~/.cache/bashy/form/form` (built 11-24) | probe |
+| 11 | `~/.cache/bashy/form/form -addr 127.0.0.1:18107 add --def FILE --title T` | **OK** form created | launch |
+| 12 | `curl` the URL | 200 | check |
+| 13 | background `form wait ID` (no key) | **FAIL** "Join this form first": the key is not resolved when the binary runs directly (README: "resolved automatically") | defect |
+| 14 | `show --key K` | pending | check |
+| 15 | background `wait` with `FORM_KEY` | ended after the default 5 min; `--timeout` is not in `-h` | defect (doc) |
+| 16 | operator: "you did not show the form yet". `add` only prints a URL; the agent never opened it | agent miss; `open URL` | miss |
+| 17–19 | looked for the timeout: `wait --help` (nothing), `-h`, grep the README and `server/cli.go` | found `--timeout` (default 5m) in source | probe |
+| 20 | `wait --timeout 4h` | answered | wait |
+
+**Baseline:** about 20 tool calls before the operator saw the form (the first page showed only at step 16). 11 were probes, 4 hit product defects (flags; the source rebuild; key resolution; the undocumented wait timeout), and 1 was an agent miss (the page was never opened). The operator also had to prompt twice.
+
+**What a shapeware-enabled form must make one step** (the acceptance targets for this pilot):
+1. `SKILL.md`'s standard run block names one command that **creates and opens** the form: for example `bashy form add --def FILE --open`, or `ask`. The skill must say "open it for the human"; printing a URL is not showing it.
+2. The run uses the **trusted core**: a prebuilt, digest-pinned server (`shaped.json`), never a source rebuild on use. Step 3's failure class disappears.
+3. Every defect above is a known issue (symptom → action) until fixed, so an agent that hits one recovers in one step with no probing. Example: "`unknown flag --def` → run `<path to core> add --def …`".
+4. Waiting is one step: `wait --timeout DURATION` documented in the skill, and the key resolved automatically for the creating agent.
+5. Measure: tool calls and probes to the first shown form, and to the first answer read. Target: 1 call to show it, 1 to read it. Compare with this baseline on the same task.

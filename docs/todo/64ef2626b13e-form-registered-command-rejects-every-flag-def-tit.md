@@ -17,3 +17,12 @@ Root cause (code inspected): examples/desk/form/register.sh registers args.posit
 Classification: product defect (registration schema), not interp. Fix where it lives: declare form's flags in register.sh, or omit args.positionals so the schema is absent (nil = no validation).
 
 Verify: `bashy form add --def examples/desk/form/examples/contact.json --title T` prints an id; `bashy form list` still works; desk unit tests.
+
+## Addendum 2026-11-25: the same session hit three more defects on the form path
+
+Seen while launching a form for the umbrella Sprint 712 review. Root causes are not yet investigated, so these are recorded here, not fixed.
+1. **The source fallback is broken.** `bashy --bashsharp examples/desk/form/form.bsh add …` (also the registered command's own `exec`) rebuilds the server when the sources are newer than the cache. The rebuild resolves `examples/desk/kit v0.5.0` and `examples/desk/chart v0.1.3` and fails with "unknown revision" from the local Go module proxy. This is probably the desk-module defect tracked in umbrella Sprint 719. Workaround: run the cached `~/.cache/bashy/form/form -addr 127.0.0.1:18107 …` directly.
+2. **The owner key is not resolved automatically** when the cached binary runs directly. `wait` answered "Join this form first" on a form that binary had just created. Passing `FORM_KEY` works.
+3. **`wait` stops after a 5-minute default** that `-h` never mentions (`server/cli.go` `--timeout`).
+
+Baseline and context: pilot 9643d77f, addendum (e).
