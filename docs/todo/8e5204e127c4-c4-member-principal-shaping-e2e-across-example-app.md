@@ -3,13 +3,12 @@ id: 8e5204e127c4
 kind: feature
 title: C4 member-principal shaping e2e across example apps + 'Enable an app for consumer shaping' runbook
 seq: 3261
-status: assigned
+status: todo
 priority: p1
 created: 2026-11-20T19:14:04.928857Z
-assignee: claude-fable5.1
-sprint: 699
-sprint_id: f30c730a-f8ad-57ba-9122-6f1c2a1cd97a
-sprint_title: 'Release train 1: one hosted-plane deploy for Sprints 682/697 + live verification'
+sprint: 711
+sprint_id: 824bc632-65c8-5982-8bf9-7f69ed848391
+sprint_title: 'Train 1 follow-ups: site MCP + site attach on dhnt.io, and the deferred integration runs (C4 five-app member matrix, I1 group-shape)'
 ---
 
 Spec: umbrella docs/plan-s682-consumer-shaping-example-apps.md §C4. Consumer-first shaping (operator 2026-11-20); owner/producer side is Sprint 683.
