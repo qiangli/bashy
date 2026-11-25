@@ -16,3 +16,6 @@ Interpretation recorded in docs/sprint-712-recommendation.md section 10 (P2): af
 - an optional/external bin-managed tool
 - a whole repo as shapeware (D18: root SKILL.md, min-band L2)
 Plan each as its own story when 721 reports; each sprint is reviewed with the operator before it starts. If "optional/" and "toolchain/" meant new folders under examples/, confirm with the operator first.
+
+
+Superseded in scope (2026-11-25, D22): the operator proposed converting ALL examples to shapeware across vendor models after the spec v1.0 draft and the form PoC (umbrella todo, dogfood campaign). These per-category pilots become part of that campaign.
