@@ -62,6 +62,15 @@ The gate checks their scopes in the panel and exercises the following flow.
   an anonymous caller when they try to shape.
 - The owner tries to approve a second candidate from the old base. The refusal
   must name both the base and the active revision.
+- C pulls the approved source through the mounted MCP, edits the returned
+  `site.json` in a local temporary directory and pushes a unified diff with
+  the pulled revision. The owner's website verifier checks the candidate.
+  After owner approval, history credits C and the mounted site serves the
+  edited greeting. Replaying the push reports both the stale and active revisions.
+- The edit-only member, the unrelated account and the anonymous caller each
+  attempt both pull and push. The sandbox checks the member's scope refusal
+  and the mount's authentication challenges. M1 unit tests cover the private
+  satellite's token exchange.
 
 Each attempt writes a fresh raw log with the image identity, executable hashes,
 service output, MCP replies, verifier evidence, owner queue and history. Keep

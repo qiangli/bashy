@@ -1,4 +1,6 @@
 """Process supervisor and synthetic clients. Run only inside the disposable image."""
+import base64
+import difflib
 import json
 import os
 from pathlib import Path
@@ -6,6 +8,7 @@ import secrets
 import shutil
 import socket
 import subprocess
+import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -50,8 +53,9 @@ class Fixture(BaseHTTPRequestHandler):
                 {"path": "/", "title": "Support desk", "revision": "fixture-v1", "sections": []})
         elif self.path == "/index.md":
             mime, body = "text/markdown", "# Support desk\n"
-        elif self.path in ("/", "/published/"):
-            greeting = "Original support greeting" if self.path == "/" else "Approved support greeting"
+        elif self.path in ("/", "/published/", "/member/"):
+            greeting = {"/": "Original support greeting", "/published/": "Approved support greeting",
+                        "/member/": "Member support greeting"}[self.path]
             mime, body = "text/html", f"<html><body><h1>{greeting}</h1></body></html>"
         else:
             self.send_error(404)
@@ -169,6 +173,67 @@ def wait_version(revision):
     raise AssertionError(f"served version {last!r}, expected {revision}")
 
 
+def member_pull_push(active):
+    snapshot = shape(C, "pull", {})
+    base = snapshot["revision"]
+    site, = [f for f in snapshot["files"] if f["path"] == "site.json"]
+    with tempfile.TemporaryDirectory() as checkout:
+        path = Path(checkout) / "site.json"
+        path.write_bytes(base64.b64decode(site["content"], validate=True))
+        original = path.read_text()
+        config = json.loads(original)
+        check(base == active and config["title"] == "Approved support greeting"
+              and config["site_url"] == ORIGIN + "/published", "C pulled O's active website source")
+        config.update(title="Member support greeting", site_url=ORIGIN + "/member")
+        path.write_text(json.dumps(config, indent=2) + "\n")
+        patch = "".join(difflib.unified_diff(original.splitlines(True), path.read_text().splitlines(True),
+                                             fromfile="a/site.json", tofile="b/site.json"))
+    push = {"base_revision": base, "patch": patch}
+    for tool, args in (("shape_pull", {}), ("shape_push", push)):
+        member_refused(A, tool, call(A, tool, args))
+        for user in (ACCOUNT, None):
+            check(call(user, tool, args).get("challenge"),
+                  f"{user or 'anonymous'} refused {tool} by the mounted app grant gate")
+
+    candidate = shape(C, "push", push)
+    cid, rev = candidate["id"], candidate["rev"]
+    check(cid and rev and rev != base and candidate["base_rev"] == base and
+          candidate["principal"] == C and candidate["activation_principal"] == OWNER and
+          candidate["status"] == "verified",
+          "C's pushed patch produced a verified candidate on O's line")
+    status = owner_cli("status", APP)
+    queued, = [item for item in status["candidates"] if item["id"] == cid]
+    evidence = json.loads(Path(queued["verdict"]["evidence"]).read_text())
+    print("push verifier evidence", json.dumps(evidence), flush=True)
+    binding = evidence["binding"]
+    check(queued["verdict"]["pass"] and
+          (binding["principal"], binding["base"], binding["candidate"]) == (OWNER, base, rev)
+          and evidence["verdict"] == "pass" and
+          any(c["name"] == "checks/build.bsh" and c["status"] == "pass" for c in evidence["checks"]),
+          "O's website verifier passed the pushed revision against the pulled base")
+    check(status["active"] == base and
+          json.loads(get_page(C, "/_shaping/api/version"))["version"] == base,
+          "O's active and served versions stay at the pulled base pending approval")
+
+    approved = shape(OWNER, "approve", {"id": cid})
+    check(approved["id"] == cid and approved["rev"] == rev and approved["status"] == "approved",
+          "O approved C's pushed revision")
+    history = owner_cli("history", APP)
+    entry, = [v for v in history["versions"] if v["revision"] == rev]
+    check(history["active"] == rev and entry["principal"] == OWNER and entry["author"] == C,
+          "O's history credits C for the pushed revision")
+    wait_version(rev)
+    panel = json.loads(get_page(C, "/_shaping/api/me"))
+    check(panel["version"] == rev and panel["title"] == "Member support greeting"
+          and "<h1>Member support greeting</h1>" in get_page(C, "/"),
+          "the mounted site serves C's local edit at the approved revision")
+
+    stale = call(C, "shape_push", push)
+    check(stale.get("isError") and f"active revision changed (base {base}, active {rev})"
+          in stale["content"][0]["text"], "stale push refused with both pulled and active revisions")
+    check(owner_cli("status", APP)["active"] == rev, "stale push left the approved revision active")
+
+
 def scenario():
     wish = {"request": "Publish the support greeting", "agent": BINDING}
     for scope, circle in (("edit", "company"), ("shape", "contractor")):
@@ -253,6 +318,7 @@ def scenario():
     check(result.get("isError") and f"active revision changed (base {base}, active {rev})"
           in result["content"][0]["text"], "stale approval refused with both base and active revisions")
     check(owner_cli("status", APP)["active"] == rev, "stale approval left C's revision active")
+    member_pull_push(rev)
 
 
 def start_outpost():
