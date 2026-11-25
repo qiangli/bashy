@@ -18,6 +18,7 @@ import (
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/qiangli/yoke/pkg/accounts"
+	"github.com/qiangli/yoke/pkg/fleet"
 	"github.com/qiangli/yoke/pkg/fleet/cloudboxfake"
 )
 
@@ -33,6 +34,9 @@ type mcpConnectFixture struct {
 	mu         sync.Mutex
 	now        time.Time
 	seenBearer []string
+	children   []string
+	exchanges  []string
+	t          *testing.T
 }
 
 func newMCPConnectFixture(t *testing.T, shareWithMember, signedIn bool) *mcpConnectFixture {
@@ -46,6 +50,7 @@ func newMCPConnectFixture(t *testing.T, shareWithMember, signedIn bool) *mcpConn
 	t.Setenv("BASHY_CLOUDBOX_URL", "")
 
 	fx := &mcpConnectFixture{
+		t:    t,
 		fake: cloudboxfake.New(t),
 		now:  time.Date(2026, 11, 24, 23, 0, 0, 0, time.UTC),
 	}
@@ -153,13 +158,43 @@ func (fx *mcpConnectFixture) recordingHTTPClient() *http.Client {
 	return &http.Client{
 		Timeout: 15 * time.Second,
 		Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if r.URL.Path == "/api/v1/tokens" && r.URL.Scheme+"://"+r.URL.Host == fx.fake.URL() && r.Header.Get("Authorization") != "Bearer "+fx.memberTok {
+				fx.t.Error("child mint did not use the saved cloudbox account credential")
+			}
+			if r.URL.Path == "/api/v1/tokens/exchange" {
+				auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+				fx.mu.Lock()
+				valid := auth != fx.memberTok && slices.Contains(fx.children, auth)
+				fx.exchanges = append(fx.exchanges, auth)
+				fx.mu.Unlock()
+				if !valid {
+					fx.t.Error("satellite exchange received an account token or an unminted child")
+				}
+			}
 			if strings.HasPrefix(r.URL.Path, "/matrix/h/") {
 				auth := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 				fx.mu.Lock()
 				fx.seenBearer = append(fx.seenBearer, auth)
 				fx.mu.Unlock()
 			}
-			return http.DefaultTransport.RoundTrip(r)
+			resp, err := http.DefaultTransport.RoundTrip(r)
+			if err == nil && r.URL.Path == "/api/v1/tokens" && resp.StatusCode == http.StatusCreated {
+				raw, _ := io.ReadAll(resp.Body)
+				resp.Body.Close()
+				resp.Body = io.NopCloser(bytes.NewReader(raw))
+				var child fleet.MintedToken
+				if json.Unmarshal(raw, &child) != nil || !slices.Equal(child.Scopes, []string{"satellites:delegate", "host:proxy"}) {
+					fx.t.Error("minted child does not have exactly the two required scopes")
+				}
+				expires, _ := time.Parse(time.RFC3339, child.ExpiresAt)
+				if expires.Sub(fx.nowTime()) != time.Hour {
+					fx.t.Error("child lifetime is not one hour")
+				}
+				fx.mu.Lock()
+				fx.children = append(fx.children, child.Token)
+				fx.mu.Unlock()
+			}
+			return resp, err
 		}),
 	}
 }
@@ -174,15 +209,19 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
-func seedCloudboxAccount(t *testing.T, alias, endpoint, envVar, tokenVal string) {
+func seedCloudboxAccount(t *testing.T, alias, endpoint, envVar, tokenVal string, categories ...accounts.Category) {
 	t.Helper()
+	category := accounts.Cloudbox
+	if len(categories) != 0 {
+		category = categories[0]
+	}
 	t.Setenv(envVar, tokenVal)
 	st := accounts.Open(accounts.DefaultPath())
 	if err := st.Observe("cloudbox", []accounts.Observation{{
 		SourceKey: alias,
 		Account: accounts.Account{
 			Alias:             alias,
-			Category:          accounts.Cloudbox,
+			Category:          category,
 			Provider:          "cloudbox",
 			ProviderAccountID: alias,
 			Connections: []accounts.Connection{{
@@ -309,6 +348,20 @@ func TestMCPConnectStdioPassThroughAndRefreshPastTTL(t *testing.T) {
 		t.Fatal("expected fresh satellite bearer after expiry")
 	}
 
+	// The same session also survives the child's one-hour lifetime. Renew
+	// just before expiry, then again after an idle period beyond expiry.
+	for _, advance := range []time.Duration{49*time.Minute - 20*time.Second, 61 * time.Minute} {
+		fx.advance(advance)
+		if _, err := cs.ListTools(ctx, nil); err != nil {
+			t.Fatalf("ListTools across child expiry: %v", err)
+		}
+	}
+	fx.mu.Lock()
+	if len(fx.children) != 3 || len(fx.exchanges) != 4 || fx.exchanges[0] != fx.exchanges[1] || fx.exchanges[1] == fx.exchanges[2] || fx.exchanges[2] == fx.exchanges[3] {
+		t.Error("child was not cached and renewed at the expected expiry boundaries")
+	}
+	fx.mu.Unlock()
+
 	// 4. Revoking the owner's share mid-session causes the next call to fail
 	// naming 'not shared with you'.
 	delReq, _ := http.NewRequest(http.MethodDelete, fx.fake.URL()+"/api/v1/hosts/studio/shares/"+fx.shareID, nil)
@@ -383,6 +436,11 @@ func TestMCPConnectErrorsNameCauseAndScrubTokens(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("BASHY_FLEET_TOKEN", tc.token)
+			base := fx.fake.URL()
+			if tc.target == beforeSignIn.appURL {
+				base = beforeSignIn.fake.URL()
+			}
+			t.Setenv("BASHY_CLOUDBOX_URL", base)
 			var stdout, stderr bytes.Buffer
 			exit := runMCPConnect(context.Background(), []string{tc.target, "--json"}, mcpConnectDeps{
 				stdout: &stdout, stderr: &stderr, now: fx.nowTime,
@@ -417,5 +475,77 @@ func TestDispatchMCPConnectFrontDoorValidation(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "invalid satellite app URL") {
 		t.Fatalf("expected invalid URL error, got %q", stderr)
+	}
+}
+
+func TestMCPConnectSavedSatelliteAccountDoesNotMint(t *testing.T) {
+	fx := newMCPConnectFixture(t, true, true)
+	seedCloudboxAccount(t, "sat-acct", fx.satURL, "TEST_SAT_TOKEN", fx.memberTok, accounts.Satellite)
+	calls := 0
+	hc := &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/api/v1/tokens" {
+			t.Error("saved satellite account attempted to mint a child")
+		}
+		if r.URL.Path == "/api/v1/tokens/exchange" {
+			calls++
+			if r.Header.Get("Authorization") != "Bearer "+fx.memberTok {
+				t.Error("saved satellite credential changed")
+			}
+		}
+		return http.DefaultTransport.RoundTrip(r)
+	})}
+	var stdout, stderr bytes.Buffer
+	code := runMCPConnect(context.Background(), []string{fx.appURL, "--account", "sat-acct", "--json"}, mcpConnectDeps{
+		stdout: &stdout, stderr: &stderr, now: fx.nowTime, httpClient: hc,
+	})
+	if code != 0 || calls != 1 {
+		t.Fatalf("saved satellite path: exit=%d exchanges=%d stderr=%s", code, calls, stderr.String())
+	}
+	assertNoTokensInOutput(t, stdout.String()+stderr.String(), fx.memberTok)
+
+	other := fx.fake.AddSatellite(t, "owner@example.com", "other")
+	code = runMCPConnect(context.Background(), []string{fx.fake.SatelliteURL(other) + "/matrix/h/studio/app/site/mcp", "--account", "sat-acct", "--json"}, mcpConnectDeps{
+		stdout: &stdout, stderr: &stderr, now: fx.nowTime, httpClient: hc,
+	})
+	if code == 0 || !strings.Contains(stderr.String(), "another satellite") || calls != 1 {
+		t.Fatal("mismatched satellite account was not refused before network access")
+	}
+}
+
+func TestMCPConnectMintRefusalAndRedirectDoNotLeak(t *testing.T) {
+	for _, status := range []int{http.StatusUnauthorized, http.StatusForbidden, http.StatusInternalServerError, http.StatusTemporaryRedirect} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			fx := newMCPConnectFixture(t, true, true)
+			reached := false
+			rogue := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				reached = true
+				t.Error("mint redirect forwarded credentials")
+			}))
+			defer rogue.Close()
+			master := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/v1/tokens" || r.Header.Get("Authorization") != "Bearer "+fx.memberTok {
+					t.Error("unexpected mint request")
+				}
+				w.Header().Set("Location", rogue.URL)
+				w.WriteHeader(status)
+				json.NewEncoder(w).Encode(map[string]string{"error": fx.memberTok})
+			}))
+			defer master.Close()
+			seedCloudboxAccount(t, "refused", master.URL, "TEST_REFUSED_TOKEN", fx.memberTok)
+			var stdout, stderr bytes.Buffer
+			code := runMCPConnect(context.Background(), []string{fx.appURL, "--account", "refused", "--json"}, mcpConnectDeps{
+				stdout: &stdout, stderr: &stderr, now: fx.nowTime, httpClient: fx.recordingHTTPClient(),
+			})
+			var env mcpConnectEnvelope
+			json.Unmarshal(stdout.Bytes(), &env)
+			want := "exchange_failed"
+			if status == 401 || status == 403 {
+				want = "exchange_refused"
+			}
+			if code == 0 || env.Code != want || reached || len(fx.exchanges) != 0 {
+				t.Fatalf("mint refusal: exit=%d code=%s", code, env.Code)
+			}
+			assertNoTokensInOutput(t, stdout.String()+stderr.String(), fx.memberTok)
+		})
 	}
 }

@@ -2,6 +2,7 @@ package agentos
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"os/signal"
 	"slices"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -118,10 +120,26 @@ func connectSiteMCP(ctx context.Context, endpoint fleet.SatelliteAppEndpoint, ac
 		return nil, &connectError{"account_conflict", "selected account belongs to another satellite"}
 	}
 
-	// Both HTTP clients refuse redirects. Only the exchange sees the account bearer.
-	source := &fleet.SatelliteTokenSource{
+	// Only a saved account for this satellite may send its token directly.
+	var source mcpTokenSource = &fleet.SatelliteTokenSource{
 		Client: fleet.SatelliteClient{BaseURL: endpoint.Satellite, Token: token, HTTP: deps.httpClient},
 		Now:    deps.now,
+	}
+	if selected == nil || selected.Category != fleet.AccountSatellite {
+		hc := http.Client{Timeout: 20 * time.Second}
+		if deps.httpClient != nil {
+			hc = *deps.httpClient
+		}
+		hc.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+		now := deps.now
+		if now == nil {
+			now = time.Now
+		}
+		source = &mcpChildTokenSource{
+			minter:    fleet.TokenClient{BaseURL: base, Token: token, HTTP: &hc},
+			satellite: fleet.SatelliteClient{BaseURL: endpoint.Satellite, HTTP: deps.httpClient},
+			now:       now,
+		}
 	}
 	transport := http.DefaultTransport
 	if deps.httpClient != nil && deps.httpClient.Transport != nil {
@@ -183,8 +201,55 @@ func connectSiteMCP(ctx context.Context, endpoint fleet.SatelliteAppEndpoint, ac
 	return nil, err
 }
 
+type mcpTokenSource interface {
+	Token(context.Context) (string, error)
+}
+
+// The cloudbox account credential stays with the minter. Only a one-hour,
+// attenuated child crosses the boundary to the URL's satellite.
+type mcpChildTokenSource struct {
+	minter    fleet.TokenClient
+	satellite fleet.SatelliteClient
+	now       func() time.Time
+	mu        sync.Mutex
+	source    *fleet.SatelliteTokenSource
+	refreshAt time.Time
+}
+
+func (s *mcpChildTokenSource) Token(ctx context.Context) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.source == nil || !s.now().Before(s.refreshAt) {
+		child, err := s.minter.Create("mcp-connect-"+strings.ToLower(rand.Text()), []string{"satellites:delegate", "host:proxy"}, "1h")
+		if err != nil {
+			var refusal *fleet.TokenError
+			if errors.As(err, &refusal) {
+				message := ""
+				// Match only known causes; never forward the response body.
+				switch refusal.Message {
+				case "scope satellites:delegate is not held by the calling token":
+					message = "token lacks scope satellites:delegate"
+				case "scope host:proxy is not held by the calling token":
+					message = "scope escalation refused"
+				}
+				return "", &fleet.ProvisionError{Status: refusal.Status, Message: message}
+			}
+			return "", err
+		}
+		expires, err := time.Parse(time.RFC3339, child.ExpiresAt)
+		if err != nil || !expires.After(s.now().Add(30*time.Second)) {
+			return "", errors.New("child token has no usable expiry")
+		}
+		client := s.satellite
+		client.Token = child.Token
+		s.source = &fleet.SatelliteTokenSource{Client: client, Now: s.now}
+		s.refreshAt = expires.Add(-30 * time.Second)
+	}
+	return s.source.Token(ctx)
+}
+
 type mcpBearerTransport struct {
-	source *fleet.SatelliteTokenSource
+	source mcpTokenSource
 	base   http.RoundTripper
 }
 
