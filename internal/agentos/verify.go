@@ -29,6 +29,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	conformcli "github.com/dhnt/conform/cli"
 	"io"
 	"net/http"
 	"os"
@@ -132,13 +133,18 @@ func (l suiteLicense) String() string {
 func verifyCmd() *cobra.Command {
 	var list, asJSON bool
 	cmd := &cobra.Command{
-		Use:   "conform [suite] [flags]",
-		Short: "run bashy's formal test batteries (compat/conformance/compliance/benchmark)",
+		Use:   "conform [suite|run|cert|mutate|version] [flags]",
+		Short: "run bashy's formal test batteries, or judge an app against its CONTRACT.md",
 		Long: "verify runs bashy's formal test batteries. The four suites are a precision\n" +
 			"ladder — compatibility (vs GNU bash), conformance (measured vs POSIX suites),\n" +
 			"compliance (official certification), benchmark (agentic performance) — named so\n" +
 			"a claim is never overstated. Test suites are fetched at runtime (public) or\n" +
-			"user-supplied (licensed); bashy never vendors them.",
+			"user-supplied (licensed); bashy never vendors them.\n\n" +
+			"run, cert, mutate and version are the dhnt/conform suite, shipped in-process as\n" +
+			"an invariant: they judge any app behaviourally against its CONTRACT.md (CLI\n" +
+			"assertions plus ui page inventories), certify a candidate against a reference\n" +
+			"with a noise baseline and sealed evidence, and measure suite strength with\n" +
+			"mutants. Run `bashy conform run --help` for flags.",
 		RunE: func(c *cobra.Command, args []string) error {
 			if list || len(args) == 0 {
 				if asJSON {
@@ -155,7 +161,27 @@ func verifyCmd() *cobra.Command {
 	for _, s := range suiteRegistry() {
 		cmd.AddCommand(suiteSubcommand(s))
 	}
+	for _, name := range []string{"run", "cert", "mutate", "version"} {
+		cmd.AddCommand(conformSuiteSubcommand(name))
+	}
 	return cmd
+}
+
+// conformSuiteSubcommand hands argv verbatim to the dhnt/conform command line,
+// in-process, so `bashy conform run` and the standalone `conform run` are the
+// same code at the same version (the go.mod pin).
+func conformSuiteSubcommand(name string) *cobra.Command {
+	return &cobra.Command{
+		Use:                name,
+		Short:              "dhnt/conform " + name + " (judge an app against its CONTRACT.md)",
+		DisableFlagParsing: true,
+		RunE: func(c *cobra.Command, args []string) error {
+			if code := conformcli.Run(append([]string{name}, args...), c.OutOrStdout(), c.ErrOrStderr()); code != 0 {
+				dispatchExit(code)
+			}
+			return nil
+		},
+	}
 }
 
 func suiteSubcommand(s suiteSpec) *cobra.Command {
