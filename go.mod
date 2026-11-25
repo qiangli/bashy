@@ -346,13 +346,13 @@ require (
 	github.com/qiangli/bash/cmd v0.0.0-20261121101805-42efe30317c4 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261123172747-32d78887eb27 // indirect
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261125125146-0b4ba3944687 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261125140535-764d9dfcf361 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
 	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261125101800-57ea4c79abad // indirect
 	github.com/qiangli/yoke/pkg/oci v0.0.0-20261125101800-57ea4c79abad // indirect
 	github.com/qiangli/yoke/pkg/provider v0.0.0-20261125101800-57ea4c79abad // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/quic-go/quic-go v0.63.0 // indirect
+	github.com/quic-go/quic-go v0.60.0 // indirect
 	github.com/quic-go/webtransport-go v0.11.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.8 // indirect
@@ -430,7 +430,7 @@ require (
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.2 // indirect
 	go.opentelemetry.io/contrib/bridges/otelslog v0.21.0 // indirect
-	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.72.0 // indirect
+	go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin v0.69.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.72.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/runtime v0.72.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.23.0 // indirect
