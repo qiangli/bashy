@@ -4,7 +4,7 @@ seq: 18
 form: page
 type: decision
 title: 'Extend bashy: small verbs, Bash# skill-scripts, shaping hooks, and the example → optional → core levels'
-description: 'How every agent adds or changes bashy features, runbooks and shaped apps: compose small JSON verbs in Bash# skill-scripts, design a shaping hook, start new helpers as examples and graduate them to optional then core, keep shared services provider-agnostic — WHEN adding a command, writing a runbook/kb page, planning a feature, or shaping an app (keywords: rod not fish, unix, compose, skill-script, bsh, shaping, extension point, example, optional, core, alpha, beta, graduate, maturity, experimental, preview, supported, provider-agnostic)'
+description: 'How every agent adds or changes bashy features, runbooks and shaped apps: compose small JSON verbs in Bash# skill-scripts, design a shaping hook, start new helpers as examples and graduate them to optional then core, keep shared services provider-agnostic — WHEN adding a command, writing a runbook/kb page, planning a feature, or shaping an app (keywords: rod not fish, kiss, mvp, scope, overengineering, unix, compose, skill-script, bsh, shaping, extension point, example, optional, core, alpha, beta, graduate, maturity, experimental, preview, supported, provider-agnostic)'
 tags:
     - extending
     - shaping
@@ -38,8 +38,23 @@ New user-facing helpers start as examples. A feature graduates in a release on e
 
 6. **Provider-agnostic.** Shared services (LLM door, metering, storage, …) work with any backend, including local ones such as ollama. A vendor backend (e.g. a cloud LLM) is a configuration, not a code path the feature depends on.
 
+7. **Smallest slice for a named use case (KISS/MVP).** Build for one real use case you can name, for example "an owner shares one app with two support members who shape it, and the owner approves". Deliver the smallest change that serves it, merge it, then iterate. No speculative options, roles, schema fields or abstractions. A gap a review finds is recorded as future input, not added as work. A feature an owner could shape later is future input until someone needs it: that is what shaping is for. A fix closes the defect and nothing more.
+
 ## Check before you build
 
 - Search first: `bashy commands --agentic`, `bashy kb search "<task>"`, `bashy skill list`.
+- Name the use case you are building for, and the smallest slice that serves it.
 - Name the level you are building at and the verbs you compose.
 - Name the shaping hook (which file or verb a user can shape).
+
+## Agent-first CLI parity
+
+Bashy is built for agentic tools to easily discover, use and manage every feature through its CLI. Humans can run the same CLI normally; it is not agent-exclusive. Human-oriented terminal ergonomics and TUI polish are not requirements.
+
+Bashy app/* web interfaces are designed to be human-friendly. Every feature and management action available through a web app must have an equivalent Bashy CLI operation on the same entities, with equivalent identity, permissions and approval rules.
+
+Expose discoverable help, scriptable/composable operations, structured inputs/outputs, stable references and actionable errors. Prefer reusable Bash# command/skill/script wrappers composing existing APIs and verbs.
+
+Agents may also inspect or use web apps through bashy browser --live, REST APIs or web URLs. These are valid alternative paths, but can be more cumbersome or error-prone; they do not replace the requirement for easy agent use through Bashy CLI. Likewise, humans may use the CLI even though the web UI is tailored to them.
+
+Audit each app with a UI-to-CLI action matrix and verify equivalent results/state changes and denied-access behavior. Reuse working commands and repair only demonstrated gaps.
