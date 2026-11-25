@@ -60,17 +60,17 @@ func runMCPConnect(ctx context.Context, args []string, deps mcpConnectDeps) int 
 	envelope := mcpConnectEnvelope{SchemaVersion: mcpConnectSchemaVersion}
 	var err error
 	exit := 1
-	switch parseErr := flags.Parse(args); {
-	case parseErr != nil || flags.NArg() != 1 || *help || (flags.Changed("account") && strings.TrimSpace(*account) == ""):
+	parseErr := flags.Parse(args)
+	if *help {
+		fmt.Fprint(deps.stderr, mcpUsage)
+		return 2
+	}
+	if parseErr != nil || flags.NArg() != 1 || (flags.Changed("account") && strings.TrimSpace(*account) == "") {
 		exit = 2
-		if *help {
-			fmt.Fprint(deps.stderr, mcpUsage)
-			return exit
-		}
 		// A malformed argument can contain credentials.
 		*asJSON = *asJSON || slices.Contains(args, "--json")
 		err = &connectError{"usage_error", "usage: bashy mcp connect URL [--account REF] [--json]"}
-	default:
+	} else {
 		var endpoint fleet.SatelliteAppEndpoint
 		endpoint, err = fleet.ParseSatelliteAppURL(flags.Arg(0))
 		if err != nil {
@@ -112,7 +112,7 @@ func connectSiteMCP(ctx context.Context, endpoint fleet.SatelliteAppEndpoint, ac
 		}
 	}
 	if token == "" {
-		return nil, &connectError{"no_account_token", "no account token; select a saved account with --account or sign in"}
+		return nil, &connectError{"no_account_token", "no account token. Select a saved account with --account or sign in"}
 	}
 	if selected != nil && selected.Category == fleet.AccountSatellite && !strings.EqualFold(fleet.URLOrigin(base), endpoint.Satellite) {
 		return nil, &connectError{"account_conflict", "selected account belongs to another satellite"}
@@ -198,7 +198,7 @@ func (t *mcpBearerTransport) RoundTrip(req *http.Request) (*http.Response, error
 		if errors.As(err, &refusal) {
 			switch refusal.Status {
 			case http.StatusUnauthorized:
-				return nil, &connectError{"exchange_refused", "token exchange refused; the account token is invalid or expired"}
+				return nil, &connectError{"exchange_refused", "token exchange refused (invalid or expired account token)"}
 			case http.StatusForbidden:
 				reason := "check satellite admission, browser sign-in, and account token scopes host:proxy and satellites:delegate"
 				switch refusal.Message {
@@ -209,7 +209,7 @@ func (t *mcpBearerTransport) RoundTrip(req *http.Request) (*http.Response, error
 				case "token lacks scope satellites:delegate":
 					reason = "the account token lacks satellites:delegate"
 				}
-				return nil, &connectError{"exchange_refused", "token exchange refused; " + reason}
+				return nil, &connectError{"exchange_refused", "token exchange refused (" + reason + ")"}
 			}
 		}
 		return nil, &connectError{"exchange_failed", "could not exchange the account token on the satellite"}
@@ -220,9 +220,13 @@ func (t *mcpBearerTransport) RoundTrip(req *http.Request) (*http.Response, error
 	if err != nil {
 		return nil, err
 	}
-	if resp.StatusCode == http.StatusForbidden {
+	if resp.StatusCode/100 != 2 {
 		resp.Body.Close()
-		return nil, &connectError{"not_shared", "app not shared with you (HTTP 403)"}
+		if resp.StatusCode == http.StatusForbidden {
+			return nil, &connectError{"not_shared", "app not shared with you (HTTP 403)"}
+		}
+		// Gateway diagnostics may quote request headers. Only report the status.
+		return nil, &connectError{"connect_failed", fmt.Sprintf("site MCP returned HTTP %d", resp.StatusCode)}
 	}
 	return resp, nil
 }

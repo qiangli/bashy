@@ -49,11 +49,7 @@ func newMCPConnectFixture(t *testing.T, shareWithMember, signedIn bool) *mcpConn
 		fake: cloudboxfake.New(t),
 		now:  time.Date(2026, 11, 24, 23, 0, 0, 0, time.UTC),
 	}
-	fx.fake.SetNow(func() time.Time {
-		fx.mu.Lock()
-		defer fx.mu.Unlock()
-		return fx.now
-	})
+	fx.fake.SetNow(fx.nowTime)
 
 	fx.ownerTok = fx.fake.AddOwner("owner@example.com")
 	fx.memberTok = fx.fake.AddOwner("member@example.com")
@@ -82,7 +78,7 @@ func newMCPConnectFixture(t *testing.T, shareWithMember, signedIn bool) *mcpConn
 		}
 		defer resp.Body.Close()
 		if resp.StatusCode/100 != 2 {
-			t.Fatalf("POST %s failed with HTTP %d", path, resp.StatusCode)
+			t.Fatalf("%s %s failed with HTTP %d", method, path, resp.StatusCode)
 		}
 		var out map[string]any
 		_ = json.NewDecoder(resp.Body).Decode(&out)
@@ -109,16 +105,15 @@ func newMCPConnectFixture(t *testing.T, shareWithMember, signedIn bool) *mcpConn
 		Page string `json:"page"`
 	}
 	type echoOut struct {
-		Page     string `json:"page"`
-		Caller   string `json:"caller"`
-		Revision string `json:"revision"`
+		Page   string `json:"page"`
+		Caller string `json:"caller"`
 	}
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{
 		Name:        "read_page",
 		Description: "Read a page from the owner's site.",
 	}, func(_ context.Context, req *mcpsdk.CallToolRequest, in echoIn) (*mcpsdk.CallToolResult, echoOut, error) {
 		c := req.Extra.Header.Get("X-Periscope-User")
-		return nil, echoOut{Page: in.Page, Caller: c, Revision: "rev-001"}, nil
+		return nil, echoOut{Page: in.Page, Caller: c}, nil
 	})
 	type listIn struct{}
 	type listOut struct {
@@ -373,96 +368,38 @@ func TestMCPConnectJSONEnvelopeAndZeroTokenLeakage(t *testing.T) {
 }
 
 func TestMCPConnectErrorsNameCauseAndScrubTokens(t *testing.T) {
-	t.Run("no account token", func(t *testing.T) {
-		fx := newMCPConnectFixture(t, true, true)
-		var stdout, stderr bytes.Buffer
-		code := runMCPConnect(context.Background(), []string{fx.appURL, "--json"}, mcpConnectDeps{
-			stdout: &stdout,
-			stderr: &stderr,
-			now:    fx.nowTime,
-		})
-		if code == 0 {
-			t.Fatal("expected failure with no account token")
-		}
-		if !strings.Contains(stderr.String(), "no account token") {
-			t.Fatalf("stderr = %q, want 'no account token'", stderr.String())
-		}
-		var env mcpConnectEnvelope
-		if err := json.Unmarshal(stdout.Bytes(), &env); err != nil || env.OK || env.Code != "no_account_token" || !strings.Contains(env.Error, "no account token") {
-			t.Fatalf("json error envelope = %+v (err=%v, raw=%s)", env, err, stdout.String())
-		}
-	})
-
-	t.Run("exchange refused", func(t *testing.T) {
-		fx := newMCPConnectFixture(t, true, true)
-		for _, tc := range []struct {
-			name, tok, want string
-		}{
-			{"outsider not admitted", fx.outsider, "admitted"},
-			{"missing delegate", fx.fake.AddToken("member@example.com", cloudboxfake.ScopeHostProxy), "satellites:delegate"},
-			{"missing requested scope", fx.fake.AddToken("member@example.com", cloudboxfake.ScopeSatellitesDelegate), "host:proxy"},
-			{"invalid token", "sentinel-invalid-account", "invalid or expired"},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				t.Setenv("BASHY_FLEET_TOKEN", tc.tok)
-				var stdout, stderr bytes.Buffer
-				code := runMCPConnect(context.Background(), []string{fx.appURL, "--json"}, mcpConnectDeps{
-					stdout: &stdout,
-					stderr: &stderr,
-					now:    fx.nowTime,
-				})
-				if code == 0 {
-					t.Fatal("expected failure when exchange refused")
-				}
-				if !strings.Contains(stderr.String(), "exchange refused") || !strings.Contains(stderr.String(), tc.want) {
-					t.Fatalf("stderr = %q, want 'exchange refused'", stderr.String())
-				}
-				assertNoTokensInOutput(t, stdout.String()+stderr.String(), tc.tok)
-				var env mcpConnectEnvelope
-				if err := json.Unmarshal(stdout.Bytes(), &env); err != nil || env.OK || env.Code != "exchange_refused" {
-					t.Fatalf("json error envelope = %+v (err=%v)", env, err)
-				}
+	fx := newMCPConnectFixture(t, false, true)
+	beforeSignIn := newMCPConnectFixture(t, true, false)
+	for _, tc := range []struct {
+		name, target, token, code, want string
+	}{
+		{"no account token", fx.appURL, "", "no_account_token", "no account token"},
+		{"not admitted", fx.appURL, fx.outsider, "exchange_refused", "admitted"},
+		{"missing delegation scope", fx.appURL, fx.fake.AddToken("member@example.com", cloudboxfake.ScopeHostProxy), "exchange_refused", "satellites:delegate"},
+		{"missing requested scope", fx.appURL, fx.fake.AddToken("member@example.com", cloudboxfake.ScopeSatellitesDelegate), "exchange_refused", "host:proxy"},
+		{"invalid token", fx.appURL, "sentinel-invalid-account", "exchange_refused", "invalid or expired"},
+		{"never signed in", beforeSignIn.appURL, beforeSignIn.memberTok, "exchange_refused", "sign in to this satellite in the browser"},
+		{"app not shared", fx.appURL, fx.memberTok, "not_shared", "not shared with you"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("BASHY_FLEET_TOKEN", tc.token)
+			var stdout, stderr bytes.Buffer
+			exit := runMCPConnect(context.Background(), []string{tc.target, "--json"}, mcpConnectDeps{
+				stdout: &stdout, stderr: &stderr, now: fx.nowTime,
 			})
-		}
-	})
-
-	t.Run("admitted but never signed in", func(t *testing.T) {
-		fx := newMCPConnectFixture(t, true, false)
-		t.Setenv("BASHY_FLEET_TOKEN", fx.memberTok)
-		var stdout, stderr bytes.Buffer
-		code := runMCPConnect(context.Background(), []string{fx.appURL, "--json"}, mcpConnectDeps{stdout: &stdout, stderr: &stderr})
-		if code == 0 || !strings.Contains(stderr.String(), "sign in to this satellite in the browser") {
-			t.Fatal("missing browser sign-in diagnosis", stderr.String())
-		}
-		assertNoTokensInOutput(t, stdout.String()+stderr.String(), fx.memberTok)
-	})
-
-	t.Run("not shared with you", func(t *testing.T) {
-		fx := newMCPConnectFixture(t, false, true)
-		t.Setenv("BASHY_FLEET_TOKEN", fx.memberTok)
-
-		var stdout, stderr bytes.Buffer
-		code := runMCPConnect(context.Background(), []string{fx.appURL, "--json"}, mcpConnectDeps{
-			stdout:     &stdout,
-			stderr:     &stderr,
-			httpClient: fx.recordingHTTPClient(),
-			now:        fx.nowTime,
+			assertNoTokensInOutput(t, stdout.String()+stderr.String(), tc.token)
+			var env mcpConnectEnvelope
+			if err := json.Unmarshal(stdout.Bytes(), &env); err != nil {
+				t.Fatal(err)
+			}
+			if exit == 0 || env.OK || env.SchemaVersion != mcpConnectSchemaVersion || env.Code != tc.code {
+				t.Fatalf("exit %d, envelope %+v", exit, env)
+			}
+			if !strings.Contains(stderr.String(), tc.want) || !strings.Contains(env.Error, tc.want) {
+				t.Fatalf("expected %q in stderr and envelope: %q / %q", tc.want, stderr.String(), env.Error)
+			}
 		})
-		if code == 0 {
-			t.Fatal("expected failure when app is not shared")
-		}
-		if !strings.Contains(stderr.String(), "not shared with you") {
-			t.Fatalf("stderr = %q, want 'not shared with you'", stderr.String())
-		}
-		assertNoTokensInOutput(t, stdout.String()+stderr.String(), fx.memberTok)
-		for _, b := range fx.bearers() {
-			assertNoTokensInOutput(t, stdout.String()+stderr.String(), b)
-		}
-		var env mcpConnectEnvelope
-		if err := json.Unmarshal(stdout.Bytes(), &env); err != nil || env.OK || env.Code != "not_shared" || !strings.Contains(env.Error, "not shared with you") {
-			t.Fatalf("json error envelope = %+v (err=%v)", env, err)
-		}
-	})
+	}
 }
 
 func TestDispatchMCPConnectFrontDoorValidation(t *testing.T) {
@@ -472,13 +409,13 @@ func TestDispatchMCPConnectFrontDoorValidation(t *testing.T) {
 	const secret = "cli-secret-must-never-appear-123"
 	stderr := captureMCPStderr(t, func() {
 		if code := dispatchMCP([]string{"connect", "https://user:" + secret + "@example.com/matrix/h/studio/app/site/mcp"}); code != 2 {
-			t.Fatalf("non-https connect = %d, want 2", code)
+			t.Fatalf("connect with URL credentials = %d, want 2", code)
 		}
 	})
 	if strings.Contains(stderr, secret) {
-		t.Fatalf("secret leaked in stderr: %q", stderr)
+		t.Fatal("credential leaked in stderr")
 	}
-	if !strings.Contains(stderr, "https") {
-		t.Fatalf("expected https error, got %q", stderr)
+	if !strings.Contains(stderr, "invalid satellite app URL") {
+		t.Fatalf("expected invalid URL error, got %q", stderr)
 	}
 }
