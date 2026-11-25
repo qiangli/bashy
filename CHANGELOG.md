@@ -31,16 +31,57 @@ frozen release candidate before the tag.
 
 ## [Unreleased]
 
-### Added
+## [1.0.0-rc.41] — 2026-11-25
+
+The first promoted release since `v1.0.0-rc.37`. `v1.0.0-rc.40-dev` was
+published as a pre-release and never promoted (its Windows tier check
+failed); its candidate notes below ship in this release together with the
+fix. Build coordinate: Go 1.27, toolchain go1.27.4; Bash compatibility 5.3.
+
+### Fixed since the rc.40 candidate
+
+- **Windows: Go adapters build on first use with a cold cache.** The
+  dispatcher exports the adapter cache root in drive form, so the first-use
+  build lands where the dispatcher looks for it. On rc.40, a fresh install
+  without `BASHY_ADAPTER_CACHE` set failed the first run of every Go adapter
+  on Windows.
+
+### Added since the rc.40 candidate
 
 - `bashy mcp serve --transport http --hosted`: a third serving profile beside
   `--outpost` and `--tools site`, for callers who have no host. Every request
   carries a master-signed, short-lived per-call identity; each executing call
   runs as a child process in a scratch home removed after it, under
   `--timeout` and `--max-output`; shell sessions are not served; the caller
-  is the principal in the audit line. See `docs/mcp-server.md`.
+  is the principal in the audit line. A gated call runs only after the
+  caller approved it, and the caller's vault credentials are projected into
+  the call. See `docs/mcp-server.md`.
+- `bashy mcp connect`: bridges a local MCP client to an app on a satellite
+  as a member. It exchanges only renewable, attenuated child tokens, keeps
+  the owner's per-app decisions on every call, and reports gateway failures
+  without reflecting response bodies.
+- **Agent-ready sites.** Native site commands and the generic
+  `<owner>/site` template: `/agents.txt`, `Link` headers, Markdown twins and
+  JSON-LD; a site MCP tool profile (`list_pages`, `read_page`, `cite`, and
+  owner-gated shape tools); verified bashy agents with signed site verbs,
+  bound to the site's own origins. Members with the matching scope can pull
+  a site's source and push a patch.
+- **Shaping scopes.** `shape` enforces site member scopes, and owners get
+  scope commands. The website example adds visitor personalization wishes
+  (`wishes ls|add|rm`), a scope-gated member wish box, and follows the
+  owner's approved revision. Access tiers use one vocabulary: anonymous,
+  account, member, owner.
+- **Desk page** (`examples/desk`): a meeting and workshop page on the desk
+  verbs: join by short code, organizer, participant and display faces; poll,
+  form, brainstorm, book, note, embed and timer blocks; live presence and a
+  speaking queue; export to Markdown, HTML and PDF. Notepad, chart,
+  calendar, viewer and brainstorm embed in a page, and page edits keep a
+  revision history with undo.
+- New examples: `release-mirror` (bashy as the LAN install server; it
+  serves the outpost installers with `BASHY_RELEASE_BASE` pre-set) and
+  `trove` (a virtual drive over Google Drive and GitHub).
 
-## [1.0.0-rc.40] — 2026-11-22 (candidate)
+## [1.0.0-rc.40] — 2026-11-22 (candidate, never promoted; ships in rc.41)
 
 Everything user-visible merged since `v1.0.0-rc.37` (the last promoted
 release). `v1.0.0-rc.38-dev` and `v1.0.0-rc.39-dev` were tagged but never
