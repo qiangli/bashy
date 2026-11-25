@@ -1072,8 +1072,8 @@ github.com/qiangli/gotreesitter v0.0.0-20261121101804-5522e72a297d h1:J+o7c0QM7x
 github.com/qiangli/gotreesitter v0.0.0-20261121101804-5522e72a297d/go.mod h1:lHua6RLf+ZxT1WN6UqODeefMxRPCeaVlzPXjSrZJM74=
 github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab h1:OHRJGrZUjF6p04I8boHvTL3eqLHkcfYm5XFOfVs4DcE=
 github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab/go.mod h1:I2nRWPzJSo6Di2rMFEbnKuWFzlQsc8M/GhlYJ8f/PZU=
-github.com/qiangli/outpost v0.14.38-0.20261125070317-3719345614b4 h1:JbRbgPAnERKAuNznxx3mz5S0UgzWxQTnNT57l32jry0=
-github.com/qiangli/outpost v0.14.38-0.20261125070317-3719345614b4/go.mod h1:rRtseSyTeP49oir2qwGXQh2XS/tma3mZCZj3Z7pMy4g=
+github.com/qiangli/outpost v0.14.38-0.20261125101530-dec940bac495 h1:RThp+IoQnB6TUD2u8fWGDrxysmSqgo6vZfD+IhSo6R4=
+github.com/qiangli/outpost v0.14.38-0.20261125101530-dec940bac495/go.mod h1:rRtseSyTeP49oir2qwGXQh2XS/tma3mZCZj3Z7pMy4g=
 github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb h1:sZ0O1FtouYq/ieqiPwCA5s2SQrsTCYTHxJN0PMR7RTw=
 github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb/go.mod h1:G9TZ3lljDx9Cy/MDxevTV4W+VmBelEAF+SJIHLc+zrQ=
 github.com/qiangli/readline v0.1.4-0.20261121101804-6ed12265d8dd h1:Wglq9xjlWIA4awX2VEzAQ7SThH9ahm9hgE+R1duffl0=
