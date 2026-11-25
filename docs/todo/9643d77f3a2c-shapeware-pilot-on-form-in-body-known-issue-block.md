@@ -26,3 +26,12 @@ Measure: tool calls to get past the bug (baseline 2026-11-25: 5), whether checks
 - Name the existing CLI↔serve contract **bashy-ui-v1** in the form README: the document envelope `{schema_version, kind, title, fields|blocks, actions}` (form fields ∪ page blocks vocabulary) plus the existing kit routes POST /api/action, GET /api/state, GET /api/export, GET /api/events. Extend kit/contracttest to the envelope.
 - Known gap: a fence calls `RUNNER <verb> <file>`, but form expects `add --def FILE`. Close it together with 64ef2626 (accept a positional file).
 - Acceptance tests that drive a browser run on the gate host, never the dev box.
+
+## Addendum 2026-11-25 (b): raw view of a .bsh (operator agreed)
+
+Viewing a `.bsh` as a page reuses existing pieces; there is no new verb.
+- **Parse:** sh/syntax already parses blocks (`SourceBlock`: language, alias, runner, body). Projecting a face (`--skill` etc.) should use the parser, not the hand-rolled line loops in form.bsh and hello.bsh.
+- **Convert:** add `.bsh` as a `bashy lens` input (yoke/pkg/lens), `lens -f bsh -t md`. The skill body becomes prose, the script becomes `bash` code blocks, `~~~feature` becomes a status table, and `~~~ui` becomes a block that renders as a static preview.
+- **Render:** kit/render (goldmark + fence overrides, as charts already do) gets `feature` and `ui` block renderers; then `lens -f bsh -t md F | viewer`.
+- **Rule: rendering is not running.** A raw view never executes runners; the ui face is a static preview with no working actions. HTML/CSS/JS is output only (the default fish, sanitized); the source stays `.bsh`.
+- Reference artifact: the hello-world walkthrough (sprint 712 thread, 2026-11-25): hello.bsh with script/skill/ui/feature faces, verified-with-tbd release, field shaping, undo, upstream.
