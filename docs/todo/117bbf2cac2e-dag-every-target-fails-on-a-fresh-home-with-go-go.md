@@ -4,11 +4,14 @@ kind: bug
 title: 'dag: every target fails on a fresh HOME with ''go: go.mod file not found'' before the body runs'
 seq: 3317
 status: todo
-priority: p2
+priority: p1
 labels:
     - dag
     - fresh-home
 created: 2026-11-25T16:03:27.443249Z
+sprint: 721
+sprint_id: 69fc2c51-8faf-58e7-83ac-f27007837ae7
+sprint_title: 'Shapeware pilot on form: spec v0.1 layout, lifecycle, one-step launch'
 ---
 
 Seen 2026-11-25 (umbrella Sprint 712, testing the shapeware lifecycle dag.md). Repro on the dev box:
