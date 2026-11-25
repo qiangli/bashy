@@ -49,3 +49,13 @@ Other mesh patterns are recorded as future input; they are not part of this pilo
 - a `<bashy-face src=… face=ui>` web component consuming bashy-ui-v1
 - the bashy-ui-v1 wire as the integration point for any framework, plus MCP
 - the browser extension's Shape button reading the page's companion
+
+## Addendum 2026-11-25 (d): no converter for the UI face (operator: no reinventing the wheel)
+
+The UI face is a restricted profile of semantic HTML/CSS, so it needs no parser/converter. This SUPERSEDES addendum (b)'s `lens -f bsh -t md` and the `feature`/`ui` render overrides in kit/render for the UI face:
+- **UI face:** the `~~~ui` body is restricted HTML, served as-is to the browser (visual). Audio walks the same semantic page with the CSS speech rules (`@media speech`), as screen readers already do.
+- **What remains, all already existing:**
+  - the face split, using the sh/syntax `SourceBlock` (replace the hand-rolled loops)
+  - the profile check, by tightening the kit's bluemonday allowlist and keeping the self-only CSP: semantic elements only, no inline style or handlers, no page JS beyond kit.js
+- **Raw view of a whole .bsh:** stays the notepad's plain-text view (worked 2026-11-25). A rendered view is not in the MVP.
+- **Case 1 (form):** the form JSON stays as data; the form server already compiles it into kit HTML.
