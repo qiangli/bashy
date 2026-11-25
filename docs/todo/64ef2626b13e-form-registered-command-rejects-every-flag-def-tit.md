@@ -29,3 +29,13 @@ Seen while launching a form for the umbrella Sprint 712 review. Root causes are 
 3. **`wait` stops after a 5-minute default** that `-h` never mentions (`server/cli.go` `--timeout`).
 
 Baseline and context: pilot 9643d77f, addendum (e).
+
+## Addendum 2026-11-25 (b): forms land in another app's store (shared fixed address)
+
+Seen: the form client defaults to `127.0.0.1:18107`. On the dev box that address was held by a **custom app's own form server** (`team-signup`, started 11-22 from its custom-app folder with its own `-data`). Every `add`/`show`/`wait` in this session went to that server, so five unrelated review forms, including operator answers, were stored inside `team-signup`'s data (9 forms in its store). The client never checks which app or store it is talking to. Two of those forms stayed `pending` with no answers after the operator submitted. Whether that is linked is unknown; not reproduced yet.
+
+Expected: a form-based app either uses its own address or the client refuses (or warns) when the server at the address is not the default form store.
+
+Workaround used: start a private server `form serve -data DIR -addr 127.0.0.1:18117` and pass `-data DIR -addr …` to every client call.
+
+Root cause not investigated (root cause first, before any fix; Sprint 721 story).
