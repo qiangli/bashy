@@ -1,0 +1,1416 @@
+{
+  "commit": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+  "evidence": "umbrella docs/sprint-719-evidence.md (Sprint 719 tier verdict); raw runs: tier-smoke kit .gfy-out/tier-smoke-rc41/runs/20261125t*",
+  "folds": {
+    "tier-all-native-darwin": {
+      "checks": {
+        "fold": {
+          "check": "tier-all-native",
+          "details": {
+            "leaves": {
+              "tier1": {
+                "candidate": {
+                  "bashy": {
+                    "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+                    "drift": false,
+                    "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+                  },
+                  "outpost": {
+                    "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+                    "drift": false,
+                    "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+                  },
+                  "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+                  "yoke": {
+                    "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+                    "drift": false,
+                    "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+                  }
+                },
+                "checks": {
+                  "tier1": {
+                    "check": "tier1",
+                    "details": {
+                      "budget_s": 300,
+                      "host": "macos-host",
+                      "os": "darwin",
+                      "probes": {
+                        "arith": {
+                          "reason": "arithmetic 6*7=42",
+                          "verdict": "PASS"
+                        },
+                        "commands": {
+                          "reason": "commands --agentic exit 0, 29 bashy lines recorded",
+                          "verdict": "PASS"
+                        },
+                        "coreutil": {
+                          "reason": "seq 1 3 exact",
+                          "verdict": "PASS"
+                        },
+                        "inspect": {
+                          "reason": "inspect context schema bashy-context-v1",
+                          "verdict": "PASS"
+                        },
+                        "pipeline": {
+                          "reason": "pipeline counted 2 lines",
+                          "verdict": "PASS"
+                        },
+                        "winpath": {
+                          "reason": "n/a (OS=darwin)",
+                          "verdict": "PASS"
+                        }
+                      },
+                      "remote_rc": 0
+                    },
+                    "evidence": [
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160037z-tier1-darwin/tier1/commands.log",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160037z-tier1-darwin/tier1/darwin.err",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160037z-tier1-darwin/tier1/darwin.out",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160037z-tier1-darwin/tier1/probe.sh"
+                    ],
+                    "reason": "arith=PASS pipeline=PASS coreutil=PASS commands=PASS inspect=PASS winpath=PASS",
+                    "recorded_at": "2026-11-25T16:00:38Z",
+                    "verdict": "PASS"
+                  }
+                },
+                "dry_run": false,
+                "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160037z-tier1-darwin",
+                "finished_at": "2026-11-25T16:00:39Z",
+                "host": "macos-host",
+                "os": "darwin",
+                "overall": "PASS",
+                "schema": "dhnt.tier-smoke/v1",
+                "started_at": "2026-11-25T16:00:37Z",
+                "target": "tier1"
+              },
+              "tier2": {
+                "candidate": {
+                  "bashy": {
+                    "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+                    "drift": false,
+                    "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+                  },
+                  "outpost": {
+                    "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+                    "drift": false,
+                    "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+                  },
+                  "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+                  "yoke": {
+                    "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+                    "drift": false,
+                    "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+                  }
+                },
+                "checks": {
+                  "tier2": {
+                    "check": "tier2",
+                    "details": {
+                      "budget_s": 480,
+                      "host": "macos-host",
+                      "os": "darwin",
+                      "probes": {
+                        "dag": {
+                          "reason": "node-a before node-b",
+                          "verdict": "PASS"
+                        },
+                        "presence": {
+                          "reason": "loom/sdlc --help print usage",
+                          "verdict": "PASS"
+                        },
+                        "residue": {
+                          "reason": "workdir removed",
+                          "verdict": "PASS"
+                        },
+                        "sprint": {
+                          "reason": "sprint add/show on the isolated board",
+                          "verdict": "PASS"
+                        },
+                        "weave": {
+                          "reason": "weave add/list/abandon/prune round-trip, list clean",
+                          "verdict": "PASS"
+                        }
+                      },
+                      "remote_rc": 0
+                    },
+                    "evidence": [
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160039z-tier2-darwin/tier2/commands.log",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160039z-tier2-darwin/tier2/darwin.err",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160039z-tier2-darwin/tier2/darwin.out",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160039z-tier2-darwin/tier2/probe.sh"
+                    ],
+                    "reason": "weave=PASS dag=PASS sprint=PASS presence=PASS residue=PASS",
+                    "recorded_at": "2026-11-25T16:00:42Z",
+                    "verdict": "PASS"
+                  }
+                },
+                "dry_run": false,
+                "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160039z-tier2-darwin",
+                "finished_at": "2026-11-25T16:00:42Z",
+                "host": "macos-host",
+                "os": "darwin",
+                "overall": "PASS",
+                "schema": "dhnt.tier-smoke/v1",
+                "started_at": "2026-11-25T16:00:39Z",
+                "target": "tier2"
+              },
+              "tier3": {
+                "candidate": {
+                  "bashy": {
+                    "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+                    "drift": false,
+                    "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+                  },
+                  "outpost": {
+                    "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+                    "drift": false,
+                    "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+                  },
+                  "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+                  "yoke": {
+                    "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+                    "drift": false,
+                    "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+                  }
+                },
+                "checks": {
+                  "tier3": {
+                    "check": "tier3",
+                    "details": {
+                      "budget_s": 900,
+                      "host": "macos-host",
+                      "image": "localhost/bashy:v1.0.0-rc.41-dev-linux-arm64",
+                      "os": "darwin",
+                      "probes": {
+                        "denial": {
+                          "reason": "privileged create refused 403 with a sandbox: body",
+                          "verdict": "PASS"
+                        },
+                        "engine": {
+                          "reason": "engine up, image localhost/bashy:v1.0.0-rc.41-dev-linux-arm64 present",
+                          "verdict": "PASS"
+                        },
+                        "residue": {
+                          "reason": "scratch removed",
+                          "verdict": "PASS"
+                        },
+                        "run": {
+                          "reason": "echo exact exit 0, bad command rc=127, no residue",
+                          "verdict": "PASS"
+                        },
+                        "units": {
+                          "reason": "podman+sandbox overlay-enabled, overlay removed",
+                          "verdict": "PASS"
+                        }
+                      },
+                      "remote_rc": 0
+                    },
+                    "evidence": [
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160632z-tier3-darwin/tier3/commands.log",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160632z-tier3-darwin/tier3/darwin.err",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160632z-tier3-darwin/tier3/darwin.out",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160632z-tier3-darwin/tier3/probe.sh"
+                    ],
+                    "reason": "engine=PASS run=PASS units=PASS denial=PASS residue=PASS",
+                    "recorded_at": "2026-11-25T16:06:35Z",
+                    "verdict": "PASS"
+                  }
+                },
+                "dry_run": false,
+                "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160632z-tier3-darwin",
+                "finished_at": "2026-11-25T16:06:36Z",
+                "host": "macos-host",
+                "os": "darwin",
+                "overall": "PASS",
+                "schema": "dhnt.tier-smoke/v1",
+                "started_at": "2026-11-25T16:06:32Z",
+                "target": "tier3"
+              }
+            },
+            "note": "",
+            "os": "darwin"
+          },
+          "evidence": [],
+          "reason": "tier1+tier2+tier3 on darwin",
+          "recorded_at": "2026-11-25T16:12:02Z",
+          "verdict": "PASS"
+        }
+      },
+      "dry_run": false,
+      "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t161201z-tier-all-native-darwin",
+      "finished_at": "2026-11-25T16:12:02Z",
+      "leaves": {
+        "tier1": {
+          "candidate": {
+            "bashy": {
+              "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+              "drift": false,
+              "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+            },
+            "outpost": {
+              "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+              "drift": false,
+              "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+            },
+            "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+            "yoke": {
+              "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+              "drift": false,
+              "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+            }
+          },
+          "checks": {
+            "tier1": {
+              "check": "tier1",
+              "details": {
+                "budget_s": 300,
+                "host": "macos-host",
+                "os": "darwin",
+                "probes": {
+                  "arith": {
+                    "reason": "arithmetic 6*7=42",
+                    "verdict": "PASS"
+                  },
+                  "commands": {
+                    "reason": "commands --agentic exit 0, 29 bashy lines recorded",
+                    "verdict": "PASS"
+                  },
+                  "coreutil": {
+                    "reason": "seq 1 3 exact",
+                    "verdict": "PASS"
+                  },
+                  "inspect": {
+                    "reason": "inspect context schema bashy-context-v1",
+                    "verdict": "PASS"
+                  },
+                  "pipeline": {
+                    "reason": "pipeline counted 2 lines",
+                    "verdict": "PASS"
+                  },
+                  "winpath": {
+                    "reason": "n/a (OS=darwin)",
+                    "verdict": "PASS"
+                  }
+                },
+                "remote_rc": 0
+              },
+              "evidence": [
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160037z-tier1-darwin/tier1/commands.log",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160037z-tier1-darwin/tier1/darwin.err",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160037z-tier1-darwin/tier1/darwin.out",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160037z-tier1-darwin/tier1/probe.sh"
+              ],
+              "reason": "arith=PASS pipeline=PASS coreutil=PASS commands=PASS inspect=PASS winpath=PASS",
+              "recorded_at": "2026-11-25T16:00:38Z",
+              "verdict": "PASS"
+            }
+          },
+          "dry_run": false,
+          "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160037z-tier1-darwin",
+          "finished_at": "2026-11-25T16:00:39Z",
+          "host": "macos-host",
+          "os": "darwin",
+          "overall": "PASS",
+          "schema": "dhnt.tier-smoke/v1",
+          "started_at": "2026-11-25T16:00:37Z",
+          "target": "tier1"
+        },
+        "tier2": {
+          "candidate": {
+            "bashy": {
+              "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+              "drift": false,
+              "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+            },
+            "outpost": {
+              "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+              "drift": false,
+              "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+            },
+            "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+            "yoke": {
+              "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+              "drift": false,
+              "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+            }
+          },
+          "checks": {
+            "tier2": {
+              "check": "tier2",
+              "details": {
+                "budget_s": 480,
+                "host": "macos-host",
+                "os": "darwin",
+                "probes": {
+                  "dag": {
+                    "reason": "node-a before node-b",
+                    "verdict": "PASS"
+                  },
+                  "presence": {
+                    "reason": "loom/sdlc --help print usage",
+                    "verdict": "PASS"
+                  },
+                  "residue": {
+                    "reason": "workdir removed",
+                    "verdict": "PASS"
+                  },
+                  "sprint": {
+                    "reason": "sprint add/show on the isolated board",
+                    "verdict": "PASS"
+                  },
+                  "weave": {
+                    "reason": "weave add/list/abandon/prune round-trip, list clean",
+                    "verdict": "PASS"
+                  }
+                },
+                "remote_rc": 0
+              },
+              "evidence": [
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160039z-tier2-darwin/tier2/commands.log",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160039z-tier2-darwin/tier2/darwin.err",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160039z-tier2-darwin/tier2/darwin.out",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160039z-tier2-darwin/tier2/probe.sh"
+              ],
+              "reason": "weave=PASS dag=PASS sprint=PASS presence=PASS residue=PASS",
+              "recorded_at": "2026-11-25T16:00:42Z",
+              "verdict": "PASS"
+            }
+          },
+          "dry_run": false,
+          "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160039z-tier2-darwin",
+          "finished_at": "2026-11-25T16:00:42Z",
+          "host": "macos-host",
+          "os": "darwin",
+          "overall": "PASS",
+          "schema": "dhnt.tier-smoke/v1",
+          "started_at": "2026-11-25T16:00:39Z",
+          "target": "tier2"
+        },
+        "tier3": {
+          "candidate": {
+            "bashy": {
+              "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+              "drift": false,
+              "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+            },
+            "outpost": {
+              "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+              "drift": false,
+              "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+            },
+            "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+            "yoke": {
+              "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+              "drift": false,
+              "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+            }
+          },
+          "checks": {
+            "tier3": {
+              "check": "tier3",
+              "details": {
+                "budget_s": 900,
+                "host": "macos-host",
+                "image": "localhost/bashy:v1.0.0-rc.41-dev-linux-arm64",
+                "os": "darwin",
+                "probes": {
+                  "denial": {
+                    "reason": "privileged create refused 403 with a sandbox: body",
+                    "verdict": "PASS"
+                  },
+                  "engine": {
+                    "reason": "engine up, image localhost/bashy:v1.0.0-rc.41-dev-linux-arm64 present",
+                    "verdict": "PASS"
+                  },
+                  "residue": {
+                    "reason": "scratch removed",
+                    "verdict": "PASS"
+                  },
+                  "run": {
+                    "reason": "echo exact exit 0, bad command rc=127, no residue",
+                    "verdict": "PASS"
+                  },
+                  "units": {
+                    "reason": "podman+sandbox overlay-enabled, overlay removed",
+                    "verdict": "PASS"
+                  }
+                },
+                "remote_rc": 0
+              },
+              "evidence": [
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160632z-tier3-darwin/tier3/commands.log",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160632z-tier3-darwin/tier3/darwin.err",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160632z-tier3-darwin/tier3/darwin.out",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160632z-tier3-darwin/tier3/probe.sh"
+              ],
+              "reason": "engine=PASS run=PASS units=PASS denial=PASS residue=PASS",
+              "recorded_at": "2026-11-25T16:06:35Z",
+              "verdict": "PASS"
+            }
+          },
+          "dry_run": false,
+          "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160632z-tier3-darwin",
+          "finished_at": "2026-11-25T16:06:36Z",
+          "host": "macos-host",
+          "os": "darwin",
+          "overall": "PASS",
+          "schema": "dhnt.tier-smoke/v1",
+          "started_at": "2026-11-25T16:06:32Z",
+          "target": "tier3"
+        }
+      },
+      "os": "darwin",
+      "overall": "PASS",
+      "schema": "dhnt.tier-smoke/v1",
+      "started_at": "2026-11-25T16:12:01Z",
+      "target": "tier-all-native"
+    },
+    "tier-all-native-linux": {
+      "checks": {
+        "fold": {
+          "check": "tier-all-native",
+          "details": {
+            "leaves": {
+              "tier1": {
+                "candidate": {
+                  "bashy": {
+                    "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+                    "drift": false,
+                    "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+                  },
+                  "outpost": {
+                    "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+                    "drift": false,
+                    "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+                  },
+                  "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+                  "yoke": {
+                    "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+                    "drift": false,
+                    "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+                  }
+                },
+                "checks": {
+                  "tier1": {
+                    "check": "tier1",
+                    "details": {
+                      "budget_s": 300,
+                      "host": "linux-host-wsl",
+                      "os": "linux",
+                      "probes": {
+                        "arith": {
+                          "reason": "arithmetic 6*7=42",
+                          "verdict": "PASS"
+                        },
+                        "commands": {
+                          "reason": "commands --agentic exit 0, 29 bashy lines recorded",
+                          "verdict": "PASS"
+                        },
+                        "coreutil": {
+                          "reason": "seq 1 3 exact",
+                          "verdict": "PASS"
+                        },
+                        "inspect": {
+                          "reason": "inspect context schema bashy-context-v1",
+                          "verdict": "PASS"
+                        },
+                        "pipeline": {
+                          "reason": "pipeline counted 2 lines",
+                          "verdict": "PASS"
+                        },
+                        "winpath": {
+                          "reason": "n/a (OS=linux)",
+                          "verdict": "PASS"
+                        }
+                      },
+                      "remote_rc": 0
+                    },
+                    "evidence": [
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160033z-tier1-linux/tier1/commands.log",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160033z-tier1-linux/tier1/linux.err",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160033z-tier1-linux/tier1/linux.out",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160033z-tier1-linux/tier1/probe.sh"
+                    ],
+                    "reason": "arith=PASS pipeline=PASS coreutil=PASS commands=PASS inspect=PASS winpath=PASS",
+                    "recorded_at": "2026-11-25T16:00:49Z",
+                    "verdict": "PASS"
+                  }
+                },
+                "dry_run": false,
+                "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160033z-tier1-linux",
+                "finished_at": "2026-11-25T16:00:50Z",
+                "host": "linux-host-wsl",
+                "os": "linux",
+                "overall": "PASS",
+                "schema": "dhnt.tier-smoke/v1",
+                "started_at": "2026-11-25T16:00:33Z",
+                "target": "tier1"
+              },
+              "tier2": {
+                "candidate": {
+                  "bashy": {
+                    "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+                    "drift": false,
+                    "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+                  },
+                  "outpost": {
+                    "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+                    "drift": false,
+                    "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+                  },
+                  "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+                  "yoke": {
+                    "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+                    "drift": false,
+                    "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+                  }
+                },
+                "checks": {
+                  "tier2": {
+                    "check": "tier2",
+                    "details": {
+                      "budget_s": 480,
+                      "host": "linux-host-wsl",
+                      "os": "linux",
+                      "probes": {
+                        "dag": {
+                          "reason": "node-a before node-b",
+                          "verdict": "PASS"
+                        },
+                        "presence": {
+                          "reason": "loom/sdlc --help print usage",
+                          "verdict": "PASS"
+                        },
+                        "residue": {
+                          "reason": "workdir removed",
+                          "verdict": "PASS"
+                        },
+                        "sprint": {
+                          "reason": "sprint add/show on the isolated board",
+                          "verdict": "PASS"
+                        },
+                        "weave": {
+                          "reason": "weave add/list/abandon/prune round-trip, list clean",
+                          "verdict": "PASS"
+                        }
+                      },
+                      "remote_rc": 0
+                    },
+                    "evidence": [
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160050z-tier2-linux/tier2/commands.log",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160050z-tier2-linux/tier2/linux.err",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160050z-tier2-linux/tier2/linux.out",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160050z-tier2-linux/tier2/probe.sh"
+                    ],
+                    "reason": "weave=PASS dag=PASS sprint=PASS presence=PASS residue=PASS",
+                    "recorded_at": "2026-11-25T16:01:02Z",
+                    "verdict": "PASS"
+                  }
+                },
+                "dry_run": false,
+                "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160050z-tier2-linux",
+                "finished_at": "2026-11-25T16:01:03Z",
+                "host": "linux-host-wsl",
+                "os": "linux",
+                "overall": "PASS",
+                "schema": "dhnt.tier-smoke/v1",
+                "started_at": "2026-11-25T16:00:50Z",
+                "target": "tier2"
+              },
+              "tier3": {
+                "candidate": {
+                  "bashy": {
+                    "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+                    "drift": false,
+                    "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+                  },
+                  "outpost": {
+                    "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+                    "drift": false,
+                    "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+                  },
+                  "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+                  "yoke": {
+                    "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+                    "drift": false,
+                    "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+                  }
+                },
+                "checks": {
+                  "tier3": {
+                    "check": "tier3",
+                    "details": {
+                      "budget_s": 720,
+                      "host": "linux-host-wsl",
+                      "image": "localhost/bashy:v1.0.0-rc.41-dev-linux-amd64",
+                      "os": "linux",
+                      "probes": {
+                        "denial": {
+                          "reason": "privileged create refused 403 with a sandbox: body",
+                          "verdict": "PASS"
+                        },
+                        "engine": {
+                          "reason": "engine up, image localhost/bashy:v1.0.0-rc.41-dev-linux-amd64 present",
+                          "verdict": "PASS"
+                        },
+                        "residue": {
+                          "reason": "scratch removed",
+                          "verdict": "PASS"
+                        },
+                        "run": {
+                          "reason": "echo exact exit 0, bad command rc=127, no residue",
+                          "verdict": "PASS"
+                        },
+                        "units": {
+                          "reason": "podman+sandbox overlay-enabled, overlay removed",
+                          "verdict": "PASS"
+                        }
+                      },
+                      "remote_rc": 0
+                    },
+                    "evidence": [
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160455z-tier3-linux/tier3/commands.log",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160455z-tier3-linux/tier3/linux.err",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160455z-tier3-linux/tier3/linux.out",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160455z-tier3-linux/tier3/probe.sh"
+                    ],
+                    "reason": "engine=PASS run=PASS units=PASS denial=PASS residue=PASS",
+                    "recorded_at": "2026-11-25T16:05:11Z",
+                    "verdict": "PASS"
+                  }
+                },
+                "dry_run": false,
+                "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160455z-tier3-linux",
+                "finished_at": "2026-11-25T16:05:11Z",
+                "host": "linux-host-wsl",
+                "os": "linux",
+                "overall": "PASS",
+                "schema": "dhnt.tier-smoke/v1",
+                "started_at": "2026-11-25T16:04:55Z",
+                "target": "tier3"
+              }
+            },
+            "note": "",
+            "os": "linux"
+          },
+          "evidence": [],
+          "reason": "tier1+tier2+tier3 on linux",
+          "recorded_at": "2026-11-25T16:12:00Z",
+          "verdict": "PASS"
+        }
+      },
+      "dry_run": false,
+      "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t161200z-tier-all-native-linux",
+      "finished_at": "2026-11-25T16:12:00Z",
+      "leaves": {
+        "tier1": {
+          "candidate": {
+            "bashy": {
+              "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+              "drift": false,
+              "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+            },
+            "outpost": {
+              "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+              "drift": false,
+              "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+            },
+            "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+            "yoke": {
+              "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+              "drift": false,
+              "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+            }
+          },
+          "checks": {
+            "tier1": {
+              "check": "tier1",
+              "details": {
+                "budget_s": 300,
+                "host": "linux-host-wsl",
+                "os": "linux",
+                "probes": {
+                  "arith": {
+                    "reason": "arithmetic 6*7=42",
+                    "verdict": "PASS"
+                  },
+                  "commands": {
+                    "reason": "commands --agentic exit 0, 29 bashy lines recorded",
+                    "verdict": "PASS"
+                  },
+                  "coreutil": {
+                    "reason": "seq 1 3 exact",
+                    "verdict": "PASS"
+                  },
+                  "inspect": {
+                    "reason": "inspect context schema bashy-context-v1",
+                    "verdict": "PASS"
+                  },
+                  "pipeline": {
+                    "reason": "pipeline counted 2 lines",
+                    "verdict": "PASS"
+                  },
+                  "winpath": {
+                    "reason": "n/a (OS=linux)",
+                    "verdict": "PASS"
+                  }
+                },
+                "remote_rc": 0
+              },
+              "evidence": [
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160033z-tier1-linux/tier1/commands.log",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160033z-tier1-linux/tier1/linux.err",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160033z-tier1-linux/tier1/linux.out",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160033z-tier1-linux/tier1/probe.sh"
+              ],
+              "reason": "arith=PASS pipeline=PASS coreutil=PASS commands=PASS inspect=PASS winpath=PASS",
+              "recorded_at": "2026-11-25T16:00:49Z",
+              "verdict": "PASS"
+            }
+          },
+          "dry_run": false,
+          "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160033z-tier1-linux",
+          "finished_at": "2026-11-25T16:00:50Z",
+          "host": "linux-host-wsl",
+          "os": "linux",
+          "overall": "PASS",
+          "schema": "dhnt.tier-smoke/v1",
+          "started_at": "2026-11-25T16:00:33Z",
+          "target": "tier1"
+        },
+        "tier2": {
+          "candidate": {
+            "bashy": {
+              "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+              "drift": false,
+              "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+            },
+            "outpost": {
+              "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+              "drift": false,
+              "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+            },
+            "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+            "yoke": {
+              "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+              "drift": false,
+              "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+            }
+          },
+          "checks": {
+            "tier2": {
+              "check": "tier2",
+              "details": {
+                "budget_s": 480,
+                "host": "linux-host-wsl",
+                "os": "linux",
+                "probes": {
+                  "dag": {
+                    "reason": "node-a before node-b",
+                    "verdict": "PASS"
+                  },
+                  "presence": {
+                    "reason": "loom/sdlc --help print usage",
+                    "verdict": "PASS"
+                  },
+                  "residue": {
+                    "reason": "workdir removed",
+                    "verdict": "PASS"
+                  },
+                  "sprint": {
+                    "reason": "sprint add/show on the isolated board",
+                    "verdict": "PASS"
+                  },
+                  "weave": {
+                    "reason": "weave add/list/abandon/prune round-trip, list clean",
+                    "verdict": "PASS"
+                  }
+                },
+                "remote_rc": 0
+              },
+              "evidence": [
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160050z-tier2-linux/tier2/commands.log",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160050z-tier2-linux/tier2/linux.err",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160050z-tier2-linux/tier2/linux.out",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160050z-tier2-linux/tier2/probe.sh"
+              ],
+              "reason": "weave=PASS dag=PASS sprint=PASS presence=PASS residue=PASS",
+              "recorded_at": "2026-11-25T16:01:02Z",
+              "verdict": "PASS"
+            }
+          },
+          "dry_run": false,
+          "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160050z-tier2-linux",
+          "finished_at": "2026-11-25T16:01:03Z",
+          "host": "linux-host-wsl",
+          "os": "linux",
+          "overall": "PASS",
+          "schema": "dhnt.tier-smoke/v1",
+          "started_at": "2026-11-25T16:00:50Z",
+          "target": "tier2"
+        },
+        "tier3": {
+          "candidate": {
+            "bashy": {
+              "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+              "drift": false,
+              "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+            },
+            "outpost": {
+              "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+              "drift": false,
+              "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+            },
+            "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+            "yoke": {
+              "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+              "drift": false,
+              "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+            }
+          },
+          "checks": {
+            "tier3": {
+              "check": "tier3",
+              "details": {
+                "budget_s": 720,
+                "host": "linux-host-wsl",
+                "image": "localhost/bashy:v1.0.0-rc.41-dev-linux-amd64",
+                "os": "linux",
+                "probes": {
+                  "denial": {
+                    "reason": "privileged create refused 403 with a sandbox: body",
+                    "verdict": "PASS"
+                  },
+                  "engine": {
+                    "reason": "engine up, image localhost/bashy:v1.0.0-rc.41-dev-linux-amd64 present",
+                    "verdict": "PASS"
+                  },
+                  "residue": {
+                    "reason": "scratch removed",
+                    "verdict": "PASS"
+                  },
+                  "run": {
+                    "reason": "echo exact exit 0, bad command rc=127, no residue",
+                    "verdict": "PASS"
+                  },
+                  "units": {
+                    "reason": "podman+sandbox overlay-enabled, overlay removed",
+                    "verdict": "PASS"
+                  }
+                },
+                "remote_rc": 0
+              },
+              "evidence": [
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160455z-tier3-linux/tier3/commands.log",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160455z-tier3-linux/tier3/linux.err",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160455z-tier3-linux/tier3/linux.out",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160455z-tier3-linux/tier3/probe.sh"
+              ],
+              "reason": "engine=PASS run=PASS units=PASS denial=PASS residue=PASS",
+              "recorded_at": "2026-11-25T16:05:11Z",
+              "verdict": "PASS"
+            }
+          },
+          "dry_run": false,
+          "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160455z-tier3-linux",
+          "finished_at": "2026-11-25T16:05:11Z",
+          "host": "linux-host-wsl",
+          "os": "linux",
+          "overall": "PASS",
+          "schema": "dhnt.tier-smoke/v1",
+          "started_at": "2026-11-25T16:04:55Z",
+          "target": "tier3"
+        }
+      },
+      "os": "linux",
+      "overall": "PASS",
+      "schema": "dhnt.tier-smoke/v1",
+      "started_at": "2026-11-25T16:12:00Z",
+      "target": "tier-all-native"
+    },
+    "tier-all-native-windows": {
+      "checks": {
+        "fold": {
+          "check": "tier-all-native",
+          "details": {
+            "leaves": {
+              "tier1": {
+                "candidate": {
+                  "bashy": {
+                    "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+                    "drift": false,
+                    "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+                  },
+                  "outpost": {
+                    "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+                    "drift": false,
+                    "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+                  },
+                  "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+                  "yoke": {
+                    "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+                    "drift": false,
+                    "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+                  }
+                },
+                "checks": {
+                  "tier1": {
+                    "check": "tier1",
+                    "details": {
+                      "budget_s": 360,
+                      "host": "windows-host",
+                      "os": "windows",
+                      "probes": {
+                        "arith": {
+                          "reason": "arithmetic 6*7=42",
+                          "verdict": "PASS"
+                        },
+                        "commands": {
+                          "reason": "commands --agentic exit 0, 29 bashy lines recorded",
+                          "verdict": "PASS"
+                        },
+                        "coreutil": {
+                          "reason": "seq 1 3 exact",
+                          "verdict": "PASS"
+                        },
+                        "inspect": {
+                          "reason": "inspect context schema bashy-context-v1",
+                          "verdict": "PASS"
+                        },
+                        "pipeline": {
+                          "reason": "pipeline counted 2 lines",
+                          "verdict": "PASS"
+                        },
+                        "winpath": {
+                          "reason": "drive path rounds to smoke",
+                          "verdict": "PASS"
+                        }
+                      },
+                      "remote_rc": 0
+                    },
+                    "evidence": [
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160035z-tier1-windows/tier1/commands.log",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160035z-tier1-windows/tier1/probe.sh",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160035z-tier1-windows/tier1/windows.err",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160035z-tier1-windows/tier1/windows.out"
+                    ],
+                    "reason": "arith=PASS pipeline=PASS coreutil=PASS commands=PASS inspect=PASS winpath=PASS",
+                    "recorded_at": "2026-11-25T16:00:39Z",
+                    "verdict": "PASS"
+                  }
+                },
+                "dry_run": false,
+                "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160035z-tier1-windows",
+                "finished_at": "2026-11-25T16:00:40Z",
+                "host": "windows-host",
+                "os": "windows",
+                "overall": "PASS",
+                "schema": "dhnt.tier-smoke/v1",
+                "started_at": "2026-11-25T16:00:35Z",
+                "target": "tier1"
+              },
+              "tier2": {
+                "candidate": {
+                  "bashy": {
+                    "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+                    "drift": false,
+                    "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+                  },
+                  "outpost": {
+                    "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+                    "drift": false,
+                    "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+                  },
+                  "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+                  "yoke": {
+                    "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+                    "drift": false,
+                    "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+                  }
+                },
+                "checks": {
+                  "tier2": {
+                    "check": "tier2",
+                    "details": {
+                      "budget_s": 600,
+                      "host": "windows-host",
+                      "os": "windows",
+                      "probes": {
+                        "dag": {
+                          "reason": "node-a before node-b",
+                          "verdict": "PASS"
+                        },
+                        "presence": {
+                          "reason": "loom/sdlc --help print usage",
+                          "verdict": "PASS"
+                        },
+                        "residue": {
+                          "reason": "workdir removed",
+                          "verdict": "PASS"
+                        },
+                        "sprint": {
+                          "reason": "sprint add/show on the isolated board",
+                          "verdict": "PASS"
+                        },
+                        "weave": {
+                          "reason": "weave add/list/abandon/prune round-trip, list clean",
+                          "verdict": "PASS"
+                        }
+                      },
+                      "remote_rc": 0
+                    },
+                    "evidence": [
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160040z-tier2-windows/tier2/commands.log",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160040z-tier2-windows/tier2/probe.sh",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160040z-tier2-windows/tier2/windows.err",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t160040z-tier2-windows/tier2/windows.out"
+                    ],
+                    "reason": "weave=PASS dag=PASS sprint=PASS presence=PASS residue=PASS",
+                    "recorded_at": "2026-11-25T16:00:55Z",
+                    "verdict": "PASS"
+                  }
+                },
+                "dry_run": false,
+                "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160040z-tier2-windows",
+                "finished_at": "2026-11-25T16:00:55Z",
+                "host": "windows-host",
+                "os": "windows",
+                "overall": "PASS",
+                "schema": "dhnt.tier-smoke/v1",
+                "started_at": "2026-11-25T16:00:40Z",
+                "target": "tier2"
+              },
+              "tier3": {
+                "candidate": {
+                  "bashy": {
+                    "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+                    "drift": false,
+                    "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+                  },
+                  "outpost": {
+                    "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+                    "drift": false,
+                    "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+                  },
+                  "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+                  "yoke": {
+                    "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+                    "drift": false,
+                    "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+                  }
+                },
+                "checks": {
+                  "tier3": {
+                    "check": "tier3",
+                    "details": {
+                      "budget_s": 1080,
+                      "host": "windows-host",
+                      "image": "localhost/bashy:v1.0.0-rc.41-dev-linux-amd64",
+                      "os": "windows",
+                      "probes": {
+                        "denial": {
+                          "reason": "privileged create refused 403 with a sandbox: body",
+                          "verdict": "PASS"
+                        },
+                        "engine": {
+                          "reason": "engine up, image localhost/bashy:v1.0.0-rc.41-dev-linux-amd64 present",
+                          "verdict": "PASS"
+                        },
+                        "residue": {
+                          "reason": "scratch removed",
+                          "verdict": "PASS"
+                        },
+                        "run": {
+                          "reason": "echo exact exit 0, bad command rc=127, no residue",
+                          "verdict": "PASS"
+                        },
+                        "units": {
+                          "reason": "podman+sandbox overlay-enabled, overlay removed",
+                          "verdict": "PASS"
+                        }
+                      },
+                      "remote_rc": 0
+                    },
+                    "evidence": [
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t161023z-tier3-windows/tier3/commands.log",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t161023z-tier3-windows/tier3/probe.sh",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t161023z-tier3-windows/tier3/windows.err",
+                      ".gfy-out/tier-smoke-rc41/runs/20261125t161023z-tier3-windows/tier3/windows.out"
+                    ],
+                    "reason": "engine=PASS run=PASS units=PASS denial=PASS residue=PASS",
+                    "recorded_at": "2026-11-25T16:10:41Z",
+                    "verdict": "PASS"
+                  }
+                },
+                "dry_run": false,
+                "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t161023z-tier3-windows",
+                "finished_at": "2026-11-25T16:10:42Z",
+                "host": "windows-host",
+                "os": "windows",
+                "overall": "PASS",
+                "schema": "dhnt.tier-smoke/v1",
+                "started_at": "2026-11-25T16:10:23Z",
+                "target": "tier3"
+              }
+            },
+            "note": "",
+            "os": "windows"
+          },
+          "evidence": [],
+          "reason": "tier1+tier2+tier3 on windows",
+          "recorded_at": "2026-11-25T16:12:01Z",
+          "verdict": "PASS"
+        }
+      },
+      "dry_run": false,
+      "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t161201z-tier-all-native-windows",
+      "finished_at": "2026-11-25T16:12:01Z",
+      "leaves": {
+        "tier1": {
+          "candidate": {
+            "bashy": {
+              "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+              "drift": false,
+              "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+            },
+            "outpost": {
+              "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+              "drift": false,
+              "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+            },
+            "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+            "yoke": {
+              "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+              "drift": false,
+              "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+            }
+          },
+          "checks": {
+            "tier1": {
+              "check": "tier1",
+              "details": {
+                "budget_s": 360,
+                "host": "windows-host",
+                "os": "windows",
+                "probes": {
+                  "arith": {
+                    "reason": "arithmetic 6*7=42",
+                    "verdict": "PASS"
+                  },
+                  "commands": {
+                    "reason": "commands --agentic exit 0, 29 bashy lines recorded",
+                    "verdict": "PASS"
+                  },
+                  "coreutil": {
+                    "reason": "seq 1 3 exact",
+                    "verdict": "PASS"
+                  },
+                  "inspect": {
+                    "reason": "inspect context schema bashy-context-v1",
+                    "verdict": "PASS"
+                  },
+                  "pipeline": {
+                    "reason": "pipeline counted 2 lines",
+                    "verdict": "PASS"
+                  },
+                  "winpath": {
+                    "reason": "drive path rounds to smoke",
+                    "verdict": "PASS"
+                  }
+                },
+                "remote_rc": 0
+              },
+              "evidence": [
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160035z-tier1-windows/tier1/commands.log",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160035z-tier1-windows/tier1/probe.sh",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160035z-tier1-windows/tier1/windows.err",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160035z-tier1-windows/tier1/windows.out"
+              ],
+              "reason": "arith=PASS pipeline=PASS coreutil=PASS commands=PASS inspect=PASS winpath=PASS",
+              "recorded_at": "2026-11-25T16:00:39Z",
+              "verdict": "PASS"
+            }
+          },
+          "dry_run": false,
+          "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160035z-tier1-windows",
+          "finished_at": "2026-11-25T16:00:40Z",
+          "host": "windows-host",
+          "os": "windows",
+          "overall": "PASS",
+          "schema": "dhnt.tier-smoke/v1",
+          "started_at": "2026-11-25T16:00:35Z",
+          "target": "tier1"
+        },
+        "tier2": {
+          "candidate": {
+            "bashy": {
+              "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+              "drift": false,
+              "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+            },
+            "outpost": {
+              "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+              "drift": false,
+              "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+            },
+            "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+            "yoke": {
+              "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+              "drift": false,
+              "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+            }
+          },
+          "checks": {
+            "tier2": {
+              "check": "tier2",
+              "details": {
+                "budget_s": 600,
+                "host": "windows-host",
+                "os": "windows",
+                "probes": {
+                  "dag": {
+                    "reason": "node-a before node-b",
+                    "verdict": "PASS"
+                  },
+                  "presence": {
+                    "reason": "loom/sdlc --help print usage",
+                    "verdict": "PASS"
+                  },
+                  "residue": {
+                    "reason": "workdir removed",
+                    "verdict": "PASS"
+                  },
+                  "sprint": {
+                    "reason": "sprint add/show on the isolated board",
+                    "verdict": "PASS"
+                  },
+                  "weave": {
+                    "reason": "weave add/list/abandon/prune round-trip, list clean",
+                    "verdict": "PASS"
+                  }
+                },
+                "remote_rc": 0
+              },
+              "evidence": [
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160040z-tier2-windows/tier2/commands.log",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160040z-tier2-windows/tier2/probe.sh",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160040z-tier2-windows/tier2/windows.err",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t160040z-tier2-windows/tier2/windows.out"
+              ],
+              "reason": "weave=PASS dag=PASS sprint=PASS presence=PASS residue=PASS",
+              "recorded_at": "2026-11-25T16:00:55Z",
+              "verdict": "PASS"
+            }
+          },
+          "dry_run": false,
+          "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t160040z-tier2-windows",
+          "finished_at": "2026-11-25T16:00:55Z",
+          "host": "windows-host",
+          "os": "windows",
+          "overall": "PASS",
+          "schema": "dhnt.tier-smoke/v1",
+          "started_at": "2026-11-25T16:00:40Z",
+          "target": "tier2"
+        },
+        "tier3": {
+          "candidate": {
+            "bashy": {
+              "checkout": "0665ffb3da511efd1cca7b547a65a97c37a62050",
+              "drift": false,
+              "pinned": "0665ffb3da511efd1cca7b547a65a97c37a62050"
+            },
+            "outpost": {
+              "checkout": "764d9dfcf361d3274642f0b7afd9000204d21c0a",
+              "drift": false,
+              "pinned": "764d9dfcf361d3274642f0b7afd9000204d21c0a"
+            },
+            "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+            "yoke": {
+              "checkout": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3",
+              "drift": false,
+              "pinned": "89fc8e423b5425ab8ea4b0c88bfc18c849fcb7b3"
+            }
+          },
+          "checks": {
+            "tier3": {
+              "check": "tier3",
+              "details": {
+                "budget_s": 1080,
+                "host": "windows-host",
+                "image": "localhost/bashy:v1.0.0-rc.41-dev-linux-amd64",
+                "os": "windows",
+                "probes": {
+                  "denial": {
+                    "reason": "privileged create refused 403 with a sandbox: body",
+                    "verdict": "PASS"
+                  },
+                  "engine": {
+                    "reason": "engine up, image localhost/bashy:v1.0.0-rc.41-dev-linux-amd64 present",
+                    "verdict": "PASS"
+                  },
+                  "residue": {
+                    "reason": "scratch removed",
+                    "verdict": "PASS"
+                  },
+                  "run": {
+                    "reason": "echo exact exit 0, bad command rc=127, no residue",
+                    "verdict": "PASS"
+                  },
+                  "units": {
+                    "reason": "podman+sandbox overlay-enabled, overlay removed",
+                    "verdict": "PASS"
+                  }
+                },
+                "remote_rc": 0
+              },
+              "evidence": [
+                ".gfy-out/tier-smoke-rc41/runs/20261125t161023z-tier3-windows/tier3/commands.log",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t161023z-tier3-windows/tier3/probe.sh",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t161023z-tier3-windows/tier3/windows.err",
+                ".gfy-out/tier-smoke-rc41/runs/20261125t161023z-tier3-windows/tier3/windows.out"
+              ],
+              "reason": "engine=PASS run=PASS units=PASS denial=PASS residue=PASS",
+              "recorded_at": "2026-11-25T16:10:41Z",
+              "verdict": "PASS"
+            }
+          },
+          "dry_run": false,
+          "evidence_dir": ".gfy-out/tier-smoke-rc41/runs/20261125t161023z-tier3-windows",
+          "finished_at": "2026-11-25T16:10:42Z",
+          "host": "windows-host",
+          "os": "windows",
+          "overall": "PASS",
+          "schema": "dhnt.tier-smoke/v1",
+          "started_at": "2026-11-25T16:10:23Z",
+          "target": "tier3"
+        }
+      },
+      "os": "windows",
+      "overall": "PASS",
+      "schema": "dhnt.tier-smoke/v1",
+      "started_at": "2026-11-25T16:12:01Z",
+      "target": "tier-all-native"
+    }
+  },
+  "folds_required": [
+    "tier-all-native-linux",
+    "tier-all-native-darwin",
+    "tier-all-native-windows"
+  ],
+  "not_run": [
+    "tier-all-fleet",
+    "tier4-sphere3",
+    "tier5-cluster3:cloudbox",
+    "tier5-cluster3:local"
+  ],
+  "reason": "linux PASS; windows PASS (rc.40 Windows adapter cold-build defect fixed; candidate run from a scratch dir because outpost pins the login-PATH copy); darwin PASS (macOS QA host rebooted first: TCP clock wrap had frozen TIME_WAIT; candidate run from a scratch dir because the login-PATH bashy serves running jobs). tier1+tier2+tier3 each, assets from the verified LAN copy",
+  "record": "release-tier-verdict",
+  "recorded_at": "2026-11-25T16:12:28Z",
+  "release": "v1.0.0-rc.41-dev",
+  "schema": "dhnt.tier-smoke/v1",
+  "scope": "native",
+  "sprint": 719,
+  "story": "282834655193",
+  "umbrella": "cd977f0e3f65a0128e349aa0bdd52b453783fc33",
+  "verdict": "PASS"
+}
