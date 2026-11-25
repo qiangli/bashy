@@ -229,6 +229,15 @@ work the same way toward you):
   serve it with `bashy mcp serve --transport http --tools site
   --site-app <app>` (or `--site-dir <dir>`), adding `--outpost` when fronted
   by outpost's `<app>/mcp` reverse proxy.
+- **Members work from their own machine** with `bashy mcp connect
+  https://SATELLITE/matrix/h/HOST/app/NAME/mcp [--account REF]`: it bridges
+  a local MCP client over stdio to the owner's site MCP. Before the first
+  use: sign in to the owner's satellite once in the browser, and use a
+  cloudbox account token holding `satellites:delegate` and `host:proxy`
+  (create it in the console, or narrow one with `bashy token create`).
+  The account token stays with cloudbox; the satellite only sees a
+  one-hour child token. The owner must share the app with you; errors
+  name the missing step.
 - **Identify yourself when asked:** `bashy site key [--json]` prints the
   outpost Ed25519 public key JWK + RFC 7638 `keyid` for `site.json`;
   `--sign` (`BASHY_SIGN_REQUESTS=1`) and `--signature-agent <https-url>`
