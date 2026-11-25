@@ -1,10 +1,10 @@
 module github.com/qiangli/bashy/examples/desk
 
-go 1.27
+go 1.27.0
 
 toolchain go1.27.4
 
-require github.com/qiangli/yoke v0.0.0-20261108192754-3544f295a6a7
+require github.com/qiangli/yoke v0.0.0-20261125193453-d617ba6af831
 
 replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab
 

@@ -56,6 +56,20 @@ func TestConsumerPolishedToolsDeclareGenieExamples(t *testing.T) {
 	}
 }
 
+func TestFormShapewareCoreDigest(t *testing.T) {
+	shapedBytes, err := os.ReadFile(filepath.Join("form", appserver.File))
+	if err != nil {
+		t.Fatalf("read form/shaped.json: %v", err)
+	}
+	m, err := appserver.Parse(shapedBytes)
+	if err != nil {
+		t.Fatalf("appserver.Parse(form/shaped.json): %v", err)
+	}
+	if m.Server == nil || !strings.HasPrefix(m.Server.Digest, "sha256:") || len(m.Server.Digest) != len("sha256:")+64 {
+		t.Fatalf("form shaped.json server.digest = %q, want sha256:<64 hex>", m.Server.Digest)
+	}
+}
+
 func TestDeskToolsShipShapedServer(t *testing.T) {
 	for name, root := range shapedTools {
 		t.Run(name, func(t *testing.T) {

@@ -1200,7 +1200,7 @@ func serveWithOptions(addr, data, prefix string, explicitAddr bool) {
 		log.Fatal(err)
 	}
 	ln, err := net.Listen("tcp", addr)
-	if err != nil && !explicitAddr && addr != defaultFormAddr {
+	if err != nil && !explicitAddr {
 		ln, err = net.Listen("tcp", "127.0.0.1:0")
 	}
 	if err != nil {

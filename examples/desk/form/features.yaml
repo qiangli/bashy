@@ -1,0 +1,32 @@
+# form feature list (shapeware v0.1). Ids are stable across versions.
+- id: define-and-open
+  status: verified
+  intent: Create a form from JSON or YAML and open its loopback page for the human in one command.
+  acceptance:
+    - form add --id intake --def examples/contact.json --title "Contact preferences" --open --json --fields id,status,opened => {"id":"intake","opened":true,"schema_version":"bashy-form-v1","status":"pending"}
+    - GET /?id=intake => 200 data-field="name"
+- id: submit-answers
+  status: verified
+  intent: Save partial or complete respondent answers and keep them across reloads.
+  acceptance:
+    - form answer intake --answer name=Ada --answer contact=email --answer subscribe=yes --complete --json --fields id,status => {"id":"intake","schema_version":"bashy-form-v1","status":"answered"}
+- id: wait-answers
+  status: verified
+  intent: Wait for a created form to be answered with automatic local owner-key resolution and an explicit timeout.
+  acceptance:
+    - form wait intake --timeout 5s --json --fields id,status => {"id":"intake","schema_version":"bashy-form-v1","status":"answered"}
+- id: secret-refusal
+  status: verified
+  critical: true
+  intent: Refuse secret-typed or secret-named fields before storage so credentials never enter the form store.
+  acceptance:
+    - form add --id bad-secret --definition '[{"id":"api_key","label":"API key","kind":"text"}]' --json => ERROR 1 Secret fields are refused here
+- id: group-required
+  status: tbd
+  band: L2
+  intent: Group unanswered required fields at the top so the human can see what is left. Passing --group-required to form add or form set reorders the form definition (preserving relative order within each group) so required fields with empty/missing answers appear first, followed by answered required fields and optional fields.
+  acceptance:
+    - form add --id grouped --def examples/contact.json --group-required --json --fields status => {"schema_version":"bashy-form-v1","status":"pending"}
+    - form show grouped --json | .definition[].id => name,contact,subscribe,bio,topics,avatar
+    - form set grouped --answer name=Ada --group-required --json --fields status => {"schema_version":"bashy-form-v1","status":"filled-by-agent"}
+    - form show grouped --json | .definition[].id => contact,subscribe,name,bio,topics,avatar

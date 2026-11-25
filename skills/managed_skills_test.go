@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	yokeskills "github.com/qiangli/yoke/pkg/skills"
 )
 
 // TestBashyIsTheOnlyEmbeddedSkill: moving the other skill folders' bodies
@@ -69,6 +71,23 @@ func TestCommandDocsAvailable(t *testing.T) {
 	}
 	if _, ok := CommandDhnt("sprint"); ok {
 		t.Fatal("sprint has no skill.dhnt; CommandDhnt should report absent")
+	}
+}
+
+func TestFormShapewareFrontmatter(t *testing.T) {
+	skillBytes, err := os.ReadFile("../examples/desk/form/SKILL.md")
+	if err != nil {
+		t.Fatalf("read form/SKILL.md: %v", err)
+	}
+	sk, err := yokeskills.ParseFrontmatter(skillBytes)
+	if err != nil {
+		t.Fatalf("ParseFrontmatter(form/SKILL.md): %v", err)
+	}
+	if sk.Type != "shapeware" || sk.TypeWarning != "" {
+		t.Fatalf("form SKILL.md Type = %q (warning=%q), want shapeware with no warning", sk.Type, sk.TypeWarning)
+	}
+	if sk.Meta["min-band"] != "L2" || sk.Meta["shapeware"] != "0.1" {
+		t.Fatalf("form SKILL.md metadata = %+v, want min-band=L2 and shapeware=0.1", sk.Meta)
 	}
 }
 
@@ -262,7 +281,9 @@ func validateDeskDocFlags(doc string) []string {
 			"addr": true, "data": true, "prefix": true, "title": true, "body": true, "id": true,
 			"extract": true, "values": true, "refusals": true, "def": true, "definition": true,
 			"respondents": true, "anonymous": true, "close-at": true, "results-visible": true,
-			"poll": true, "options": true, "key": true, "timeout": true, "interval": true, "answer": true,
+			"poll": true, "options": true, "key": true, "timeout": true, "interval": true,
+			"answer": true, "answers": true, "complete": true, "invite": true, "participant": true,
+			"open": true,
 		},
 		"chart": {
 			"addr": true, "data": true, "prefix": true, "title": true, "body": true, "id": true,

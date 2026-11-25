@@ -1,0 +1,71 @@
+# Grade a work copy against this INSTALLED folder (shapeware v0.1).
+# Usage, from the installed folder: bashy --bashsharp checks/candidate.bsh COPY
+# The copy may add acceptance examples and change form.bsh. It may not change
+# or remove existing examples, checks/, contract.bsh, dag.md, shaped.json,
+# server/, go.mod, go.sum, or any critical: flag. Then THIS folder's checker
+# grades the copy.
+# Prints PASS|FAIL lines and VARIANT <version>+shaped.<sha>; exit 1 on any FAIL.
+set -u
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ $(basename "$(dirname "$script_dir")") == ".shape" ]]; then
+  # Invoked with no arguments inside `bashy src pr verify`'s staged check dir:
+  # verify the clone's core source digest against shaped.json.
+  if [[ $# -eq 0 ]]; then
+    clone=$(cd "$script_dir/../.." && pwd)
+    runner="${BASHY:-${BASH:-bashy}}"
+    exec "$runner" --bashsharp "$clone/form.bsh" --verify-core
+  fi
+  base=$(cd "$script_dir/../.." && pwd)
+else
+  base=$(cd "$script_dir/.." && pwd)
+fi
+
+if [[ $# -lt 1 || -z "${1:-}" ]]; then
+  echo "FAIL usage (usage: candidate.bsh COPY)"
+  exit 1
+fi
+copy=$(cd "$1" 2>/dev/null && pwd) || {
+  echo "FAIL copy exists (no such folder: $1)"
+  exit 1
+}
+
+runner="${BASHY:-${BASH:-bashy}}"
+fail=0
+ok()  { echo "PASS $1"; }
+bad() { echo "FAIL $1 ${2:-}"; fail=1; }
+
+[[ "$copy" != "$base" ]] && ok "copy is not the installed folder" || bad "copy is not the installed folder"
+
+for p in checks contract.bsh dag.md shaped.json go.mod go.sum server; do
+  [[ -e "$base/$p" || -e "$copy/$p" ]] || continue
+  diff -r "$base/$p" "$copy/$p" >/dev/null 2>&1 && ok "protected $p unchanged" || bad "protected $p unchanged" "($p was changed)"
+done
+
+if [[ -f "$base/features.yaml" ]]; then
+  if [[ ! -f "$copy/features.yaml" ]]; then
+    bad "features.yaml only adds lines" "(features.yaml missing in copy)"
+  else
+    removed=$(diff "$base/features.yaml" "$copy/features.yaml" 2>/dev/null | grep -c '^<' || true)
+    [[ $removed -eq 0 ]] && ok "features.yaml only adds lines" || bad "features.yaml only adds lines" "($removed existing lines changed or removed)"
+  fi
+fi
+
+SHAPEWARE_BASE="$base" "$runner" --bashsharp "$base/checks/acceptance.bsh" "$copy" || fail=1
+
+# The variant id: the base version plus the first 7 hex of a SHA-256 over the
+# copy's files (relative paths, sorted, SKILL.md excluded). Reproducible.
+ver=$(sed -n 's/^  version: "\(.*\)"$/\1/p' "$base/SKILL.md" | head -1)
+sha=$(
+  cd "$copy" &&
+  find . -type f ! -path ./SKILL.md ! -path './.git/*' ! -path './.desk-build/*' ! -path './.shapeware/*' ! -name '.DS_Store' |
+  LC_ALL=C sort |
+  while IFS= read -r f; do
+    h=$(sha256sum "$f")
+    printf '%s  %s\n' "${h%% *}" "$f"
+  done |
+  sha256sum |
+  { read -r sum _; printf '%s' "${sum:0:7}"; }
+)
+echo "VARIANT ${ver:-0.0.0}+shaped.$sha"
+exit $fail

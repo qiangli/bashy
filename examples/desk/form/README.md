@@ -8,17 +8,22 @@ questionnaire (F3).
 
 ## Quick round-trip
 
+This directory is a **shapeware v0.1** folder (`SKILL.md`, `dag.md`,
+`features.yaml`, `checks/acceptance.bsh`, `checks/candidate.bsh`, `contract.bsh`,
+and `shaped.json` with a pinned `server.digest`). Read `SKILL.md` first for the
+one-step agent workflow.
+
 ```bash
-bashy form add --def ./examples/contact.json --title "Contact preferences"
+bashy form add --def ./examples/contact.json --title "Contact preferences" --open
 # form-9f3a… http://127.0.0.1:18107/?id=form-9f3a…#invite=… pending
 # ownerKey: … (keep private)
+# opened: http://127.0.0.1:18107/?id=form-9f3a…#invite=…
 
-bashy form open form-9f3a…        # owner reopens with a plain URL
-# send the URL printed by add to one recipient; the page redeems its invite
+bashy form open form-9f3a… --open # owner reopens with a plain URL
 # human fills the page (Save = partial, Submit = complete)
 
-bashy form show form-9f3a… --json  # definition + answers keyed by field id
-bashy form wait form-9f3a…        # local owner key is resolved automatically (default --timeout 5m)
+bashy form show form-9f3a… --json           # definition + answers keyed by field id
+bashy form wait form-9f3a… --timeout 30m    # local owner key is resolved automatically (default --timeout 5m)
 ```
 
 `wait` blocks until answered, closed, or `--timeout` expires (default `5m`; pass
@@ -54,7 +59,7 @@ Indexes are never used.
 Both optional files are JSON objects keyed by that same row key:
 
 ```json
-{"name-id":"Ada","email-id":{"value":"ada@example.test","status":"filled-by-agent"}}
+{"name-id":"Ada","role-id":{"value":"Reviewer","status":"filled-by-agent"}}
 ```
 
 ```json

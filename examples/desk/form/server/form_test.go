@@ -791,3 +791,146 @@ func TestIdempotentJoinByRedeemingParticipant(t *testing.T) {
 		t.Fatalf("browser2 reused invite: want 403, got %d", code)
 	}
 }
+
+func TestCLIOpenFlagCreatesAndOpensInviteURL(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake browser recorder uses /bin/sh")
+	}
+	base := startServer(t)
+	addr := strings.TrimPrefix(base, "http://")
+	recFile := filepath.Join(t.TempDir(), "opened.txt")
+	fakeBrowser := filepath.Join(t.TempDir(), "fake-browser.sh")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$1\" >> \"" + recFile + "\"\n"
+	if err := os.WriteFile(fakeBrowser, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("FORM_BROWSER", fakeBrowser)
+
+	var out bytes.Buffer
+	if code := runCLI([]string{"add", "-addr", addr, "--id", "open-add", "--def", "../examples/contact.json", "--title", "Open test", "--open"}, &out); code != 0 {
+		t.Fatalf("add --open: exit %d: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "opened: "+base+"/?id=open-add#invite=") {
+		t.Fatalf("add --open stdout lacks opened invite URL:\n%s", out.String())
+	}
+
+	out.Reset()
+	if code := runCLI([]string{"ask", "-addr", addr, "--id", "open-ask", "--def", "../examples/contact.json", "--title", "Ask test", "--open", "--json"}, &out); code != 0 {
+		t.Fatalf("ask --open --json: exit %d: %s", code, out.String())
+	}
+	var askObj map[string]any
+	if err := json.Unmarshal(out.Bytes(), &askObj); err != nil || askObj["opened"] != true {
+		t.Fatalf("ask --open --json lacks opened=true: %v %s", err, out.String())
+	}
+
+	recorded, err := os.ReadFile(recFile)
+	if err != nil {
+		t.Fatalf("read recorded browser opens: %v", err)
+	}
+	lines := strings.Split(strings.TrimSpace(string(recorded)), "\n")
+	if len(lines) != 2 || !strings.Contains(lines[0], "?id=open-add#invite=") || !strings.Contains(lines[1], "?id=open-ask#invite=") {
+		t.Fatalf("unexpected opened URLs: %q", lines)
+	}
+
+	// Unsupported verb with --open fails closed with exit 2.
+	out.Reset()
+	if code := runCLI([]string{"list", "-addr", addr, "--open"}, &out); code != 2 {
+		t.Fatalf("list --open: want exit 2, got %d: %s", code, out.String())
+	}
+}
+
+func TestCoreDigestMatchAndMismatch(t *testing.T) {
+	// 1. Live examples/desk/form shaped.json must match the committed core source.
+	if err := VerifyCoreDigest("..", "../shaped.json"); err != nil {
+		t.Fatalf("committed core digest mismatch: %v", err)
+	}
+
+	// 2. Copy core source into a scratch directory; verify pass, then tamper and verify refusal.
+	copyRoot := t.TempDir()
+	for _, rel := range []string{"go.mod", "go.sum", "shaped.json"} {
+		b, err := os.ReadFile(filepath.Join("..", rel))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(copyRoot, rel), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	err := filepath.WalkDir(".", func(p string, d os.DirEntry, werr error) error {
+		if werr != nil {
+			return werr
+		}
+		if p != "." && strings.HasPrefix(d.Name(), ".") {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		dst := filepath.Join(copyRoot, "server", p)
+		if d.IsDir() {
+			return os.MkdirAll(dst, 0o755)
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dst, b, 0o644)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyCoreDigest(copyRoot, ""); err != nil {
+		t.Fatalf("clean copy failed VerifyCoreDigest: %v", err)
+	}
+
+	// Tamper with server/main.go in the copy: VerifyCoreDigest and runCLI must refuse.
+	tampered := filepath.Join(copyRoot, "server", "main.go")
+	origMain, err := os.ReadFile(tampered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(tampered, append(origMain, []byte("\n// tampered\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyCoreDigest(copyRoot, ""); err == nil || !strings.Contains(err.Error(), "digest mismatch") {
+		t.Fatalf("tampered server/main.go: want digest mismatch, got %v", err)
+	}
+
+	base := startServer(t)
+	addr := strings.TrimPrefix(base, "http://")
+	t.Setenv("FORM_APP_ROOT", copyRoot)
+	t.Setenv("FORM_PIN_MANIFEST", filepath.Join("..", "shaped.json"))
+	var out bytes.Buffer
+	if code := runCLI([]string{"list", "-addr", addr}, &out); code != 1 || !strings.Contains(out.String(), "digest mismatch") {
+		t.Fatalf("runCLI with tampered FORM_APP_ROOT: want exit 1 digest mismatch, got %d: %s", code, out.String())
+	}
+}
+
+func TestSKILLMdMatchesEmbeddedFence(t *testing.T) {
+	skillRaw, err := os.ReadFile("../SKILL.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bshRaw, err := os.ReadFile("../form.bsh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const startMarker = "~~~skill as guide\n"
+	const endMarker = "\n~~~\n"
+	_, after, ok := strings.Cut(string(bshRaw), startMarker)
+	if !ok {
+		t.Fatal("form.bsh lacks ~~~skill as guide fence")
+	}
+	fenceBody, _, ok := strings.Cut(after, endMarker)
+	if !ok {
+		t.Fatal("form.bsh lacks closing ~~~ fence")
+	}
+	want := strings.TrimRight(strings.ReplaceAll(string(skillRaw), "\r\n", "\n"), "\n")
+	got := strings.TrimRight(strings.ReplaceAll(fenceBody, "\r\n", "\n"), "\n")
+	if got != want {
+		t.Fatalf("SKILL.md and form.bsh embedded skill fence drifted")
+	}
+}

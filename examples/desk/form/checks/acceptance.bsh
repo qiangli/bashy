@@ -1,0 +1,173 @@
+# Acceptance (shapeware v0.1 checks contract), run from the INSTALLED folder.
+# Usage: bashy --bashsharp checks/acceptance.bsh [--strict] [DIR]
+#   DIR defaults to this folder; a work copy is graded by THIS checker, with
+#   the trusted-core pin frozen from THIS folder's shaped.json.
+# Prints one line per example: PASS|FAIL|TBD <feature-id>#<n> <example>.
+# Example results are not feature status: a passing tbd example prints PASS
+# and the feature stays tbd until the owner promotes it.
+# Fails closed: a verified example that errors or differs is FAIL.
+# Exit status: 1 if any FAIL (or if --strict and any TBD), else 0.
+set -u
+
+strict=false
+if [[ "${1:-}" == "--strict" ]]; then
+  strict=true
+  shift
+fi
+
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+if [[ $(basename "$(dirname "$script_dir")") == ".shape" ]]; then
+  here=$(cd "$script_dir/../.." && pwd)
+else
+  here=$(cd "$script_dir/.." && pwd)
+fi
+dir=$(cd "${1:-$here}" && pwd) || { echo "FAIL - - no such folder: ${1:-}"; exit 1; }
+[[ -f "$dir/features.yaml" ]] || { echo "FAIL - - missing $dir/features.yaml"; exit 1; }
+
+runner="${BASHY:-${BASH:-bashy}}"
+scratch=$(mktemp -d "${TMPDIR:-/tmp}/.form-accept.XXXXXX")
+srv_pid=""
+cleanup() {
+  if [[ -n "$srv_pid" ]]; then
+    kill "$srv_pid" 2>/dev/null || true
+    wait "$srv_pid" 2>/dev/null || true
+  fi
+  rm -rf "$scratch"
+}
+trap cleanup EXIT
+
+# Under `bashy src pr verify`, HOME is the clone root: isolate HOME/TMPDIR and
+# expose the running interpreter on PATH as bashy, matching checks/go.bsh.
+mkdir -p "$scratch/bin" "$scratch/home" "$scratch/data"
+if [[ -x "$runner" ]]; then
+  ln -s "$runner" "$scratch/bin/bashy"
+  export PATH="$scratch/bin:$PATH"
+  runner="$scratch/bin/bashy"
+fi
+if [[ "${HOME:-}" == "$here" || -z "${HOME:-}" ]]; then
+  export HOME="$scratch/home"
+fi
+
+export SHAPEWARE_BASE="$here"
+export FORM_DATA="$scratch/data"
+export FORM_BROWSER="none"
+export FORM_AUTO_SERVE="0"
+unset FORM_ADDR FORM_PREFIX FORM_PUBLIC_URL FORM_KEY BASHY_APP BASHY_APP_ADDR BASHY_APP_DATA
+
+if ! "$runner" --bashsharp "$dir/form.bsh" --build-core >/dev/null 2>"$scratch/build.err"; then
+  echo "FAIL - - core build/digest failed: $(tr '\n' ' ' < "$scratch/build.err")"
+  exit 1
+fi
+
+"$runner" --bashsharp "$dir/form.bsh" serve -data "$FORM_DATA" -addr 127.0.0.1:0 >"$scratch/srv.log" 2>&1 &
+srv_pid=$!
+srv_addr=""
+for ((i = 0; i < 60; i++)); do
+  if [[ -f "$FORM_DATA/server.json" ]]; then
+    srv_addr=$(jq -r '.addr // ""' "$FORM_DATA/server.json" 2>/dev/null || true)
+    [[ -n "$srv_addr" ]] && break
+  fi
+  sleep 0.05
+done
+if [[ -z "$srv_addr" ]]; then
+  echo "FAIL - - loopback test server never started: $(tr '\n' ' ' < "$scratch/srv.log")"
+  exit 1
+fi
+
+fail=0
+tbd_count=0
+id=""
+status="tbd"
+n=0
+
+record_result() {
+  local ok=$1 detail=$2
+  if [[ $ok == true ]]; then
+    echo "PASS $id#$n $ex"
+  elif [[ $status == tbd ]]; then
+    echo "TBD $id#$n $ex"
+    tbd_count=$((tbd_count + 1))
+  else
+    echo "FAIL $id#$n $ex ($detail)"
+    fail=1
+  fi
+}
+
+while IFS= read -r line; do
+  case $line in
+    '- id: '*)
+      id=${line#- id: }
+      id=${id%%#*}
+      id=${id%"${id##*[![:space:]]}"}
+      status=tbd
+      n=0
+      ;;
+    '  status: '*)
+      status=${line#  status: }
+      status=${status%%#*}
+      status=${status%"${status##*[![:space:]]}"}
+      ;;
+    '    - '*' => '*)
+      ex=${line#    - }
+      n=$((n + 1))
+      lhs=${ex%% => *}
+      want=${ex#* => }
+      if [[ $lhs == 'GET '* ]]; then
+        path=${lhs#GET }
+        body_file="$scratch/http-$n.body"
+        http_code=$(curl -sS -o "$body_file" -w '%{http_code}' "http://$srv_addr$path" 2>/dev/null || echo "000")
+        want_code=${want%% *}
+        want_sub=""
+        [[ $want == *' '* ]] && want_sub=${want#* }
+        if [[ $http_code == "$want_code" ]] && { [[ -z "$want_sub" ]] || grep -Fq -- "$want_sub" "$body_file"; }; then
+          record_result true ""
+        else
+          record_result false "HTTP $http_code, wanted $want"
+        fi
+      else
+        jq_expr=""
+        cmd_part="$lhs"
+        if [[ $lhs == *' | '* ]]; then
+          cmd_part=${lhs%% | *}
+          jq_expr=${lhs#* | }
+        fi
+        cmd_rest=${cmd_part#form }
+        mapfile -d '' -t argv < <(printf '%s' "$cmd_rest" | xargs printf '%s\0')
+        got=$(cd "$dir" && "$runner" --bashsharp "$dir/form.bsh" "${argv[@]}" 2>&1)
+        rc=$?
+        if [[ $want == 'ERROR '* ]]; then
+          rest_want=${want#ERROR }
+          want_rc=${rest_want%% *}
+          want_msg=${rest_want#* }
+          if [[ $rc -eq $want_rc && $got == *"$want_msg"* ]]; then
+            record_result true ""
+          else
+            record_result false "exit $rc, got: ${got:-<none>}"
+          fi
+        elif [[ -n "$jq_expr" ]]; then
+          if [[ $rc -eq 0 ]]; then
+            projected=$(jq -r "[ $jq_expr ] | join(\",\")" <<<"$got" 2>/dev/null || true)
+          else
+            projected=""
+          fi
+          if [[ $rc -eq 0 && $projected == "$want" ]]; then
+            record_result true ""
+          else
+            record_result false "exit $rc, got: ${projected:-${got:-<none>}}"
+          fi
+        else
+          if [[ $rc -eq 0 && $got == "$want" ]]; then
+            record_result true ""
+          else
+            record_result false "exit $rc, got: ${got:-<none>}"
+          fi
+        fi
+      fi
+      ;;
+  esac
+done < "$dir/features.yaml"
+
+if [[ $strict == true && $tbd_count -gt 0 ]]; then
+  fail=1
+fi
+exit $fail

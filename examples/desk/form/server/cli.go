@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,6 +47,7 @@ Flags:
   --title TEXT            Form title
   --body TEXT             Agent note (returned by show, hidden by open/list)
   --id ID                 Explicit form id on add/ask/reply
+  --open                  add/ask/open/reply: open the form URL in a browser for the human
   --key KEY               Owner capability key (or FORM_KEY; wait resolves local owner key automatically)
   --timeout DURATION      wait: give up after this long (default 5m, e.g. 30m, 4h)
   --interval DURATION     wait: poll interval (default 2s)
@@ -190,6 +190,7 @@ func runCLI(args []string, stdout io.Writer) int {
 	fs.Var(answers, "answer", "prefill answer as key=value (repeatable, with set/answer)")
 	answersPath := fs.String("answers", "", "answer values as JSON file (- for stdin)")
 	complete := fs.Bool("complete", false, "submit complete respondent answer")
+	openBrowser := fs.Bool("open", false, "open the form URL in a browser")
 	positional, visited, err := parseVerbArgsWithSet(fs, append(pre, post...))
 	if err != nil {
 		if *asJSON {
@@ -197,6 +198,25 @@ func runCLI(args []string, stdout io.Writer) int {
 		}
 		fmt.Fprintf(stdout, "error: %v\n", err)
 		return 2
+	}
+	if appRoot := strings.TrimSpace(os.Getenv("FORM_APP_ROOT")); appRoot != "" {
+		if derr := VerifyCoreDigest(appRoot, strings.TrimSpace(os.Getenv("FORM_PIN_MANIFEST"))); derr != nil {
+			if *asJSON {
+				fmt.Fprintln(stdout, kit.CanonicalJSON(kit.Envelope("form", map[string]any{
+					"error": map[string]any{"code": "core_digest_mismatch", "message": derr.Error()},
+				})))
+			} else {
+				fmt.Fprintf(stdout, "error: %v\n", derr)
+			}
+			return 1
+		}
+	}
+	if *openBrowser {
+		switch verb {
+		case "add", "ask", "open", "reply":
+		default:
+			return kit.UsageError(stdout, "form", *asJSON, fmt.Sprintf("--open is only supported with add, ask, open or reply (got %q)", verb))
+		}
 	}
 	if visited["addr"] {
 		explicitAddr = true
@@ -348,7 +368,7 @@ func runCLI(args []string, stdout io.Writer) int {
 		base := "http://" + *addr + *prefix
 		payload["action"] = action
 		raw, _ := json.Marshal(payload)
-		req, err := http.NewRequest("POST", base+"/api/action"+commonQuery(common.Fields), bytes.NewReader(raw))
+		req, err := http.NewRequest("POST", base+"/api/action", bytes.NewReader(raw))
 		if err != nil {
 			return nil, nil, failClient("invalid_arg", err.Error(), 2)
 		}
@@ -410,11 +430,35 @@ func runCLI(args []string, stdout io.Writer) int {
 		saveClientOwnerKey(*data, serverKeyScope(scope, *addr, *prefix), id, ownerKey)
 	}
 	emit := func(obj map[string]any, arr []map[string]any) int {
+		var openedLink string
+		if *openBrowser && obj != nil {
+			if inviteURL, ok := obj["inviteURL"].(string); ok && inviteURL != "" {
+				openedLink = inviteURL
+			} else if rawURL, ok := obj["url"].(string); ok {
+				openedLink = rawURL
+			}
+			if err := openFormURL(openedLink); err != nil {
+				return failClient("open_failed", fmt.Sprintf("open browser: %v", err), 1)
+			}
+			obj["opened"] = true
+			obj["openedURL"] = openedLink
+		}
 		if *asJSON {
 			if arr != nil {
+				if common.Fields != "" {
+					return failClient("invalid_arg", "unknown field "+strings.TrimSpace(strings.Split(common.Fields, ",")[0]), 2)
+				}
 				fmt.Fprintln(stdout, kit.CanonicalJSON(arr))
 			} else {
-				fmt.Fprintln(stdout, kit.CanonicalJSON(obj))
+				outObj := obj
+				if common.Fields != "" && obj != nil {
+					projected, perr := kit.Project(obj, common.Fields)
+					if perr != nil {
+						return failClient("invalid_arg", perr.Error(), 2)
+					}
+					outObj = projected
+				}
+				fmt.Fprintln(stdout, kit.CanonicalJSON(outObj))
 			}
 			return 0
 		}
@@ -452,6 +496,9 @@ func runCLI(args []string, stdout io.Writer) int {
 			}
 			if k, ok := obj["ownerKey"]; ok {
 				fmt.Fprintf(stdout, "ownerKey: %v (keep private)\n", k)
+			}
+			if openedLink != "" {
+				fmt.Fprintf(stdout, "opened: %s\n", openedLink)
 			}
 		}
 		return 0
@@ -621,6 +668,9 @@ func runCLI(args []string, stdout io.Writer) int {
 		if !ok {
 			return 2
 		}
+		if rc := resolveWaitKey(id); rc != 0 {
+			return rc
+		}
 		obj, _, code := call("show", map[string]any{"id": id})
 		if code != 0 {
 			return code
@@ -657,6 +707,9 @@ func runCLI(args []string, stdout io.Writer) int {
 		id, ok := needID()
 		if !ok {
 			return 2
+		}
+		if rc := resolveWaitKey(id); rc != 0 {
+			return rc
 		}
 		def, code := loadDef()
 		if code != 0 {
@@ -738,7 +791,7 @@ func looksLikeDefArg(s string) bool {
 
 var cliBoolFlags = map[string]bool{
 	"json": true, "anonymous": true, "results-visible": true, "complete": true,
-	"h": true, "help": true,
+	"open": true, "h": true, "help": true,
 }
 
 // splitVerb splits argv into flags before the verb, the verb, and args after
@@ -864,13 +917,6 @@ func sortedKeys(m map[string]any) []string {
 		}
 	}
 	return keys
-}
-
-func commonQuery(fields string) string {
-	if fields == "" {
-		return ""
-	}
-	return "?fields=" + url.QueryEscape(fields)
 }
 
 func serverKeyScope(store, addr, prefix string) string {

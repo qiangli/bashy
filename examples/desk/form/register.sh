@@ -14,7 +14,10 @@ name=${1:-form}
   --set effects.0=read --set effects.1=write --set effects.2=exec --set effects.3=net
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-printf '%s\n' "$guide" > "$tmp/SKILL.md"
+# Stage the shapeware folder cleanly (no build/test scratch files) plus its canonical dhnt face.
+for item in SKILL.md dag.md features.yaml contract.bsh shaped.json form.bsh form.sh register.sh README.md checks references examples server go.mod go.sum; do
+  [[ -e "$here/$item" ]] && cp -R "$here/$item" "$tmp/$item"
+done
 "$runner" --bashsharp "$here/form.bsh" --contract > "$tmp/skill.dhnt"
 "$runner" skill add "$tmp" --force
 
@@ -23,4 +26,4 @@ printf '%s\n' "$guide" > "$tmp/SKILL.md"
   --tip "Ad-hoc forms and questionnaires: define in JSON/YAML, human fills, agent reads answers" \
   --force
 
-echo "Registered $name: one Bash# body, command and executable skill."
+echo "Registered $name: shapeware skill, command, and shaped app."

@@ -1,5 +1,9 @@
 {
-  "server": {"main": "server", "args": ["serve", "-addr", "$ADDR", "-data", "$DATA"]},
+  "server": {
+    "main": "server",
+    "args": ["serve", "-addr", "$ADDR", "-data", "$DATA"],
+    "digest": "sha256:437339b26c9186a72ca77e224fe07c81572d5d64d041b7b7f944e559b0e72b08"
+  },
   "genie": {
     "examples": [
       "Keep the Save and Submit bar visible while I scroll through a long questionnaire.",
