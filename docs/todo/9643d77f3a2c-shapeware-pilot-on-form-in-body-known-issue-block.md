@@ -50,12 +50,14 @@ Other mesh patterns are recorded as future input; they are not part of this pilo
 - the bashy-ui-v1 wire as the integration point for any framework, plus MCP
 - the browser extension's Shape button reading the page's companion
 
-## Addendum 2026-11-25 (d): no converter for the UI face (operator: no reinventing the wheel)
+## Addendum 2026-11-25 (d): restricted HTML AND the converter, not either/or (operator)
 
-The UI face is a restricted profile of semantic HTML/CSS, so it needs no parser/converter. This SUPERSEDES addendum (b)'s `lens -f bsh -t md` and the `feature`/`ui` render overrides in kit/render for the UI face:
-- **UI face:** the `~~~ui` body is restricted HTML, served as-is to the browser (visual). Audio walks the same semantic page with the CSS speech rules (`@media speech`), as screen readers already do.
-- **What remains, all already existing:**
+No reinventing the wheel: when the UI face is written as restricted semantic HTML/CSS, it needs no conversion. The converter from addendum (b) STAYS part of the solution. Both paths coexist:
+- **Direct path:** a `~~~ui` body in restricted HTML is served as-is (visual). Audio walks the same semantic page with `@media speech` rules, as screen readers do.
+- **Converter path (addendum (b), kept):**
+  - `lens -f bsh -t md` plus the `feature`/`ui` renderers in kit/render, for faces that are data (`~~~feature` specs, JSON/YAML `~~~ui`/form definitions)
+  - the rendered raw view of a whole .bsh
+  - representations the browser does not give for free (Markdown/PDF export, terminal, MCP elicitation, audio)
+- **Shared foundation:**
   - the face split, using the sh/syntax `SourceBlock` (replace the hand-rolled loops)
-  - the profile check, by tightening the kit's bluemonday allowlist and keeping the self-only CSP: semantic elements only, no inline style or handlers, no page JS beyond kit.js
-- **Raw view of a whole .bsh:** stays the notepad's plain-text view (worked 2026-11-25). A rendered view is not in the MVP.
-- **Case 1 (form):** the form JSON stays as data; the form server already compiles it into kit HTML.
+  - the restricted-HTML profile check: a tightened kit bluemonday allowlist plus the self-only CSP; semantic elements only, no inline style or handlers, no page JS beyond kit.js. The converter emits this profile too, so both paths meet in the same HTML.
