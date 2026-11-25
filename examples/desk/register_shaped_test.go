@@ -56,6 +56,14 @@ func TestDeskRegisterScriptsUsePublicShapedAppPath(t *testing.T) {
 				t.Fatalf("app list lacks registered shaped app %s:\n%s", name, list)
 			}
 
+			if name == "form" {
+				assertRegisteredFormFlags(t, f, root)
+			}
+			if name == "chart" {
+				if out := f.bashy("chart", "add", "--input", "-", "--widget", "gauge", "--dry-run", "--json"); !strings.Contains(out, `"verb":"add"`) {
+					t.Fatalf("registered chart rejected flags:\n%s", out)
+				}
+			}
 			if name == "viewer" || name == "chart" || name == "calendar" || name == "page" {
 				assertRegisteredGenie(t, f, name)
 			}
@@ -161,5 +169,54 @@ func assertRegisteredGenie(t *testing.T, f *forkHome, name string) {
 		if !strings.Contains(string(body), marker) {
 			t.Errorf("GET %s: missing Genie marker %q", req.URL.Path, marker)
 		}
+	}
+}
+
+func assertRegisteredFormFlags(t *testing.T, f *forkHome, root string) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	srvLog, err := os.CreateTemp(t.TempDir(), "form-serve-*.log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer srvLog.Close()
+	srv := exec.CommandContext(ctx, f.bin, "form", "serve", "-addr", "127.0.0.1:0")
+	srv.Dir = filepath.Dir(f.home)
+	srv.Env = f.env
+	srv.Stdout, srv.Stderr = srvLog, srvLog
+	if err := srv.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		cancel()
+		_ = srv.Wait()
+	}()
+
+	serverJSON := filepath.Join(f.home, "desk", "form", "server.json")
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(serverJSON); err == nil {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if _, err := os.Stat(serverJSON); err != nil {
+		raw, _ := os.ReadFile(srvLog.Name())
+		t.Fatalf("registered form serve never wrote %s:\n%s", serverJSON, raw)
+	}
+
+	def := filepath.Join(root, "examples", "contact.json")
+	added := f.bashy("form", "add", "--def", def, "--title", "Intake")
+	fields := strings.Fields(strings.SplitN(added, "\n", 2)[0])
+	if len(fields) < 3 || !strings.HasPrefix(fields[0], "form-") {
+		t.Fatalf("registered form add --def --title output = %q", added)
+	}
+	id := fields[0]
+	if listed := f.bashy("form", "list"); !strings.Contains(listed, id) {
+		t.Fatalf("registered form list lacks %s:\n%s", id, listed)
+	}
+	if help := f.bashy("form", "-h"); !strings.Contains(help, "--timeout") || !strings.Contains(help, "5m") {
+		t.Fatalf("registered form -h lacks --timeout 5m:\n%s", help)
 	}
 }

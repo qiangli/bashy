@@ -40,8 +40,11 @@ build() {
   [[ "$src" -nt "$bin" ]] && stale=true
  done
  if [[ $stale == true ]]; then
+  if [[ -f "$here/../register-modules.sh" ]]; then
+   (BASHY_BIN="${BASHY_BIN:-${BASHY:-bashy}}" . "$here/../register-modules.sh" >&2)
+  fi
   mkdir -p "$here/.desk-build" "$cache"
-  (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -buildvcs=false -trimpath -o ".desk-build/chart$exe" . && { mv -f ".desk-build/chart$exe" "$bin" || [[ -f "$bin" ]]; })
+  (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -buildvcs=false -o ".desk-build/chart$exe" . && { mv -f ".desk-build/chart$exe" "$bin" || [[ -f "$bin" ]]; })
  fi
 }
 case ${1:-} in

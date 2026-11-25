@@ -12,7 +12,7 @@
 set -euo pipefail
 
 desk_kit_version=v0.5.0
-desk_chart_version=v0.1.3
+desk_chart_version=v0.1.5
 
 desk_modules_here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 desk_modules_runner=${BASHY_BIN:-bashy}

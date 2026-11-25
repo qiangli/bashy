@@ -18,12 +18,20 @@ bashy form open form-9f3a…        # owner reopens with a plain URL
 # human fills the page (Save = partial, Submit = complete)
 
 bashy form show form-9f3a… --json  # definition + answers keyed by field id
-bashy form wait form-9f3a…        # local owner key is resolved automatically
+bashy form wait form-9f3a…        # local owner key is resolved automatically (default --timeout 5m)
 ```
 
-`wait` blocks until answered (or closed/timeout). It reads the owner key from
-the same local form store when neither `--key` nor `FORM_KEY` is supplied; a
-caller using another store or host must provide one of those credentials.
+`wait` blocks until answered, closed, or `--timeout` expires (default `5m`; pass
+e.g. `--timeout 4h` for long async reviews, `--interval 2s` for poll cadence).
+It resolves the owner key automatically from the local form store or client key
+cache when neither `--key` nor `FORM_KEY` is supplied; a caller on another host
+must provide one of those credentials.
+
+A standalone `form serve` binds `127.0.0.1:18107` for the default form store,
+while `form serve -data DIR` (without `-addr`) selects a per-store loopback
+port and records `DIR/server.json`. Every server advertises a non-reversible
+digest of its canonical data path (`X-Desk-Store`), and the client refuses to
+read or write when the server at `--addr` owns a different store.
 
 ## Replyforms
 

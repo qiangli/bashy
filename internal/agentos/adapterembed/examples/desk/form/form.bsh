@@ -34,20 +34,23 @@ executable argv and source path; `bashy skill show form` reads this face.
 - The human fills the form on the loopback page (Save keeps a partial
   save, Submit completes it); partial saves survive reload.
 - `bashy form show ID --json` reads the definition and the answers back as
-  JSON keyed by field id. `bashy form wait ID` blocks until the form is
-  answered (or closed, or the timeout hits). For a form created in the same
-  local store, `wait` resolves the owner's key automatically; use `--key` or
-  `FORM_KEY` when waiting from another store or host.
+  JSON keyed by field id. `bashy form wait ID [--timeout 5m]` blocks until
+  the form is answered (or closed, or `--timeout` expires; default `5m`, pass
+  e.g. `--timeout 4h` for long reviews). For a form created by this local
+  client or store, `wait` resolves the owner's key automatically; use `--key`
+  or `FORM_KEY` when waiting from another host.
 - `bashy form set ID --answer name=Ada` prefills answers as the owner;
   `list`, `share`, `close` work like every desk tool.
 - `bashy form serve` starts the native foreground service (loopback only)
   and prints the participant origin. Ctrl-C stops it; saved forms remain.
+  A custom `-data DIR` gets its own loopback port and records `DIR/server.json`,
+  and the client refuses when the server at `--addr` serves a different store.
 - Fields typed secret — or secret-named like `db_password` — are refused
   before storage; credentials stay with `bashy ask`/vault.
 - `FORM_DATA` selects the data directory; default is
   `$BASHY_HOME/desk/form`. `FORM_ADDR` selects the listener; default
-  `127.0.0.1:18107`. `FORM_PREFIX` selects a URL sub-path when served
-  behind one; default empty. Never publish an owner key.
+  `127.0.0.1:18107` for the default store. `FORM_PREFIX` selects a URL
+  sub-path when served behind one; default empty. Never publish an owner key.
 - `bashy form publish-outpost [--public] [--icon URL] [--json] [--dry-run]`
   lists the console's `/form/` on the paired outpost, login required unless
   `--public`; `unpublish-outpost` removes it.
@@ -76,9 +79,71 @@ build() {
     [[ "$src" -nt "$bin" ]] && stale=true
   done
   if [[ $stale == true ]]; then
+    if [[ -f "$here/../register-modules.sh" ]]; then
+      (BASHY_BIN="${BASHY_BIN:-${BASHY:-bashy}}" . "$here/../register-modules.sh" >&2)
+    fi
     mkdir -p "$here/.desk-build" "$cache"
-    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -buildvcs=false -trimpath -o ".desk-build/form$exe" ./server && { mv -f ".desk-build/form$exe" "$bin" || [[ -f "$bin" ]]; })
+    (cd "$here" && GOWORK=off CGO_ENABLED=0 go build -trimpath -buildvcs=false -o ".desk-build/form$exe" ./server && { mv -f ".desk-build/form$exe" "$bin" || [[ -f "$bin" ]]; })
   fi
+}
+usage() {
+  cat <<'EOF'
+Ad-hoc loopback forms: define in JSON/YAML, human fills on the page, agent reads answers as JSON.
+
+Usage:
+  form VERB [ID] [flags]
+
+Commands:
+  serve               Start loopback form server (default 127.0.0.1:18107; custom -data uses its own port)
+  add [FILE|-]        Create a form from --def FILE|- (or positional FILE), --definition, or --poll
+  ask [ID|FILE]       Create a Q1..Qn questionnaire, or append a follow-up round to ID (with --key)
+  reply               Create a web-form reply checklist from --extract FILE|- [--values FILE] [--refusals FILE]
+  open ID             Print id, loopback URL, and status only (never content)
+  show ID             Read definition and answers (owner --key/FORM_KEY or joined participant)
+  wait ID             Poll until answered, closed, or --timeout expires (default 5m; resolves local owner key)
+  set ID              Update title/body/definition or prefill answers (--answer k=v, repeatable)
+  answer ID           Submit respondent answers (--answer k=v or --answers FILE|- [--complete])
+  list                List forms in the store (id, status, URL)
+  share ID            Mint a single-use invite link (or reusable URL when --respondents many)
+  join ID [INVITE]    Redeem a single-use --invite CODE
+  close ID            Close a form against further responses
+  publish-outpost     Publish /form/ on the paired outpost (--public, --icon, --json, --dry-run)
+  unpublish-outpost   Remove /form/ from the paired outpost
+
+Flags:
+  --def FILE|-            Form definition file in JSON or YAML (- for stdin)
+  --definition TEXT       Inline JSON or YAML form definition
+  --title TEXT            Form title
+  --body TEXT             Agent note (returned by show, hidden by open/list)
+  --id ID                 Explicit form id on add/ask/reply
+  --key KEY               Owner capability key (or FORM_KEY; wait resolves local owner key automatically)
+  --timeout DURATION      wait: give up after this long (default 5m, e.g. 30m, 4h)
+  --interval DURATION     wait: poll interval (default 2s)
+  --answer KEY=VALUE      Field answer pair (repeatable on set and answer)
+  --answers FILE|-        Respondent answers as JSON object (- for stdin)
+  --complete              answer: submit complete respondent answer (checks required fields)
+  --poll QUESTION         add: one-question multi-respondent poll (requires --options)
+  --options A,B,C         add: comma-separated choices for --poll
+  --respondents MODE      one (default) or many
+  --anonymous             Do not ask participants for a name
+  --results-visible       Show live aggregate results to respondents
+  --close-at RFC3339      Automatic close timestamp
+  --extract FILE|-        reply: browser extract JSON
+  --values FILE           reply: proposed values JSON
+  --refusals FILE         reply: guard refusals/failures JSON
+  --invite CODE           join: single-use invite token
+  --participant TOKEN     Respondent session token
+  --addr HOST:PORT        Loopback server address (or FORM_ADDR; default 127.0.0.1:18107)
+  --data DIR              Form store directory (or FORM_DATA; default $BASHY_HOME/desk/form)
+  --prefix /PATH          URL path prefix (or FORM_PREFIX)
+  --json                  Print raw versioned JSON response
+  --fields F1,F2          Project top-level JSON fields (requires --json)
+  --dry-run               Preview action without mutating state
+  --explain               Describe the action as versioned JSON
+  --no-input              Never prompt for input
+  --help=mcp              Print MCP tool metadata JSON
+  -h, --help              Show this help
+EOF
 }
 case ${1:-serve} in
 --skill)
@@ -90,37 +155,17 @@ case ${1:-serve} in
   done < "${BASH_SOURCE[0]}"
   ;;
 --contract) echo 'sokilili foromu efefecato reada wurite neto fini sotepo porota porota fini enisure gereeni fini fini' ;;
--h|--help) echo 'form [serve|add|reply|ask|open|show|set|list|share|close|wait|answer|join|publish-outpost|unpublish-outpost] [--json] — ad-hoc forms and questionnaires; --skill prints its embedded skill' ;;
+-h|--help) usage ;;
 publish-outpost|unpublish-outpost) kit_outpost "$1" form form "${CONSOLE_PORT:-22749}" false "${@:2}" ;;
-serve)
-  shift || true
-  data=${FORM_DATA:-}
-  addr=${FORM_ADDR:-127.0.0.1:18107}
-  prefix=${FORM_PREFIX:-}
-  build
-  if [[ -n ${data:-} && -n ${prefix:-} ]]; then exec "$bin" serve -data "$data" -addr "$addr" -prefix "$prefix" "$@"
-  elif [[ -n ${data:-} ]]; then exec "$bin" serve -data "$data" -addr "$addr" "$@"
-  elif [[ -n ${prefix:-} ]]; then exec "$bin" serve -addr "$addr" -prefix "$prefix" "$@"
-  else exec "$bin" serve -addr "$addr" "$@"; fi
-  ;;
 stop)
   if pkill -f "$bin serve" 2>/dev/null; then echo "stopped form"; else echo "no form server matched $bin serve"; fi
   ;;
 test) cd "$here"; GOWORK=off go test ./... ;;
-add|reply|ask|open|show|set|list|share|close|wait|join|answer)
-  build
-  data=${FORM_DATA:-}
-  addr=${FORM_ADDR:-127.0.0.1:18107}
-  prefix=${FORM_PREFIX:-}
-  args=()
-  if [[ -n ${data:-} ]]; then args+=(-data "$data"); fi
-  args+=(-addr "$addr")
-  if [[ -n ${prefix:-} ]]; then args+=(-prefix "$prefix"); fi
-  exec "$bin" "${args[@]}" "$@"
-  ;;
 *)
-  # Let the native CLI produce its versioned JSON usage error for --json.
   build
+  if [[ $# -eq 0 ]]; then
+    exec "$bin" serve
+  fi
   exec "$bin" "$@"
   ;;
 esac

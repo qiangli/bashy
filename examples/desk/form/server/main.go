@@ -11,6 +11,8 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html"
@@ -21,6 +23,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -64,6 +67,78 @@ type item struct {
 	Owner          string             `json:"owner"`
 	Members        map[string]bool    `json:"members"`
 	Invites        map[string]bool    `json:"invites"`
+	Redeemed       map[string]string  `json:"redeemed,omitempty"`
+}
+
+const storeHeader = "X-Desk-Store"
+
+type serverInfo struct {
+	Addr   string `json:"addr"`
+	Prefix string `json:"prefix,omitempty"`
+	Store  string `json:"store"`
+	PID    int    `json:"pid"`
+}
+
+func serverInfoPath(dir string) string { return filepath.Join(dir, "server.json") }
+
+func canonicalStorePath(dir string) string {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		abs = filepath.Clean(dir)
+	}
+	cur := abs
+	var tail []string
+	for {
+		if resolved, err := filepath.EvalSymlinks(cur); err == nil {
+			for i := len(tail) - 1; i >= 0; i-- {
+				resolved = filepath.Join(resolved, tail[i])
+			}
+			return filepath.Clean(resolved)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return filepath.Clean(abs)
+		}
+		tail = append(tail, filepath.Base(cur))
+		cur = parent
+	}
+}
+
+func storeID(dir string) string {
+	sum := sha256.Sum256([]byte("bashy-form-store-v1:" + canonicalStorePath(dir)))
+	return hex.EncodeToString(sum[:16])
+}
+
+func derivedStoreAddr(dir string) string {
+	id := storeID(dir)
+	n, _ := strconv.ParseUint(id[:4], 16, 64)
+	port := 28100 + int(n%900)
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+}
+
+func readServerInfo(dir string) (serverInfo, bool) {
+	raw, err := os.ReadFile(serverInfoPath(dir))
+	if err != nil {
+		return serverInfo{}, false
+	}
+	var info serverInfo
+	if json.Unmarshal(raw, &info) != nil || info.Addr == "" {
+		return serverInfo{}, false
+	}
+	return info, true
+}
+
+func writeServerInfo(dir, addr, prefix string) {
+	info := serverInfo{Addr: addr, Prefix: prefix, Store: storeID(dir), PID: os.Getpid()}
+	if raw, err := json.Marshal(info); err == nil {
+		_ = kit.AtomicWrite(serverInfoPath(dir), raw)
+	}
+}
+
+func cleanupServerInfo(dir, addr string, pid int) {
+	if info, ok := readServerInfo(dir); ok && info.Addr == addr && info.PID == pid {
+		_ = os.Remove(serverInfoPath(dir))
+	}
 }
 
 type app struct {
@@ -105,6 +180,9 @@ func (a *app) loadLocked(id string) (*item, error) {
 	}
 	if it.Invites == nil {
 		it.Invites = map[string]bool{}
+	}
+	if it.Redeemed == nil {
+		it.Redeemed = map[string]string{}
 	}
 	if it.Answers == nil {
 		it.Answers = Answers{}
@@ -290,6 +368,9 @@ func (a *app) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
+	if a.dir != "" {
+		w.Header().Set(storeHeader, storeID(a.dir))
+	}
 	kit.ApplySecurityHeaders(w)
 	if !kit.GuardPOST(w, r, "form") {
 		return
@@ -306,7 +387,11 @@ func (a *app) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if path == "/healthz" && r.Method == "GET" {
-		kit.WriteJSON(w, map[string]bool{"ok": true})
+		res := map[string]any{"ok": true}
+		if a.dir != "" {
+			res["store"] = storeID(a.dir)
+		}
+		kit.WriteJSON(w, res)
 		return
 	}
 	if path == "/api/state" && r.Method == "GET" {
@@ -793,12 +878,29 @@ func (a *app) join(w http.ResponseWriter, r *http.Request, req request, me strin
 		}
 		return
 	}
+	if kit.ValidToken(req.Invite) && it.Members[me] && it.Redeemed[req.Invite] == me {
+		kit.WriteJSON(w, a.openView(r, it))
+		return
+	}
 	if !kit.ValidToken(req.Invite) || !it.Invites[req.Invite] {
 		kit.Fail(w, 403, "This invite is invalid. Ask the owner for a new one.")
 		return
 	}
 	next := *it
+	next.Members = make(map[string]bool, len(it.Members)+1)
+	for k, v := range it.Members {
+		next.Members[k] = v
+	}
+	next.Invites = make(map[string]bool, len(it.Invites))
+	for k, v := range it.Invites {
+		next.Invites[k] = v
+	}
+	next.Redeemed = make(map[string]string, len(it.Redeemed)+1)
+	for k, v := range it.Redeemed {
+		next.Redeemed[k] = v
+	}
 	next.Members[me] = true
+	next.Redeemed[req.Invite] = me
 	delete(next.Invites, req.Invite) // single use
 	if err := a.saveLocked(&next); err != nil {
 		kit.Fail(w, 500, "Could not save. Your change was not accepted.")
@@ -981,6 +1083,16 @@ const formPageJS = `(function () {
   var fragment = new URLSearchParams(location.hash.slice(1));
   var invite = fragment.get('invite');
   var id = new URLSearchParams(location.search).get('id');
+  var joinErr = '';
+  function showError(text) {
+    var msg = document.querySelector('[data-desk-alert]');
+    if (msg) {
+      msg.textContent = text;
+      msg.setAttribute('data-kind', 'error');
+      if (msg.scrollIntoView) msg.scrollIntoView({ block: 'nearest' });
+    }
+    if (window.deskToast) window.deskToast(text, 'error');
+  }
   var joining = Promise.resolve(true);
   if (invite && id) {
     joining = fetch('api/action', {
@@ -992,8 +1104,8 @@ const formPageJS = `(function () {
       history.replaceState(null, '', location.pathname + location.search);
       return true;
     }).catch(function (e) {
-      var msg = document.querySelector('[data-desk-alert]');
-      if (msg) { msg.textContent = e.message; msg.setAttribute('data-kind', 'error'); }
+      joinErr = e.message;
+      showError(e.message);
       return false;
     });
   }
@@ -1031,7 +1143,10 @@ const formPageJS = `(function () {
   }
   async function send(complete) {
     var msg = document.querySelector('[data-desk-alert]');
-    if (!await joining) return;
+    if (!await joining) {
+      showError(joinErr || 'This invite is invalid. Ask the owner for a new one.');
+      return;
+    }
     var payload = collect();
     if (!payload) return;
     payload.action = 'answer';
@@ -1044,7 +1159,7 @@ const formPageJS = `(function () {
       });
       var body = await r.json();
       if (!r.ok) {
-        if (msg) { msg.textContent = (body && body.error && body.error.message) || 'Could not save.'; msg.setAttribute('data-kind', 'error'); }
+        showError((body && body.error && body.error.message) || 'Could not save.');
         return;
       }
       if (msg) msg.textContent = '';
@@ -1055,9 +1170,15 @@ const formPageJS = `(function () {
         badge.textContent = body.status;
       }
     } catch (e) {
-      if (msg) msg.textContent = 'Could not save. The server may be down; your answers are still on this page.';
+      showError('Could not save. The server may be down; your answers are still on this page.');
     }
   }
+  document.addEventListener('submit', function (ev) {
+    if (ev.target && ev.target.id === 'desk-form') {
+      ev.preventDefault();
+      send(true);
+    }
+  });
   document.addEventListener('click', function (ev) {
     if (ev.target.closest('[data-desk-save]')) send(false);
     if (ev.target.closest('[data-desk-submit]')) send(true);
@@ -1065,6 +1186,13 @@ const formPageJS = `(function () {
 })();`
 
 func serve(addr, data, prefix string) {
+	serveWithOptions(addr, data, prefix, true)
+}
+
+func serveWithOptions(addr, data, prefix string, explicitAddr bool) {
+	if !explicitAddr && canonicalStorePath(data) != canonicalStorePath(kit.DefaultDataDir("form")) {
+		addr = derivedStoreAddr(data)
+	}
 	if err := kit.CheckLoopback(addr); err != nil {
 		log.Fatal(err)
 	}
@@ -1072,11 +1200,21 @@ func serve(addr, data, prefix string) {
 		log.Fatal(err)
 	}
 	ln, err := net.Listen("tcp", addr)
+	if err != nil && !explicitAddr && addr != defaultFormAddr {
+		ln, err = net.Listen("tcp", "127.0.0.1:0")
+	}
 	if err != nil {
 		log.Fatal(err)
 	}
-	_, port, _ := net.SplitHostPort(ln.Addr().String())
-	origin := "http://" + net.JoinHostPort("127.0.0.1", port)
+	boundHost, port, _ := net.SplitHostPort(ln.Addr().String())
+	if boundHost == "" {
+		boundHost = "127.0.0.1"
+	}
+	boundAddr := net.JoinHostPort(boundHost, port)
+	pid := os.Getpid()
+	writeServerInfo(data, boundAddr, prefix)
+	defer cleanupServerInfo(data, boundAddr, pid)
+	origin := "http://" + boundAddr
 	a := &app{dir: data, prefix: prefix, baseURL: origin + prefix, items: map[string]*item{}}
 	fmt.Printf("\nDesk form — keep this terminal running\nParticipant: %s/\nSaved forms: %s\nCtrl-C stops the server.\n\n",
 		a.baseURL, filepath.Join(data, "items"))

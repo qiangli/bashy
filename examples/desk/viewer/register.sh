@@ -19,7 +19,7 @@ EOT
 )
 
 atlas_args=()
-atlas_rows=$(cd "$here/../kit" && go run ./cmd/atlas viewer 0)
+atlas_rows=$(cd "$here/../kit" && GOWORK=off go run ./cmd/atlas viewer 0)
 while IFS= read -r row; do atlas_args+=(--set "$row"); done <<< "$atlas_rows"
 "$runner" commands add "$name" --force \
   --set "exec.0=$runner" --set exec.1=--bashsharp --set "exec.2=$here/viewer.bsh" \

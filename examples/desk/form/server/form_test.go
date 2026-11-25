@@ -15,9 +15,12 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
+	kit "github.com/qiangli/bashy/examples/desk/kit"
 	"github.com/qiangli/bashy/examples/desk/kit/contracttest"
 )
 
@@ -599,5 +602,192 @@ func deskCLICallback(base string) func(...string) (int, string) {
 		argv := append([]string{"--addr", strings.TrimPrefix(base, "http://")}, args...)
 		code := runCLI(argv, &out)
 		return code, out.String()
+	}
+}
+
+func TestCLIRefusesForeignServerStoreAndDiscoversServerInfo(t *testing.T) {
+	for _, k := range []string{"FORM_ADDR", "FORM_DATA", "FORM_PREFIX", "FORM_PUBLIC_URL", "FORM_KEY", "BASHY_APP", "BASHY_APP_ADDR", "BASHY_APP_DATA"} {
+		t.Setenv(k, "")
+	}
+	// Server 1 represents another custom app (e.g. team-signup) with its own store.
+	foreignApp, foreignURL := serveApp(t)
+	foreignAddr := strings.TrimPrefix(foreignURL, "http://")
+	defaultDir := t.TempDir()
+
+	// Explicit --addr + mismatched --data must refuse before mutating foreignApp.
+	var out bytes.Buffer
+	code := runCLI([]string{"add", "--addr", foreignAddr, "--data", defaultDir, "--def", "../examples/contact.json", "--title", "Review"}, &out)
+	if code != 1 || !strings.Contains(out.String(), "different form store") {
+		t.Fatalf("expected foreign-store refusal (exit 1), got %d: %s", code, out.String())
+	}
+	entries, _ := os.ReadDir(filepath.Join(foreignApp.dir, "items"))
+	if len(entries) != 0 {
+		t.Fatalf("foreign store must remain untouched, got %d items", len(entries))
+	}
+
+	// JSON mode returns a structured store_mismatch error.
+	out.Reset()
+	code = runCLI([]string{"list", "--addr", foreignAddr, "--data", defaultDir, "--json"}, &out)
+	if code != 1 || !strings.Contains(out.String(), `"store_mismatch"`) {
+		t.Fatalf("expected JSON store_mismatch error, got %d: %s", code, out.String())
+	}
+
+	// A legacy pre-fix server without X-Desk-Store is also refused when --data is expected.
+	var legacyActionHits atomic.Int32
+	legacySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"ok":true}`))
+			return
+		}
+		legacyActionHits.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer legacySrv.Close()
+	out.Reset()
+	legacyAddr := strings.TrimPrefix(legacySrv.URL, "http://")
+	code = runCLI([]string{"add", "--addr", legacyAddr, "--data", defaultDir, "--def", "../examples/contact.json"}, &out)
+	if code != 1 || legacyActionHits.Load() != 0 {
+		t.Fatalf("legacy foreign server should be refused before /api/action: exit=%d hits=%d out=%s", code, legacyActionHits.Load(), out.String())
+	}
+
+	// Non-default stores derive their own port instead of 127.0.0.1:18107.
+	if got := derivedStoreAddr(foreignApp.dir); got == defaultFormAddr {
+		t.Fatalf("custom store derived default address %s", got)
+	}
+
+	// When a store has a live server.json, -data DIR discovers its listener without -addr.
+	ownApp, ownURL := serveApp(t)
+	ownAddr := strings.TrimPrefix(ownURL, "http://")
+	writeServerInfo(ownApp.dir, ownAddr, "")
+	out.Reset()
+	if code := runCLI([]string{"add", "--data", ownApp.dir, "--id", "discovered-form", "--def", "../examples/contact.json", "--title", "Own"}, &out); code != 0 {
+		t.Fatalf("add via server.json discovery: exit %d: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "discovered-form") {
+		t.Fatalf("unexpected add output: %s", out.String())
+	}
+}
+
+func TestCLIDiscoversAppRuntime(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake bashy script uses /bin/sh")
+	}
+	a, base := serveApp(t)
+	for _, k := range []string{"FORM_ADDR", "FORM_DATA", "FORM_PREFIX", "FORM_PUBLIC_URL", "FORM_KEY", "BASHY_APP", "BASHY_APP_ADDR", "BASHY_APP_DATA"} {
+		t.Setenv(k, "")
+	}
+	t.Setenv("BASHY_HOME", t.TempDir())
+	const publicURL = "https://console.example.test/form"
+	payload, err := json.Marshal(kit.AppRuntime{Addr: strings.TrimPrefix(base, "http://"), Data: a.dir, URL: publicURL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fake := filepath.Join(t.TempDir(), "bashy")
+	script := "#!/bin/sh\n" +
+		"[ \"$*\" = 'app show form --runtime --json' ] || exit 1\n" +
+		"printf '%s\\n' \"$TEST_DESK_APP_RUNTIME\"\n"
+	if err := os.WriteFile(fake, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("BASHY_BIN", fake)
+	t.Setenv("TEST_DESK_APP_RUNTIME", string(payload))
+
+	var out bytes.Buffer
+	if code := runCLI([]string{"add", "--id", "console-form", "--def", "../examples/contact.json"}, &out); code != 0 {
+		t.Fatalf("add via runtime discovery: exit %d: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), publicURL+"/?id=console-form") {
+		t.Fatalf("expected console mount URL in %q", out.String())
+	}
+}
+
+func TestCLIWaitResolvesCachedOwnerKeyWithoutSharedDataDir(t *testing.T) {
+	for _, k := range []string{"FORM_ADDR", "FORM_DATA", "FORM_PREFIX", "FORM_PUBLIC_URL", "FORM_KEY", "BASHY_APP", "BASHY_APP_ADDR", "BASHY_APP_DATA"} {
+		t.Setenv(k, "")
+	}
+	// Server stores items in its own temp dir; client runs with a separate BASHY_HOME
+	// (reproducing direct cached-binary execution with -addr and no matching -data).
+	_, srvURL := serveApp(t)
+	addr := strings.TrimPrefix(srvURL, "http://")
+	creatorHome := t.TempDir()
+	t.Setenv("BASHY_HOME", creatorHome)
+
+	var out bytes.Buffer
+	if code := runCLI([]string{"add", "-addr", addr, "--id", "direct-wait", "--def", "../examples/contact.json", "--title", "Direct"}, &out); code != 0 {
+		t.Fatalf("add: exit %d: %s", code, out.String())
+	}
+	complete := `{"action":"answer","id":"direct-wait","complete":true,"answers":{"name":"Ada","contact":"email","subscribe":"yes"}}`
+	if code, raw := post(t, srvURL, complete, ""); code != 200 {
+		t.Fatalf("answer: %d %s", code, raw)
+	}
+
+	out.Reset()
+	if code := runCLI([]string{"wait", "-addr", addr, "--timeout", "2s", "--interval", "10ms", "--json", "direct-wait"}, &out); code != 0 {
+		t.Fatalf("wait without FORM_KEY or shared -data failed: exit %d: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), `"Ada"`) {
+		t.Fatalf("wait output missing answer: %s", out.String())
+	}
+
+	// Another caller with a fresh BASHY_HOME did not create the form and is still denied.
+	t.Setenv("BASHY_HOME", t.TempDir())
+	out.Reset()
+	if code := runCLI([]string{"wait", "-addr", addr, "--timeout", "100ms", "--interval", "10ms", "direct-wait"}, &out); code != 1 || !strings.Contains(out.String(), "Join this form") {
+		t.Fatalf("unauthenticated caller must be denied: exit %d: %s", code, out.String())
+	}
+}
+
+func TestCLIHelpDocumentsWaitTimeoutAndPositionalDef(t *testing.T) {
+	for _, argv := range [][]string{{"-h"}, {"--help"}, {"wait", "-h"}, {"wait", "--help"}} {
+		var out bytes.Buffer
+		if code := runCLI(argv, &out); code != 0 {
+			t.Fatalf("%v: want exit 0, got %d: %s", argv, code, out.String())
+		}
+		if !strings.Contains(out.String(), "--timeout") || !strings.Contains(out.String(), "5m") {
+			t.Fatalf("%v: help must document --timeout and default 5m:\n%s", argv, out.String())
+		}
+	}
+
+	srvURL := startServer(t)
+	addr := strings.TrimPrefix(srvURL, "http://")
+	var out bytes.Buffer
+	if code := runCLI([]string{"add", "../examples/contact.json", "-addr", addr, "--id", "pos-add", "--title", "Positional"}, &out); code != 0 {
+		t.Fatalf("positional add: exit %d: %s", code, out.String())
+	}
+	out.Reset()
+	if code := runCLI([]string{"ask", "../examples/contact.json", "-addr", addr, "--id", "pos-ask"}, &out); code != 0 {
+		t.Fatalf("positional ask: exit %d: %s", code, out.String())
+	}
+}
+
+func TestIdempotentJoinByRedeemingParticipant(t *testing.T) {
+	_, base := serveApp(t)
+	var out bytes.Buffer
+	addr := strings.TrimPrefix(base, "http://")
+	if code := runCLI([]string{"add", "-addr", addr, "--id", "rejoin-probe", "--def", "../examples/contact.json"}, &out); code != 0 {
+		t.Fatalf("add: %d %s", code, out.String())
+	}
+	firstLine := strings.Fields(strings.SplitN(out.String(), "\n", 2)[0])
+	u, err := url.Parse(firstLine[1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	invite := strings.TrimPrefix(u.Fragment, "invite=")
+
+	// Browser 1 visits the page (getting a form-participant cookie) and redeems the invite twice (reload).
+	browser1 := participant(t, base)
+	for attempt := 1; attempt <= 2; attempt++ {
+		code, res := participantAction(t, browser1, base, `{"action":"join","id":"rejoin-probe","invite":"`+invite+`"}`)
+		if code != 200 {
+			t.Fatalf("browser1 join attempt %d: want 200, got %d (%v)", attempt, code, res)
+		}
+	}
+
+	// Browser 2 (different participant cookie) cannot reuse the redeemed single-use invite.
+	browser2 := participant(t, base)
+	code, _ := participantAction(t, browser2, base, `{"action":"join","id":"rejoin-probe","invite":"`+invite+`"}`)
+	if code != 403 {
+		t.Fatalf("browser2 reused invite: want 403, got %d", code)
 	}
 }
