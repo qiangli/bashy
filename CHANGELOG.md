@@ -39,7 +39,9 @@ frozen release candidate before the tag.
   built, and looked up the outpost commit on the GitHub API without a token.
   It failed for rc.40 and rc.41, so outposts were not told about either
   release. It now registers the five built platforms and passes the
-  workflow token.
+  workflow token. A promoted release can be registered again with
+  `gh workflow run promote.yml -f version=vX -f register_only=true`, which
+  uses the workflow's current script, not the release's.
 
 ## [1.0.0-rc.41] — 2026-11-25
 
