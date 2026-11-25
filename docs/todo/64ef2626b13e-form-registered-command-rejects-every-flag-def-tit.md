@@ -4,10 +4,13 @@ kind: bug
 title: 'form: registered command rejects every flag (--def, --title, --key)'
 seq: 3311
 status: todo
-priority: p2
+priority: p1
 labels:
     - desk
 created: 2026-11-25T10:17:38.006874Z
+sprint: 721
+sprint_id: 69fc2c51-8faf-58e7-83ac-f27007837ae7
+sprint_title: 'Shapeware pilot on form: spec v0 layout, one-step launch'
 ---
 
 Symptom (2026-11-25, dev box): `bashy form add --def F.json --title T` exits 2 with 'bashy: form: unknown flag --def'. Running `bashy --bashsharp examples/desk/form/form.bsh add --def ...` works.

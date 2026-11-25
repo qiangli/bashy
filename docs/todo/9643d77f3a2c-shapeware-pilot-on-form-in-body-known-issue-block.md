@@ -4,10 +4,13 @@ kind: spike
 title: 'Shapeware pilot on form: in-body known-issue block + one TBD spec, fresh-agent run'
 seq: 3312
 status: todo
-priority: p2
+priority: p1
 labels:
     - shaping
 created: 2026-11-25T10:17:49.05743Z
+sprint: 721
+sprint_id: 69fc2c51-8faf-58e7-83ac-f27007837ae7
+sprint_title: 'Shapeware pilot on form: spec v0 layout, one-step launch'
 ---
 
 Follow-on to umbrella Sprint 712 (story b35b89620f88, plan only). This is its case (iii): a feature delivered without a new binary. Keep it KISS/MVP: prove the rod once, on form only.
