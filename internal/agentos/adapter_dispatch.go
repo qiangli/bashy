@@ -452,7 +452,9 @@ func resolveAdapterScript(folder, entry string) string {
 
 func embeddedAdapterBuildsGo(relSlash string) bool {
 	data, err := fs.ReadFile(adapterembed.FS, relSlash)
-	return err == nil && bytes.Contains(data, []byte(`gomod="$here/go.mod"`))
+	return err == nil &&
+		bytes.Contains(data, []byte(`gomod="$here/go.mod"`)) &&
+		!bytes.Contains(data, []byte("# bashy-inproc-fallback"))
 }
 
 func adapterScriptPath(p string) string {

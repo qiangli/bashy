@@ -10,7 +10,7 @@ duplicate code.
 | Verb | Status | Adapter Entry | Notes / Exception Reason |
 |---|---|---|---|
 | `todo` | Converted | `yoke/todo` | Landed in 62ee3c74; links `_ "github.com/qiangli/yoke/pkg/weave"` so sprint/story-close reclamation hooks fire in the standalone adapter; standalone deps and help verified. |
-| `dag` | Converted | `yoke/dag` | Carries its own copy of `jq.go` (`yoke/cmds/jq/jq.go`) so DAG target bodies resolve `jq` in-process via `coreutils/shell.Handler()` without importing `yoke/cmds/jq`; `AssertStandaloneDeps` clean; routed via `runCommandAdapter`. |
+| `dag` | Converted | `yoke/dag` | Carries its own copy of `jq.go` (`yoke/cmds/jq/jq.go`) so standalone `yoke/dag` target bodies resolve `jq` in-process via `coreutils/shell.Handler()` without importing `yoke/cmds/jq`; `AssertStandaloneDeps` clean. `bashy dag` dispatches in-process by default (`dispatchDag`, preserving `dag_bashpp.go` and fresh-HOME execution without `go`) while honoring active `shape` slots and `BASHY_ADAPTERS_ROOT`, and `dag.bsh` falls back to `BASHY_ADAPTER_INPROC=1` when standalone Go sources are absent. |
 | `mb` | Converted | `yoke/mb` | Standalone deps and help verified; routed via `runCommandAdapter`. |
 | `inbox` | Converted | `yoke/inbox` | Sprint 677 story #612 (conductor review 2026-11-21): the session-relay, turn-delivery, watcher-claim and poll glue is DUPLICATED into `yoke/inbox` (package main, no import of another command package); routed via `runCommandAdapter`. Copied inbox tests run there; the agentos originals stay for chat turn delivery and the unread hint. |
 | `kb` | Converted | `yoke/kb` | Conductor review 2026-11-21 (operator rule: no non-internal command depends on another, even at the cost of duplicate code). `yoke/kb` carries its own recall reader wiring (kb's copy of the code-ring reader, the indexed-file lane, and the recall/context/ask/memory mounts) instead of importing `yoke/cmds/graph`; builds alone `GOWORK=off`; `AssertStandaloneDeps` clean with no allowed extra command packages; routed via `runCommandAdapter`. |
@@ -29,7 +29,7 @@ one side changes, change the other.
 
 | Adapter | Duplicated file(s) | Original |
 |---|---|---|
-| `yoke/dag` | `capacity.go`, `capacity_monitor.go` | Sprint capacity services and read-only monitor snapshot closure from `internal/agentos/sprint_monitor*.go`; old dispatch/services retained only in legacy test helpers. No sprint command import. |
+| `yoke/dag` | `capacity.go`, `capacity_monitor.go` | Sprint capacity services and read-only monitor snapshot closure from `internal/agentos/{dag_dispatch,sprint_monitor*}.go`. No sprint command import. |
 | `yoke/dag` | `jq.go` | `yoke/cmds/jq/jq.go` |
 | `yoke/kb` | `codering.go`, `index_reader.go`, `recall.go` | `yoke/cmds/graph/codering.go` (+ graph cache helpers), `internal/agentos/index_reader.go`, `kbrecall.go`, `kbmemory.go` |
 | `yoke/meet` | `steward_meet.go`, `steward_select.go`, `mb_seam.go`, `main.go` (`wireMeet`) | `internal/agentos/steward_meet.go`, `steward_select.go`, `budget_admission.go`, `messageboard.go`, `agentos.go` (`wireMeet`) |

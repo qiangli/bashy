@@ -13,6 +13,10 @@ for src in "$here"/*.go; do
   if [[ "$src" -nt "$bin" ]]; then stale=1; fi
 done
 if [[ -n "$stale" ]]; then
+  # bashy-inproc-fallback: materialized embedded adapters carry no Go sources.
+  if [[ ! -f "$here/main.go" || ! -f "$gomod" ]]; then
+    BASHY_ADAPTER_INPROC=1 BASHY_SELF="$_bashy_self" exec "${_bashy_self:-bashy}" dag "$@"
+  fi
   mkdir -p "${bin%/*}"
   run_go() { if command -v go >/dev/null 2>&1; then go "$@"; else BASHY_HINTS=off BASHY_ADAPTER_INPROC=1 "${_bashy_self:-bashy}" go "$@"; fi; }
   # DAG error envelopes use stderr. Successful bootstrap diagnostics must

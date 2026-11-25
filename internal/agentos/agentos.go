@@ -1138,7 +1138,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// The agent-first DAG task runner: markdown-defined targets run as a
 		// dependency graph. dag.ExitCodeOf recovers the stable weavecli exit
 		// code from the cobra error so agents get a meaningful status.
-		dispatchExit(runCommandAdapter("yoke", "dag", os.Args[1], os.Args[2:]))
+		dispatchExit(dispatchDag(os.Args[1], os.Args[2:]))
 	case "site":
 		cmd := newSiteCmd()
 		setCobraArgs(cmd, os.Args[2:])

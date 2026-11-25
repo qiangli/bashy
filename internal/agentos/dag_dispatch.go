@@ -1,22 +1,95 @@
+// Copyright (c) 2026 qiangli
+// See LICENSE for licensing information
+
 package agentos
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"math"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/qiangli/yoke/pkg/dag"
 	"github.com/qiangli/yoke/pkg/resources"
+	"github.com/qiangli/yoke/pkg/shape/slot"
 )
 
 var (
 	capacityObserveHost = resources.ObserveHost
 	capacityLoadPolicy  = dag.LoadCapacityPolicy
 )
+
+// dispatchDag runs `bashy dag` in-process so a fresh install or isolated HOME
+// never requires a Go toolchain, module cache, or source checkout before
+// executing a lifecycle dag.md, while still honoring active `shape` slots and
+// explicit `BASHY_ADAPTERS_ROOT` overrides.
+func dispatchDag(invokedAs string, args []string) int {
+	if invokedAs == "" {
+		invokedAs = "dag"
+	}
+	if os.Getenv(adapterInprocEnv) == "1" {
+		return runDagInproc(args)
+	}
+	if !certProfile() {
+		for _, slotName := range uniqueStrings(invokedAs, "dag") {
+			if active, ok, err := shapeSlotSelect(slotName); err == nil && ok && active.Path != "" {
+				env, envErr := slot.EntryEnvironment(active.Path, appendAdapterEnv(os.Environ(), invokedAs, false))
+				if envErr == nil {
+					return shapeSlotLaunch(active.Path, append([]string{invokedAs}, args...), env)
+				}
+			}
+		}
+	}
+	if strings.TrimSpace(os.Getenv(adaptersRootEnv)) != "" {
+		return runCommandAdapter("yoke", "dag", invokedAs, args)
+	}
+	return runDagInproc(args)
+}
+
+func runDagInproc(args []string) int {
+	self := strings.TrimSpace(os.Getenv("BASHY_SELF"))
+	if self == "" {
+		self = strings.TrimSpace(os.Getenv(adapterSelfEnv))
+	}
+	for _, k := range []string{adapterInprocEnv, adapterExecEnv, adapterSelfEnv, invokedAsEnv, "BASHY_SELF"} {
+		_ = os.Unsetenv(k)
+	}
+	if self != "" && len(os.Args) > 0 {
+		os.Args[0] = self
+	}
+	applyAllProxyFallback()
+	return runDagDispatch(args, os.Stdout, os.Stderr)
+}
+
+// runDagDispatch mounts the DAG runner with the capacity endpoint and runs it.
+//
+// Two things here are load-bearing. dag.NewDagCmd sets SilenceErrors, so an
+// error cobra raises BEFORE RunE (an unknown flag, a parse failure — and, until
+// coreutils 539b8fa7 declared the root's positional contract, every target
+// once `capacity` was mounted) reaches this caller as the only evidence that
+// anything went wrong. Mapping it straight to an exit code, as this used to,
+// produced a silent `exit 1` that two sprint-163 workers spent their last ten
+// minutes on. dag's own failures are *dag.Error values that emitErr has
+// already written as an envelope; those are not printed twice.
+func runDagDispatch(args []string, stdout, stderr io.Writer) int {
+	cmd := dag.NewDagCmd()
+	dag.AddCapacityCommands(cmd, sprintCapacityServices())
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	setCobraArgs(cmd, args)
+	err := cmd.Execute()
+	var dagErr *dag.Error
+	if err != nil && !errors.As(err, &dagErr) {
+		fmt.Fprintf(stderr, "bashy dag: %v\n", err)
+	}
+	return dag.ExitCodeOf(err)
+}
 
 func sprintCapacityServices() dag.CapacityServices {
 	return dag.CapacityServices{
