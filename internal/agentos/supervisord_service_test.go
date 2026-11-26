@@ -150,6 +150,10 @@ func TestServiceMonitorSeedInternalAndCustomShareOneMechanism(t *testing.T) {
 	sock := shortSocket(t)
 	t.Setenv("BASHY_SUPERVISORD_SOCKET", sock)
 	t.Setenv("BASHY_SUPERVISORD_TEST_CHILD", "hold")
+	// The unit's child must be this test binary's stub, never a real bashy from the environment.
+	t.Setenv("BASHY_SELF", "")
+	// Even a real child must not reach the host scheduler store.
+	t.Setenv("BASHY_SCHEDULE_STATE", filepath.Join(home, "schedule.json"))
 
 	// The production seed set grows independently of this mechanism test.
 	// Explicitly turn every default off before selecting the one seed under
