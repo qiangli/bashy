@@ -219,7 +219,7 @@ class Dist:
             if native:
                 self.run(target + "-" + shell + "-launcher", ["cc", "-x", "c", "-std=c11", "-O2", "-Wall", "-Wextra", "-Werror", "-o", str(stage / shell), str(sources["bash"] / "native/siglaunch.c.in")], env=env)
         outpost_sha = self.inputs["sources"]["outpost"]["commit"]
-        outpost_flags = f"-s -w -X github.com/qiangli/outpost/internal/agent.releaseTag={self.inputs['tag']} -X github.com/qiangli/outpost/internal/agent.ldCommit={outpost_sha} -X github.com/qiangli/outpost/internal/agent.ldDirty=false"
+        outpost_flags = f"-s -w -X github.com/qiangli/outpost/internal/agent.releaseTag={base} -X github.com/qiangli/outpost/internal/agent.ldCommit={outpost_sha} -X github.com/qiangli/outpost/internal/agent.ldDirty=false"
         self.run(target + "-outpost", ["go", "build", "-mod=readonly", "-trimpath", "-tags", "fb_archives", "-ldflags", outpost_flags, "-o", str(stage / ("outpost" + suffix)), "./cmd/outpost"], sources["outpost"], env)
         if goos == "linux":
             self.run(target + "-scratch", ["/usr/bin/dash", "scripts/build-bashy-artifact.sh", str(stage / "bashy-scratch"), flags, "bashy_scratch"], sources["bashy"], dict(env, BASHY_EXE="/bashy"))
