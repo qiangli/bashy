@@ -38,10 +38,10 @@ require (
 	github.com/pjbgf/sha1cd v0.7.0 // indirect
 	github.com/power-devops/perfstat v0.0.0-20240221224432-82ca36839d55 // indirect
 	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136 // indirect
-	github.com/qiangli/coreutils v0.0.0-20261126092031-5f9da9132e14 // indirect
+	github.com/qiangli/coreutils v0.0.0-20261126163007-96e079612fa5 // indirect
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126143736-0bc70d510997 // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126143736-0bc70d510997 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126213049-bbe744c93fee // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126213049-bbe744c93fee // indirect
 	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
@@ -95,7 +95,7 @@ require (
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261121101804-c5832f99ccf6
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261126163007-96e079612fa5
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 
@@ -157,7 +157,7 @@ replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/externa
 replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402
 
 require (
-	github.com/qiangli/yoke v0.0.0-20261126143736-0bc70d510997
+	github.com/qiangli/yoke v0.0.0-20261126213049-bbe744c93fee
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/net v0.62.0
