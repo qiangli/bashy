@@ -3,14 +3,17 @@ id: f06ca924557c
 kind: refactor
 title: conform is the judge only; bashy's own test batteries move to selftest
 seq: 3324
-status: todo
+status: done
 priority: p1
 labels:
     - conform
 created: 2026-11-26T10:56:23.010154Z
+assignee: codex-gpt6.2-astra
 sprint: 725
 sprint_id: 5396d983-6e99-5b2b-8985-d08dc89fdef5
 sprint_title: conform is the judge only; bashy's own batteries move to selftest
+closed: 2026-11-26T11:10:42.265958Z
+closed_by: claude-opus5.5
 ---
 
 Operator ruling 2026-11-26 (from bashy todo 3257b40fcc9a, found in umbrella Sprint 723). bashy is for agents: one name must mean one thing.
