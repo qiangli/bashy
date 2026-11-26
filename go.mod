@@ -89,13 +89,15 @@ require (
 	github.com/itchyny/gojq v0.12.19
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
+	github.com/opencontainers/go-digest v1.0.0
+	github.com/opencontainers/image-spec v1.1.1
 	github.com/pkg/sftp v1.13.10
 	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136
 	github.com/qiangli/coreutils v0.0.0-20261126092031-5f9da9132e14
 	github.com/qiangli/ycode v0.3.1-dev.0.20261125125149-fcc970b2f421
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261126135000-b7ca202e247e
-	github.com/qiangli/yoke/external/otel v0.0.0-20261126135000-b7ca202e247e
+	github.com/qiangli/yoke v0.0.0-20261126143736-0bc70d510997
+	github.com/qiangli/yoke/external/otel v0.0.0-20261126143736-0bc70d510997
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -414,8 +416,6 @@ require (
 	github.com/nxadm/tail v1.4.11 // indirect
 	github.com/odvcencio/gotreesitter v0.16.0 // indirect
 	github.com/opencontainers/cgroups v0.0.6 // indirect
-	github.com/opencontainers/go-digest v1.0.0 // indirect
-	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/opencontainers/runc v1.4.3 // indirect
 	github.com/opencontainers/runtime-spec v1.3.0 // indirect
 	github.com/opencontainers/runtime-tools v0.9.1-0.20260316125833-8a4db579f5c8 // indirect
@@ -461,9 +461,9 @@ require (
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261126093020-24c7e91e39b1 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126135000-b7ca202e247e // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261126135000-b7ca202e247e // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126135000-b7ca202e247e // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126143736-0bc70d510997 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261126143736-0bc70d510997 // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126143736-0bc70d510997 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.60.0 // indirect
 	github.com/quic-go/webtransport-go v0.11.1 // indirect

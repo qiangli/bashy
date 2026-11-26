@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qiangli/yoke/pkg/artifact"
 	"github.com/qiangli/yoke/pkg/resources"
 	"github.com/qiangli/yoke/pkg/weave"
 	"github.com/spf13/cobra"
@@ -30,14 +31,49 @@ type hostAdmissionPolicy struct {
 	AllowEstimatedMemory    bool     `json:"allow_estimated_memory,omitempty"`
 }
 
-func configureWeaveResourceAdmission(cmd *cobra.Command) {
+func checkArtifactPressureAdmission(root string) error {
+	st, ok, err := artifact.LoadPressureState(root)
+	if err != nil || !ok || !st.Activated || !st.GrowthBlocked {
+		return nil
+	}
+	header := fmt.Sprintf("active resource pressure state=%s (growth_blocked=true", st.Level)
+	if st.UnsatisfiedFloor {
+		header += ", unsatisfied_floor=true"
+	}
+	header += ")"
+	parts := []string{header}
+	if st.FloorDetail != nil {
+		parts = append(parts, fmt.Sprintf("free_bytes=%d < required_floor_bytes=%d (protected_bytes=%d, leased_bytes=%d)",
+			st.FloorDetail.FreeBytes, st.FloorDetail.RequiredFloorBytes,
+			st.FloorDetail.ProtectedBytes, st.FloorDetail.LeasedBytes))
+	}
+	if len(st.Reasons) > 0 {
+		parts = append(parts, strings.Join(st.Reasons, "; "))
+	}
+	return errors.New(strings.Join(parts, ": "))
+}
+
+func buildWeaveResourceHooks() weave.WeaveResourceHooks {
 	policyPath := strings.TrimSpace(os.Getenv("BASHY_HOST_ADMISSION_POLICY"))
-	hooks := weave.WeaveResourceHooks{RequireHostCheck: policyPath != "", LookupIdentity: func(ctx context.Context, pid int) (string, error) {
-		id, err := resources.LookupProcessIdentity(ctx, pid)
-		return id.StartID, err
-	}}
-	if policyPath != "" {
+	pst, pstOK, pstErr := artifact.LoadPressureState("")
+	pressureActivated := pstErr == nil && pstOK && pst.Activated
+	pressureBlocked := pressureActivated && pst.GrowthBlocked
+
+	hooks := weave.WeaveResourceHooks{
+		RequireHostCheck: policyPath != "" || pressureBlocked,
+		LookupIdentity: func(ctx context.Context, pid int) (string, error) {
+			id, err := resources.LookupProcessIdentity(ctx, pid)
+			return id.StartID, err
+		},
+	}
+	if policyPath != "" || pressureActivated {
 		hooks.CheckHost = func(ctx context.Context, demand weave.WeaveResourceDemand) error {
+			if err := checkArtifactPressureAdmission(""); err != nil {
+				return err
+			}
+			if policyPath == "" {
+				return nil
+			}
 			f, err := os.Open(policyPath)
 			if err != nil {
 				return err
@@ -65,9 +101,16 @@ func configureWeaveResourceAdmission(cmd *cobra.Command) {
 			return checkHostAdmission(p, obs, demand, time.Now())
 		}
 	}
-	weave.WithWeaveResources(cmd, hooks)
+	return hooks
+}
+
+func configureWeaveResourceAdmission(cmd *cobra.Command) {
+	weave.WithWeaveResources(cmd, buildWeaveResourceHooks())
 }
 func checkHostAdmission(p hostAdmissionPolicy, obs *resources.HostObservation, demand weave.WeaveResourceDemand, now time.Time) error {
+	if err := checkArtifactPressureAdmission(""); err != nil {
+		return err
+	}
 	if obs == nil || obs.System == nil {
 		return errors.New("host observation unavailable")
 	}

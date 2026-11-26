@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -16,9 +17,10 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/qiangli/bash/interp"
+	"github.com/qiangli/yoke/pkg/artifact"
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/resources"
-	"github.com/qiangli/bash/interp"
 )
 
 // limit bounds what one action may consume, like a pod's resources.limits.
@@ -122,6 +124,7 @@ type limitRecord struct {
 	Command  string `json:"command,omitempty"`
 	Exit     int    `json:"exit"`
 	Off      string `json:"off,omitempty"`
+	Reason   string `json:"reason,omitempty"`
 }
 
 func writeLimitRecord(w io.Writer, r limitRecord) {
@@ -253,6 +256,51 @@ func cachedDisk(dir string) (free, total uint64, err error) {
 	return floorCache.diskFree, floorCache.diskTot, floorCache.diskErr
 }
 
+func pressureRootFromEnv(getenv func(string) string) string {
+	if getenv != nil {
+		if p := strings.TrimSpace(getenv("BASHY_ARTIFACTS_DIR")); p != "" {
+			return p
+		}
+		if p := strings.TrimSpace(getenv("BASHY_HOME")); p != "" {
+			return filepath.Join(p, "artifacts")
+		}
+	}
+	return artifact.DefaultRoot()
+}
+
+func pressureFloorRefusal(getenv func(string) string, command string) (limitRecord, bool) {
+	if getenv != nil {
+		switch strings.ToLower(strings.TrimSpace(getenv("BASHY_LIMITS"))) {
+		case "off", "0", "false", "no":
+			return limitRecord{}, false
+		}
+	}
+	st, ok, err := artifact.LoadPressureState(pressureRootFromEnv(getenv))
+	if err != nil || !ok || !st.Activated || !st.GrowthBlocked {
+		return limitRecord{}, false
+	}
+	var observed, floor uint64
+	if st.FloorDetail != nil {
+		observed = st.FloorDetail.FreeBytes
+		floor = st.FloorDetail.RequiredFloorBytes
+	}
+	reason := fmt.Sprintf("active resource pressure state=%s", st.Level)
+	if len(st.Reasons) > 0 {
+		reason = strings.Join(st.Reasons, "; ")
+	}
+	return limitRecord{
+		Kind:     "refused",
+		Resource: "pressure",
+		Observed: observed,
+		Floor:    floor,
+		Unit:     "bytes",
+		Command:  command,
+		Exit:     limitRefusedStatus,
+		Off:      "BASHY_LIMITS=off",
+		Reason:   reason,
+	}, true
+}
+
 // floorRefusal checks the host floors for one command about to start. A probe
 // that cannot read the host admits: a floor refuses on evidence only.
 func floorRefusal(getenv func(string) string, dir, command string, write func() bool) (limitRecord, bool) {
@@ -265,6 +313,9 @@ func floorRefusal(getenv func(string) string, dir, command string, write func() 
 		}
 	}
 	if write() {
+		if rec, refused := pressureFloorRefusal(getenv, command); refused {
+			return rec, true
+		}
 		if free, total, err := cachedDisk(dir); err == nil && total > 0 {
 			if f := hostFloors(getenv, 0, total); !f.off && free < f.disk {
 				return limitRecord{Kind: "refused", Resource: "disk", Observed: free, Floor: f.disk, Unit: "bytes", Command: command, Exit: limitRefusedStatus, Off: "BASHY_LIMITS=off"}, true
@@ -286,7 +337,7 @@ var limitRecoverySet = map[string]bool{
 
 var limitRecoveryVerbs = map[string]map[string]bool{
 	"git":    {"status": true, "log": true, "diff": true, "show": true, "rev-parse": true, "branch": true},
-	"bashy":  {"resources": true, "resource": true, "inspect": true, "doctor": true, "limit": true, "ps": true, "kill": true},
+	"bashy":  {"resources": true, "resource": true, "prune": true, "inspect": true, "doctor": true, "limit": true, "ps": true, "kill": true},
 	"podman": {"ps": true, "stop": true, "kill": true, "rm": true, "rmi": true, "system": true},
 	"docker": {"ps": true, "stop": true, "kill": true, "rm": true, "rmi": true, "system": true},
 }
@@ -297,6 +348,9 @@ func commandName(arg0 string) string {
 
 func limitRecovery(args []string) bool {
 	name := commandName(args[0])
+	if isBashyExecutable(args[0]) {
+		name = "bashy"
+	}
 	if limitRecoverySet[name] {
 		return true
 	}
@@ -408,7 +462,7 @@ func dispatchLimit(args []string) int {
 
 // runLimit admits, starts and watches one command; stderr takes the records.
 func runLimit(spec limitSpec, argv []string, dir string, stderr io.Writer) int {
-	if rec, refused := floorRefusal(os.Getenv, dir, commandName(argv[0]), func() bool { return true }); refused {
+	if rec, refused := floorRefusal(os.Getenv, dir, commandName(argv[0]), func() bool { return !limitRecovery(argv) }); refused {
 		writeLimitRecord(stderr, rec)
 		return limitRefusedStatus
 	}
