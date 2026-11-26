@@ -1,7 +1,7 @@
 // Copyright (c) 2026 qiangli
 // See LICENSE for licensing information
 
-// `bashy verify` codifies bashy's formal test batteries as first-class
+// `bashy selftest` codifies bashy's formal test batteries as first-class
 // subcommands. The four are a PRECISION LADDER, not synonyms — the subcommand
 // names keep the distinction visible so a claim is never overstated:
 //
@@ -29,7 +29,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	conformcli "github.com/dhnt/conform/cli"
 	"io"
 	"net/http"
 	"os"
@@ -39,6 +38,7 @@ import (
 	"strings"
 	"time"
 
+	conformcli "github.com/dhnt/conform/cli"
 	"github.com/spf13/cobra"
 
 	"github.com/qiangli/bash/winmode"
@@ -97,7 +97,7 @@ func suiteRegistry() []suiteSpec {
 	}
 }
 
-// conformSchemaVersion is the envelope `bashy conform --list --json` (and
+// conformSchemaVersion is the envelope `bashy selftest --list --json` (and
 // its hidden alias `verify`) emits: the suite registry with each suite's
 // precision claim, licensing posture and setup status.
 const conformSchemaVersion = "bashy-conform-v1"
@@ -130,21 +130,16 @@ func (l suiteLicense) String() string {
 	return "unknown"
 }
 
-func verifyCmd() *cobra.Command {
+func selftestCmd() *cobra.Command {
 	var list, asJSON bool
 	cmd := &cobra.Command{
-		Use:   "conform [suite|run|cert|mutate|version] [flags]",
-		Short: "run bashy's formal test batteries, or judge an app against its CONTRACT.md",
-		Long: "verify runs bashy's formal test batteries. The four suites are a precision\n" +
+		Use:   "selftest [compat|conformance|compliance|benchmark] [flags]",
+		Short: "run bashy's formal test batteries",
+		Long: "selftest runs bashy's formal test batteries. The four suites are a precision\n" +
 			"ladder — compatibility (vs GNU bash), conformance (measured vs POSIX suites),\n" +
 			"compliance (official certification), benchmark (agentic performance) — named so\n" +
 			"a claim is never overstated. Test suites are fetched at runtime (public) or\n" +
-			"user-supplied (licensed); bashy never vendors them.\n\n" +
-			"run, cert, mutate and version are the dhnt/conform suite, shipped in-process as\n" +
-			"an invariant: they judge any app behaviourally against its CONTRACT.md (CLI\n" +
-			"assertions plus ui page inventories), certify a candidate against a reference\n" +
-			"with a noise baseline and sealed evidence, and measure suite strength with\n" +
-			"mutants. Run `bashy conform run --help` for flags.",
+			"user-supplied (licensed); bashy never vendors them.",
 		RunE: func(c *cobra.Command, args []string) error {
 			if list || len(args) == 0 {
 				if asJSON {
@@ -161,27 +156,30 @@ func verifyCmd() *cobra.Command {
 	for _, s := range suiteRegistry() {
 		cmd.AddCommand(suiteSubcommand(s))
 	}
-	for _, name := range []string{"run", "cert", "mutate", "version"} {
-		cmd.AddCommand(conformSuiteSubcommand(name))
-	}
 	return cmd
 }
 
-// conformSuiteSubcommand hands argv verbatim to the dhnt/conform command line,
-// in-process, so `bashy conform run` and the standalone `conform run` are the
-// same code at the same version (the go.mod pin).
-func conformSuiteSubcommand(name string) *cobra.Command {
-	return &cobra.Command{
-		Use:                name,
-		Short:              "dhnt/conform " + name + " (judge an app against its CONTRACT.md)",
-		DisableFlagParsing: true,
-		RunE: func(c *cobra.Command, args []string) error {
-			if code := conformcli.Run(append([]string{name}, args...), c.OutOrStdout(), c.ErrOrStderr()); code != 0 {
-				dispatchExit(code)
-			}
-			return nil
-		},
+func runSelftest(args []string, stdout, stderr io.Writer) int {
+	cmd := selftestCmd()
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	setCobraArgs(cmd, args)
+	if err := cmd.Execute(); err != nil {
+		return 1
 	}
+	return 0
+}
+
+func runConform(args []string, stdout, stderr io.Writer) int {
+	if len(args) > 0 {
+		// One-release compatibility surface. Future judge arguments pass through.
+		switch args[0] {
+		case "compat", "conformance", "compliance", "benchmark", "--list":
+			fmt.Fprintln(stderr, `conform: the test batteries moved to "bashy selftest"; this forward will be removed`)
+			return runSelftest(args, stdout, stderr)
+		}
+	}
+	return conformcli.Run(args, stdout, stderr)
 }
 
 func suiteSubcommand(s suiteSpec) *cobra.Command {
@@ -191,9 +189,12 @@ func suiteSubcommand(s suiteSpec) *cobra.Command {
 		Short:              s.Summary,
 		DisableFlagParsing: true, // pass flags straight through to the underlying harness
 		RunE: func(c *cobra.Command, args []string) error {
+			if len(args) == 1 && (args[0] == "--help" || args[0] == "-h") {
+				return c.Help()
+			}
 			root, ok := findBashySourceRoot(mustGetwd())
 			if !ok {
-				return fmt.Errorf("bashy verify %s must run from a bashy source checkout (needs the Makefile + scripts/)", s.Name)
+				return fmt.Errorf("bashy selftest %s must run from a bashy source checkout (needs the Makefile + scripts/)", s.Name)
 			}
 			code := s.Run(root, args)
 			if code != 0 {
@@ -206,7 +207,7 @@ func suiteSubcommand(s suiteSpec) *cobra.Command {
 }
 
 func writeVerifyListJSON(w io.Writer) error {
-	env := conformEnvelope{SchemaVersion: conformSchemaVersion, Verb: "conform"}
+	env := conformEnvelope{SchemaVersion: conformSchemaVersion, Verb: "selftest"}
 	for _, s := range suiteRegistry() {
 		env.Suites = append(env.Suites, conformSuiteRow{Name: s.Name, Aliases: s.Aliases, Kind: s.Kind, Summary: s.Summary,
 			License: s.License.String(), Ready: s.Ready, FetchURL: s.FetchURL})
@@ -217,7 +218,7 @@ func writeVerifyListJSON(w io.Writer) error {
 }
 
 func printVerifyList(w io.Writer) {
-	fmt.Fprintln(w, "bashy verify — formal test batteries (a precision ladder, not synonyms):")
+	fmt.Fprintln(w, "bashy selftest — formal test batteries (a precision ladder, not synonyms):")
 	fmt.Fprintln(w)
 	lic := map[suiteLicense]string{
 		licensePublicFetch:  "public suite, fetched at runtime (gitignored, never vendored)",
@@ -491,12 +492,12 @@ func runVerifyCompliance(root string, args []string) int {
 		}
 	}
 	w := os.Stdout
-	fmt.Fprintln(w, "bashy verify compliance — official POSIX certification (Open Group VSC-PCTS)")
+	fmt.Fprintln(w, "bashy selftest compliance — official POSIX certification (Open Group VSC-PCTS)")
 	fmt.Fprintln(w, "STATUS: stub. The certification suite is LICENSED (not open source), so bashy")
 	fmt.Fprintln(w, "does not — and legally cannot — auto-download it. Obtain it under license, then")
 	fmt.Fprintln(w, "point this command at your local copy:")
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "  bashy verify compliance --suite /path/to/vsc-pcts")
+	fmt.Fprintln(w, "  bashy selftest compliance --suite /path/to/vsc-pcts")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Obtaining a license:")
 	fmt.Fprintln(w, "  • The Open Group POSIX/UNIX certification + the VSC-PCTS test suite:")
@@ -522,11 +523,11 @@ func runVerifyBenchmark(root string, args []string) int {
 	}
 	if len(args) == 0 {
 		w := os.Stdout
-		fmt.Fprintln(w, "bashy verify benchmark — agentic shell benchmark (bashy vs GNU Bash 5.3)")
+		fmt.Fprintln(w, "bashy selftest benchmark — agentic shell benchmark (bashy vs GNU Bash 5.3)")
 		fmt.Fprintln(w, "Container-enforced arms × codex/claude/agy. Needs a container runtime + the")
 		fmt.Fprintln(w, "agent CLIs; see docs/agent-shell-eval/. Pass harness args through, e.g.:")
 		fmt.Fprintln(w)
-		fmt.Fprintln(w, "  bashy verify benchmark --task wrong-cwd-recovery --tool codex")
+		fmt.Fprintln(w, "  bashy selftest benchmark --task wrong-cwd-recovery --tool codex")
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "(no args → this help; the harness is orchestrated by the eval campaign)")
 		return 0

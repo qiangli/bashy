@@ -110,7 +110,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "account", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "member", "group", "superadmin", "suite", "desktop", "journey", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "shape", "check", "gate", "pair", "judge", "conform", "dhnt", "release", "app", "transpile", "transcribe", "providers",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "account", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "member", "group", "superadmin", "suite", "desktop", "journey", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "shape", "check", "gate", "pair", "judge", "conform", "selftest", "dhnt", "release", "app", "transpile", "transcribe", "providers",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -205,7 +205,7 @@ var (
 		// it cannot follow a citation.
 		"lexicon", "sota",
 		// self-fidelity / cert (inspect stays visible)
-		"check", "conform",
+		"check", "conform", "selftest",
 		// Output recovery (`out`) graduated in Sprint 379; reduction remains opt-in.
 		"run", "full",
 		// engines: oci is the standard name, sandbox the popular one; these
@@ -705,6 +705,10 @@ func dispatch() {
 func dispatchWithContext(ctx context.Context) {
 	if len(os.Args) < 2 {
 		return
+	}
+	// The judge owns every argument, including help and common-looking flags.
+	if os.Args[1] == "conform" {
+		dispatchExit(runConform(os.Args[2:], os.Stdout, os.Stderr))
 	}
 	if code, handled := dispatchFormattedHelp(os.Args[1:]); handled {
 		dispatchExit(code)
@@ -1252,23 +1256,8 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// Static script preflight: syntax, recursive command inventory, and
 		// bashy/system/container/not-found resolution.
 		dispatchExit(dispatchCheck(os.Args[2:]))
-	case "conform", "verify":
-		// BASHY'S OWN fidelity batteries: compat (GNU Bash 5.3) / conformance (yash
-		// POSIX) / compliance (Open Group VSC-PCTS, stub) / benchmark. Runs from a
-		// bashy source checkout.
-		//
-		// Renamed from `verify` 2026-07-12. It had claimed the most general word in
-		// the vocabulary for the narrowest possible thing: verifying BASHY ITSELF. A
-		// project that ADOPTS bashy would never run these against its own code, yet
-		// `bashy verify` is exactly what such a project would reach for to ask "does
-		// my code pass?" — and get bash's conformance suites instead. `verify`
-		// remains a hidden alias; the general pass/fail question is `bashy gate`.
-		cmd := verifyCmd()
-		setCobraArgs(cmd, os.Args[2:])
-		if err := cmd.Execute(); err != nil {
-			dispatchExit(1)
-		}
-		dispatchExit(0)
+	case "selftest", "verify":
+		dispatchExit(runSelftest(os.Args[2:], os.Stdout, os.Stderr))
 	case "self":
 		// Self-management: fetch/cache release binaries and explicitly install a
 		// selected candidate. This is the bashy-side migration of outpost's

@@ -326,8 +326,8 @@ github.com/dgryski/go-groupvarint v0.0.0-20230630160417-2bfb7969fb3c h1:cHaw4wmu
 github.com/dgryski/go-groupvarint v0.0.0-20230630160417-2bfb7969fb3c/go.mod h1:MlkUQveSLEDbIgq2r1e++tSf0zfzU9mQpa9Qkczl+9Y=
 github.com/dgryski/trifles v0.0.0-20230903005119-f50d829f2e54 h1:SG7nF6SRlWhcT7cNTs5R6Hk4V2lcmLz2NsG2VnInyNo=
 github.com/dgryski/trifles v0.0.0-20230903005119-f50d829f2e54/go.mod h1:if7Fbed8SFyPtHLHbg49SI7NAdJiC5WIA09pe59rfAA=
-github.com/dhnt/conform v0.1.1 h1:x8lSHHsYfxdWvy/hlhOdSwFKfq5cA3/klXxuXqc/Flg=
-github.com/dhnt/conform v0.1.1/go.mod h1:UYrZ71T8xFsOTmnuBaQR8CHyJr/JVn8TwINjaqwJSJo=
+github.com/dhnt/conform v0.1.2-0.20261126093449-29482789cf2b h1:axafVQVsfpsXDoZJG8crCpaUeyJAteNWR63qMhOqRr8=
+github.com/dhnt/conform v0.1.2-0.20261126093449-29482789cf2b/go.mod h1:UYrZ71T8xFsOTmnuBaQR8CHyJr/JVn8TwINjaqwJSJo=
 github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0 h1:FXaV/6HaUUz+l1RdhRF7SiR9+YvWqA9gBILAnNmgKnw=
 github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0/go.mod h1:NWMp5rGs8DEVej6UAESxYrYuJKKBHCY0WRItxoJd9b8=
 github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8 h1:OtSeLS5y0Uy01jaKK4mA/WVIYtpzVm63vLVAPzJXigg=

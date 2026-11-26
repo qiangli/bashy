@@ -176,8 +176,8 @@ func cobraVerb(name string) *cobra.Command {
 		return schemaKBCmd()
 	case "schedule":
 		return schedule.NewScheduleCmd()
-	case "conform", "verify":
-		return verifyCmd()
+	case "selftest", "verify":
+		return selftestCmd()
 	case "self":
 		return selfCmd()
 	case "site":

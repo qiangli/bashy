@@ -33,6 +33,9 @@ func TestCommandsCatalogSources(t *testing.T) {
 			t.Errorf("verbs missing %q", want)
 		}
 	}
+	if got := commandFeatureReport("verify", builtins, core, verbs, hiddenVerbsCatalog(), gnuCoreutilsInventory{})["alias_of"]; got != "selftest" {
+		t.Errorf("verify alias_of = %v, want selftest", got)
+	}
 	// The curated experimental set is out of the default catalog (verbs AND
 	// tools), back under --all, and never loses its shim or dispatch.
 	hidden := hiddenVerbsCatalog()
@@ -51,7 +54,7 @@ func TestCommandsCatalogSources(t *testing.T) {
 	if slices.Contains(curatedHiddenVerbs, "agentic") || !slices.Contains(verbs, "agentic") || !slices.Contains(alwaysShimVerbs, "agentic") {
 		t.Errorf("agentic is a Bash++ reserved word and must stay visible and shimmed")
 	}
-	for _, shimmed := range []string{"run", "podman", "sphere", "check"} {
+	for _, shimmed := range []string{"run", "podman", "sphere", "check", "conform", "selftest"} {
 		if !slices.Contains(alwaysShimVerbs, shimmed) {
 			t.Errorf("hiding %q must not remove its bare shim", shimmed)
 		}

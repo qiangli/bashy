@@ -449,6 +449,10 @@ func commandFeatureReport(name string, builtins, core, verbs, hidden []string, g
 			break
 		}
 	}
+	// The pinned shared atlas still identifies verify by the former battery name.
+	if name == "verify" {
+		out["alias_of"] = "selftest"
+	}
 	if name == "grep" {
 		out["known_gaps"] = []string{"BRE/ERE back-references are not supported by the current RE2-backed implementation"}
 		out["agent_hint"] = "avoid grep patterns with back-references, or use a GNU grep fallback/container for those scripts"
@@ -557,7 +561,8 @@ var verbSynopsis = map[string]string{
 	"coach":              "run an agent under an LLM-free auto-coach that ESCs it out of doomed tool-loops and tells it to deliver",
 	"search":             "find local files by indexed filename or scan content, and search the web with cited results",
 	"sota":               "research the current state of the art: ground a synthesis agent in real bashy-search sources (cite only those), or --hitchhike on the agent's own subscription web search",
-	"conform":            "bashy's OWN fidelity batteries (compat/conformance/compliance/benchmark); run/cert/mutate judge any app against its CONTRACT.md (dhnt/conform)",
+	"conform":            "judge an app against its CONTRACT.md with dhnt/conform",
+	"selftest":           "run bashy's formal test batteries (compat/conformance/compliance/benchmark)",
 	"chat":               "talk to an agent in a governed live session, or send one unattended instruction",
 	"meet":               "multi-participant deliberation session with a notes-only secretary",
 	"mcp":                "serve bashy commands to agents over the Model Context Protocol (stdio)",
@@ -644,7 +649,7 @@ var verbSynopsis = map[string]string{
 	"otel":               "the telemetry pillar (O3: ollama · oci · otel): query OTel telemetry with bounded agent-readable summaries",
 	"audit":              "hidden alias for bashy inspect audit",
 	"check":              "statically check shell scripts for bashy/system command closure and --bashsharp null safety",
-	"verify":             "run formal test batteries: compat/conformance/compliance/benchmark",
+	"verify":             "alias of selftest: run bashy's formal test batteries",
 	"remote":             "push bashy to a remote host (idempotent, version-matched, ssh/scp bootstrap; no remote internet needed)",
 	"self":               "fetch/cache/install a released bashy binary",
 	"bootstrap":          "hidden alias for bashy self",
@@ -703,6 +708,8 @@ var verbSynopsis = map[string]string{
 // merge the declarative registry's synopses into verbSynopsis so registry CLIs
 // (doctl, …) carry a synopsis in `bashy commands` without a hand-maintained line.
 func init() {
+	// The pinned shared atlas still describes the batteries under their old name.
+	bashyOwnedVerbAtlas["selftest"], _ = atlas.Lookup("conform")
 	for _, e := range registry.All() {
 		if verbSynopsis[e.Name] == "" {
 			verbSynopsis[e.Name] = e.Synopsis

@@ -47,14 +47,19 @@ subcommand. `tool|model|agent|skill list --json` (and the hidden plurals)
 emit `bashy-registry-list-v1` (`kind`, `view`, `items`), written by the
 registry itself since Sprint 406; the front door wraps only a list verb
 that still writes a bare array and passes an envelope through untouched. The
-other probed surfaces in that slice are bashy-owned: `conform --list --json`
-(`bashy-conform-v1`), `install-agent --json` (`bashy-install-agent-v1`),
+other probed surfaces in that slice are bashy-owned: `selftest --list --json`
+(`bashy-conform-v1`, with `verb: "selftest"`), `install-agent --json` (`bashy-install-agent-v1`),
 `mcp tools --json` (`bashy-mcp-tools-v1`, the profile `serve` would expose,
 without serving), `out --list --json` / `out --json HANDLE` (`bashy-out-v1`),
 `ollama status --json` (`bashy-ollama-status-v1`, read-only — never
 provisions or contacts the engine), and `chat --dry-run --json`
 (`bashy-chat-v1`, resolves the launch without running an agent). `llm env
 --json` emits the `bashy-llm-env-v1` envelope.
+
+`verify` aliases `selftest`. For one release, the four battery names and
+`--list` also work under `conform` and print a migration notice on stderr.
+All other `conform` invocations use the dhnt/conform judge CLI directly. The
+inventory’s `conform --list --json` row exercises the temporary forward.
 
 Consumers name shipped skills with a source reference; empty cells require a
 real consumer to be identified. Visible/core does not imply a stability tier.

@@ -120,8 +120,8 @@ func TestFleetListEnvelopeLeavesTextAndObjectsAlone(t *testing.T) {
 	}
 }
 
-func TestConformListJSONCarriesVersionedEnvelope(t *testing.T) {
-	cmd := verifyCmd()
+func TestSelftestListJSONCarriesVersionedEnvelope(t *testing.T) {
+	cmd := selftestCmd()
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetArgs([]string{"--list", "--json"})
@@ -129,6 +129,9 @@ func TestConformListJSONCarriesVersionedEnvelope(t *testing.T) {
 		t.Fatal(err)
 	}
 	env := decodeEnvelope(t, out.String(), conformSchemaVersion)
+	if env["verb"] != "selftest" {
+		t.Fatalf("unexpected verb: %v", env["verb"])
+	}
 	suites, _ := env["suites"].([]any)
 	if len(suites) != len(suiteRegistry()) {
 		t.Fatalf("suites = %d, want %d", len(suites), len(suiteRegistry()))
