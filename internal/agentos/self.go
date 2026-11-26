@@ -52,6 +52,7 @@ destination path.`,
 		selfImportCmd(),
 		selfPruneCmd(),
 		selfOCICmd(),
+		selfFixedPointCmd(), selfRunnerStageCmd(),
 	)
 	return cmd
 }

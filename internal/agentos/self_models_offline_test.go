@@ -240,7 +240,29 @@ func TestSelfModelsOfflineCaptureRestoreEvalSealPruneUnloadAndTier(t *testing.T)
 		}
 	}
 
-	// 1. Seed minimal self-host source checkout and bootstrap generation 1.
+	// 1. Seed minimal self-host source checkout and bootstrap generation 1 (using hermetic 64 MiB reserve profiles so unit tests do not depend on >8 GiB host disk free space).
+	selfHostProf := artifact.SelfHostProfileV1(artifact.CurrentPlatform())
+	selfHostProf.Capacity.RebuildReserveBytes = 64 << 20
+	selfHostProfBytes, err := json.Marshal(selfHostProf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selfHostProfPath := filepath.Join(t.TempDir(), "self-host-profile.json")
+	if err := os.WriteFile(selfHostProfPath, selfHostProfBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fullProf := artifact.DefaultProfileV1(artifact.CurrentPlatform())
+	fullProf.Capacity.RebuildReserveBytes = 64 << 20
+	fullProfBytes, err := json.Marshal(fullProf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fullProfPath := filepath.Join(t.TempDir(), "default-profile.json")
+	if err := os.WriteFile(fullProfPath, fullProfBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
 	srcCheckout := filepath.Join(t.TempDir(), "minimal-src")
 	if err := os.MkdirAll(filepath.Join(srcCheckout, "cmd", "bashy"), 0o755); err != nil {
 		t.Fatal(err)
@@ -253,7 +275,7 @@ func TestSelfModelsOfflineCaptureRestoreEvalSealPruneUnloadAndTier(t *testing.T)
 	}
 	if bootOut, err := runSelfCLI(t,
 		"bootstrap",
-		"--profile", "self-host",
+		"--profile", selfHostProfPath,
 		"--artifact-root", artRoot,
 		"--source", srcCheckout,
 		"--go-version", hostGoVer,
@@ -280,8 +302,8 @@ func TestSelfModelsOfflineCaptureRestoreEvalSealPruneUnloadAndTier(t *testing.T)
 		}
 	}
 
-	// 3. Before `model offline eval`, `self seal --profile default` MUST fail (missing ollama-eval)!
-	if out, err := runSelfCLI(t, "seal", "--profile", "default", "--artifact-root", artRoot); !errors.Is(err, artifact.ErrIncompleteClosure) {
+	// 3. Before `model offline eval`, `self seal --profile <fullProfPath>` MUST fail (missing ollama-eval)!
+	if out, err := runSelfCLI(t, "seal", "--profile", fullProfPath, "--artifact-root", artRoot); !errors.Is(err, artifact.ErrIncompleteClosure) {
 		t.Fatalf("self seal --profile default before eval = (%v, %s), want ErrIncompleteClosure", err, out)
 	}
 
@@ -307,11 +329,11 @@ func TestSelfModelsOfflineCaptureRestoreEvalSealPruneUnloadAndTier(t *testing.T)
 		}
 	}
 
-	// 5. Run `model offline eval --profile default` against local simulated Ollama server, then `self seal --profile default`!
+	// 5. Run `model offline eval` against local simulated Ollama server, then `self seal`!
 	srv, getUnloaded := startLocalOllamaSimServer(t, modelsDir)
 	evalOut, err := runModelCLI(t,
 		"offline", "eval",
-		"--profile", "default",
+		"--profile", fullProfPath,
 		"--url", srv.URL,
 		"--models-dir", modelsDir,
 		"--artifact-root", artRoot,
@@ -328,7 +350,7 @@ func TestSelfModelsOfflineCaptureRestoreEvalSealPruneUnloadAndTier(t *testing.T)
 		t.Fatalf("expected 2 eval records, got %+v", evalRes)
 	}
 
-	sealOut, err := runSelfCLI(t, "seal", "--profile", "default", "--artifact-root", artRoot, "--json")
+	sealOut, err := runSelfCLI(t, "seal", "--profile", fullProfPath, "--artifact-root", artRoot, "--json")
 	if err != nil {
 		t.Fatalf("self seal --profile default after eval failed: %v\n%s", err, sealOut)
 	}
@@ -388,7 +410,7 @@ func TestSelfModelsOfflineCaptureRestoreEvalSealPruneUnloadAndTier(t *testing.T)
 	if _, err := runModelCLI(t, "offline", "restore", "--all", "--models-dir", modelsDir, "--artifact-root", artRoot); err != nil {
 		t.Fatalf("post-prune restore failed: %v", err)
 	}
-	if _, err := runModelCLI(t, "offline", "eval", "--profile", "default", "--url", srv.URL, "--models-dir", modelsDir, "--artifact-root", artRoot); err != nil {
+	if _, err := runModelCLI(t, "offline", "eval", "--profile", fullProfPath, "--url", srv.URL, "--models-dir", modelsDir, "--artifact-root", artRoot); err != nil {
 		t.Fatalf("post-restart inference+embedding verification failed: %v", err)
 	}
 

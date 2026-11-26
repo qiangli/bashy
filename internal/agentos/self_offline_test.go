@@ -336,9 +336,31 @@ func main() {
 	t.Setenv("GOPROXY", "file://"+filepath.ToSlash(filepath.Join(seedModCache, "cache", "download")))
 	t.Setenv("GOSUMDB", "off")
 
+	selfHostProf := artifact.SelfHostProfileV1(artifact.CurrentPlatform())
+	selfHostProf.Capacity.RebuildReserveBytes = 64 << 20
+	selfHostProfBytes, err := json.Marshal(selfHostProf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	selfHostProfPath := filepath.Join(t.TempDir(), "self-host-profile.json")
+	if err := os.WriteFile(selfHostProfPath, selfHostProfBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	fullProf := artifact.DefaultProfileV1(artifact.CurrentPlatform())
+	fullProf.Capacity.RebuildReserveBytes = 64 << 20
+	fullProfBytes, err := json.Marshal(fullProf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fullProfPath := filepath.Join(t.TempDir(), "default-profile.json")
+	if err := os.WriteFile(fullProfPath, fullProfBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
 	bootCLIOut, err := runSelfCLI(t,
 		"bootstrap",
-		"--profile", "self-host",
+		"--profile", selfHostProfPath,
 		"--artifact-root", artRoot1,
 		"--source", srcCheckout,
 		"--publish-module", sibDir,
@@ -372,13 +394,13 @@ func main() {
 	t.Setenv("GOMODCACHE", filepath.Join(t.TempDir(), "empty-gomodcache"))
 	t.Setenv("GOPROXY", "https://proxy.golang.org,direct")
 
-	// 2. `self seal --profile default` MUST refuse with ErrIncompleteClosure (missing required Ollama models)!
-	if out, err := runSelfCLI(t, "seal", "--artifact-root", artRoot1, "--profile", "default"); !errors.Is(err, artifact.ErrIncompleteClosure) {
+	// 2. `self seal --profile <fullProfPath>` MUST refuse with ErrIncompleteClosure (missing required Ollama models)!
+	if out, err := runSelfCLI(t, "seal", "--artifact-root", artRoot1, "--profile", fullProfPath); !errors.Is(err, artifact.ErrIncompleteClosure) {
 		t.Fatalf("self seal --profile default = (%v, %s), want ErrIncompleteClosure", err, out)
 	}
 
-	// 3. `self seal --profile self-host --json` MUST succeed!
-	sealOut, err := runSelfCLI(t, "seal", "--artifact-root", artRoot1, "--profile", "self-host", "--json")
+	// 3. `self seal --profile <selfHostProfPath> --json` MUST succeed!
+	sealOut, err := runSelfCLI(t, "seal", "--artifact-root", artRoot1, "--profile", selfHostProfPath, "--json")
 	if err != nil {
 		t.Fatalf("self seal --profile self-host failed: %v\n%s", err, sealOut)
 	}

@@ -48,13 +48,32 @@ $oci volume exists "$volume" 2>/dev/null || $oci volume create "$volume" >/dev/n
 # starts the commands it forks with an empty mask (measured), so it forks
 # bashy rather than exec-ing it: an exec keeps the blocked mask. Its exit
 # status is bashy's. Both go away when bashy reaps as PID 1 (Sprint 653 R9).
-exec $oci run --rm --init \
+user_cmd="$*"
+set -- --rm --init \
   -v "$volume:/var/cache/bashy-build:U" \
   -v "$src:/work:U" \
   -w /work \
-  -e BASHY_BUILD_RUN=1 \
-  ${BASHY_BUILD_OUT:+-v "$BASHY_BUILD_OUT:/out:U"} \
-  ${BASHY_BUILD_CPUS:+--cpus "$BASHY_BUILD_CPUS" -e GOFLAGS=-p=$BASHY_BUILD_CPUS} \
+  -e BASHY_BUILD_RUN=1
+if [ "${BASHY_BUILD_OFFLINE:-0}" = "1" ]; then
+  set -- "$@" --network=none -e BASHY_OFFLINE=1 -e GOTOOLCHAIN=local
+fi
+if [ -n "${BASHY_ARTIFACTS_MOUNT:-}" ]; then
+  artifacts_abs=$(CDPATH= cd -P "$BASHY_ARTIFACTS_MOUNT" && pwd) || fail "no artifacts directory: $BASHY_ARTIFACTS_MOUNT"
+  set -- "$@" -v "$artifacts_abs:/var/lib/bashy/artifacts:ro" -e BASHY_ARTIFACTS_DIR=/var/lib/bashy/artifacts
+fi
+if [ -n "${BASHY_GO_TARBALL:-}" ] && [ -f "$BASHY_GO_TARBALL" ]; then
+  tar_dir=$(CDPATH= cd -P "$(dirname "$BASHY_GO_TARBALL")" && pwd) || fail "no tarball directory: $BASHY_GO_TARBALL"
+  tar_abs="$tar_dir/$(basename "$BASHY_GO_TARBALL")"
+  set -- "$@" -v "$tar_abs:/var/cache/bashy-go-tarball.tgz:ro" -e BASHY_GO_TARBALL=/var/cache/bashy-go-tarball.tgz
+fi
+if [ -n "${BASHY_BUILD_OUT:-}" ]; then
+  set -- "$@" -v "$BASHY_BUILD_OUT:/out:U"
+fi
+if [ -n "${BASHY_BUILD_CPUS:-}" ]; then
+  set -- "$@" --cpus "$BASHY_BUILD_CPUS" -e "GOFLAGS=-p=$BASHY_BUILD_CPUS"
+fi
+set -- "$@" \
   --entrypoint /usr/bin/dash \
   "$ref" -c '/bashy -c "$1"' dash \
-  'mkdir -p "$GOMODCACHE" "$GOCACHE" "$GOTMPDIR" ${BASHY_ADAPTER_CACHE:+"$BASHY_ADAPTER_CACHE"} && '"$*"
+  'mkdir -p "$GOMODCACHE" "$GOCACHE" "$GOTMPDIR" ${BASHY_ADAPTER_CACHE:+"$BASHY_ADAPTER_CACHE"} && '"$user_cmd"
+exec $oci run "$@"
