@@ -16,6 +16,7 @@ Without bashy, read the step's code block. `$BASHY` is set by `bashy dag`.
 ### source
 Where the source is. This folder is the complete source of release 0.1.0; nothing to fetch.
 Effects: read
+Band: none
 
 ```bash
 echo "source: this folder (form 0.1.0); nothing to fetch"
@@ -24,6 +25,7 @@ echo "source: this folder (form 0.1.0); nothing to fetch"
 ### build
 Verify the pinned trusted-core digest in `shaped.json`, ensure the cached core server binary is ready, and parse-check `form.bsh`.
 Effects: read, write, exec
+Band: unmeasured
 
 ```bash
 "$BASHY" --bashsharp --check ./form.bsh
@@ -33,6 +35,7 @@ Effects: read, write, exec
 ### test
 Run the shapeware acceptance checks (`PASS`/`FAIL`/`TBD` lines; exit 1 on any `FAIL`).
 Effects: read, write, exec, net
+Band: none
 
 ```bash
 "$BASHY" --bashsharp ./checks/acceptance.bsh
@@ -41,6 +44,7 @@ Effects: read, write, exec, net
 ### install
 Install `form` as a registered bashy command, shapeware skill, and shaped app.
 Effects: read, write, exec
+Band: unmeasured
 
 ```bash
 "$BASHY" ./register.sh
@@ -49,6 +53,7 @@ Effects: read, write, exec
 ### run
 Run `form` with `ARGS`, split with shell quoting and never evaluated. Example: `ARGS='add --def examples/contact.json --title "Intake" --open'`. Default: `list`.
 Effects: read, write, exec, net
+Band: unmeasured
 
 ```bash
 mapfile -d '' -t argv < <(printf '%s' "${ARGS:-list}" | xargs printf '%s\0')
@@ -58,6 +63,7 @@ mapfile -d '' -t argv < <(printf '%s' "${ARGS:-list}" | xargs printf '%s\0')
 ### serve
 Start the foreground loopback form server (default 127.0.0.1:18107; custom `-data` uses its own port).
 Effects: read, write, exec, net
+Band: unmeasured
 
 ```bash
 "$BASHY" --bashsharp ./form.bsh serve
@@ -66,6 +72,7 @@ Effects: read, write, exec, net
 ### show
 Read the registered executable body and skill face.
 Effects: read
+Band: unmeasured
 
 ```bash
 "$BASHY" commands show form

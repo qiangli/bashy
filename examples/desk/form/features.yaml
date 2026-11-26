@@ -28,6 +28,9 @@
   intent: Refuse secret-typed or secret-named fields before storage so credentials never enter the form store.
   acceptance:
     - form add --id bad-secret --definition '[{"id":"api_key","label":"API key","kind":"text"}]' --json => ERROR 1 Secret fields are refused here
+    - form add --id bad-secret-2 --definition '[{"id":"my-Access-Token","label":"Token","kind":"text"}]' --json => ERROR 1 Secret fields are refused here
+    - form add --id near-miss --definition '[{"id":"keyboard","label":"Keyboard layout","kind":"text"},{"id":"token_count","label":"Token count","kind":"text"}]' --json --fields id,status => {"id":"near-miss","schema_version":"bashy-form-v1","status":"pending"}
+    - form add --id bad-secret-3 --definition '[{"id":"q","label":"Q","kind":"secret"}]' --json => ERROR 1 Secret fields are refused here
 - id: poll
   status: verified
   effort: 2

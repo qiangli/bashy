@@ -1,6 +1,6 @@
 # Form CLI Contract (`CONTRACT.md`)
 
-Certification-style behavioural specification for `form` (`schema_version`: `"bashy-form-v1"`). Spec v2 (2026-11-25): every rule below is demonstrated by at least one assertion or acceptance line.
+Certification-style behavioural specification for `form` (`schema_version`: `"bashy-form-v1"`). Spec v2.1 (2026-11-26): every rule below is demonstrated by at least one assertion or acceptance line, and a rule that names a set defines the set.
 
 ## How assertions are judged
 
@@ -20,8 +20,8 @@ Certification-style behavioural specification for `form` (`schema_version`: `"ba
 
 - `--def FILE` reads a JSON (`.json`) or YAML (`.yaml`/`.yml`) file holding an object `{"title": ..., "fields": [...]}`. `examples/contact.json` and `examples/contact.yaml` are the same form; the YAML uses block mappings and flow lists such as `options: [email, phone, post]` (F-01, F-10).
 - `--definition JSON` takes inline JSON: a bare array of fields (F-06, F-12) or the same object as a file.
-- A field is `id`, `label` and `kind`, plus optional `required`, `options` (for `choice` and `multi`), `recommended` and `help`. `kind` is one of `text`, `textarea`, `choice`, `multi`, `yes-no` or `file`. Any other kind is an error (F-13).
-- Secret-typed or secret-named fields (`api_key`, `db_password`, ...) are refused before storage (F-06).
+- A field is `id`, `label` and `kind`, plus optional `required`, `options` (for `choice` and `multi`), `recommended` and `help`. `kind` is one of `text`, `textarea`, `choice`, `multi`, `yes-no` or `file`. Any other kind is an error (F-13), and kind `secret` is refused as a secret field (F-16).
+- **Secret fields are refused before storage.** A field is secret when its `id`, ignoring case, contains `password`, `passwd`, `secret` or `credential`, or one of the pairs `api`+`key`, `access`+`token`, `private`+`key` with the two words joined directly or by one `_` or `-`. So `api_key`, `stripe-api-key`, `APIKEY` and `my-Access-Token` are secret (F-06, F-14), while `keyboard` and `token_count` are not (F-15). The match is on the field `id` anywhere in it. A field whose `kind` is `secret` is refused the same way (F-16). This is the whole rule.
 - `--title` overrides the file's title.
 
 ## UI rules (the page at the form's `url`)
@@ -139,6 +139,30 @@ Refuse an unknown field kind.
 ```console
 $ form add --id bad-kind --definition '[{"id":"q","label":"Q","kind":"slider"}]' --json
 error: field "q": unknown kind "slider"...
+```
+exit: 1
+
+### F-14
+Refuse a secret-named field whatever its case or separator, anywhere in the id.
+```console
+$ form add --id bad-secret-2 --definition '[{"id":"my-Access-Token","label":"Token","kind":"text"}]' --json
+error: Secret fields are refused here...
+```
+exit: 1
+
+### F-15
+Accept ids that only look similar: the rule is the list above, nothing more.
+```console
+$ form add --id near-miss --definition '[{"id":"keyboard","label":"Keyboard layout","kind":"text"},{"id":"token_count","label":"Token count","kind":"text"}]' --json --fields id,status
+{"id":"near-miss","schema_version":"bashy-form-v1","status":"pending"}
+```
+exit: 0
+
+### F-16
+Refuse a field of kind `secret`, whatever its id.
+```console
+$ form add --id bad-secret-3 --definition '[{"id":"q","label":"Q","kind":"secret"}]' --json
+error: Secret fields are refused here...
 ```
 exit: 1
 
