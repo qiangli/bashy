@@ -3,12 +3,13 @@ id: 8e5204e127c4
 kind: feature
 title: C4 member-principal shaping e2e across example apps + 'Enable an app for consumer shaping' runbook
 seq: 3261
-status: todo
+status: wontfix
 priority: p2
 created: 2026-11-20T19:14:04.928857Z
 sprint: 724
 sprint_id: 4c6a8940-8673-582a-adef-d7665a30d524
 sprint_title: 'Consolidated follow-ups after train 1 (supersedes 711, 713, 714, 715, 718, 720): owner-sharing and A/O/C sandbox e2e, site MCP and site attach, deferred integration runs, known reds, MCP 2026-07-28'
+closed: 2026-11-26T11:16:23.569857Z
 ---
 
 Spec: umbrella docs/plan-s682-consumer-shaping-example-apps.md §C4. Consumer-first shaping (operator 2026-11-20); owner/producer side is Sprint 683.
