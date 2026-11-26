@@ -14,7 +14,6 @@ status: candidate
 evidence: Compiled 2026-11-24 from bashy README, docs/software-shaping.md, docs/public-claims-evidence.md and the founder narrative rule of 2026-11-12; DRAFT for operator review
 source:
     tool: claude
-    host: dragon
 created: "2026-11-25T04:42:35Z"
 ---
 

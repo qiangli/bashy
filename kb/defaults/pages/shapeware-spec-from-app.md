@@ -16,11 +16,12 @@ status: candidate
 evidence: '2026-11-26: examples/desk/form converted this way (spec v2.1); its reference certifies 17/17 with 117/117 mutants; agents of four vendors rebuilt it from the spec, 3 of 3 runs each at the start tier'
 source:
     tool: claude
-    host: dragon
 created: "2026-11-26T13:53:46Z"
 ---
 
-Goal: make an existing app or repository shapeable: give it a shapeware spec that is sound enough for another agent to rebuild, repair or extend the app from the spec alone. Format: the shapeware spec (a superset of an Agent Skill folder; only `SKILL.md` is required, missing parts take defaults). Worked example, converted this way and then rebuilt from its spec by agents of four vendors: bashy `examples/desk/form`. Related: [[shapeware-spec-from-plan]] when there are only instructions, [[shapeware-source-from-spec]] for the builder's side, a spec-to-source drill (a builder that has not seen the source rebuilds the app and the judge decides) to test the result.
+Goal: make an existing app or repository shapeable: give it a shapeware spec that is sound enough for another agent to rebuild, repair or extend the app from the spec alone. Format: the shapeware spec (a superset of an Agent Skill folder; only `SKILL.md` is required, missing parts take defaults). Worked example, converted this way and then rebuilt from its spec by agents of four vendors: bashy `examples/desk/form`. Related: [[shapeware-spec-from-plan]] when there are only instructions, [[shapeware-source-from-spec]] for the builder's side, [[shapeware-operate-from-dag]] to install and run a built folder, a rebuild test (a builder that has not seen the source rebuilds the app and the judge decides) to test the result.
+
+Tools and format: the judge is `bashy conform` (`spec check`, `run`, `cert`, `mutate`). Where a step says `conform ...`, type `bashy conform ...`; on a machine without bashy use the standalone `conform` binary (github.com/dhnt/conform). The format on one page is `examples/desk/form/references/shapeware.md` in the bashy source, and the folder around it is the worked example, with a full `CONTRACT.md`, `features.yaml` and `dag.md`. `bashy src fetch bashy` puts the source under `${BASHY_HOME:-$HOME/.bashy}/src/bashy`.
 
 ## Before you start
 - **Choose the surface, not the repository.** A spec covers what a user or agent can observe: commands, outputs, pages, files written. For a large repository, convert one app or one command family at a time; a root `SKILL.md` can make the whole repository a shapeware folder later.
@@ -47,7 +48,7 @@ Goal: make an existing app or repository shapeable: give it a shapeware spec tha
 9. **Compile the spec:** `conform spec check DIR` until it reports nothing. It checks features without acceptance lines, example files nothing uses, flags never defined, outputs with no open/closed rule, rules given by example, and the lifecycle steps with their effects and bands.
 10. **Certify the reference on the test host:** `conform cert` (3 runs, every assertion passes, none noisy) and `conform mutate` (every mutant killed). A surviving mutant is a missing assertion: add it and repeat. Also run the app's own acceptance checks.
 11. **State the venue** a rebuilt app must run on: OS, interpreter and toolchain versions, network, what is absent.
-12. **Prove it reproduces.** Have a builder that has not seen the source rebuild the app from the spec (a spec-to-source drill (a builder that has not seen the source rebuilds the app and the judge decides)). Classify every failure. A failure caused by the spec goes back to step 4; expect one or two rounds.
+12. **Prove it reproduces.** Have a builder that has not seen the source rebuild the app from the spec (the rebuild test). Classify every failure. A failure caused by the spec goes back to step 4; expect one or two rounds.
 13. **Record what was measured:** the lowest band that rebuilt it, per lifecycle step where measured, with the bindings and the date.
 
 ## What the first conversion taught

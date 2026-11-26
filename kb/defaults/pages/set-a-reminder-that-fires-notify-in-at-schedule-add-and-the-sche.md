@@ -13,7 +13,6 @@ status: candidate
 evidence: '2026-11-25, scratch schedule store: notify --in 1s --to a role seat stored a one-shot job, schedule tick fired it (fired 1 job, job shown [off]); schedule add --every stored a job; service status shows the opt-in unit state'
 source:
     tool: claude-fable5.2
-    host: dragon
 created: "2026-11-26T02:00:32Z"
 ---
 

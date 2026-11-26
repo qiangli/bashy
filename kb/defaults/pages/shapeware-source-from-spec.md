@@ -14,11 +14,12 @@ status: candidate
 evidence: '2026-11-26: failure classes from 43 rebuild runs of examples/desk/form across five vendors; the guide itself has not yet been given to a builder'
 source:
     tool: claude
-    host: dragon
 created: "2026-11-26T13:53:46Z"
 ---
 
-Goal: build an app from a shapeware spec folder (`CONTRACT.md`, `features.yaml`, `examples/`, `dag.md`, a task file) so that it passes the judge at the stated venue and can be installed and run through its lifecycle. Lessons are from rebuilding bashy's `form` from its spec by agents of four vendors. Related: [[shapeware-spec-from-app]], a spec-to-source drill (a builder that has not seen the source rebuilds the app and the judge decides).
+Goal: build an app from a shapeware spec folder (`CONTRACT.md`, `features.yaml`, `examples/`, `dag.md`, a task file) so that it passes the judge at the stated venue and can be installed and run through its lifecycle. Lessons are from rebuilding bashy's `form` from its spec by agents of four vendors. Related: [[shapeware-spec-from-app]], [[shapeware-spec-from-plan]], [[shapeware-operate-from-dag]] to install and run what you built, a rebuild test (a builder that has not seen the source rebuilds the app and the judge decides).
+
+Tools and format: the judge is `bashy conform` (`spec check`, `run`, `cert`, `mutate`). Where a step says `conform ...`, type `bashy conform ...`; on a machine without bashy use the standalone `conform` binary (github.com/dhnt/conform). The format on one page is `examples/desk/form/references/shapeware.md` in the bashy source, and the folder around it is the worked example, with a full `CONTRACT.md`, `features.yaml` and `dag.md`. `bashy src fetch bashy` puts the source under `${BASHY_HOME:-$HOME/.bashy}/src/bashy`.
 
 ## Steps
 0. **Compile the spec you were given:** `conform spec check .` (the judge also says so when you run it: "spec check reports N finding(s)"). Each finding is a place where the spec does not fully decide the behaviour. Do not guess silently there: take the reading that the examples and the rule's purpose both support, and write the choice in your notes.

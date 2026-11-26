@@ -15,7 +15,6 @@ status: candidate
 evidence: '2026-11-24: a sprint worker hit a per-model 429 (''Individual quota reached, resets in 92h'') one turn in; another model binding of the same vendor CLI probed usable and took the story. Operator guideline: providers meter per model; switch model, then vendor; escalate only when all bindings are exhausted.'
 source:
     tool: claude
-    host: dragon
 created: "2026-11-24T14:16:01Z"
 ---
 

@@ -16,11 +16,12 @@ status: candidate
 evidence: '2026-11-26: three top-tier agents of different vendors each converted four sprint stories into a checker-clean spec in 3 to 7 minutes with this runbook; not yet tried on a plan-mode plan'
 source:
     tool: claude
-    host: dragon
 created: "2026-11-26T13:53:46Z"
 ---
 
-Goal: turn instructions (an agent's plan, or a bashy sprint card with its stories, or a set of todos) into a shapeware spec folder that another agent can build from with no further questions. Format: the shapeware spec format. Worked example of a finished spec: bashy `examples/desk/form` (`CONTRACT.md`, `features.yaml`, `examples/`). Related: [[shapeware-spec-from-app]] when the app already exists; a spec-to-source drill (a builder that has not seen the source rebuilds the app and the judge decides) to test the result.
+Goal: turn instructions (an agent's plan, or a bashy sprint card with its stories, or a set of todos) into a shapeware spec folder that another agent can build from with no further questions. Format: the shapeware spec format. Worked example of a finished spec: bashy `examples/desk/form` (`CONTRACT.md`, `features.yaml`, `examples/`). Related: [[shapeware-spec-from-app]] when the app already exists; [[shapeware-source-from-spec]] for the builder; a rebuild test (a builder that has not seen the source rebuilds the app and the judge decides) to test the result.
+
+Tools and format: the judge is `bashy conform` (`spec check`, `run`, `cert`, `mutate`). Where a step says `conform ...`, type `bashy conform ...`; on a machine without bashy use the standalone `conform` binary (github.com/dhnt/conform). The format on one page is `examples/desk/form/references/shapeware.md` in the bashy source, and the folder around it is the worked example, with a full `CONTRACT.md`, `features.yaml` and `dag.md`. `bashy src fetch bashy` puts the source under `${BASHY_HOME:-$HOME/.bashy}/src/bashy`.
 
 ## Steps
 1. **Collect the instructions as given.** For a sprint: `bashy sprint show N` and each story body. For todos: `bashy todo show ID`. For a plan: the plan text. Do not read the app's source, even if it exists; the spec must come from the instructions.
