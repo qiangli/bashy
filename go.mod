@@ -79,7 +79,7 @@ replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewi
 
 require (
 	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261126213226-7844bc5c9643
+	github.com/bashsharp/bashsharp v0.0.0-20261126221111-0ec897e5814a
 	github.com/benhoyt/goawk v1.31.0
 	github.com/creack/pty/v2 v2.0.1
 	github.com/dhnt/conform v0.1.2-0.20261126131226-51481167c86c
@@ -96,8 +96,8 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261126163007-96e079612fa5
 	github.com/qiangli/ycode v0.3.1-dev.0.20261125125149-fcc970b2f421
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261126213049-bbe744c93fee
-	github.com/qiangli/yoke/external/otel v0.0.0-20261126213049-bbe744c93fee
+	github.com/qiangli/yoke v0.0.0-20261126221046-257ce14714d9
+	github.com/qiangli/yoke/external/otel v0.0.0-20261126221046-257ce14714d9
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -459,11 +459,11 @@ require (
 	github.com/qiangli/bash/cmd v0.0.0-20261121101805-42efe30317c4 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261123172747-32d78887eb27 // indirect
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261126213434-bb8f9ebd6587 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261126221156-fbad06db1f38 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126213049-bbe744c93fee // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261126213049-bbe744c93fee // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126213049-bbe744c93fee // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126221046-257ce14714d9 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261126221046-257ce14714d9 // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126221046-257ce14714d9 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.60.0 // indirect
 	github.com/quic-go/webtransport-go v0.11.1 // indirect
