@@ -33,6 +33,7 @@ bashy schedule list               # jobs with their next run time
 ```
 
 - The `schedule` unit is opt-in. Where it is disabled, jobs are accepted and stored but nothing fires them, and `next` in `schedule list` stays in the past.
+- bashy says so itself: the first line of `bashy schedule list` is `engine: running (pid N, overdue N)` or `engine: not running (overdue N)`, and `schedule add` and `notify --in/--at` print a one-line hint on stderr when the job is stored while no engine is running (silence: `BASHY_HINTS=off`).
 - Turn it on for this host (the owner's decision): `bashy service enable schedule`.
 - Without the unit: `bashy schedule tick` fires everything that is due once; `bashy schedule daemon` runs a foreground loop.
 
