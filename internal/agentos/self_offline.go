@@ -574,8 +574,15 @@ func runSelfBootstrap(ctx context.Context, opts selfBootstrapOptions) (*selfBoot
 	})
 
 	// 5. Capture Go module dependency closure + optional local module publications.
+	moduleDirs := []string{srcDir}
+	for _, sub := range []string{"toolchain", "yoke", "custom", "optional"} {
+		subDir := filepath.Join(srcDir, sub)
+		if isRegularFile(filepath.Join(subDir, "go.mod")) {
+			moduleDirs = append(moduleDirs, subDir)
+		}
+	}
 	modRes, err := gomod.CaptureModuleClosure(ctx, gomod.ModuleClosureOptions{
-		ModuleDirs:   []string{srcDir},
+		ModuleDirs:   moduleDirs,
 		PublishDirs:  opts.PublishModules,
 		GoBin:        goBin,
 		GOROOT:       goroot,
