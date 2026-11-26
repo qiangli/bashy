@@ -1,2 +1,6 @@
 .desk-build/
-/notepad
+/notepad-bin
+/.npdata/
+/.serve.pid
+/.npserve.log
+/.npdf.out

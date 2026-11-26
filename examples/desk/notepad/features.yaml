@@ -1,0 +1,77 @@
+# notepad feature list (shapeware v0.1). Ids are stable across versions.
+# effort: relative size in Fibonacci points (1, 2, 3, 5, 8, 13 = split it); minutes per point are measured per band by the drills.
+# Acceptance lines assume the server is running (CONTRACT.md N-01 starts it).
+- id: serve-and-stop
+  effort: 3
+  status: verified
+  intent: Run this user's notepad server in the foreground on a loopback address, and stop it with a defined stop that exits 0 whether or not a server was running, keeping stored notes across the stop (CONTRACT.md "Service rules").
+  acceptance:
+    - notepad stop => stopped notepad
+    - notepad --addr 127.0.0.1:18195 --data ./.npdata show note-1 --json --fields id,status => {"id":"note-1","schema_version":"bashy-notepad-v1","status":"filled-by-agent"}
+- id: create-and-open
+  effort: 2
+  status: verified
+  intent: Create a note with an inline title and body or with no body, and re-surface it by id without ever re-emitting its content.
+  acceptance:
+    - notepad add --id note-1 --title "Probe One" --body "Hello probe world" --json --fields id,status => {"id":"note-1","schema_version":"bashy-notepad-v1","status":"filled-by-agent"}
+    - notepad open note-1 --json --fields id,status,url => {"id":"note-1","schema_version":"bashy-notepad-v1","status":"filled-by-agent","url":"http://localhost:{PORT}/?id=note-1"}
+    - GET /?id=note-1 => 200 Title
+- id: read-and-update
+  effort: 2
+  status: verified
+  intent: Read a note's title and body, replace its body, and list notes without bodies.
+  acceptance:
+    - notepad set note-1 --body "Updated body text" --json --fields id,active => {"active":"r2","id":"note-1","schema_version":"bashy-notepad-v1"}
+    - notepad show note-1 --json --fields title,body => {"body":"Updated body text","schema_version":"bashy-notepad-v1","title":"Probe One"}
+- id: import-formats
+  effort: 5
+  status: verified
+  intent: Create notes from txt, md, json, html and pdf files, converting each to the body the contract defines (CONTRACT.md "Content formats").
+  acceptance:
+    - notepad add --id file-txt -f examples/meeting.txt --json --fields id,title => {"id":"file-txt","schema_version":"bashy-notepad-v1","title":"meeting"}
+    - notepad add --id file-json -f examples/data.json --json --fields id,status => {"id":"file-json","schema_version":"bashy-notepad-v1","status":"filled-by-agent"}
+    - notepad add --id file-html -f examples/page.html --json --fields id,status => {"id":"file-html","schema_version":"bashy-notepad-v1","status":"filled-by-agent"}
+    - notepad add --id file-pdf -f examples/paper.pdf --json --fields id,status => {"id":"file-pdf","schema_version":"bashy-notepad-v1","status":"filled-by-agent"}
+- id: export-formats
+  effort: 3
+  status: verified
+  intent: Export a note to pdf, png, html or txt and report the format written; refuse any other format with a usage error.
+  acceptance:
+    - notepad export note-1 --to txt --json --fields id,format => {"format":"txt","id":"note-1","schema_version":"bashy-notepad-v1"}
+    - notepad export note-1 --to docx => ERROR 2 unsupported export format "docx" (supported: pdf, png, html, txt)
+- id: revisions
+  effort: 2
+  status: verified
+  intent: Keep a revision per body write and reactivate an earlier one with undo or restore.
+  acceptance:
+    - notepad history note-1 --json --fields id,active => {"active":"r2","id":"note-1","schema_version":"bashy-notepad-v1"}
+    - notepad undo note-1 --json --fields id,active => {"active":"r1","id":"note-1","schema_version":"bashy-notepad-v1"}
+- id: share-invite
+  effort: 1
+  status: verified
+  intent: Mint a single-use invite for a note so another person can join it from its page.
+  acceptance:
+    - notepad share note-1 --json --fields id,status => {"id":"note-1","schema_version":"bashy-notepad-v1","status":"filled-by-agent"}
+- id: close-note
+  effort: 1
+  status: verified
+  intent: Close a note so later body writes are refused while reads still work.
+  acceptance:
+    - notepad close note-empty --json --fields id,status => {"id":"note-empty","schema_version":"bashy-notepad-v1","status":"closed"}
+    - notepad set note-empty --body x => ERROR 1 This note is closed
+- id: secret-refusal
+  effort: 1
+  status: verified
+  critical: true
+  intent: Refuse secret-typed or secret-named fields before storage so credentials never enter the note store (CONTRACT.md "Secret fields").
+  acceptance:
+    - curl -s -X POST http://127.0.0.1:18195/api/action -H "Content-Type: application/json" -d '{"action":"add","id":"sec-1","fields":[{"name":"api_key","type":"text","value":"x"}]}' => {"error":{"code":"invalid_arg","message":"Secret fields are refused here; credentials stay with bashy ask/vault"},"schema_version":"bashy-notepad-v1"}
+    - curl -s -X POST http://127.0.0.1:18195/api/action -H "Content-Type: application/json" -d '{"action":"add","id":"sec-ok","fields":[{"name":"keyboard","type":"text","value":"x"}]}' => {"id":"sec-ok","schema_version":"bashy-notepad-v1","status":"pending","...":"..."}
+- id: self-contained-conversion
+  effort: 5
+  status: tbd
+  intent: Convert html and pdf input inside the app itself, with no bashy process on the PATH, keeping the same resulting bodies as the reference conversion (CONTRACT.md N-15, N-19). Today the reference shells out to bashy lens for those two formats (KI-2).
+  acceptance:
+    - notepad add --id file-html -f examples/page.html --json --fields id,status => {"id":"file-html","schema_version":"bashy-notepad-v1","status":"filled-by-agent"}
+    - notepad show file-html --json --fields body => {"body":"# Imported Title\n\nA paragraph with [a link](https://example.com).","schema_version":"bashy-notepad-v1"}
+    - notepad add --id file-pdf -f examples/paper.pdf --json --fields id,status => {"id":"file-pdf","schema_version":"bashy-notepad-v1","status":"filled-by-agent"}

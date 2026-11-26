@@ -1,0 +1,70 @@
+#!/bin/sh
+# Launcher for the notepad reference build. Runs ./notepad-bin (see
+# build.sh) and adds the one verb the Go binary does not have: `stop`.
+# `serve` records its process id in ./.serve.pid before it starts, and
+# `stop` terminates that process. `stop` exits 0 whether or not a server
+# was running, and it never deletes stored notes.
+set -u
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+bin="$here/notepad-bin"
+pidfile="$here/.serve.pid"
+
+# The verb is the first argument that is not a flag or a flag's value.
+verb=
+skip=
+for arg in "$@"; do
+  if [ -n "$skip" ]; then
+    skip=
+    continue
+  fi
+  case "$arg" in
+    --addr|--data|--prefix|--title|--body|-f|--file|--format|--to|-o|--output|--id|--key|--base-rev|--rev|--break)
+      skip=1 ;;
+    -*)
+      ;;
+    *)
+      verb=$arg
+      break ;;
+  esac
+done
+
+case "$verb" in
+stop)
+  killed=
+  if [ -f "$pidfile" ]; then
+    pid=$(cat "$pidfile" 2>/dev/null || true)
+    case "$pid" in
+      ''|*[!0-9]*) ;;
+      *)
+        if kill "$pid" 2>/dev/null; then
+          killed=1
+          n=0
+          while [ "$n" -lt 50 ]; do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.1
+            n=$((n + 1))
+          done
+        fi
+        ;;
+    esac
+    rm -f "$pidfile"
+  fi
+  if [ -z "$killed" ]; then
+    # Fall back to the serve processes of this folder's binary.
+    pkill -f "$bin serve" 2>/dev/null || true
+  fi
+  echo "stopped notepad"
+  exit 0
+  ;;
+esac
+
+if [ ! -x "$bin" ]; then
+  echo "error: notepad is not built; run ./build.sh first" >&2
+  exit 1
+fi
+
+if [ "$verb" = "serve" ]; then
+  printf '%s' "$$" > "$pidfile"
+  exec "$bin" "$@"
+fi
+exec "$bin" "$@"
