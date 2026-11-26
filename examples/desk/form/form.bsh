@@ -123,6 +123,25 @@ PASS/FAIL/TBD lines, and the feature or known-issue id.
   or vault for credentials.
 - `form add|set ... --group-required`: feature `group-required`, status `tbd`.
 
+## Measured bands (bounds, 2026-11-26)
+A band is stated in this folder only when a drill measured it. `min-band` in
+the frontmatter was declared before that rule and is not a measurement. Two
+drills on this app's spec gave the bounds below. They name bindings, not
+levels, because the registry bands of these bindings are still seeded.
+- **Build from the spec** (source and a launcher from `CONTRACT.md`, with the
+  judge in the loop): passes at `codex-gpt6.1-terra` (3 of 3 on spec v2, and
+  3 of 3 on spec v2.1 with the lifecycle steps), `muse-ember` (3 of 3) and
+  `claude-sonnet5` (2 of 3), each one tier below a binding that also passed;
+  `agy-gemini4-carbon` passed 3 of 3 on rerun. Lower tiers were not run.
+- **Operate a built folder** (build, test, install, one command, serve, fetch
+  the page, stop; the spec's lifecycle run with `sh`, without bashy): passes
+  at `codex-gpt6-luna` (3 of 3) and `opencode-glm-5.3-flash` (3 of 3). A plain
+  script with no model also passes, so the steps themselves need no model.
+  Lower tiers were not run. The steps of this folder's own `dag.md` run
+  through bashy; they were not part of the drill and stay `unmeasured`.
+
+Sources: umbrella `docs/sprint-723-report.md` and `docs/sprint-731-report.md`.
+
 ## Known issues
 - KI-1 [workaround] feature:submit-answers passing multiple choices to a `multi` field with `--answer FIELD=a,b` or repeated `--answer FIELD=v` fails with `is not one of its options` or keeps only the last value -> pass a JSON object with an array via `--answers -`, e.g. `printf '{"topics":["news","events"]}\n' | bashy form answer ID --answers - --complete`
   retry: 1
