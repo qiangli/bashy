@@ -69,6 +69,15 @@ Band: unmeasured
 "$BASHY" --bashsharp ./form.bsh serve
 ```
 
+### stop
+Stop this user's form server, whatever started it. Exits 0 when none is running.
+Effects: read, exec
+Band: unmeasured
+
+```bash
+"$BASHY" --bashsharp ./form.bsh stop
+```
+
 ### show
 Read the registered executable body and skill face.
 Effects: read

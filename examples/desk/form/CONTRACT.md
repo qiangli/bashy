@@ -1,6 +1,6 @@
 # Form CLI Contract (`CONTRACT.md`)
 
-Certification-style behavioural specification for `form` (`schema_version`: `"bashy-form-v1"`). Spec v2.1 (2026-11-26): every rule below is demonstrated by at least one assertion or acceptance line, and a rule that names a set defines the set.
+Certification-style behavioural specification for `form` (`schema_version`: `"bashy-form-v1"`). Spec v2.2 (2026-11-26): every rule below is demonstrated by at least one assertion or acceptance line, a rule that names a set defines the set, and the service has a defined stop.
 
 ## How assertions are judged
 
@@ -23,6 +23,13 @@ Certification-style behavioural specification for `form` (`schema_version`: `"ba
 - A field is `id`, `label` and `kind`, plus optional `required`, `options` (for `choice` and `multi`), `recommended` and `help`. `kind` is one of `text`, `textarea`, `choice`, `multi`, `yes-no` or `file`. Any other kind is an error (F-13), and kind `secret` is refused as a secret field (F-16).
 - **Secret fields are refused before storage.** A field is secret when its `id`, ignoring case, contains `password`, `passwd`, `secret` or `credential`, or one of the pairs `api`+`key`, `access`+`token`, `private`+`key` with the two words joined directly or by one `_` or `-`. So `api_key`, `stripe-api-key`, `APIKEY` and `my-Access-Token` are secret (F-06, F-14), while `keyboard` and `token_count` are not (F-15). The match is on the field `id` anywhere in it. A field whose `kind` is `secret` is refused the same way (F-16). This is the whole rule.
 - `--title` overrides the file's title.
+
+## Service rules
+
+- **The page answers as soon as `form add` returns.** `add` starts this user's form server when none is running (F-01, U-01).
+- **`form stop`** stops this user's form server, whatever started it. It exits 0 whether or not a server was running (F-17, F-18).
+- **Stored forms are kept across a stop.** The next `form add` starts the server again (F-19), and a form stored before the stop is served again (F-20).
+- **`form serve`** runs this user's form server in the foreground, for a service that something else supervises. It is stopped with `form stop`. What a signal does to it, and what happens when it is started while a server is already running, are implementation freedoms; the lifecycle (`dag.md`) therefore stops before it serves.
 
 ## UI rules (the page at the form's `url`)
 
@@ -165,6 +172,36 @@ $ form add --id bad-secret-3 --definition '[{"id":"q","label":"Q","kind":"secret
 error: Secret fields are refused here...
 ```
 exit: 1
+
+### F-17
+Stop the service. `form stop` exits 0.
+```console
+$ form stop
+```
+exit: 0
+
+### F-18
+Stop again with no server running: still exit 0.
+```console
+$ form stop
+```
+exit: 0
+
+### F-19
+Add a form after a stop: the server starts again.
+```console
+$ form add --id after-stop --definition '[{"id":"q","label":"Question","kind":"text"}]' --json --fields id,status
+{"id":"after-stop","schema_version":"bashy-form-v1","status":"pending"}
+```
+exit: 0
+
+### F-20
+A form stored before the stop is still there.
+```console
+$ form show inline-1 --json --fields id,status
+{"id":"inline-1","schema_version":"bashy-form-v1","status":"pending"}
+```
+exit: 0
 
 ## Page interaction (documented; executable as I-01 once conform supports `interact`)
 
