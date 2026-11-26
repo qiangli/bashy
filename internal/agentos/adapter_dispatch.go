@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/qiangli/bashy/internal/agentos/adapterembed"
+	"github.com/qiangli/yoke/pkg/artifact"
 	"github.com/qiangli/yoke/pkg/shape/slot"
 	"github.com/qiangli/yoke/pkg/src"
 )
@@ -383,8 +384,27 @@ var adapterCandidateRoots = candidateBashyRoots
 // Go-backed adapter when a binary-only install has no source beside it. Tests
 // replace it so embedded-fallback coverage never reaches the network.
 var adapterSourceFetch = func(home string) error {
+	if strings.TrimSpace(home) == "" {
+		home = src.Home()
+	}
+	if artifact.IsSealed("") {
+		dest := filepath.Join(src.SrcDir(home), "bashy")
+		seed := filepath.Join(src.SeedDir(home), "bashy")
+		seedGit := filepath.Join(src.SeedDir(home), "bashy.git")
+		if !isDirPath(dest) && !isDirPath(seed) && !isDirPath(seedGit) {
+			return fmt.Errorf("%w: bashy release source is not cached locally at %s", artifact.ErrSealedNetworkDenied, dest)
+		}
+	}
 	_, err := src.Fetch(home, "bashy")
+	if err != nil && artifact.IsSealed("") && !strings.Contains(err.Error(), artifact.ErrSealedNetworkDenied.Error()) {
+		return fmt.Errorf("%w: %v", artifact.ErrSealedNetworkDenied, err)
+	}
 	return err
+}
+
+func isDirPath(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.IsDir()
 }
 
 const embeddedOutpostHelper = "examples/desk/kit/outpost.bsh"

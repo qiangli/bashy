@@ -20,6 +20,7 @@ import (
 	"github.com/spf13/cobra"
 
 	outgit "github.com/qiangli/yoke/git"
+	"github.com/qiangli/yoke/pkg/artifact"
 	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
@@ -36,7 +37,21 @@ It does not replace the running executable unless you explicitly install to a
 destination path.`,
 		SilenceUsage: true,
 	}
-	cmd.AddCommand(selfFetchCmd(), selfBuildCmd(), selfInstallCmd(), selfCheckCmd(), selfImageCmd(), selfSeedCmd())
+	cmd.AddCommand(
+		selfFetchCmd(),
+		selfBuildCmd(),
+		selfInstallCmd(),
+		selfCheckCmd(),
+		selfImageCmd(),
+		selfSeedCmd(),
+		selfBootstrapCmd(),
+		selfSealCmd(),
+		selfVerifyCmd(),
+		selfStatusCmd(),
+		selfExportCmd(),
+		selfImportCmd(),
+		selfPruneCmd(),
+	)
 	return cmd
 }
 
@@ -412,7 +427,7 @@ func buildSelfBinary(ctx context.Context, target, version string) error {
 	if version := selfShellRuntimeStamp(); version != "" {
 		ldflags += " -X github.com/bashsharp/bashsharp/transpile.ShellRuntimeCommit=" + version
 	}
-	c := exec.CommandContext(ctx, exe, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", target, "./cmd/bashy")
+	c := newSelfGoBuildCmd(ctx, exe, "", target, ldflags)
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
 	return c.Run()
@@ -473,10 +488,16 @@ func selfShellRuntimeStamp() string {
 func ensureBashyRelease(ctx context.Context, version string) (string, error) {
 	tool, err := resolveBashyRelease(ctx, version)
 	if err != nil {
+		if artifact.IsSealed("") && !errors.Is(err, artifact.ErrSealedNetworkDenied) {
+			return "", fmt.Errorf("%w: %v", artifact.ErrSealedNetworkDenied, err)
+		}
 		return "", err
 	}
 	members, err := binmgr.EnsureMembers(ctx, tool, productMemberNames())
 	if err != nil {
+		if artifact.IsSealed("") && !errors.Is(err, artifact.ErrSealedNetworkDenied) {
+			return "", fmt.Errorf("%w: %v", artifact.ErrSealedNetworkDenied, err)
+		}
 		return "", err
 	}
 	return members[releaseBinaryName()], nil
@@ -486,7 +507,7 @@ func resolveBashyRelease(ctx context.Context, version string) (binmgr.Tool, erro
 	if strings.TrimSpace(version) == "" {
 		version = "latest"
 	}
-	return binmgr.ResolveGitHub(ctx, binmgr.GitHubSpec{
+	tool, err := binmgr.ResolveGitHub(ctx, binmgr.GitHubSpec{
 		Name:           "bashy",
 		RequireArchive: true,
 		Repo:           bashyReleaseRepo,
@@ -494,6 +515,10 @@ func resolveBashyRelease(ctx context.Context, version string) (binmgr.Tool, erro
 		Member:         releaseBinaryName(),
 		AssetMatch:     bashyArchiveMatch,
 	})
+	if err != nil && artifact.IsSealed("") && !errors.Is(err, artifact.ErrSealedNetworkDenied) {
+		return binmgr.Tool{}, fmt.Errorf("%w: %v", artifact.ErrSealedNetworkDenied, err)
+	}
+	return tool, err
 }
 
 func releaseBinaryName() string {

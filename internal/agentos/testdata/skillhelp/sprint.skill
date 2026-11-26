@@ -418,6 +418,7 @@ to unrelated repositories, branches, or resources.
   untrack       Remove a repo todo store from the sprint's derived story index
   wait          Block until the next event on the sprint card, print one line, exit
   who           Who is working on what, per repo, across every sprint
+  worker-status Show or watch local worker sessions and available account readings
   yield         Give a claimed story back to the sprint, unfinished
 
 ## Flags

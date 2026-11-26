@@ -57,6 +57,7 @@ import (
 	"github.com/qiangli/yoke/external/meshagent"
 	"github.com/qiangli/yoke/external/registry"
 	_ "github.com/qiangli/yoke/pkg/accounts/builtin"
+	"github.com/qiangli/yoke/pkg/artifact"
 	"github.com/qiangli/yoke/pkg/ask"
 	"github.com/qiangli/yoke/pkg/atlas"
 	"github.com/qiangli/yoke/pkg/autofix"
@@ -1304,15 +1305,15 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		// them before PATH). --json for a structured catalog.
 		dispatchExit(dispatchCommands(os.Args[2:]))
 	case "go":
-		// Bootstrap escape hatch: when an adapter script runs on a bare node
-		// with no host `go` on PATH, it invokes `BASHY_ADAPTER_INPROC=1 bashy go`
-		// so the toolchain provisioner runs in-process without recursing back
-		// into toolchain/go/go.bsh.
-		if os.Getenv(adapterInprocEnv) == "1" {
+		// Bootstrap escape hatch (and sealed hermetic mode): run gotoolchain.NewGoCmd()
+		// in-process so bare or sealed hosts never depend on compiling toolchain/go/go.bsh.
+		if os.Getenv(adapterInprocEnv) == "1" || artifact.IsSealed("") {
 			for _, k := range []string{adapterInprocEnv, adapterExecEnv, adapterSelfEnv, invokedAsEnv, "BASHY_SELF"} {
 				_ = os.Unsetenv(k)
 			}
-			applyAllProxyFallback()
+			if !artifact.IsSealed("") {
+				applyAllProxyFallback()
+			}
 			cmd := gotoolchain.NewGoCmd()
 			setCobraArgs(cmd, os.Args[2:])
 			if err := cmd.Execute(); err != nil {

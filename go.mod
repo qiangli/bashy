@@ -94,8 +94,8 @@ require (
 	github.com/qiangli/coreutils v0.0.0-20261126092031-5f9da9132e14
 	github.com/qiangli/ycode v0.3.1-dev.0.20261125125149-fcc970b2f421
 	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261126092849-17bf1a1dda58
-	github.com/qiangli/yoke/external/otel v0.0.0-20261126092849-17bf1a1dda58
+	github.com/qiangli/yoke v0.0.0-20261126131553-5cafc812db50
+	github.com/qiangli/yoke/external/otel v0.0.0-20261126131553-5cafc812db50
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
@@ -140,6 +140,7 @@ require (
 	github.com/acarl005/stripansi v0.0.0-20180116102854-5a71ef0e047d // indirect
 	github.com/aead/serpent v0.0.0-20160714141033-fba169763ea6 // indirect
 	github.com/agnivade/levenshtein v1.2.1 // indirect
+	github.com/aofei/backoff v1.2.0 // indirect
 	github.com/apache/arrow/go/arrow v0.0.0-20211112161151-bc219186db40 // indirect
 	github.com/armon/go-socks5 v0.0.0-20160902184237-e75332964ef5 // indirect
 	github.com/asdine/storm/v3 v3.2.1 // indirect
@@ -317,6 +318,7 @@ require (
 	github.com/google/pprof v0.0.0-20260507013755-92041b743c96 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/goproxy/goproxy v0.27.0 // indirect
 	github.com/gorilla/handlers v1.5.2 // indirect
 	github.com/gorilla/mux v1.8.1 // indirect
 	github.com/gorilla/schema v1.4.1 // indirect
@@ -459,9 +461,9 @@ require (
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
 	github.com/qiangli/outpost v0.14.38-0.20261126093020-24c7e91e39b1 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126092849-17bf1a1dda58 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261126092849-17bf1a1dda58 // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126092849-17bf1a1dda58 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126131553-5cafc812db50 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261126131553-5cafc812db50 // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126131553-5cafc812db50 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.60.0 // indirect
 	github.com/quic-go/webtransport-go v0.11.1 // indirect
@@ -605,6 +607,7 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 	modernc.org/sqlite v1.59.0 // indirect
+	oras.land/oras-go/v2 v2.7.0 // indirect
 	resty.dev/v3 v3.0.0-rc.2 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect

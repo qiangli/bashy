@@ -1,6 +1,7 @@
 package agentos
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -189,8 +190,7 @@ func buildBashyInDir(dir, target, version string) error {
 		return fmt.Errorf("self build --local: cannot resolve current executable for managed Go build")
 	}
 	ldflags := "-s -w -X github.com/bashsharp/bashsharp/cli.bashVersion=5.3.0(1)-bashy-" + version
-	c := exec.Command(exe, "go", "build", "-trimpath", "-ldflags", ldflags, "-o", target, "./cmd/bashy")
-	c.Dir = dir
+	c := newSelfGoBuildCmd(context.Background(), exe, dir, target, ldflags)
 	c.Stdout, c.Stderr = os.Stdout, os.Stderr
 	return c.Run()
 }
