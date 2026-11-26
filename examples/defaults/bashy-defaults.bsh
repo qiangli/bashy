@@ -75,7 +75,8 @@ provides/route/requires records; `animate-prerendered` also `accepts
 /takes_dir`, so only a request with a takes directory selects it, and
 `animate-echomimic` `accepts /model=^echomimic`, so only a request that asks
 for EchoMimicV3 does), the M5 Replicate API rods
-(`examples/api-rods`, with vault-bound HTTP tool commands), and
+(`examples/api-rods`, with vault-bound HTTP tool commands), `shape-feed`
+(examples/shape-feed: designated issue feed into `bashy shape wish`), and
 `bashy-defaults` itself.
 
 The default kb pages (`kb/defaults` in the pin) need no setup:
@@ -138,6 +139,7 @@ animate-echomimic|examples/oss-rods/animate-echomimic.bsh|read,write,exec,net||a
 song-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|song|song|api|has=jq has=curl has=ffprobe has=python3
 image-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|image|image.generate,image.edit|api|has=jq has=curl has=ffprobe has=python3
 animate-replicate|examples/api-rods/replicate-media.bsh|read,write,exec,net,spend|animate|animate|api|has=jq has=curl has=ffprobe has=python3
+shape-feed|examples/shape-feed/shape-feed.bsh|read,write,exec,net
 bashy-defaults|examples/defaults/bashy-defaults.bsh|read,write,exec"
 
 usage() {

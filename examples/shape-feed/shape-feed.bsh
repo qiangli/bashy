@@ -1,0 +1,315 @@
+#!/usr/bin/env -S bashy --bashsharp
+# shape-feed: read a designated issue feed into todos and enter `bashy shape wish`.
+# One editable Bash# body for the shape-feed command and skill.
+#
+#   shape-feed APP --source gh:OWNER/REPO#LABEL [--owner LOGIN] [--apply]
+#   shape-feed APP --source file:PATH[#LABEL] [--owner LOGIN] [--apply]
+#
+# Preview by default; pass --apply to file new todos and call `bashy shape wish APP --todo ID`.
+
+~~~skill as guide
+---
+name: shape-feed
+description: Read open issues from a designated source (GitHub label or JSON file) into source-keyed todos and enter bashy shape wish. Preview by default; --apply writes todos and calls shape wish. Issue text is treated strictly as data and never executed.
+metadata:
+  requires: "has=bashy"
+---
+# shape-feed — designated issue feed into `bashy shape wish`
+
+Reads open issues from one designated source, keeps only items authored by
+`--owner` (defaulting to the repository owner for `gh:`), derives a stable todo
+ID from the source and issue number (`meet adopt` sha256 pattern so re-reads
+never duplicate), files each new item with `--origin feed` and `--reporter`,
+and enters `bashy shape wish APP --todo ID -- REQUEST`.
+
+## Usage
+
+```sh
+shape-feed APP --source gh:OWNER/REPO#LABEL [--owner LOGIN] [--apply]
+shape-feed APP --source file:PATH[#LABEL] [--owner LOGIN] [--apply]
+```
+
+- **Preview by default**: without `--apply`, prints what would be filed and
+  writes nothing.
+- **`--apply`**: files one todo per new matching issue via
+  `bashy todo add --no-sprint --id ID --origin feed --reporter AUTHOR --note -`
+  and runs `bashy shape wish APP --todo ID -- REQUEST`. A second `--apply`
+  skips already-filed IDs and files nothing new.
+- **GitHub source (`gh:OWNER/REPO#LABEL`)**: reads via one fixed read call
+  (`bashy gh issue list --repo OWNER/REPO --state open --label LABEL --json number,title,body,author,labels`)
+  and defaults `--owner` to `OWNER`.
+- **File source (`file:PATH[#LABEL]`)**: reads a JSON array in the same shape
+  (for tests, chat handovers, or research agents). Pass `--owner LOGIN` to
+  filter by author; omit `--owner` to accept all items in the file.
+- **Untrusted issue text**: issue titles and bodies are strictly data. Bodies
+  stream via `--note -` stdin and titles/requests follow `--`, never evaluated
+  or executed as commands.
+
+`SHAPE_FEED_BASHY_BIN` (or `BASHY_BIN`) overrides the `bashy` binary used for
+`gh`, `todo`, and `shape` calls.
+
+## Verification
+
+`go test ./examples/shape-feed/` drives `shape-feed` with `--source file:...`
+against a real `bashy todo` store: preview files nothing, `--apply` files one
+todo per owner issue and skips others, a second `--apply` files nothing, and
+shell metacharacters in issue text are never executed.
+~~~
+
+set -euo pipefail
+shopt -u patsub_replacement 2>/dev/null || true
+
+PROG=shape-feed
+
+usage() {
+    sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+}
+
+fail() {
+    echo "$PROG: $1" >&2
+    exit "${2:-1}"
+}
+
+bashy_bin() {
+    if [ -n "${SHAPE_FEED_BASHY_BIN:-}" ]; then
+        printf '%s\n' "$SHAPE_FEED_BASHY_BIN"
+    elif [ -n "${BASHY_BIN:-}" ]; then
+        printf '%s\n' "$BASHY_BIN"
+    else
+        printf 'bashy\n'
+    fi
+}
+
+# Normalize --flag=value into --flag value so typed registry calls and CLI
+# calls behave identically.
+args=()
+for a in "$@"; do
+    case "$a" in
+        --skill)
+            sed -n '/^~~~skill as guide$/,/^~~~$/p' "${BASH_SOURCE[0]}" | sed '1d;$d'
+            exit 0
+            ;;
+        -h|--help|help)
+            usage
+            exit 0
+            ;;
+        --*=*)
+            args+=("${a%%=*}" "${a#*=}")
+            ;;
+        *)
+            args+=("$a")
+            ;;
+    esac
+done
+set -- "${args[@]}"
+
+app=""
+source_spec=""
+owner=""
+owner_set=0
+apply=0
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --source)
+            [ $# -ge 2 ] || { usage >&2; exit 2; }
+            source_spec=$2
+            shift 2
+            ;;
+        --owner)
+            [ $# -ge 2 ] || { usage >&2; exit 2; }
+            [ -n "$2" ] || fail "--owner must not be empty" 2
+            owner=$2
+            owner_set=1
+            shift 2
+            ;;
+        --apply)
+            apply=1
+            shift
+            ;;
+        --)
+            shift
+            while [ $# -gt 0 ]; do
+                if [ -z "$app" ]; then
+                    app=$1
+                else
+                    fail "unexpected argument: $1" 2
+                fi
+                shift
+            done
+            ;;
+        -*)
+            fail "unknown option: $1" 2
+            ;;
+        *)
+            if [ -z "$app" ]; then
+                app=$1
+            else
+                fail "unexpected argument: $1" 2
+            fi
+            shift
+            ;;
+    esac
+done
+
+[ -n "$app" ] || { usage >&2; exit 2; }
+case "$app" in
+    .|..|*/*|*\\*|*[[:space:]]*) fail "invalid app name: $app" 2 ;;
+esac
+[ -n "$source_spec" ] || fail "--source is required" 2
+
+source_mode=""
+repo=""
+label=""
+file_path=""
+source_key=""
+
+case "$source_spec" in
+    gh:*)
+        rest=${source_spec#gh:}
+        case "$rest" in
+            *#*)
+                repo=${rest%%#*}
+                label=${rest#*#}
+                ;;
+            *)
+                fail "--source gh: requires OWNER/REPO#LABEL" 2
+                ;;
+        esac
+        repo_owner=${repo%%/*}
+        repo_name=${repo#*/}
+        if [ -z "$repo_owner" ] || [ -z "$repo_name" ] || [[ "$repo_name" == */* ]] || [ "$repo" = "$repo_owner" ]; then
+            fail "invalid GitHub repo in --source: $repo" 2
+        fi
+        [ -n "$label" ] || fail "--source gh: requires a non-empty #LABEL" 2
+        if [ "$owner_set" = 0 ]; then
+            owner=$repo_owner
+        fi
+        source_mode="gh"
+        source_key="gh:$repo"
+        ;;
+    file:*)
+        rest=${source_spec#file:}
+        [ -n "$rest" ] || fail "--source file: requires a PATH" 2
+        file_path=$rest
+        if [ ! -f "$file_path" ] && [[ "$rest" == *#* ]]; then
+            cand_path=${rest%#*}
+            cand_label=${rest##*#}
+            if [ -f "$cand_path" ] && [ -n "$cand_label" ]; then
+                file_path=$cand_path
+                label=$cand_label
+            fi
+        fi
+        [ -f "$file_path" ] || fail "source file not found: $file_path" 1
+        file_dir=$(cd "$(dirname -- "$file_path")" && pwd -P)
+        source_mode="file"
+        source_key="file:$file_dir/${file_path##*/}"
+        ;;
+    *)
+        fail "unsupported --source $source_spec (want gh:OWNER/REPO#LABEL or file:PATH)" 2
+        ;;
+esac
+
+command -v jq >/dev/null 2>&1 || fail "jq is required" 1
+command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required" 1
+
+bin=$(bashy_bin)
+
+if [ "$source_mode" = "gh" ]; then
+    issues_json=$("$bin" gh issue list --repo "$repo" --state open --label "$label" --json number,title,body,author,labels) || fail "gh issue list failed for $repo#$label" 1
+else
+    issues_json=$(cat -- "$file_path") || fail "failed to read $file_path" 1
+fi
+
+[ -n "$issues_json" ] || fail "empty JSON from source $source_spec" 1
+printf '%s\n' "$issues_json" | jq -e 'type == "array"' >/dev/null 2>&1 || fail "source did not return a JSON array" 1
+
+todo_list_json=$("$bin" todo list --all --json) || fail "todo list failed" 1
+existing_ids=$(printf '%s\n' "$todo_list_json" | jq -r 'if .t == "node" then (.attrs.id // empty) elif (.result.items | type) == "array" then (.result.items[].id // empty) else empty end')
+
+has_id() {
+    local needle=$1 line
+    while IFS= read -r line; do
+        [ "$line" = "$needle" ] && return 0
+    done <<< "$existing_ids"
+    return 1
+}
+
+has_label() {
+    local want=$1 labels_text=$2 line
+    while IFS= read -r line; do
+        [ "$line" = "$want" ] && return 0
+    done <<< "$labels_text"
+    return 1
+}
+
+matched=0
+would_file=0
+filed=0
+skipped_owner=0
+skipped_existing=0
+
+while IFS= read -r item; do
+    [ -n "$item" ] || continue
+    number=$(printf '%s\n' "$item" | jq -r '.number // empty')
+    case "$number" in
+        ''|*[!0-9]*) fail "issue missing numeric number" 1 ;;
+    esac
+    title=$(printf '%s\n' "$item" | jq -r '.title // ""')
+    body=$(printf '%s\n' "$item" | jq -r '.body // ""')
+    author=$(printf '%s\n' "$item" | jq -r 'if (.author | type) == "object" then (.author.login // "") else (.author // "") end')
+
+    if [ -n "$label" ] && [ "$source_mode" = "file" ]; then
+        item_labels=$(printf '%s\n' "$item" | jq -r '(.labels // []) | map(if type == "object" then (.name // "") else . end) | .[]')
+        if ! has_label "$label" "$item_labels"; then
+            continue
+        fi
+    fi
+
+    if [ -n "$owner" ]; then
+        if [ -z "$author" ] || [ "${author,,}" != "${owner,,}" ]; then
+            skipped_owner=$((skipped_owner + 1))
+            continue
+        fi
+    fi
+
+    matched=$((matched + 1))
+    hash_line=$(printf 'shape-feed\0%s\0%s' "$source_key" "$number" | sha256sum)
+    todo_id=${hash_line:0:12}
+
+    if has_id "$todo_id"; then
+        echo "$PROG: skip $todo_id #$number (already filed)"
+        skipped_existing=$((skipped_existing + 1))
+        continue
+    fi
+
+    [ -n "$title" ] || title="Issue #$number"
+    request=$title
+    if [ -n "$body" ]; then
+        request="$title"$'\n\n'"$body"
+    fi
+
+    if [ "$apply" = 0 ]; then
+        echo "$PROG: preview $todo_id #$number [$author] -- $title"
+        would_file=$((would_file + 1))
+        continue
+    fi
+
+    todo_args=(todo add --no-sprint --id "$todo_id" --origin feed --note - --json)
+    if [ -n "$author" ]; then
+        todo_args+=(--reporter "$author")
+    fi
+    todo_args+=(-- "$title")
+    printf '%s' "$body" | "$bin" "${todo_args[@]}" >/dev/null || fail "todo add failed for #$number ($todo_id)" 1
+    existing_ids="$existing_ids"$'\n'"$todo_id"
+
+    "$bin" shape wish "$app" --todo "$todo_id" -- "$request" >/dev/null || fail "shape wish failed for #$number ($todo_id)" 1
+    echo "$PROG: filed $todo_id #$number [$author] -- $title"
+    filed=$((filed + 1))
+done < <(printf '%s\n' "$issues_json" | jq -c '.[]')
+
+if [ "$apply" = 0 ]; then
+    echo "$PROG: preview app=$app matched=$matched would_file=$would_file skipped_existing=$skipped_existing skipped_owner=$skipped_owner"
+else
+    echo "$PROG: applied app=$app matched=$matched filed=$filed skipped_existing=$skipped_existing skipped_owner=$skipped_owner"
+fi
