@@ -31,7 +31,7 @@ Tools and format: the judge is `bashy conform` (`spec check`, `run`, `cert`, `mu
 
 ## Steps
 1. **`SKILL.md` at the root:** the type line, the standard run block, and a short behaviour summary that points at the contract. Put how this particular build is operated (its scripts, server, workarounds) in a separate section marked as not required of other implementations.
-2. **`dag.md`, the lifecycle:** the five steps `source`, `build`, `test`, `install`, `run`, plus `serve` for an app with a page. Each step is exact and non-interactive, with an `Effects:` line and a `Band:` line (`none` where no model is needed, `unmeasured` until a drill measures it, `L1` to `L5` once measured).
+2. **`dag.md`, the lifecycle:** the five steps `source`, `build`, `test`, `install`, `run`, plus `serve` and `stop` for an app with a page or a server. Each step is exact and non-interactive, with an `Effects:` line and a `Band:` line (`none` where no model is needed, `unmeasured` until a drill measures it, `L1` to `L5` once measured).
 3. **`features.yaml`:** one feature per user-visible capability: `id`, `intent`, `effort` (Fibonacci points), `status` (`verified` only if you ran it; else `tbd`), `critical: true` for anything security-relevant, and `acceptance` lines of the form `command => expected`.
 4. **`CONTRACT.md`, rules first:**
    - how assertions are judged (placeholders, open marker, what plain text is checked);
@@ -57,6 +57,17 @@ Tools and format: the judge is `bashy conform` (`spec check`, `run`, `cert`, `mu
 - **The app may differ from its own documentation.** Record the app's real behaviour in the contract and file the difference as a known issue; do not write the spec to match the documentation.
 - **Do not ask a builder to re-create a critical rule from examples.** Supply it as data, or define it exactly.
 - **Hidden cases stay with the owner.** They vary documented behaviour only, and each is independent (its own state, a fresh HOME).
+
+## What the second conversion taught (a service app; the spec written by an agent, the hidden cases by another vendor's agent)
+- **A service needs a start and a stop that the contract can run.** If the app has no stop verb, or no verb starts its server, say where they live (a small launcher beside the built program is acceptable), how the contract starts the server and waits until it is ready, and what `stop` is scoped to (this folder or this user). Assert that `stop` exits 0 with nothing running and that stored state survives a stop. A signal is not a stop the contract can check.
+- **Name the reference command.** Certify the command a user runs (the launcher), not the program it wraps: `conform cert --reference-cmd` takes that command, and `--dir` the folder that holds `examples/`.
+- **Know how the judge compares output.** Only a command that carries `--json` is compared structurally (open markers, any key order). Every other output is compared as text, including JSON printed by `curl`. For those, either state the exact format as a rule or normalise the output inside the command. A byte format the spec never stated failed a build whose behaviour was right.
+- **When the reference's page fails the UI rules** (no programmatic labels, for example): assert what the page does carry (the visible texts, the button names) with a console check, record the gap as a known issue, and say that an implementation may do better.
+- **A surviving mutant is usually a missing assertion, not always.** Redirections, pipes and compound commands can hide a mutation from the judge. First make the assertion's last step one plain command; add an assertion only if the mutant still survives.
+- **A rule with no assertion is unverified.** A second agent found four places where the reference did not follow rules its contract stated, and no assertion covered any of them. Run every `features.yaml` acceptance line on the reference; for each rule in the contract, point at the assertion that exercises it, or move it to the open questions.
+- **Binary examples.** When no fixture exists, make one, say in the spec how it was made, and assert properties that do not depend on one extractor's exact text. A tool the app calls for a conversion is a venue line, not an implementation detail.
+- **Both lifecycle files pass the lint.** In a reference folder `conform spec check` reads the `dag.md` beside `CONTRACT.md`. The lifecycle of the app as a spec (kept as `spec/dag.md`, with `spec/README.md` listing the files of a spec release) is checked when the release is assembled. Steps of the spec's lifecycle run with `sh` and need nothing of the reference build.
+- **Say which state model the contract uses.** Ordered assertions against one server and one data folder suit a service: state it under "How assertions are judged", start the server in the first assertion and stop it in the last. Independent assertions, each in a fresh HOME, suit a tool with no server.
 
 ## Sizing
 One small app (about 2,000 to 3,000 lines, one service, one page): one working session for the spec and its certification, plus a rebuild round. Certification with mutants took about 35 minutes of test-host time per pass in the worked example.

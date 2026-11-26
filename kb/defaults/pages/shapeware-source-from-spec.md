@@ -17,7 +17,7 @@ source:
 created: "2026-11-26T13:53:46Z"
 ---
 
-Goal: build an app from a shapeware spec folder (`CONTRACT.md`, `features.yaml`, `examples/`, `dag.md`, a task file) so that it passes the judge at the stated venue and can be installed and run through its lifecycle. Lessons are from rebuilding bashy's `form` from its spec by agents of four vendors. Related: [[shapeware-spec-from-app]], [[shapeware-spec-from-plan]], [[shapeware-operate-from-dag]] to install and run what you built, a rebuild test (a builder that has not seen the source rebuilds the app and the judge decides).
+Goal: build an app from a shapeware spec folder (`CONTRACT.md`, `features.yaml`, `examples/`, `dag.md`, a task file) so that it passes the judge at the stated venue and can be installed and run through its lifecycle. Lessons are from rebuilding two bashy apps from their specs (`form`, a form tool, and `notepad`, a notes server) by agents of several vendors. Related: [[shapeware-spec-from-app]], [[shapeware-spec-from-plan]], [[shapeware-operate-from-dag]] to install and run what you built, a rebuild test (a builder that has not seen the source rebuilds the app and the judge decides).
 
 Tools and format: the judge is `bashy conform` (`spec check`, `run`, `cert`, `mutate`). Where a step says `conform ...`, type `bashy conform ...`; on a machine without bashy use the standalone `conform` binary (github.com/dhnt/conform). The format on one page is `examples/desk/form/references/shapeware.md` in the bashy source, and the folder around it is the worked example, with a full `CONTRACT.md`, `features.yaml` and `dag.md`. `bashy src fetch bashy` puts the source under `${BASHY_HOME:-$HOME/.bashy}/src/bashy`.
 
@@ -26,12 +26,14 @@ Tools and format: the judge is `bashy conform` (`spec check`, `run`, `cert`, `mu
 1. **Read the rules section of `CONTRACT.md` before the assertions.** Envelope keys, projection flags, open/closed outputs and error form apply to every command.
 2. **Read the task file and `dag.md` for the venue and the lifecycle:** OS, interpreter and toolchain versions, network, what is absent, and the steps your build must satisfy (build, test, install, run, serve). Build for that venue, not for the machine you are on.
 3. **Write files early.** Start the launcher and a first command within the first minutes, then extend. A long plan with nothing on disk can be cut off.
-4. **Run the judge while you build:** `conform run CONTRACT.md --path . --fresh-home`. Fix by assertion name until all pass.
+4. **Run the judge while you build:** `conform run CONTRACT.md --path . --fresh-home`. Fix by assertion name until all pass. Do not deliver while any visible assertion fails.
 5. **Cover every example file and every input format** in `examples/`, including each syntax the examples use.
 6. **Implement a rule as a rule.** Where the spec defines a set (which names are refused, which kinds are valid), implement the definition and test both sides of its boundary, not only the example shown.
 7. **Errors:** exactly the stated stream, text prefix and exit code, and nothing else on that stream (no warnings from your interpreter).
-8. **UI:** follow the stated label, required and control rules; the judge reads the accessible inventory, not your markup.
-9. **Deliver source, the launcher and a working lifecycle.** Before you finish:
+8. **Output compared as text matches byte for byte.** Only output of a command that carries `--json` is compared structurally. Where the contract shows JSON printed by another command (an HTTP API read with `curl`), print it exactly as shown: compact, keys in that order.
+9. **UI:** follow the stated label, required and control rules; the judge reads the accessible inventory, not your markup.
+10. **A service:** implement the start and stop the contract's service rules define (readiness, what `stop` is scoped to, state kept across a stop), and make every step of `dag.md` work when its block is run with `sh` on a fresh copy, `build` included: the launcher may not rely on something you built by hand.
+11. **Deliver source, the launcher and a working lifecycle.** Before you finish:
    - remove build outputs and caches from the workspace, or make the launcher rebuild when the cached binary does not run here;
    - make sure the launcher works from a fresh HOME with no network;
    - use only the standard library or dependencies vendored in the workspace;
@@ -45,3 +47,5 @@ Tools and format: the judge is `bashy conform` (`spec check`, `run`, `cert`, `mu
 - Nothing was delivered: the session ended during a long first planning turn.
 - A rule given by example was implemented for the example's form only (`api_key` refused, `stripe-api-key` accepted).
 - Servers started for self-checks were left running after the session.
+- JSON from an HTTP API was printed with spaces and another key order; the checks compare that output as text, and every one of them failed although the behaviour was right. Three of those assertions were visible at delivery.
+- A session read the spec, spent nine minutes in one thinking step and ended without writing a file.

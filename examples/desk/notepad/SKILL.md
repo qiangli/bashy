@@ -95,11 +95,27 @@ known-issue id.
   `close ID` closes a note, `export ID --to pdf|png|html|txt` writes a
   rendered file, and `history`/`undo`/`restore` manage body revisions.
 
-## Measured bands
-No drill has measured this spec yet. Every `Band:` in `spec/dag.md` is
-`unmeasured`, and the steps of this folder's own `dag.md` run through
-bashy and are likewise unmeasured. A plain script with no model runs the
-lifecycle steps themselves; that is an expectation, not a measurement.
+## Measured bands (bounds, 2026-11-26)
+A band is stated in this folder only when a drill measured it. One drill on
+spec v1.0 gave the bounds below. They name bindings, not levels, because the
+registry bands of these bindings are still seeded.
+- **Build from the spec** (source, `build.sh` and a launcher from the spec
+  release, with the judge in the loop; graded on the visible contract, 27
+  hidden cases, a page interaction, and the lifecycle test): passes at
+  `codex-gpt6.1-terra` (3 of 3, about 6 minutes a run). `opencode-glm-5.3-flash`
+  passed 1 of 3 (one run failed on the text format of the API's JSON, one
+  delivered no file). `opencode-glm-5.3` delivered no file in its one
+  completed run and was not measured further. A smoke run with
+  `claude-sonnet5.5` passed and is not scored. Lower tiers were not run.
+- **Lifecycle** (every step of `spec/dag.md` run with `sh` on a fresh copy,
+  and the service checks): passes on the reference and on every build that
+  passed behaviour. A plain script runs it, so the steps need no model.
+- The spec was written by `muse-wonder` and the hidden cases by
+  `claude-opus5.5`, each in one session from the kb runbooks.
+The steps of this folder's own `dag.md` run through bashy; they were not part
+of the drill and stay `unmeasured`.
+
+Sources: umbrella `docs/sprint-726-report.md` and `docs/sprint-726-protocol.md`.
 
 ## Known issues
 - KI-3 [workaround] feature:create-and-open the page's field texts sit beside their controls without a programmatic label association, so label-based automation cannot find the controls by label -> drive the page by control name (title, body, importFile) or use the CLI
