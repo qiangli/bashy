@@ -1,13 +1,15 @@
 # form feature list (shapeware v0.1). Ids are stable across versions.
 - id: define-and-open
   status: verified
-  intent: Create a form from JSON or YAML and open its loopback page for the human in one command.
+  intent: Create a form from a JSON or YAML file (examples/contact.json, examples/contact.yaml) or an inline --definition array, and open its loopback page for the human in one command.
   acceptance:
     - form add --id intake --def examples/contact.json --title "Contact preferences" --open --json --fields id,status,opened => {"id":"intake","opened":true,"schema_version":"bashy-form-v1","status":"pending"}
-    - GET /?id=intake => 200 data-field="name"
+    - form add --id intake-yaml --def examples/contact.yaml --title "Contact preferences" --json --fields id,status => {"id":"intake-yaml","schema_version":"bashy-form-v1","status":"pending"}
+    - form add --id inline-1 --definition '[{"id":"q","label":"Question","kind":"text"}]' --json --fields id,status => {"id":"inline-1","schema_version":"bashy-form-v1","status":"pending"}
+    - GET /?id=intake => 200 Full name
 - id: submit-answers
   status: verified
-  intent: Save partial or complete respondent answers and keep them across reloads.
+  intent: Save partial or complete respondent answers, from the CLI or by submitting the page, and keep them across reloads (CONTRACT.md "Page interaction").
   acceptance:
     - form answer intake --answer name=Ada --answer contact=email --answer subscribe=yes --complete --json --fields id,status => {"id":"intake","schema_version":"bashy-form-v1","status":"answered"}
 - id: wait-answers
