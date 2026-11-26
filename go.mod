@@ -114,7 +114,7 @@ require (
 	github.com/dgraph-io/simdjson-go v0.3.0 // indirect
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da // indirect
 	github.com/dgryski/go-groupvarint v0.0.0-20230630160417-2bfb7969fb3c // indirect
-	github.com/dhnt/conform v0.1.0
+	github.com/dhnt/conform v0.1.1
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8 // indirect
 	github.com/digitalocean/go-libvirt v0.0.0-20220804181439-8648fbde413e // indirect
 	github.com/digitalocean/go-qemu v0.0.0-20250212194115-ee9b0668d242 // indirect
