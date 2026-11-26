@@ -226,3 +226,27 @@ func TestResourcePressureHostFloorBlocksGrowthWhileAllowingRecovery(t *testing.T
 		t.Fatalf("unexpected refusal stderr:\n%s", stderr)
 	}
 }
+
+func TestResourcePressureCLICommonOptionsJSONAndSealedInproc(t *testing.T) {
+	artDir := isolatePressureEnv(t)
+	rcmd := resources.NewCommand()
+	var out, errBuf bytes.Buffer
+	rcmd.SetOut(&out)
+	rcmd.SetErr(&errBuf)
+	outArgs, err := applyCommonOptions(rcmd, []string{"pressure", "status", "--artifact-root", artDir, "--json"})
+	if err != nil {
+		t.Fatalf("applyCommonOptions(pressure status --artifact-root ... --json): %v", err)
+	}
+	rcmd.SetArgs(outArgs)
+	if err := rcmd.Execute(); err != nil {
+		t.Fatalf("rcmd.Execute: %v (stderr: %s)", err, errBuf.String())
+	}
+	if !strings.Contains(out.String(), `"schema_version"`) {
+		t.Fatalf("expected JSON output, got %s", out.String())
+	}
+
+	t.Setenv("BASHY_OFFLINE", "1")
+	if !shouldRunOfflineOrInproc([]string{"pressure", "status"}) {
+		t.Fatal("expected shouldRunOfflineOrInproc true when BASHY_OFFLINE=1")
+	}
+}

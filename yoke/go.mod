@@ -20,6 +20,7 @@ require (
 	github.com/a2aproject/a2a-go/v2 v2.3.1 // indirect
 	github.com/alecthomas/assert/v2 v2.11.0 // indirect
 	github.com/alecthomas/repr v0.5.2 // indirect
+	github.com/aofei/backoff v1.2.0 // indirect
 	github.com/asdine/storm/v3 v3.2.1 // indirect
 	github.com/aymanbagabas/go-pty v0.2.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -107,7 +108,6 @@ require (
 	github.com/go-webauthn/webauthn v0.18.2 // indirect
 	github.com/go-webauthn/x v0.3.1 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
-	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.5.0 // indirect
 	github.com/goccy/go-yaml v1.19.2 // indirect
 	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
@@ -122,6 +122,7 @@ require (
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/pprof v0.0.0-20260507013755-92041b743c96 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/goproxy/goproxy v0.27.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.30.0 // indirect
 	github.com/gtsteffaniak/filebrowser/backend v0.0.0-20261113140828-88b90a50350d // indirect
@@ -149,6 +150,8 @@ require (
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/nguyenthenguyen/docx v0.0.0-20230621112118-9c8e795a11db // indirect
 	github.com/odvcencio/gotreesitter v0.16.0 // indirect
+	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/opencontainers/image-spec v1.1.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.3.1 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/pjbgf/sha1cd v0.7.0 // indirect
@@ -163,8 +166,8 @@ require (
 	github.com/prometheus/statsd_exporter v0.29.0 // indirect
 	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261123172747-32d78887eb27 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126041417-ada7e452af17 // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126041417-ada7e452af17 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126213049-bbe744c93fee // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126213049-bbe744c93fee // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
@@ -244,6 +247,7 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
 	modernc.org/sqlite v1.59.0 // indirect
+	oras.land/oras-go/v2 v2.7.0 // indirect
 	resty.dev/v3 v3.0.0-rc.2 // indirect
 )
 
@@ -254,7 +258,7 @@ require (
 
 // Dependency replaces are not transitive: keep the embedded awk on the same
 // immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261124121700-f9833f726fac
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261126163007-96e079612fa5
 
 replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
 
@@ -316,11 +320,11 @@ replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/externa
 replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402
 
 require (
-	github.com/bashsharp/bashsharp v0.0.0-20261124123418-08fabb33d718
+	github.com/bashsharp/bashsharp v0.0.0-20261126213226-7844bc5c9643
 	github.com/itchyny/gojq v0.12.19
-	github.com/qiangli/coreutils v0.0.0-20261124121700-f9833f726fac
+	github.com/qiangli/coreutils v0.0.0-20261126163007-96e079612fa5
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be
-	github.com/qiangli/yoke v0.0.0-20261126041417-ada7e452af17
+	github.com/qiangli/yoke v0.0.0-20261126213049-bbe744c93fee
 	github.com/rjeczalik/notify v0.9.3
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10

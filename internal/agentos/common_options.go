@@ -118,13 +118,49 @@ func ownFlag(c *cobra.Command, name string) bool {
 	return c.Flags().Lookup(name) != nil || c.PersistentFlags().Lookup(name) != nil || c.InheritedFlags().Lookup(name) != nil
 }
 
+func findDeepestSubcommand(root *cobra.Command, args []string) *cobra.Command {
+	cur := root
+	for i := 0; i < len(args); i++ {
+		tok := args[i]
+		if tok == "--" {
+			break
+		}
+		if strings.HasPrefix(tok, "-") {
+			if strings.HasPrefix(tok, "--") && !strings.Contains(tok, "=") {
+				fname := string(normalizeFlagName(nil, tok[2:]))
+				if f := cur.Flags().Lookup(fname); f != nil && f.Value.Type() != "bool" {
+					i++
+					continue
+				}
+				if f := cur.InheritedFlags().Lookup(fname); f != nil && f.Value.Type() != "bool" {
+					i++
+					continue
+				}
+			}
+			continue
+		}
+		var matched *cobra.Command
+		for _, sub := range cur.Commands() {
+			if sub.Name() == tok || sub.HasAlias(tok) {
+				matched = sub
+				break
+			}
+		}
+		if matched == nil {
+			break
+		}
+		cur = matched
+	}
+	return cur
+}
+
 // applyCommonOptions strips engine-handled common options from args (a
 // command's own flag of the same name always wins) and arranges their
 // behaviour on the resolved command. A non-nil error is a native exit 2.
 func applyCommonOptions(root *cobra.Command, args []string) ([]string, error) {
 	target, _, err := root.Find(args)
 	if err != nil || target == nil {
-		target = root
+		target = findDeepestSubcommand(root, args)
 	}
 	path := target.CommandPath()
 	var o commonOpts

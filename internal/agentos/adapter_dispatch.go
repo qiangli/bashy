@@ -623,3 +623,31 @@ func isRegularFile(path string) bool {
 	fi, err := os.Stat(path)
 	return err == nil && fi.Mode().IsRegular()
 }
+
+func clearAdapterTrampolineEnv() {
+	for _, k := range []string{adapterInprocEnv, adapterExecEnv, adapterSelfEnv, invokedAsEnv, "BASHY_SELF"} {
+		_ = os.Unsetenv(k)
+	}
+}
+
+func shouldRunOfflineOrInproc(args []string) bool {
+	if os.Getenv(adapterInprocEnv) == "1" || os.Getenv("BASHY_OFFLINE") == "1" || artifact.IsSealed("") {
+		return true
+	}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "--" {
+			break
+		}
+		if val, ok := strings.CutPrefix(a, "--artifact-root="); ok && strings.TrimSpace(val) != "" {
+			if artifact.IsSealed(strings.TrimSpace(val)) {
+				return true
+			}
+		} else if a == "--artifact-root" && i+1 < len(args) {
+			if artifact.IsSealed(strings.TrimSpace(args[i+1])) {
+				return true
+			}
+		}
+	}
+	return false
+}

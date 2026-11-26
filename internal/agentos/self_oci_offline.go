@@ -494,8 +494,8 @@ func selfOCIBuildCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&tag, "tag", "t", "", "Image tag to build (default localhost/bashy-sandbox:local)")
-	cmd.Flags().StringVarP(&containerfile, "file", "f", "", "Containerfile path")
+	cmd.Flags().StringVar(&tag, "tag", "", "Image tag to build (default localhost/bashy-sandbox:local)")
+	cmd.Flags().StringVar(&containerfile, "file", "", "Containerfile path")
 	cmd.Flags().StringVar(&artifactRoot, "artifact-root", "", "Artifact store root directory")
 	cmd.Flags().BoolVar(&deterministic, "deterministic", false, "Mark built image as bit-for-bit reproducible")
 	cmd.Flags().StringVar(&retentionStr, "retention", "protected", "Retention class: protected, reconstructible, or scratch")

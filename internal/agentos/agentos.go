@@ -68,6 +68,7 @@ import (
 	"github.com/qiangli/yoke/pkg/craft"
 	"github.com/qiangli/yoke/pkg/feed"
 	"github.com/qiangli/yoke/pkg/fleet"
+	"github.com/qiangli/yoke/pkg/gomod"
 	"github.com/qiangli/yoke/pkg/handoff"
 	"github.com/qiangli/yoke/pkg/instance"
 	"github.com/qiangli/yoke/pkg/jobs"
@@ -76,6 +77,7 @@ import (
 	"github.com/qiangli/yoke/pkg/policy/coord"
 	"github.com/qiangli/yoke/pkg/principal"
 	"github.com/qiangli/yoke/pkg/recommend"
+	"github.com/qiangli/yoke/pkg/resources"
 	"github.com/qiangli/yoke/pkg/role/meetroom"
 	"github.com/qiangli/yoke/pkg/room"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
@@ -875,6 +877,16 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		folder, entry, _ := lookupAdaptedVerb(os.Args[1])
 		dispatchExit(runCommandAdapter(folder, entry, os.Args[1], os.Args[2:]))
 	case "resource", "resources":
+		if shouldRunOfflineOrInproc(os.Args[2:]) {
+			clearAdapterTrampolineEnv()
+			rcmd := resources.NewCommand()
+			setCobraArgs(rcmd, os.Args[2:])
+			if err := rcmd.Execute(); err != nil {
+				fmt.Fprintln(os.Stderr, "bashy resource:", err)
+				dispatchExit(1)
+			}
+			dispatchExit(0)
+		}
 		dispatchExit(runCommandAdapter("yoke", "resource", os.Args[1], os.Args[2:]))
 	case "claim":
 		cmd := coord.NewClaimCmd(func() []string {
@@ -1138,6 +1150,16 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		}
 		dispatchExit(0)
 	case "mod":
+		if shouldRunOfflineOrInproc(os.Args[2:]) {
+			clearAdapterTrampolineEnv()
+			mcmd := gomod.NewModCmd()
+			setCobraArgs(mcmd, os.Args[2:])
+			if err := mcmd.Execute(); err != nil {
+				fmt.Fprintln(os.Stderr, "bashy mod:", err)
+				dispatchExit(1)
+			}
+			dispatchExit(0)
+		}
 		dispatchExit(runCommandAdapter("yoke", "mod", os.Args[1], os.Args[2:]))
 	case "dag":
 		// The agent-first DAG task runner: markdown-defined targets run as a
@@ -1307,10 +1329,8 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 	case "go":
 		// Bootstrap escape hatch (and sealed hermetic mode): run gotoolchain.NewGoCmd()
 		// in-process so bare or sealed hosts never depend on compiling toolchain/go/go.bsh.
-		if os.Getenv(adapterInprocEnv) == "1" || artifact.IsSealed("") {
-			for _, k := range []string{adapterInprocEnv, adapterExecEnv, adapterSelfEnv, invokedAsEnv, "BASHY_SELF"} {
-				_ = os.Unsetenv(k)
-			}
+		if shouldRunOfflineOrInproc(os.Args[2:]) {
+			clearAdapterTrampolineEnv()
 			if !artifact.IsSealed("") {
 				applyAllProxyFallback()
 			}
