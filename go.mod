@@ -4,6 +4,117 @@ go 1.27.0
 
 toolchain go1.27.4
 
+// Bashy is built on github.com/qiangli/bash, the fork of mvdan.cc/sh carrying
+// the Bash 5.3, POSIX and Bash# interpreter patches (relocated from
+// github.com/qiangli/sh). It resolves as an ordinary versioned module; inside
+// the dhnt umbrella go.work selects the live ../bash sibling.
+
+// Dependency replaces are not transitive: keep the embedded awk on the same
+// immutable POSIX formatter and ERE-backend fork pinned by coreutils.
+replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261126092031-5f9da9132e14
+
+replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
+
+replace github.com/perses/perses => github.com/qiangli/perses v0.0.0-20260426190059-de437951b5e6
+
+replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20261121101804-6ed12265d8dd
+
+replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab
+
+// Podman embed: bashy mounts yoke's in-process podman engine, which consumes
+// the qiangli/podman fork + the pkg/oci wrapper. Cross-module replaces don't
+// propagate from yoke's go.mod, so bashy (the main module) restates them.
+replace go.podman.io/podman/v6 => github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb
+
+// yoke's files panel uses the maintained File Browser (module
+// github.com/gtsteffaniak/filebrowser/backend) via the qiangli/filebrowser-quantum
+// fork's fbembed branch. Bumping it must also update
+// internal/agentos/src_mount.go.
+replace github.com/gtsteffaniak/filebrowser/backend => github.com/qiangli/filebrowser-quantum/backend v0.0.0-20261115042727-40f3c84d55a9
+
+// gotreesitter: pinned local fork of upstream v0.16.0 (../gotreesitter,
+// hosted as qiangli/gotreesitter, module path kept as upstream's) with the
+// five non-permissive grammars deleted at the byte level — caddy,
+// disassembly, ebnf, jq (GPL-3.0) and nim (MPL-2.0); the other 201 are
+// attributed in yoke/THIRD_PARTY_GRAMMARS.md. Upstream has no exclusion
+// mechanism that removes embedded bytes, and the path replace also redirects
+// the transitive qiangli/gfy -> odvcencio imports, which a module-path rename
+// could not reach. Restated here because yoke's replace is not transitive.
+// Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
+replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261121101804-5522e72a297d
+
+replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
+
+replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261125125149-fcc970b2f421
+
+tool (
+	github.com/qiangli/bash/cmd/bash
+	github.com/qiangli/outpost/cmd/outpost
+)
+
+// viper v1.4.0 (via the umbrella workspace) requires the pre-split monolithic
+// github.com/ugorji/go v1.1.4, which still contains the codec package that
+// gin imports from github.com/ugorji/go/codec v1.3.1 — an ambiguous import in
+// workspace builds with bashy_engines. v1.2.14 of the root module no longer
+// carries codec. Version-scoped so standalone builds are unaffected.
+replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go v1.2.14
+
+// S488: cross-module replacements are not inherited from yoke or Outpost.
+// Keep the shipped engine, file manager, and mesh on their permissive forks.
+replace github.com/go-git/go-billy/v5 => github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f
+
+replace github.com/hashicorp/go-multierror => github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9
+
+replace github.com/hashicorp/errwrap => github.com/qiangli/yoke/external/errwrap v0.0.0-20261021020216-636e2fd289e9
+
+replace github.com/hashicorp/yamux => github.com/qiangli/yamux v0.1.0
+
+replace github.com/libp2p/go-yamux/v5 => github.com/qiangli/yamux/v5 v5.0.0
+
+replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/external/securejoin v0.0.0-20261021020216-636e2fd289e9
+
+// S407.6: all shell, utility, and background-job routes link the lazy MIT
+// fork so TUI-only width tables are built only when a width is queried.
+replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402
+
+require (
+	github.com/aymanbagabas/go-pty v0.2.3
+	github.com/bashsharp/bashsharp v0.0.0-20261126092954-9d621d8cdd7e
+	github.com/benhoyt/goawk v1.31.0
+	github.com/creack/pty/v2 v2.0.1
+	github.com/dhnt/conform v0.1.1
+	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
+	github.com/fatih/color v1.19.0
+	github.com/go-git/go-git/v5 v5.19.3
+	github.com/itchyny/gojq v0.12.19
+	github.com/modelcontextprotocol/go-sdk v1.8.0
+	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
+	github.com/pkg/sftp v1.13.10
+	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136
+	github.com/qiangli/coreutils v0.0.0-20261126092031-5f9da9132e14
+	github.com/qiangli/ycode v0.3.1-dev.0.20261125125149-fcc970b2f421
+	github.com/qiangli/ycode/examples/genie v0.0.0
+	github.com/qiangli/yoke v0.0.0-20261126092849-17bf1a1dda58
+	github.com/qiangli/yoke/external/otel v0.0.0-20261126092849-17bf1a1dda58
+	github.com/rjeczalik/notify v0.9.3
+	github.com/spf13/cobra v1.10.2
+	github.com/spf13/pflag v1.0.10
+	go.opentelemetry.io/otel v1.47.0
+	go.opentelemetry.io/otel/sdk v1.47.0
+	go.opentelemetry.io/otel/trace v1.47.0
+	golang.org/x/crypto v0.59.0
+	golang.org/x/crypto/x509roots/fallback v0.0.0-20260921070245-7a4a4d6beae2
+	golang.org/x/mod v0.42.0
+	golang.org/x/net v0.63.0
+	golang.org/x/sys v0.50.0
+	golang.org/x/term v0.48.0
+	golang.org/x/text v0.44.0
+	gopkg.in/yaml.v3 v3.0.1
+	k8s.io/api v0.35.0
+	k8s.io/apimachinery v0.35.0
+	k8s.io/client-go v0.35.0
+)
+
 require (
 	charm.land/bubbles/v2 v2.2.1 // indirect
 	charm.land/bubbletea/v2 v2.0.9 // indirect
@@ -114,7 +225,6 @@ require (
 	github.com/dgraph-io/simdjson-go v0.3.0 // indirect
 	github.com/dgryski/go-farm v0.0.0-20240924180020-3414d57e47da // indirect
 	github.com/dgryski/go-groupvarint v0.0.0-20230630160417-2bfb7969fb3c // indirect
-	github.com/dhnt/conform v0.1.1
 	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8 // indirect
 	github.com/digitalocean/go-libvirt v0.0.0-20220804181439-8648fbde413e // indirect
 	github.com/digitalocean/go-qemu v0.0.0-20250212194115-ee9b0668d242 // indirect
@@ -347,11 +457,11 @@ require (
 	github.com/qiangli/bash/cmd v0.0.0-20261121101805-42efe30317c4 // indirect
 	github.com/qiangli/bonsai v0.0.0-20261123172747-32d78887eb27 // indirect
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
-	github.com/qiangli/outpost v0.14.38-0.20261126044215-06dbb8befe87 // indirect
+	github.com/qiangli/outpost v0.14.38-0.20261126093020-24c7e91e39b1 // indirect
 	github.com/qiangli/yamux v0.2.0 // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126061843-c5ea25999602 // indirect
-	github.com/qiangli/yoke/pkg/oci v0.0.0-20261126061843-c5ea25999602 // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126061843-c5ea25999602 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261126092849-17bf1a1dda58 // indirect
+	github.com/qiangli/yoke/pkg/oci v0.0.0-20261126092849-17bf1a1dda58 // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261126092849-17bf1a1dda58 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
 	github.com/quic-go/quic-go v0.60.0 // indirect
 	github.com/quic-go/webtransport-go v0.11.1 // indirect
@@ -360,6 +470,7 @@ require (
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
+	github.com/rogpeppe/go-internal v1.16.0 // indirect
 	github.com/rwcarlsen/goexif v0.0.0-20190401172101-9e8deecbddbd // indirect
 	github.com/sabhiram/go-gitignore v0.0.0-20210923224102-525f6e181f06 // indirect
 	github.com/sagikazarmark/locafero v0.12.0 // indirect
@@ -501,114 +612,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 	tags.cncf.io/container-device-interface v1.1.0 // indirect
 	tags.cncf.io/container-device-interface/specs-go v1.1.0 // indirect
-)
-
-// Bashy is built on github.com/qiangli/bash, the fork of mvdan.cc/sh carrying
-// the Bash 5.3, POSIX and Bash# interpreter patches (relocated from
-// github.com/qiangli/sh). It resolves as an ordinary versioned module; inside
-// the dhnt umbrella go.work selects the live ../bash sibling.
-
-// Dependency replaces are not transitive: keep the embedded awk on the same
-// immutable POSIX formatter and ERE-backend fork pinned by coreutils.
-replace github.com/benhoyt/goawk => github.com/qiangli/coreutils/third_party/goawk v0.0.0-20261124121700-f9833f726fac
-
-replace github.com/jaegertracing/jaeger => github.com/qiangli/jaeger v0.0.0-20260426223533-5aaa7eb1f040
-
-replace github.com/perses/perses => github.com/qiangli/perses v0.0.0-20260426190059-de437951b5e6
-
-replace github.com/ergochat/readline => github.com/qiangli/readline v0.1.4-0.20261121101804-6ed12265d8dd
-
-replace github.com/ollama/ollama => github.com/qiangli/ollama v0.0.0-20261016181410-b0d0bbba93ab
-
-// Podman embed: bashy mounts yoke's in-process podman engine, which consumes
-// the qiangli/podman fork + the pkg/oci wrapper. Cross-module replaces don't
-// propagate from yoke's go.mod, so bashy (the main module) restates them.
-replace go.podman.io/podman/v6 => github.com/qiangli/podman/v6 v6.0.0-20261013004941-fa029d9c82fb
-
-// yoke's files panel uses the maintained File Browser (module
-// github.com/gtsteffaniak/filebrowser/backend) via the qiangli/filebrowser-quantum
-// fork's fbembed branch. Bumping it must also update
-// internal/agentos/src_mount.go.
-replace github.com/gtsteffaniak/filebrowser/backend => github.com/qiangli/filebrowser-quantum/backend v0.0.0-20261115042727-40f3c84d55a9
-
-// gotreesitter: pinned local fork of upstream v0.16.0 (../gotreesitter,
-// hosted as qiangli/gotreesitter, module path kept as upstream's) with the
-// five non-permissive grammars deleted at the byte level — caddy,
-// disassembly, ebnf, jq (GPL-3.0) and nim (MPL-2.0); the other 201 are
-// attributed in yoke/THIRD_PARTY_GRAMMARS.md. Upstream has no exclusion
-// mechanism that removes embedded bytes, and the path replace also redirects
-// the transitive qiangli/gfy -> odvcencio imports, which a module-path rename
-// could not reach. Restated here because yoke's replace is not transitive.
-// Fork provenance and re-sync policy: ../gotreesitter/FORK.md.
-replace github.com/odvcencio/gotreesitter => github.com/qiangli/gotreesitter v0.0.0-20261121101804-5522e72a297d
-
-replace modernc.org/sqlite => github.com/qiangli/sqlite v1.50.2-0.20261018085128-5fb52bf328cb
-
-replace github.com/qiangli/ycode/examples/genie v0.0.0 => github.com/qiangli/ycode/examples/genie v0.0.0-20261125125149-fcc970b2f421
-
-tool (
-	github.com/qiangli/bash/cmd/bash
-	github.com/qiangli/outpost/cmd/outpost
-)
-
-// viper v1.4.0 (via the umbrella workspace) requires the pre-split monolithic
-// github.com/ugorji/go v1.1.4, which still contains the codec package that
-// gin imports from github.com/ugorji/go/codec v1.3.1 — an ambiguous import in
-// workspace builds with bashy_engines. v1.2.14 of the root module no longer
-// carries codec. Version-scoped so standalone builds are unaffected.
-replace github.com/ugorji/go v1.1.4 => github.com/ugorji/go v1.2.14
-
-// S488: cross-module replacements are not inherited from yoke or Outpost.
-// Keep the shipped engine, file manager, and mesh on their permissive forks.
-replace github.com/go-git/go-billy/v5 => github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f
-
-replace github.com/hashicorp/go-multierror => github.com/qiangli/yoke/external/multierror v0.0.0-20261021020216-636e2fd289e9
-
-replace github.com/hashicorp/errwrap => github.com/qiangli/yoke/external/errwrap v0.0.0-20261021020216-636e2fd289e9
-
-replace github.com/hashicorp/yamux => github.com/qiangli/yamux v0.1.0
-
-replace github.com/libp2p/go-yamux/v5 => github.com/qiangli/yamux/v5 v5.0.0
-
-replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/external/securejoin v0.0.0-20261021020216-636e2fd289e9
-
-// S407.6: all shell, utility, and background-job routes link the lazy MIT
-// fork so TUI-only width tables are built only when a width is queried.
-replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402
-
-require (
-	github.com/aymanbagabas/go-pty v0.2.3
-	github.com/bashsharp/bashsharp v0.0.0-20261125101851-12523ff06abc
-	github.com/benhoyt/goawk v1.31.0
-	github.com/creack/pty/v2 v2.0.1
-	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
-	github.com/fatih/color v1.19.0
-	github.com/go-git/go-git/v5 v5.19.3
-	github.com/itchyny/gojq v0.12.19
-	github.com/modelcontextprotocol/go-sdk v1.8.0
-	github.com/ollama/ollama v0.0.0-00010101000000-000000000000
-	github.com/pkg/sftp v1.13.10
-	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136
-	github.com/qiangli/coreutils v0.0.0-20261126020849-bef90e271000
-	github.com/qiangli/ycode v0.3.1-dev.0.20261125125149-fcc970b2f421
-	github.com/qiangli/ycode/examples/genie v0.0.0
-	github.com/qiangli/yoke v0.0.0-20261126061843-c5ea25999602
-	github.com/qiangli/yoke/external/otel v0.0.0-20261126061843-c5ea25999602
-	github.com/rjeczalik/notify v0.9.3
-	github.com/spf13/cobra v1.10.2
-	github.com/spf13/pflag v1.0.10
-	go.opentelemetry.io/otel v1.47.0
-	go.opentelemetry.io/otel/sdk v1.47.0
-	go.opentelemetry.io/otel/trace v1.47.0
-	golang.org/x/crypto v0.59.0
-	golang.org/x/crypto/x509roots/fallback v0.0.0-20260921070245-7a4a4d6beae2
-	golang.org/x/mod v0.42.0
-	golang.org/x/net v0.63.0
-	golang.org/x/sys v0.50.0
-	golang.org/x/term v0.48.0
-	golang.org/x/text v0.44.0
-	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.35.0
-	k8s.io/apimachinery v0.35.0
-	k8s.io/client-go v0.35.0
 )
