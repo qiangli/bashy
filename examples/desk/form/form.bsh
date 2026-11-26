@@ -391,7 +391,8 @@ stop)
   if [[ -f "$store_dir/server.json" ]]; then
     spid=$(jq -r '.pid // ""' "$store_dir/server.json" 2>/dev/null || true)
     if [[ -n "$spid" ]] && kill "$spid" 2>/dev/null; then
-      rm -f "$store_dir/server.json"
+      # The stopping server removes this file too; losing that race is not a failure.
+      rm -f "$store_dir/server.json" 2>/dev/null || true
       stopped=true
     fi
   fi
