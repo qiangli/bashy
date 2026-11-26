@@ -41,14 +41,30 @@ type workerStatus struct {
 }
 
 func newWorkerStatusCmd() *cobra.Command {
-	var asJSON bool
+	return workerStatusCommand(workerStatusRuntime{collect: collectWorkerStatus, wait: waitInboxPoll})
+}
+
+func workerStatusCommand(rt workerStatusRuntime) *cobra.Command {
+	var asJSON, diff bool
+	var duration time.Duration
 	cmd := &cobra.Command{
 		Use:   "worker-status",
-		Short: "Show local worker sessions and available account quota, usage, and spend",
+		Short: "Show or watch local worker sessions and available account readings",
 		Long:  "Observe local worker sessions and cached account readings. Account readings describe pools independently of the session rows.",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			snapshot, err := collectWorkerStatus(cmd.Context())
+			if cmd.Flags().Changed("watch") {
+				if duration <= 0 {
+					return sprintUsagef("--watch requires a positive duration")
+				}
+				ctx, stop := sprintMonitorContext(cmd.Context(), duration)
+				defer stop()
+				return watchWorkerStatus(ctx, cmd.OutOrStdout(), rt, asJSON, diff)
+			}
+			if diff {
+				return sprintUsagef("--diff requires --watch")
+			}
+			snapshot, err := rt.collect(cmd.Context())
 			if err != nil {
 				return err
 			}
@@ -58,7 +74,9 @@ func newWorkerStatusCmd() *cobra.Command {
 			return renderWorkerStatus(cmd.OutOrStdout(), snapshot)
 		},
 	}
-	cmd.Flags().BoolVar(&asJSON, "json", false, "emit a versioned JSON snapshot")
+	cmd.Flags().BoolVar(&asJSON, "json", false, "emit a versioned JSON snapshot or newline-delimited watch events")
+	cmd.Flags().DurationVar(&duration, "watch", 0, "watch for a positive duration, sampling every 5s")
+	cmd.Flags().BoolVar(&diff, "diff", false, "show only changes after the first snapshot (requires --watch)")
 	return cmd
 }
 
