@@ -23,6 +23,7 @@ package agentos
 // that cannot be enforced fails closed (125).
 
 import (
+	"context"
 	"crypto/rand"
 	"debug/elf"
 	"encoding/hex"
@@ -38,6 +39,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qiangli/yoke/pkg/artifact"
 	"github.com/qiangli/yoke/pkg/policy/audit"
 )
 
@@ -148,9 +150,17 @@ func containInjectedBashy(path, arch string) (string, error) {
 	return path, nil
 }
 
+func containPodmanArgv(args ...string) []string {
+	if custom := strings.Fields(os.Getenv("BASHY_OCI")); len(custom) > 0 {
+		return append(custom, args...)
+	}
+	return append([]string{bashySelfPath(), "podman"}, args...)
+}
+
 // containPodman runs `bashy podman ARGS` and returns its trimmed stdout.
 func containPodman(args ...string) (string, error) {
-	cmd := exec.Command(bashySelfPath(), append([]string{"podman"}, args...)...)
+	argv := containPodmanArgv(args...)
+	cmd := exec.Command(argv[0], argv[1:]...)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -160,10 +170,61 @@ func containPodman(args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// containEnsureImage pulls a digest reference when it is not present (the
-// content is fixed by the digest) and reports the image's architecture.
+func containImageExists(ref string) error {
+	argv := containPodmanArgv("image", "exists", ref)
+	return exec.Command(argv[0], argv[1:]...).Run()
+}
+
+func tryRestoreContainImageFromCAS(ctx context.Context, ref string) (bool, error) {
+	root := artifact.DefaultRoot()
+	var (
+		backend artifact.Backend
+		err     error
+	)
+	if client, ok := artifact.TryConnectService(ctx, root); ok {
+		backend = client
+	} else {
+		dbPath := filepath.Join(root, "catalog.db")
+		fi, statErr := os.Stat(dbPath)
+		if statErr != nil || fi.IsDir() {
+			return false, nil
+		}
+		backend, err = artifact.OpenStore(ctx, artifact.StoreOptions{Root: root})
+		if err != nil {
+			return false, err
+		}
+	}
+	defer backend.Close()
+
+	tmpTar, err := os.CreateTemp("", "bashy-contain-restore-*.oci.tar")
+	if err != nil {
+		return false, err
+	}
+	tmpPath := tmpTar.Name()
+	_ = tmpTar.Close()
+	defer os.Remove(tmpPath)
+
+	if _, err := artifact.ExportOCIArchive(ctx, backend, ref, tmpPath); err != nil {
+		return false, err
+	}
+	if _, err := containPodman("image", "load", "-q", "-i", tmpPath); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// containEnsureImage restores a missing digest reference from local protected
+// CAS when available, refuses external pulls in sealed mode, or pulls otherwise.
 func containEnsureImage(ref string) (string, error) {
-	if exec.Command(bashySelfPath(), "podman", "image", "exists", ref).Run() != nil {
+	if containImageExists(ref) != nil {
+		if restored, _ := tryRestoreContainImageFromCAS(context.Background(), ref); restored {
+			if containImageExists(ref) == nil {
+				return containPodman("image", "inspect", "--format", "{{.Architecture}}", ref)
+			}
+		}
+		if artifact.IsSealed("") {
+			return "", fmt.Errorf("%w: container image %s not in local artifact store (external pull forbidden in sealed mode)", artifact.ErrSealedNetworkDenied, ref)
+		}
 		fmt.Fprintf(os.Stderr, "contain: pulling %s\n", ref)
 		if _, err := containPodman("pull", "-q", ref); err != nil {
 			return "", err
@@ -227,14 +288,21 @@ func runContainedImage(s *containImageSpec, stderr io.Writer, run func(argv []st
 		}
 	}
 	name := "bashy-contain-" + randomHex(6)
-	argv := append([]string{bashySelfPath()}, containRunArgs(s, name, bashyPath)...)
+	runArgs := containRunArgs(s, name, bashyPath)
+	var argv []string
+	if customOCI := strings.Fields(s.getenv("BASHY_OCI")); len(customOCI) > 0 && len(runArgs) > 0 && runArgs[0] == "podman" {
+		argv = append(customOCI, runArgs[1:]...)
+	} else {
+		argv = append([]string{bashySelfPath()}, runArgs...)
+	}
 	if s.Provider == containCustom {
 		argv = append(strings.Fields(s.getenv("BASHY_CONTAIN_CUSTOM")), argv...)
 	}
 	start := time.Now()
 	status := run(argv)
 	// --rm removes it on a normal exit; this covers a killed podman client.
-	_ = exec.Command(bashySelfPath(), "podman", "rm", "-f", "-i", name).Run()
+	rmArgv := containPodmanArgv("rm", "-f", "-i", name)
+	_ = exec.Command(rmArgv[0], rmArgv[1:]...).Run()
 	containRecord(s, status, start)
 	return status
 }

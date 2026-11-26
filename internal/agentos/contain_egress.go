@@ -27,6 +27,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/qiangli/yoke/pkg/artifact"
 	"github.com/qiangli/yoke/pkg/broker/door"
 	"github.com/qiangli/yoke/pkg/fleet"
 )
@@ -133,7 +134,11 @@ var loadContainEgress = func() containEgress {
 			endpoints = append(endpoints, f)
 		}
 	}
-	return buildContainEgress(endpoints, door.Port())
+	eg := buildContainEgress(endpoints, door.Port())
+	if artifact.IsSealed("") {
+		eg.Remote = nil
+	}
+	return eg
 }
 
 // containProxy is a CONNECT proxy (plus absolute-URI forwarding for http://

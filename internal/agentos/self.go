@@ -51,6 +51,7 @@ destination path.`,
 		selfExportCmd(),
 		selfImportCmd(),
 		selfPruneCmd(),
+		selfOCICmd(),
 	)
 	return cmd
 }

@@ -5,6 +5,7 @@ package agentos
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/qiangli/yoke/external/pwsh"
 	"github.com/qiangli/yoke/external/python"
@@ -13,12 +14,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
 
 	"github.com/bashsharp/bashsharp/cli"
+	"github.com/qiangli/yoke/pkg/artifact"
 	"github.com/qiangli/yoke/pkg/binmgr"
 )
 
@@ -94,7 +97,19 @@ func buildSelfImage(ctx context.Context, stdout, stderr io.Writer, version, arch
 	if err != nil {
 		return err
 	}
-	artifact, version, err := scratchArtifact(ctx, stderr, version, arch)
+	sealed := artifact.IsSealed("")
+	if sealed && len(with) > 0 {
+		prof, pErr := resolveEffectiveOCIProfile("", "")
+		if pErr != nil {
+			return pErr
+		}
+		for _, w := range normalizedWith(with) {
+			if err := artifact.CheckSandboxPackAllowed(prof, true, w); err != nil {
+				return err
+			}
+		}
+	}
+	scratchBin, version, err := scratchArtifact(ctx, stderr, version, arch)
 	if err != nil {
 		return err
 	}
@@ -106,7 +121,7 @@ func buildSelfImage(ctx context.Context, stdout, stderr io.Writer, version, arch
 		return err
 	}
 	defer os.RemoveAll(ctxDir)
-	if err := copyFileMode(artifact, filepath.Join(ctxDir, "bashy"), 0o755); err != nil {
+	if err := copyFileMode(scratchBin, filepath.Join(ctxDir, "bashy"), 0o755); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(filepath.Join(ctxDir, "tmp", "bashy"), 0o1777); err != nil {
@@ -122,8 +137,13 @@ func buildSelfImage(ctx context.Context, stdout, stderr io.Writer, version, arch
 	if err != nil {
 		return err
 	}
-	argv = append(argv, "build", "--platform", "linux/"+arch, "-t", tag, ctxDir)
-	fmt.Fprintf(stderr, "bashy self image: building %s from %s\n", tag, filepath.Base(artifact))
+	baseArgv := slices.Clone(argv)
+	if sealed {
+		argv = append(argv, "build", "--pull=never", "--network=none", "--platform", "linux/"+arch, "-t", tag, ctxDir)
+	} else {
+		argv = append(argv, "build", "--platform", "linux/"+arch, "-t", tag, ctxDir)
+	}
+	fmt.Fprintf(stderr, "bashy self image: building %s from %s\n", tag, filepath.Base(scratchBin))
 	c := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	c.Stdin, c.Stdout, c.Stderr = os.Stdin, stderr, stderr
 	if err := c.Run(); err != nil {
@@ -131,7 +151,7 @@ func buildSelfImage(ctx context.Context, stdout, stderr io.Writer, version, arch
 	}
 	fmt.Fprintln(stdout, tag)
 	fmt.Fprintf(stderr, "run a script offline:\n  %s run --rm --network=none -v \"$PWD:/work\" -w /work %s --bashsharp ./script.bsh\n",
-		strings.Join(engineDisplay(argv[:len(argv)-6]), " "), tag)
+		strings.Join(engineDisplay(baseArgv), " "), tag)
 	return nil
 }
 
@@ -197,6 +217,20 @@ func scratchArtifact(ctx context.Context, stderr io.Writer, version, arch string
 		candidates = []string{v, v + "-dev"}
 	}
 	scratchName := "bashy-scratch-" + arch
+	sealed := artifact.IsSealed("")
+	if sealed {
+		if cacheRoot, cErr := binmgr.CacheDir(); cErr == nil {
+			for _, v := range candidates {
+				if v == "" || v == "latest" {
+					continue
+				}
+				cached := filepath.Join(cacheRoot, scratchName, v, binmgr.BinaryName(scratchName))
+				if info, sErr := os.Stat(cached); sErr == nil && info.Mode().IsRegular() {
+					return cached, v, nil
+				}
+			}
+		}
+	}
 	var lastErr error
 	for _, v := range candidates {
 		tool, err := binmgr.ResolveGitHub(ctx, binmgr.GitHubSpec{
@@ -214,9 +248,15 @@ func scratchArtifact(ctx context.Context, stderr io.Writer, version, arch string
 		fmt.Fprintf(stderr, "bashy self image: artifact %s@%s\n", scratchAssetPrefix+arch, tool.Version)
 		p, err := binmgr.Ensure(ctx, tool)
 		if err != nil {
+			if sealed && !errors.Is(err, artifact.ErrSealedNetworkDenied) {
+				return "", "", fmt.Errorf("%w: %v", artifact.ErrSealedNetworkDenied, err)
+			}
 			return "", "", err
 		}
 		return p, tool.Version, nil
+	}
+	if sealed && lastErr != nil && !errors.Is(lastErr, artifact.ErrSealedNetworkDenied) {
+		return "", "", fmt.Errorf("%w: self image: no %s%s asset for %s: %v", artifact.ErrSealedNetworkDenied, scratchAssetPrefix, arch, strings.Join(candidates, " / "), lastErr)
 	}
 	return "", "", fmt.Errorf("self image: no %s%s asset for %s: %w", scratchAssetPrefix, arch, strings.Join(candidates, " / "), lastErr)
 }
