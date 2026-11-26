@@ -12,6 +12,7 @@ exact same server through `bashy calendar` verbs with `bashy-calendar-v1` JSON e
   ```bash
   bashy schedule add --at "$(bashy calendar show evt-1 --json | jq -r .start)" -- bashy inbox human send "Sprint review starting"
   ```
+  For a plain notice, `bashy notify --at HH:MM --to WHO "subject"` (or `--in 15m`) does the same in one command. Either way the schedule engine must be running: see `bashy kb show set-a-reminder-that-fires-notify-in-at-schedule-add-and-the-sche`.
 - **Deferred / out of scope**: recurrence (`RRULE`), RSVP, built-in reminder daemons, CalDAV serving, background two-way sync, and month-grid views.
 
 ## Quick Start & Consumer Shaping Registration
