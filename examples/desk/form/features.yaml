@@ -1,5 +1,7 @@
 # form feature list (shapeware v0.1). Ids are stable across versions.
+# effort: relative size in Fibonacci points (1, 2, 3, 5, 8, 13 = split it); minutes per point are measured per band by the drills.
 - id: define-and-open
+  effort: 3
   status: verified
   intent: Create a form from a JSON or YAML file (examples/contact.json, examples/contact.yaml) or an inline --definition array, and open its loopback page for the human in one command.
   acceptance:
@@ -8,22 +10,32 @@
     - form add --id inline-1 --definition '[{"id":"q","label":"Question","kind":"text"}]' --json --fields id,status => {"id":"inline-1","schema_version":"bashy-form-v1","status":"pending"}
     - GET /?id=intake => 200 Full name
 - id: submit-answers
+  effort: 3
   status: verified
   intent: Save partial or complete respondent answers, from the CLI or by submitting the page, and keep them across reloads (CONTRACT.md "Page interaction").
   acceptance:
     - form answer intake --answer name=Ada --answer contact=email --answer subscribe=yes --complete --json --fields id,status => {"id":"intake","schema_version":"bashy-form-v1","status":"answered"}
 - id: wait-answers
+  effort: 1
   status: verified
   intent: Wait for a created form to be answered with automatic local owner-key resolution and an explicit timeout.
   acceptance:
     - form wait intake --timeout 5s --json --fields id,status => {"id":"intake","schema_version":"bashy-form-v1","status":"answered"}
 - id: secret-refusal
+  effort: 1
   status: verified
   critical: true
   intent: Refuse secret-typed or secret-named fields before storage so credentials never enter the form store.
   acceptance:
     - form add --id bad-secret --definition '[{"id":"api_key","label":"API key","kind":"text"}]' --json => ERROR 1 Secret fields are refused here
+- id: poll
+  status: verified
+  effort: 2
+  intent: Create a one-question poll for many respondents with an automatic close time, and read its question, options, close time and respondent mode back (CONTRACT.md F-07, F-08).
+  acceptance:
+    - form add --id release-poll --poll "Ship release?" --options "yes,hold" --close-at 2099-12-31T23:59:59Z --json --fields id,status => {"id":"release-poll","schema_version":"bashy-form-v1","status":"pending"}
 - id: group-required
+  effort: 2
   status: tbd
   band: L2
   intent: Group unanswered required fields at the top so the human can see what is left. Passing --group-required to form add or form set reorders the form definition (preserving relative order within each group) so required fields with empty/missing answers appear first, followed by answered required fields and optional fields.
