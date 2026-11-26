@@ -6,9 +6,8 @@ seq: 3319
 status: todo
 priority: p2
 created: 2026-11-25T19:29:20.898891Z
-sprint: 722
-sprint_id: ffc7a05d-4229-598a-8834-4c1212246274
-sprint_title: 'dhnt/conform: the shaping certification suite as its own module'
 ---
 
 Seen 2026-11-25 (Sprint 721, putting the sprint status in bashy viewer). (1) bashy viewer add rebuilt from source and failed: 'reading examples/desk/chart/go.mod at revision examples/desk/chart/v0.1.3: unknown revision' (local Go module proxy not published). Same class as 64ef2626 addendum 1; the g5 fix (publish desk modules before a stale build) covered form.bsh and chart.bsh only, not viewer.bsh (or notepad/page). Workaround: run examples/desk/register-modules.sh. (2) append --template status with the sprint omitted failed 'sprint card not found in sprint show output': bashy sprint show N --json now returns an adapt envelope {schema_version, command, status, result:{sprint, goal_progress, ...}}, and the x-source: sprint filler does not look under result. Workaround: pass the sprint object in --data. (3) Observation, not viewer: goal_progress read 3/8 because story status is derived from the shared bashy checkout at an older commit. Root cause first for (1) and (2) before fixing.
+
+Conductor note (Sprint 722 close, 2026-11-25): returned to standalone. It was moved into 722 to feed a viewer CONTRACT.md, and the viewer contract was dropped from the 722 MVP (only form was recorded). Unchanged otherwise.
