@@ -13,6 +13,10 @@ pull request or discussion that describes one.
    proof of concept and no affected-system information. A maintainer will reply
    with a private channel.
 
+A machine-readable [RFC 9116](https://www.rfc-editor.org/rfc/rfc9116) security
+contact file is maintained in this repository at
+[`.well-known/security.txt`](.well-known/security.txt).
+
 Include, as far as you can:
 
 - the affected version (`bashy --version`) and operating system;

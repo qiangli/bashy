@@ -31,8 +31,63 @@ frozen release candidate before the tag.
 
 ## [Unreleased]
 
+## [1.0.0] — TBD (draft; not yet released)
+
+Draft changelog entry for `v1.0.0`, summarizing user-visible changes merged to
+`main` since `v1.0.0-rc.41` (through commit `1c89eb59`). Frozen candidate
+commit, release date and final release evidence are `OPEN` and will be fixed on
+the frozen `v1.0.0` candidate before promotion. Build coordinate on `main`:
+`go 1.27.0`, toolchain `go1.27.4` (`go.mod`); Bash compatibility `5.3`. Draft
+release notes (declared limitations, unsigned macOS/Windows binaries, supported
+installs, Go interpreted performance disclosure, Go corpus inventory and
+certification placeholder):
+[docs/release-notes-v1.0.0-draft.md](docs/release-notes-v1.0.0-draft.md).
+
+### Added
+
+- **Offline self-contained operation (`bashy self`, `bashy self oci`, `bashy model offline`).**
+  Added `bashy self bootstrap|seal|verify --offline|status|export|import|prune`
+  over `yoke/pkg/artifact` and `yoke/pkg/gomod`, routing `self build` through
+  the `productgo` runtime overlay when present and enforcing sealed network
+  guards; added `bashy self oci capture|restore|build|lock-status|packs` with
+  local CAS image restoration in `containEnsureImage` and `--pull=never
+  --network=none` sealed builds; added `bashy model offline
+  capture|restore|eval|unload|tier` for offline Ollama model management.
+- **In-process `conform` judge and `selftest` verb split.** `bashy conform`
+  dispatches directly to the pinned in-process `github.com/dhnt/conform` judge
+  (including rule-by-example and lifecycle lint rules), while bashy's own
+  verification batteries move to `bashy selftest` (`verify` stays as the
+  battery alias; legacy entry points warn for one release).
+- **Shapeware v0.1 / spec v2.2 layout and default KB runbooks.**
+  `examples/desk/form` adopts the shapeware layout (`SKILL.md`, `CONTRACT.md`
+  with assertions `F-01`–`F-20` and service rules, `features.yaml` with effort
+  points and the poll feature, `dag.md` with band bounds and a defined `stop`
+  step, `spec/` lifecycle, `form add --open` and `server.digest` verification);
+  four linked shapeware runbooks ship in `kb/defaults/`.
+- **Sprint worker and account status.** `bashy sprint` displays current worker
+  and account readings and watches them for changes.
+- **Graph stream `todo` fields.** Projects `known` todo status along with
+  `workaround` and `expires` fields into the graph stream.
+- **Security contact and v1.0.0 release note draft.** Added RFC 9116
+  [`.well-known/security.txt`](.well-known/security.txt) (referenced from
+  [`SECURITY.md`](SECURITY.md)) and draft v1.0.0 release notes at
+  [`docs/release-notes-v1.0.0-draft.md`](docs/release-notes-v1.0.0-draft.md).
+
+### Changed
+
+- **Schedule engine state and engine-off hints.** `schedule list` leads with an
+  engine-state line, `schedule add` and `notify --in/--at` hint on stderr when
+  a job is stored while no schedule engine is running, and `kb/defaults/` ships
+  the reminder runbook.
+- **Dependency pins.** Synchronized `coreutils`, `yoke`, `bashsharp`,
+  `outpost`, and `github.com/dhnt/conform` module pins in `go.mod` (including
+  paired-host producer/adapter pins and coreutils updates).
+
 ### Fixed
 
+- **Bundled `outpost` version stamp.** `scripts/dist.py` stamps the bundled
+  `outpost` executable with the promoted distribution version instead of
+  retaining a `-dev` suffix.
 - **Release registration.** The release and promote workflows register each
   release with the hosted release index, so outposts update to it. The
   registration step required a macOS Intel outpost build, which is no longer
@@ -42,6 +97,13 @@ frozen release candidate before the tag.
   workflow token. A promoted release can be registered again with
   `gh workflow run promote.yml -f version=vX -f register_only=true`, which
   uses the workflow's current script, not the release's.
+- **`bashy dag` on a fresh `HOME`.** `bashy dag` runs in-process on a fresh
+  `HOME` without invoking `go`.
+- **Desk `form`, `chart`, and `viewer` command handling.** Registered `form`
+  and `chart` commands accept pass-through flags and isolate per-app stores,
+  `form add` and `form ask` accept positional definition files,
+  `viewer/register.sh` sets `GOWORK=off`, and `form stop` no longer fails when
+  the stopping server has already removed `server.json`.
 
 ## [1.0.0-rc.41] — 2026-11-25
 
@@ -514,7 +576,8 @@ sprint managers. [Notes](docs/releases/v0.22.0.md).
 
 Earlier pre-1.0 releases; see the git history between the tags.
 
-[Unreleased]: https://github.com/qiangli/bashy/compare/v1.0.0-rc.27...HEAD
+[Unreleased]: https://github.com/qiangli/bashy/compare/v1.0.0-rc.41...HEAD
+[1.0.0-rc.41]: https://github.com/qiangli/bashy/compare/v1.0.0-rc.27...v1.0.0-rc.41
 [1.0.0-rc.27]: https://github.com/qiangli/bashy/compare/v0.32.0...v1.0.0-rc.27
 [0.32.0]: https://github.com/qiangli/bashy/releases/tag/v0.32.0
 [0.31.0]: https://github.com/qiangli/bashy/releases/tag/v0.31.0

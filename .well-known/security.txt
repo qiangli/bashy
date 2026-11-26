@@ -1,0 +1,8 @@
+# RFC 9116 security contact file for bashy (https://github.com/qiangli/bashy)
+# Consistent with SECURITY.md. Serving this file from
+# https://dhnt.io/.well-known/security.txt requires a separate hosted website change.
+Contact: https://github.com/qiangli/bashy/security/advisories/new
+Expires: 2027-11-25T00:00:00Z
+Preferred-Languages: en
+Canonical: https://raw.githubusercontent.com/qiangli/bashy/main/.well-known/security.txt
+Policy: https://github.com/qiangli/bashy/blob/main/SECURITY.md
