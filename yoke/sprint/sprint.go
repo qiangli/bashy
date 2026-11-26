@@ -36,7 +36,7 @@ func newSprintCmd() *cobra.Command {
 		}
 	}
 	cmd.AddCommand(newSprintInboxAckCmd())
-	cmd.AddCommand(newSprintMonitorCmd())
+	cmd.AddCommand(newSprintMonitorCmd(), newWorkerStatusCmd())
 	cmd.AddCommand(newSprintWaitCmd(), newSprintAwaitCmd())
 	// LAST, after every edit above. yoke installed its own three reporters
 	// while it built this tree; attachSprintWatch replaced two RunEs and the
