@@ -82,7 +82,7 @@ require (
 	github.com/bashsharp/bashsharp v0.0.0-20261126092954-9d621d8cdd7e
 	github.com/benhoyt/goawk v1.31.0
 	github.com/creack/pty/v2 v2.0.1
-	github.com/dhnt/conform v0.1.2-0.20261126093449-29482789cf2b
+	github.com/dhnt/conform v0.1.2-0.20261126131226-51481167c86c
 	github.com/dhnt/dhnt v0.2.0-alpha.3.0.20260619230448-ddbed43582c0
 	github.com/fatih/color v1.19.0
 	github.com/go-git/go-git/v5 v5.19.3
