@@ -4,11 +4,11 @@ kind: feature
 title: C4 member-principal shaping e2e across example apps + 'Enable an app for consumer shaping' runbook
 seq: 3261
 status: todo
-priority: p1
+priority: p2
 created: 2026-11-20T19:14:04.928857Z
-sprint: 711
-sprint_id: 824bc632-65c8-5982-8bf9-7f69ed848391
-sprint_title: 'Train 1 follow-ups: site MCP + site attach on dhnt.io, and the deferred integration runs (C4 five-app member matrix, I1 group-shape)'
+sprint: 724
+sprint_id: 4c6a8940-8673-582a-adef-d7665a30d524
+sprint_title: 'Consolidated follow-ups after train 1 (supersedes 711, 713, 714, 715, 718, 720): owner-sharing and A/O/C sandbox e2e, site MCP and site attach, deferred integration runs, known reds, MCP 2026-07-28'
 ---
 
 Spec: umbrella docs/plan-s682-consumer-shaping-example-apps.md §C4. Consumer-first shaping (operator 2026-11-20); owner/producer side is Sprint 683.
@@ -54,3 +54,7 @@ Conductor requested the classifications before implementation. The gate claim is
 ## Operator decision on the blocker (2026-11-23)
 
 Every app must build independently of any other app or sibling module tree. Copying `../kit`/`../chart` into the managed repository, vendoring, and build-time replace rewrites are all rejected. The fix is a local Go module proxy: `desk-kit` and `desk-chart` published as versioned modules, the apps requiring them without `replace`, shaped and verifier builds setting `GOPROXY`. Design and acceptance are on umbrella bug todo `d35e0de8` and the standalone follow-up story in the umbrella store. C4 stays blocked until that lands; the retained gate-host installation (seeded `bedrock-glm-5` route via `bedrock-key`) is ready to resume the matrix, and the one-run approval is intact.
+
+## Triage 2026-11-25 (consolidated into Sprint 724)
+
+Still blocked on the console build defect d35e0de8; O0 b23982703c71 (umbrella store, same sprint) confirms the module-proxy fix and unblocks this.
