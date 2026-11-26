@@ -1,0 +1,22 @@
+#!/bin/sh
+# Fake shaping agent (deterministic, no network).
+# Handles the Codex recipe probes and makes one fixed edit in the candidate
+# checkout (cwd): remove the injected 5xx marker if present, otherwise append
+# the field-loop note the feed issue asks for.
+set -eu
+case " $* " in
+  *" login status "*) echo "Logged in using ChatGPT" >&2 ;;
+  *" exec "*)
+    echo "codex-exec" >> "${HOME:-/tmp}/stub-events"
+    if grep -q 'FIELD_LOOP_5XX_MARKER' form.bsh 2>/dev/null; then
+      # Injected-5xx heal: drop the marker line that makes the form fail.
+      grep -v 'FIELD_LOOP_5XX_MARKER' form.bsh > form.bsh.tmp
+      mv form.bsh.tmp form.bsh
+      echo "Removed the injected 5xx marker from form.bsh."
+    else
+      printf '\n# field-loop: deterministic fake-agent fix\n' >> form.bsh
+      echo "Applied the deterministic field-loop fix to form.bsh."
+    fi
+    ;;
+  *) echo "unexpected stub invocation: $*" >&2; exit 2 ;;
+esac

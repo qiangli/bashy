@@ -298,6 +298,17 @@ set -eu
 python3 tests/group-shaping-e2e/run.py --evidence "${GROUP_SHAPING_EVIDENCE:?set a fresh raw log path}"
 ```
 
+### test-field-loop-e2e
+Exercise the field loop (incident heal, owner feed, scheduled feed with the
+off switch) with fakes inside a throwaway HOME. Run on a claimed gate lane
+with the inputs in tests/field-loop-e2e/README.md.
+Effects: exec, read, write
+
+```bash
+set -eu
+python3 tests/field-loop-e2e/run.py --evidence "${FIELD_LOOP_EVIDENCE:?set a fresh raw log path}"
+```
+
 ### test-shaping-real-agent
 Opt-in pre-release Hello World lifecycle through the real shaping delegate.
 Requires `BASHY_REAL_AGENT_E2E=1`, `SHAPING_SMOKE_AGENT=TOOL:MODEL`, and

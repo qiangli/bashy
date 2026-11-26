@@ -1,0 +1,16 @@
+[
+  {
+    "number": 101,
+    "title": "Field loop: add the deterministic note to form",
+    "body": "Please apply the field-loop note so the form carries the fix.",
+    "author": {"login": "field-owner"},
+    "labels": [{"name": "field-loop"}]
+  },
+  {
+    "number": 102,
+    "title": "Field loop: non-owner request that must be skipped",
+    "body": "This issue was not filed by the owner and must not become a todo.",
+    "author": {"login": "someone-else"},
+    "labels": [{"name": "field-loop"}]
+  }
+]
