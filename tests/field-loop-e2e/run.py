@@ -165,10 +165,48 @@ def main():
                             + "\n# FIELD_LOOP_5XX_MARKER injected 5xx\n")
         run("git", "-C", src, "add", "-A")
         run("git", "-C", src, "commit", "-qm", "inject 5xx marker")
-        bashy("shape", "incident", APP,
-              "injected 5xx: form page returns 500 (FIELD_LOOP_5XX_MARKER)",
-              "--kind", "script", "--path", "/", "--user", OWNER,
-              check_rc=False)
+        # Incident repair runs inside the console, where the shaping
+        # delegate, verifier and activator live (the local CLI only records
+        # a report). Serve the console on loopback (the host operator, no
+        # pairing) and report the failure on the route the page's own error
+        # capture uses.
+        import socket
+        import urllib.request
+        with socket.socket() as sock:
+            sock.bind(("127.0.0.1", 0))
+            port = sock.getsockname()[1]
+        console_log = (home / "console.log").open("w")
+        console = subprocess.Popen(
+            [str(binary), "app", "serve", "--port", str(port),
+             "--shape-agent", AGENT],
+            stdout=console_log, stderr=subprocess.STDOUT)
+
+        def stop_console():
+            if console.poll() is None:
+                console.kill()
+            print("console log tail:\n"
+                  + (home / "console.log").read_text()[-3000:])
+        import atexit
+        atexit.register(stop_console)
+        base_url = f"http://127.0.0.1:{port}"
+        deadline = time.monotonic() + WAIT
+        while time.monotonic() < deadline:
+            try:
+                urllib.request.urlopen(base_url + "/", timeout=2).read()
+                break
+            except Exception:  # noqa: BLE001 - not up yet
+                time.sleep(1)
+        check(console.poll() is None, f"console serving on {base_url}")
+        report = json.dumps({
+            "kind": "script", "path": "/",
+            "message": "injected 5xx: form page returns 500 "
+                       "(FIELD_LOOP_5XX_MARKER)"}).encode()
+        req = urllib.request.Request(
+            f"{base_url}/api/shape/{APP}/incidents", data=report,
+            headers={"Content-Type": "application/json"}, method="POST")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            record(f"incident report -> HTTP {resp.status}: "
+                   f"{resp.read().decode(errors='replace')[:400]}")
         deadline = time.monotonic() + WAIT
         healed = ""
         while time.monotonic() < deadline:
@@ -182,6 +220,8 @@ def main():
         log_a = auto_log()
         for event in ("trigger", "attempt", "verdict", "activation"):
             check(event in log_a, f"auto log shows {event} for incident repair")
+        console.terminate()
+        console.wait(timeout=30)
         bashy("shape", "restore", APP, base_rev, "--user", OWNER)
         restored = bashy_json("shape", "status", APP,
                               "--user", OWNER).get("active", "")
