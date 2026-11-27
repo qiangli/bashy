@@ -103,7 +103,10 @@ def main():
         go_env = json.loads(subprocess.run(
             ["go", "env", "-json", "GOMODCACHE", "GOCACHE"],
             stdout=subprocess.PIPE, text=True, check=True).stdout)
-        home = Path(tempfile.mkdtemp(prefix="field-loop-home-"))
+        # Next to the evidence, not under /tmp: a gate runner may give
+        # /tmp a private view that child processes do not share.
+        home = Path(tempfile.mkdtemp(prefix="field-loop-home-",
+                                     dir=str(args.evidence.parent)))
         record(f"throwaway HOME={home}")
         fixture_bin = HERE / "fixtures" / "tools"
         env = dict(os.environ)
