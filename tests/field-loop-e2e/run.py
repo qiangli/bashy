@@ -91,6 +91,9 @@ def main():
         record(f"bashy sha256="
                f"{hashlib.sha256(binary.read_bytes()).hexdigest()}")
 
+        go_env = json.loads(subprocess.run(
+            ["go", "env", "-json", "GOMODCACHE", "GOCACHE"],
+            stdout=subprocess.PIPE, text=True, check=True).stdout)
         home = Path(tempfile.mkdtemp(prefix="field-loop-home-"))
         record(f"throwaway HOME={home}")
         fixture_bin = HERE / "fixtures" / "tools"
@@ -99,7 +102,10 @@ def main():
             "HOME": str(home), "BASHY_HOME": str(home / ".bashy"),
             "BASHY_HINTS": "off", "BROWSER": "/usr/bin/true",
             "PATH": f"{fixture_bin}:{home}/bin:{os.environ.get('PATH', '')}",
-            "GIT_TERMINAL_PROMPT": "0", "GOPROXY": "off", "GOWORK": "off",
+            "GIT_TERMINAL_PROMPT": "0", "GOWORK": "off",
+            # Keep the venue's Go caches: a throwaway HOME would otherwise
+            # hide them and the form server build would refetch everything.
+            "GOMODCACHE": go_env["GOMODCACHE"], "GOCACHE": go_env["GOCACHE"],
             "BASHY_PRINCIPAL": OWNER, "FIELD_LOOP_OWNER": OWNER,
         })
         os.environ.clear()
@@ -122,7 +128,15 @@ def main():
 
         # Register the real form shapeware app from a throwaway git copy so
         # candidate clones have a clean base revision.
-        src = home / "form-src"
+        # form/register.sh sources ../register-modules.sh, which publishes
+        # the shared desk modules (kit, chart) to the local module proxy, so
+        # the copy keeps form's desk siblings next to it.
+        desk = home / "desk"
+        desk.mkdir()
+        shutil.copy2(ROOT / "examples/desk/register-modules.sh", desk)
+        for mod in ("kit", "chart"):
+            shutil.copytree(ROOT / "examples/desk" / mod, desk / mod)
+        src = desk / "form"
         shutil.copytree(ROOT / "examples/desk/form", src,
                         ignore=shutil.ignore_patterns(
                             "node_modules", ".git", "*.test"))
