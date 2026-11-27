@@ -2,8 +2,8 @@
 # shape-feed: read a designated issue feed into todos and enter `bashy shape wish`.
 # One editable Bash# body for the shape-feed command and skill.
 #
-#   shape-feed APP --source gh:OWNER/REPO#LABEL [--owner LOGIN] [--apply]
-#   shape-feed APP --source file:PATH[#LABEL] [--owner LOGIN] [--apply]
+#   shape-feed APP --source gh:OWNER/REPO#LABEL [--owner LOGIN] [--agent TOOL:MODEL] [--apply]
+#   shape-feed APP --source file:PATH[#LABEL] [--owner LOGIN] [--agent TOOL:MODEL] [--apply]
 #
 # Preview by default; pass --apply to file new todos, call
 # `bashy shape wish APP --todo ID --source feed:ID` and activate a verified candidate.
@@ -40,6 +40,11 @@ shape-feed APP --source file:PATH[#LABEL] [--owner LOGIN] [--apply]
   and runs `bashy shape wish APP --todo ID --source feed:ID --json -- REQUEST`,
   then `bashy shape approve APP CANDIDATE` when the candidate is verified. A
   second `--apply` skips already-filed IDs and files nothing new.
+- **`--agent TOOL:MODEL`**: the shaping agent for the unattended wish (passed
+  as `bashy shape --agent`); without it, the host's configured default applies.
+- **Todo store**: todos go to the store of the working directory (the repo's
+  `docs/todo/` inside a git repo, else the personal store), so run a scheduled
+  feed from the directory whose store should hold the issues.
 - **Off switch**: when `bashy shape auto status` says off, `--apply` stops
   before filing anything; the decisions are in `bashy shape auto log`.
 - **Failure**: when the wish or the approval fails (or the candidate does not
@@ -119,6 +124,7 @@ app=""
 source_spec=""
 owner=""
 owner_set=0
+agent=""
 apply=0
 
 while [ $# -gt 0 ]; do
@@ -126,6 +132,12 @@ while [ $# -gt 0 ]; do
         --source)
             [ $# -ge 2 ] || { usage >&2; exit 2; }
             source_spec=$2
+            shift 2
+            ;;
+        --agent)
+            [ $# -ge 2 ] || { usage >&2; exit 2; }
+            [ -n "$2" ] || fail "--agent must not be empty" 2
+            agent=$2
             shift 2
             ;;
         --owner)
@@ -349,8 +361,8 @@ while IFS= read -r item; do
 
     filed=$((filed + 1))
 
-    wish_cmd="bashy shape wish $app --todo $todo_id --source feed:$todo_id"
-    if ! wish_json=$("$bin" shape wish "$app" --todo "$todo_id" --source "feed:$todo_id" --json -- "$request" 2>"$err_file"); then
+    wish_cmd="bashy shape ${agent:+--agent $agent }wish $app --todo $todo_id --source feed:$todo_id"
+    if ! wish_json=$("$bin" shape ${agent:+--agent "$agent"} wish "$app" --todo "$todo_id" --source "feed:$todo_id" --json -- "$request" 2>"$err_file"); then
         mark_known "$todo_id" "$wish_cmd" "$(last_error)"
         known=$((known + 1))
         continue
@@ -366,7 +378,7 @@ while IFS= read -r item; do
                     continue
                     ;;
             esac
-            if "$bin" shape approve "$app" "$candidate" --json >/dev/null 2>"$err_file"; then
+            if "$bin" shape ${agent:+--agent "$agent"} approve "$app" "$candidate" --json >/dev/null 2>"$err_file"; then
                 echo "$PROG: activated $todo_id #$number candidate $candidate [$author] -- $title"
                 activated=$((activated + 1))
             else
