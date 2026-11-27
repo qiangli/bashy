@@ -243,8 +243,8 @@ func TestSiteMCPMemberSourceTransfer(t *testing.T) {
 		t.Fatal(refusal)
 	}
 	c, ok := pushed["result"].(map[string]any)
-	if !ok || c["status"] != shape.Verified || c["principal"] != "member@example.com" || c["activation_principal"] != "owner@example.com" ||
-		c["base_rev"] != snapshot.Revision || len(verifier.calls) != 1 || verifier.calls[0].Principal != c["activation_principal"] || verifier.calls[0].CandidateRev != c["rev"] {
+	if !ok || c["status"] != shape.Verified || c["principal"] != "member@example.com" || c["activation_principal"] != nil ||
+		c["base_rev"] != snapshot.Revision || len(verifier.calls) != 1 || verifier.calls[0].Principal != "owner@example.com" || verifier.calls[0].CandidateRev != c["rev"] {
 		t.Fatalf("push = %v, verifier = %+v", c, verifier.calls)
 	}
 	args["base_revision"] = "stale"
