@@ -12,6 +12,13 @@ explicit override, logged to `~/.bashy/log/update.log`.
     bashy update               # build origin/main and install
     bashy update --dry-run     # show the plan and the current version
     bashy update --ref v1.0.0-rc.40-dev
+    bashy update --src DIR --reset   # build another checkout, discarding its local changes
+
+A build can leave tracked files changed in its checkout (for example `go.sum`),
+which would make the next `git checkout` abort. The default checkout belongs to
+`update`, so it is reset before each build and the dropped changes are listed.
+A `--src` checkout may hold someone's work: `update` refuses (exit 4) and names
+the changed files unless `--reset` is given.
 
 Register it once from a stable checkout (not a temporary copy, which a later
 cleanup could delete):

@@ -5,19 +5,23 @@
 # binary they run in; this command refuses inside an agent session unless
 # BASHY_UPDATE_ALLOW_AGENT=1 is set (logged override).
 #
-# Usage: bashy update [--ref REF] [--src DIR] [--dry-run]
+# Usage: bashy update [--ref REF] [--src DIR] [--reset] [--dry-run]
 #   --ref REF    git ref to build (default: origin/main)
 #   --src DIR    build checkout (default: $BASHY_HOME or ~/.bashy, then src/bashy-update)
+#   --reset      discard local changes in a --src checkout (the default checkout
+#                is update's own and is always reset, listing what it drops)
 #   --dry-run    print the plan and the versions, change nothing
 set -euo pipefail
 
 ref=origin/main
 src=""
 dry=0
+reset=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 	--ref) ref=${2:?--ref needs a value}; shift 2 ;;
 	--src) src=${2:?--src needs a value}; shift 2 ;;
+	--reset) reset=1; shift ;;
 	--dry-run) dry=1; shift ;;
 	-h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 	*) echo "update: unknown argument: $1" >&2; exit 2 ;;
@@ -40,6 +44,8 @@ else
 fi
 
 home=${BASHY_HOME:-$HOME/.bashy}
+owned=0
+[ -n "$src" ] || owned=1
 src=${src:-$home/src/bashy-update}
 repo=${BASHY_UPDATE_REPO:-https://github.com/qiangli/bashy.git}
 git=/usr/bin/git
@@ -60,6 +66,22 @@ if [ ! -d "$src/.git" ]; then
 	"$git" clone -q "$repo" "$src"
 fi
 "$git" -C "$src" fetch -q origin
+# A build can leave tracked files changed (go.sum, generated files); a dirty
+# checkout makes `git checkout` abort, so every later update would fail. The
+# default checkout is update's own: list what is dropped and reset it. A
+# --src checkout may hold someone's work: refuse unless --reset is given.
+dirty=$("$git" -C "$src" status --porcelain --untracked-files=no)
+if [ -n "$dirty" ]; then
+	if [ "$owned" = 1 ] || [ "$reset" = 1 ]; then
+		echo "update: discarding local changes in the build checkout $src:"
+		printf '%s\n' "$dirty" | sed 's/^/  /'
+		"$git" -C "$src" reset -q --hard
+	else
+		echo "update: $src has local changes; commit them, or pass --reset to discard them:" >&2
+		printf '%s\n' "$dirty" | sed 's/^/  /' >&2
+		exit 4
+	fi
+fi
 "$git" -C "$src" checkout -q --detach "$ref"
 echo "update: building $("$git" -C "$src" log --oneline -1)"
 
