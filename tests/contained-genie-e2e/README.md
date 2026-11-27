@@ -1,7 +1,7 @@
 # Contained genie end-to-end gate
 
 The gate exercises `bashy contain --net deny --dir DIR --socket SOCK` driving
-real `bashy genie` through `bashy llm session forward` against a fake cligw
+real `bashy genie` through the in-sandbox launcher (`genie --session-launcher`, which forwards in process) against a fake cligw
 unix-socket backend (`fake_door.py`) in the official `bashy-base` image locked
 by `tools/bashy-build/image.lock`.
 
@@ -19,9 +19,8 @@ by `tools/bashy-build/image.lock`.
    - print the environment and `$HOME` listing
    - return a final answer ending with `DONE`
 3. `in_sandbox.sh` runs inside `bashy contain --net deny --dir DIR --socket SOCK`,
-   captures the container-level environment, starts `bashy llm session forward`
-   on loopback, exports the five external-model variables pointing at the
-   forwarder, and invokes `bashy genie --yolo`.
+   captures the container-level environment, then hands over to the product launcher (`genie --session-launcher`) on the
+   one permitted loopback port.
 4. Four legs run and are asserted against the fake door's request log and
    on-disk artifacts:
    - **Valid token:** `expected.txt` written in `DIR`; outside canary and host
@@ -58,7 +57,7 @@ bashy dag test-contained-genie-e2e
 | `CONTAINED_GENIE_GENIE_BAR` | prebuilt `genie.bar` override | built via `bashy genie build` |
 | `CONTAINED_GENIE_EVIDENCE` | fresh raw log path (must not exist) | — |
 | `CONTAINED_GENIE_WAIT_SECONDS` | per-leg timeout in seconds | `120` |
-| `CONTAINED_GENIE_FORWARD_READY_SECONDS` | timeout waiting for `llm session forward` | `20` |
+| `CONTAINED_GENIE_FORWARD_READY_SECONDS` | unused: the launcher forwards in process | `20` |
 | `CONTAINED_GENIE_SOCKET_READY_SECONDS` | timeout waiting for fake door socket | `15` |
 | `CONTAINED_GENIE_REQUEST_TIMEOUT_MS` | per-request genie timeout in milliseconds | `30000` |
 

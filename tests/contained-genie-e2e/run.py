@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import secrets
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -229,6 +230,11 @@ def run_contained_leg(
         "CONTAINED_GENIE_REQUEST_TIMEOUT_MS": str(request_timeout_ms),
     })
 
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = str(probe.getsockname()[1])
+    env["CONTAINED_GENIE_PORT"] = port
+
     argv = [
         str(bashy_bin),
         "contain",
@@ -238,6 +244,10 @@ def run_contained_leg(
         str(work_dir),
         "--socket",
         str(socket_path),
+        "--loopback",
+        port,
+        "--env",
+        "CONTAINED_GENIE_PORT",
         "--ro",
         str(HERE),
         "--ro",
