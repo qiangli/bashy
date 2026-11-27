@@ -215,6 +215,13 @@ def main():
             if healed and healed != base_rev:
                 break
             time.sleep(2)
+        if not healed or healed == base_rev:
+            record("diagnostics: incidents and decision log")
+            bashy("shape", "incident", APP, "--user", OWNER, "--json",
+                  check_rc=False)
+            bashy("shape", "auto", "log", check_rc=False)
+            bashy("shape", "list", APP, "--user", OWNER, "--json",
+                  check_rc=False)
         check(bool(healed) and healed != base_rev,
               f"incident repair activated a healed revision ({healed})")
         log_a = auto_log()
