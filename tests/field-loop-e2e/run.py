@@ -83,9 +83,11 @@ def main():
             lines = out.splitlines()
             dec = json.JSONDecoder()
             for i in range(len(lines) - 1, -1, -1):
-                if lines[i].lstrip().startswith(("{", "[")):
+                # Top-level documents start in column 0; indented braces
+                # belong to a nested value.
+                if lines[i].startswith(("{", "[")):
                     try:
-                        doc, _ = dec.raw_decode("\n".join(lines[i:]).lstrip())
+                        doc, _ = dec.raw_decode("\n".join(lines[i:]))
                         return doc
                     except json.JSONDecodeError:
                         continue
