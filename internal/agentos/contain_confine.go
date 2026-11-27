@@ -371,11 +371,14 @@ func containerConfinedEnv(environ, names, with []string) []string {
 // sockets (both read-only; a connect works on a read-only bind) mounted at
 // their own paths, a private tmpfs as TMPDIR/HOME, exactly
 // containerConfinedEnv as the environment (podman's and the image's
-// defaults unset), DIR as the working directory. --loopback needs no rule:
+// defaults unset), DIR as the working directory. It runs as the calling
+// user: the image's default user cannot enter a caller-owned DIR (keep-id
+// maps a rootless caller to the same uid; a root caller stays root inside
+// the read-only, network-less container). --loopback needs no rule:
 // the container's loopback is its own.
 func containerConfinedArgs(c *containConfine, image string, with, environ, argv []string) []string {
 	args := []string{"podman", "run", "--rm", "-i", "--network=none", "--unsetenv-all",
-		"--userns=keep-id", "--read-only", "--tmpfs", containConfineInTmp + ":rw,nosuid,nodev,mode=1777",
+		"--userns=keep-id", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()), "--read-only", "--tmpfs", containConfineInTmp + ":rw,nosuid,nodev,mode=1777",
 		"-v", c.Dir + ":" + c.Dir + ":rw", "-w", c.Dir}
 	for _, p := range c.RO {
 		args = append(args, "-v", p+":"+p+":ro")
