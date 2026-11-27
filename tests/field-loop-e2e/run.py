@@ -157,7 +157,7 @@ def main():
         check(bool(base_rev), f"form registered with active base {base_rev}")
         # Incident repair ships as a patch release on top of a base release;
         # a freshly registered app has none, so cut v0 of the base first.
-        bashy("src", "release", APP, base_rev, "--user", OWNER)
+        bashy("src", "release", APP, base_rev, "--user", OWNER, "--shared")
 
         auto_log = lambda: bashy("shape", "auto", "log").stdout  # noqa: E731
 
