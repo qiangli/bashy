@@ -77,7 +77,10 @@ def main():
             return run(binary, *argv, **kw)
 
         def bashy_json(*argv):
-            out = bashy(*argv, "--json").stdout
+            if "--" in argv:
+                out = bashy(*argv).stdout
+            else:
+                out = bashy(*argv, "--json").stdout
             # The last JSON document in the output, single-line or
             # pretty-printed (notes may precede it).
             lines = out.splitlines()
@@ -300,7 +303,8 @@ def main():
 
         # --- (c) scheduled feed + off switch ------------------------------
         record("== (c) scheduled feed once, then off stops it ==")
-        sched = bashy_json("schedule", "add", "--name", "field-loop-feed",
+        # --json must come before "--": everything after it is the job.
+        sched = bashy_json("schedule", "--json", "add", "--name", "field-loop-feed",
                            "--every", "24h", "--",
                            str(binary), "shape-feed", APP,
                            "--source", f"file:{issues}",
