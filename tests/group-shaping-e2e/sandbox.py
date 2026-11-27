@@ -31,6 +31,11 @@ HOME = Path.home()
 CONFIG = HOME / ".config/matrix/agent.json"
 WEBSITE = ["bashy", "--bashsharp", "/website/website.bsh"]
 BINDING = "codex:gpt6-sol"
+REPAIR_AGENT = "codex:gpt6-terra"
+X_WHY = "visitors must see the approved support greeting"
+X_EXPECT = "the served heading reads Approved support greeting"
+C_WHY = "the support page should greet members by their own team"
+C_EXPECT = "members see Member support greeting on the support page"
 
 
 class Fixture(BaseHTTPRequestHandler):
@@ -192,16 +197,83 @@ def wait_version(revision):
     raise AssertionError(f"served version {last!r}, expected {revision}")
 
 
-def member_pull_push(active):
+def ledger_problem(ledger, cid):
+    """The problem holding candidate cid in a ledger view."""
+    for problem in ledger["problems"]:
+        if any(a.get("candidate") == cid for a in problem.get("attempts", [])):
+            return problem
+    raise AssertionError(f"no problem holds candidate {cid}: {json.dumps(ledger)}")
+
+
+def standings(problem):
+    return [(a.get("agent"), a["standing"]) for a in problem["attempts"]]
+
+
+def last_prompt():
+    """The stub's last recorded prompt and the work ledger it found, if any."""
+    block = (HOME / "stub-prompts").read_text().split("=== prompt\n")[-1]
+    prompt, _, ledger = block.partition("=== work ledger\n")
+    return prompt, ledger
+
+
+def ledger_leg(cid, rev):
+    """X's wish is in the ledger; Y repairs an incident with X's reasons in its brief; undo and restore change standing only."""
+    ledger = owner_cli("ledger", APP, "--max-bytes", "-1")
+    problem = ledger_problem(ledger, cid)
+    wish, = [a for a in problem["attempts"] if a.get("candidate") == cid]
+    check(wish["agent"] == BINDING and wish["principal"] == C and wish["why"] == X_WHY
+          and wish["expect"] == X_EXPECT and wish["standing"] == "active",
+          "the ledger records X's wish for C with its why, expect and active standing")
+
+    # Unattended repair ships as a patch release of a named base release.
+    owner_cli("release", APP, rev)
+    incident = owner_cli("incident", APP, "Script error on the support page", "--kind", "script",
+                         "--path", "/", "--agent", REPAIR_AGENT)
+    repaired = owner_cli("status", APP)["active"]
+    check(repaired not in (rev, "") and (HOME / "stub-events").read_text().splitlines()[-1] == "repair",
+          f"Y repaired incident {incident.get('id')} and the repair activated by itself")
+    prompt, work_ledger = last_prompt()
+    fenced = prompt.split("<<<LEDGER\n", 1)[-1].split("\nLEDGER>>>", 1)[0]
+    print("repair prompt", prompt, "work ledger", work_ledger, sep="\n", flush=True)
+    check("<<<INCIDENT" in prompt and "<<<LEDGER\n" in prompt and X_WHY in fenced and X_EXPECT in fenced,
+          "Y's repair brief carries X's why and expect inside the ledger fence")
+    check(X_WHY in work_ledger and json.loads(work_ledger)["problems"],
+          "a step in Y's work clone read .git/shape-ledger.json with X's reasons")
+
+    after = ledger_problem(owner_cli("ledger", APP, "--max-bytes", "-1"), cid)
+    check(after["key"] == problem["key"] and incident.get("id") in after.get("incidents", []),
+          "the incident is filed under X's problem")
+    check(standings(after) == [(BINDING, "superseded"), (REPAIR_AGENT, "active")],
+          "Y's repair is active and X's wish superseded")
+    count = len(after["attempts"])
+
+    owner_cli("undo", APP)
+    check(owner_cli("status", APP)["active"] == rev, "undo made X's revision active again")
+    undone = ledger_problem(owner_cli("ledger", APP, "--max-bytes", "-1"), cid)
+    check(standings(undone) == [(BINDING, "active"), (REPAIR_AGENT, "undone")] and len(undone["attempts"]) == count,
+          "undo marked Y's repair undone and deleted nothing")
+    owner_cli("restore", APP, repaired)
+    check(owner_cli("status", APP)["active"] == repaired, "restore made Y's repair active again")
+    restored = ledger_problem(owner_cli("ledger", APP, "--max-bytes", "-1"), cid)
+    check(standings(restored) == [(BINDING, "superseded"), (REPAIR_AGENT, "restored")]
+          and len(restored["attempts"]) == count, "restore marked Y's repair restored and deleted nothing")
+    wait_version(repaired)
+    return repaired
+
+
+def member_pull_push(active, title):
     snapshot = shape(C, "pull", {})
     base = snapshot["revision"]
+    seen = json.dumps(snapshot.get("ledger"))
+    check(snapshot.get("ledger") and X_WHY in seen and OWNER not in seen and str(HOME) not in seen
+          and "/shape-work/" not in seen, "C's pull carries the ledger without the owner's address or host paths")
     site, = [f for f in snapshot["files"] if f["path"] == "site.json"]
     with tempfile.TemporaryDirectory() as checkout:
         path = Path(checkout) / "site.json"
         path.write_bytes(base64.b64decode(site["content"], validate=True))
         original = path.read_text()
         config = json.loads(original)
-        check(base == active and config["title"] == "Approved support greeting"
+        check(base == active and config["title"] == title
               and config["site_url"] == ORIGIN + "/published", "C pulled O's active website source")
         config.update(title="Member support greeting", site_url=ORIGIN + "/member")
         path.write_text(json.dumps(config, indent=2) + "\n")
@@ -214,8 +286,13 @@ def member_pull_push(active):
             check(call(user, tool, args).get("challenge"),
                   f"{user or 'anonymous'} refused {tool} by the mounted app grant gate")
 
-    candidate = shape(C, "push", push)
+    candidate = shape(C, "push", dict(push, why=C_WHY, expect=C_EXPECT, agent="contractor-local-model"))
     cid, rev = candidate["id"], candidate["rev"]
+    attempt, = [a for a in ledger_problem(owner_cli("ledger", APP, "--max-bytes", "-1"), cid)["attempts"]
+                if a.get("candidate") == cid]
+    check(attempt["principal"] == C and attempt["why"] == C_WHY and attempt["expect"] == C_EXPECT
+          and attempt["agent"] == "contractor-local-model" and attempt["request"].startswith(C_WHY),
+          "C's push is in the ledger with C as principal, C's reasons and C's agent")
     check(cid and rev and rev != base and candidate["base_rev"] == base and
           candidate["principal"] == C and "activation_principal" not in candidate and
           candidate["status"] == "verified",
@@ -343,7 +420,8 @@ def scenario():
     check(result.get("isError") and f"active revision changed (base {base}, active {rev})"
           in result["content"][0]["text"], "stale approval refused with both base and active revisions")
     check(owner_cli("status", APP)["active"] == rev, "stale approval left C's revision active")
-    member_pull_push(rev)
+    repaired = ledger_leg(cid, rev)
+    member_pull_push(repaired, "Approved support greeting (repaired)")
 
 
 def start_outpost():
@@ -370,6 +448,10 @@ def main():
         ["bashy", "delegate", "--dry-run", "--json", "--agent", BINDING, "binding preflight"],
         env=dict(os.environ, BASHY_DELEGATE_CALLER="genie", BASHY_DELEGATE_ALLOW=BINDING)))
     check(invocation["agent"] == stub, f"{BINDING} resolves to {stub}")
+    invocation = json.loads(subprocess.check_output(
+        ["bashy", "delegate", "--dry-run", "--json", "--agent", REPAIR_AGENT, "binding preflight"],
+        env=dict(os.environ, BASHY_DELEGATE_CALLER="genie", BASHY_DELEGATE_ALLOW=REPAIR_AGENT)))
+    check(invocation["agent"] == stub, f"{REPAIR_AGENT} resolves to {stub}")
     run("git", "config", "--global", "user.name", "Fixture")
     run("git", "config", "--global", "user.email", OWNER)
     CONFIG.parent.mkdir(parents=True, exist_ok=True)

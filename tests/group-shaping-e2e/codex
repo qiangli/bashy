@@ -1,5 +1,8 @@
 #!/bin/sh
-# The Codex recipe probes login status, then runs one of two fixed edits.
+# The Codex recipe probes login status, then runs one of three fixed edits:
+# two wishes and one incident repair. Each prints the brief's closing block
+# with its own WHY and EXPECT, and records its prompt and whether the work
+# clone carried the shaping ledger, so the scenario can check what it saw.
 set -eu
 # Match the request between the brief's REQUEST markers only: the brief also
 # quotes earlier requests (the shaping ledger), which must not pick the edit.
@@ -8,17 +11,40 @@ case " $* " in
   *" login status "*) echo "Logged in using ChatGPT" >&2; exit 0 ;;
 esac
 case " $* " in *" exec "*) ;; *) echo "unexpected stub invocation: $*" >&2; exit 2 ;; esac
+{
+  echo "=== prompt"
+  printf '%s\n' "$*"
+  if [ -f .git/shape-ledger.json ]; then
+    echo "=== work ledger"
+    cat .git/shape-ledger.json
+  fi
+} >> "$HOME/stub-prompts"
+closing() {
+  printf 'COVERED:\n- %s\nNOT COVERED:\n- (none)\nWHY:\n- %s\nEXPECT:\n- %s\nNEXT:\n- (none)\n' "$1" "$2" "$3"
+}
 case "$request" in
   *"Publish the support greeting"*)
     sed -i -e 's/Original support greeting/Approved support greeting/' \
            -e '/"site_url":/s|",$|/published",|' site.json
     grep -q 'Approved support greeting' site.json
     echo "edit" >> "$HOME/stub-events"
-    echo "Published the support greeting." ;;
+    echo "Published the support greeting."
+    closing "published the greeting" "visitors must see the approved support greeting" "the served heading reads Approved support greeting" ;;
   *"Draft the alternate greeting"*)
     sed -i 's/Original support greeting/Alternate support greeting/' site.json
     grep -q 'Alternate support greeting' site.json
     echo "alternate" >> "$HOME/stub-events"
-    echo "Drafted the alternate greeting." ;;
+    echo "Drafted the alternate greeting."
+    closing "drafted the alternate greeting" "the owner wants a second option to compare" "the draft heading reads Alternate support greeting" ;;
+  "")
+    case " $* " in
+      *"<<<INCIDENT"*)
+        sed -i 's/"title": "\([^"]*\)"/"title": "\1 (repaired)"/' site.json
+        grep -q '(repaired)' site.json
+        echo "repair" >> "$HOME/stub-events"
+        echo "Repaired the reported failure."
+        closing "repaired the reported failure" "the incident follows the published greeting; keep its wording" "the page serves again with the greeting marked repaired" ;;
+      *) echo "unexpected stub invocation: $*" >&2; exit 2 ;;
+    esac ;;
   *) echo "unexpected stub invocation: $*" >&2; exit 2 ;;
 esac
