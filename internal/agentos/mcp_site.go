@@ -589,11 +589,16 @@ func (s *siteMCP) shape(ctx context.Context, req *mcpsdk.CallToolRequest, tool s
 	// candidate's isolated preview there.
 	r.Console = fmt.Sprintf("http://127.0.0.1:%d", webconsole.DefaultPort)
 	result, err := siteShapeExecute(ctx, r)
-	if err != nil {
-		return nil, out, err
-	}
 	if c.Tier != siteTierOwner {
 		result = siteMemberResult(result)
+		// A failed verification names its detail in the error; a member
+		// gets the member view's detail, without the host's paths.
+		if mc, ok := result.(shape.Candidate); ok && err != nil && mc.Verdict != nil && !mc.Verdict.Pass {
+			err = fmt.Errorf("shape: verification failed: %s", mc.Verdict.Detail)
+		}
+	}
+	if err != nil {
+		return nil, out, err
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
@@ -617,6 +622,9 @@ func siteMemberResult(result any) any {
 		if c, ok := v["candidate"].(shape.Candidate); ok {
 			v["candidate"] = shape.MemberView(c)
 		}
+	case map[string]string:
+		// The push reply: the owner's activation identity stays on the host.
+		delete(v, "activation_principal")
 	}
 	return result
 }

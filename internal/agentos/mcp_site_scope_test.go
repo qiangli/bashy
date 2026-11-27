@@ -3,6 +3,7 @@ package agentos
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -308,6 +309,50 @@ func TestSiteMCPMemberReplyHasNoHostFields(t *testing.T) {
 			if tier == "member" && candidate["verdict"].(map[string]any)["evidence"] != "shape-evidence:rev1" {
 				t.Errorf("member %s: verdict = %v", tool, candidate["verdict"])
 			}
+		}
+	}
+}
+
+// A member's push reply carries no owner identity, and a failed verification
+// tells a member its detail without the host's paths; the owner sees both.
+func TestSiteMCPMemberPushAndFailedVerifyHaveNoHostFields(t *testing.T) {
+	stubSiteShape(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "shaped.json"), []byte(`{"scopes":{"shape":{"groups":["support"]}}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	shapeAppLookup = func(string) (shape.App, error) { return shape.App{Name: "site", SourceDir: dir}, nil }
+	host := filepath.Join(t.TempDir(), "host")
+	work := filepath.Join(host, "work")
+	siteShapeExecute = func(_ context.Context, r shapeCLIRequest) (any, error) {
+		if r.Verb == "push" {
+			return map[string]string{"id": "0123456789abcdef", "status": shape.Verified, "principal": r.User,
+				"activation_principal": "owner@example.com", "base_rev": "rev0", "rev": "rev1"}, nil
+		}
+		c := shape.Candidate{ID: "0123456789abcdef", App: "site", Principal: r.User, Status: shape.Ready, Rev: "rev1", Workspace: work,
+			Verdict: &shape.Verdict{Pass: false, Detail: "check failed in " + filepath.Join(work, "checks", "a.bsh")}}
+		return c, fmt.Errorf("shape: verification failed: %s", c.Verdict.Detail)
+	}
+	writeSiteOutpostConfig(t, "http://127.0.0.1:1", false)
+	connect := serveSiteHTTP(t, newSiteMCP(context.Background(), "site", "", true))
+	for _, tier := range []string{"member", "owner"} {
+		cs := connect(func(h http.Header) {
+			stampAudience(h, siteTestKey, tier, tier+"@example.net", "", "company", "support")
+		})
+		out, refusal := callSite(t, cs, "shape_push", map[string]any{"base_revision": "rev0", "patch": "x"})
+		if refusal != "" {
+			t.Fatalf("%s push: %s", tier, refusal)
+		}
+		data, _ := json.Marshal(out["result"])
+		if got := strings.Contains(string(data), "owner@example.com"); got != (tier == "owner") {
+			t.Errorf("%s push reply contains owner identity = %v: %s", tier, got, data)
+		}
+		_, refusal = callSite(t, cs, "shape_verify", map[string]any{"id": "0123456789abcdef"})
+		if !strings.Contains(refusal, "verification failed") || !strings.Contains(refusal, "a.bsh") {
+			t.Fatalf("%s verify refusal lost its meaning: %q", tier, refusal)
+		}
+		if got := strings.Contains(refusal, host); got != (tier == "owner") {
+			t.Errorf("%s verify refusal contains host path = %v: %q", tier, got, refusal)
 		}
 	}
 }
