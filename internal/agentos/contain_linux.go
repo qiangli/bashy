@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 )
 
@@ -49,3 +50,19 @@ func runNativeContained(argv []string, _ bool) int {
 	}
 	return 0
 }
+
+// confineBackend: bashy's image (network none, bind mounts). The native
+// namespace provider confines the network only, so it is refused for --dir.
+func confineBackend(provider string) (string, error) {
+	p := strings.ToLower(strings.TrimSpace(provider))
+	if p == "" {
+		p = strings.ToLower(strings.TrimSpace(os.Getenv("BASHY_CONTAIN_PROVIDER")))
+	}
+	switch p {
+	case "", containBuiltin, containImageP:
+		return confineImage, nil
+	}
+	return "", fmt.Errorf("file confinement (--dir) runs in bashy's image on linux; provider %q confines the network only", p)
+}
+
+func runSeatbeltConfined(*containConfine, []string) int { return containUnsupportedStatus }

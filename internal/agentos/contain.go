@@ -305,6 +305,7 @@ func containHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 func dispatchContain(args []string) int {
 	usage := func(w io.Writer) {
 		fmt.Fprintln(w, "usage: bashy contain --net deny|model [--provider builtin|native|image|custom] -- command [args...]")
+		fmt.Fprintln(w, "       bashy contain --net deny --dir DIR [--socket /abs.sock]... [--ro /abs/path]... [--env NAME]... -- command [args...]")
 		fmt.Fprintln(w, "  run one command with enforced network isolation: native (Linux network namespace,")
 		fmt.Fprintln(w, "  macOS Seatbelt) where the OS has it, else bashy's own image with no network")
 		fmt.Fprintln(w, "  providers: builtin (default: native where the OS has it, else bashy's image), native,")
@@ -314,8 +315,14 @@ func dispatchContain(args []string) int {
 		fmt.Fprintln(w, "  --net model is deny plus a loopback allowlist proxy to the model door and the registry's API-model")
 		fmt.Fprintln(w, "  endpoints (plus BASHY_CONTAIN_ALLOW_HOST), so an agent worker can call its model; it does NOT")
 		fmt.Fprintln(w, "  discharge the net effect. macOS native only; elsewhere it fails closed (125).")
+		fmt.Fprintln(w, "  --dir DIR adds file confinement: DIR (the working directory) and a private temp (TMPDIR, HOME)")
+		fmt.Fprintln(w, "  are the only writable places; home is unreadable except DIR, each --ro path and bashy itself;")
+		fmt.Fprintln(w, "  each --socket is reachable, no other network; the environment is PATH LANG LC_ALL TERM plus each")
+		fmt.Fprintln(w, "  --env NAME. macOS: a generated Seatbelt profile; Linux: bashy's image with DIR, the --ro paths")
+		fmt.Fprintln(w, "  and the sockets bind-mounted, network none; elsewhere it fails closed (125) and nothing runs.")
 	}
 	net, provider := "", ""
+	confine := &containConfine{}
 	i := 0
 	for ; i < len(args); i++ {
 		a := args[i]
@@ -333,6 +340,12 @@ func dispatchContain(args []string) int {
 			provider = args[i]
 		case strings.HasPrefix(a, "--provider="):
 			provider = strings.TrimPrefix(a, "--provider=")
+		case (a == "--dir" || a == "--socket" || a == "--ro" || a == "--env") && i+1 < len(args):
+			i++
+			confine.add(a, args[i])
+		case strings.HasPrefix(a, "--dir=") || strings.HasPrefix(a, "--socket=") || strings.HasPrefix(a, "--ro=") || strings.HasPrefix(a, "--env="):
+			flag, v, _ := strings.Cut(a, "=")
+			confine.add(flag, v)
 		case a == "--":
 			i++
 			goto command
@@ -343,6 +356,17 @@ func dispatchContain(args []string) int {
 command:
 	if net != "deny" && net != "model" || i >= len(args) || provider != "" && !validContainProvider(provider) {
 		usage(os.Stderr)
+		return 2
+	}
+	if confine.active() {
+		if net != "deny" {
+			fmt.Fprintln(os.Stderr, "bashy contain: --dir needs --net deny")
+			return 2
+		}
+		return runConfined(confine, provider, args[i:])
+	}
+	if len(confine.Sockets)+len(confine.RO)+len(confine.Env) > 0 {
+		fmt.Fprintln(os.Stderr, "bashy contain: --socket, --ro and --env need --dir")
 		return 2
 	}
 	if err := containSupportedForNet(net, provider); err != nil {

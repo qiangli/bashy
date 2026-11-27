@@ -1,0 +1,230 @@
+package agentos
+
+// Sprint: #738; Story: #823; Story-ID: 380fd660ae7e
+//
+// Per-backend unit tests of `bashy contain --dir`: the generated Seatbelt
+// profile (macOS backend) and the bashy podman spec (Linux backend) are pure
+// functions, so both are checked on every host; no container runs here.
+
+import (
+	"net"
+	"os"
+	"path/filepath"
+	"runtime"
+	"slices"
+	"strings"
+	"testing"
+)
+
+func confineFixture(t *testing.T) *containConfine {
+	t.Helper()
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "work")
+	bundle := filepath.Join(root, "genie")
+	for _, d := range []string{dir, bundle} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// a short path: sun_path is 104 bytes on macOS
+	sockDir, err := os.MkdirTemp("/tmp", "cf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(sockDir) })
+	sock := filepath.Join(sockDir, "s.sock")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Skipf("unix socket: %v", err)
+	}
+	t.Cleanup(func() { ln.Close() })
+	return &containConfine{Dir: dir, Sockets: []string{sock}, RO: []string{bundle}, Env: []string{"GENIE_MODEL_ID"}}
+}
+
+func TestContainConfinePrepareValidates(t *testing.T) {
+	c := confineFixture(t)
+	if err := c.prepare(); err != nil {
+		t.Fatalf("valid spec refused: %v", err)
+	}
+	if real, _ := filepath.EvalSymlinks(c.Sockets[0]); real != c.Sockets[0] {
+		t.Errorf("socket not resolved: %q", c.Sockets[0])
+	}
+	bad := []struct {
+		name string
+		mut  func(*containConfine)
+		want string
+	}{
+		{"missing dir", func(c *containConfine) { c.Dir = filepath.Join(c.Dir, "nope") }, "--dir"},
+		{"dir is a file", func(c *containConfine) {
+			f := filepath.Join(c.Dir, "f")
+			os.WriteFile(f, nil, 0o644)
+			c.Dir = f
+		}, "not a directory"},
+		{"root", func(c *containConfine) { c.Dir = "/" }, "whole file system"},
+		{"relative ro", func(c *containConfine) { c.RO = []string{"genie"} }, "absolute"},
+		{"socket not a socket", func(c *containConfine) { c.Sockets = []string{c.RO[0]} }, "not a unix socket"},
+		{"env assignment", func(c *containConfine) { c.Env = []string{"A=1"} }, "NAMES"},
+		{"env HOME", func(c *containConfine) { c.Env = []string{"HOME"} }, "private temp"},
+		{"quote in path", func(c *containConfine) {
+			d := filepath.Join(c.Dir, `a"b`)
+			os.Mkdir(d, 0o755)
+			c.Dir = d
+		}, "may not contain"},
+	}
+	for _, tc := range bad {
+		c := confineFixture(t)
+		tc.mut(c)
+		if err := c.prepare(); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("%s: err = %v, want %q", tc.name, err, tc.want)
+		}
+	}
+}
+
+func TestContainConfinedEnvIsScrubbed(t *testing.T) {
+	environ := []string{"PATH=/bin", "LANG=C", "TERM=xterm", "HOME=/Users/x", "TMPDIR=/var/t",
+		"OPENAI_API_KEY=sk-secret", "AWS_SECRET_ACCESS_KEY=x", "GENIE_MODEL_ID=m", "LC_ALL=C"}
+	got := confinedEnv(environ, []string{"GENIE_MODEL_ID"}, "/priv")
+	want := []string{"PATH=/bin", "LANG=C", "TERM=xterm", "GENIE_MODEL_ID=m", "LC_ALL=C", "TMPDIR=/priv", "HOME=/priv"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("confinedEnv = %q, want %q", got, want)
+	}
+}
+
+// The macOS backend's profile.
+func TestSeatbeltConfinedProfile(t *testing.T) {
+	c := &containConfine{Dir: "/Users/u/runs/r1", Sockets: []string{"/tmp/cf/s.sock"},
+		RO: []string{"/Users/u/.local/share/genie"}}
+	p := seatbeltConfinedProfile(c, "/private/var/folders/x/T/bashy-confine-1", "/Users/u", "/private/var/folders/x/T",
+		[]string{"/Users/u/.local/bin/bashy"})
+	lines := strings.Split(p, "\n")
+	idx := func(rule string) int {
+		t.Helper()
+		i := slices.Index(lines, rule)
+		if i < 0 {
+			t.Fatalf("profile missing %q:\n%s", rule, p)
+		}
+		return i
+	}
+	// network: deny, then only loopback and the named socket
+	denyNet := idx("(deny network*)")
+	if i := idx(`(allow network-outbound (remote unix-socket (path-literal "/tmp/cf/s.sock")))`); i < denyNet {
+		t.Error("socket allowance precedes the network deny (last match wins)")
+	}
+	if strings.Contains(p, `(remote unix-socket))`) || strings.Contains(p, "(remote tcp") || strings.Contains(p, `"*:`) {
+		t.Errorf("profile opens more than loopback and the listed sockets:\n%s", p)
+	}
+	// writes: deny, then DIR and the private temp only
+	denyW := idx("(deny file-write*)")
+	if i := idx(`(allow file-write* (subpath "/Users/u/runs/r1") (subpath "/private/var/folders/x/T/bashy-confine-1"))`); i < denyW {
+		t.Error("write allowance precedes the write deny")
+	}
+	for _, l := range lines {
+		if strings.HasPrefix(l, "(allow file-write*") && strings.Contains(l, "genie") {
+			t.Errorf("an --ro path is writable: %s", l)
+		}
+	}
+	// reads: home and the temp root denied, then DIR, temp, ro, socket, bashy
+	denyHome := idx(`(deny file-read* (subpath "/Users/u"))`)
+	idx(`(deny file-read* (subpath "/private/var/folders/x/T"))`)
+	for _, rule := range []string{
+		`(allow file-read* (subpath "/Users/u/runs/r1"))`,
+		`(allow file-read* (subpath "/Users/u/.local/share/genie"))`,
+		`(allow file-read* (subpath "/private/var/folders/x/T/bashy-confine-1"))`,
+		`(allow file-read* (literal "/Users/u/.local/bin/bashy"))`,
+		`(allow file-read-metadata (literal "/Users/u"))`,
+		`(allow file-read-metadata (literal "/Users/u/runs"))`,
+	} {
+		if idx(rule) < denyHome {
+			t.Errorf("%s precedes the home deny", rule)
+		}
+	}
+	// ancestors outside the denied trees need no allowance
+	if strings.Contains(p, `(literal "/Users"))`) || strings.Contains(p, `(literal "/tmp/cf"))`) {
+		t.Errorf("metadata allowance outside the denied trees:\n%s", p)
+	}
+}
+
+// The Linux backend's container spec.
+func TestContainerConfinedArgs(t *testing.T) {
+	c := &containConfine{Dir: "/home/u/runs/r1", Sockets: []string{"/run/user/1/door.sock"},
+		RO: []string{"/home/u/.local/share/genie"}, Env: []string{"GENIE_MODEL_ID"}}
+	environ := []string{"PATH=/home/u/bin:/usr/bin", "OPENAI_API_KEY=sk-secret", "GENIE_MODEL_ID=m", "LANG=C.UTF-8"}
+	args := containerConfinedArgs(c, "localhost/bashy:test", environ, []string{"/home/u/.local/share/genie/run", "-x"})
+	line := strings.Join(args, " ")
+	for _, want := range []string{
+		"podman run --rm -i --network=none",
+		"--read-only --tmpfs /tmp:rw,nosuid,nodev,mode=1777",
+		"-v /home/u/runs/r1:/home/u/runs/r1:rw -w /home/u/runs/r1",
+		"-v /home/u/.local/share/genie:/home/u/.local/share/genie:ro",
+		"-v /run/user/1/door.sock:/run/user/1/door.sock",
+		"-e GENIE_MODEL_ID=m", "-e LANG=C.UTF-8", "-e TMPDIR=/tmp", "-e HOME=/tmp",
+		"localhost/bashy:test -c '/home/u/.local/share/genie/run' '-x'",
+	} {
+		if !strings.Contains(line, want) {
+			t.Errorf("container spec missing %q:\n%s", want, line)
+		}
+	}
+	for _, leak := range []string{"OPENAI_API_KEY", "sk-secret", "PATH=", "/home/u:/", "--network=host", "--privileged"} {
+		if strings.Contains(line, leak) {
+			t.Errorf("container spec carries %q:\n%s", leak, line)
+		}
+	}
+	// only the three named host paths are mounted (plus nothing else)
+	var mounts []string
+	for i, a := range args {
+		if a == "-v" {
+			mounts = append(mounts, args[i+1])
+		}
+	}
+	if len(mounts) != 3 {
+		t.Errorf("mounts = %q, want DIR, the --ro path and the socket only", mounts)
+	}
+	// a bare command resolves inside the image
+	if got := containerConfinedCommand(c, []string{"/usr/bin/python3", "t.py"}); got != "'python3' 't.py'" {
+		t.Errorf("host-only argv[0] kept its host path: %s", got)
+	}
+}
+
+func TestContainConfineBackendSelection(t *testing.T) {
+	t.Setenv("BASHY_CONTAIN_PROVIDER", "")
+	b, err := confineBackend("")
+	switch runtime.GOOS {
+	case "darwin":
+		if nativeContainSupported() == nil && (err != nil || b != confineSeatbelt) {
+			t.Errorf("darwin default backend = %q, %v; want seatbelt", b, err)
+		}
+		if b, err := confineBackend("image"); err != nil || b != confineImage {
+			t.Errorf("darwin image backend = %q, %v", b, err)
+		}
+	case "linux":
+		if err != nil || b != confineImage {
+			t.Errorf("linux default backend = %q, %v; want image", b, err)
+		}
+		if _, err := confineBackend("native"); err == nil {
+			t.Error("linux native provider accepted for --dir (it confines the network only)")
+		}
+	default:
+		if err == nil || !strings.Contains(err.Error(), runtime.GOOS) {
+			t.Errorf("%s must refuse --dir with a named reason, got %q, %v", runtime.GOOS, b, err)
+		}
+	}
+	if _, err := confineBackend("custom"); err == nil {
+		t.Error("custom provider accepted for --dir")
+	}
+}
+
+func TestDispatchContainConfineFlags(t *testing.T) {
+	c := confineFixture(t)
+	if st := dispatchContain([]string{"--net", "model", "--dir", c.Dir, "--", "true"}); st != 2 {
+		t.Errorf("--dir with --net model: status %d, want 2", st)
+	}
+	if st := dispatchContain([]string{"--net", "deny", "--ro", c.RO[0], "--", "true"}); st != 2 {
+		t.Errorf("--ro without --dir: status %d, want 2", st)
+	}
+	if st := dispatchContain([]string{"--net", "deny", "--dir", filepath.Join(c.Dir, "missing"), "--", "true"}); st != containUnsupportedStatus {
+		t.Errorf("missing --dir: status %d, want 125 (nothing ran)", st)
+	}
+}

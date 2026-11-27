@@ -6,9 +6,12 @@ package agentos
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -83,5 +86,92 @@ func TestContainNativeDenyStaysOffline(t *testing.T) {
 	}
 	if code := runNativeContained([]string{"sh", "-c", `test -z "$HTTPS_PROXY$http_proxy" && ! curl -sf -m 5 -o /dev/null ` + srv.URL}, false); code != 0 {
 		t.Fatalf("deny must have no proxy variables and no reachable endpoint: exit %d", code)
+	}
+}
+
+// Sprint: #738; Story: #823; Story-ID: 380fd660ae7e
+//
+// The generated profile, enforced: Seatbelt (not a container) on this host.
+func TestContainConfinedSeatbeltEnforces(t *testing.T) {
+	if nativeContainSupported() != nil {
+		t.Skip("no Seatbelt on this host")
+	}
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	home := filepath.Join(root, "home")
+	dir := filepath.Join(home, "runs", "r1")
+	bundle := filepath.Join(home, "bundle")
+	for _, d := range []string{dir, bundle} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.WriteFile(filepath.Join(home, "canary"), []byte("secret"), 0o600)
+	os.WriteFile(filepath.Join(bundle, "tool"), []byte("bundle"), 0o644)
+	t.Setenv("HOME", home)
+	t.Setenv("CONFINE_SECRET", "sk-leak")
+
+	sockDir, err := os.MkdirTemp("/tmp", "cf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(sockDir)
+	serve := func(name string) string {
+		p := filepath.Join(sockDir, name)
+		ln, err := net.Listen("unix", p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { ln.Close() })
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				c.Write([]byte("door\n"))
+				c.Close()
+			}
+		}()
+		return p
+	}
+	door, other := serve("door.sock"), serve("other.sock")
+
+	script := `set -u
+fail() { echo "FAIL: $*"; exit 1; }
+[ "$(pwd -P)" = "$WANT_DIR" ] || fail "cwd $(pwd -P)"
+echo ok > out || fail "write DIR"
+echo ok > "$TMPDIR/t" || fail "write TMPDIR"
+[ "$HOME" = "$TMPDIR" ] || fail "HOME=$HOME"
+[ -z "${CONFINE_SECRET:-}" ] || fail "secret leaked"
+cat "$WANT_BUNDLE/tool" >/dev/null || fail "read --ro"
+cat "$WANT_HOME/canary" 2>/dev/null && fail "canary readable"
+ls "$WANT_HOME" 2>/dev/null && fail "home listable"
+echo x 2>/dev/null > "$WANT_HOME/x" && fail "home writable"
+echo x 2>/dev/null > "$WANT_BUNDLE/x" && fail "--ro writable"
+echo x 2>/dev/null > /tmp/bashy-confine-escape && fail "/tmp writable"
+if command -v nc >/dev/null; then
+  [ "$(nc -U "$WANT_DOOR" </dev/null)" = door ] || fail "door socket unreachable"
+  [ "$(nc -U "$WANT_OTHER" </dev/null 2>/dev/null)" = door ] && fail "other socket reachable"
+fi
+exit 0`
+	c := &containConfine{Dir: dir, Sockets: []string{door}, RO: []string{bundle},
+		Env: []string{"WANT_DIR", "WANT_HOME", "WANT_BUNDLE", "WANT_DOOR", "WANT_OTHER"}}
+	t.Setenv("WANT_DIR", dir)
+	t.Setenv("WANT_HOME", home)
+	t.Setenv("WANT_BUNDLE", bundle)
+	t.Setenv("WANT_DOOR", door)
+	t.Setenv("WANT_OTHER", other)
+	if st := runConfined(c, "native", []string{"/bin/sh", "-c", script}); st != 0 {
+		t.Fatalf("confined run: exit %d", st)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "out")); string(b) != "ok\n" {
+		t.Fatalf("DIR/out = %q", b)
+	}
+	if _, err := os.Stat("/tmp/bashy-confine-escape"); err == nil {
+		os.Remove("/tmp/bashy-confine-escape")
+		t.Fatal("wrote outside DIR")
 	}
 }

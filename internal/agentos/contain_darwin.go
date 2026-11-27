@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -79,4 +80,48 @@ func runNativeContained(argv []string, model bool) int {
 		return containUnsupportedStatus
 	}
 	return 0
+}
+
+// confineBackend: Seatbelt natively (builtin/native), or bashy's image
+// through the podman machine when the image provider is asked for.
+func confineBackend(provider string) (string, error) {
+	switch resolveContainProvider(provider) {
+	case containNative:
+		if err := nativeContainSupported(); err != nil {
+			return "", fmt.Errorf("file confinement (--dir): %v", err)
+		}
+		return confineSeatbelt, nil
+	case containImageP:
+		return confineImage, nil
+	}
+	return "", errors.New("file confinement (--dir) has no custom provider: the wrapper's confinement cannot be verified")
+}
+
+// runSeatbeltConfined runs argv under seatbeltConfinedProfile in c.Dir with
+// the scrubbed environment and a private temp removed afterwards.
+func runSeatbeltConfined(c *containConfine, argv []string) int {
+	userTemp, err := filepath.EvalSymlinks(os.TempDir())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "bashy contain: temp root: %v; nothing ran\n", err)
+		return containUnsupportedStatus
+	}
+	tmp, err := os.MkdirTemp(userTemp, "bashy-confine-")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "bashy contain: private temp: %v; nothing ran\n", err)
+		return containUnsupportedStatus
+	}
+	defer os.RemoveAll(tmp)
+	home := ""
+	if h, err := os.UserHomeDir(); err == nil {
+		if r, err := filepath.EvalSymlinks(h); err == nil {
+			home = r
+		}
+	}
+	if home == "" {
+		fmt.Fprintln(os.Stderr, "bashy contain: no resolvable home directory to deny; nothing ran")
+		return containUnsupportedStatus
+	}
+	profile := seatbeltConfinedProfile(c, tmp, home, userTemp, containConfineSelf())
+	env := confinedEnv(os.Environ(), c.Env, tmp)
+	return runContainChild(seatbeltExec, append([]string{"-p", profile, "--"}, argv...), c.Dir, env)
 }
