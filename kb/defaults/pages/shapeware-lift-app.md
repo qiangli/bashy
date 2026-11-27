@@ -17,7 +17,6 @@ status: candidate
 evidence: '2026-11-26: examples/desk/form lifted this way (spec v2.1); its reference certifies 17/17 with 117/117 mutants; agents of four vendors rebuilt it from the spec, 3 of 3 runs each at the start tier. Renamed to lift 2026-11-27 (operator).'
 source:
     tool: claude
-    host: dragon
 created: "2026-11-27T13:40:35Z"
 supersedes: shapeware-spec-from-app
 valid_from: "2026-11-27T13:40:35Z"
