@@ -1,6 +1,6 @@
 # Shape gate evidence
 
-The registered-app contract adds S-16 through S-32. The `cert` and `mutate` targets write its reports to `shape-cert.json` and `shape-mutate.log`. Run `alone` for its standalone lifecycle evidence.
+The registered-app contract adds S-16 through S-33. The `cert` and `mutate` targets write its reports to `shape-cert.json` and `shape-mutate.log`. Run `alone` for its standalone lifecycle evidence.
 
 ## Earlier refusal-only contract (2026-11-27)
 

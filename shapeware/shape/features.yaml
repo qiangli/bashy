@@ -6,7 +6,7 @@
   intent: Import a hand-edited workspace as a ready candidate while the baseline stays active.
   acceptance:
     - S-18 binds the imported candidate ID and revision.
-    - S-20 shows the workspace edit and S-23 confirms the baseline is still active.
+    - S-20 shows the workspace edit, S-23 confirms the baseline is still active, and S-33 confirms the candidate revision differs from it.
 - id: verify-candidate
   effort: 3
   status: verified

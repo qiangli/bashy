@@ -4,7 +4,7 @@ Behavioural specification for the `shape` surface (`bashy shape` plus the site M
 
 ## How assertions are judged
 
-- Run the assertions in order in a disposable work directory with one fresh HOME and TMPDIR per run. S-01 through S-13 use an unregistered name. S-16 copies `examples/fixture/` into HOME and registers the copy with `bashy app add`. It also prepares a separate workspace with an edited greeting. The fixture has a read-only smoke check and needs neither a shaping agent nor a running console.
+- Run the assertions in order in a disposable work directory with one fresh HOME and TMPDIR per run. S-01 through S-13 use an unregistered name. S-16 copies `examples/fixture/` into HOME, commits the fixture with fixed Git metadata, and registers it with `bashy app add` through a local file URL to preserve the baseline revision. It also prepares a separate workspace with an edited greeting. The fixture has a read-only smoke check and needs neither a shaping agent nor a running console.
 - The lifecycle uses the synthetic principal `shape-tester`. For the scope commands the judge sets the local login and principal to `shape-owner`.
 - Commands with `--json` and a JSON block are compared structurally. `"..."` matches any value, and `"...": "..."` allows additional object keys. An object without that marker is closed. `{ID}` binds the candidate ID and `{KEY}` binds its revision for the rest of the run.
 - Plain text is checked where a console block gives it. The trailing `...` in refusal messages leaves the hint open. S-11 through S-13 assert exit codes only because the message can include the local HOME path.
@@ -163,17 +163,20 @@ $ cp examples/fixture/contract.bsh "$HOME/shape-fixture/"
 $ cp examples/fixture/checks/smoke.bsh "$HOME/shape-fixture/checks/"
 $ cp -R "$HOME/shape-fixture" "$HOME/shape-edit"
 $ printf '%s\n' '<!doctype html>' '<title>Shape fixture</title>' '<h1 id="greeting">Shaped greeting</h1>' > "$HOME/shape-edit/public/index.html"
-$ bashy app add shape-fixture --type shaped --source "$HOME/shape-fixture"
+$ git -C "$HOME/shape-fixture" init -q --object-format=sha1
+$ git -C "$HOME/shape-fixture" -c core.autocrlf=false add public/index.html contract.bsh checks/smoke.bsh
+$ GIT_AUTHOR_DATE=2026-01-01T00:00:00Z GIT_COMMITTER_DATE=2026-01-01T00:00:00Z git -C "$HOME/shape-fixture" -c user.name='Shape Fixture' -c user.email=shape-fixture@example.invalid -c commit.gpgsign=false commit -qm 'Baseline greeting'
+$ bashy app add shape-fixture --type shaped --source "file://$HOME/shape-fixture"
 shape-fixture -> /shape-fixture/ (shaped, ...)
 note: takes effect on the console's next request
 ```
 exit: 0
 
 ### S-17
-Record the active baseline for the selected principal. A newly registered fixture has no candidates.
+Confirm the fixture commit is the active baseline and the selected principal has no candidates.
 ```console
-$ shape status shape-fixture --user shape-tester --json > "$HOME/baseline.json" && cat "$HOME/baseline.json"
-{"app":"shape-fixture","principal":"shape-tester","active":"...","candidates":[],"...":"..."}
+$ shape status shape-fixture --user shape-tester --json
+{"app":"shape-fixture","principal":"shape-tester","active":"03c495fdc3fa4ace92ec9f3602c1a6fa7685829d","candidates":[],"...":"..."}
 ```
 exit: 0
 
@@ -221,10 +224,10 @@ $ shape preview shape-fixture {ID} --console http://localhost:22749 --user shape
 exit: 0
 
 ### S-23
-Keep the baseline active while the verified candidate is pending. The active revision must differ from the candidate revision.
+Keep the fixture baseline active while the verified candidate is pending. S-33 checks that the candidate has a different revision.
 ```console
-$ shape status shape-fixture --user shape-tester --json > "$HOME/pending.json" && base=$(bashy -c 'jq "$@"' _ -er .active "$HOME/baseline.json") && active=$(bashy -c 'jq "$@"' _ -er .active "$HOME/pending.json") && test "$active" = "$base" && test "$active" != "{KEY}" && cat "$HOME/pending.json"
-{"app":"shape-fixture","principal":"shape-tester","active":"...","candidates":[{"id":"{ID}","status":"verified","rev":"{KEY}","...":"..."}],"...":"..."}
+$ shape status shape-fixture --user shape-tester --json
+{"app":"shape-fixture","principal":"shape-tester","active":"03c495fdc3fa4ace92ec9f3602c1a6fa7685829d","candidates":[{"id":"{ID}","status":"verified","rev":"{KEY}","...":"..."}],"...":"..."}
 ```
 exit: 0
 
@@ -256,16 +259,16 @@ exit: 0
 ### S-27
 Undo the activation and report the baseline revision as the new selection.
 ```console
-$ shape undo shape-fixture --user shape-tester --json > "$HOME/undo.json" && base=$(bashy -c 'jq "$@"' _ -er .active "$HOME/baseline.json") && revision=$(bashy -c 'jq "$@"' _ -er .Revision "$HOME/undo.json") && test "$revision" = "$base" && cat "$HOME/undo.json"
-{"App":"shape-fixture","Principal":"shape-tester","Revision":"...","Previous":"{KEY}","...":"..."}
+$ shape undo shape-fixture --user shape-tester --json
+{"App":"shape-fixture","Principal":"shape-tester","Revision":"03c495fdc3fa4ace92ec9f3602c1a6fa7685829d","Previous":"{KEY}","...":"..."}
 ```
 exit: 0
 
 ### S-28
 Confirm the baseline remains active in a separate status call after undo.
 ```console
-$ shape status shape-fixture --user shape-tester --json > "$HOME/undone.json" && base=$(bashy -c 'jq "$@"' _ -er .active "$HOME/baseline.json") && active=$(bashy -c 'jq "$@"' _ -er .active "$HOME/undone.json") && test "$active" = "$base" && cat "$HOME/undone.json"
-{"app":"shape-fixture","principal":"shape-tester","active":"...","candidates":[],"...":"..."}
+$ shape status shape-fixture --user shape-tester --json
+{"app":"shape-fixture","principal":"shape-tester","active":"03c495fdc3fa4ace92ec9f3602c1a6fa7685829d","candidates":[],"...":"..."}
 ```
 exit: 0
 
@@ -298,5 +301,12 @@ Read the persisted circle grant from a separate scope invocation.
 ```console
 $ shape scope ls --app shape-fixture --user shape-owner --as shape-owner --json
 {"app":"shape-fixture","scopes":{"shape":{"circles":["fixture-circle"]}}}
+```
+exit: 0
+
+### S-33
+The imported revision bound in S-18 differs from the baseline that stayed active in S-17 and S-23.
+```console
+$ bashy -c 'test "$1" != "$2"' _ "{KEY}" 03c495fdc3fa4ace92ec9f3602c1a6fa7685829d
 ```
 exit: 0

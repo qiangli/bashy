@@ -53,7 +53,7 @@ Everything below describes operating **this bashy reference build**. It is not a
 
 | 2027 positioning claim | Assertion evidence | Open coverage |
 |---|---|---|
-| Software shaping prepares isolated changes and lets the user inspect them before activation. | `wish-candidate`, `inspect-status` and `preview-candidate` (S-17 through S-23) cover import, patch, baseline isolation and the web preview URL. | Agent generation, rendered preview and native app previews. |
+| Software shaping prepares isolated changes and lets the user inspect them before activation. | `wish-candidate`, `inspect-status` and `preview-candidate` (S-17 through S-23, S-33) cover import, patch, baseline isolation and the web preview URL. | Agent generation, rendered preview and native app previews. |
 | A checked change is activated explicitly and can be reversed. | `verify-candidate` and `approve-activate` (S-21, S-24, S-25) cover the passing verdict and active revision. `history-versions` and `undo-restore` (S-26 through S-30) cover version listing, undo and restore by name. | App data across restore (KI-2). |
 | Owners decide which members can shape an app. | `member-scope` (S-09, S-10, S-31, S-32) covers scope-name validation, assigning a circle and reading the persisted grant. | Member authorization, site MCP and real-agent group shaping (KI-1, KI-3). |
 

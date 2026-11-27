@@ -105,7 +105,7 @@ sh ./judge.sh cert "$(pwd -P)/.shapeware/bin" "${CANDIDATE:-}"
 ```
 
 ### mutate
-Mutation-test the built launcher on the gate host. Budget 122 default CLI mutants times one 32-assertion contract run.
+Mutation-test the built launcher on the gate host. Budget 123 default CLI mutants times one 33-assertion contract run.
 Effects: read, write, exec
 Band: none
 
