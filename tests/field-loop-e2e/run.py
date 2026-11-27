@@ -63,7 +63,7 @@ def main():
 
         def run(*argv, check_rc=True, timeout=None):
             record("+ " + " ".join(str(a) for a in argv))
-            proc = subprocess.run([str(a) for a in argv],
+            proc = subprocess.run([str(a) for a in argv], cwd=str(home),
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT, text=True,
                                   timeout=timeout or WAIT)
@@ -163,6 +163,18 @@ def main():
 
         auto_log = lambda: bashy("shape", "auto", "log").stdout  # noqa: E731
 
+        def todo_items():
+            out = bashy("todo", "list", "--all", "--json").stdout
+            items = []
+            for line in out.splitlines():
+                line = line.strip()
+                if not line.startswith("{"):
+                    continue
+                node = json.loads(line)
+                if node.get("t") == "node":
+                    items.append(node.get("attrs", {}))
+            return items
+
         # --- (a) injected 5xx -> incident repair -> activated -> restorable
         record("== (a) incident repair heals an injected 5xx ==")
         # The console's loopback caller is the host operator; incident
@@ -252,12 +264,11 @@ def main():
               "--set", "effects.2=exec", "--set", "effects.3=net")
         issues = HERE / "fixtures" / "issues.json"
         feed = bashy("shape-feed", APP, "--source", f"file:{issues}",
-                     "--owner", OWNER, "--apply", timeout=WAIT)
+                     "--owner", OWNER, "--agent", AGENT, "--apply",
+                     timeout=WAIT)
         check("filed" in feed.stdout or "applied" in feed.stdout,
               "shape-feed --apply filed the owner issue")
-        todos = bashy_json("todo", "list", "--all")
-        items = (todos.get("result", {}).get("items", todos)
-                 if isinstance(todos, dict) else todos)
+        items = todo_items()
         feed_todos = [t for t in items
                       if t.get("origin") == "feed"]
         check(len(feed_todos) == 1,
@@ -283,18 +294,16 @@ def main():
                            "--every", "24h", "--",
                            str(binary), "shape-feed", APP,
                            "--source", f"file:{issues}",
-                           "--owner", OWNER, "--apply")
+                           "--owner", OWNER, "--agent", AGENT, "--apply")
         job_id = str(sched.get("id") or sched.get("result", {}).get("id", ""))
         check(bool(job_id), f"schedule job added ({job_id})")
-        before = len(bashy_json("todo", "list", "--all")
-                     .get("result", {}).get("items", []))
+        before = len(todo_items())
         bashy("schedule", "run", job_id, timeout=WAIT)
         bashy("shape", "auto", "off")
         check("off" in bashy("shape", "auto", "status").stdout,
               "unattended shaping switched off")
         bashy("schedule", "run", job_id, timeout=WAIT, check_rc=False)
-        after_items = bashy_json("todo", "list", "--all") \
-            .get("result", {}).get("items", [])
+        after_items = todo_items()
         check(len(after_items) == before,
               "second scheduled run filed nothing after auto off")
         check("refusal" in auto_log(),
