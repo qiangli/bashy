@@ -57,6 +57,13 @@ func freePort(t *testing.T) int {
 // robots.txt answers. It returns the origin and the request-log path.
 func startFixture(t *testing.T) (origin, logPath string) {
 	t.Helper()
+	return startFixtureIn(t, t.TempDir())
+}
+
+// startFixtureIn is startFixture with the server's TMPDIR set to tmp, where
+// serve writes its generated server script.
+func startFixtureIn(t *testing.T, tmp string) (origin, logPath string) {
+	t.Helper()
 	bin := bashyBin(t)
 	port := freePort(t)
 	logPath = filepath.Join(t.TempDir(), "requests.log")
@@ -64,6 +71,7 @@ func startFixture(t *testing.T) (origin, logPath string) {
 	cmd := exec.CommandContext(ctx, bin, "--bashsharp", scriptPath(t),
 		"serve", "--log", logPath, "--port", fmt.Sprint(port))
 	cmd.Stdout, cmd.Stderr = nil, nil
+	cmd.Env = append(os.Environ(), "TMPDIR="+tmp)
 	// `serve` ends in `exec python3 …`. When the interpreter cannot replace
 	// its image it runs the server as a CHILD, and the context's kill reaches
 	// only bashy: the server is orphaned and keeps serving after the test
@@ -261,4 +269,18 @@ func TestFixtureServerStopsWithTest(t *testing.T) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	t.Fatalf("fixture server at %s still answers after its test ended", origin)
+}
+
+// TestServeRemovesItsScript pins that serve leaves no generated
+// discover-serve.*.py behind in TMPDIR once the server is up.
+func TestServeRemovesItsScript(t *testing.T) {
+	tmp := t.TempDir()
+	startFixtureIn(t, tmp)
+	left, err := filepath.Glob(filepath.Join(tmp, "discover-serve.*"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(left) != 0 {
+		t.Fatalf("serve left its server script behind: %v", left)
+	}
 }
