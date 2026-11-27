@@ -3,12 +3,15 @@ id: e104bacba5ea
 kind: task
 title: L1 lift bashy's shaping surface into shapeware/shape/
 seq: 3328
-status: todo
+status: done
 priority: p1
 created: 2026-11-27T16:53:33.234778Z
+assignee: muse-wonder
 sprint: 737
 sprint_id: c5dc4786-3303-5f7b-8f04-1207027a550f
 sprint_title: 'Lift bashy, outpost and cloudbox into shapeware (first surfaces, beacon: 2027 positioning)'
+closed: 2026-11-27T17:19:54.452166Z
+closed_by: claude-opus5.5
 ---
 
 Lift bashy's shaping surface. Surface: bashy shape (wish, verify, preview, approve, undo, restore, history, scope, status) and the site MCP shaping tools, as they behave on one host. Folder: shapeware/shape/ (bashy already carries shapeware/index.bsh). Reference runs to reuse: tests/group-shaping-e2e and tests/field-loop-e2e (fakes, gate host).
