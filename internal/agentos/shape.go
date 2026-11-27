@@ -17,7 +17,9 @@ import (
 type shapeCLIRequest struct {
 	BaseRevision, Patch string
 	// Caller and Owner are set only by authenticated in-process surfaces.
-	Caller                                                                       *shape.Caller
+	Caller *shape.Caller
+	// Source is the wish's trigger (shape wish --source KIND:REF, local only).
+	Source                                                                       shape.Source
 	Owner                                                                        string
 	PreviewArgs                                                                  []string
 	IncidentKind, IncidentPath                                                   string
@@ -71,7 +73,7 @@ func bashyShapeCmd() *cobra.Command {
 		{"submit", "submit APP REV", "Submit an approved version through existing review gates", 2, 2},
 	} {
 		spec := spec
-		var from, story, todo, page, element, incidentKind, incidentPath, incidentID string
+		var from, story, todo, page, element, source, incidentKind, incidentPath, incidentID string
 		var reproduction, expected, evidence string
 		var to, contract []string
 		var all, preview, repair bool
@@ -84,6 +86,7 @@ func bashyShapeCmd() *cobra.Command {
 			sub.Flags().StringVar(&from, "from", "", "import a hand-made workspace into an isolated candidate")
 			sub.Flags().StringVar(&story, "story", "", "link an existing story")
 			sub.Flags().StringVar(&todo, "todo", "", "link an existing todo")
+			sub.Flags().StringVar(&source, "source", "", "what triggered the wish, as KIND:REF (human, incident, feed, schedule); feed and schedule obey `shape auto` (local only)")
 			sub.Flags().StringVar(&page, "page", "", "request's app page context")
 			sub.Flags().StringVar(&element, "element", "", "request's element context")
 			sub.Flags().StringVar(&reproduction, "reproduction", "", "defect report: how to reproduce")
@@ -139,6 +142,19 @@ func bashyShapeCmd() *cobra.Command {
 			}
 			if r.Verb == "wish" && r.From == "" && strings.TrimSpace(r.Request) == "" {
 				return errors.New("shape: wish needs REQUEST or --from WORKSPACE")
+			}
+			if source != "" {
+				if o.Remote != "" {
+					return errors.New("shape: --source is local only; a remote wish takes its source from the console")
+				}
+				kind, ref, _ := strings.Cut(source, ":")
+				r.Source = shape.Source{Kind: strings.TrimSpace(kind), Ref: strings.TrimSpace(ref)}
+				if r.Source.Kind == "" {
+					return errors.New("shape: --source wants KIND:REF")
+				}
+				if err := r.Source.Validate(); err != nil {
+					return err
+				}
 			}
 			if o.Remote != "" {
 				if o.User != "" || o.Actor != "" {

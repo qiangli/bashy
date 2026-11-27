@@ -5,12 +5,13 @@
 #   shape-feed APP --source gh:OWNER/REPO#LABEL [--owner LOGIN] [--apply]
 #   shape-feed APP --source file:PATH[#LABEL] [--owner LOGIN] [--apply]
 #
-# Preview by default; pass --apply to file new todos and call `bashy shape wish APP --todo ID`.
+# Preview by default; pass --apply to file new todos, call
+# `bashy shape wish APP --todo ID --source feed:ID` and activate a verified candidate.
 
 ~~~skill as guide
 ---
 name: shape-feed
-description: Read open issues from a designated source (GitHub label or JSON file) into source-keyed todos and enter bashy shape wish. Preview by default; --apply writes todos and calls shape wish. Issue text is treated strictly as data and never executed.
+description: Read open issues from a designated source (GitHub label or JSON file) into source-keyed todos and enter bashy shape wish. Preview by default; --apply writes todos, calls shape wish with the feed as its source and activates a verified candidate; it does nothing while bashy shape auto is off. Issue text is treated strictly as data and never executed.
 metadata:
   requires: "has=bashy"
 ---
@@ -20,7 +21,10 @@ Reads open issues from one designated source, keeps only items authored by
 `--owner` (defaulting to the repository owner for `gh:`), derives a stable todo
 ID from the source and issue number (`meet adopt` sha256 pattern so re-reads
 never duplicate), files each new item with `--origin feed` and `--reporter`,
-and enters `bashy shape wish APP --todo ID -- REQUEST`.
+and enters `bashy shape wish APP --todo ID --source feed:ID -- REQUEST`. A
+candidate that comes back verified is activated with `bashy shape approve`
+(which verifies again and keeps the existing rollback; `bashy shape undo APP`
+reverts it).
 
 ## Usage
 
@@ -33,8 +37,14 @@ shape-feed APP --source file:PATH[#LABEL] [--owner LOGIN] [--apply]
   writes nothing.
 - **`--apply`**: files one todo per new matching issue via
   `bashy todo add --no-sprint --id ID --origin feed --reporter AUTHOR --note -`
-  and runs `bashy shape wish APP --todo ID -- REQUEST`. A second `--apply`
-  skips already-filed IDs and files nothing new.
+  and runs `bashy shape wish APP --todo ID --source feed:ID --json -- REQUEST`,
+  then `bashy shape approve APP CANDIDATE` when the candidate is verified. A
+  second `--apply` skips already-filed IDs and files nothing new.
+- **Off switch**: when `bashy shape auto status` says off, `--apply` stops
+  before filing anything; the decisions are in `bashy shape auto log`.
+- **Failure**: when the wish or the approval fails (or the candidate does not
+  verify), the todo is set to status `known` with a workaround text naming
+  what was tried and the error, and the next item is processed.
 - **GitHub source (`gh:OWNER/REPO#LABEL`)**: reads via one fixed read call
   (`bashy gh issue list --repo OWNER/REPO --state open --label LABEL --json number,title,body,author,labels`)
   and defaults `--owner` to `OWNER`.
@@ -52,8 +62,10 @@ shape-feed APP --source file:PATH[#LABEL] [--owner LOGIN] [--apply]
 
 `go test ./examples/shape-feed/` drives `shape-feed` with `--source file:...`
 against a real `bashy todo` store: preview files nothing, `--apply` files one
-todo per owner issue and skips others, a second `--apply` files nothing, and
-shell metacharacters in issue text are never executed.
+todo per owner issue and skips others, a second `--apply` files nothing, shell
+metacharacters in issue text are never executed, the off switch files nothing,
+a verified candidate is approved and a failed wish or approval leaves the todo
+known.
 ~~~
 
 set -euo pipefail
@@ -62,7 +74,7 @@ shopt -u patsub_replacement 2>/dev/null || true
 PROG=shape-feed
 
 usage() {
-    sed -n '2,9p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+    sed -n '2,10p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
 }
 
 fail() {
@@ -243,9 +255,41 @@ has_label() {
     return 1
 }
 
+# The host off switch for unattended shaping stops the feed before it files
+# anything; `shape wish --source feed:...` would refuse each item anyway.
+if [ "$apply" = 1 ]; then
+    auto_json=$("$bin" shape auto status --json) || fail "shape auto status failed" 1
+    auto_state=$(printf '%s\n' "$auto_json" | jq -r '.auto // empty') || fail "shape auto status returned no JSON" 1
+    if [ "$auto_state" = "off" ]; then
+        echo "$PROG: unattended shaping is off on this host (bashy shape auto on); nothing filed"
+        exit 0
+    fi
+fi
+
+err_file=$(mktemp "${TMPDIR:-/tmp}/shape-feed.XXXXXX") || fail "mktemp failed" 1
+trap 'rm -f -- "$err_file"' EXIT
+
+# One bounded line of the last command's stderr, for a todo workaround.
+last_error() {
+    local text
+    text=$(tr '\n' ' ' < "$err_file")
+    text=${text:0:400}
+    printf '%s' "${text:-no error text}"
+}
+
+# The todo stays as the owner's record of an item the feed could not land.
+mark_known() {
+    local id=$1 tried=$2 why=$3
+    echo "$PROG: known $id -- $tried: $why" >&2
+    "$bin" todo status "$id" known --workaround "shape-feed tried: $tried; error: $why" >/dev/null \
+        || echo "$PROG: could not set todo $id to known" >&2
+}
+
 matched=0
 would_file=0
 filed=0
+activated=0
+known=0
 skipped_owner=0
 skipped_existing=0
 
@@ -303,13 +347,46 @@ while IFS= read -r item; do
     printf '%s' "$body" | "$bin" "${todo_args[@]}" >/dev/null || fail "todo add failed for #$number ($todo_id)" 1
     existing_ids="$existing_ids"$'\n'"$todo_id"
 
-    "$bin" shape wish "$app" --todo "$todo_id" -- "$request" >/dev/null || fail "shape wish failed for #$number ($todo_id)" 1
-    echo "$PROG: filed $todo_id #$number [$author] -- $title"
     filed=$((filed + 1))
+
+    wish_cmd="bashy shape wish $app --todo $todo_id --source feed:$todo_id"
+    if ! wish_json=$("$bin" shape wish "$app" --todo "$todo_id" --source "feed:$todo_id" --json -- "$request" 2>"$err_file"); then
+        mark_known "$todo_id" "$wish_cmd" "$(last_error)"
+        known=$((known + 1))
+        continue
+    fi
+    candidate=$(printf '%s\n' "$wish_json" | jq -r '.id // empty' 2>/dev/null) || candidate=""
+    status=$(printf '%s\n' "$wish_json" | jq -r '.status // empty' 2>/dev/null) || status=""
+    case "$status" in
+        verified)
+            case "$candidate" in
+                ''|*[!0-9A-Za-z_-]*)
+                    mark_known "$todo_id" "$wish_cmd" "no candidate id in the result"
+                    known=$((known + 1))
+                    continue
+                    ;;
+            esac
+            if "$bin" shape approve "$app" "$candidate" --json >/dev/null 2>"$err_file"; then
+                echo "$PROG: activated $todo_id #$number candidate $candidate [$author] -- $title"
+                activated=$((activated + 1))
+            else
+                mark_known "$todo_id" "bashy shape approve $app $candidate" "$(last_error)"
+                known=$((known + 1))
+            fi
+            ;;
+        requested|reported)
+            echo "$PROG: filed $todo_id #$number candidate $candidate ($status, awaiting the owner) [$author] -- $title"
+            ;;
+        *)
+            detail=$(printf '%s\n' "$wish_json" | jq -r '.verdict.detail // .error // empty' 2>/dev/null) || detail=""
+            mark_known "$todo_id" "$wish_cmd" "candidate ${candidate:-none} stopped at ${status:-no status}${detail:+: ${detail:0:400}}"
+            known=$((known + 1))
+            ;;
+    esac
 done < <(printf '%s\n' "$issues_json" | jq -c '.[]')
 
 if [ "$apply" = 0 ]; then
     echo "$PROG: preview app=$app matched=$matched would_file=$would_file skipped_existing=$skipped_existing skipped_owner=$skipped_owner"
 else
-    echo "$PROG: applied app=$app matched=$matched filed=$filed skipped_existing=$skipped_existing skipped_owner=$skipped_owner"
+    echo "$PROG: applied app=$app matched=$matched filed=$filed activated=$activated known=$known skipped_existing=$skipped_existing skipped_owner=$skipped_owner"
 fi

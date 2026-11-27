@@ -124,16 +124,41 @@ func (e *buildError) Error() string { return e.err.Error() + "\n" + e.out }
 func fileExists(path string) bool { _, err := os.Stat(path); return err == nil }
 
 // wrapperScript forwards `todo` calls to the real built bashy binary and
-// intercepts `shape wish` and `gh issue list` so tests inspect real todos on
-// disk while logging exact shape/gh invocations.
+// intercepts `shape` and `gh issue list` so tests inspect real todos on disk
+// while logging exact shape wish/approve and gh invocations. FAKE_AUTO,
+// FAKE_WISH_STATUS, FAKE_WISH_FAIL and FAKE_APPROVE_FAIL script the shaping
+// service's answers.
 const wrapperScript = `#!/bin/sh
 case "$1" in
   todo)
     exec "$REAL_BASHY" "$@"
     ;;
   shape)
-    printf '%s\n' "$*" >> "$WISH_LOG"
-    exit 0
+    case "$2" in
+      auto)
+        printf '{"auto":"%s"}\n' "${FAKE_AUTO:-on}"
+        ;;
+      wish)
+        printf '%s\n' "$*" >> "$WISH_LOG"
+        if [ -n "${FAKE_WISH_FAIL:-}" ]; then
+          echo "shape: $FAKE_WISH_FAIL" >&2
+          exit 1
+        fi
+        printf '{"id":"cand1","status":"%s"}\n' "${FAKE_WISH_STATUS:-verified}"
+        ;;
+      approve)
+        printf '%s\n' "$*" >> "$WISH_LOG"
+        if [ -n "${FAKE_APPROVE_FAIL:-}" ]; then
+          echo "shape: $FAKE_APPROVE_FAIL" >&2
+          exit 1
+        fi
+        echo '{"id":"cand1","status":"approved"}'
+        ;;
+      *)
+        echo "unexpected shape call: $*" >&2
+        exit 1
+        ;;
+    esac
     ;;
   gh)
     printf '%s\n' "$*" >> "$GH_LOG"
@@ -156,6 +181,7 @@ type fixture struct {
 	ghLog     string
 	ghFixture string
 	workDir   string
+	env       []string // extra environment for the script (FAKE_* knobs)
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -199,6 +225,7 @@ func (f *fixture) run(args ...string) (string, int) {
 		"GH_LOG="+f.ghLog,
 		"GH_FIXTURE="+f.ghFixture,
 	)
+	cmd.Env = append(cmd.Env, f.env...)
 	if adapterDir != "" {
 		cmd.Env = append(cmd.Env, "BASHY_ADAPTER_CACHE="+adapterDir)
 	}
@@ -384,8 +411,14 @@ func TestShapeFeedPreviewApplyAndReread(t *testing.T) {
 		t.Fatalf("missing wish log: %v", err)
 	}
 	wishes := string(wishBytes)
-	if !strings.Contains(wishes, "shape wish form --todo "+first.ID+" --") || !strings.Contains(wishes, "shape wish form --todo "+second.ID+" --") {
-		t.Fatalf("shape wish log missing expected --todo links:\n%s", wishes)
+	for _, id := range []string{first.ID, second.ID} {
+		if !strings.Contains(wishes, "shape wish form --todo "+id+" --source feed:"+id+" --json --") {
+			t.Fatalf("shape wish log missing the --todo/--source call for %s:\n%s", id, wishes)
+		}
+	}
+	// A verified candidate is activated: approve follows each wish.
+	if got := strings.Count(wishes, "shape approve form cand1"); got != 2 || !strings.Contains(out, "activated=2") || !strings.Contains(out, "known=0") {
+		t.Fatalf("approve calls = %d, want 2:\n%s\n%s", got, wishes, out)
 	}
 
 	// 3. Second --apply: re-read files nothing new and triggers no second wish.
@@ -448,5 +481,89 @@ func TestShapeFeedSkillFence(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("--skill missing %q", want)
 		}
+	}
+}
+
+const twoIssues = `[
+  {"number": 1, "title": "First", "body": "one", "author": {"login": "alice"}},
+  {"number": 2, "title": "Second", "body": "two", "author": {"login": "alice"}}
+]`
+
+func (f *fixture) writeIssues(body string) string {
+	f.t.Helper()
+	p := filepath.Join(f.workDir, "issues.json")
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		f.t.Fatal(err)
+	}
+	return p
+}
+
+// todoShow returns `bashy todo show ID` for the fixture's store.
+func (f *fixture) todoShow(id string) string {
+	f.t.Helper()
+	cmd := exec.Command(f.realBin, "todo", "show", id)
+	cmd.Dir = f.workDir
+	cmd.Env = append(os.Environ(), "BASHY_TODO_DIR="+f.todoDir, "BASHY_HINTS=off", "BASHY_TELEMETRY_QUIET=1")
+	if adapterDir != "" {
+		cmd.Env = append(cmd.Env, "BASHY_ADAPTER_CACHE="+adapterDir)
+	}
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		f.t.Fatalf("todo show %s: %v\n%s", id, err, out)
+	}
+	return string(out)
+}
+
+func TestShapeFeedOffSwitchFilesNothing(t *testing.T) {
+	f := newFixture(t)
+	f.env = []string{"FAKE_AUTO=off"}
+	out, code := f.run("form", "--source", "file:"+f.writeIssues(twoIssues), "--apply")
+	if code != 0 || !strings.Contains(out, "unattended shaping is off") {
+		t.Fatalf("exit %d:\n%s", code, out)
+	}
+	if got := f.listTodos(); len(got) != 0 {
+		t.Fatalf("off switch filed %d todos", len(got))
+	}
+	if fileExists(f.wishLog) {
+		t.Fatal("off switch still called shape wish")
+	}
+}
+
+// A failed wish or approval leaves the todo known, naming what was tried and
+// the error, and the feed goes on to the next item.
+func TestShapeFeedFailureLeavesTodoKnown(t *testing.T) {
+	for _, tc := range []struct {
+		name, env, tried, why string
+		approves              int
+	}{
+		{"wish fails", "FAKE_WISH_FAIL=agent exploded", "bashy shape wish form --todo ", "agent exploded", 0},
+		{"approve fails", "FAKE_APPROVE_FAIL=verification failed", "bashy shape approve form cand1", "verification failed", 2},
+		{"not verified", "FAKE_WISH_STATUS=ready", "bashy shape wish form --todo ", "stopped at ready", 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			f.env = []string{tc.env}
+			out, code := f.run("form", "--source", "file:"+f.writeIssues(twoIssues), "--apply")
+			if code != 0 || !strings.Contains(out, "filed=2") || !strings.Contains(out, "activated=0") || !strings.Contains(out, "known=2") {
+				t.Fatalf("exit %d:\n%s", code, out)
+			}
+			wishes, _ := os.ReadFile(f.wishLog)
+			if got := strings.Count(string(wishes), "shape wish form"); got != 2 {
+				t.Fatalf("wish calls = %d, want 2 (the feed must continue):\n%s", got, wishes)
+			}
+			if got := strings.Count(string(wishes), "shape approve form"); got != tc.approves {
+				t.Fatalf("approve calls = %d, want %d:\n%s", got, tc.approves, wishes)
+			}
+			todos := f.listTodos()
+			if len(todos) != 2 {
+				t.Fatalf("got %d todos, want 2", len(todos))
+			}
+			for _, it := range todos {
+				shown := f.todoShow(it.ID)
+				if !strings.Contains(shown, "known") || !strings.Contains(shown, tc.tried) || !strings.Contains(shown, tc.why) {
+					t.Fatalf("todo %s is not known with the tried command and error:\n%s", it.ID, shown)
+				}
+			}
+		})
 	}
 }

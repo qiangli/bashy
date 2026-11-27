@@ -182,3 +182,39 @@ func TestShapeRemoteAuthenticationBodyIsNotRendered(t *testing.T) {
 		t.Fatalf("unsafe auth failure handling: result=%v err=%v", result, err)
 	}
 }
+
+func TestShapeWishSourceFlag(t *testing.T) {
+	oldExec, oldActor := shapeCLIExecute, shapeAuthoredActor
+	defer func() { shapeCLIExecute = oldExec; shapeAuthoredActor = oldActor }()
+	shapeAuthoredActor = func(string) (string, error) { return "actor", nil }
+	var got *shapeCLIRequest
+	shapeCLIExecute = func(_ context.Context, r shapeCLIRequest) (any, error) {
+		got = &r
+		return map[string]string{"id": "candidate"}, nil
+	}
+	run := func(args ...string) error {
+		got = nil
+		cmd := bashyShapeCmd()
+		cmd.SetOut(&bytes.Buffer{})
+		cmd.SetArgs(args)
+		return cmd.Execute()
+	}
+	if err := run("wish", "form", "fix it", "--user", "person", "--todo", "abc", "--source", "feed:abc"); err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.Source.Kind != "feed" || got.Source.Ref != "abc" {
+		t.Fatalf("mapped request=%+v", got)
+	}
+	if err := run("wish", "form", "fix it", "--user", "person"); err != nil || got.Source.Kind != "" {
+		t.Fatalf("no --source: %v %+v", err, got)
+	}
+	for _, args := range [][]string{
+		{"wish", "form", "fix it", "--user", "person", "--source", "robot:1"},
+		{"wish", "form", "fix it", "--user", "person", "--source", ":1"},
+		{"wish", "form", "fix it", "--remote", "https://example.invalid", "--source", "feed:1"},
+	} {
+		if err := run(args...); err == nil || got != nil {
+			t.Fatalf("accepted %v (err %v)", args, err)
+		}
+	}
+}

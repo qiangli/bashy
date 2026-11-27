@@ -128,7 +128,7 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 			return svc.PreviewProgram(ctx, caller, r.ID)
 		}
 	}
-	wish := shape.Wish{Request: r.Request, Page: r.Page, Element: r.Element, Story: r.Story, Todo: r.Todo, Reproduction: r.Reproduction, Expected: r.Expected, Evidence: r.Evidence}
+	wish := shape.Wish{Source: r.Source, Request: r.Request, Page: r.Page, Element: r.Element, Story: r.Story, Todo: r.Todo, Reproduction: r.Reproduction, Expected: r.Expected, Evidence: r.Evidence}
 	if r.Verb == "wish" {
 		root, err := shapeTrackingRoot(r.Actor)
 		if err != nil {
