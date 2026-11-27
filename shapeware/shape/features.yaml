@@ -1,81 +1,73 @@
-# shape feature list (shapeware v0.1). Ids are stable across versions.
-# effort: relative size in Fibonacci points (1, 2, 3, 5, 8, 13 = split it).
+# shape feature list (shapeware v0.1). IDs are stable across versions.
+# effort is relative size in Fibonacci points (1, 2, 3, 5, 8, 13 = split it).
 - id: wish-candidate
   effort: 5
   status: verified
-  intent: Generate an isolated candidate from a plain-text wish (examples/wish.txt), or import a hand-made change with --from, without editing the active source.
+  intent: Import a hand-edited workspace as a ready candidate while the baseline stays active.
   acceptance:
-    - shape wish no-such-app-xyz "Change the greeting" --user shape-tester => ERROR 1 shape: app "no-such-app-xyz" is not registered
+    - S-18 binds the imported candidate ID and revision.
+    - S-20 shows the workspace edit and S-23 confirms the baseline is still active.
 - id: verify-candidate
   effort: 3
   status: verified
-  intent: Run the trusted verifier on a candidate; failure is nonzero with an inspectable verdict. Verify does not call conform (KI-4).
+  intent: Run the trusted verifier on the imported static app candidate.
   acceptance:
-    - shape verify no-such-app-xyz cand1 --user shape-tester => ERROR 1 shape: app "no-such-app-xyz" is not registered
+    - S-21 reports the candidate revision as verified with a passing verdict.
 - id: preview-candidate
   effort: 3
   status: verified
-  intent: Preview a candidate in isolation (console URL for web, verified executable for CLI kind, side-port URL for service kind).
+  intent: Return a candidate-specific web preview URL.
   acceptance:
-    - shape preview no-such-app-xyz cand1 --user shape-tester => ERROR 1 shape: app "no-such-app-xyz" is not registered
+    - S-22 identifies the verified candidate in the URL and payload.
 - id: approve-activate
   effort: 3
   status: verified
   critical: true
-  intent: Owner-only activation that re-verifies and uses the sealed activation gate; approve and undo remain owner-only on CLI and site MCP.
+  intent: Approve and activate the verified candidate for the selected principal.
   acceptance:
-    - shape approve no-such-app-xyz cand1 --user shape-tester => ERROR 1 shape: app "no-such-app-xyz" is not registered
+    - S-24 reports approval and a passing verdict for the candidate revision.
+    - S-25 confirms that revision is active and the candidate is no longer pending.
 - id: inspect-status
   effort: 2
   status: verified
-  intent: Inspect the active version and candidates (status), one candidate (show) and its patch (diff).
+  intent: Inspect the active revision and pending candidates, one candidate, and its patch.
   acceptance:
-    - shape status no-such-app-xyz --user shape-tester => ERROR 1 shape: app "no-such-app-xyz" is not registered
-    - shape show no-such-app-xyz cand1 --user shape-tester => ERROR 1 shape: app "no-such-app-xyz" is not registered
-    - shape diff no-such-app-xyz cand1 --user shape-tester => ERROR 1 shape: app "no-such-app-xyz" is not registered
+    - S-17 establishes the baseline and S-23 shows the verified pending candidate.
+    - S-19 shows the same candidate and S-20 shows its greeting change.
 - id: history-versions
   effort: 2
   status: verified
-  intent: List the selected principal's versions of an app.
+  intent: List the selected principal's versions of the fixture app.
   acceptance:
-    - shape history no-such-app-xyz --user shape-tester => ERROR 1
+    - S-26 lists the activated revision and its version name for shape-tester.
 - id: undo-restore
   effort: 3
   status: verified
-  intent: Undo to the previous version, or restore a named version, through the trusted gate.
+  intent: Undo to the previous revision and restore a named version.
   acceptance:
-    - shape undo no-such-app-xyz --user shape-tester => ERROR 1
-    - shape restore no-such-app-xyz v1 --user shape-tester => ERROR 1
+    - S-27 and S-28 confirm undo returns to the baseline and persists it as active.
+    - S-29 and S-30 restore the approved version by name and confirm it stays active.
 - id: member-scope
   effort: 3
   status: verified
   critical: true
-  intent: Manage owner-defined member audiences (scope ls, set, rm in examples/scope-grant.txt); only edit and shape are valid scope names and shape includes edit.
+  intent: Set a shape grant for a circle as the local owner and read it back.
   acceptance:
-    - shape scope ls --app no-such-app-xyz --json --user shape-tester => ERROR 1 shape: app "no-such-app-xyz" is not registered
-    - shape scope set --app no-such-app-xyz bogus --circle c1 --json --user shape-tester => ERROR 1 shape scope: unknown scope "bogus" (want edit or shape)
-    - shape scope set --app no-such-app-xyz edit --circle c1 --json --user shape-tester => ERROR 1 shape: app "no-such-app-xyz" is not registered
+    - S-31 sets the shape grant for fixture-circle and S-32 reads it back.
+    - S-09 rejects an unknown scope name and S-10 accepts edit through scope-name validation.
 - id: site-mcp-shaping
   effort: 5
-  status: verified
-  intent: Site MCP tools shape_wish, shape_pull, shape_push, shape_verify, shape_preview, shape_approve and shape_undo for verified members; other members' wishes queue for the owner without running an agent.
-  acceptance:
-    - shape wish no-such-app-xyz "Change the greeting" --user shape-tester => ERROR 1 shape: app "no-such-app-xyz" is not registered
+  status: tbd
+  intent: Assert the site MCP shaping tools, scoped member access and queuing of unscoped wishes for the owner.
 - id: group-shaping
   effort: 8
   status: tbd
-  intent: Two members shape one app through the mounted site MCP with owner approval, stale-base refusal and pull/push replay refusal, proven with a real (non-stub) shaping agent rather than only the sandbox stub (KI-1).
-  acceptance:
-    - shape status no-such-app-xyz --user shape-tester => ERROR 1 shape: app "no-such-app-xyz" is not registered
+  intent: Two members shape one app through the mounted site MCP with owner approval, stale-base refusal and pull/push replay refusal, using a real shaping agent (KI-1).
 - id: restore-data-asserted
   effort: 3
   status: tbd
   intent: Assert that app data written before a change is intact after approve and after restore of a named version (KI-2).
-  acceptance:
-    - shape restore no-such-app-xyz v1 --user shape-tester => ERROR 1
 - id: mcp-restore-named
   effort: 2
   status: tbd
   intent: A site MCP tool that restores a named version, matching the CLI restore verb (KI-3).
-  acceptance:
-    - shape restore no-such-app-xyz v1 --user shape-tester => ERROR 1

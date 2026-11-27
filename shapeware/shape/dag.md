@@ -1,6 +1,6 @@
 ---
 name: shape
-description: Lifecycle of the shape lifted surface (source, build, test, install, run). Use when asked to fetch, build, test, install or run the shape surface.
+description: Lifecycle and gate targets for the shape surface. Use to resolve, build, test, install, run or certify the shape surface.
 type: dag
 default: test
 ---
@@ -42,20 +42,18 @@ here=$(pwd -P)
 impl=${IMPL:-$(cat .shapeware/impl)}
 mkdir -p .shapeware/bin
 (cd "$impl" && GOWORK=off CGO_ENABLED=0 go build -o "$here/.shapeware/bin/bashy" ./cmd/bashy)
-printf '#!/bin/sh\nexec "%s" shape "$@"\n' "$here/.shapeware/bin/bashy" > .shapeware/bin/shape
+printf '%s\n' '#!/bin/sh' 'exec "$(dirname "$0")/bashy" shape "$@"' > .shapeware/bin/shape
 chmod +x .shapeware/bin/shape
 .shapeware/bin/bashy --version
 ```
 
 ### test
-Certify the contract against the built `shape` launcher (3 runs, none noisy) on the gate host with a fresh HOME per run.
+Run the contract once against the built shape launcher with a fresh HOME on the gate host.
 Effects: read, write, exec
 Band: none
 
 ```bash
-set -eu
-impl=${IMPL:-$(cat .shapeware/impl)}
-"$(pwd -P)/.shapeware/bin/bashy" conform cert --contract CONTRACT.md --reference-cmd "$(pwd -P)/.shapeware/bin/shape" --candidate-cmd "$(pwd -P)/.shapeware/bin/shape" --runs 3 --dir "$(pwd -P)" --fresh-home
+sh ./judge.sh test "$(pwd -P)/.shapeware/bin"
 ```
 
 ### install
@@ -80,4 +78,55 @@ set -eu
 impl=${IMPL:-$(cat .shapeware/impl)}
 : "${ARGS:?set ARGS, for example ARGS='status hello-world --json'}"
 printf '%s' "$ARGS" | xargs "$(pwd -P)/.shapeware/bin/bashy" shape
+```
+
+### check
+Lint this folder and, in the implementation repository, run the shapeware index check. Runs anywhere.
+Effects: read
+Band: none
+
+```bash
+set -eu
+runner=${BASHY:-bashy}
+"$runner" conform spec check .
+top=$(git rev-parse --show-toplevel 2>/dev/null || true)
+if [ -n "$top" ] && [ -f "$top/shapeware/index.bsh" ]; then
+    "$runner" --bashsharp "$top/shapeware/index.bsh" check
+fi
+```
+
+### cert
+Certify the built reference on the gate host in three runs with a fresh HOME per run. Set CANDIDATE to a command that implements the shape CLI to grade it against this reference.
+Effects: read, write, exec
+Band: none
+
+```bash
+sh ./judge.sh cert "$(pwd -P)/.shapeware/bin" "${CANDIDATE:-}"
+```
+
+### mutate
+Mutation-test the built launcher on the gate host. Budget 122 default CLI mutants times one 32-assertion contract run.
+Effects: read, write, exec
+Band: none
+
+```bash
+sh ./judge.sh mutate "$(pwd -P)/.shapeware/bin"
+```
+
+### alone
+Copy the standalone spec outside the checkout and run its source, build and test steps on the gate host. Fresh-agent review is a separate review step.
+Effects: read, write, exec, net, priv
+Band: none
+
+```bash
+set -eu
+scratch=$(mktemp -d /tmp/shapeware-shape-alone.XXXXXXXX)
+trap 'rm -rf "$scratch"' EXIT
+mkdir "$scratch/shape"
+cp -R SKILL.md CONTRACT.md features.yaml dag.md judge.sh examples "$scratch/shape/"
+cd "$scratch/shape"
+unset IMPL
+bashy dag -f dag.md source
+bashy dag -f dag.md build
+bashy dag -f dag.md test
 ```

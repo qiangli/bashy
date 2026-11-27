@@ -1,0 +1,2 @@
+set -eu
+grep -q '^<h1 id="greeting">.*</h1>$' public/index.html

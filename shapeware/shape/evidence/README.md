@@ -1,4 +1,10 @@
-# Evidence (2026-11-27)
+# Shape gate evidence
+
+The registered-app contract adds S-16 through S-32. The `cert` and `mutate` targets write its reports to `shape-cert.json` and `shape-mutate.log`. Run `alone` for its standalone lifecycle evidence.
+
+## Earlier refusal-only contract (2026-11-27)
+
+The archived files below cover S-01 through S-15.
 
 Gate venue: the Windows gate host's WSL gate lane 1 (Linux 6.18 WSL2, Ubuntu-24.04, x86_64, Go 1.27.4), with `gate-linux` also claimed. The folder was copied to `/root/shape-alone/shape` on that host, outside any checkout, and driven only by its own lifecycle: `bashy dag -f dag.md source` (cloned the implementation at the certified commit), `build` (built bashy from that source and wrote the `shape` launcher) and `test`. Assertions ran with `--fresh-home` and an explicit `--user shape-tester`, so no registered app, real agent or live service was involved: sandbox-fake state only. The gate-host e2e reference runs this spec also reuses are the repository's `tests/group-shaping-e2e` and `tests/field-loop-e2e` (stub shaping agent, synthetic accounts, fake upstream).
 
