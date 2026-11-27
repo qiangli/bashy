@@ -217,11 +217,12 @@ def member_pull_push(active):
     candidate = shape(C, "push", push)
     cid, rev = candidate["id"], candidate["rev"]
     check(cid and rev and rev != base and candidate["base_rev"] == base and
-          candidate["principal"] == C and candidate["activation_principal"] == OWNER and
+          candidate["principal"] == C and "activation_principal" not in candidate and
           candidate["status"] == "verified",
-          "C's pushed patch produced a verified candidate on O's line")
+          "C's pushed patch produced a verified candidate; the reply carries no owner identity")
     status = owner_cli("status", APP)
     queued, = [item for item in status["candidates"] if item["id"] == cid]
+    check(queued.get("activation_principal") == OWNER, "C's pushed candidate activates on O's line")
     evidence = json.loads(Path(queued["verdict"]["evidence"]).read_text())
     print("push verifier evidence", json.dumps(evidence), flush=True)
     binding = evidence["binding"]
