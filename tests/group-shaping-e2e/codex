@@ -1,15 +1,21 @@
 #!/bin/sh
 # The Codex recipe probes login status, then runs one of two fixed edits.
 set -eu
+# Match the request between the brief's REQUEST markers only: the brief also
+# quotes earlier requests (the shaping ledger), which must not pick the edit.
+request=$(printf '%s\n' "$*" | sed -n '/^<<<REQUEST$/,/^REQUEST>>>$/p')
 case " $* " in
-  *" login status "*) echo "Logged in using ChatGPT" >&2 ;;
-  *" exec "*"Publish the support greeting"*)
+  *" login status "*) echo "Logged in using ChatGPT" >&2; exit 0 ;;
+esac
+case " $* " in *" exec "*) ;; *) echo "unexpected stub invocation: $*" >&2; exit 2 ;; esac
+case "$request" in
+  *"Publish the support greeting"*)
     sed -i -e 's/Original support greeting/Approved support greeting/' \
            -e '/"site_url":/s|",$|/published",|' site.json
     grep -q 'Approved support greeting' site.json
     echo "edit" >> "$HOME/stub-events"
     echo "Published the support greeting." ;;
-  *" exec "*"Draft the alternate greeting"*)
+  *"Draft the alternate greeting"*)
     sed -i 's/Original support greeting/Alternate support greeting/' site.json
     grep -q 'Alternate support greeting' site.json
     echo "alternate" >> "$HOME/stub-events"
