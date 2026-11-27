@@ -97,6 +97,11 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 	if r.Caller != nil {
 		caller = *r.Caller
 	}
+	if r.Verb == "ledger" {
+		// The host CLI is the operator's view; an authenticated in-process
+		// caller gets the view its identity allows.
+		return svc.Ledger(caller, r.Caller == nil, r.ID, r.MaxBytes)
+	}
 	if hostKind {
 		switch r.Verb {
 		case "status":

@@ -10,8 +10,11 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/qiangli/yoke/pkg/shape"
 )
 
 func executeShapeRemote(ctx context.Context, r shapeCLIRequest) (any, error) {
@@ -45,6 +48,10 @@ func executeShapeRemote(ctx context.Context, r shapeCLIRequest) (any, error) {
 		q := u.Query()
 		q.Set("page", r.Page)
 		u.RawQuery = q.Encode()
+	}
+	if r.Verb == "ledger" {
+		// The console applies the viewer filter for the session's identity.
+		u.RawQuery = url.Values{"base": {r.ID}, "max": {strconv.Itoa(r.MaxBytes)}}.Encode()
 	}
 	var payload io.Reader
 	if body != nil {
@@ -93,6 +100,13 @@ func executeShapeRemote(ctx context.Context, r shapeCLIRequest) (any, error) {
 	var result any
 	if err := json.Unmarshal(b, &result); err != nil {
 		return nil, fmt.Errorf("shape: remote returned invalid JSON")
+	}
+	if r.Verb == "ledger" {
+		var l shape.Ledger
+		if err := json.Unmarshal(b, &l); err != nil {
+			return nil, fmt.Errorf("shape: remote returned an invalid ledger")
+		}
+		return l, nil
 	}
 	if r.Verb == "diff" {
 		if patch, ok := result.(map[string]any); ok {
@@ -155,6 +169,8 @@ func shapeRemoteOperation(r shapeCLIRequest) (string, string, any, error) {
 		return "GET", "/suggest", nil, nil
 	case "history":
 		return "GET", "/history", nil, nil
+	case "ledger":
+		return "GET", "/ledger", nil, nil
 	case "undo":
 		return "POST", "/history/undo", map[string]any{}, nil
 	case "restore":

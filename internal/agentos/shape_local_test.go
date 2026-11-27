@@ -130,7 +130,7 @@ func TestShapeCommandSchemaIncludesLifecycle(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("shape missing from schema")
 	}
-	for _, verb := range []string{"status", "wish", "show", "diff", "verify", "preview", "approve", "reject", "suggest", "incident", "history", "undo", "restore", "release", "offer", "adopt"} {
+	for _, verb := range []string{"status", "wish", "show", "diff", "verify", "preview", "approve", "reject", "suggest", "incident", "history", "ledger", "undo", "restore", "release", "offer", "adopt"} {
 		child, _, err := cmd.Find([]string{verb})
 		if err != nil || child == cmd {
 			t.Errorf("%s missing", verb)

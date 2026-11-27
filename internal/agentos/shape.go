@@ -29,6 +29,8 @@ type shapeCLIRequest struct {
 	To                                                                           []string
 	All, Preview, Repair                                                         bool
 	Contract                                                                     []string
+	// MaxBytes bounds a ledger read (shape.Bound).
+	MaxBytes int
 }
 
 type shapeCLIOptions struct {
@@ -65,6 +67,7 @@ func bashyShapeCmd() *cobra.Command {
 		{"suggest", "suggest APP", "Suggest requests for the current app", 1, 1},
 		{"incident", "incident APP [MESSAGE]", "List incidents or report a problem", 1, 2},
 		{"history", "history APP", "List the selected principal's versions", 1, 1},
+		{"ledger", "ledger APP", "Show why the app was shaped: attempts grouped by problem", 1, 1},
 		{"undo", "undo APP", "Restore the previous version through the trusted gate", 1, 1},
 		{"restore", "restore APP REV", "Restore a version through the trusted gate", 2, 2},
 		{"release", "release APP REV", "Name a release through the existing source rules", 2, 2},
@@ -77,6 +80,8 @@ func bashyShapeCmd() *cobra.Command {
 		var reproduction, expected, evidence string
 		var to, contract []string
 		var all, preview, repair bool
+		var maxBytes int
+		var base string
 		checkArgs := cobra.RangeArgs(spec.min, spec.max)
 		if spec.max < 0 {
 			checkArgs = cobra.MinimumNArgs(spec.min)
@@ -92,6 +97,10 @@ func bashyShapeCmd() *cobra.Command {
 			sub.Flags().StringVar(&reproduction, "reproduction", "", "defect report: how to reproduce")
 			sub.Flags().StringVar(&expected, "expected", "", "defect report: expected behavior")
 			sub.Flags().StringVar(&evidence, "evidence", "", "defect report: observed evidence")
+		}
+		if spec.verb == "ledger" {
+			sub.Flags().StringVar(&base, "base", "", "view the ledger as of this revision; later attempts are marked, not hidden")
+			sub.Flags().IntVar(&maxBytes, "max-bytes", 0, "bound the output for a small context (0: 8 KiB, negative: everything)")
 		}
 		if spec.verb == "submit" {
 			sub.Flags().StringVar(&story, "story", "", "link submission to an existing story")
@@ -123,6 +132,9 @@ func bashyShapeCmd() *cobra.Command {
 			}
 			if spec.verb == "incident" {
 				r.ID = incidentID
+			}
+			if spec.verb == "ledger" {
+				r.ID, r.MaxBytes = base, maxBytes
 			}
 			if r.App == "." || r.App == ".." || strings.ContainsAny(r.App, "/\\") {
 				return errors.New("shape: app must be one path segment")
@@ -195,6 +207,9 @@ func bashyShapeCmd() *cobra.Command {
 }
 
 func writeShapeResult(w io.Writer, result any, asJSON bool) error {
+	if l, ok := result.(shape.Ledger); ok && !asJSON {
+		result = l.Text()
+	}
 	if text, ok := result.(string); ok && !asJSON {
 		_, err := fmt.Fprintln(w, text)
 		return err
