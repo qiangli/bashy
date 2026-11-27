@@ -163,6 +163,10 @@ def main():
 
         # --- (a) injected 5xx -> incident repair -> activated -> restorable
         record("== (a) incident repair heals an injected 5xx ==")
+        # The console's loopback caller is the host operator; incident
+        # repair activates that principal's version.
+        import getpass
+        OPERATOR = "os:" + getpass.getuser()
         form_bsh = src / "form.bsh"
         form_bsh.write_text(form_bsh.read_text()
                             + "\n# FIELD_LOOP_5XX_MARKER injected 5xx\n")
@@ -214,13 +218,13 @@ def main():
         healed = ""
         while time.monotonic() < deadline:
             healed = bashy_json("shape", "status", APP,
-                                "--user", OWNER).get("active", "")
+                                "--user", OPERATOR).get("active", "")
             if healed and healed != base_rev:
                 break
             time.sleep(2)
         if not healed or healed == base_rev:
             record("diagnostics: incidents and decision log")
-            bashy("shape", "incident", APP, "--user", OWNER, "--json",
+            bashy("shape", "incident", APP, "--user", OPERATOR, "--json",
                   check_rc=False)
             bashy("shape", "auto", "log", check_rc=False)
         check(bool(healed) and healed != base_rev,
@@ -230,9 +234,9 @@ def main():
             check(event in log_a, f"auto log shows {event} for incident repair")
         console.terminate()
         console.wait(timeout=30)
-        bashy("shape", "restore", APP, base_rev, "--user", OWNER)
+        bashy("shape", "restore", APP, base_rev, "--user", OPERATOR)
         restored = bashy_json("shape", "status", APP,
-                              "--user", OWNER).get("active", "")
+                              "--user", OPERATOR).get("active", "")
         check(restored == base_rev,
               f"previous revision restorable (active={restored})")
 
