@@ -82,6 +82,14 @@ test-shaping-promotion: FORCE
 test-group-shaping-e2e: FORCE
 	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-group-shaping-e2e
 
+# Exercise the field loop (incident heal, owner feed, scheduled feed with the off switch) with fakes inside a throwaway HOME.
+test-field-loop-e2e: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-field-loop-e2e
+
+# Exercise `bashy contain --net deny --dir` driving real `bashy genie` through `bashy llm session forward` against a fake cligw unix-socket door in the locked of…
+test-contained-genie-e2e: FORCE
+	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-contained-genie-e2e
+
 # Opt-in pre-release Hello World lifecycle through the real shaping delegate.
 test-shaping-real-agent: FORCE
 	@command -v bashy >/dev/null || { echo "requires bashy: https://github.com/qiangli/bashy"; exit 127; }; bashy dag test-shaping-real-agent

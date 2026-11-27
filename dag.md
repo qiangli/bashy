@@ -309,6 +309,18 @@ set -eu
 python3 tests/field-loop-e2e/run.py --evidence "${FIELD_LOOP_EVIDENCE:?set a fresh raw log path}"
 ```
 
+### test-contained-genie-e2e
+Exercise `bashy contain --net deny --dir` driving real `bashy genie` through
+`bashy llm session forward` against a fake cligw unix-socket door in the locked
+official base image. Run on a claimed Linux gate host with the inputs in
+tests/contained-genie-e2e/README.md.
+Effects: exec, net, read, write
+
+```bash
+set -eu
+python3 tests/contained-genie-e2e/run.py --evidence "${CONTAINED_GENIE_EVIDENCE:?set a fresh raw log path}"
+```
+
 ### test-shaping-real-agent
 Opt-in pre-release Hello World lifecycle through the real shaping delegate.
 Requires `BASHY_REAL_AGENT_E2E=1`, `SHAPING_SMOKE_AGENT=TOOL:MODEL`, and
