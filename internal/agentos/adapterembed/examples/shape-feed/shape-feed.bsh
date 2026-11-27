@@ -38,7 +38,8 @@ shape-feed APP --source file:PATH[#LABEL] [--owner LOGIN] [--apply]
 - **`--apply`**: files one todo per new matching issue via
   `bashy todo add --no-sprint --id ID --origin feed --reporter AUTHOR --note -`
   and runs `bashy shape wish APP --todo ID --source feed:ID --json -- REQUEST`,
-  then `bashy shape approve APP CANDIDATE` when the candidate is verified. A
+  then `bashy shape approve APP CANDIDATE` when the candidate is ready or verified
+  (approve verifies again before it activates). A
   second `--apply` skips already-filed IDs and files nothing new.
 - **`--agent TOOL:MODEL`**: the shaping agent for the unattended wish (passed
   as `bashy shape --agent`); without it, the host's configured default applies.
@@ -370,7 +371,9 @@ while IFS= read -r item; do
     candidate=$(printf '%s\n' "$wish_json" | jq -r '.id // empty' 2>/dev/null) || candidate=""
     status=$(printf '%s\n' "$wish_json" | jq -r '.status // empty' 2>/dev/null) || status=""
     case "$status" in
-        verified)
+        # shape approve verifies again before it activates, so a ready
+        # candidate is approved too; a failed verification leaves it known.
+        ready|verified)
             case "$candidate" in
                 ''|*[!0-9A-Za-z_-]*)
                     mark_known "$todo_id" "$wish_cmd" "no candidate id in the result"

@@ -278,11 +278,12 @@ def main():
         check("filed" in feed.stdout or "applied" in feed.stdout,
               "shape-feed --apply filed the owner issue")
         items = todo_items()
-        feed_todos = [t for t in items
-                      if t.get("origin") == "feed"]
-        check(len(feed_todos) == 1,
-              f"exactly one feed todo filed (got {len(feed_todos)})")
-        check(feed_todos[0].get("reporter") == OWNER,
+        # origin and reporter live in the todo file (the list graph omits them)
+        feed_files = [p for p in (ops / "docs" / "todo").glob("*.md")
+                      if "\norigin: feed\n" in p.read_text()]
+        check(len(feed_files) == 1,
+              f"exactly one feed todo filed (got {len(feed_files)})")
+        check(f"\nreporter: {OWNER}\n" in feed_files[0].read_text(),
               "feed todo records the owner as reporter")
         deadline = time.monotonic() + WAIT
         active_b = ""

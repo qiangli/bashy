@@ -416,7 +416,7 @@ func TestShapeFeedPreviewApplyAndReread(t *testing.T) {
 			t.Fatalf("shape wish log missing the --todo/--source call for %s:\n%s", id, wishes)
 		}
 	}
-	// A verified candidate is activated: approve follows each wish.
+	// A ready or verified candidate is activated: approve follows each wish.
 	if got := strings.Count(wishes, "shape approve form cand1"); got != 2 || !strings.Contains(out, "activated=2") || !strings.Contains(out, "known=0") {
 		t.Fatalf("approve calls = %d, want 2:\n%s\n%s", got, wishes, out)
 	}
@@ -538,7 +538,7 @@ func TestShapeFeedFailureLeavesTodoKnown(t *testing.T) {
 	}{
 		{"wish fails", "FAKE_WISH_FAIL=agent exploded", "bashy shape wish form --todo ", "agent exploded", 0},
 		{"approve fails", "FAKE_APPROVE_FAIL=verification failed", "bashy shape approve form cand1", "verification failed", 2},
-		{"not verified", "FAKE_WISH_STATUS=ready", "bashy shape wish form --todo ", "stopped at ready", 0},
+		{"not verified", "FAKE_WISH_STATUS=failed", "bashy shape wish form --todo ", "stopped at failed", 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			f := newFixture(t)
