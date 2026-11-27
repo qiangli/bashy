@@ -40,8 +40,8 @@ require (
 	github.com/qiangli/bash v0.0.0-20261122134408-5c52281f7136 // indirect
 	github.com/qiangli/coreutils v0.0.0-20261126163007-96e079612fa5 // indirect
 	github.com/qiangli/gfy v0.0.0-20261121101804-aab4f6fad5be // indirect
-	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261127061630-997d9c1c57c4 // indirect
-	github.com/qiangli/yoke/pkg/provider v0.0.0-20261127061630-997d9c1c57c4 // indirect
+	github.com/qiangli/yoke/pkg/llmgw v0.0.0-20261127062714-7cba4b1d3efe // indirect
+	github.com/qiangli/yoke/pkg/provider v0.0.0-20261127062714-7cba4b1d3efe // indirect
 	github.com/richardlehane/mscfb v1.0.8 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/rogpeppe/go-internal v1.16.0 // indirect
@@ -157,7 +157,7 @@ replace github.com/cyphar/filepath-securejoin => github.com/qiangli/yoke/externa
 replace github.com/mattn/go-runewidth => github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402
 
 require (
-	github.com/qiangli/yoke v0.0.0-20261127061630-997d9c1c57c4
+	github.com/qiangli/yoke v0.0.0-20261127062714-7cba4b1d3efe
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10
 	golang.org/x/net v0.62.0
