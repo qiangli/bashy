@@ -34,6 +34,7 @@ import (
 )
 
 const genieUsage = `usage: bashy genie [-m MODEL] [--effort LEVEL] [--yolo] [--pull] "MESSAGE"   one turn in this directory; the answer on stdout
+       bashy genie --contained [-m BINDING|BAND] [--dir DIR] "TASK"   scoped model door and file sandbox
        ... | bashy genie [-m MODEL]       the same, the message read from stdin
        bashy genie [-m MODEL]             hand off terminal use to bashy ycode
        bashy genie web [-m MODEL]         hand off the browser chat page to bashy ycode web
@@ -73,6 +74,14 @@ func dispatchGenieWithHandoff(args []string, handoff bool) int {
 	// Help first, before any flag can be misread as a message and before the
 	// bundle, the door or a model download: E1 F8 was `prompt --help` running
 	// a turn.
+	if handoff && len(args) > 0 {
+		switch args[0] {
+		case "--contained":
+			return dispatchContainedGenie(args[1:])
+		case "--session-launcher":
+			return launchContainedGenie(args[1:])
+		}
+	}
 	if genieHelpRequested(args) {
 		fmt.Fprint(os.Stdout, genieUsage)
 		return 0
