@@ -592,6 +592,9 @@ func (s *siteMCP) shape(ctx context.Context, req *mcpsdk.CallToolRequest, tool s
 	if err != nil {
 		return nil, out, err
 	}
+	if c.Tier != siteTierOwner {
+		result = siteMemberResult(result)
+	}
 	data, err := json.Marshal(result)
 	if err != nil {
 		return nil, out, err
@@ -601,6 +604,21 @@ func (s *siteMCP) shape(ctx context.Context, req *mcpsdk.CallToolRequest, tool s
 		return nil, out, err
 	}
 	return nil, siteShapeOutput{App: s.app, Verb: r.Verb, Principal: c.Principal, Result: view}, nil
+}
+
+// siteMemberResult filters a shaping reply for a caller who is not the owner:
+// a candidate, bare or inside the preview reply, goes out as its member view,
+// without the host's paths and identities.
+func siteMemberResult(result any) any {
+	switch v := result.(type) {
+	case shape.Candidate:
+		return shape.MemberView(v)
+	case map[string]any:
+		if c, ok := v["candidate"].(shape.Candidate); ok {
+			v["candidate"] = shape.MemberView(c)
+		}
+	}
+	return result
 }
 
 // newSiteMCPServer registers the site's page and shaping tools.

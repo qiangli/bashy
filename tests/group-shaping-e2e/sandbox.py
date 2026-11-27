@@ -150,6 +150,25 @@ def owner_cli(*args):
     return json.loads(raw)
 
 
+def owner_candidate(cid):
+    """The owner's full record of a candidate; a member's MCP reply is filtered."""
+    found, = [item for item in owner_cli("status", APP)["candidates"] if item["id"] == cid]
+    return found
+
+
+HOST_FIELDS = ("workspace", "tracking_root", "tracking_item", "artifact_path", "actor",
+               "activation_principal", "agent_identity", "agent_receipt")
+
+
+def member_view(reply, full):
+    """A member's reply is the owner's record without host paths and identities."""
+    verdict = reply.get("verdict") or {}
+    return (not any(field in reply for field in HOST_FIELDS)
+            and "artifact_path" not in verdict
+            and verdict.get("evidence", "shape-evidence:" + reply.get("rev", "")) == "shape-evidence:" + reply.get("rev", "")
+            and all(reply[k] == full[k] for k in ("id", "principal", "status", "request")))
+
+
 def get_page(user, path):
     with urlopen(Request(FRONT + MOUNT + path, headers=headers(user)), timeout=5) as response:
         return response.read().decode()
@@ -256,8 +275,11 @@ def scenario():
     candidate = shape(C, "wish", wish)
     cid, rev = candidate["id"], candidate["rev"]
     base = candidate["base_rev"]
-    check(candidate["principal"] == C and candidate["activation_principal"] == OWNER,
+    owned = owner_candidate(cid)
+    check(candidate["principal"] == C and owned["activation_principal"] == OWNER,
           "C created a candidate for the owner's line")
+    check(member_view(candidate, owned) and owned["workspace"],
+          "C's wish reply carries no host path or identity")
     check(cid and rev and candidate["base_rev"] != rev and candidate["status"] == "ready",
           "wish produced a new ready revision")
     check((HOME / "stub-events").read_text().splitlines() == ["edit"],
@@ -269,7 +291,9 @@ def scenario():
     verified = shape(C, "verify", {"id": cid})
     check(verified["id"] == cid and verified["rev"] == rev and verified["status"] == "verified"
           and verified["verdict"]["pass"], "trusted verifier passed the candidate revision")
-    evidence = json.loads(Path(verified["verdict"]["evidence"]).read_text())
+    check(verified["verdict"]["evidence"] == "shape-evidence:" + rev and member_view(verified, owner_candidate(cid)),
+          "C's verify reply names the evidence by reference, not by host path")
+    evidence = json.loads(Path(owner_candidate(cid)["verdict"]["evidence"]).read_text())
     print("verifier evidence", json.dumps(evidence), flush=True)
     check(evidence["binding"]["candidate"] == rev and evidence["binding"]["principal"] == OWNER and
           any(c["name"] == "checks/build.bsh" and c["status"] == "pass" for c in evidence["checks"]),
@@ -305,10 +329,10 @@ def scenario():
     req = shape(A, "wish", {"request": "Change the support page footer", "agent": BINDING})
     status = owner_cli("status", APP)
     queued, = [item for item in status["candidates"] if item["id"] == req["id"]]
-    check(req == queued and queued["kind"] == "request" and queued["status"] == "requested"
+    check(member_view(req, queued) and queued["kind"] == "request" and queued["status"] == "requested"
           and queued["principal"] == A and queued["activation_principal"] == OWNER,
           "A's code wish is a request in O's queue")
-    request_dir = Path(candidate["workspace"]).parents[1] / req["id"]
+    request_dir = Path(owned["workspace"]).parents[1] / req["id"]
     check(not queued.get("workspace") and (request_dir / "candidate.json").is_file()
           and not (request_dir / "work").exists(), "A's request has no workspace")
     check((HOME / "stub-events").read_text().splitlines() == ["edit", "alternate"],

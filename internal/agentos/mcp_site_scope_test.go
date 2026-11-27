@@ -241,3 +241,63 @@ func TestSiteMCPMemberSourceTransfer(t *testing.T) {
 		t.Fatalf("stale push: refusal=%q verifier calls=%d", refusal, len(verifier.calls))
 	}
 }
+
+// A caller who is not the owner gets the member view of a candidate: no host
+// path, board item, host actor or owner identity; the owner still gets all.
+func TestSiteMCPMemberReplyHasNoHostFields(t *testing.T) {
+	stubSiteShape(t)
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "shaped.json"), []byte(`{"scopes":{"shape":{"groups":["support"]}}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	shapeAppLookup = func(string) (shape.App, error) { return shape.App{Name: "site", SourceDir: dir}, nil }
+	host := filepath.Join(t.TempDir(), "host")
+	siteShapeExecute = func(_ context.Context, r shapeCLIRequest) (any, error) {
+		c := shape.Candidate{ID: "0123456789abcdef", App: "site", Principal: r.User, Status: shape.Verified, Rev: "rev1",
+			Workspace: filepath.Join(host, "work"), TrackingRoot: filepath.Join(host, "todo"), TrackingItem: "T-42",
+			ArtifactPath: filepath.Join(host, "artifact"), Actor: r.Actor, ActivationPrincipal: "owner@example.com",
+			Identity: "agent-identity", Receipt: "agent-receipt",
+			Verdict: &shape.Verdict{Pass: true, Evidence: filepath.Join(host, "src", ".evidence", "rev1.json")}}
+		if r.Verb == "preview" {
+			return map[string]any{"app": r.App, "principal": r.User, "candidate": c, "url": "http://127.0.0.1:1/shape/site/preview/" + c.ID + "/"}, nil
+		}
+		return c, nil
+	}
+	writeSiteOutpostConfig(t, "http://127.0.0.1:1", false)
+	connect := serveSiteHTTP(t, newSiteMCP(context.Background(), "site", "", true))
+	leaks := []string{host, "T-42", "site-owner-agent", "owner@example.com", "agent-identity", "agent-receipt"}
+	for _, tier := range []string{"member", "owner"} {
+		cs := connect(func(h http.Header) {
+			stampAudience(h, siteTestKey, tier, tier+"@example.net", "", "company", "support")
+		})
+		for tool, args := range map[string]map[string]any{
+			"shape_wish":    {"request": "Change the heading"},
+			"shape_verify":  {"id": "0123456789abcdef"},
+			"shape_preview": {"id": "0123456789abcdef"},
+		} {
+			out, refusal := callSite(t, cs, tool, args)
+			if refusal != "" {
+				t.Fatalf("%s %s: %s", tier, tool, refusal)
+			}
+			data, _ := json.Marshal(out["result"])
+			for _, leak := range leaks {
+				if got := strings.Contains(string(data), leak); got != (tier == "owner") {
+					t.Errorf("%s %s: reply contains %q = %v: %s", tier, tool, leak, got, data)
+				}
+			}
+			candidate := out["result"].(map[string]any)
+			if tool == "shape_preview" {
+				if candidate["url"] == "" {
+					t.Errorf("%s preview lost its url", tier)
+				}
+				candidate = candidate["candidate"].(map[string]any)
+			}
+			if candidate["id"] != "0123456789abcdef" || candidate["rev"] != "rev1" || candidate["status"] != shape.Verified {
+				t.Errorf("%s %s: candidate = %v", tier, tool, candidate)
+			}
+			if tier == "member" && candidate["verdict"].(map[string]any)["evidence"] != "shape-evidence:rev1" {
+				t.Errorf("member %s: verdict = %v", tool, candidate["verdict"])
+			}
+		}
+	}
+}
