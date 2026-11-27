@@ -155,6 +155,9 @@ def main():
         status = bashy_json("shape", "status", APP, "--user", OWNER)
         base_rev = status.get("active") or status.get("revision") or ""
         check(bool(base_rev), f"form registered with active base {base_rev}")
+        # Incident repair ships as a patch release on top of a base release;
+        # a freshly registered app has none, so cut v0 of the base first.
+        bashy("src", "release", APP, base_rev, "--user", OWNER)
 
         auto_log = lambda: bashy("shape", "auto", "log").stdout  # noqa: E731
 
@@ -220,8 +223,6 @@ def main():
             bashy("shape", "incident", APP, "--user", OWNER, "--json",
                   check_rc=False)
             bashy("shape", "auto", "log", check_rc=False)
-            bashy("shape", "list", APP, "--user", OWNER, "--json",
-                  check_rc=False)
         check(bool(healed) and healed != base_rev,
               f"incident repair activated a healed revision ({healed})")
         log_a = auto_log()
