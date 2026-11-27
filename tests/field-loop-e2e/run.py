@@ -63,7 +63,7 @@ def main():
 
         def run(*argv, check_rc=True, timeout=None):
             record("+ " + " ".join(str(a) for a in argv))
-            proc = subprocess.run([str(a) for a in argv], cwd=str(home),
+            proc = subprocess.run([str(a) for a in argv], cwd=str(ops),
                                   stdout=subprocess.PIPE,
                                   stderr=subprocess.STDOUT, text=True,
                                   timeout=timeout or WAIT)
@@ -108,6 +108,12 @@ def main():
         home = Path(tempfile.mkdtemp(prefix="field-loop-home-",
                                      dir=str(args.evidence.parent)))
         record(f"throwaway HOME={home}")
+        # The feed runs from an operations repo: its docs/todo/ is the one
+        # store both `bashy todo` and shape tracking resolve to. (Outside a
+        # repo they resolve to different personal lists; filed separately.)
+        ops = home / "ops"
+        (ops / "docs" / "todo").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(ops)], check=True)
         fixture_bin = HERE / "fixtures" / "tools"
         env = dict(os.environ)
         env.update({
