@@ -21,4 +21,4 @@ Root cause: `startFixture` cancelled a context that SIGKILLs only bashy. `serve`
 
 Fix: bashy 5f612099 runs the fixture in its own process group and kills the group in cleanup; `TestFixtureServerStopsWithTest` checks the port stops answering. Evidence, puppy VM container (golang:1.27, bashy v1.0.0-rc.41): on main a63b7c4 the two tests PASS and leave 2 `discover-serve` servers (reproduces the incident); on 5f612099 all three tests PASS and 0 servers remain.
 
-Still open: each real `serve` run leaves its generated `discover-serve.XXXXXX.py` in $TMPDIR (exec gives the script no chance to delete it).
+Temp script (fixed 2026-11-27, bashy 031c3afc): the generated server deletes its own `discover-serve.XXXXXX.py` once loaded; the fixture runs with a private TMPDIR and `TestServeRemovesItsScript` checks none remains. Puppy VM container: all five discover tests PASS, 0 servers left.
