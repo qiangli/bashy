@@ -316,12 +316,18 @@ def main():
         bashy("shape", "auto", "off")
         check("off" in bashy("shape", "auto", "status").stdout,
               "unattended shaping switched off")
-        bashy("schedule", "run", job_id, timeout=WAIT, check_rc=False)
+        off_run = bashy("schedule", "run", job_id, timeout=WAIT,
+                        check_rc=False)
+        check("unattended shaping is off" in off_run.stdout,
+              "scheduled feed run stops while unattended shaping is off")
         after_items = todo_items()
         check(len(after_items) == before,
               "second scheduled run filed nothing after auto off")
-        check("refusal" in auto_log(),
-              "auto log shows the refusal after auto off")
+        # The feed checks the switch before any wish, so the decision log
+        # records the switch; a wish that does reach the service while off
+        # is refused and logged there (unit-tested in yoke pkg/shape).
+        check("\tswitch\toff" in auto_log(),
+              "auto log shows unattended shaping switched off")
         record(PASS + f"; evidence {args.evidence}")
         print(PASS)
 
