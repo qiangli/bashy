@@ -244,6 +244,12 @@ def main():
 
         # --- (b) owner issue via shape-feed --apply -----------------------
         record("== (b) shape-feed owner issue -> todo -> wish -> activated ==")
+        # Register shape-feed in this HOME the way bashy-defaults does.
+        bashy("commands", "add", "shape-feed",
+              "--set", f"exec.0={binary}", "--set", "exec.1=--bashsharp",
+              "--set", f"exec.2={ROOT / 'examples/shape-feed/shape-feed.bsh'}",
+              "--set", "effects.0=read", "--set", "effects.1=write",
+              "--set", "effects.2=exec", "--set", "effects.3=net")
         issues = HERE / "fixtures" / "issues.json"
         feed = bashy("shape-feed", APP, "--source", f"file:{issues}",
                      "--owner", OWNER, "--apply", timeout=WAIT)
