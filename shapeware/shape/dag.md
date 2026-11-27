@@ -20,10 +20,10 @@ Band: none
 set -eu
 mkdir -p .shapeware
 top=$(git rev-parse --show-toplevel 2>/dev/null || true)
-if [ -n "$top" ] && [ "$top" != "$PWD" ] && [ -f "$top/shapeware/index.bsh" ]; then
+if [ -n "$top" ] && [ "$top" != "$(pwd -P)" ] && [ -f "$top/shapeware/index.bsh" ]; then
     impl=$top
 else
-    impl=$PWD/.shapeware/src
+    impl=$(pwd -P)/.shapeware/src
     [ -d "$impl/.git" ] || git clone -q https://github.com/qiangli/bashy.git "$impl"
     git -C "$impl" checkout -q --detach bb467707bd5f0f7f269aab4e5ff9c188c7c00d23
 fi
@@ -33,15 +33,16 @@ echo "implementation: $impl"
 
 ### build
 Build bashy from the resolved implementation on the gate host and write a `shape` launcher (a shim that execs `bashy shape`) beside it, so the contract's `shape` commands run the built binary.
-Effects: read, write, exec
+Effects: read, write, exec, net, priv
 Band: unmeasured
 
 ```bash
 set -eu
+here=$(pwd -P)
 impl=${IMPL:-$(cat .shapeware/impl)}
 mkdir -p .shapeware/bin
-(cd "$impl" && GOWORK=off CGO_ENABLED=0 go build -o "$OLDPWD/.shapeware/bin/bashy" ./cmd/bashy)
-printf '#!/bin/sh\nexec "%s" shape "$@"\n' "$PWD/.shapeware/bin/bashy" > .shapeware/bin/shape
+(cd "$impl" && GOWORK=off CGO_ENABLED=0 go build -o "$here/.shapeware/bin/bashy" ./cmd/bashy)
+printf '#!/bin/sh\nexec "%s" shape "$@"\n' "$here/.shapeware/bin/bashy" > .shapeware/bin/shape
 chmod +x .shapeware/bin/shape
 .shapeware/bin/bashy --version
 ```
@@ -54,7 +55,7 @@ Band: none
 ```bash
 set -eu
 impl=${IMPL:-$(cat .shapeware/impl)}
-"$PWD/.shapeware/bin/bashy" conform cert --contract CONTRACT.md --reference-cmd "$PWD/.shapeware/bin/shape" --candidate-cmd "$PWD/.shapeware/bin/shape" --runs 3 --dir "$PWD" --fresh-home
+"$(pwd -P)/.shapeware/bin/bashy" conform cert --contract CONTRACT.md --reference-cmd "$(pwd -P)/.shapeware/bin/shape" --candidate-cmd "$(pwd -P)/.shapeware/bin/shape" --runs 3 --dir "$(pwd -P)" --fresh-home
 ```
 
 ### install
@@ -65,8 +66,8 @@ Band: unmeasured
 ```bash
 set -eu
 impl=${IMPL:-$(cat .shapeware/impl)}
-"$PWD/.shapeware/bin/bashy" skill add .
-echo "installed: shape skill from $PWD"
+"$(pwd -P)/.shapeware/bin/bashy" skill add .
+echo "installed: shape skill from $(pwd -P)"
 ```
 
 ### run
@@ -78,5 +79,5 @@ Band: unmeasured
 set -eu
 impl=${IMPL:-$(cat .shapeware/impl)}
 : "${ARGS:?set ARGS, for example ARGS='status hello-world --json'}"
-printf '%s' "$ARGS" | xargs "$PWD/.shapeware/bin/bashy" shape
+printf '%s' "$ARGS" | xargs "$(pwd -P)/.shapeware/bin/bashy" shape
 ```

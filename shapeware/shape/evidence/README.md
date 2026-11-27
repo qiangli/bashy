@@ -1,10 +1,17 @@
 # Evidence (2026-11-27)
 
-Venue: this host (`dragon`, darwin/arm64) using the installed bashy binary (build 345f01d) through a `shape` shim (`exec bashy shape "$@"`), with `--fresh-home` per run and no registered app, so every assertion runs with sandbox-fake state only. No product code was built or changed. The gate-host e2e reference runs this spec reuses are the repository's `tests/group-shaping-e2e` and `tests/field-loop-e2e` (stub shaping agent, synthetic accounts, fake upstream).
+Gate venue: `elephant` WSL gate lane 1 (claimed as `elephant.lane1`; Linux `elephant` 6.18 WSL2, Ubuntu-24.04, x86_64, Go 1.27.4), with `gate-linux` also claimed. The folder was copied to `/root/shape-alone/shape` on that host, outside any checkout, and driven only by its own lifecycle: `bashy dag -f dag.md source` (cloned the implementation at the certified commit), `build` (built bashy from that source and wrote the `shape` launcher) and `test`. Assertions ran with `--fresh-home` and an explicit `--user shape-tester`, so no registered app, real agent or live service was involved: sandbox-fake state only. The gate-host e2e reference runs this spec also reuses are the repository's `tests/group-shaping-e2e` and `tests/field-loop-e2e` (stub shaping agent, synthetic accounts, fake upstream).
 
-- `cert.log` / `cert.json`: `bashy conform cert --contract CONTRACT.md --reference-cmd <shim>/shape --candidate-cmd <shim>/shape --runs 3 --dir shapeware/shape --fresh-home` — PASS, 3 runs, `noisy: []`, all 15 assertions PASS in every run.
-- `mutate.log`: `bashy conform mutate CONTRACT.md --path <shim> --dir shapeware/shape --fresh-home` — strength 27/27, every mutant killed, no survivors to record.
-- Folder-alone: `shapeware/shape/` copied to `/tmp/shape-alone/shape` (outside any checkout) passed `bashy conform spec check` (no output) and the same 3-run cert (PASS, kept at `/tmp/shape-alone/alone.log` on this host).
-- `bashy conform spec check shapeware/shape` reports nothing; `bashy --bashsharp shapeware/index.bsh check` prints `PASS shapeware/shape`.
+Gate logs (raw, from the gate host):
+- `gate-source.log`, `gate-build.log`, `gate-test.log`: the folder-alone lifecycle; `gate-test.log` holds the cert JSON with `"verdict": "PASS"` and `"noisy": []` over 3 runs, all 15 assertions PASS in every run.
+- `cert-gate.log` / `cert-gate.json`: `conform cert --runs 3 --fresh-home` against the gate-built `shape` launcher — PASS, `noisy: []`, environment linux/amd64, go1.27.4.
+- `mutate-gate.log`: `conform mutate --fresh-home` against the gate-built launcher — strength 27/27, every mutant killed, no survivors to record.
 
-Unmeasured: the `build`, `install` and `run` lifecycle steps on a Linux gate host (they build bashy from source), and any shaping of a registered app with a real agent. See the known issues in `../SKILL.md`.
+Dev-host logs (kept for comparison; they do not satisfy the gate acceptance on their own):
+- `cert.log` / `cert.json`, `mutate.log`: the same cert (PASS, 3 runs, none noisy) and mutate (27/27) on `dragon` (darwin/arm64) through the installed bashy binary.
+
+Also verified at the delivery commit: `bashy conform spec check shapeware/shape` reports nothing and `bashy --bashsharp shapeware/index.bsh check` prints `PASS shapeware/shape`.
+
+Two defects were found by the gate run and fixed in this spec (no product code changed): the lifecycle steps used `$PWD`, which a gate shell may inherit from another host, so they now resolve the folder with `pwd -P`; and the assertions assumed an ambient principal, so every `shape` command now passes `--user shape-tester` explicitly.
+
+Unmeasured: any shaping of a registered app with a real (non-stub) agent. See the known issues in `../SKILL.md`.

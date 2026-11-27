@@ -4,7 +4,7 @@ Behavioural specification for the `shape` surface (`bashy shape` plus the site M
 
 ## How assertions are judged
 
-- Assertions are ordered and run against one fresh HOME; no app is registered in it, so `no-such-app-xyz` is never a registered app. Run-specific values are replaced with placeholders (`{ID}`, `{PORT}`, `{TIME}`, `{KEY}`) where they occur.
+- Assertions are ordered and run against one fresh HOME; no app is registered in it, so `no-such-app-xyz` is never a registered app. Every `shape` command passes `--user shape-tester` explicitly, so no `BASHY_PRINCIPAL` from the environment is assumed. Run-specific values are replaced with placeholders (`{ID}`, `{PORT}`, `{TIME}`, `{KEY}`) where they occur.
 - Only a command that carries `--json` is compared structurally. `"..."` marks an open value. An object without `"...": "..."` is closed: exactly the keys shown.
 - Plain text is checked only where a console block gives it. Otherwise only the exit code is required. This is why S-11 to S-13 assert only the exit code: their text output carries the caller's HOME path, which is not part of the contract.
 - Errors go to stderr with exit 1, prefixed as shown in each assertion. There is no JSON error envelope on these paths (S-01).
@@ -37,7 +37,7 @@ Behavioural specification for the `shape` surface (`bashy shape` plus the site M
 ### S-01
 Refuse `status` for an unregistered app, as plain text on stderr with exit 1.
 ```console
-$ shape status no-such-app-xyz
+$ shape status no-such-app-xyz --user shape-tester
 shape: app "no-such-app-xyz" is not registered...
 ```
 exit: 1
@@ -45,7 +45,7 @@ exit: 1
 ### S-02
 Refuse `wish` for an unregistered app before any agent runs.
 ```console
-$ shape wish no-such-app-xyz "Change the greeting"
+$ shape wish no-such-app-xyz "Change the greeting" --user shape-tester
 shape: app "no-such-app-xyz" is not registered...
 ```
 exit: 1
@@ -53,7 +53,7 @@ exit: 1
 ### S-03
 Refuse `verify` for an unregistered app.
 ```console
-$ shape verify no-such-app-xyz cand1
+$ shape verify no-such-app-xyz cand1 --user shape-tester
 shape: app "no-such-app-xyz" is not registered...
 ```
 exit: 1
@@ -61,7 +61,7 @@ exit: 1
 ### S-04
 Refuse `preview` for an unregistered app.
 ```console
-$ shape preview no-such-app-xyz cand1
+$ shape preview no-such-app-xyz cand1 --user shape-tester
 shape: app "no-such-app-xyz" is not registered...
 ```
 exit: 1
@@ -69,7 +69,7 @@ exit: 1
 ### S-05
 Refuse `approve` for an unregistered app.
 ```console
-$ shape approve no-such-app-xyz cand1
+$ shape approve no-such-app-xyz cand1 --user shape-tester
 shape: app "no-such-app-xyz" is not registered...
 ```
 exit: 1
@@ -77,7 +77,7 @@ exit: 1
 ### S-06
 Refuse `show` for an unregistered app.
 ```console
-$ shape show no-such-app-xyz cand1
+$ shape show no-such-app-xyz cand1 --user shape-tester
 shape: app "no-such-app-xyz" is not registered...
 ```
 exit: 1
@@ -85,7 +85,7 @@ exit: 1
 ### S-07
 Refuse `diff` for an unregistered app.
 ```console
-$ shape diff no-such-app-xyz cand1
+$ shape diff no-such-app-xyz cand1 --user shape-tester
 shape: app "no-such-app-xyz" is not registered...
 ```
 exit: 1
@@ -93,7 +93,7 @@ exit: 1
 ### S-08
 Refuse `scope ls` for an unregistered app.
 ```console
-$ shape scope ls --app no-such-app-xyz --json
+$ shape scope ls --app no-such-app-xyz --json --user shape-tester
 shape: app "no-such-app-xyz" is not registered...
 ```
 exit: 1
@@ -101,7 +101,7 @@ exit: 1
 ### S-09
 Refuse a scope name outside the set {`edit`, `shape`} before any app work.
 ```console
-$ shape scope set --app no-such-app-xyz bogus --circle c1 --json
+$ shape scope set --app no-such-app-xyz bogus --circle c1 --json --user shape-tester
 shape scope: unknown scope "bogus" (want edit or shape)...
 ```
 exit: 1
@@ -109,7 +109,7 @@ exit: 1
 ### S-10
 Accept `edit` as a scope name (the near miss): it passes the scope rule and is refused only because the app is not registered.
 ```console
-$ shape scope set --app no-such-app-xyz edit --circle c1 --json
+$ shape scope set --app no-such-app-xyz edit --circle c1 --json --user shape-tester
 shape: app "no-such-app-xyz" is not registered...
 ```
 exit: 1
@@ -117,21 +117,21 @@ exit: 1
 ### S-11
 Refuse `history` for an app whose source was never fetched (exit code only; the message carries the caller's HOME path).
 ```console
-$ shape history no-such-app-xyz
+$ shape history no-such-app-xyz --user shape-tester
 ```
 exit: 1
 
 ### S-12
 Refuse `undo` for an app whose source was never fetched (exit code only).
 ```console
-$ shape undo no-such-app-xyz
+$ shape undo no-such-app-xyz --user shape-tester
 ```
 exit: 1
 
 ### S-13
 Refuse `restore` of a named version for an app whose source was never fetched (exit code only).
 ```console
-$ shape restore no-such-app-xyz v1
+$ shape restore no-such-app-xyz v1 --user shape-tester
 ```
 exit: 1
 
