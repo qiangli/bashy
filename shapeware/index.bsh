@@ -1,0 +1,133 @@
+#!/usr/bin/env -S bashy --bashsharp
+# shapeware/index.bsh: the entry point to this repository's lifted shapeware.
+# One body, two faces: read it as a skill, run it as a script. The same file is
+# copied verbatim into every repository; it discovers the surfaces itself.
+
+~~~skill as guide
+---
+name: shapeware-index
+description: Find, list and check the lifted shapeware surfaces of this repository. Each folder under shapeware/ is one surface with its own SKILL.md, CONTRACT.md, features.yaml and dag.md. Use when you need to know which parts of this repository have a shapeware spec, open one, or lint them all.
+compatibility: Runs with bashy (pure-Go Bash 5.3 + Bash#); without bashy, read shapeware/*/SKILL.md directly.
+metadata:
+  type: shapeware-index
+  shapeware: "0.1"
+---
+# shapeware index
+
+`shapeware/` holds this repository's lifted surfaces, one folder each
+(`shapeware/<surface>/`), made with the kb runbook `shapeware-lift-app`. A
+surface's `SKILL.md` is where to start; its `CONTRACT.md` is the behaviour.
+
+    bashy --bashsharp shapeware/index.bsh             # list surfaces
+    bashy --bashsharp shapeware/index.bsh --json      # the same as JSON
+    bashy --bashsharp shapeware/index.bsh path NAME   # the folder of one surface
+    bashy --bashsharp shapeware/index.bsh check       # conform spec check on each
+
+A folder without a `SKILL.md` is not a surface and is skipped. `check` exits 1
+when any surface fails the lint.
+~~~
+
+set -euo pipefail
+
+here=$(cd "$(dirname "$0")" && pwd)
+
+usage() {
+	echo "usage: index.bsh [list] [--json] | path NAME | check" >&2
+	exit 2
+}
+
+# frontmatter_value FILE KEY prints KEY's value from FILE's leading YAML
+# frontmatter (single-line values; quotes stripped). Builtins only.
+frontmatter_value() {
+	local file=$1 key=$2 line n=0 v
+	while IFS= read -r line; do
+		if [ "$line" = "---" ]; then
+			n=$((n + 1))
+			[ "$n" -ge 2 ] && return 0
+			continue
+		fi
+		[ "$n" -eq 1 ] || continue
+		case "$line" in
+		"$key:"*)
+			v=${line#"$key:"}
+			v=${v# }
+			v=${v#\'}; v=${v%\'}
+			v=${v#\"}; v=${v%\"}
+			printf '%s\n' "$v"
+			return 0
+			;;
+		esac
+	done < "$file"
+}
+
+surfaces() {
+	local d
+	for d in "$here"/*/; do
+		[ -f "$d/SKILL.md" ] || continue
+		d=${d%/}
+		printf '%s\n' "${d##*/}"
+	done
+}
+
+json_str() {
+	local s=$1
+	s=${s//\\/\\\\}
+	s=${s//\"/\\\"}
+	printf '"%s"' "$s"
+}
+
+cmd_list() {
+	local json=$1 name desc first=1
+	if [ "$json" = 1 ]; then
+		printf '{"schema_version":"shapeware-index-v1","surfaces":['
+	fi
+	while IFS= read -r name; do
+		desc=$(frontmatter_value "$here/$name/SKILL.md" description)
+		if [ "$json" = 1 ]; then
+			[ "$first" = 1 ] || printf ','
+			first=0
+			printf '{"name":%s,"path":%s,"description":%s}' \
+				"$(json_str "$name")" "$(json_str "shapeware/$name")" "$(json_str "$desc")"
+		else
+			printf '%s\tshapeware/%s\t%s\n' "$name" "$name" "$desc"
+		fi
+	done < <(surfaces)
+	if [ "$json" = 1 ]; then
+		printf ']}\n'
+	fi
+}
+
+cmd_path() {
+	local want=${1:-}
+	[ -n "$want" ] || usage
+	if [ -f "$here/$want/SKILL.md" ]; then
+		printf '%s\n' "$here/$want"
+		return 0
+	fi
+	echo "index.bsh: no surface named '$want' (see: index.bsh list)" >&2
+	return 1
+}
+
+cmd_check() {
+	local name failed=0 count=0
+	while IFS= read -r name; do
+		count=$((count + 1))
+		if bashy conform spec check "$here/$name"; then
+			echo "PASS shapeware/$name"
+		else
+			echo "FAIL shapeware/$name"
+			failed=1
+		fi
+	done < <(surfaces)
+	[ "$count" -gt 0 ] || echo "index.bsh: no surfaces under shapeware/ yet"
+	return "$failed"
+}
+
+case "${1:-list}" in
+list) cmd_list "$([ "${2:-}" = --json ] && echo 1 || echo 0)" ;;
+--json) cmd_list 1 ;;
+path) cmd_path "${2:-}" ;;
+check) cmd_check ;;
+-h | --help) usage ;;
+*) usage ;;
+esac
