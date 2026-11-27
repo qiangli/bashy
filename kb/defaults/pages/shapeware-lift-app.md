@@ -36,8 +36,8 @@ Tools and format: the judge is `bashy conform` (`spec check`, `run`, `cert`, `mu
 - **Do builds, tests and runs on a test host,** never on a shared development machine.
 
 ## Steps
-1. **`SKILL.md` at the root:** the type line, the standard run block, and a short behaviour summary that points at the contract. Put how this particular build is operated (its scripts, server, workarounds) in a separate section marked as not required of other implementations.
-2. **`dag.md`, the lifecycle:** the five steps `source`, `build`, `test`, `install`, `run`, plus `serve` and `stop` for an app with a page or a server. Each step is exact and non-interactive, with an `Effects:` line and a `Band:` line (`none` where no model is needed, `unmeasured` until a drill measures it, `L1` to `L5` once measured).
+1. **`SKILL.md` at the root:** the type line, the standard run block, and a short behaviour summary that points at the contract. For a surface of a larger repository (`shapeware/<surface>/`), use the lifted-surface variant of the run block (the format §4.3a): the "what it is" line naming the surface, the repository and the certified commit (`metadata.implementation`, `metadata.reference-commit`), and Build changes the implementation in a work copy of the repository, never this folder. Put how this particular build is operated (its scripts, server, workarounds) in a separate section marked as not required of other implementations.
+2. **`dag.md`, the lifecycle:** the five steps `source`, `build`, `test`, `install`, `run`, plus `serve` and `stop` for an app with a page or a server. For a lifted surface, `source` is the two-way step of §4.3a: the containing repository when the folder sits in it, else a clone at the certified commit, recorded in `.shapeware/impl`; the other steps read `${IMPL:-$(cat .shapeware/impl)}`. Each step is exact and non-interactive, with an `Effects:` line and a `Band:` line (`none` where no model is needed, `unmeasured` until a drill measures it, `L1` to `L5` once measured).
 3. **`features.yaml`:** one feature per user-visible capability: `id`, `intent`, `effort` (Fibonacci points), `status` (`verified` only if you ran it; else `tbd`), `critical: true` for anything security-relevant, and `acceptance` lines of the form `command => expected`.
 4. **`CONTRACT.md`, rules first:**
    - how assertions are judged (placeholders, open marker, what plain text is checked);
@@ -55,7 +55,8 @@ Tools and format: the judge is `bashy conform` (`spec check`, `run`, `cert`, `mu
 10. **Certify the reference on the test host:** `conform cert` (3 runs, every assertion passes, none noisy) and `conform mutate` (every mutant killed). A surviving mutant is a missing assertion: add it and repeat. Also run the app's own acceptance checks.
 11. **State the venue** a rebuilt app must run on: OS, interpreter and toolchain versions, network, what is absent.
 12. **Prove it reproduces.** Have a builder that has not seen the source rebuild the app from the spec (the rebuild test). Classify every failure. A failure caused by the spec goes back to step 4; expect one or two rounds.
-13. **Record what was measured:** the lowest band that rebuilt it, per lifecycle step where measured, with the bindings and the date.
+13. **For a lifted surface, prove the folder stands alone.** Copy only `shapeware/<surface>/` somewhere outside any checkout, give it to an agent that has not seen the repository, and require a passing **Check** from the folder's own text and lifecycle.
+14. **Record what was measured:** the lowest band that rebuilt it, per lifecycle step where measured, with the bindings and the date.
 
 ## What the first conversion taught
 - The first spec read well and reproduced badly: 1 pass in 15 rebuild attempts. After the gaps were closed, start tiers of four vendors passed. The gaps were all of a few kinds: a format named in prose but never used by an assertion; a flag used in examples but never defined; outputs closed for no stated reason; page rules left to inference; the behaviour spec mixed with how the reference is operated; a rule given by example.
