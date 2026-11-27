@@ -148,7 +148,7 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 	case "pull":
 		return svc.PullSource(ctx, caller)
 	case "push":
-		candidate, err := svc.PushPatch(ctx, caller, r.BaseRevision, r.Patch)
+		candidate, err := svc.PushPatch(ctx, caller, r.BaseRevision, r.Patch, r.PatchMetadata)
 		if err != nil {
 			return nil, err
 		}

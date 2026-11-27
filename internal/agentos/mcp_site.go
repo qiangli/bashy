@@ -547,6 +547,9 @@ type siteShapeWishInput struct {
 	Agent   string `json:"agent,omitempty" jsonschema:"shaping agent as tool:model (bashy shape wish --agent)"`
 }
 type siteShapePushInput struct {
+	Why          string `json:"why,omitempty" jsonschema:"reason for the change (first line becomes the request)"`
+	Expect       string `json:"expect,omitempty" jsonschema:"expected outcome of the change"`
+	Agent        string `json:"agent,omitempty" jsonschema:"agent that authored the patch"`
 	BaseRevision string `json:"base_revision" jsonschema:"owner revision returned by shape_pull"`
 	Patch        string `json:"patch" jsonschema:"unified text diff against base_revision"`
 }
@@ -640,14 +643,15 @@ func newSiteMCPServer(s *siteMCP, version string, audit func(yokemcp.Record)) *m
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "cite", Annotations: readOnly,
 		Description: "Return the citation record {url, section_id, revision, section_sha256, quote} for <url_or_path>#<section_id>."}, s.cite)
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "shape_pull", Annotations: readOnly,
-		Description: "Pull the owner's active revision and tracked source files (path, Git mode and base64 content). Requires shape scope."},
+		Description: "Pull the owner's active revision with its tracked source files (path, Git mode and base64 content) and the shaping ledger visible to the caller. Requires shape scope."},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest, _ struct{}) (*mcpsdk.CallToolResult, siteShapeOutput, error) {
 			return s.shape(ctx, req, "shape_pull", shapeCLIRequest{Verb: "pull"})
 		})
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "shape_push",
 		Description: "Apply a unified text diff to the owner's current revision and verify a candidate for owner approval. Requires shape scope."},
 		func(ctx context.Context, req *mcpsdk.CallToolRequest, in siteShapePushInput) (*mcpsdk.CallToolResult, siteShapeOutput, error) {
-			return s.shape(ctx, req, "shape_push", shapeCLIRequest{Verb: "push", BaseRevision: in.BaseRevision, Patch: in.Patch})
+			return s.shape(ctx, req, "shape_push", shapeCLIRequest{Verb: "push", BaseRevision: in.BaseRevision, Patch: in.Patch,
+				PatchMetadata: shape.PatchMetadata{Why: in.Why, Expect: in.Expect, Agent: in.Agent}})
 		})
 	mcpsdk.AddTool(srv, &mcpsdk.Tool{Name: "shape_wish",
 		Description: "Ask for a site change. Owners and members with shape scope create candidates; other members file requests on the owner's queue."},

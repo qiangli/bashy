@@ -16,6 +16,7 @@ import (
 
 type shapeCLIRequest struct {
 	BaseRevision, Patch string
+	PatchMetadata       shape.PatchMetadata
 	// Caller and Owner are set only by authenticated in-process surfaces.
 	Caller *shape.Caller
 	// Source is the wish's trigger (shape wish --source KIND:REF, local only).

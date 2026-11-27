@@ -15,6 +15,7 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 
 	"github.com/qiangli/yoke/pkg/shape"
+	"github.com/qiangli/yoke/pkg/shape/state"
 )
 
 func TestSiteMCPScopeMatrix(t *testing.T) {
@@ -222,6 +223,19 @@ func TestSiteMCPMemberSourceTransfer(t *testing.T) {
 	cs := serveSiteHTTP(t, newSiteMCP(context.Background(), "site", "", true))(func(h http.Header) {
 		stampAudience(h, siteTestKey, "member", "member@example.com", "", "contractor", "support")
 	})
+	const owner = "owner@example.com"
+	prior := state.AutoDecision{Time: time.Now().Add(-time.Hour), App: "site", Problem: "todo:private-ticket", Candidate: "0123456789abcdef",
+		Principal: owner, Line: owner, Agent: "prior-agent", Rev: hash.String(),
+		Event: "activation", Result: "activated", Why: "Keep the heading readable"}
+	if err := state.LogAuto(home, prior); err != nil {
+		t.Fatal(err)
+	}
+	later := prior
+	later.Time = prior.Time.Add(time.Minute)
+	later.Problem, later.Candidate, later.Rev = "todo:later", "fedcba9876543210", "later"
+	if err := state.LogAuto(home, later); err != nil {
+		t.Fatal(err)
+	}
 	pulled, refusal := callSite(t, cs, "shape_pull", nil)
 	if refusal != "" {
 		t.Fatal(refusal)
@@ -237,18 +251,70 @@ func TestSiteMCPMemberSourceTransfer(t *testing.T) {
 	if snapshot.Revision != hash.String() || len(snapshot.Files) != 2 || snapshot.Files[0].Path != "page" || string(snapshot.Files[0].Content) != "old\n" {
 		t.Fatalf("pull = %+v", snapshot)
 	}
-	args := map[string]any{"base_revision": snapshot.Revision, "patch": "--- a/page\n+++ b/page\n@@ -1 +1 @@\n-old\n+new\n"}
-	pushed, refusal := callSite(t, cs, "shape_push", args)
-	if refusal != "" {
-		t.Fatal(refusal)
+	if snapshot.Ledger == nil || snapshot.Ledger.Base != snapshot.Revision || len(snapshot.Ledger.Problems) != 2 {
+		t.Fatalf("ledger for pulled revision = %+v", snapshot.Ledger)
 	}
-	c, ok := pushed["result"].(map[string]any)
-	if !ok || c["status"] != shape.Verified || c["principal"] != "member@example.com" || c["activation_principal"] != nil ||
-		c["base_rev"] != snapshot.Revision || len(verifier.calls) != 1 || verifier.calls[0].Principal != "owner@example.com" || verifier.calls[0].CandidateRev != c["rev"] {
-		t.Fatalf("push = %v, verifier = %+v", c, verifier.calls)
+	laterProblem, activeProblem := snapshot.Ledger.Problems[0], snapshot.Ledger.Problems[1]
+	for _, problem := range snapshot.Ledger.Problems {
+		if !strings.HasPrefix(problem.Key, "p-") {
+			t.Fatalf("member problem key = %q", problem.Key)
+		}
 	}
-	args["base_revision"] = "stale"
-	if _, refusal := callSite(t, cs, "shape_push", args); !strings.Contains(refusal, "base stale") || !strings.Contains(refusal, "active "+snapshot.Revision) || len(verifier.calls) != 1 {
+	if !strings.Contains(activeProblem.Summary, "active at "+snapshot.Revision[:12]) || len(laterProblem.Attempts) != 1 {
+		t.Fatalf("problems at pulled revision = %+v", snapshot.Ledger.Problems)
+	}
+	attempt := laterProblem.Attempts[0]
+	if attempt.Standing != shape.StandingLater || attempt.Principal != "" || attempt.Line != "" || attempt.Why != prior.Why || attempt.Agent != prior.Agent {
+		t.Fatalf("member attempt = %+v", attempt)
+	}
+
+	svc := shape.Service{App: shape.App{Name: "site", Owner: owner, SourceDir: source}, Options: shape.Options{Home: home}}
+	const patch = "--- a/page\n+++ b/page\n@@ -1 +1 @@\n-old\n+new\n"
+	for _, tc := range []struct{ name, request, why, expect, agent string }{
+		{name: "legacy", request: "Import member patch"},
+		{name: "with reasons", request: "Clarify the heading", why: "Clarify the heading\nThe old wording was ambiguous.", expect: "Readers can identify the page", agent: "contractor-agent"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := map[string]any{"base_revision": snapshot.Revision, "patch": patch}
+			if tc.why != "" {
+				args["why"], args["expect"], args["agent"] = tc.why, tc.expect, tc.agent
+			}
+			before := len(verifier.calls)
+			pushed, refusal := callSite(t, cs, "shape_push", args)
+			if refusal != "" {
+				t.Fatal(refusal)
+			}
+			c, ok := pushed["result"].(map[string]any)
+			if !ok || c["status"] != shape.Verified || c["principal"] != "member@example.com" || c["activation_principal"] != nil ||
+				c["base_rev"] != snapshot.Revision || len(verifier.calls) != before+1 || verifier.calls[before].Principal != owner || verifier.calls[before].CandidateRev != c["rev"] {
+				t.Fatalf("push = %v, verifier = %+v", c, verifier.calls)
+			}
+			id, _ := c["id"].(string)
+			candidate, err := svc.Show(context.Background(), shape.Caller{Principal: owner}, id)
+			if err != nil || candidate.Request != tc.request || candidate.Why != tc.why || candidate.Expect != tc.expect || candidate.Agent != tc.agent || candidate.Actor != "site-owner-agent" {
+				t.Fatalf("candidate = %+v, err = %v", candidate, err)
+			}
+			lines, err := state.ReadAutoLog(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			seen := map[string]bool{}
+			for _, line := range lines {
+				if line.Candidate != id {
+					continue
+				}
+				seen[line.Event] = true
+				if line.Principal != "member@example.com" || line.Line != owner || line.Agent != tc.agent || line.Why != tc.why || line.Expect != tc.expect {
+					t.Fatalf("decision = %+v", line)
+				}
+			}
+			if !seen["trigger"] || !seen["verdict"] {
+				t.Fatalf("missing decisions: %v", seen)
+			}
+		})
+	}
+	args := map[string]any{"base_revision": "stale", "patch": patch}
+	if _, refusal := callSite(t, cs, "shape_push", args); !strings.Contains(refusal, "base stale") || !strings.Contains(refusal, "active "+snapshot.Revision) || len(verifier.calls) != 2 {
 		t.Fatalf("stale push: refusal=%q verifier calls=%d", refusal, len(verifier.calls))
 	}
 }
