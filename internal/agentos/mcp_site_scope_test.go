@@ -121,7 +121,7 @@ func TestSiteMCPUnscopedWishUsesOwnerQueue(t *testing.T) {
 	if err = json.Unmarshal(data, &candidate); err != nil {
 		t.Fatal(err)
 	}
-	if candidate.Kind != shape.KindRequest || candidate.Status != shape.Requested || candidate.Principal != "member@example.com" || candidate.RepresentedUser != "member@example.com" || candidate.ActivationPrincipal != "owner@example.com" || candidate.Workspace != "" || candidate.Actor != "owner-agent" {
+	if candidate.Kind != shape.KindRequest || candidate.Status != shape.Requested || candidate.Principal != "member@example.com" || candidate.RepresentedUser != "member@example.com" || candidate.ActivationPrincipal != "" || candidate.Workspace != "" || candidate.Actor != "" {
 		t.Fatalf("request=%+v", candidate)
 	}
 	// Opening the owner queue through the core proves the real adapter retained
@@ -131,8 +131,18 @@ func TestSiteMCPUnscopedWishUsesOwnerQueue(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = os.Stat(filepath.Join(ownerDir, "candidate.json")); err != nil {
+	// The member's reply is filtered; the owner's stored record keeps the
+	// owner and host identities.
+	stored, err := os.ReadFile(filepath.Join(ownerDir, "candidate.json"))
+	if err != nil {
 		t.Fatal(err)
+	}
+	var record shape.Candidate
+	if err = json.Unmarshal(stored, &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.ActivationPrincipal != "owner@example.com" || record.Actor != "owner-agent" {
+		t.Fatalf("stored request=%+v", record)
 	}
 	memberDir, err := svc.CandidateDir("member@example.com", candidate.ID)
 	if err != nil {
