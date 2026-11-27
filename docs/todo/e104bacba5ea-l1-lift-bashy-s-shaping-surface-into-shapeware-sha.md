@@ -3,10 +3,11 @@ id: e104bacba5ea
 kind: task
 title: L1 lift bashy's shaping surface into shapeware/shape/
 seq: 3328
-status: doing
+status: assigned
 priority: p1
 created: 2026-11-27T16:53:33.234778Z
-assignee: muse-wonder
+weave: 2
+assignee: codex-gpt6.2-sol
 sprint: 737
 sprint_id: c5dc4786-3303-5f7b-8f04-1207027a550f
 sprint_title: 'Lift bashy, outpost and cloudbox into shapeware (first surfaces, beacon: 2027 positioning)'
