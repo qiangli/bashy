@@ -4,7 +4,6 @@
 package agentos
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,7 +11,9 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/url"
+	"net/http"
+	"net/http/httputil"
+
 	"os"
 	"os/exec"
 	"os/signal"
@@ -170,10 +171,14 @@ func runContainedGenie(ctx context.Context, selector, dir, task string, out, dia
 		}
 		rec.Band = fleet.BandLabel(band)
 	}
+	port, err := genieLoopbackPort()
+	if err != nil {
+		return 1, fmt.Errorf("select session loopback port: %w", err)
+	}
 	args := []string{
 		"contain", "--net", "deny", "--dir", dir, "--socket", session.Socket,
-		"--ro", bundle, "--env", "OPENAI_API_KEY", "--",
-		self, "genie", "--session-launcher", session.Socket, bundle, rec.Binding, rec.Label, task,
+		"--loopback", port, "--ro", bundle, "--env", "OPENAI_API_KEY", "--",
+		self, "genie", "--session-launcher", session.Socket, port, bundle, rec.Binding, rec.Label, task,
 	}
 	cmd := exec.CommandContext(ctx, self, args...)
 	cmd.SysProcAttr = ownProcessGroupAttr()
@@ -190,41 +195,59 @@ func runContainedGenie(ctx context.Context, selector, dir, task string, out, dia
 	return 0, nil
 }
 
-// launchContainedGenie runs inside contain. Only the scoped key crosses via
-// --env; the endpoint comes from the forwarder on the sandbox's own loopback.
+func genieLoopbackPort() (string, error) {
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		return "", err
+	}
+	return strconv.Itoa(listener.Addr().(*net.TCPAddr).Port), listener.Close()
+}
+
+// Serve the scoped Unix socket on precisely the port permitted by contain.
+// If another process took that port, refuse before launching the client.
+func genieSessionForward(socket, port string) (string, func(), error) {
+	n, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || n == 0 || strconv.FormatUint(n, 10) != port {
+		return "", nil, errors.New("invalid session loopback port")
+	}
+	addr := net.JoinHostPort("127.0.0.1", port)
+	ln, err := net.Listen("tcp4", addr)
+	if err != nil {
+		return "", nil, err
+	}
+	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return (&net.Dialer{}).DialContext(ctx, "unix", socket)
+	}}
+	server := &http.Server{ReadHeaderTimeout: 10 * time.Second, Handler: &httputil.ReverseProxy{
+		Transport: transport,
+		Rewrite: func(r *httputil.ProxyRequest) {
+			r.Out.URL.Scheme = "http"
+			r.Out.URL.Host = "localhost"
+			r.Out.Host = "localhost"
+		},
+	}}
+	go server.Serve(ln)
+	return "http://" + addr + "/v1", func() {
+		server.Close()
+		transport.CloseIdleConnections()
+	}, nil
+}
+
 func launchContainedGenie(args []string) int {
-	if len(args) != 5 || os.Getenv("OPENAI_API_KEY") == "" {
+	if len(args) != 6 || os.Getenv("OPENAI_API_KEY") == "" {
 		fmt.Fprintln(os.Stderr, "genie launcher: missing session parameters")
 		return 2
 	}
-	socket, bundle, model, label, task := args[0], args[1], args[2], args[3], args[4]
+	socket, port, bundle, model, label, task := args[0], args[1], args[2], args[3], args[4], args[5]
 	self := bashySelfPath()
-	forward := exec.Command(self, "llm", "session", "forward", "--socket", socket)
-	forward.Stderr = os.Stderr
-	pipe, err := forward.StdoutPipe()
-	if err == nil {
-		err = forward.Start()
-	}
+	endpoint, stop, err := genieSessionForward(socket, port)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "start session forwarder:", err)
 		return 1
 	}
-	defer func() {
-		forward.Process.Kill()
-		forward.Wait()
-	}()
-	// Bound startup even when a broken forwarder never writes its ready line.
-	timer := time.AfterFunc(10*time.Second, func() { pipe.Close() })
-	reader := bufio.NewReader(io.LimitReader(pipe, 1024))
-	line, err := reader.ReadString('\n')
-	timer.Stop()
-	endpoint, e := url.Parse(strings.TrimSpace(line))
-	if err != nil || e != nil || endpoint.Scheme != "http" || endpoint.User != nil || !net.ParseIP(endpoint.Hostname()).IsLoopback() || endpoint.Port() == "" || endpoint.Path != "/v1" {
-		fmt.Fprintln(os.Stderr, "session forwarder did not publish its loopback endpoint; check bashy llm session forward")
-		return 1
-	}
+	defer stop()
 	env := append(os.Environ(),
-		"OPENAI_BASE_URL="+endpoint.String(),
+		"OPENAI_BASE_URL="+endpoint,
 		"GENIE_MODEL_ID="+model, "GENIE_EXTERNAL_MODEL="+model,
 		"GENIE_EXTERNAL_CONTEXT="+strconv.Itoa(genieContextFallback),
 		"GENIE_YCODE_SESSION="+label, "GENIE_TOOLCHAINS=none",

@@ -7,11 +7,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -36,11 +40,7 @@ case "$1 $2" in
   echo "$4" >> "$TRACE/close"
   test "$SCENARIO" != close
   ;;
- forward)
-  test "$4" = --socket && test "$5" = /session.sock
-  echo http://127.0.0.1:31415/v1
-  exec sleep 60
-  ;;
+ *) exit 99;;
  esac;;
 "contain --net")
  printf '%s\n' "$@" > "$TRACE/contain"
@@ -55,7 +55,7 @@ case "$1 $2" in
  test "$3" = chat
  test "$GENIE_MODEL_ID" = seat && test "$GENIE_EXTERNAL_MODEL" = seat || exit 30
  test "$GENIE_EXTERNAL_CONTEXT" = 32768 && test "$OPENAI_API_KEY" = run-key || exit 31
- test "$OPENAI_BASE_URL" = http://127.0.0.1:31415/v1 || exit 32
+ test "$OPENAI_BASE_URL" = "http://127.0.0.1:$EXPECTED_PORT/v1" || exit 32
  test "$GENIE_YCODE_SESSION" = label || exit 33
  if test "$GENIE_MODE" = chat; then
   test "$(cat)" = 'one task' || exit 34
@@ -128,8 +128,16 @@ func TestGenieContainedComposition(t *testing.T) {
 				t.Fatal(record)
 			}
 			if code == 0 {
-				want = []string{"contain", "--net", "deny", "--dir", dir, "--socket", "/session.sock", "--ro", os.Getenv("GENIE_BAR"), "--env", "OPENAI_API_KEY", "--", os.Getenv("BASHY_SELF"), "genie", "--session-launcher", "/session.sock", os.Getenv("GENIE_BAR"), "seat", label, task}
-				if got := strings.Split(strings.TrimSuffix(read("contain"), "\n"), "\n"); !reflect.DeepEqual(got, want) {
+				got := strings.Split(strings.TrimSuffix(read("contain"), "\n"), "\n")
+				if len(got) < 9 {
+					t.Fatalf("short contain command %q", got)
+				}
+				port := got[8]
+				if n, err := strconv.ParseUint(port, 10, 16); err != nil || n == 0 {
+					t.Fatalf("invalid loopback port %q", port)
+				}
+				want = []string{"contain", "--net", "deny", "--dir", dir, "--socket", "/session.sock", "--loopback", port, "--ro", os.Getenv("GENIE_BAR"), "--env", "OPENAI_API_KEY", "--", os.Getenv("BASHY_SELF"), "genie", "--session-launcher", "/session.sock", port, os.Getenv("GENIE_BAR"), "seat", label, task}
+				if !reflect.DeepEqual(got, want) {
 					t.Fatalf("contain %q", got)
 				}
 				if rec.Binding != "seat" || (flag == "--band" && rec.Band != "L4") || rec.Exit != 0 || rec.MaxRequests != 200 || rec.ExpiresAt == "" || rec.Sandbox == "" || !reflect.DeepEqual(rec.Models, []string{"seat"}) || out.String() != "answer\n" {
@@ -150,9 +158,14 @@ func TestGenieContainedComposition(t *testing.T) {
 func TestGenieContainedLauncher(t *testing.T) {
 	setupContainedGenie(t, "launch")
 	t.Setenv("OPENAI_API_KEY", "run-key")
+	port, err := genieLoopbackPort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("EXPECTED_PORT", port)
 	var code int
 	out := captureStdout(t, func() {
-		code = launchContainedGenie([]string{"/session.sock", "genie.bar", "seat", "label", "one task"})
+		code = launchContainedGenie([]string{"/session.sock", port, "genie.bar", "seat", "label", "one task"})
 	})
 	if code != 0 || out != "substantive answer\n" {
 		t.Fatalf("code=%d output=%q", code, out)
@@ -193,5 +206,60 @@ func TestGenieContainedSignal(t *testing.T) {
 	record, err := os.ReadFile(filepath.Join(dir, "genie", "runs", strings.TrimSpace(string(data))+".json"))
 	if err != nil || !strings.Contains(string(record), `"exit":130`) {
 		t.Fatalf("record=%s err=%v", record, err)
+	}
+}
+
+func TestGenieSessionForward(t *testing.T) {
+	// Unix socket paths are short on Darwin, independent of the test name.
+	dir, err := os.MkdirTemp("", "gf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(dir)
+	socket := filepath.Join(dir, "s")
+	ln, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	door := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.RequestURI() != "/v1/chat/completions?stream=1" || r.Header.Get("Authorization") != "Bearer run-key" {
+			http.Error(w, "unexpected request", http.StatusBadRequest)
+			return
+		}
+		io.Copy(w, r.Body)
+	})}
+	go door.Serve(ln)
+	defer door.Close()
+	port, err := genieLoopbackPort()
+	if err != nil {
+		t.Fatal(err)
+	}
+	url, stop, err := genieSessionForward(socket, port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	if url != "http://127.0.0.1:"+port+"/v1" {
+		t.Fatal(url)
+	}
+	req, err := http.NewRequest(http.MethodPost, url+"/chat/completions?stream=1", strings.NewReader("test request"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Authorization", "Bearer run-key")
+	resp, err := (&http.Client{Timeout: 5 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil || resp.StatusCode != 200 || string(body) != "test request" {
+		t.Fatalf("relay: %d %q %v", resp.StatusCode, body, err)
+	}
+	for _, unavailable := range []string{"0", port} {
+		if _, closeProxy, err := genieSessionForward(socket, unavailable); err == nil {
+			closeProxy()
+			t.Fatalf("accepted unavailable port %s", unavailable)
+		}
 	}
 }

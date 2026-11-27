@@ -4,6 +4,6 @@
 
 For example, `bashy genie --contained -m L4 --dir ./checkout "Explain the failing check"` prints the answer on stdout. Start the host door with `bashy llm up` if session creation reports it unavailable. A host with an enforcing file sandbox is required. A backend refusal exits with status 125.
 
-The sandbox can write to the selected directory and its private temporary home. Genie reads its bundle and reaches the model through a loopback forwarder to the scoped session socket. Subscription credentials stay on the host. Bashy builds the builtin genie bundle on first use. Each session expires after 30 minutes or 200 requests and is revoked when the run ends, including on interrupt.
+The sandbox can write to the selected directory and its private temporary home. Genie reads its bundle and reaches the model through a forwarder bound to the single permitted loopback port to the scoped session socket. The only secret passed into the sandbox is the run token, supplied through `OPENAI_API_KEY`. Subscription credentials stay on the host. Bashy builds the builtin genie bundle on first use. Each session expires after 30 minutes or 200 requests and is revoked when the run ends, including on interrupt.
 
 A private JSON record under `${BASHY_HOME:-~/.bashy}/genie/runs/<label>.json` contains the requested selector, selected binding, band (when known), allowed models, expiry, request cap, sandbox, directory and process exit code.
