@@ -78,10 +78,17 @@ def main():
 
         def bashy_json(*argv):
             out = bashy(*argv, "--json").stdout
-            for line in reversed(out.splitlines()):
-                line = line.strip()
-                if line.startswith(("{", "[")):
-                    return json.loads(line)
+            # The last JSON document in the output, single-line or
+            # pretty-printed (notes may precede it).
+            lines = out.splitlines()
+            dec = json.JSONDecoder()
+            for i in range(len(lines) - 1, -1, -1):
+                if lines[i].lstrip().startswith(("{", "[")):
+                    try:
+                        doc, _ = dec.raw_decode("\n".join(lines[i:]).lstrip())
+                        return doc
+                    except json.JSONDecodeError:
+                        continue
             raise AssertionError(f"no JSON in output of {argv}: {out!r}")
 
         for path in (Path(__file__), HERE / "fixtures/issues.json",
