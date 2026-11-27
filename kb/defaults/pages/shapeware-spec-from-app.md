@@ -12,11 +12,14 @@ tags:
     - contract
     - reverse-sdlc
     - dag
-status: candidate
+status: superseded
 evidence: '2026-11-26: examples/desk/form converted this way (spec v2.1); its reference certifies 17/17 with 117/117 mutants; agents of four vendors rebuilt it from the spec, 3 of 3 runs each at the start tier'
 source:
     tool: claude
 created: "2026-11-26T13:53:46Z"
+updated: "2026-11-27T13:40:35Z"
+superseded_by: shapeware-lift-app
+valid_to: "2026-11-27T13:40:35Z"
 ---
 
 Goal: make an existing app or repository shapeable: give it a shapeware spec that is sound enough for another agent to rebuild, repair or extend the app from the spec alone. Format: the shapeware spec (a superset of an Agent Skill folder; only `SKILL.md` is required, missing parts take defaults). Worked example, converted this way and then rebuilt from its spec by agents of four vendors: bashy `examples/desk/form`. Related: [[shapeware-spec-from-plan]] when there are only instructions, [[shapeware-source-from-spec]] for the builder's side, [[shapeware-operate-from-dag]] to install and run a built folder, a rebuild test (a builder that has not seen the source rebuilds the app and the judge decides) to test the result.

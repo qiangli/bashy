@@ -18,7 +18,7 @@ source:
 created: "2026-11-26T15:16:48Z"
 ---
 
-Goal: take a shapeware folder that is already built from its spec to an installed command and a running service, by carrying out its lifecycle exactly. This needs less skill than building: on the worked example a plain script with no model passes, and lower-tier agents passed cold. Building the folder from its spec is a different job: [[shapeware-source-from-spec]]. Writing the spec: [[shapeware-spec-from-app]], [[shapeware-spec-from-plan]].
+Goal: take a shapeware folder that is already built from its spec to an installed command and a running service, by carrying out its lifecycle exactly. This needs less skill than building: on the worked example a plain script with no model passes, and lower-tier agents passed cold. Building the folder from its spec is a different job: [[shapeware-source-from-spec]]. Writing the spec: [[shapeware-lift-app]], [[shapeware-spec-from-plan]].
 
 Tools and format: the judge is `bashy conform` (`spec check`, `run`, `cert`, `mutate`). Where a step says `conform ...`, type `bashy conform ...`; on a machine without bashy use the standalone `conform` binary (github.com/dhnt/conform). The format on one page is `examples/desk/form/references/shapeware.md` in the bashy source, and the folder around it is the worked example. `bashy src fetch bashy` puts the source under `${BASHY_HOME:-$HOME/.bashy}/src/bashy`.
 
