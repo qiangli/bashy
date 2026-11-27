@@ -64,10 +64,16 @@ func startFixture(t *testing.T) (origin, logPath string) {
 	cmd := exec.CommandContext(ctx, bin, "--bashsharp", scriptPath(t),
 		"serve", "--log", logPath, "--port", fmt.Sprint(port))
 	cmd.Stdout, cmd.Stderr = nil, nil
+	// `serve` ends in `exec python3 …`. When the interpreter cannot replace
+	// its image it runs the server as a CHILD, and the context's kill reaches
+	// only bashy: the server is orphaned and keeps serving after the test
+	// (found 2026-11-27, todo 95f11ca25e17). Run the fixture in its own
+	// process group and stop the whole group.
+	fixtureOwnGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { cancel(); _ = cmd.Wait() })
+	t.Cleanup(func() { fixtureKillGroup(cmd); cancel(); _ = cmd.Wait() })
 	origin = fmt.Sprintf("http://127.0.0.1:%d", port)
 	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
@@ -235,4 +241,24 @@ func TestDryRunAndUsage(t *testing.T) {
 	if err := exec.Command(bin, "--bashsharp", scriptPath(t)).Run(); err == nil {
 		t.Error("no-verb invocation must fail with usage")
 	}
+}
+
+// TestFixtureServerStopsWithTest pins the cleanup: once the test that
+// started the fixture ends, nothing answers on its port any more.
+func TestFixtureServerStopsWithTest(t *testing.T) {
+	var origin string
+	t.Run("serve", func(t *testing.T) {
+		origin, _ = startFixture(t)
+	})
+	if origin == "" {
+		t.Skip("fixture did not start")
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if err := exec.Command("curl", "-fsS", "-m", "1", origin+"/robots.txt").Run(); err != nil {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+	t.Fatalf("fixture server at %s still answers after its test ended", origin)
 }
