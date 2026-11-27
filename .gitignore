@@ -71,3 +71,6 @@ vsxgen/
 
 # kb tooling runtime lock (never committed)
 docs/kb/.workflow.lock
+
+# shapeware work copies and resolved implementations
+.shapeware/

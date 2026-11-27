@@ -1,0 +1,4 @@
+shape scope set --app website edit --circle company --group support
+shape scope set --app website shape --circle contractor --group support
+shape scope ls --app website --json
+shape scope rm --app website shape --json

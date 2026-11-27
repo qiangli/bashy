@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+This repo has shapeware: run `bashy --bashsharp shapeware/index.bsh`
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project

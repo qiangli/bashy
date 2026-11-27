@@ -1,0 +1,81 @@
+# shape feature list (shapeware v0.1). Ids are stable across versions.
+# effort: relative size in Fibonacci points (1, 2, 3, 5, 8, 13 = split it).
+- id: wish-candidate
+  effort: 5
+  status: verified
+  intent: Generate an isolated candidate from a plain-text wish (examples/wish.txt), or import a hand-made change with --from, without editing the active source.
+  acceptance:
+    - shape wish no-such-app-xyz "Change the greeting" => ERROR 1 shape: app "no-such-app-xyz" is not registered
+- id: verify-candidate
+  effort: 3
+  status: verified
+  intent: Run the trusted verifier on a candidate; failure is nonzero with an inspectable verdict. Verify does not call conform (KI-4).
+  acceptance:
+    - shape verify no-such-app-xyz cand1 => ERROR 1 shape: app "no-such-app-xyz" is not registered
+- id: preview-candidate
+  effort: 3
+  status: verified
+  intent: Preview a candidate in isolation (console URL for web, verified executable for CLI kind, side-port URL for service kind).
+  acceptance:
+    - shape preview no-such-app-xyz cand1 => ERROR 1 shape: app "no-such-app-xyz" is not registered
+- id: approve-activate
+  effort: 3
+  status: verified
+  critical: true
+  intent: Owner-only activation that re-verifies and uses the sealed activation gate; approve and undo remain owner-only on CLI and site MCP.
+  acceptance:
+    - shape approve no-such-app-xyz cand1 => ERROR 1 shape: app "no-such-app-xyz" is not registered
+- id: inspect-status
+  effort: 2
+  status: verified
+  intent: Inspect the active version and candidates (status), one candidate (show) and its patch (diff).
+  acceptance:
+    - shape status no-such-app-xyz => ERROR 1 shape: app "no-such-app-xyz" is not registered
+    - shape show no-such-app-xyz cand1 => ERROR 1 shape: app "no-such-app-xyz" is not registered
+    - shape diff no-such-app-xyz cand1 => ERROR 1 shape: app "no-such-app-xyz" is not registered
+- id: history-versions
+  effort: 2
+  status: verified
+  intent: List the selected principal's versions of an app.
+  acceptance:
+    - shape history no-such-app-xyz => ERROR 1
+- id: undo-restore
+  effort: 3
+  status: verified
+  intent: Undo to the previous version, or restore a named version, through the trusted gate.
+  acceptance:
+    - shape undo no-such-app-xyz => ERROR 1
+    - shape restore no-such-app-xyz v1 => ERROR 1
+- id: member-scope
+  effort: 3
+  status: verified
+  critical: true
+  intent: Manage owner-defined member audiences (scope ls, set, rm in examples/scope-grant.txt); only edit and shape are valid scope names and shape includes edit.
+  acceptance:
+    - shape scope ls --app no-such-app-xyz --json => ERROR 1 shape: app "no-such-app-xyz" is not registered
+    - shape scope set --app no-such-app-xyz bogus --circle c1 --json => ERROR 1 shape scope: unknown scope "bogus" (want edit or shape)
+    - shape scope set --app no-such-app-xyz edit --circle c1 --json => ERROR 1 shape: app "no-such-app-xyz" is not registered
+- id: site-mcp-shaping
+  effort: 5
+  status: verified
+  intent: Site MCP tools shape_wish, shape_pull, shape_push, shape_verify, shape_preview, shape_approve and shape_undo for verified members; other members' wishes queue for the owner without running an agent.
+  acceptance:
+    - shape wish no-such-app-xyz "Change the greeting" => ERROR 1 shape: app "no-such-app-xyz" is not registered
+- id: group-shaping
+  effort: 8
+  status: tbd
+  intent: Two members shape one app through the mounted site MCP with owner approval, stale-base refusal and pull/push replay refusal, proven with a real (non-stub) shaping agent rather than only the sandbox stub (KI-1).
+  acceptance:
+    - shape status no-such-app-xyz => ERROR 1 shape: app "no-such-app-xyz" is not registered
+- id: restore-data-asserted
+  effort: 3
+  status: tbd
+  intent: Assert that app data written before a change is intact after approve and after restore of a named version (KI-2).
+  acceptance:
+    - shape restore no-such-app-xyz v1 => ERROR 1
+- id: mcp-restore-named
+  effort: 2
+  status: tbd
+  intent: A site MCP tool that restores a named version, matching the CLI restore verb (KI-3).
+  acceptance:
+    - shape restore no-such-app-xyz v1 => ERROR 1

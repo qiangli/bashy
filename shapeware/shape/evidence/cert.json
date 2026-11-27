@@ -1,0 +1,188 @@
+{
+  "conform_version": "0.1.1",
+  "contract_sha256": "14f38c692f90cb521b3aea97a745d7595074a54d1e5aa10a6967dd215221ee0f",
+  "candidate": {
+    "name": "shape",
+    "digest": "sha256:81b941d6d8f44dd1fc48b4b86ebbe8814df442cefb1aa1535f62cb2e6fb17640"
+  },
+  "reference": {
+    "name": "shape",
+    "digest": "sha256:81b941d6d8f44dd1fc48b4b86ebbe8814df442cefb1aa1535f62cb2e6fb17640"
+  },
+  "environment": {
+    "os": "darwin",
+    "arch": "arm64",
+    "go_version": "go1.27.4",
+    "shell": "sh"
+  },
+  "baseline": {
+    "runs": 3,
+    "noisy": [],
+    "reference_runs": [
+      {
+        "S-01": "PASS",
+        "S-02": "PASS",
+        "S-03": "PASS",
+        "S-04": "PASS",
+        "S-05": "PASS",
+        "S-06": "PASS",
+        "S-07": "PASS",
+        "S-08": "PASS",
+        "S-09": "PASS",
+        "S-10": "PASS",
+        "S-11": "PASS",
+        "S-12": "PASS",
+        "S-13": "PASS",
+        "S-14": "PASS",
+        "S-15": "PASS"
+      },
+      {
+        "S-01": "PASS",
+        "S-02": "PASS",
+        "S-03": "PASS",
+        "S-04": "PASS",
+        "S-05": "PASS",
+        "S-06": "PASS",
+        "S-07": "PASS",
+        "S-08": "PASS",
+        "S-09": "PASS",
+        "S-10": "PASS",
+        "S-11": "PASS",
+        "S-12": "PASS",
+        "S-13": "PASS",
+        "S-14": "PASS",
+        "S-15": "PASS"
+      },
+      {
+        "S-01": "PASS",
+        "S-02": "PASS",
+        "S-03": "PASS",
+        "S-04": "PASS",
+        "S-05": "PASS",
+        "S-06": "PASS",
+        "S-07": "PASS",
+        "S-08": "PASS",
+        "S-09": "PASS",
+        "S-10": "PASS",
+        "S-11": "PASS",
+        "S-12": "PASS",
+        "S-13": "PASS",
+        "S-14": "PASS",
+        "S-15": "PASS"
+      }
+    ]
+  },
+  "layers": {
+    "cli": "PASS"
+  },
+  "verdict": "PASS",
+  "results": [
+    {
+      "layer": "cli",
+      "name": "S-01",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-02",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-03",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-04",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-05",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-06",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-07",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-08",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-09",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-10",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-11",
+      "status": "PASS",
+      "detail": "ok (exit matched; plain text open)",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-12",
+      "status": "PASS",
+      "detail": "ok (exit matched; plain text open)",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-13",
+      "status": "PASS",
+      "detail": "ok (exit matched; plain text open)",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-14",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "S-15",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    }
+  ],
+  "timestamp": "2026-11-27T17:01:00Z",
+  "seal": "c78ccfd21d506723261df272af1878823a3261d3984b91307362b9c7506fd41f"
+}
