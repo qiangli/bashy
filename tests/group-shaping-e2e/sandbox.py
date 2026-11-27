@@ -34,6 +34,7 @@ BINDING = "codex:gpt6-sol"
 REPAIR_AGENT = "codex:gpt6-terra"
 X_WHY = "visitors must see the approved support greeting"
 X_EXPECT = "the served heading reads Approved support greeting"
+Y_WHY = "the incident follows the published greeting; keep its wording"
 C_WHY = "the support page should greet members by their own team"
 C_EXPECT = "members see Member support greeting on the support page"
 
@@ -234,7 +235,6 @@ def ledger_leg(cid, rev):
           f"Y repaired incident {incident.get('id')} and the repair activated by itself")
     prompt, work_ledger = last_prompt()
     fenced = prompt.split("<<<LEDGER\n", 1)[-1].split("\nLEDGER>>>", 1)[0]
-    print("repair prompt", prompt, "work ledger", work_ledger, sep="\n", flush=True)
     check("<<<INCIDENT" in prompt and "<<<LEDGER\n" in prompt and X_WHY in fenced and X_EXPECT in fenced,
           "Y's repair brief carries X's why and expect inside the ledger fence")
     check(X_WHY in work_ledger and json.loads(work_ledger)["problems"],
@@ -265,7 +265,8 @@ def member_pull_push(active, title):
     snapshot = shape(C, "pull", {})
     base = snapshot["revision"]
     seen = json.dumps(snapshot.get("ledger"))
-    check(snapshot.get("ledger") and X_WHY in seen and OWNER not in seen and str(HOME) not in seen
+    # The live attempt is Y's restored repair: its reasons travel to C.
+    check(snapshot.get("ledger") and Y_WHY in seen and OWNER not in seen and str(HOME) not in seen
           and "/shape-work/" not in seen, "C's pull carries the ledger without the owner's address or host paths")
     site, = [f for f in snapshot["files"] if f["path"] == "site.json"]
     with tempfile.TemporaryDirectory() as checkout:
