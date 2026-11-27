@@ -1,0 +1,45 @@
+==> alone
+==> source
+implementation: /tmp/shapeware-shape-alone.t2J3Rl5K/shape/.shapeware/src
+dag: 1 target(s) ok
+==> build
+bashy, GNU Bash 5.3 compatible, version 5.3.0(1)-bashy
+dag: 1 target(s) ok
+==> test
+dag: effect cap: target "test": "sh" needs unknown not in Effects: exec,read,write
+PASS S-01 ok
+PASS S-02 ok
+PASS S-03 ok
+PASS S-04 ok
+PASS S-05 ok
+PASS S-06 ok
+PASS S-07 ok
+PASS S-08 ok
+PASS S-09 ok
+PASS S-10 ok
+PASS S-11 ok (exit matched; plain text open)
+PASS S-12 ok (exit matched; plain text open)
+PASS S-13 ok (exit matched; plain text open)
+PASS S-14 ok
+PASS S-15 ok
+PASS S-16 ok
+PASS S-17 ok
+PASS S-18 ok
+PASS S-19 ok
+PASS S-20 ok
+PASS S-21 ok
+PASS S-22 ok
+PASS S-23 ok
+PASS S-24 ok
+PASS S-25 ok
+PASS S-26 ok
+PASS S-27 ok
+PASS S-28 ok
+PASS S-29 ok
+PASS S-30 ok
+PASS S-31 ok
+PASS S-32 ok
+PASS S-33 ok (exit matched; plain text open)
+dag: 1 target(s) ok
+dag: effect cap: target "alone": "rm" needs destroy not in Effects: exec,net,priv,read,write
+dag: 1 target(s) ok

@@ -1,1 +1,4 @@
-PASS evidence/cert-gate.json
+==> cert
+dag: effect cap: target "cert": "sh" needs unknown not in Effects: exec,read,write
+PASS evidence/shape-cert.json
+dag: 1 target(s) ok

@@ -1,0 +1,3 @@
+==> check
+dag: effect cap: target "check": "conform" needs exec not in Effects: read
+dag: 1 target(s) ok
