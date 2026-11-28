@@ -309,6 +309,8 @@ github.com/qiangli/yoke v0.0.0-20261128081941-c4c8e6111d2a h1:csDJZti7riVMAZFHyu
 github.com/qiangli/yoke v0.0.0-20261128081941-c4c8e6111d2a/go.mod h1:Z7aJ/9yuUNmFaQEj2Ajw5fAkAN5R+5X/abZns1vfLjU=
 github.com/qiangli/yoke v0.0.0-20261128082424-a74ef552b36f h1:n9oIgk9+O8q+9+t9SR7fv1bTohfp+VLVAr4nl0uGTLA=
 github.com/qiangli/yoke v0.0.0-20261128082424-a74ef552b36f/go.mod h1:Z7aJ/9yuUNmFaQEj2Ajw5fAkAN5R+5X/abZns1vfLjU=
+github.com/qiangli/yoke v0.0.0-20261128082701-744d2263d5e8 h1:puA7cmiokX9gR39856CqjhXOBI2mNwitFeyw1OnC04Q=
+github.com/qiangli/yoke v0.0.0-20261128082701-744d2263d5e8/go.mod h1:Z7aJ/9yuUNmFaQEj2Ajw5fAkAN5R+5X/abZns1vfLjU=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f h1:aOhDxEjodWKHckz8+Bp49lmQXh80hK0ucSTtyJcj2NQ=
 github.com/qiangli/yoke/external/go-billy v0.0.0-20261030181600-621d3b7f135f/go.mod h1:Q0Q5T6VFoIzC2QCjcH2DnKhvD6lvneoJKxG0TYasq8E=
 github.com/qiangli/yoke/external/runewidth v0.0.0-20261025041311-99ef13338402 h1:GaFTBFLiK9HEK4DBrKzVmc61k4MhJE8q9sQws9r1h3o=
@@ -363,6 +365,8 @@ github.com/qiangli/yoke/pkg/provider v0.0.0-20261128081941-c4c8e6111d2a h1:rgKl/
 github.com/qiangli/yoke/pkg/provider v0.0.0-20261128081941-c4c8e6111d2a/go.mod h1:p0yUuA4jVCMcbhp855EvkGBSRidmzhtrmPpjIe6yrzQ=
 github.com/qiangli/yoke/pkg/provider v0.0.0-20261128082424-a74ef552b36f h1:mqQR0IqDz/koXNd/dypBHQ4uExvEHyZ/+eJqRV67Xpg=
 github.com/qiangli/yoke/pkg/provider v0.0.0-20261128082424-a74ef552b36f/go.mod h1:p0yUuA4jVCMcbhp855EvkGBSRidmzhtrmPpjIe6yrzQ=
+github.com/qiangli/yoke/pkg/provider v0.0.0-20261128082701-744d2263d5e8 h1:Vhvtkqul0mspiKq5oeOLW8FadbAxH8FOPOrYnmGw9As=
+github.com/qiangli/yoke/pkg/provider v0.0.0-20261128082701-744d2263d5e8/go.mod h1:p0yUuA4jVCMcbhp855EvkGBSRidmzhtrmPpjIe6yrzQ=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/richardlehane/mscfb v1.0.8 h1:UXdg61fxF69/X9yMYuRHAWSrGXIul/UAPivAsUXMme8=
