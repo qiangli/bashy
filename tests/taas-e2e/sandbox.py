@@ -400,7 +400,9 @@ def scenario(c, o, outpost):
     # Unshare: the folder offer is gone (403).
     cli(c, "files", "unshare", "docs")
     status, _, _ = member(A, "files-docs", "/offers/files-docs", body={"args": {"op": "ls"}})
-    check(status == 403, f"a read after unshare is refused: HTTP {status}")
+    # unshare removes the offer app itself, so outpost answers 404 (unknown
+    # app) rather than the door's 403: either way the folder is gone.
+    check(status in (403, 404), f"a read after unshare is refused: HTTP {status}")
 
 
 def main():
