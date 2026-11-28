@@ -63,6 +63,7 @@ func bashyShapeCmd() *cobra.Command {
 		{"diff", "diff APP ID", "Show the candidate patch", 2, 2},
 		{"verify", "verify APP ID", "Run the trusted verifier", 2, 2},
 		{"preview", "preview APP ID [-- ARGS...]", "Preview an isolated candidate", 2, -1},
+		{"spec-review", "spec-review APP ID", "Owner: mark a candidate's spec change reviewed so it is graded against its own spec", 2, 2},
 		{"approve", "approve APP ID", "Verify again and activate explicitly", 2, 2},
 		{"reject", "reject APP ID", "Discard a candidate without activation", 2, 2},
 		{"suggest", "suggest APP", "Suggest requests for the current app", 1, 1},

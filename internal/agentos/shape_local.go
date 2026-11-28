@@ -186,6 +186,8 @@ func executeShapeCLI(ctx context.Context, r shapeCLIRequest) (any, error) {
 			err = fmt.Errorf("shape: verification failed: %s", c.Verdict.Detail)
 		}
 		return c, err
+	case "spec-review":
+		return svc.ReviewSpec(ctx, caller, r.ID)
 	case "approve":
 		return svc.Approve(ctx, caller, r.ID)
 	case "reject":
