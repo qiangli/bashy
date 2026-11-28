@@ -26,6 +26,7 @@ import (
 
 	"github.com/qiangli/coreutils/pkg/nudge"
 	"github.com/qiangli/coreutils/pkg/weavecli"
+	"github.com/qiangli/yoke/pkg/bus"
 	"github.com/qiangli/yoke/pkg/fleet"
 )
 
@@ -286,7 +287,11 @@ func checkUnreadArrivals(reader string, fp uint64, fpOK bool, st inboxHintArriva
 // inherited, so a stale session stays silent. The login-user legacy fallback
 // (no agent principal) is unaffected: it reads its own mail as before.
 func resolveHintReader(as string) (reader string, retired bool, err error) {
-	reader, err = resolveInboxReader(as)
+	// A native agent session with no declared identity reads its ad hoc
+	// mailbox. The identity is borrowed for this lookup only: the command the
+	// hint precedes may be one that grants authority, and it must not inherit
+	// an identity it would not have been given.
+	bus.WithAdHocIdentity(func() { reader, err = resolveInboxReader(as) })
 	if err != nil {
 		return "", false, err
 	}

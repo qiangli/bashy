@@ -672,3 +672,62 @@ func TestUnreadHintSilentUnderChatInboxOff(t *testing.T) {
 		t.Fatalf("normal session lost its unread hint: %q", buf.String())
 	}
 }
+
+// A native agent session — a vendor CLI with no declared identity — is told
+// about mail sent to its ad hoc identity on its next ordinary command. The
+// identity is borrowed for the lookup: the command that follows the hint sees
+// no instance stamped on the process.
+func TestUnreadHintReachesANativeAgentSession(t *testing.T) {
+	isolateUnifiedInbox(t)
+	isolateHintState(t)
+	for _, env := range []string{"BASHY_PRINCIPAL", "BASHY_INSTANCE", "BASHY_AGENT", "WEAVE_AGENT",
+		"BASHY_AGENT_ID", "WEAVE_CONDUCTOR", "BASHY_SESSION_CLAIM", bus.AdHocIdentityEnv} {
+		t.Setenv(env, "")
+	}
+	priorDetect, priorSession, priorNotice, priorOn := bus.DetectHarness, bus.CurrentSessionClaim, bus.AdHocNotice, bus.AdHocIdentity
+	bus.DetectHarness = func() (string, bool) { return "claude", true }
+	bus.CurrentSessionClaim = func(string) string { return "native-session-1" }
+	var named bytes.Buffer
+	bus.AdHocNotice = &named
+	bus.AdHocIdentity = false
+	t.Cleanup(func() {
+		bus.DetectHarness, bus.CurrentSessionClaim, bus.AdHocNotice, bus.AdHocIdentity = priorDetect, priorSession, priorNotice, priorOn
+	})
+
+	// First command: no mail yet, so no hint — but the session now has a name.
+	var buf bytes.Buffer
+	emitUnreadHint([]string{"status"}, &buf, true)
+	if buf.String() != "" {
+		t.Fatalf("hint with no mail: %q", buf.String())
+	}
+	all, err := bus.InstanceStoreFn().List()
+	if err != nil || len(all) != 1 || !strings.HasPrefix(all[0].Label, "claude-") {
+		t.Fatalf("instances after the first command = %+v, %v; want one ad hoc claude instance", all, err)
+	}
+	inst := all[0]
+	if !strings.Contains(named.String(), inst.Label) {
+		t.Fatalf("the session was not told its name: %q", named.String())
+	}
+	if os.Getenv("BASHY_INSTANCE") != "" || bus.AdHocIdentity {
+		t.Fatalf("the borrowed identity leaked into the command: BASHY_INSTANCE=%q on=%v", os.Getenv("BASHY_INSTANCE"), bus.AdHocIdentity)
+	}
+
+	// Mail arrives for it; the next command says so, without the body.
+	if err := bus.PostMessage(bus.Post{From: "conductor", To: inst.MailAddress(), Body: "reply for the native session"}); err != nil {
+		t.Fatal(err)
+	}
+	buf.Reset()
+	emitUnreadHint([]string{"status"}, &buf, true)
+	if got := buf.String(); !strings.Contains(got, "1 unread") || strings.Contains(got, "reply for the native session") {
+		t.Fatalf("hint = %q, want one unread and no body", got)
+	}
+
+	// Switched off, the session is left as it was before: no name, no hint.
+	t.Setenv(bus.AdHocIdentityEnv, "off")
+	t.Setenv("BASHY_HINTS_STATE", filepath.Join(t.TempDir(), "inbox-hints.json"))
+	buf.Reset()
+	emitUnreadHint([]string{"status"}, &buf, true)
+	if buf.String() != "" {
+		t.Fatalf("hint with the ad hoc identity off: %q", buf.String())
+	}
+}

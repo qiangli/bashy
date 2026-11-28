@@ -1082,8 +1082,12 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		}
 		dispatchExit(0)
 	case "mb", "messages":
+		// Messaging is where a native agent session gets its ad hoc identity;
+		// set here too for an adapter that runs in this process.
+		bus.AdHocIdentity = true
 		dispatchExit(runCommandAdapter("yoke", "mb", os.Args[1], os.Args[2:]))
 	case "inbox":
+		bus.AdHocIdentity = true
 		dispatchExit(runCommandAdapter("yoke", "inbox", os.Args[1], os.Args[2:]))
 	case "notify", "instance", "feed":
 		// The host communication front doors all share pkg/bus's fleet seams:

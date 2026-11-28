@@ -26,6 +26,9 @@ func wireMessageBoard() {
 		return out
 	}
 	bus.DetectHarness = fleet.DetectTool
+	// A native agent session (vendor CLI, no declared identity) gets an ad hoc
+	// identity on this surface, so it can sign and be answered.
+	bus.AdHocIdentity = true
 	bus.CurrentSessionClaim = currentAgentSession
 	bus.IsMainLineTool = isSteerToolName
 }

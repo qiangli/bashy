@@ -49,6 +49,9 @@ func wireMessageBoard() {
 	// extends it), so the board and the rest of bashy agree on what counts as
 	// an agent rather than keeping a second copy that can drift.
 	bus.DetectHarness = fleet.DetectTool
+	// A native agent session (vendor CLI, no declared identity) gets an ad hoc
+	// identity on this surface, so it can sign and be answered.
+	bus.AdHocIdentity = true
 	// One receive surface, one turn-boundary hook. The callback is a read-through
 	// view over MB/Meet/role stores; pkg/bus remains the owner of pending delivery
 	// and no additional spool is introduced.
