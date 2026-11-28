@@ -12,6 +12,12 @@
 #   contract      a changed CONTRACT.md fails
 #   weakened      a changed features.yaml line fails
 #   broken        an allowed change that breaks the pinned go test fails
+#   ignored       a new git-ignored Go file outside the globs fails
+#   symlink       a tracked symlink re-pointed to another directory fails
+#   mode          an exec-bit change outside the globs fails
+#   outputs       untracked build outputs (metadata.build-outputs) are left out
+#   protected-link  a protected file replaced by a symlink to the same bytes fails
+#   quotes        single-quoted metadata values are read like the lint reads them
 # Needs bashy, git and go. Everything is written under one temporary folder.
 # With CONFORM=/path/to/conform it also lints the fake surface.
 # Usage: bash selftest.sh    Exit 1 if any case does not behave as stated.
@@ -28,7 +34,11 @@ s=$base/shapeware/calc
 mkdir -p "$base/internal/calc" "$base/cmd/calc" "$s/checks" "$s/scripts"
 cp "$src/checks/candidate.bsh" "$s/checks/candidate.bsh"
 cp "$src/scripts/launcher.sh" "$s/scripts/launcher.sh"
-printf '.shapeware/\n' >"$base/.gitignore"
+printf '.shapeware/\nbin/\nnode_modules/\nzz_*.go\n' >"$base/.gitignore"
+mkdir -p "$base/docs/v1" "$base/docs/v2"
+echo one >"$base/docs/v1/page.md"
+echo two >"$base/docs/v2/page.md"
+ln -s v1 "$base/docs/current"
 printf 'module example.invalid/calc\n\ngo 1.21\n' >"$base/go.mod"
 cat >"$base/internal/calc/calc.go" <<'EOF'
 package calc
@@ -74,7 +84,7 @@ metadata:
   version: "0.1.0"
   implementation: "https://example.invalid/calc.git"
   candidate-files: "internal/calc/*.go"
-  build-outputs: "bin/*"
+  build-outputs: "bin/* node_modules"
 ---
 # calc
 
@@ -191,6 +201,10 @@ done < "$here/features.yaml"
 exit $fail
 EOF
 git -C "$base" init -q -b main && git -C "$base" add -A && git -C "$base" commit -qm base
+# Ignored build outputs in the installed checkout only, as after a real build.
+mkdir -p "$base/bin" "$base/node_modules/pkg/lib"
+echo binary >"$base/bin/calc"
+echo 'module.exports = 1' >"$base/node_modules/pkg/lib/index.js"
 
 failed=0
 n=0
@@ -228,6 +242,27 @@ grade "$c"; expect $? weakened 1 '^FAIL features.yaml only adds lines'
 
 copy; sed 's/return a + b/return a - b/' "$base/internal/calc/calc.go" >"$c/internal/calc/calc.go"
 grade "$c"; expect $? broken 1 '^FAIL add#1 calc gotest ./internal/calc TestAdd => PASS TestAdd'
+
+copy; printf 'package main\n\nfunc init() {}\n' >"$c/cmd/calc/zz_hook.go"
+grade "$c"; expect $? ignored 1 '^FAIL change within metadata.candidate-files (cmd/calc/zz_hook.go)'
+
+copy; rm "$c/docs/current" && ln -s v2 "$c/docs/current"
+grade "$c"; expect $? symlink 1 '^FAIL change within metadata.candidate-files (docs/current)'
+
+copy; chmod +x "$c/cmd/calc/main.go"
+grade "$c"; expect $? mode 1 '^FAIL change within metadata.candidate-files (cmd/calc/main.go)'
+
+copy; printf '// changed\n' >>"$c/internal/calc/calc.go"
+grade "$c"; expect $? outputs 0 '^PASS changes within metadata.candidate-files (1 files)'
+
+copy; rm "$c/shapeware/calc/checks/acceptance.bsh" && ln -s "$s/checks/acceptance.bsh" "$c/shapeware/calc/checks/acceptance.bsh"
+grade "$c"; expect $? protected-link 1 '^FAIL protected shapeware/calc/checks/acceptance.bsh unchanged'
+
+sed "s|candidate-files: \"internal/calc/\*.go\"|candidate-files: 'internal/calc/*.go'|" "$s/SKILL.md" >"$work/skill" && mv "$work/skill" "$s/SKILL.md"
+grep -q "candidate-files: 'internal" "$s/SKILL.md" || { echo "FAIL quotes: SKILL.md was not rewritten"; failed=1; }
+git -C "$base" commit -qam 'single quotes'
+copy; printf '// changed\n' >>"$c/internal/calc/calc.go"
+grade "$c"; expect $? quotes 0 '^PASS changes within metadata.candidate-files (1 files)'
 
 if [[ -n ${CONFORM:-} ]]; then
   if "$CONFORM" spec check "$s" >"$work/out" 2>&1; then echo "ok   lint (conform spec check)"

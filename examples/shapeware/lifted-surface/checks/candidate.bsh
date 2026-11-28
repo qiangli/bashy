@@ -12,13 +12,19 @@
 #   candidate-files  space-separated repo-relative globs a candidate may
 #                    change, e.g. "internal/backup/*.go"; * and ? never
 #                    cross "/", and there is no **
-#   build-outputs    optional globs of build outputs, left out of the comparison
+#   build-outputs    optional globs of build outputs, left out of the
+#                    comparison; a glob that matches a directory leaves out
+#                    everything under it (e.g. "node_modules")
+# Values may be bare, "double-quoted" or 'single-quoted', as the lint reads them.
 #
 # PASS/FAIL lines, then VARIANT <version>+shaped.<sha>; exit 1 on any FAIL:
 #   - the copy is not the installed implementation;
 #   - every file that differs between the installed implementation and the
-#     copy (tracked, or untracked and not ignored; .shapeware/ and build
-#     outputs left out; a deleted file counts) matches a candidate-files glob;
+#     copy matches a candidate-files glob. Every file counts, tracked,
+#     untracked or git-ignored; only .git/, .shapeware/ and build-outputs are
+#     left out. A file differs in its bytes, its mode (100644 or 100755) or
+#     its kind; a symlink is compared as a link (its target), never followed.
+#     An added or deleted file counts;
 #   - this folder's files in the copy are unchanged, except that features.yaml
 #     may add lines. (A spec change with a candidate, §6a, sprint 742 M2,
 #     relaxes this rule; this file does not implement it.)
@@ -27,8 +33,8 @@
 #     IMPL=WORKCOPY and SHAPEWARE_BIN set to a scratch bin folder, so the
 #     installed build is never overwritten.
 # <sha> is the first 7 hex of a SHA-256 over the changed implementation
-# files (each file's SHA-256, or "deleted", two spaces, its repo-relative
-# path; sorted). No changed file gives "none". Reproducible.
+# files (each file's SHA-256 and mode, a symlink's "120000 TARGET", or
+# "deleted"; two spaces, its repo-relative path; sorted). No changed file gives "none". Reproducible.
 set -u
 export BASHY_HINTS=off
 
@@ -50,10 +56,13 @@ meta() {
     f && m && /^[^ ]/ { m = 0 }
     f && m {
       line = $0; sub(/^ +/, "", line)
-      if (index(line, k ": ") == 1) {
-        v = substr(line, length(k) + 3); gsub(/^"|"$/, "", v); print v; exit
+      if (index(line, k ":") == 1) {
+        v = substr(line, length(k) + 2); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v)
+        if (length(v) >= 2 && (v ~ /^".*"$/ || v ~ ("^" q ".*" q "$"))) v = substr(v, 2, length(v) - 2)
+        else if ((i = index(v, " #")) > 0) { v = substr(v, 1, i - 1); sub(/[ \t]+$/, "", v) }
+        print v; exit
       }
-    }' "$here/SKILL.md"
+    }' q="'" "$here/SKILL.md"
 }
 
 # glob_match PATH GLOB: segment by segment, so * and ? never cross "/".
@@ -74,15 +83,42 @@ match_any() { # PATH GLOB...
   return 1
 }
 
-# list DIR: the files git sees (tracked, or untracked and not ignored). The
-# host git by path: a shell's built-in git may not serve ls-files -co.
-hostgit=$(type -P git) || hostgit=/usr/bin/git
+# is_output PATH: PATH, or a directory above it, matches a build-outputs glob.
+is_output() {
+  local IFS=/ seg pre=
+  local -a segs
+  (( ${#outputs[@]} )) || return 1
+  read -ra segs <<<"$1"
+  for seg in "${segs[@]}"; do
+    pre=${pre:+$pre/}$seg
+    match_any "$pre" "${outputs[@]}" && return 0
+  done
+  return 1
+}
+
+# list DIR: every file and symlink under DIR, .git and .shapeware pruned.
+# Ignored files count: Go compiles a git-ignored .go file all the same.
+# Symlinks are listed, never followed.
 list() {
-  if [[ -d $1/.git || -f $1/.git ]]; then
-    "$hostgit" -C "$1" ls-files -co --exclude-standard
-  else
-    (cd "$1" && find . -type f ! -path './.git/*' | sed 's|^\./||')
-  fi
+  (cd "$1" && find . \( -name .git -o -name .shapeware \) -prune -o \( -type f -o -type l \) -print) | sed 's|^\./||'
+  return "${PIPESTATUS[0]}"
+}
+
+# kind PATH: git's view of one entry. "-" missing, "120000 TARGET" a symlink
+# (not followed), "100755" or "100644" a file, "other" anything else.
+kind() {
+  if [[ -L $1 ]]; then printf '120000 %s' "$(readlink "$1")"
+  elif [[ -f $1 ]]; then if [[ -x $1 ]]; then printf 100755; else printf 100644; fi
+  elif [[ -e $1 ]]; then printf other
+  else printf -; fi
+}
+# same_file A B: same kind, mode, link target and, for files, the same bytes.
+same_file() {
+  local ka kb
+  ka=$(kind "$1") kb=$(kind "$2")
+  [[ $ka == "$kb" ]] || return 1
+  [[ $ka == 100* ]] || return 0
+  cmp -s "$1" "$2"
 }
 
 sum256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; }
@@ -118,15 +154,14 @@ trap 'rm -rf "$tmp"' EXIT
 
 # 1. Implementation files: every difference matches a candidate-files glob.
 # Fail closed: a listing that fails is a FAIL, never "no changes".
-list "$base" >"$tmp/files.base" || bad "list the installed implementation's files" "(git ls-files failed in $base)"
-list "$copy" >"$tmp/files.copy" || bad "list the copy's files" "(git ls-files failed in $copy)"
+list "$base" >"$tmp/files.base" || bad "list the installed implementation's files" "(find failed in $base)"
+list "$copy" >"$tmp/files.copy" || bad "list the copy's files" "(find failed in $copy)"
 changed=()
 outside=0
 while IFS= read -r f; do
   case /$f/ in */.shapeware/* | "/$surface/"*) continue ;; esac
-  (( ${#outputs[@]} )) && match_any "$f" "${outputs[@]}" && continue
-  [[ -d $base/$f || -d $copy/$f ]] && continue # a submodule or a directory entry
-  cmp -s "$base/$f" "$copy/$f" 2>/dev/null && continue
+  is_output "$f" && continue
+  same_file "$base/$f" "$copy/$f" && continue
   if (( ${#allowed[@]} )) && match_any "$f" "${allowed[@]}"; then
     changed+=("$f")
   else
@@ -141,8 +176,8 @@ if [[ -d $copy/$surface ]]; then
   before=$fail
   while IFS= read -r f; do
     case /$f/ in */.shapeware/* | /features.yaml/) continue ;; esac
-    cmp -s "$here/$f" "$copy/$surface/$f" 2>/dev/null || bad "protected $surface/$f unchanged" "($f was changed, added or removed)"
-  done < <({ (cd "$here" && find . -type f); (cd "$copy/$surface" && find . -type f); } | sed 's|^\./||' | LC_ALL=C sort -u)
+    same_file "$here/$f" "$copy/$surface/$f" || bad "protected $surface/$f unchanged" "($f was changed, added or removed)"
+  done < <({ list "$here"; list "$copy/$surface"; } | LC_ALL=C sort -u)
   (( fail == before )) && ok "protected $surface unchanged"
   if [[ -f $here/features.yaml ]]; then
     if [[ -f $copy/$surface/features.yaml ]]; then
@@ -170,7 +205,12 @@ ver=$(meta version)
 sha=none
 if (( ${#changed[@]} )); then
   sha=$(for f in "${changed[@]}"; do
-    if [[ -f $copy/$f ]]; then h=$(sum256 <"$copy/$f"); h=${h%% *}; else h=deleted; fi
+    k=$(kind "$copy/$f")
+    case $k in
+      100*) h=$(sum256 <"$copy/$f"); h="${h%% *} $k" ;;
+      -) h=deleted ;;
+      *) h=$k ;;
+    esac
     printf '%s  %s\n' "$h" "$f"
   done | sum256 | cut -c1-7)
 fi
