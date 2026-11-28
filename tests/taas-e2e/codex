@@ -1,0 +1,10 @@
+#!/bin/sh
+# One-shot agent stub for the offered agent: answers the Codex recipe's
+# login probe, then prints one fixed answer. No model, no network.
+set -eu
+case " $* " in
+  *" login status "*) echo "Logged in using ChatGPT" >&2; exit 0 ;;
+  *" exec "*) echo "$*" >> "$HOME/stub-prompts"; echo "offered agent answer"; exit 0 ;;
+esac
+echo "unexpected stub invocation: $*" >&2
+exit 2
