@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -97,31 +98,66 @@ func confineBackend(provider string) (string, error) {
 	return "", errors.New("file confinement (--dir) has no custom provider: the wrapper's confinement cannot be verified")
 }
 
-// runSeatbeltConfined runs argv under seatbeltConfinedProfile in c.Dir with
-// the scrubbed environment and a private temp removed afterwards.
-func runSeatbeltConfined(c *containConfine, argv []string) int {
+// containAccountHome is the account's home from the OS user record (never
+// $HOME, which the caller controls); a seam for tests.
+var containAccountHome = func() (string, error) {
+	u, err := user.LookupId(strconv.Itoa(os.Getuid()))
+	if err != nil {
+		return "", err
+	}
+	if u.HomeDir == "" || !filepath.IsAbs(u.HomeDir) {
+		return "", fmt.Errorf("user record of uid %d has no absolute home", os.Getuid())
+	}
+	return u.HomeDir, nil
+}
+
+// seatbeltDeveloperDir is the selected developer directory (xcode-select's
+// link target) when it is outside the system roots: /usr/bin/git and the
+// other shims exec from it.
+func seatbeltDeveloperDir() []string {
+	t, err := os.Readlink("/private/var/db/xcode_select_link")
+	if err != nil || !filepath.IsAbs(t) {
+		return nil
+	}
+	if r, err := filepath.EvalSymlinks(t); err == nil && sbplSafePath(r) == nil && r != "/" {
+		return []string{r}
+	}
+	return nil
+}
+
+// seatbeltConfinedHost resolves the host side of the profile: the account
+// home from the user record (fail closed without one), $HOME, the user temp
+// root and a fresh private temp inside it (the caller removes it).
+func seatbeltConfinedHost() (seatbeltHost, error) {
+	home, err := containAccountHome()
+	if err != nil {
+		return seatbeltHost{}, fmt.Errorf("account home from the user record: %v", err)
+	}
 	userTemp, err := filepath.EvalSymlinks(os.TempDir())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "bashy contain: temp root: %v; nothing ran\n", err)
-		return containUnsupportedStatus
+		return seatbeltHost{}, fmt.Errorf("temp root: %v", err)
 	}
 	tmp, err := os.MkdirTemp(userTemp, "bashy-confine-")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "bashy contain: private temp: %v; nothing ran\n", err)
+		return seatbeltHost{}, fmt.Errorf("private temp: %v", err)
+	}
+	return seatbeltHost{
+		Tmp:    tmp,
+		Deny:   containConfineDenyRoots(home, os.Getenv("HOME"), userTemp),
+		Self:   containConfineSelf(),
+		System: seatbeltDeveloperDir(),
+	}, nil
+}
+
+// runSeatbeltConfined runs argv under seatbeltConfinedProfile in c.Dir with
+// the scrubbed environment and a private temp removed afterwards.
+func runSeatbeltConfined(c *containConfine, argv []string) int {
+	host, err := seatbeltConfinedHost()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "bashy contain: %v; nothing ran\n", err)
 		return containUnsupportedStatus
 	}
-	defer os.RemoveAll(tmp)
-	home := ""
-	if h, err := os.UserHomeDir(); err == nil {
-		if r, err := filepath.EvalSymlinks(h); err == nil {
-			home = r
-		}
-	}
-	if home == "" {
-		fmt.Fprintln(os.Stderr, "bashy contain: no resolvable home directory to deny; nothing ran")
-		return containUnsupportedStatus
-	}
-	profile := seatbeltConfinedProfile(c, tmp, home, userTemp, containConfineSelf())
-	env := confinedEnv(os.Environ(), c.Env, tmp)
-	return runContainChild(seatbeltExec, append([]string{"-p", profile, "--"}, argv...), c.Dir, env)
+	defer os.RemoveAll(host.Tmp)
+	env := confinedEnv(os.Environ(), c.Env, host.Tmp)
+	return runContainChild(seatbeltExec, append([]string{"-p", seatbeltConfinedProfile(c, host), "--"}, argv...), c.Dir, env)
 }

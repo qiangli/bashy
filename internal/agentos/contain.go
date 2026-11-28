@@ -305,7 +305,7 @@ func containHandler() func(interp.ExecHandlerFunc) interp.ExecHandlerFunc {
 func dispatchContain(args []string) int {
 	usage := func(w io.Writer) {
 		fmt.Fprintln(w, "usage: bashy contain --net deny|model [--provider builtin|native|image|custom] -- command [args...]")
-		fmt.Fprintln(w, "       bashy contain --net deny --dir DIR [--socket /abs.sock]... [--ro /abs/path]... [--env NAME]... -- command [args...]")
+		fmt.Fprintln(w, "       bashy contain --net deny --dir DIR [--socket /abs.sock]... [--ro /abs/path]... [--env NAME]... [--loopback PORT]... -- command [args...]")
 		fmt.Fprintln(w, "  run one command with enforced network isolation: native (Linux network namespace,")
 		fmt.Fprintln(w, "  macOS Seatbelt) where the OS has it, else bashy's own image with no network")
 		fmt.Fprintln(w, "  providers: builtin (default: native where the OS has it, else bashy's image), native,")
@@ -316,8 +316,9 @@ func dispatchContain(args []string) int {
 		fmt.Fprintln(w, "  endpoints (plus BASHY_CONTAIN_ALLOW_HOST), so an agent worker can call its model; it does NOT")
 		fmt.Fprintln(w, "  discharge the net effect. macOS native only; elsewhere it fails closed (125).")
 		fmt.Fprintln(w, "  --dir DIR adds file confinement: DIR (the working directory) and a private temp (TMPDIR, HOME)")
-		fmt.Fprintln(w, "  are the only writable places; home is unreadable except DIR, each --ro path and bashy itself;")
-		fmt.Fprintln(w, "  each --socket is reachable, no other network; the environment is PATH LANG LC_ALL TERM plus each")
+		fmt.Fprintln(w, "  are the only writable places; reads are the system roots, DIR, each --ro path and bashy itself")
+		fmt.Fprintln(w, "  (never home or the keychains); each --socket and loopback on each --loopback PORT are reachable,")
+		fmt.Fprintln(w, "  no other network; the environment is PATH LANG LC_ALL TERM plus each")
 		fmt.Fprintln(w, "  --env NAME. macOS: a generated Seatbelt profile; Linux: bashy's image with DIR, the --ro paths")
 		fmt.Fprintln(w, "  and the sockets bind-mounted, network none; elsewhere it fails closed (125) and nothing runs.")
 	}
@@ -340,12 +341,20 @@ func dispatchContain(args []string) int {
 			provider = args[i]
 		case strings.HasPrefix(a, "--provider="):
 			provider = strings.TrimPrefix(a, "--provider=")
-		case (a == "--dir" || a == "--socket" || a == "--ro" || a == "--env") && i+1 < len(args):
-			i++
-			confine.add(a, args[i])
-		case strings.HasPrefix(a, "--dir=") || strings.HasPrefix(a, "--socket=") || strings.HasPrefix(a, "--ro=") || strings.HasPrefix(a, "--env="):
-			flag, v, _ := strings.Cut(a, "=")
-			confine.add(flag, v)
+		case containConfineFlag(a) || containConfineFlag(strings.SplitN(a, "=", 2)[0]):
+			flag, v, inline := strings.Cut(a, "=")
+			if !inline {
+				if i+1 >= len(args) {
+					fmt.Fprintf(os.Stderr, "bashy contain: %s needs a value\n", flag)
+					return 2
+				}
+				i++
+				v = args[i]
+			}
+			if err := confine.add(flag, v); err != nil {
+				fmt.Fprintf(os.Stderr, "bashy contain: %v\n", err)
+				return 2
+			}
 		case a == "--":
 			i++
 			goto command
@@ -365,8 +374,8 @@ command:
 		}
 		return runConfined(confine, provider, args[i:])
 	}
-	if len(confine.Sockets)+len(confine.RO)+len(confine.Env) > 0 {
-		fmt.Fprintln(os.Stderr, "bashy contain: --socket, --ro and --env need --dir")
+	if len(confine.Sockets)+len(confine.RO)+len(confine.Env)+len(confine.Loopback) > 0 {
+		fmt.Fprintln(os.Stderr, "bashy contain: --socket, --ro, --env and --loopback need --dir")
 		return 2
 	}
 	if err := containSupportedForNet(net, provider); err != nil {

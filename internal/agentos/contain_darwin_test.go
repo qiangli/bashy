@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -138,6 +139,36 @@ func TestContainConfinedSeatbeltEnforces(t *testing.T) {
 		return p
 	}
 	door, other := serve("door.sock"), serve("other.sock")
+	// a file outside every allowed root and not under any home
+	outside := filepath.Join(sockDir, "outside")
+	os.WriteFile(outside, []byte("secret"), 0o644)
+	acct, err := containAccountHome()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// loopback: the listed port is reachable, another host listener is not
+	tcp := func() (net.Listener, int) {
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { ln.Close() })
+		go func() {
+			for {
+				c, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				c.Close()
+			}
+		}()
+		return ln, ln.Addr().(*net.TCPAddr).Port
+	}
+	_, listed := tcp()
+	_, unlisted := tcp()
+	free := func() int { ln, p := tcp(); ln.Close(); return p }
+	bindListed, bindUnlisted := free(), free()
+	keychainOutside := exec.Command("security", "list-keychains").Run() == nil
 
 	script := `set -u
 fail() { echo "FAIL: $*"; exit 1; }
@@ -152,13 +183,41 @@ ls "$WANT_HOME" 2>/dev/null && fail "home listable"
 echo x 2>/dev/null > "$WANT_HOME/x" && fail "home writable"
 echo x 2>/dev/null > "$WANT_BUNDLE/x" && fail "--ro writable"
 echo x 2>/dev/null > /tmp/bashy-confine-escape && fail "/tmp writable"
+cat "$WANT_OUTSIDE" 2>/dev/null && fail "file outside the allowed roots readable"
+ls "$WANT_ACCT" 2>/dev/null && fail "account home listable with HOME pointing elsewhere"
+ls /Library/Keychains 2>/dev/null && fail "keychains listable"
+ls /Volumes 2>/dev/null && fail "/Volumes listable"
+cat /etc/hosts >/dev/null || fail "system config unreadable"
+if [ -n "${WANT_KEYCHAIN:-}" ]; then
+  security list-keychains >/dev/null 2>&1 && fail "keychain services reachable"
+fi
+if command -v nc >/dev/null; then
+  nc -z -G 2 127.0.0.1 "$WANT_LISTED" 2>/dev/null || fail "listed loopback port unreachable"
+  nc -z -G 2 127.0.0.1 "$WANT_UNLISTED" 2>/dev/null && fail "unlisted loopback port reachable"
+fi
+if command -v python3 >/dev/null; then
+  bind() { python3 -c 'import socket,sys; s=socket.socket(); s.bind(("127.0.0.1", int(sys.argv[1]))); s.listen(1)' "$1" 2>/dev/null; }
+  bind "$WANT_BIND_LISTED" || fail "listed loopback port not bindable"
+  bind "$WANT_BIND_UNLISTED" && fail "unlisted loopback port bindable"
+fi
 if command -v nc >/dev/null; then
   [ "$(nc -U "$WANT_DOOR" </dev/null)" = door ] || fail "door socket unreachable"
   [ "$(nc -U "$WANT_OTHER" </dev/null 2>/dev/null)" = door ] && fail "other socket reachable"
 fi
 exit 0`
 	c := &containConfine{Dir: dir, Sockets: []string{door}, RO: []string{bundle},
-		Env: []string{"WANT_DIR", "WANT_HOME", "WANT_BUNDLE", "WANT_DOOR", "WANT_OTHER"}}
+		Loopback: []int{listed, bindListed},
+		Env: []string{"WANT_DIR", "WANT_HOME", "WANT_BUNDLE", "WANT_DOOR", "WANT_OTHER", "WANT_OUTSIDE", "WANT_ACCT",
+			"WANT_KEYCHAIN", "WANT_LISTED", "WANT_UNLISTED", "WANT_BIND_LISTED", "WANT_BIND_UNLISTED"}}
+	t.Setenv("WANT_OUTSIDE", outside)
+	t.Setenv("WANT_ACCT", acct)
+	if keychainOutside {
+		t.Setenv("WANT_KEYCHAIN", "1")
+	}
+	t.Setenv("WANT_LISTED", fmt.Sprint(listed))
+	t.Setenv("WANT_UNLISTED", fmt.Sprint(unlisted))
+	t.Setenv("WANT_BIND_LISTED", fmt.Sprint(bindListed))
+	t.Setenv("WANT_BIND_UNLISTED", fmt.Sprint(bindUnlisted))
 	t.Setenv("WANT_DIR", dir)
 	t.Setenv("WANT_HOME", home)
 	t.Setenv("WANT_BUNDLE", bundle)
@@ -173,5 +232,43 @@ exit 0`
 	if _, err := os.Stat("/tmp/bashy-confine-escape"); err == nil {
 		os.Remove("/tmp/bashy-confine-escape")
 		t.Fatal("wrote outside DIR")
+	}
+}
+
+// The home to deny comes from the OS user record; without one nothing runs.
+func TestContainConfinedSeatbeltNeedsAccountHome(t *testing.T) {
+	if nativeContainSupported() != nil {
+		t.Skip("no Seatbelt on this host")
+	}
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := containAccountHome
+	defer func() { containAccountHome = old }()
+	containAccountHome = func() (string, error) { return "", fmt.Errorf("no user record") }
+	marker := filepath.Join(dir, "ran")
+	c := &containConfine{Dir: dir, dirSet: true}
+	if st := runConfined(c, "native", []string{"/usr/bin/touch", marker}); st != containUnsupportedStatus {
+		t.Fatalf("status %d, want 125", st)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the command ran without a resolvable account home")
+	}
+	// both the user-record home and a different $HOME are denied
+	containAccountHome = func() (string, error) { return "/Users/acct-from-record", nil }
+	t.Setenv("HOME", dir)
+	host, err := seatbeltConfinedHost()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.RemoveAll(host.Tmp)
+	for _, want := range []string{"/Users/acct-from-record", dir} {
+		if !slices.Contains(host.Deny, want) {
+			t.Errorf("deny roots %q miss %s", host.Deny, want)
+		}
+	}
+	if h, err := old(); err != nil || !filepath.IsAbs(h) {
+		t.Fatalf("account home from the user record: %q, %v", h, err)
 	}
 }

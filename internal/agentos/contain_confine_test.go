@@ -96,9 +96,13 @@ func TestContainConfinedEnvIsScrubbed(t *testing.T) {
 // The macOS backend's profile.
 func TestSeatbeltConfinedProfile(t *testing.T) {
 	c := &containConfine{Dir: "/Users/u/runs/r1", Sockets: []string{"/tmp/cf/s.sock"},
-		RO: []string{"/Users/u/.local/share/genie"}}
-	p := seatbeltConfinedProfile(c, "/private/var/folders/x/T/bashy-confine-1", "/Users/u", "/private/var/folders/x/T",
-		[]string{"/Users/u/.local/bin/bashy"})
+		RO: []string{"/Users/u/.local/share/genie"}, Loopback: []int{41234}}
+	p := seatbeltConfinedProfile(c, seatbeltHost{
+		Tmp:    "/private/var/folders/x/T/bashy-confine-1",
+		Deny:   []string{"/Users/u", "/Volumes/fake-home", "/private/var/folders/x/T"},
+		Self:   []string{"/Users/u/.local/bin/bashy"},
+		System: []string{"/Applications/Xcode.app/Contents/Developer"},
+	})
 	lines := strings.Split(p, "\n")
 	idx := func(rule string) int {
 		t.Helper()
@@ -108,76 +112,131 @@ func TestSeatbeltConfinedProfile(t *testing.T) {
 		}
 		return i
 	}
-	// network: deny, then only loopback and the named socket
-	denyNet := idx("(deny network*)")
-	if i := idx(`(allow network-outbound (remote unix-socket (path-literal "/tmp/cf/s.sock")))`); i < denyNet {
-		t.Error("socket allowance precedes the network deny (last match wins)")
+	after := func(rule string, floor int, what string) {
+		t.Helper()
+		if idx(rule) < floor {
+			t.Errorf("%s precedes %s (last match wins)", rule, what)
+		}
 	}
-	if strings.Contains(p, `(remote unix-socket))`) || strings.Contains(p, "(remote tcp") || strings.Contains(p, `"*:`) {
-		t.Errorf("profile opens more than loopback and the listed sockets:\n%s", p)
+	// ipc: default-deny Mach lookups, a short allow-list without the keychain
+	denyMach := idx("(deny mach-lookup)")
+	after(`(allow mach-lookup (global-name "com.apple.system.opendirectoryd.libinfo"))`, denyMach, "the mach deny")
+	for _, l := range lines {
+		if strings.HasPrefix(l, "(allow mach-lookup") && (strings.Contains(l, "Security") || strings.Contains(l, "secd") || strings.Contains(l, "trustd") || strings.Contains(l, "cfprefsd")) {
+			t.Errorf("keychain or preferences service allowed: %s", l)
+		}
+	}
+	// network: deny, then the named socket and the one loopback port only
+	denyNet := idx("(deny network*)")
+	after(`(allow network-outbound (remote unix-socket (path-literal "/tmp/cf/s.sock")))`, denyNet, "the network deny")
+	after(`(allow network-outbound (remote ip "localhost:41234"))`, denyNet, "the network deny")
+	after(`(allow network-bind network-inbound (local ip "localhost:41234"))`, denyNet, "the network deny")
+	if strings.Contains(p, `localhost:*`) || strings.Contains(p, `(remote unix-socket))`) || strings.Contains(p, "(remote tcp") || strings.Contains(p, `"*:`) {
+		t.Errorf("profile opens more than the listed sockets and port:\n%s", p)
+	}
+	noLoop := seatbeltConfinedProfile(&containConfine{Dir: c.Dir}, seatbeltHost{Tmp: "/t"})
+	if strings.Contains(noLoop, "ip \"") {
+		t.Errorf("no --loopback must mean no loopback at all:\n%s", noLoop)
 	}
 	// writes: deny, then DIR and the private temp only
 	denyW := idx("(deny file-write*)")
-	if i := idx(`(allow file-write* (subpath "/Users/u/runs/r1") (subpath "/private/var/folders/x/T/bashy-confine-1"))`); i < denyW {
-		t.Error("write allowance precedes the write deny")
-	}
+	after(`(allow file-write* (subpath "/Users/u/runs/r1") (subpath "/private/var/folders/x/T/bashy-confine-1"))`, denyW, "the write deny")
 	for _, l := range lines {
 		if strings.HasPrefix(l, "(allow file-write*") && strings.Contains(l, "genie") {
 			t.Errorf("an --ro path is writable: %s", l)
 		}
 	}
-	// reads: home and the temp root denied, then DIR, temp, ro, socket, bashy
+	// reads: default deny, system roots, keychains denied again, then the
+	// homes and temp root denied, then DIR, temp, ro, socket, bashy
+	denyR := idx("(deny file-read*)")
+	if denyR < denyW {
+		t.Error("read deny precedes the write rules")
+	}
+	usr := idx(`(allow file-read* (subpath "/usr"))`)
+	after(`(allow file-read* (literal "/"))`, denyR, "the read deny")
+	idx(`(allow file-read* (subpath "/Applications/Xcode.app/Contents/Developer"))`)
+	if usr < denyR {
+		t.Error("system read allowance precedes the default read deny")
+	}
+	after(`(deny file-read* (subpath "/Library/Keychains"))`, idx(`(allow file-read* (subpath "/Library"))`), "the /Library allowance")
 	denyHome := idx(`(deny file-read* (subpath "/Users/u"))`)
-	idx(`(deny file-read* (subpath "/private/var/folders/x/T"))`)
+	after(`(deny file-read* (subpath "/Volumes/fake-home"))`, usr, "the system reads")
+	after(`(deny file-read* (subpath "/private/var/folders/x/T"))`, usr, "the system reads")
 	for _, rule := range []string{
 		`(allow file-read* (subpath "/Users/u/runs/r1"))`,
 		`(allow file-read* (subpath "/Users/u/.local/share/genie"))`,
 		`(allow file-read* (subpath "/private/var/folders/x/T/bashy-confine-1"))`,
 		`(allow file-read* (literal "/Users/u/.local/bin/bashy"))`,
+		`(allow file-read* (literal "/tmp/cf/s.sock"))`,
 		`(allow file-read-metadata (literal "/Users/u"))`,
 		`(allow file-read-metadata (literal "/Users/u/runs"))`,
 	} {
-		if idx(rule) < denyHome {
-			t.Errorf("%s precedes the home deny", rule)
+		after(rule, denyHome, "the home deny")
+	}
+	// nothing outside the named roots is readable: no broad allowance
+	for _, l := range lines {
+		if strings.HasPrefix(l, "(allow file-read* (subpath \"/Users\")") || strings.HasPrefix(l, "(allow file-read* (subpath \"/\")") ||
+			strings.HasPrefix(l, "(allow file-read* (subpath \"/Volumes") || strings.HasPrefix(l, "(allow file-read* (subpath \"/private/tmp") {
+			t.Errorf("broad read allowance: %s", l)
 		}
 	}
-	// ancestors outside the denied trees need no allowance
-	if strings.Contains(p, `(literal "/Users"))`) || strings.Contains(p, `(literal "/tmp/cf"))`) {
-		t.Errorf("metadata allowance outside the denied trees:\n%s", p)
+}
+
+func TestContainConfineDenyRoots(t *testing.T) {
+	got := containConfineDenyRoots("/Users/acct", "/Users/other", "/private/var/folders/x/T")
+	if want := []string{"/Users/acct", "/Users/other", "/private/var/folders/x/T"}; !slices.Equal(got, want) {
+		t.Errorf("deny roots = %q, want %q", got, want)
+	}
+	if got := containConfineDenyRoots("/Users/acct", "/Users/acct/", ""); !slices.Equal(got, []string{"/Users/acct"}) {
+		t.Errorf("same home twice = %q", got)
+	}
+	if got := containConfineDenyRoots("/Users/acct", "/", ""); !slices.Equal(got, []string{"/Users/acct"}) {
+		t.Errorf("HOME=/ must not deny the whole tree: %q", got)
 	}
 }
 
 // The Linux backend's container spec.
 func TestContainerConfinedArgs(t *testing.T) {
 	c := &containConfine{Dir: "/home/u/runs/r1", Sockets: []string{"/run/user/1/door.sock"},
-		RO: []string{"/home/u/.local/share/genie"}, Env: []string{"GENIE_MODEL_ID"}}
-	environ := []string{"PATH=/home/u/bin:/usr/bin", "OPENAI_API_KEY=sk-secret", "GENIE_MODEL_ID=m", "LANG=C.UTF-8"}
-	args := containerConfinedArgs(c, "localhost/bashy:test", environ, []string{"/home/u/.local/share/genie/run", "-x"})
+		RO: []string{"/home/u/.local/share/genie"}, Env: []string{"GENIE_MODEL_ID"}, Loopback: []int{41234}}
+	environ := []string{"PATH=/home/u/bin:/usr/bin", "OPENAI_API_KEY=sk-secret", "GENIE_MODEL_ID=m", "LANG=C.UTF-8", "HOME=/home/u"}
+	args := containerConfinedArgs(c, "localhost/bashy:test", nil, environ, []string{"/home/u/.local/share/genie/run", "-x"})
 	line := strings.Join(args, " ")
 	for _, want := range []string{
-		"podman run --rm -i --network=none",
+		"podman run --rm -i --network=none --unsetenv-all",
 		"--read-only --tmpfs /tmp:rw,nosuid,nodev,mode=1777",
 		"-v /home/u/runs/r1:/home/u/runs/r1:rw -w /home/u/runs/r1",
 		"-v /home/u/.local/share/genie:/home/u/.local/share/genie:ro",
-		"-v /run/user/1/door.sock:/run/user/1/door.sock",
-		"-e GENIE_MODEL_ID=m", "-e LANG=C.UTF-8", "-e TMPDIR=/tmp", "-e HOME=/tmp",
+		"-v /run/user/1/door.sock:/run/user/1/door.sock:ro",
 		"localhost/bashy:test -c '/home/u/.local/share/genie/run' '-x'",
 	} {
 		if !strings.Contains(line, want) {
 			t.Errorf("container spec missing %q:\n%s", want, line)
 		}
 	}
-	for _, leak := range []string{"OPENAI_API_KEY", "sk-secret", "PATH=", "/home/u:/", "--network=host", "--privileged"} {
+	for _, leak := range []string{"OPENAI_API_KEY", "sk-secret", "/home/u/bin", "HOME=/home/u", "--network=host", "--privileged", "41234"} {
 		if strings.Contains(line, leak) {
 			t.Errorf("container spec carries %q:\n%s", leak, line)
 		}
 	}
-	// only the three named host paths are mounted (plus nothing else)
-	var mounts []string
+	// the complete environment, nothing else
+	var env, mounts []string
 	for i, a := range args {
-		if a == "-v" {
+		switch a {
+		case "-e":
+			env = append(env, args[i+1])
+		case "-v":
 			mounts = append(mounts, args[i+1])
 		}
+	}
+	wantEnv := []string{"PATH=/", "OTEL_TRACES_EXPORTER=none", "BASHY_TELEMETRY_QUIET=1", "BASHY_AGENTIC=1", "BASHY_HINTS=off",
+		"GENIE_MODEL_ID=m", "LANG=C.UTF-8", "TMPDIR=/tmp", "HOME=/tmp"}
+	if !slices.Equal(env, wantEnv) {
+		t.Errorf("environment = %q, want exactly %q", env, wantEnv)
+	}
+	withEnv := containerConfinedEnv(nil, nil, []string{"go"})
+	if !slices.Contains(withEnv, "BASHY_BIN_CACHE=/opt/bashy/bin") || len(withEnv) != 10 {
+		t.Errorf("--with image environment = %q", withEnv)
 	}
 	if len(mounts) != 3 {
 		t.Errorf("mounts = %q, want DIR, the --ro path and the socket only", mounts)
@@ -218,13 +277,35 @@ func TestContainConfineBackendSelection(t *testing.T) {
 
 func TestDispatchContainConfineFlags(t *testing.T) {
 	c := confineFixture(t)
-	if st := dispatchContain([]string{"--net", "model", "--dir", c.Dir, "--", "true"}); st != 2 {
-		t.Errorf("--dir with --net model: status %d, want 2", st)
+	for _, tc := range []struct {
+		args []string
+		want int
+	}{
+		{[]string{"--net", "model", "--dir", c.Dir, "--", "true"}, 2},
+		{[]string{"--net", "deny", "--ro", c.RO[0], "--", "true"}, 2},
+		{[]string{"--net", "deny", "--loopback", "4000", "--", "true"}, 2},
+		{[]string{"--net", "deny", "--dir", filepath.Join(c.Dir, "missing"), "--", "true"}, containUnsupportedStatus},
+		// an empty or missing --dir never falls back to network-only mode
+		{[]string{"--net", "deny", "--dir=", "--", "true"}, 2},
+		{[]string{"--net", "deny", "--dir", "", "--", "true"}, 2},
+		{[]string{"--net", "deny", "--", "true", "--dir"}, -1}, // after --: the command's own argument
+		{[]string{"--net", "deny", "--dir"}, 2},
+		{[]string{"--net", "deny", "--dir", c.Dir, "--loopback", "0", "--", "true"}, 2},
+		{[]string{"--net", "deny", "--dir", c.Dir, "--loopback=http", "--", "true"}, 2},
+		{[]string{"--net", "deny", "--dir", c.Dir, "--socket=", "--", "true"}, 2},
+	} {
+		if tc.want < 0 {
+			continue
+		}
+		if st := dispatchContain(tc.args); st != tc.want {
+			t.Errorf("%q: status %d, want %d", tc.args, st, tc.want)
+		}
 	}
-	if st := dispatchContain([]string{"--net", "deny", "--ro", c.RO[0], "--", "true"}); st != 2 {
-		t.Errorf("--ro without --dir: status %d, want 2", st)
+	var cc containConfine
+	if err := cc.add("--loopback", "41234"); err != nil || !slices.Equal(cc.Loopback, []int{41234}) {
+		t.Errorf("--loopback 41234: %v %v", cc.Loopback, err)
 	}
-	if st := dispatchContain([]string{"--net", "deny", "--dir", filepath.Join(c.Dir, "missing"), "--", "true"}); st != containUnsupportedStatus {
-		t.Errorf("missing --dir: status %d, want 125 (nothing ran)", st)
+	if err := cc.add("--dir", ""); err == nil || !cc.active() {
+		t.Error("an empty --dir must be refused and still count as asked for")
 	}
 }

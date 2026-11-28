@@ -4,12 +4,15 @@ package agentos
 //
 // File confinement on `bashy contain` (Seam B of the Sprint 738 plan):
 //
-//	bashy contain --net deny --dir DIR [--socket /abs.sock]… [--ro /abs/path]… [--env NAME]… -- CMD [ARGS…]
+//	bashy contain --net deny --dir DIR [--socket /abs.sock]… [--ro /abs/path]… [--env NAME]… [--loopback PORT]… -- CMD [ARGS…]
 //
 // With --dir, DIR and a fresh private temp (TMPDIR, and HOME) are the only
-// writable places and DIR is the working directory; the user's home is
-// unreadable except each --ro path, DIR and bashy itself; each --socket is
-// reachable; nothing else on the network is. The environment is scrubbed to
+// writable places and DIR is the working directory; reads are the system
+// roots (never the keychains), DIR, each --ro path and bashy itself — the
+// account home, $HOME and the user temp root never; each --socket is
+// reachable, and loopback only on each --loopback PORT; nothing else on the
+// network is. On macOS, Mach lookups are limited to the account database,
+// notifications and logging (no keychain, no preferences). The environment is scrubbed to
 // a fixed allow-list plus the --env names. One spec (containConfine), two
 // backends: a generated Seatbelt profile on macOS (seatbeltConfinedProfile)
 // and bashy's own image through bashy podman elsewhere (containerConfinedArgs:
@@ -24,6 +27,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -33,17 +37,44 @@ type containConfine struct {
 	Sockets []string // unix sockets the child may connect to
 	RO      []string // host paths readable (never writable) inside
 	Env     []string // variable NAMES passed through besides the allow-list
+	// Loopback ports the child may bind and connect to (the in-sandbox
+	// forwarder's). macOS: the only loopback in the profile; Linux: the
+	// container's own loopback is private, so no rule is needed.
+	Loopback []int
+	dirSet   bool // --dir was given (even if its value was refused)
 }
 
 // containConfineEnvAllow is what survives the scrub (TMPDIR and HOME are
 // always set to the private temp, never inherited).
 var containConfineEnvAllow = []string{"PATH", "LANG", "LC_ALL", "TERM"}
 
-func (c *containConfine) active() bool { return c.Dir != "" }
+func (c *containConfine) active() bool { return c.dirSet }
 
-// add records one flag; a repeated --dir keeps the last.
-func (c *containConfine) add(flag, v string) {
+// containConfineFlag reports whether a is one of the confinement flags.
+func containConfineFlag(a string) bool {
+	switch a {
+	case "--dir", "--socket", "--ro", "--env", "--loopback":
+		return true
+	}
+	return false
+}
+
+// add records one flag; a repeated --dir keeps the last. An empty value or
+// a bad port is a usage error: it must never silently drop the confinement.
+func (c *containConfine) add(flag, v string) error {
+	if flag == "--dir" {
+		c.dirSet = true
+	}
+	if v == "" {
+		return fmt.Errorf("%s needs a non-empty value", flag)
+	}
 	switch flag {
+	case "--loopback":
+		port, err := strconv.Atoi(v)
+		if err != nil || port < 1 || port > 65535 {
+			return fmt.Errorf("--loopback %q: not a TCP port (1-65535)", v)
+		}
+		c.Loopback = append(c.Loopback, port)
 	case "--dir":
 		c.Dir = v
 	case "--socket":
@@ -53,6 +84,7 @@ func (c *containConfine) add(flag, v string) {
 	case "--env":
 		c.Env = append(c.Env, v)
 	}
+	return nil
 }
 
 // prepare validates the spec and resolves every path to its real absolute
@@ -155,58 +187,129 @@ func pathAncestors(p string) []string {
 	return out
 }
 
-// seatbeltConfinedProfile is the macOS backend's profile for c: writes only
-// to c.Dir, tmp and the terminal/null devices; reads of home and of the
-// user temp root denied except c.Dir, tmp, the --ro paths and bashy (self);
-// no network but the --socket paths and loopback (for an in-sandbox
-// forwarder; Seatbelt has no network namespace, so this loopback is the
-// host's — see the story record). Rules are last-match-wins.
-func seatbeltConfinedProfile(c *containConfine, tmp, home, userTemp string, self []string) string {
+// seatbeltHost is what the macOS profile needs from the host besides the
+// spec: the private temp, the trees whose reads are denied even inside an
+// allowed system root (the account home, $HOME, the user temp root), bashy
+// itself, and extra read-only system roots (the selected developer dir).
+type seatbeltHost struct {
+	Tmp    string
+	Deny   []string
+	Self   []string
+	System []string
+}
+
+// seatbeltSystemReads are the read-only roots every process needs: the
+// system, the dynamic linker caches, the shared configuration, devices, and
+// the usual tool prefixes (/opt holds Homebrew; /usr/local the older one).
+var seatbeltSystemReads = []string{"/usr", "/bin", "/sbin", "/System", "/Library", "/opt",
+	"/private/etc", "/private/var/db/timezone", "/private/var/db/dyld", "/private/var/select", "/dev",
+	"/private/var/db/xcode_select_link"}
+
+// seatbeltSecretReads stay unreadable inside the system roots.
+var seatbeltSecretReads = []string{"/Library/Keychains"}
+
+// seatbeltMachAllow are the only Mach services the child may look up: the
+// account database, notifications and logging. Everything else — the
+// keychain (com.apple.SecurityServer, securityd, secd, trustd), preferences
+// (cfprefsd serves the home's) and the rest of launchd — is denied.
+var seatbeltMachAllow = []string{
+	"com.apple.system.opendirectoryd.libinfo",
+	"com.apple.system.opendirectoryd.membership",
+	"com.apple.system.notification_center",
+	"com.apple.system.logger",
+	"com.apple.logd",
+	"com.apple.diagnosticd",
+}
+
+// containConfineDenyRoots are the read-denied trees: the account home from
+// the OS user record, $HOME when it names another place, and the user temp
+// root; "/" and duplicates dropped.
+func containConfineDenyRoots(accountHome, envHome, userTemp string) []string {
+	var out []string
+	for _, d := range []string{accountHome, envHome, userTemp} {
+		if d == "" {
+			continue
+		}
+		if r, err := filepath.EvalSymlinks(d); err == nil {
+			d = r
+		}
+		d = filepath.Clean(d)
+		if d != "/" && filepath.IsAbs(d) && sbplSafePath(d) == nil && !slices.Contains(out, d) {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// seatbeltConfinedProfile is the macOS backend's profile for c. Reads are
+// denied by default: the system roots are readable (minus the keychains),
+// then the home, $HOME and the user temp root are denied again, then DIR,
+// the private temp, the --ro paths, the sockets and bashy are allowed.
+// Writes go only to DIR, the private temp and the terminal/null devices.
+// Network: the listed unix sockets, unix sockets under DIR and the temp, and
+// loopback only on the --loopback ports (Seatbelt has no network namespace:
+// this loopback is the host's, so no other port of it is open). Mach
+// lookups: the short allow-list only. Rules are last-match-wins.
+func seatbeltConfinedProfile(c *containConfine, h seatbeltHost) string {
 	var b strings.Builder
 	line := func(format string, a ...any) { fmt.Fprintf(&b, format+"\n", a...) }
+	tmp := h.Tmp
 	line("(version 1)")
 	line("(allow default)")
-	line("; network: nothing but the listed unix sockets and loopback")
+	line("; ipc: no host services but the account database, notifications and logging")
+	line("(deny mach-lookup)")
+	for _, n := range seatbeltMachAllow {
+		line("(allow mach-lookup (global-name %s))", sbplQuote(n))
+	}
+	line("; network: the listed unix sockets and the listed loopback ports only")
 	line("(deny network*)")
-	line(`(allow network-bind network-inbound (local ip "localhost:*"))`)
-	line(`(allow network-outbound (remote ip "localhost:*"))`)
 	line("(allow network-bind network-inbound (local unix-socket (subpath %s)) (local unix-socket (subpath %s)))", sbplQuote(c.Dir), sbplQuote(tmp))
 	line("(allow network-outbound (remote unix-socket (subpath %s)) (remote unix-socket (subpath %s)))", sbplQuote(c.Dir), sbplQuote(tmp))
 	for _, s := range c.Sockets {
 		line("(allow network-outbound (remote unix-socket (path-literal %s)))", sbplQuote(s))
 	}
+	for _, p := range c.Loopback {
+		line(`(allow network-bind network-inbound (local ip "localhost:%d"))`, p)
+		line(`(allow network-outbound (remote ip "localhost:%d"))`, p)
+	}
 	line("; writes: DIR, the private temp, terminal and null devices")
 	line("(deny file-write*)")
 	line("(allow file-write* (subpath %s) (subpath %s))", sbplQuote(c.Dir), sbplQuote(tmp))
 	line(`(allow file-write* (literal "/dev/null") (literal "/dev/zero") (literal "/dev/tty") (literal "/dev/dtracehelper") (regex #"^/dev/fd/") (regex #"^/dev/ttys[0-9]+$"))`)
-	line("; reads: not home, not the user temp root")
-	var denied []string
-	for _, d := range []string{home, userTemp} {
-		if d != "" && d != "/" {
-			denied = append(denied, d)
-			line("(deny file-read* (subpath %s))", sbplQuote(d))
-		}
+	line("; reads: denied by default; the system roots minus the keychains")
+	line("(deny file-read*)")
+	line(`(allow file-read* (literal "/"))`) // the root directory itself (dyld lists it), not its subtree
+	system := append(slices.Clone(seatbeltSystemReads), h.System...)
+	for _, p := range system {
+		line("(allow file-read* (subpath %s))", sbplQuote(p))
 	}
-	allowed := append([]string{c.Dir, tmp}, c.RO...)
-	allowed = append(allowed, c.Sockets...)
-	allowed = append(allowed, self...)
-	var meta []string
-	for _, p := range allowed {
+	for _, p := range seatbeltSecretReads {
+		line("(deny file-read* (subpath %s))", sbplQuote(p))
+	}
+	line("; not the home, $HOME or the user temp root, even under a system root")
+	for _, d := range h.Deny {
+		line("(deny file-read* (subpath %s))", sbplQuote(d))
+	}
+	line("; DIR, the private temp, the --ro paths, the sockets, bashy")
+	trees := append([]string{c.Dir, tmp}, c.RO...)
+	files := append(slices.Clone(c.Sockets), h.Self...)
+	// the root-level links (/etc /var /tmp) and every ancestor of an allowed
+	// path are stat-able so lookups and getcwd work; their contents are not
+	meta := []string{"/etc", "/var", "/tmp"}
+	for _, p := range slices.Concat(trees, files, system) {
 		for _, a := range pathAncestors(p) {
-			for _, d := range denied {
-				if (a == d || strings.HasPrefix(a, d+"/")) && !slices.Contains(meta, a) {
-					meta = append(meta, a)
-				}
+			if !slices.Contains(meta, a) {
+				meta = append(meta, a)
 			}
 		}
 	}
 	for _, a := range meta {
 		line("(allow file-read-metadata (literal %s))", sbplQuote(a))
 	}
-	for _, p := range append([]string{c.Dir, tmp}, c.RO...) {
+	for _, p := range trees {
 		line("(allow file-read* (subpath %s))", sbplQuote(p))
 	}
-	for _, p := range append(slices.Clone(c.Sockets), self...) {
+	for _, p := range files {
 		line("(allow file-read* (literal %s))", sbplQuote(p))
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -237,27 +340,53 @@ func containConfineSelf() []string {
 // paths; the private temp is a tmpfs at /tmp.
 const containConfineInTmp = "/tmp"
 
+// containerConfinedImageEnv is the image's own part of the confined run's
+// environment, stated here because the run discards the image's ENV
+// (--unsetenv-all): bashy's in-image PATH, telemetry off (no network to send
+// it to), agent mode without hints, and, for an image built --with
+// toolchains, the cache locations its provisioners read.
+func containerConfinedImageEnv(with []string) []string {
+	env := []string{"PATH=/", "OTEL_TRACES_EXPORTER=none", "BASHY_TELEMETRY_QUIET=1", "BASHY_AGENTIC=1", "BASHY_HINTS=off"}
+	if len(normalizedWith(with)) > 0 {
+		env = append(env, "BASHY_BIN_CACHE=/opt/bashy/bin", "UV_PYTHON_INSTALL_DIR=/opt/bashy/python", "UV_PYTHON_PREFERENCE=only-managed")
+	}
+	return env
+}
+
+// containerConfinedEnv is the complete environment of the confined image
+// run: the image part, then the scrubbed host part (its PATH dropped: host
+// entries do not exist inside) with TMPDIR and HOME at the private tmpfs.
+func containerConfinedEnv(environ, names, with []string) []string {
+	env := containerConfinedImageEnv(with)
+	for _, kv := range confinedEnv(environ, names, containConfineInTmp) {
+		if k, _, _ := strings.Cut(kv, "="); k != "PATH" {
+			env = append(env, kv)
+		}
+	}
+	return env
+}
+
 // containerConfinedArgs is the Linux backend's `bashy podman` command line
 // for c: bashy's image, no network, only DIR (rw), the --ro paths and the
-// sockets bind-mounted at their own paths, a private tmpfs as TMPDIR/HOME,
-// the scrubbed environment, DIR as the working directory.
-func containerConfinedArgs(c *containConfine, image string, environ []string, argv []string) []string {
-	opts := []string{"--userns=keep-id", "--read-only", "--tmpfs", containConfineInTmp + ":rw,nosuid,nodev,mode=1777",
-		"-e", "BASHY_CONTAINED=confine",
+// sockets (both read-only; a connect works on a read-only bind) mounted at
+// their own paths, a private tmpfs as TMPDIR/HOME, exactly
+// containerConfinedEnv as the environment (podman's and the image's
+// defaults unset), DIR as the working directory. --loopback needs no rule:
+// the container's loopback is its own.
+func containerConfinedArgs(c *containConfine, image string, with, environ, argv []string) []string {
+	args := []string{"podman", "run", "--rm", "-i", "--network=none", "--unsetenv-all",
+		"--userns=keep-id", "--read-only", "--tmpfs", containConfineInTmp + ":rw,nosuid,nodev,mode=1777",
 		"-v", c.Dir + ":" + c.Dir + ":rw", "-w", c.Dir}
 	for _, p := range c.RO {
-		opts = append(opts, "-v", p+":"+p+":ro")
+		args = append(args, "-v", p+":"+p+":ro")
 	}
 	for _, s := range c.Sockets {
-		opts = append(opts, "-v", s+":"+s)
+		args = append(args, "-v", s+":"+s+":ro")
 	}
-	for _, kv := range confinedEnv(environ, c.Env, containConfineInTmp) {
-		if k, _, _ := strings.Cut(kv, "="); k == "PATH" {
-			continue // the image's own PATH: host entries do not exist inside
-		}
-		opts = append(opts, "-e", kv)
+	for _, kv := range containerConfinedEnv(environ, c.Env, with) {
+		args = append(args, "-e", kv)
 	}
-	return podmanRun(opts, image, "-c", containerConfinedCommand(c, argv))
+	return append(args, image, "-c", containerConfinedCommand(c, argv))
 }
 
 // containerConfinedCommand is containerCommand, except an absolute argv[0]
@@ -308,7 +437,7 @@ func runContainerConfined(c *containConfine, argv []string) int {
 		fmt.Fprintf(os.Stderr, "bashy contain: %v; nothing ran\n", err)
 		return containUnsupportedStatus
 	}
-	return runContainChild(self, containerConfinedArgs(c, image, os.Environ(), argv), "", nil)
+	return runContainChild(self, containerConfinedArgs(c, image, with, os.Environ(), argv), "", nil)
 }
 
 // runContainChild runs name args with the terminal, in dir (if set) with env
