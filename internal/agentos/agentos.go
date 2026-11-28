@@ -720,6 +720,11 @@ func dispatchWithContext(ctx context.Context) {
 		// L1 of the skills advertisement ladder: agent driving + agent-naive
 		// repo + not hinted here before → one stderr pointer. Zero repo writes.
 		maybeAdvertiseSkillHint()
+		// Identity first (Sprint 744): a native agent session is given its ad
+		// hoc name here, or a coordination verb is refused with how to name it.
+		if code, refused := agentIdentityGate(os.Args[1:], os.Stderr); refused {
+			dispatchExit(code)
+		}
 		// Unread-mail hint (Sprint 321): every ordinary command surfaces the same
 		// stderr-only hint when unread mail waits — read-only, arrival-scoped.
 		maybeHintUnreadMail(os.Args[1:])
