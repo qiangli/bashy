@@ -38,7 +38,7 @@ HOME = Path.home()
 C_HOME, O_HOME = HOME / ".bashy", HOME / "o-host"
 CONFIG = HOME / ".config/matrix/agent.json"
 MODEL, AGENT, CAP = "fake-model", "helper", 64
-OFFERS = ("llm", "stt", AGENT, "files-docs", "files-outside")
+OFFERS = (MODEL, "stt", AGENT, "files-docs", "files-outside", "files-offers", "files-in")
 T1, T2 = os.environ.get("TAAS_T1") == "1", os.environ.get("TAAS_T2") == "1"
 WAIT = float(os.environ.get("TAAS_WAIT", "15"))
 calls = {}  # (principal, tool) -> list of usage dicts the callers saw
