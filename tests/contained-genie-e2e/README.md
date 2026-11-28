@@ -53,6 +53,7 @@ bashy dag test-contained-genie-e2e
 |---|---|---|
 | `CONTAINED_GENIE_GATE` | must be `1` (fail-closed otherwise) | — |
 | `CONTAINED_GENIE_BASHY_BIN` | candidate `bashy` binary under test | `bin/bashy` |
+| `CONTAINED_GENIE_SANDBOX_BASHY` | static linux `bashy` mounted inside the image (`bashy dag build-bashy-scratch` output) | the candidate binary |
 | `CONTAINED_GENIE_IMAGE` | container image override (skips `image.lock` digest check) | `base_image` in `image.lock` |
 | `CONTAINED_GENIE_GENIE_BAR` | prebuilt `genie.bar` override | built via `bashy genie build` |
 | `CONTAINED_GENIE_EVIDENCE` | fresh raw log path (must not exist) | — |

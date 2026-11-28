@@ -217,7 +217,9 @@ def run_contained_leg(
         "BASHY_HINTS": "off",
         "BASHY_ADVISOR": "off",
         "BASHY_CONTAIN_IMAGE": contain_image,
-        "BASHY_CONTAIN_BASHY": str(bashy_bin),
+        # The bashy that runs INSIDE the image: a static linux build (the
+        # scratch profile the released image carries), not the host binary.
+        "BASHY_CONTAIN_BASHY": os.environ.get("CONTAINED_GENIE_SANDBOX_BASHY", str(bashy_bin)),
         "CONTAINED_GENIE_SOCKET": str(socket_path),
         "CONTAINED_GENIE_TOKEN": token,
         "CONTAINED_GENIE_MODEL_ID": model_id,
