@@ -344,16 +344,17 @@ def scenario(c, o, outpost):
     if T2:
         for name, args in (("stt", ["--input", "bashy://o/files-in/in.wav"]),
                            ("files-docs", ["--op", "ls"])):
-            cli(o, "remote", "add", "c", name)
+            # Both hosts share one container, so mount under a local name.
+            cli(o, "remote", "add", "c", name, "--as", "c-" + name)
             tools = cli_json(o, "mcp", "tools", "--json")
-            mounted = [t for t in tools if t.get("name", "").endswith(name)]
+            mounted = [t for t in tools if t.get("name", "") == "c-" + name]
             check(mounted and mounted[0].get("inputSchema", {}).get("properties"),
                   f"bashy remote add c {name} shows a typed tool in bashy mcp tools")
             out = cli(o, "mcp", "call", mounted[0]["name"], *args, ok=False)
             check(out.returncode == 0, f"a call through the mounted {name} works")
         cli(c, "offer", "stop", MODEL)
         cli(c, "offer", MODEL, "--group", "support", "--tag", "changed")
-        cli(o, "remote", "add", "c", MODEL)
+        cli(o, "remote", "add", "c", MODEL, "--as", "c-" + MODEL)
         cli(c, "offer", "stop", MODEL)
         cli(c, "offer", MODEL, "--group", "support", "--tag", "changed-again")
         out = cli(o, "mcp", "call", "c-" + MODEL, "--prompt", "say hello", ok=False)
