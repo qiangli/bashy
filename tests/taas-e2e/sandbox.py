@@ -68,7 +68,7 @@ class Satellite(BaseHTTPRequestHandler):
         share = dict(rule, id=f"share-{len(Satellite.shares) + 1}", host=parts[4],
                      created="2026-11-28T00:00:00Z")
         Satellite.shares.append(share)
-        self.send_json(201, share)
+        self.send_json(201, {"share": share})
 
     def do_DELETE(self):
         share_id = self.path.rsplit("/", 1)[-1]
@@ -78,7 +78,7 @@ class Satellite(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.endswith("/shares") and self.path.startswith("/api/v1/hosts/"):
-            self.send_json(200, [s for s in Satellite.shares if self.path.split("/")[4] == s["host"]])
+            self.send_json(200, {"shares": [s for s in Satellite.shares if self.path.split("/")[4] == s["host"]]})
             return
         if self.path != "/api/v1/hosts/self/grants" or self.headers.get("Authorization") != "Bearer " + TOKEN:
             self.send_error(401 if self.path.endswith("/grants") else 404)
