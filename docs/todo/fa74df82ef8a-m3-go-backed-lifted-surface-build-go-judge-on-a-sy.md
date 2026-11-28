@@ -3,11 +3,12 @@ id: fa74df82ef8a
 kind: feature
 title: 'M3 Go-backed lifted surface: build Go, judge on a synthetic temp DB, enforce a declared candidate file set'
 seq: 3334
-status: todo
+status: assigned
 priority: p0
 labels:
     - shapeware
 created: 2026-11-28T06:50:10.608245Z
+assignee: claude-opus5.5-s741
 sprint: 742
 sprint_id: 7dde34d4-f382-5aba-8ff5-071c5e3548b8
 sprint_title: 'Shaping: bugs and issues become spec changes (issue-to-spec support)'
