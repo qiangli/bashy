@@ -1,0 +1,268 @@
+{
+  "conform_version": "0.1.1",
+  "contract_sha256": "1842377c3e23c6d69c00094b83bbc4fc040befa4ca995dc70951016fe740e9fd",
+  "candidate": {
+    "name": "session",
+    "digest": "sha256:1b5701e052db9ed382fb333852893ca75f3795609754f7e3d2f832183a0c9a52"
+  },
+  "reference": {
+    "name": "session",
+    "digest": "sha256:1b5701e052db9ed382fb333852893ca75f3795609754f7e3d2f832183a0c9a52"
+  },
+  "environment": {
+    "os": "linux",
+    "arch": "amd64",
+    "go_version": "go1.27.4",
+    "shell": "sh"
+  },
+  "baseline": {
+    "runs": 3,
+    "noisy": [],
+    "reference_runs": [
+      {
+        "A-01": "PASS",
+        "A-02": "PASS",
+        "A-03": "PASS",
+        "A-04": "PASS",
+        "A-05": "PASS",
+        "A-06": "PASS",
+        "A-07": "PASS",
+        "A-08": "PASS",
+        "A-09": "PASS",
+        "A-10": "PASS",
+        "A-12": "PASS",
+        "A-13": "PASS",
+        "A-14": "PASS",
+        "A-15": "PASS",
+        "A-16": "PASS",
+        "A-17": "PASS",
+        "A-18": "PASS",
+        "A-19": "PASS",
+        "A-20": "PASS",
+        "A-21": "PASS",
+        "A-22": "PASS",
+        "A-23": "PASS",
+        "A-24": "PASS"
+      },
+      {
+        "A-01": "PASS",
+        "A-02": "PASS",
+        "A-03": "PASS",
+        "A-04": "PASS",
+        "A-05": "PASS",
+        "A-06": "PASS",
+        "A-07": "PASS",
+        "A-08": "PASS",
+        "A-09": "PASS",
+        "A-10": "PASS",
+        "A-12": "PASS",
+        "A-13": "PASS",
+        "A-14": "PASS",
+        "A-15": "PASS",
+        "A-16": "PASS",
+        "A-17": "PASS",
+        "A-18": "PASS",
+        "A-19": "PASS",
+        "A-20": "PASS",
+        "A-21": "PASS",
+        "A-22": "PASS",
+        "A-23": "PASS",
+        "A-24": "PASS"
+      },
+      {
+        "A-01": "PASS",
+        "A-02": "PASS",
+        "A-03": "PASS",
+        "A-04": "PASS",
+        "A-05": "PASS",
+        "A-06": "PASS",
+        "A-07": "PASS",
+        "A-08": "PASS",
+        "A-09": "PASS",
+        "A-10": "PASS",
+        "A-12": "PASS",
+        "A-13": "PASS",
+        "A-14": "PASS",
+        "A-15": "PASS",
+        "A-16": "PASS",
+        "A-17": "PASS",
+        "A-18": "PASS",
+        "A-19": "PASS",
+        "A-20": "PASS",
+        "A-21": "PASS",
+        "A-22": "PASS",
+        "A-23": "PASS",
+        "A-24": "PASS"
+      }
+    ]
+  },
+  "layers": {
+    "cli": "PASS"
+  },
+  "verdict": "PASS",
+  "results": [
+    {
+      "layer": "cli",
+      "name": "A-01",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-02",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-03",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-04",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-05",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-06",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-07",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-08",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-09",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-10",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-12",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-13",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-14",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-15",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-16",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-17",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-18",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-19",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-20",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-21",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-22",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-23",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    },
+    {
+      "layer": "cli",
+      "name": "A-24",
+      "status": "PASS",
+      "detail": "ok",
+      "freshness": "fresh"
+    }
+  ],
+  "timestamp": "2026-11-28T10:59:25Z",
+  "seal": "85b2b57a5ca344003fe733efc4a319c9c4187b7a2399b0715a8a2c7065b78a99"
+}

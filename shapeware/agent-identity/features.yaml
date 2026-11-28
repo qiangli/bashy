@@ -1,0 +1,32 @@
+# agent-identity feature list (shapeware v0.1). IDs are stable across versions.
+# effort is relative size in Fibonacci points (1, 2, 3, 5, 8, 13 = split it).
+- id: adhoc-session-id
+  effort: 3
+  status: verified
+  intent: A bashy <tool> launch is its own session with an id no later launch reuses, and the tool's help says what that id looks like.
+  acceptance:
+    - A-20 shows the per-launch session form in the resolved launch.
+    - A-21 shows it in the tool's help, with how to reach one session among several.
+    - session gotest github.com/qiangli/yoke/pkg/chat TestJoinAdHocDerivesTheIDFromTheInstanceUUID => PASS TestJoinAdHocDerivesTheIDFromTheInstanceUUID
+- id: native-session-identity
+  effort: 8
+  status: verified
+  intent: An agent that calls bashy from its own CLI, having declared nothing, gets a name and an inbox by itself and learns the name the first time.
+  acceptance:
+    - A-02 names the session on its first verb and A-03 does not repeat it.
+    - A-05 gives a second session of the same tool a different name, and A-07 names a session of another tool.
+    - A-06 and A-08 list one instance per session, each labelled with the first group of its UUID.
+    - session gotest github.com/qiangli/yoke/pkg/bus TestAdHocIdentityFromTheHarnessAncestor => PASS TestAdHocIdentityFromTheHarnessAncestor
+    - A-09 sends to a session by its name.
+    - session gotest ./internal/agentos TestUnreadHintReachesANativeAgentSession => PASS TestUnreadHintReachesANativeAgentSession
+    - A-12 reads the message as the named session and A-13 shows the sender has none.
+- id: front-door-identity-step
+  effort: 5
+  status: verified
+  critical: true
+  intent: Every coordination verb runs as a named agent or not at all, and a refusal tells the agent how to name itself.
+  acceptance:
+    - A-04 takes a claim with no declared name and A-05 shows it held under the session's name.
+    - A-14 and A-15 refuse an unidentifiable agent session on coordination verbs with the naming guidance and exit 2.
+    - A-16 and A-17 let that session run a verb that records nobody and read a verb's help.
+    - A-18 leaves a self-chosen name alone, A-19 the off switch, A-01 a caller that is not an agent, and A-22 the shell itself.
