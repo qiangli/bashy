@@ -119,7 +119,7 @@ effects: [read]
 
 
 def as_host(home, port):
-    return dict(os.environ, BASHY_HOME=str(home), BASHY_LLM_PORT=str(port))
+    return dict(os.environ, BASHY_HOME=str(home), BASHY_LLM_PORT=str(port), FAKE_MODEL_KEY="fake-key")
 
 
 def cli(env, *args, ok=True):
@@ -368,7 +368,9 @@ def main():
         httpd = ThreadingHTTPServer(("127.0.0.1", port), server)
         threading.Thread(target=httpd.serve_forever, daemon=True).start()
     run("bashy", "tools", "set", "codex", "--set", "cli.binary=/fixture/codex")
-    cli(c, "model", "add", MODEL, "--provider", "openai-compat", "--kind", "local",
+    # The door passes a request through only to an API model with a key
+    # reference (broker FleetAPI.ResolveAPI); the fake key lives in the env.
+    cli(c, "model", "add", MODEL, "--provider", "openai-compat", "--kind", "api", "--api-key-ref", "FAKE_MODEL_KEY",
         "--base-url", f"http://127.0.0.1:{MODEL_PORT}/v1", "--upstream", MODEL)
     cli(c, "agent", "add", AGENT, "--tool", "codex", "--model", MODEL)
     for record in (TRANSCRIBE, UNTYPED):
