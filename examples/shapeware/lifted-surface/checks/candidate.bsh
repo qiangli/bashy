@@ -4,7 +4,7 @@
 # surface copies it verbatim into its checks/ folder.
 #
 # Usage, from anywhere:
-#   bashy --bashsharp checks/candidate.bsh WORKCOPY
+#   bashy --bashsharp checks/candidate.bsh [--spec-change] WORKCOPY
 # WORKCOPY is a fresh clone or git worktree of the implementing repository.
 #
 # Read from this folder's SKILL.md frontmatter (metadata, string values):
@@ -26,22 +26,37 @@
 #     its kind; a symlink is compared as a link (its target), never followed.
 #     An added or deleted file counts;
 #   - this folder's files in the copy are unchanged, except that features.yaml
-#     may add lines. (A spec change with a candidate, §6a, sprint 742 M2,
-#     relaxes this rule; this file does not implement it.)
+#     may add lines. With --spec-change (a spec change with a candidate, §6a)
+#     the copy may also change CONTRACT.md, features.yaml (any line),
+#     examples/ and the Known issues section of SKILL.md; checks/,
+#     contract.bsh, dag.md, shaped.json and every other file stay unchanged.
+#     "Unchanged" means the same type (file or symlink), mode and bytes: a
+#     protected file replaced by a symlink to the same bytes fails, and a
+#     spec file that changes must stay a regular file. In SKILL.md only the
+#     Known issues section (its heading to the next "## " heading) may change.
+#     A SPEC-CHANGE section then lists every changed or removed features.yaml
+#     line and every changed or removed CONTRACT.md assertion id, and the
+#     build and acceptance below run this folder's (the INSTALLED) dag.md and
+#     checks/ over the COPY's spec files, in a scratch folder.
 #   - the copy builds with this folder's dag.md build step, and this folder's
 #     checks/acceptance.bsh passes on it. Both run from this folder with
 #     IMPL=WORKCOPY and SHAPEWARE_BIN set to a scratch bin folder, so the
 #     installed build is never overwritten.
 # <sha> is the first 7 hex of a SHA-256 over the changed implementation
 # files (each file's SHA-256 and mode, a symlink's "120000 TARGET", or
-# "deleted"; two spaces, its repo-relative path; sorted). No changed file gives "none". Reproducible.
+# "deleted"; two spaces, its repo-relative path; sorted). No changed file
+# gives "none". Reproducible. With --spec-change the changed spec files are
+# hashed too, as <surface>/<path>, so a variant names its code and its spec
+# together.
 set -u
 export BASHY_HINTS=off
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 runner=${BASHY:-bashy}
 
-[[ $# -eq 1 ]] || { echo "usage: candidate.bsh WORKCOPY" >&2; exit 2; }
+spec_change=0
+if [[ ${1:-} == --spec-change ]]; then spec_change=1; shift; fi
+[[ $# -eq 1 ]] || { echo "usage: candidate.bsh [--spec-change] WORKCOPY" >&2; exit 2; }
 
 fail=0
 ok()  { echo "PASS $1"; }
@@ -172,14 +187,55 @@ done < <(LC_ALL=C sort -u "$tmp/files.base" "$tmp/files.copy")
 (( outside == 0 )) && ok "changes within metadata.candidate-files (${#changed[@]} files)"
 
 # 2. This folder, as the copy carries it: unchanged, features.yaml adds only.
+# With --spec-change, the spec files may change (spec_file) and are listed.
+spec_file() { # REL: a file a spec change may change
+  case $1 in CONTRACT.md | features.yaml | SKILL.md | examples/*) return 0 ;; esac
+  return 1
+}
+# outside_known_issues FILE: SKILL.md without its Known issues section (the
+# "## Known issues" heading up to the next "## " heading or the end).
+outside_known_issues() { [[ -f $1 ]] && awk '/^## / { ki = ($0 ~ /^## Known issues[ \t]*$/) } !ki' "$1"; }
+# assertions FILE: "ID<TAB>sha" per CONTRACT.md assertion (### heading to the next).
+assertions() {
+  [[ -f $1 ]] || return 0
+  local id
+  for id in $(awk '/^### / { print $2 }' "$1" | LC_ALL=C sort -u); do
+    printf '%s\t%s\n' "$id" "$(awk -v id="$id" '/^### / { on = ($2 == id) } on' "$1" | sum256 | cut -c1-16)"
+  done
+}
+spec_changed=()
 if [[ -d $copy/$surface ]]; then
   before=$fail
   while IFS= read -r f; do
-    case /$f/ in */.shapeware/* | /features.yaml/) continue ;; esac
+    case /$f/ in */.shapeware/*) continue ;; esac
+    if (( spec_change )) && spec_file "$f"; then
+      # A spec file may change, but stays a regular file (or is removed):
+      # never a symlink, so it cannot point outside the copy.
+      case $(kind "$copy/$surface/$f") in
+        100* | -) same_file "$here/$f" "$copy/$surface/$f" || spec_changed+=("$f") ;;
+        *) bad "spec file $surface/$f is a regular file" "($f is $(kind "$copy/$surface/$f"))" ;;
+      esac
+      continue
+    fi
+    if [[ $f == features.yaml ]]; then # its lines are checked below; its kind and mode here
+      [[ $(kind "$here/$f") == "$(kind "$copy/$surface/$f")" ]] || bad "protected $surface/$f unchanged" "($f changed its type or mode)"
+      continue
+    fi
     same_file "$here/$f" "$copy/$surface/$f" || bad "protected $surface/$f unchanged" "($f was changed, added or removed)"
   done < <({ list "$here"; list "$copy/$surface"; } | LC_ALL=C sort -u)
+  if (( spec_change )); then
+    # Through files: cmp stops at the first difference, and a writer cut off
+    # mid-stream would end this script with SIGPIPE.
+    outside_known_issues "$here/SKILL.md" >"$tmp/skill.here"
+    outside_known_issues "$copy/$surface/SKILL.md" >"$tmp/skill.copy"
+    if cmp -s "$tmp/skill.here" "$tmp/skill.copy"; then
+      ok "SKILL.md changes only its Known issues"
+    else
+      bad "SKILL.md changes only its Known issues" "(SKILL.md changed outside its ## Known issues section)"
+    fi
+  fi
   (( fail == before )) && ok "protected $surface unchanged"
-  if [[ -f $here/features.yaml ]]; then
+  if (( ! spec_change )) && [[ -f $here/features.yaml ]]; then
     if [[ -f $copy/$surface/features.yaml ]]; then
       removed=$(diff "$here/features.yaml" "$copy/$surface/features.yaml" | grep -c '^<')
       (( removed == 0 )) && ok "features.yaml only adds lines" || bad "features.yaml only adds lines" "($removed existing lines changed or removed)"
@@ -191,10 +247,39 @@ else
   bad "copy has this folder" "($surface is missing)"
 fi
 
+# The spec change, for the owner's review: every changed or removed
+# features.yaml line and every changed or removed contract assertion id.
+if (( spec_change )); then
+  echo "SPEC-CHANGE files: ${spec_changed[*]:-(none)}"
+  diff "$here/features.yaml" "$copy/$surface/features.yaml" 2>/dev/null | sed -n 's/^< /SPEC-CHANGE features.yaml - /p'
+  diff "$here/features.yaml" "$copy/$surface/features.yaml" 2>/dev/null | sed -n 's/^> /SPEC-CHANGE features.yaml + /p'
+  join -t $'\t' -a 1 -e '' -o 0,1.2,2.2 <(assertions "$here/CONTRACT.md" | LC_ALL=C sort) <(assertions "$copy/$surface/CONTRACT.md" | LC_ALL=C sort) |
+    while IFS=$'\t' read -r id old new; do
+      if [[ -z $new ]]; then echo "SPEC-CHANGE assertion $id removed"
+      elif [[ $old != "$new" ]]; then echo "SPEC-CHANGE assertion $id changed"; fi
+    done
+  join -t $'\t' -v 2 <(assertions "$here/CONTRACT.md" | LC_ALL=C sort) <(assertions "$copy/$surface/CONTRACT.md" | LC_ALL=C sort) |
+    while IFS=$'\t' read -r id _; do echo "SPEC-CHANGE assertion $id added"; done
+fi
+
 # 3. Build the copy into a scratch bin folder, then this folder's checker grades it.
-if (cd "$here" && IMPL=$copy SHAPEWARE_BIN=$tmp/bin "$runner" dag -f dag.md build) >"$tmp/build.log" 2>&1; then
+# With --spec-change the checker is this folder's, the spec the copy's: a
+# scratch folder holds the installed files with the copy's spec files over them.
+grader=$here
+if (( spec_change )); then
+  grader=$tmp/surface
+  mkdir -p "$grader"
+  (cd "$here" && find . -type f ! -path './.shapeware/*' | while IFS= read -r f; do
+    mkdir -p "$grader/$(dirname "$f")" && cp -p "$f" "$grader/$f"; done)
+  rm -rf "$grader/examples" "$grader/CONTRACT.md" "$grader/features.yaml" "$grader/SKILL.md"
+  for f in CONTRACT.md features.yaml SKILL.md; do
+    [[ -f $copy/$surface/$f ]] && cp -p "$copy/$surface/$f" "$grader/$f"
+  done
+  [[ -d $copy/$surface/examples ]] && cp -Rp "$copy/$surface/examples" "$grader/examples"
+fi
+if (cd "$grader" && IMPL=$copy SHAPEWARE_BIN=$tmp/bin "$runner" dag -f dag.md build) >"$tmp/build.log" 2>&1; then
   ok "copy builds (dag.md build)"
-  (cd "$here" && IMPL=$copy SHAPEWARE_BIN=$tmp/bin "$runner" --bashsharp checks/acceptance.bsh "$copy") || fail=1
+  (cd "$grader" && IMPL=$copy SHAPEWARE_BIN=$tmp/bin "$runner" --bashsharp checks/acceptance.bsh "$copy") || fail=1
 else
   tail -n 20 "$tmp/build.log" >&2
   bad "copy builds (dag.md build)" "(acceptance not run)"
@@ -203,8 +288,10 @@ fi
 # 4. The variant id, over the changed implementation files only.
 ver=$(meta version)
 sha=none
-if (( ${#changed[@]} )); then
-  sha=$(for f in "${changed[@]}"; do
+hashed=("${changed[@]}")
+for f in "${spec_changed[@]}"; do hashed+=("$surface/$f"); done
+if (( ${#hashed[@]} )); then
+  sha=$(for f in "${hashed[@]}"; do
     k=$(kind "$copy/$f")
     case $k in
       100*) h=$(sum256 <"$copy/$f"); h="${h%% *} $k" ;;

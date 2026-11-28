@@ -18,6 +18,15 @@
 #   outputs       untracked build outputs (metadata.build-outputs) are left out
 #   protected-link  a protected file replaced by a symlink to the same bytes fails
 #   quotes        single-quoted metadata values are read like the lint reads them
+#   spec-change   with --spec-change, a fix that changes a pinned expectation
+#                 (features.yaml, CONTRACT.md, Known issues) passes against the
+#                 copy's spec and lists the change; without the flag it fails
+#   spec-checks   with --spec-change, a changed checks/ file still fails
+#   spec-skill    with --spec-change, SKILL.md above Known issues still fails
+#   spec-skill-after  with --spec-change, a section after Known issues still fails
+#   spec-link     with --spec-change, a checks/ file replaced by a symlink to the
+#                 same bytes still fails
+#   spec-file-link  with --spec-change, a spec file that becomes a symlink fails
 # Needs bashy, git and go. Everything is written under one temporary folder.
 # With CONFORM=/path/to/conform it also lints the fake surface.
 # Usage: bash selftest.sh    Exit 1 if any case does not behave as stated.
@@ -91,6 +100,9 @@ metadata:
 Type: shapeware (v0.1)
 
 ## Known issues
+
+## Notes
+Plain notes, outside the Known issues section.
 EOF
 cat >"$s/CONTRACT.md" <<'EOF'
 # calc contract
@@ -209,7 +221,7 @@ echo 'module.exports = 1' >"$base/node_modules/pkg/lib/index.js"
 failed=0
 n=0
 copy() { n=$((n + 1)); c=$work/copy$n; git clone -q "$base" "$c"; }
-grade() { (cd "$s" && IMPL=$base bashy --bashsharp checks/candidate.bsh "$1") >"$work/out" 2>"$work/err"; }
+grade() { (cd "$s" && IMPL=$base bashy --bashsharp checks/candidate.bsh "$@") >"$work/out" 2>"$work/err"; }
 expect() { # NAME WANT-EXIT GREP-PATTERN
   local rc=$1 name=$2 want=$3 pat=$4
   if [[ $rc -eq $want ]] && grep -q -- "$pat" "$work/out"; then
@@ -263,6 +275,37 @@ grep -q "candidate-files: 'internal" "$s/SKILL.md" || { echo "FAIL quotes: SKILL
 git -C "$base" commit -qam 'single quotes'
 copy; printf '// changed\n' >>"$c/internal/calc/calc.go"
 grade "$c"; expect $? quotes 0 '^PASS changes within metadata.candidate-files (1 files)'
+# A fix whose pinned expectation changes: 2 + 3 now reads 6.
+spec_fix() {
+  sed 's/return a + b/return a + b + 1/' "$base/internal/calc/calc.go" >"$c/internal/calc/calc.go"
+  sed 's/Add(2, 3) != 5/Add(2, 3) != 6/; s/!= 5"/!= 6"/' "$base/internal/calc/calc_test.go" >"$c/internal/calc/calc_test.go"
+  sed 's/=> 5$/=> 6/' "$base/shapeware/calc/features.yaml" >"$c/shapeware/calc/features.yaml"
+  sed 's/The pinned go test passes./The pinned go test passes (2 + 3 reads 6)./' "$base/shapeware/calc/CONTRACT.md" >"$c/shapeware/calc/CONTRACT.md"
+  awk '{ print } /^## Known issues$/ { print "- 2 + 3 read 5; the fix reads 6." }' "$base/shapeware/calc/SKILL.md" >"$c/shapeware/calc/SKILL.md"
+}
+copy; spec_fix
+grade "$c"; expect $? spec-change-without-flag 1 '^FAIL features.yaml only adds lines'
+grade --spec-change "$c"; expect $? spec-change 0 '^VARIANT 0.1.0+shaped.[0-9a-f]\{7\}$'
+grep -q '^FAIL' "$work/out" && { echo "FAIL spec-change: a FAIL line was printed"; sed 's/^/     | /' "$work/out"; failed=1; }
+for pat in '^SPEC-CHANGE files: CONTRACT.md SKILL.md features.yaml$' '^SPEC-CHANGE features.yaml - .*calc-app 2 3 => 5$' \
+  '^SPEC-CHANGE features.yaml + .*calc-app 2 3 => 6$' '^SPEC-CHANGE assertion C-01 changed$' '^PASS add#2 calc-app 2 3 => 6$'; do
+  grep -q -- "$pat" "$work/out" || { echo "FAIL spec-change: no line matching '$pat'"; failed=1; }
+done
+
+copy; spec_fix; printf '# weakened\nexit 0\n' >"$c/shapeware/calc/checks/acceptance.bsh"
+grade --spec-change "$c"; expect $? spec-checks 1 '^FAIL protected shapeware/calc/checks/acceptance.bsh unchanged'
+
+copy; spec_fix; sed 's/version: "0.1.0"/version: "0.2.0"/' "$c/shapeware/calc/SKILL.md" >"$c/skill" && mv "$c/skill" "$c/shapeware/calc/SKILL.md"
+grade --spec-change "$c"; expect $? spec-skill 1 '^FAIL SKILL.md changes only its Known issues'
+
+copy; spec_fix; printf 'One more note.\n' >>"$c/shapeware/calc/SKILL.md"
+grade --spec-change "$c"; expect $? spec-skill-after 1 '^FAIL SKILL.md changes only its Known issues'
+
+copy; spec_fix; rm "$c/shapeware/calc/checks/acceptance.bsh" && ln -s "$s/checks/acceptance.bsh" "$c/shapeware/calc/checks/acceptance.bsh"
+grade --spec-change "$c"; expect $? spec-link 1 '^FAIL protected shapeware/calc/checks/acceptance.bsh unchanged'
+
+copy; spec_fix; mv "$c/shapeware/calc/CONTRACT.md" "$work/contract.$n" && ln -s "$work/contract.$n" "$c/shapeware/calc/CONTRACT.md"
+grade --spec-change "$c"; expect $? spec-file-link 1 '^FAIL spec file shapeware/calc/CONTRACT.md is a regular file'
 
 if [[ -n ${CONFORM:-} ]]; then
   if "$CONFORM" spec check "$s" >"$work/out" 2>&1; then echo "ok   lint (conform spec check)"
