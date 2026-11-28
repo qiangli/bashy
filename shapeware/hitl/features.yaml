@@ -1,0 +1,55 @@
+# hitl feature list (shapeware v0.1). IDs are stable across versions.
+# effort is relative size in Fibonacci points (1, 2, 3, 5, 8, 13 = split it).
+- id: argv-approval
+  effort: 3
+  status: verified
+  intent: An action outside what an agent may do alone waits for one decision by a human, tied to that exact argv (lifted, unchanged).
+  acceptance:
+    - A-01 lists an empty queue; A-02 raises an approval for an argv and prints its id.
+    - A-03 shows the argv and that it is pending; A-04 allows it and prints the resume flag.
+    - A-05 refuses a second answer; A-06 returns the decision to a waiting requester.
+- id: needs-request
+  effort: 5
+  status: verified
+  intent: An agent or sprint manager puts one typed question to its human, with options and a recommendation, refs, a deadline and risk tags, and raising it twice does not ask twice.
+  acceptance:
+    - A-07 raises the hotfix decision with every field and A-10 shows it to the human.
+    - A-08 and A-09 show that the same key raises one request, not two.
+    - A-11 refuses a kind outside decision, approval, action, info; A-25 refuses an option the request does not offer.
+    - A-26 answers with an option and A-27 returns the answer to the waiting manager.
+    - session gotest github.com/qiangli/yoke/pkg/ask TestNeedAnswerWakesRequester => PASS TestNeedAnswerWakesRequester
+- id: scoped-delegate
+  effort: 8
+  status: verified
+  critical: true
+  intent: The human designates one agent that answers in-scope requests on their behalf, never the non-delegable ones, and the human can see, override and revoke what it decided.
+  acceptance:
+    - A-12 to A-14 show no delegate, refuse an agent designating one, and let the human designate one with a scope.
+    - A-15 routes an in-scope request to the delegate and A-16 keeps a non-delegable one with the human.
+    - A-17 and A-18 refuse an undesignated agent and the delegate outside its scope; A-19 records the delegate's in-scope answer on the human's behalf.
+    - A-20 lists the on-behalf decisions; A-21 refuses the delegate overriding; A-22 and A-28 let the human override and keep the replaced decision.
+    - A-29 to A-31 revoke the delegation and refuse the former delegate.
+    - session gotest github.com/qiangli/yoke/pkg/ask TestNeedRevokeEscalatesAtOnce => PASS TestNeedRevokeEscalatesAtOnce
+    - session gotest github.com/qiangli/yoke/pkg/ask TestNeedDeadlineEscalatesDelegated => PASS TestNeedDeadlineEscalatesDelegated
+- id: board-alert
+  effort: 5
+  status: verified
+  intent: Everything waiting on the human shows as Needs you on the sprint board web UI and on the sprint card, until it is answered.
+  acceptance:
+    - session gotest github.com/qiangli/yoke/pkg/webconsole TestBoardOverviewCarriesNeedsYou => PASS TestBoardOverviewCarriesNeedsYou
+    - session gotest github.com/qiangli/yoke/pkg/weave TestRenderSprintNeedsListsOpenRequests => PASS TestRenderSprintNeedsListsOpenRequests
+- id: authenticated-answer
+  effort: 5
+  status: verified
+  critical: true
+  intent: Only the request's human, signed in, answers on the board or at the shell; another person, an undesignated agent and a second answer are refused.
+  acceptance:
+    - A-23 refuses another person; A-05 and A-37 refuse a second answer.
+    - session gotest github.com/qiangli/yoke/pkg/webconsole TestBoardAnswerSignedInOwner => PASS TestBoardAnswerSignedInOwner
+    - session gotest github.com/qiangli/yoke/pkg/webconsole TestBoardAnswerRefusesUnsignedCloudCaller => PASS TestBoardAnswerRefusesUnsignedCloudCaller
+- id: external-channels
+  effort: 13
+  status: tbd
+  intent: A request also reaches the human on channels they opt into (email, Klatch, Google, calendar-aware timing, quiet hours, digests), and a reply there resolves it.
+  acceptance:
+    - Deferred by the owner 2026-11-28 (the board alert is enough for now); see todo 8baccf0ce8be. No assertion until a channel is specified.
