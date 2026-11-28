@@ -3,7 +3,7 @@ id: 0a5eafd54350
 kind: feature
 title: M4 Contract and acceptance lines can cite pinned go tests
 seq: 3335
-status: assigned
+status: done
 priority: p1
 labels:
     - shapeware
@@ -12,6 +12,8 @@ assignee: claude-opus5.5-s741
 sprint: 742
 sprint_id: 7dde34d4-f382-5aba-8ff5-071c5e3548b8
 sprint_title: 'Shaping: bugs and issues become spec changes (issue-to-spec support)'
+closed: 2026-11-28T10:38:01.137745Z
+closed_by: claude-opus5.5-s741
 ---
 
 ClassGo's sprint 733 characterization tests are the real evidence of current behaviour but sit outside any spec. Allow an acceptance line / assertion of the form 'go test -run NAME ./pkg => PASS' with the test named in the surface, so a fix that flips a pinned test is a spec-linked change and candidate.bsh runs it. Decide how mutate treats such assertions. Verification: classgo backup restore pinned test cited from the data-backup-restore surface.
