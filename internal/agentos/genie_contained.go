@@ -275,6 +275,9 @@ func launchContainedGenie(args []string) int {
 		"GENIE_MODEL_ID="+model, "GENIE_EXTERNAL_MODEL="+model,
 		"GENIE_EXTERNAL_CONTEXT="+strconv.Itoa(genieContextFallback),
 		"GENIE_YCODE_SESSION="+label, "GENIE_TOOLCHAINS=none",
+		// `bashy` must resolve inside: the host PATH names places the sandbox
+		// cannot read, and a folder's own instructions call bashy by name.
+		"PATH="+filepath.Dir(self)+string(os.PathListSeparator)+os.Getenv("PATH"),
 		// Offline: the mounted toolchain is the only one; nothing is fetched.
 		"GOTOOLCHAIN=local", "GOPROXY=off", "GOFLAGS=-mod=mod", "GOWORK=off",
 	)
