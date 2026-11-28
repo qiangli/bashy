@@ -364,7 +364,11 @@ def scenario(c, o, outpost):
         cli(c, "offer", "stop", MODEL)
         cli(c, "offer", MODEL, "--group", "support", "--tag", "changed-again")
         out = cli(o, "c-" + MODEL, "--prompt", "say hello", ok=False)
-        check(out.returncode and "409" in out.stdout + out.stderr, "a mounted tool whose definition digest changed refuses 409")
+        text = out.stdout + out.stderr
+        # The caller compares its pinned digest first (and the door answers
+        # 409 to a stale pin): either way the refusal names the fix.
+        check(out.returncode and ("409" in text or "bashy remote add c " + MODEL in text),
+              "a mounted tool whose definition digest changed is refused and names bashy remote add")
 
     # (5) T1: both usage rollups agree per tool, in the offer's unit, with no price.
     if T1:
