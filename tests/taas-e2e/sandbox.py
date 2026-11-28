@@ -47,7 +47,39 @@ calls = {}  # (principal, tool) -> list of usage dicts the callers saw
 class Satellite(BaseHTTPRequestHandler):
     """The fake satellite's grant copy (cloudboxfake accounts): A and O are in support."""
 
+    # Host share rules (outpost apps share) are stored here; the audience the
+    # gate checks comes from the static grant copy below, as in group shaping.
+    shares = []
+
+    def send_json(self, status, data):
+        raw = json.dumps(data).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def do_POST(self):
+        parts = self.path.split("/")
+        if len(parts) != 6 or parts[1:4] != ["api", "v1", "hosts"] or parts[5] != "shares":
+            self.send_error(404)
+            return
+        rule = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        share = dict(rule, id=f"share-{len(Satellite.shares) + 1}", host=parts[4],
+                     created="2026-11-28T00:00:00Z")
+        Satellite.shares.append(share)
+        self.send_json(201, share)
+
+    def do_DELETE(self):
+        share_id = self.path.rsplit("/", 1)[-1]
+        Satellite.shares = [s for s in Satellite.shares if s["id"] != share_id]
+        self.send_response(204)
+        self.end_headers()
+
     def do_GET(self):
+        if self.path.endswith("/shares") and self.path.startswith("/api/v1/hosts/"):
+            self.send_json(200, [s for s in Satellite.shares if self.path.split("/")[4] == s["host"]])
+            return
         if self.path != "/api/v1/hosts/self/grants" or self.headers.get("Authorization") != "Bearer " + TOKEN:
             self.send_error(401 if self.path.endswith("/grants") else 404)
             return
