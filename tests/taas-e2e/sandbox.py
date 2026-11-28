@@ -352,14 +352,16 @@ def scenario(c, o, outpost):
             mounted = [t for t in tools if t.get("name", "") == "c-" + name]
             check(mounted and mounted[0].get("inputSchema", {}).get("properties"),
                   f"bashy remote add c {name} shows a typed tool in bashy mcp tools")
-            out = cli(o, "mcp", "call", mounted[0]["name"], *args, ok=False)
+            # A mounted tool is a registered command: a shell agent runs it by
+            # name; an MCP client reaches the same record through mcp serve.
+            out = cli(o, mounted[0]["name"], *args, ok=False)
             check(out.returncode == 0, f"a call through the mounted {name} works")
         cli(c, "offer", "stop", MODEL)
         cli(c, "offer", MODEL, "--group", "support", "--tag", "changed")
         cli(o, "remote", "add", "c", MODEL, "--as", "c-" + MODEL)
         cli(c, "offer", "stop", MODEL)
         cli(c, "offer", MODEL, "--group", "support", "--tag", "changed-again")
-        out = cli(o, "mcp", "call", "c-" + MODEL, "--prompt", "say hello", ok=False)
+        out = cli(o, "c-" + MODEL, "--prompt", "say hello", ok=False)
         check(out.returncode and "409" in out.stdout + out.stderr, "a mounted tool whose definition digest changed refuses 409")
 
     # (5) T1: both usage rollups agree per tool, in the offer's unit, with no price.
