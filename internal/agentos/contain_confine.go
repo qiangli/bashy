@@ -375,11 +375,13 @@ func containerConfinedEnv(environ, names, with []string) []string {
 // defaults unset), DIR as the working directory. It runs as the calling
 // user: the image's default user cannot enter a caller-owned DIR (keep-id
 // maps a rootless caller to the same uid; a root caller stays root inside
-// the read-only, network-less container). --loopback needs no rule:
+// the read-only, network-less container, with every capability dropped
+// and no privilege gain). --loopback needs no rule:
 // the container's loopback is its own.
 func containerConfinedArgs(c *containConfine, image string, with, environ, argv []string) []string {
 	args := []string{"podman", "run", "--rm", "-i", "--network=none", "--unsetenv-all",
-		"--userns=keep-id", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()), "--read-only", "--tmpfs", containConfineInTmp + ":rw,nosuid,nodev,mode=1777",
+		"--userns=keep-id", "--user", fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
+		"--cap-drop=ALL", "--security-opt=no-new-privileges", "--read-only", "--tmpfs", containConfineInTmp + ":rw,nosuid,nodev,mode=1777",
 		"-v", c.Dir + ":" + c.Dir + ":rw", "-w", c.Dir}
 	for _, p := range c.RO {
 		args = append(args, "-v", p+":"+p+":ro")
@@ -444,6 +446,15 @@ func runContainerConfined(c *containConfine, argv []string) int {
 	args := containerConfinedArgs(c, image, with, os.Environ(), argv)
 	if injected := strings.TrimSpace(os.Getenv("BASHY_CONTAIN_BASHY")); injected != "" {
 		path, err := containInjectedBashy(injected, runtime.GOARCH)
+		if err == nil {
+			// The mount source is a real absolute path with no mount syntax in it.
+			if path, err = filepath.Abs(path); err == nil {
+				path, err = filepath.EvalSymlinks(path)
+			}
+			if err == nil && strings.ContainsAny(path, ":,") {
+				err = fmt.Errorf("injected bashy path %q cannot be mounted (contains ':' or ',')", path)
+			}
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "bashy contain: %v; nothing ran\n", err)
 			return containUnsupportedStatus

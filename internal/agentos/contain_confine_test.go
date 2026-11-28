@@ -317,6 +317,7 @@ func TestContainerConfinedInject(t *testing.T) {
 	got := strings.Join(containerConfinedInject(args, "/opt/cand/bashy"), " ")
 	for _, want := range []string{
 		"--user ",
+		"--cap-drop=ALL --security-opt=no-new-privileges --read-only",
 		"--entrypoint /.bashy/bashy -v /opt/cand/bashy:/.bashy/bashy:ro -e PATH=/.bashy:/ localhost/bashy:test -c ",
 	} {
 		if !strings.Contains(got, want) {
