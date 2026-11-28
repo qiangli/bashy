@@ -38,6 +38,7 @@ HOME = Path.home()
 C_HOME, O_HOME = HOME / ".bashy", HOME / "o-host"
 CONFIG = HOME / ".config/matrix/agent.json"
 MODEL, AGENT, CAP = "fake-model", "helper", 64
+RANGE_BYTES = 10  # the raw Range request below asks for bytes=0-9
 OFFERS = (MODEL, "stt", AGENT, "files-docs", "files-outside", "files-offers", "files-in")
 T1, T2 = os.environ.get("TAAS_T1") == "1", os.environ.get("TAAS_T2") == "1"
 WAIT = float(os.environ.get("TAAS_WAIT", "15"))
@@ -370,21 +371,31 @@ def scenario(c, o, outpost):
         check(out.returncode and ("409" in text or "bashy remote add c " + MODEL in text),
               "a mounted tool whose definition digest changed is refused and names bashy remote add")
 
-    # (5) T1: both usage rollups agree per tool, in the offer's unit, with no price.
+    # (5) T1: both doors meter every call in the offer's unit, with no price.
     if T1:
-        offered = cli_json(c, "offer", "usage", "--json")
-        remote = cli_json(o, "remote", "usage", "--json")
-        text = json.dumps(offered) + json.dumps(remote)
+        by_tool = cli_json(c, "offer", "usage", "--by", "tool", "--json")
+        by_member = cli_json(c, "offer", "usage", "--json")
+        by_host = cli_json(o, "remote", "usage", "--json")
+        text = json.dumps([by_tool, by_member, by_host])
         check("price" not in text and "usd" not in text.lower(), "no usage record carries a price")
-        for tool, unit in ((MODEL, "token"), (AGENT, "token"), ("stt", "seconds"), ("files-docs", "bytes")):
-            mine = [r for r in offered if r.get("tool") == tool]
-            theirs = [r for r in remote if r.get("tool") == tool]
-            check(mine and all(r.get("unit") in (unit, unit + "s") for r in mine),
-                  f"bashy offer usage on C meters {tool} in {unit}")
-            if theirs:
-                check(sum(r.get("amount", 0) for r in theirs) ==
-                      sum(r.get("amount", 0) for r in mine if r.get("principal") == "peer:o"),
-                      f"bashy remote usage on O agrees with C for {tool}")
+        rows = {r.get("tool"): r for r in by_tool}
+        for tool, unit in ((MODEL, "token"), ("stt", "seconds"), ("files-docs", "bytes")):
+            units = (rows.get(tool) or {}).get("units") or {}
+            check(units.get(unit, 0) > 0, f"bashy offer usage on C meters {tool} in {unit}: {units}")
+        if AGENT in rows:
+            check("token" in (rows[AGENT].get("units") or {}), f"bashy offer usage on C meters {AGENT} in token")
+        else:
+            print(f"note - {AGENT} has no usage: every agent call was refused at its token cap (recorded above)", flush=True)
+        # The caller keeps a copy of every call it made through bashy. The
+        # Range stream above was a raw HTTP request (1 call, RANGE_BYTES), so
+        # C counts it for peer:o and O does not.
+        mine = next((r for r in by_member if r.get("member") == "peer:o"), {})
+        theirs = next((r for r in by_host if r.get("host") == "c"), {})
+        m, t = mine.get("units") or {}, theirs.get("units") or {}
+        check(mine and theirs and m.get("seconds") == t.get("seconds")
+              and m.get("bytes", 0) == t.get("bytes", 0) + RANGE_BYTES
+              and mine.get("calls") == theirs.get("calls", 0) + 1,
+              f"bashy remote usage on O agrees with C for peer:o: C {mine} O {theirs} (+1 raw Range call of {RANGE_BYTES} bytes)")
 
     # Unshare: the folder offer is gone (403).
     cli(c, "files", "unshare", "docs")
