@@ -236,6 +236,13 @@ def run_contained_leg(
         probe.bind(("127.0.0.1", 0))
         port = str(probe.getsockname()[1])
     env["CONTAINED_GENIE_PORT"] = port
+    # The genie bundle's adapter is interpreted Go source: it needs a Go
+    # toolchain, mounted read-only from the host as the product verb does.
+    go_bin = os.path.realpath(os.environ.get("CONTAINED_GENIE_GO") or shutil.which("go") or "")
+    if not os.path.isfile(go_bin):
+        raise AssertionError("no go binary for the sandbox: set CONTAINED_GENIE_GO")
+    go_root = os.path.dirname(os.path.dirname(go_bin))
+    env["BASHPP_GO"] = go_bin
 
     argv = [
         str(bashy_bin),
@@ -248,6 +255,10 @@ def run_contained_leg(
         str(socket_path),
         "--loopback",
         port,
+        "--ro",
+        go_root,
+        "--env",
+        "BASHPP_GO",
         "--env",
         "CONTAINED_GENIE_PORT",
         "--ro",

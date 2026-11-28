@@ -100,6 +100,9 @@ func TestGenieContainedComposition(t *testing.T) {
 	} {
 		t.Run(tc.scenario, func(t *testing.T) {
 			dir := setupContainedGenie(t, tc.scenario)
+			realGo := genieSandboxGo
+			genieSandboxGo = func() (string, string, error) { return "/sdk/go/bin/go", "/sdk/go", nil }
+			t.Cleanup(func() { genieSandboxGo = realGo })
 			var out, diag bytes.Buffer
 			task := "literal ; $workspace"
 			code, err := runContainedGenie(context.Background(), tc.selector, dir, task, &out, &diag)
@@ -136,7 +139,7 @@ func TestGenieContainedComposition(t *testing.T) {
 				if n, err := strconv.ParseUint(port, 10, 16); err != nil || n == 0 {
 					t.Fatalf("invalid loopback port %q", port)
 				}
-				want = []string{"contain", "--net", "deny", "--dir", dir, "--socket", "/session.sock", "--loopback", port, "--ro", os.Getenv("GENIE_BAR"), "--env", "OPENAI_API_KEY", "--", os.Getenv("BASHY_SELF"), "genie", "--session-launcher", "/session.sock", port, os.Getenv("GENIE_BAR"), "seat", label, task}
+				want = []string{"contain", "--net", "deny", "--dir", dir, "--socket", "/session.sock", "--loopback", port, "--ro", os.Getenv("GENIE_BAR"), "--ro", "/sdk/go", "--env", "OPENAI_API_KEY", "--env", "BASHPP_GO", "--", os.Getenv("BASHY_SELF"), "genie", "--session-launcher", "/session.sock", port, os.Getenv("GENIE_BAR"), "seat", label, task}
 				if !reflect.DeepEqual(got, want) {
 					t.Fatalf("contain %q", got)
 				}

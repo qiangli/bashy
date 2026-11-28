@@ -175,15 +175,23 @@ func runContainedGenie(ctx context.Context, selector, dir, task string, out, dia
 	if err != nil {
 		return 1, fmt.Errorf("select session loopback port: %w", err)
 	}
+	// The bundle's adapter is Go source bashy interprets, which asks a Go
+	// toolchain what the source imports. The sandbox has no network and no
+	// cache to provision one in, so the host's provisioned toolchain is
+	// mounted read-only and named explicitly (BASHPP_GO).
+	goBin, goRoot, err := genieSandboxGo()
+	if err != nil {
+		return 1, fmt.Errorf("no Go toolchain to give the sandbox; run `bashy go version` once on this host to provision it: %w", err)
+	}
 	args := []string{
 		"contain", "--net", "deny", "--dir", dir, "--socket", session.Socket,
-		"--loopback", port, "--ro", bundle, "--env", "OPENAI_API_KEY", "--",
+		"--loopback", port, "--ro", bundle, "--ro", goRoot, "--env", "OPENAI_API_KEY", "--env", "BASHPP_GO", "--",
 		self, "genie", "--session-launcher", session.Socket, port, bundle, rec.Binding, rec.Label, task,
 	}
 	cmd := exec.CommandContext(ctx, self, args...)
 	cmd.SysProcAttr = ownProcessGroupAttr()
 	cmd.Cancel = func() error { return killProcessGroup(cmd.Process) }
-	cmd.Env = setEnv(os.Environ(), "OPENAI_API_KEY", session.Token)
+	cmd.Env = setEnv(setEnv(os.Environ(), "OPENAI_API_KEY", session.Token), "BASHPP_GO", goBin)
 	cmd.Stdout, cmd.Stderr = out, diag
 	if e = cmd.Run(); e != nil {
 		code = genieCommandStatus(ctx, e)
@@ -193,6 +201,22 @@ func runContainedGenie(ctx context.Context, selector, dir, task string, out, dia
 		return code, e
 	}
 	return 0, nil
+}
+
+// genieSandboxGo is the host's provisioned go binary and its GOROOT, symlinks
+// resolved so the read-only mount is the real tree.
+var genieSandboxGo = func() (bin, root string, err error) {
+	argv, _, err := islandToolResolver("go")
+	if err != nil {
+		return "", "", err
+	}
+	if len(argv) != 1 {
+		return "", "", fmt.Errorf("%q is not a single go binary", argv)
+	}
+	if bin, err = filepath.EvalSymlinks(argv[0]); err != nil {
+		return "", "", err
+	}
+	return bin, filepath.Dir(filepath.Dir(bin)), nil
 }
 
 func genieLoopbackPort() (string, error) {
@@ -251,6 +275,8 @@ func launchContainedGenie(args []string) int {
 		"GENIE_MODEL_ID="+model, "GENIE_EXTERNAL_MODEL="+model,
 		"GENIE_EXTERNAL_CONTEXT="+strconv.Itoa(genieContextFallback),
 		"GENIE_YCODE_SESSION="+label, "GENIE_TOOLCHAINS=none",
+		// Offline: the mounted toolchain is the only one; nothing is fetched.
+		"GOTOOLCHAIN=local", "GOPROXY=off", "GOFLAGS=-mod=mod", "GOWORK=off",
 	)
 	run := func(mode string, stdin io.Reader, args ...string) ([]byte, error) {
 		cmd := exec.Command(self, append([]string{"run", "--target", "chat", bundle}, args...)...)
