@@ -251,7 +251,7 @@ def scenario(c, o, outpost):
           f"the agent tool runs locally on C or names its token cap (exit {agent.returncode})")
 
     # (2) offers: one of each class; an internal verb and an untyped command are refused.
-    for name, extra in (("llm", ["--limit", "0"]), ("stt", ["--limit", "1"]),
+    for name, extra in (("llm", ["--limit", "0"]), ("stt", ["--limit", "2"]),
                         (AGENT, ["--token-cap", str(CAP)])):
         target = MODEL if name == "llm" else name
         out = cli_json(c, "offer", target, "--group", "support", *extra, "--json")
@@ -297,6 +297,8 @@ def scenario(c, o, outpost):
     reply = member_call(A, "stt", {"input": "bashy://o/files-in/in.wav"})
     refs = reply["result"].get("artifact_refs") or reply["result"].get("ArtifactRefs") or []
     check(refs and "/files-offers/" in refs[0]["uri"], f"transcribe returned an artifact URI {refs and refs[0]['uri']}")
+    # --limit 2 counts per caller: A's second call passes, its third is refused.
+    member_call(A, "stt", {"input": "bashy://o/files-in/in.wav"})
     member_call(A, "stt", {"input": "bashy://o/files-in/in.wav"}, expect=429)
     remote = cli(o, "remote", "call", "c", "stt", "--input", "bashy://o/files-in/in.wav", "--json")
     peer_reply = json.loads(remote.stdout)
