@@ -27,6 +27,20 @@
 #   spec-link     with --spec-change, a checks/ file replaced by a symlink to the
 #                 same bytes still fails
 #   spec-file-link  with --spec-change, a spec file that becomes a symlink fails
+#   deleted       a deleted candidate file is hashed as "deleted" (one side
+#                 lacks the file)
+#   fail-fast     after a protected-file or file-set FAIL the copy is never
+#                 built: the build step's marker is not written
+# and runs the launcher's gotest verb directly:
+#   gotest-root, gotest-nested, gotest-nested-deep  a ./path in the root
+#                 module and in a nested module (its own go.mod) passes
+#   gotest-dep    a dependency import path required in go.mod passes; the
+#                 dependency is a local module (replace => ../dep), so offline
+#   gotest-*-fail no matching test, "..", "./...", a missing directory, a
+#                 symlink out of the implementation, an import path not
+#                 required in go.mod, one in the implementation's own module
+#                 (cite it as ./path), and a NAME that is not one top-level
+#                 test (Test.*, A|B, a subtest, bare Test) each print FAIL NAME
 # Needs bashy, git and go. Everything is written under one temporary folder.
 # With CONFORM=/path/to/conform it also lints the fake surface.
 # Usage: bash selftest.sh    Exit 1 if any case does not behave as stated.
@@ -35,6 +49,7 @@ export BASHY_HINTS=off
 src=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+export GOWORK=off GOPROXY=off GOFLAGS=-mod=readonly
 export GIT_AUTHOR_NAME=selftest GIT_AUTHOR_EMAIL=selftest@example.invalid
 export GIT_COMMITTER_NAME=selftest GIT_COMMITTER_EMAIL=selftest@example.invalid
 
@@ -48,7 +63,15 @@ mkdir -p "$base/docs/v1" "$base/docs/v2"
 echo one >"$base/docs/v1/page.md"
 echo two >"$base/docs/v2/page.md"
 ln -s v1 "$base/docs/current"
-printf 'module example.invalid/calc\n\ngo 1.21\n' >"$base/go.mod"
+printf 'module example.invalid/calc\n\ngo 1.21\n\nrequire example.invalid/dep v0.0.0\n\nreplace example.invalid/dep => ../dep\n' >"$base/go.mod"
+# A dependency module, outside the implementation, and a nested module inside it.
+mkdir -p "$work/dep/greet" "$base/tools/sub/inner"
+printf 'module example.invalid/dep\n\ngo 1.21\n' >"$work/dep/go.mod"
+printf 'package greet\n\nimport "testing"\n\nfunc TestGreet(t *testing.T) {}\n' >"$work/dep/greet/greet_test.go"
+printf 'module example.invalid/calc/tools/sub\n\ngo 1.21\n' >"$base/tools/sub/go.mod"
+printf 'package sub\n\nimport "testing"\n\nfunc TestSub(t *testing.T) {}\n' >"$base/tools/sub/sub_test.go"
+printf 'package inner\n\nimport "testing"\n\nfunc TestInner(t *testing.T) {}\n' >"$base/tools/sub/inner/inner_test.go"
+printf 'package calc\n\n// Extra is deleted by the deleted case.\nconst Extra = 1\n' >"$base/internal/calc/extra.go"
 cat >"$base/internal/calc/calc.go" <<'EOF'
 package calc
 
@@ -124,6 +147,12 @@ cat >"$s/features.yaml" <<'EOF'
   acceptance:
     - calc gotest ./internal/calc TestAdd => PASS TestAdd
     - calc-app 2 3 => 5
+- id: modules
+  status: verified
+  intent: Pinned go tests in a nested module and in a dependency.
+  acceptance:
+    - calc gotest ./tools/sub/inner TestInner => PASS TestInner
+    - calc gotest example.invalid/dep/greet TestGreet => PASS TestGreet
 EOF
 cat >"$s/dag.md" <<'EOF'
 ---
@@ -159,6 +188,7 @@ mkdir -p "$bin"
 (cd "$impl" && go build -o "$bin/calc-app" ./cmd/calc)
 printf '#!/bin/sh\nLAUNCHER_IMPL=%s exec sh %s "$@"\n' "$(quote "$impl")" "$(quote "$PWD/scripts/launcher.sh")" >"$bin/calc"
 chmod +x "$bin/calc"
+[ -z "${BUILD_MARK:-}" ] || echo "$impl" >>"$BUILD_MARK"
 echo "build: ok"
 ```
 
@@ -221,6 +251,8 @@ echo 'module.exports = 1' >"$base/node_modules/pkg/lib/index.js"
 failed=0
 n=0
 copy() { n=$((n + 1)); c=$work/copy$n; git clone -q "$base" "$c"; }
+export BUILD_MARK=$work/built
+built() { grep -qxF "$(cd "$1" && pwd -P)" "$BUILD_MARK" 2>/dev/null; } # COPY: did a build run on it
 grade() { (cd "$s" && IMPL=$base bashy --bashsharp checks/candidate.bsh "$@") >"$work/out" 2>"$work/err"; }
 expect() { # NAME WANT-EXIT GREP-PATTERN
   local rc=$1 name=$2 want=$3 pat=$4
@@ -306,6 +338,60 @@ grade --spec-change "$c"; expect $? spec-link 1 '^FAIL protected shapeware/calc/
 
 copy; spec_fix; mv "$c/shapeware/calc/CONTRACT.md" "$work/contract.$n" && ln -s "$work/contract.$n" "$c/shapeware/calc/CONTRACT.md"
 grade --spec-change "$c"; expect $? spec-file-link 1 '^FAIL spec file shapeware/calc/CONTRACT.md is a regular file'
+
+# One side lacks a file: a deleted candidate file is hashed as "deleted".
+copy; rm "$c/internal/calc/extra.go"
+want=$(printf 'deleted  internal/calc/extra.go\n' | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -c1-7)
+grade "$c"; expect $? deleted 0 "^VARIANT 0.1.0+shaped.$want\$"
+
+# Fail fast: no build after a comparison FAIL; a passing copy is built.
+copy; printf '\nOne more line.\n' >>"$c/shapeware/calc/CONTRACT.md"
+grade "$c"; expect $? fail-fast-protected 1 '^VARIANT '
+built "$c" && { echo "FAIL fail-fast-protected: the copy was built after a protected-file FAIL"; failed=1; }
+copy; printf 'package main\n\nfunc init() { panic("ran") }\n' >"$c/cmd/calc/zz_hook.go"
+grade "$c"; expect $? fail-fast-files 1 '^FAIL copy builds (dag.md build) (not run'
+built "$c" && { echo "FAIL fail-fast-files: the copy was built after a file-set FAIL"; failed=1; }
+copy; printf '// changed\n' >>"$c/internal/calc/calc.go"
+grade "$c"; expect $? fail-fast-passing 0 '^PASS copy builds'
+built "$c" || { echo "FAIL fail-fast-passing: the build marker was not written"; failed=1; }
+
+# The launcher's gotest verb, run directly against the base implementation.
+gotest() { # NAME WANT-LINE PKG TEST
+  local name=$1 want=$2 got rc
+  got=$(LAUNCHER_IMPL=$base sh "$src/scripts/launcher.sh" gotest "$3" "$4" 2>&1); rc=$?
+  local wrc=1; [[ $want == PASS* ]] && wrc=0
+  if [[ $got == "$want" && $rc -eq $wrc ]]; then echo "ok   $name (exit $rc)"
+  else echo "FAIL $name: got '$got' exit $rc, want '$want'"; failed=1; fi
+}
+gotest gotest-root 'PASS TestAdd' ./internal/calc TestAdd
+gotest gotest-nested 'PASS TestSub' ./tools/sub TestSub
+gotest gotest-nested-deep 'PASS TestInner' ./tools/sub/inner TestInner
+gotest gotest-dep 'PASS TestGreet' example.invalid/dep/greet TestGreet
+gotest gotest-nested-nomatch-fail 'FAIL TestNoSuch' ./tools/sub TestNoSuch
+gotest gotest-nested-wrong-module-fail 'FAIL TestInner' ./tools/sub TestInner
+gotest gotest-dotdot-fail 'FAIL TestSub' ./tools/../tools/sub TestSub
+gotest gotest-pattern-fail 'FAIL TestSub' ./tools/... TestSub
+gotest gotest-missing-fail 'FAIL TestSub' ./tools/nope TestSub
+gotest gotest-dep-nomatch-fail 'FAIL TestNoSuch' example.invalid/dep/greet TestNoSuch
+gotest gotest-not-required-fail 'FAIL TestGreet' example.invalid/other/greet TestGreet
+# Operands the launcher refuses before any go test runs (it never widens).
+gotest gotest-name-pattern-fail 'FAIL Test.*' ./internal/calc 'Test.*'
+gotest gotest-name-alternation-fail 'FAIL TestAdd|TestSub' ./internal/calc 'TestAdd|TestSub'
+gotest gotest-name-subtest-fail 'FAIL TestAdd/x' ./internal/calc TestAdd/x
+gotest gotest-name-bare-fail 'FAIL Test' ./internal/calc Test
+gotest gotest-name-not-test-fail 'FAIL Add' ./internal/calc Add
+gotest gotest-root-pattern-fail 'FAIL TestAdd' ./... TestAdd
+gotest gotest-bare-dotslash-fail 'FAIL TestAdd' ./ TestAdd
+gotest gotest-parent-fail 'FAIL TestAdd' ../base/internal/calc TestAdd
+gotest gotest-absolute-fail 'FAIL TestAdd' "$base/internal/calc" TestAdd
+gotest gotest-flag-fail 'FAIL TestAdd' -race TestAdd
+gotest gotest-stdlib-fail 'FAIL TestAdd' strings TestAdd
+gotest gotest-dep-pattern-fail 'FAIL TestGreet' example.invalid/dep/... TestGreet
+gotest gotest-dep-dotdot-fail 'FAIL TestGreet' example.invalid/x/../dep/greet TestGreet
+gotest gotest-own-module-path-fail 'FAIL TestAdd' example.invalid/calc/internal/calc TestAdd
+ln -s "$work/dep" "$base/escape"
+gotest gotest-symlink-out-fail 'FAIL TestGreet' ./escape/greet TestGreet
+rm "$base/escape"
 
 if [[ -n ${CONFORM:-} ]]; then
   if "$CONFORM" spec check "$s" >"$work/out" 2>&1; then echo "ok   lint (conform spec check)"
