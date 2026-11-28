@@ -1,0 +1,178 @@
+# Grade a work copy of the IMPLEMENTATION against this INSTALLED lifted
+# surface (shapeware spec §4.3b and Appendix D). The same file serves every
+# lifted surface: it reads what it needs from this folder's SKILL.md, so a
+# surface copies it verbatim into its checks/ folder.
+#
+# Usage, from anywhere:
+#   bashy --bashsharp checks/candidate.bsh WORKCOPY
+# WORKCOPY is a fresh clone or git worktree of the implementing repository.
+#
+# Read from this folder's SKILL.md frontmatter (metadata, string values):
+#   version          the release the variant id starts with
+#   candidate-files  space-separated repo-relative globs a candidate may
+#                    change, e.g. "internal/backup/*.go"; * and ? never
+#                    cross "/", and there is no **
+#   build-outputs    optional globs of build outputs, left out of the comparison
+#
+# PASS/FAIL lines, then VARIANT <version>+shaped.<sha>; exit 1 on any FAIL:
+#   - the copy is not the installed implementation;
+#   - every file that differs between the installed implementation and the
+#     copy (tracked, or untracked and not ignored; .shapeware/ and build
+#     outputs left out; a deleted file counts) matches a candidate-files glob;
+#   - this folder's files in the copy are unchanged, except that features.yaml
+#     may add lines. (A spec change with a candidate, §6a, sprint 742 M2,
+#     relaxes this rule; this file does not implement it.)
+#   - the copy builds with this folder's dag.md build step, and this folder's
+#     checks/acceptance.bsh passes on it. Both run from this folder with
+#     IMPL=WORKCOPY and SHAPEWARE_BIN set to a scratch bin folder, so the
+#     installed build is never overwritten.
+# <sha> is the first 7 hex of a SHA-256 over the changed implementation
+# files (each file's SHA-256, or "deleted", two spaces, its repo-relative
+# path; sorted). No changed file gives "none". Reproducible.
+set -u
+export BASHY_HINTS=off
+
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+runner=${BASHY:-bashy}
+
+[[ $# -eq 1 ]] || { echo "usage: candidate.bsh WORKCOPY" >&2; exit 2; }
+
+fail=0
+ok()  { echo "PASS $1"; }
+bad() { echo "FAIL $1 ${2:-}"; fail=1; }
+
+# meta KEY: a metadata string value from this folder's SKILL.md frontmatter.
+meta() {
+  awk -v k="$1" '
+    NR == 1 && /^---$/ { f = 1; next }
+    f && /^---$/ { exit }
+    f && /^metadata:/ { m = 1; next }
+    f && m && /^[^ ]/ { m = 0 }
+    f && m {
+      line = $0; sub(/^ +/, "", line)
+      if (index(line, k ": ") == 1) {
+        v = substr(line, length(k) + 3); gsub(/^"|"$/, "", v); print v; exit
+      }
+    }' "$here/SKILL.md"
+}
+
+# glob_match PATH GLOB: segment by segment, so * and ? never cross "/".
+glob_match() {
+  local IFS=/ i
+  local -a ps gs
+  read -ra ps <<<"$1"
+  read -ra gs <<<"$2"
+  (( ${#ps[@]} == ${#gs[@]} )) || return 1
+  for ((i = 0; i < ${#ps[@]}; i++)); do
+    [[ ${ps[i]} == ${gs[i]} ]] || return 1
+  done
+}
+match_any() { # PATH GLOB...
+  local p=$1 g
+  shift
+  for g in "$@"; do glob_match "$p" "$g" && return 0; done
+  return 1
+}
+
+# list DIR: the files git sees (tracked, or untracked and not ignored). The
+# host git by path: a shell's built-in git may not serve ls-files -co.
+hostgit=$(type -P git) || hostgit=/usr/bin/git
+list() {
+  if [[ -d $1/.git || -f $1/.git ]]; then
+    "$hostgit" -C "$1" ls-files -co --exclude-standard
+  else
+    (cd "$1" && find . -type f ! -path './.git/*' | sed 's|^\./||')
+  fi
+}
+
+sum256() { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; }
+
+base=${IMPL:-}
+if [[ -z $base && -f $here/.shapeware/impl ]]; then
+  base=$(<"$here/.shapeware/impl")
+fi
+if [[ -z $base && -f $here/../index.bsh ]]; then
+  base=$(cd "$here/../.." && pwd -P)
+fi
+base=$(cd "${base:-/nonexistent}" 2>/dev/null && pwd -P) || {
+  echo "FAIL installed implementation resolved (run the source step first)"
+  exit 1
+}
+copy=$(cd "$1" 2>/dev/null && pwd -P) || {
+  echo "FAIL copy exists (no such folder: $1)"
+  exit 1
+}
+case $here/ in
+  "$base"/*) surface=${here#"$base/"} ;;
+  *) surface=shapeware/${here##*/} ;; # standing alone: the folder's place in the repository
+esac
+
+read -ra allowed <<<"$(meta candidate-files)"
+read -ra outputs <<<"$(meta build-outputs)"
+
+[[ $copy != "$base" ]] && ok "copy is not the installed implementation" || bad "copy is not the installed implementation"
+(( ${#allowed[@]} )) && ok "metadata.candidate-files is declared" || bad "metadata.candidate-files is declared" "(no globs in SKILL.md)"
+
+tmp=$(mktemp -d)
+trap 'rm -rf "$tmp"' EXIT
+
+# 1. Implementation files: every difference matches a candidate-files glob.
+# Fail closed: a listing that fails is a FAIL, never "no changes".
+list "$base" >"$tmp/files.base" || bad "list the installed implementation's files" "(git ls-files failed in $base)"
+list "$copy" >"$tmp/files.copy" || bad "list the copy's files" "(git ls-files failed in $copy)"
+changed=()
+outside=0
+while IFS= read -r f; do
+  case /$f/ in */.shapeware/* | "/$surface/"*) continue ;; esac
+  (( ${#outputs[@]} )) && match_any "$f" "${outputs[@]}" && continue
+  [[ -d $base/$f || -d $copy/$f ]] && continue # a submodule or a directory entry
+  cmp -s "$base/$f" "$copy/$f" 2>/dev/null && continue
+  if (( ${#allowed[@]} )) && match_any "$f" "${allowed[@]}"; then
+    changed+=("$f")
+  else
+    bad "change within metadata.candidate-files" "($f)"
+    outside=$((outside + 1))
+  fi
+done < <(LC_ALL=C sort -u "$tmp/files.base" "$tmp/files.copy")
+(( outside == 0 )) && ok "changes within metadata.candidate-files (${#changed[@]} files)"
+
+# 2. This folder, as the copy carries it: unchanged, features.yaml adds only.
+if [[ -d $copy/$surface ]]; then
+  before=$fail
+  while IFS= read -r f; do
+    case /$f/ in */.shapeware/* | /features.yaml/) continue ;; esac
+    cmp -s "$here/$f" "$copy/$surface/$f" 2>/dev/null || bad "protected $surface/$f unchanged" "($f was changed, added or removed)"
+  done < <({ (cd "$here" && find . -type f); (cd "$copy/$surface" && find . -type f); } | sed 's|^\./||' | LC_ALL=C sort -u)
+  (( fail == before )) && ok "protected $surface unchanged"
+  if [[ -f $here/features.yaml ]]; then
+    if [[ -f $copy/$surface/features.yaml ]]; then
+      removed=$(diff "$here/features.yaml" "$copy/$surface/features.yaml" | grep -c '^<')
+      (( removed == 0 )) && ok "features.yaml only adds lines" || bad "features.yaml only adds lines" "($removed existing lines changed or removed)"
+    else
+      bad "features.yaml only adds lines" "(features.yaml missing in copy)"
+    fi
+  fi
+else
+  bad "copy has this folder" "($surface is missing)"
+fi
+
+# 3. Build the copy into a scratch bin folder, then this folder's checker grades it.
+if (cd "$here" && IMPL=$copy SHAPEWARE_BIN=$tmp/bin "$runner" dag -f dag.md build) >"$tmp/build.log" 2>&1; then
+  ok "copy builds (dag.md build)"
+  (cd "$here" && IMPL=$copy SHAPEWARE_BIN=$tmp/bin "$runner" --bashsharp checks/acceptance.bsh "$copy") || fail=1
+else
+  tail -n 20 "$tmp/build.log" >&2
+  bad "copy builds (dag.md build)" "(acceptance not run)"
+fi
+
+# 4. The variant id, over the changed implementation files only.
+ver=$(meta version)
+sha=none
+if (( ${#changed[@]} )); then
+  sha=$(for f in "${changed[@]}"; do
+    if [[ -f $copy/$f ]]; then h=$(sum256 <"$copy/$f"); h=${h%% *}; else h=deleted; fi
+    printf '%s  %s\n' "$h" "$f"
+  done | sum256 | cut -c1-7)
+fi
+echo "VARIANT ${ver:-0.0.0}+shaped.$sha"
+exit $fail
