@@ -1,7 +1,7 @@
 # Evidence (Sprint 744 N4)
 
 Gate run on the Windows test host's Linux lane, 2026-11-28, through the
-standard dag targets (`bashy dag -f dag.md source|build|check|test|cert`).
+standard dag targets (`bashy dag -f dag.md source|build|check|test|cert|mutate|alone`).
 The reference is bashy built by the `build` step from the commit in
 `SKILL.md` (`metadata.reference-commit`), driven through the `session`
 launcher that step writes; the cert report's digest is the launcher's.
@@ -16,9 +16,11 @@ A-23 and A-24 cited go tests.
 | `check` | `conform spec check` clean; index check PASS for both surfaces | <1 s |
 | `test` | A-01 to A-24, 23 of 23 PASS | 37 s |
 | `cert` | PASS, 3 runs, none noisy (`agent-identity-cert.json`, contract sha256 `1842377c…` = this CONTRACT.md) | 138 s |
+| `mutate` | strength 46/46: an output mutant and an exit mutant per assertion, all killed (`agent-identity-mutate.log`) | 1649 s |
+| `alone` | lone copy outside the checkout: clone at the pinned commit, build, test, 23 of 23 PASS (`alone-gate.log`) | 51 s |
 
-`mutate` and `alone` results are added when their runs finish. `dag: effect
-cap` lines are warnings only.
+`dag: effect cap` lines are warnings only. The `alone` run needs the network
+once, to clone the implementation at the pinned commit.
 
 Venue: Linux amd64, Go 1.27.4 on `PATH` with a module cache that already
 holds the implementation's dependencies (`bashy mb` and `bashy inbox`

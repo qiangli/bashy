@@ -1,0 +1,35 @@
+==> alone
+==> source
+implementation: /tmp/shapeware-agent-identity-alone.EFz4Iakw/agent-identity/.shapeware/src
+dag: 1 target(s) ok
+==> build
+bashy, GNU Bash 5.3 compatible, version 5.3.0(1)-bashy
+dag: 1 target(s) ok
+==> test
+dag: effect cap: target "test": "sh" needs unknown not in Effects: exec,read,write
+PASS A-01 ok
+PASS A-02 ok
+PASS A-03 ok
+PASS A-04 ok
+PASS A-05 ok
+PASS A-06 ok
+PASS A-07 ok
+PASS A-08 ok
+PASS A-09 ok
+PASS A-10 ok
+PASS A-12 ok
+PASS A-13 ok
+PASS A-14 ok
+PASS A-15 ok
+PASS A-16 ok
+PASS A-17 ok
+PASS A-18 ok
+PASS A-19 ok
+PASS A-20 ok
+PASS A-21 ok
+PASS A-22 ok
+PASS A-23 ok
+PASS A-24 ok
+dag: 1 target(s) ok
+dag: effect cap: target "alone": "rm" needs destroy not in Effects: exec,net,priv,read,write
+dag: 1 target(s) ok
