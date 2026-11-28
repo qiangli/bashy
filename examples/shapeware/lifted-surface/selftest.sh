@@ -36,6 +36,15 @@
 #                 module and in a nested module (its own go.mod) passes
 #   gotest-dep    a dependency import path required in go.mod passes; the
 #                 dependency is a local module (replace => ../dep), so offline
+#   testmain-fake-*-fail  a TestMain that prints a fake "--- PASS" (and a
+#                 fake -list line) without running the test fails
+#   residual-testmain-forgery-passes  a TestMain written to forge both -list
+#                 and -json still passes: the residual spec §6 states
+#   env-no-launcher-impl  LAUNCHER_IMPL does not reach the test
+#   old-*         a go 1.16 module: a required dependency passes; a module
+#                 only in the build list (and in a replace line) fails
+#   writes-*-fail a test that writes go.mod or go.sum (root or nested
+#                 module) fails, and the write is not restored
 #   gotest-*-fail no matching test, "..", "./...", a missing directory, a
 #                 symlink out of the implementation, an import path not
 #                 required in go.mod, one in the implementation's own module
@@ -392,6 +401,147 @@ gotest gotest-own-module-path-fail 'FAIL TestAdd' example.invalid/calc/internal/
 ln -s "$work/dep" "$base/escape"
 gotest gotest-symlink-out-fail 'FAIL TestGreet' ./escape/greet TestGreet
 rm "$base/escape"
+
+# Review fixes (sprint 742 M6), in implementations of their own so the base
+# stays untouched: a TestMain that fakes a PASS, a test that writes go.mod or
+# go.sum, the launcher's environment, and a module in the build list that
+# go.mod does not require.
+m6=$work/m6
+mkdir -p "$m6/ghost" "$m6/ghostlist" "$m6/writer" "$m6/n" "$m6/env"
+printf 'module example.invalid/m6\n\ngo 1.21\n' >"$m6/go.mod"
+cat >"$m6/ghost/ghost_test.go" <<'EOF'
+package ghost
+
+import (
+	"fmt"
+	"os"
+	"testing"
+)
+
+// TestMain never runs a test; it prints the line a passing test prints.
+func TestMain(m *testing.M) {
+	fmt.Println("=== RUN   TestGhost")
+	fmt.Println("--- PASS: TestGhost (0.00s)")
+	fmt.Println("PASS")
+	os.Exit(0)
+}
+EOF
+cat >"$m6/ghostlist/ghost_test.go" <<'EOF'
+package ghostlist
+
+import (
+	"fmt"
+	"os"
+	"testing"
+)
+
+// TestMain also fakes the -list output.
+func TestMain(m *testing.M) {
+	fmt.Println("TestGhost")
+	fmt.Println("--- PASS: TestGhost (0.00s)")
+	os.Exit(0)
+}
+EOF
+cat >"$m6/writer/writer_test.go" <<'EOF'
+package writer
+
+import (
+	"os"
+	"testing"
+)
+
+// TestWriteRoot appends to the implementation's go.mod (the module root).
+func TestWriteRoot(t *testing.T) {
+	f, err := os.OpenFile("../go.mod", os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	f.WriteString("// written by a test\n")
+}
+EOF
+printf 'module example.invalid/m6/n\n\ngo 1.21\n' >"$m6/n/go.mod"
+cat >"$m6/n/n_test.go" <<'EOF'
+package n
+
+import (
+	"os"
+	"testing"
+)
+
+// TestWriteNested creates go.sum in its nested module.
+func TestWriteNested(t *testing.T) {
+	if err := os.WriteFile("go.sum", nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+EOF
+cat >"$m6/env/env_test.go" <<'EOF'
+package env
+
+import (
+	"os"
+	"testing"
+)
+
+// TestNoLauncherImpl: the launcher does not pass LAUNCHER_IMPL to a test.
+func TestNoLauncherImpl(t *testing.T) {
+	if v, ok := os.LookupEnv("LAUNCHER_IMPL"); ok {
+		t.Fatalf("LAUNCHER_IMPL=%q reached the test", v)
+	}
+}
+EOF
+# A go 1.16 module (unpruned graph): olddep2 is in the build list through
+# olddep's go.mod, but the implementation's go.mod does not require it.
+old=$work/old
+mkdir -p "$old" "$work/olddep/y" "$work/olddep2/x"
+printf 'module example.invalid/old\n\ngo 1.16\n\nrequire example.invalid/olddep v0.0.0\n\nreplace example.invalid/olddep => ../olddep\n\nreplace example.invalid/olddep2 => ../olddep2\n' >"$old/go.mod"
+printf 'module example.invalid/olddep\n\ngo 1.16\n\nrequire example.invalid/olddep2 v0.0.0\n' >"$work/olddep/go.mod"
+printf 'package y\n\nimport "testing"\n\nfunc TestY(t *testing.T) {}\n' >"$work/olddep/y/y_test.go"
+printf 'module example.invalid/olddep2\n\ngo 1.16\n' >"$work/olddep2/go.mod"
+printf 'package x\n\nimport "testing"\n\nfunc TestX(t *testing.T) {}\n' >"$work/olddep2/x/x_test.go"
+gotest_in() { # IMPL NAME WANT-LINE PKG TEST
+  local impl=$1 name=$2 want=$3 got rc wrc=1
+  got=$(LAUNCHER_IMPL=$impl sh "$src/scripts/launcher.sh" gotest "$4" "$5" 2>&1); rc=$?
+  [[ $want == PASS* ]] && wrc=0
+  if [[ $got == "$want" && $rc -eq $wrc ]]; then echo "ok   $name (exit $rc)"
+  else echo "FAIL $name: got '$got' exit $rc, want '$want'"; failed=1; fi
+}
+mkdir -p "$m6/forge"
+cat >"$m6/forge/forge_test.go" <<'EOF'
+package forge
+
+import (
+	"flag"
+	"fmt"
+	"os"
+	"testing"
+)
+
+// TestMain forges both the -list and the -json output of a test that does
+// not exist: the residual the spec states (§6, a cited test trusts its
+// package's TestMain).
+func TestMain(m *testing.M) {
+	flag.Parse()
+	if flag.Lookup("test.list").Value.String() != "" {
+		fmt.Println("TestGhost")
+	} else {
+		fmt.Println("--- PASS: TestGhost (0.00s)")
+	}
+	os.Exit(0)
+}
+EOF
+gotest_in "$m6" testmain-fake-pass-fail 'FAIL TestGhost' ./ghost TestGhost
+gotest_in "$m6" residual-testmain-forgery-passes 'PASS TestGhost' ./forge TestGhost
+gotest_in "$m6" testmain-fake-list-fail 'FAIL TestGhost' ./ghostlist TestGhost
+gotest_in "$m6" env-no-launcher-impl 'PASS TestNoLauncherImpl' ./env TestNoLauncherImpl
+gotest_in "$old" old-required-dep 'PASS TestY' example.invalid/olddep/y TestY
+gotest_in "$old" old-unrequired-dep-fail 'FAIL TestX' example.invalid/olddep2/x TestX
+cp "$m6/go.mod" "$work/m6.go.mod"
+gotest_in "$m6" writes-root-go-mod-fail 'FAIL TestWriteRoot' ./writer TestWriteRoot
+cmp -s "$m6/go.mod" "$work/m6.go.mod" && { echo "FAIL writes-root-go-mod-fail: the test did not write go.mod"; failed=1; }
+gotest_in "$m6" writes-nested-go-sum-fail 'FAIL TestWriteNested' ./n TestWriteNested
+[[ -f $m6/n/go.sum ]] || { echo "FAIL writes-nested-go-sum-fail: the test did not write go.sum (nothing is restored)"; failed=1; }
 
 if [[ -n ${CONFORM:-} ]]; then
   if "$CONFORM" spec check "$s" >"$work/out" 2>&1; then echo "ok   lint (conform spec check)"
