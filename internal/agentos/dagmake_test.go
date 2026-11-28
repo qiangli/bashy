@@ -160,7 +160,18 @@ func stubDagMakeExec(t *testing.T, code int) *[]dagMakeCall {
 	return calls
 }
 
+// dagMakeHintEnv pins the two variables the hint reads from the process
+// environment. A venue may export BASHY_HINTS=off (the gate lanes do) or run
+// under an agent shell (BASHY_AGENTIC): the hint assertions must not depend
+// on either.
+func dagMakeHintEnv(t *testing.T) {
+	t.Helper()
+	t.Setenv("BASHY_HINTS", "")
+	t.Setenv("BASHY_AGENTIC", "")
+}
+
 func TestMakeFallthroughFrontDoor(t *testing.T) {
+	dagMakeHintEnv(t)
 	calls := stubDagMakeExec(t, 3)
 	dir := t.TempDir()
 	writeDagMakeFixture(t, dir, "dag.md", dagMakeFixture)
@@ -195,6 +206,7 @@ func TestMakeFallthroughFrontDoor(t *testing.T) {
 }
 
 func TestMakeFallthroughListAndHints(t *testing.T) {
+	dagMakeHintEnv(t)
 	calls := stubDagMakeExec(t, 0)
 	dir := t.TempDir()
 	writeDagMakeFixture(t, dir, "dag.md", dagMakeFixture)
@@ -245,6 +257,7 @@ func TestMakeFallthroughListAndHints(t *testing.T) {
 // through the ExecHandler ring, and a Makefile directory passes through to
 // the next handler with argv untouched.
 func TestDagMakeHandlerShell(t *testing.T) {
+	dagMakeHintEnv(t)
 	calls := stubDagMakeExec(t, 0)
 	dir := t.TempDir()
 	writeDagMakeFixture(t, dir, "dag.md", dagMakeFixture)
