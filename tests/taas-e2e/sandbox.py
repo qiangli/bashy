@@ -136,6 +136,7 @@ script: |
   printf '{{"text":"transcript of %s bytes","seconds":1}}\\n' "$n"
 effects: [read]
 unit: seconds
+output: file:out.txt
 args:
   flags:
     - name: input
