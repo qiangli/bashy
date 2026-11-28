@@ -48,7 +48,7 @@ def main():
                   "/python": Path(os.environ["GROUP_SHAPING_PYTHON"]),
                   "/go": Path(subprocess.check_output(["go", "env", "GOROOT"], text=True).strip()),
                   "/tools/git": Path(git)}
-        for tool in ("bashy", "outpost", "delegate"):
+        for tool in ("bashy", "outpost", "delegate", "adapter-llm", "adapter-offer", "adapter-files"):
             binary = binary_dir / tool
             with binary.open("rb") as stream:
                 digest = hashlib.file_digest(stream, "sha256").hexdigest()

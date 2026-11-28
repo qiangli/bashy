@@ -359,6 +359,10 @@ def main():
     cache = HOME / ".cache/bashy/adapters/yoke"
     cache.mkdir(parents=True, exist_ok=True)
     shutil.copy("/tools/delegate", cache / "delegate")
+    # The sealed image has no source tree, so the yoke adapters this gate
+    # drives are prebuilt on the lane and installed in the adapter cache.
+    for verb in ("llm", "offer", "files"):
+        shutil.copy("/tools/adapter-" + verb, cache / verb)
     check(shutil.which("codex") == "/fixture/codex", "the one-shot agent stub is on PATH")
     for server, port in ((Satellite, 18881), (FakeModel, MODEL_PORT)):
         httpd = ThreadingHTTPServer(("127.0.0.1", port), server)
