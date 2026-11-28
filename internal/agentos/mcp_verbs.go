@@ -47,6 +47,10 @@ func mcpVerbCommands() []yokemcp.RegisteredCommand {
 		if slices.Contains(hidden, name) || slices.Contains(ring, name) || tool.Lookup(name) != nil {
 			continue
 		}
+		// The typed tool of the same name replaces the argv verb adapter.
+		if _, typed := mcpTypedCalls[name]; typed {
+			continue
+		}
 		entry, ok := atlas.Lookup(name)
 		if !ok {
 			if _, logged := mcpMissingVerbAtlas.LoadOrStore(name, true); !logged {

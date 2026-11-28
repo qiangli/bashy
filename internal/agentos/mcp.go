@@ -23,6 +23,8 @@ import (
 	dbcmd "github.com/qiangli/yoke/cmds/db"
 	yokemcp "github.com/qiangli/yoke/mcp"
 	"github.com/qiangli/yoke/pkg/atlas"
+	"github.com/qiangli/yoke/pkg/broker"
+	"github.com/qiangli/yoke/pkg/chat"
 	"github.com/qiangli/yoke/pkg/kbmemory"
 	"github.com/qiangli/yoke/pkg/policy/audit"
 )
@@ -411,6 +413,12 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 			return out
 		}
 		var direct []func() yokemcp.RegisteredCommand
+		for _, name := range []string{"agent", "llm"} {
+			if profile == "all" || slices.Contains(selectedNames, name) {
+				direct = append(direct, mcpTypedCalls[name])
+				opts.Tools = slices.DeleteFunc(opts.Tools, func(tool string) bool { return tool == name })
+			}
+		}
 		if exposeDB {
 			direct = append(direct, dbcmd.MCPCommand)
 		}
@@ -443,9 +451,17 @@ func mcpOptions(allow, profile string) (yokemcp.Options, error) {
 		// retrieval tools run the same `kb memory retrieve` / `kb memory
 		// index-sync` commands the CLI dispatches.
 		return append(registered(), dbcmd.MCPCommand(), kbmemory.MCPCommand(),
-			kbmemory.MCPRetrieveCommand(), kbmemory.MCPSyncIndexCommand(), kbmemory.MCPMaintainCommand())
+			kbmemory.MCPRetrieveCommand(), kbmemory.MCPSyncIndexCommand(), kbmemory.MCPMaintainCommand(),
+			mcpTypedCalls["agent"](), mcpTypedCalls["llm"]())
 	}
 	return opts, nil
+}
+
+// mcpTypedCalls are the one-shot typed tools: llm (bashy llm call) and agent
+// (a read-only bashy delegate). Each replaces the argv verb of its name.
+var mcpTypedCalls = map[string]func() yokemcp.RegisteredCommand{
+	"agent": chat.MCPAgentCommand,
+	"llm":   broker.MCPCommand,
 }
 
 // Keep the transport's single call record in the same hash-chained audit as
