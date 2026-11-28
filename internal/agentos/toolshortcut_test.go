@@ -104,8 +104,8 @@ func TestToolShortcutSyntheticRing(t *testing.T) {
 	}
 }
 
-// Session id is the tool name (or tool:model), sanitized exactly like chat
-// derives it — including the dot-mangling the operator hit
+// The session id's base is the tool name (or tool:model), sanitized exactly
+// like chat derives it — including the dot-mangling the operator hit
 // (codex-gpt6.1-sol -> codex-gpt6-1-sol).
 func TestToolShortcutSessionID(t *testing.T) {
 	for agent, want := range map[string]string{
@@ -230,7 +230,7 @@ func TestToolShortcutHelp(t *testing.T) {
 	// --model switches the binding, model and session id together.
 	toolShortcutHelp(&buf, tool, toolShortcutOpts{yolo: true, model: "gpt6"})
 	out = buf.String()
-	for _, want := range []string{"binding:  codex:gpt6", "model:    gpt6", "session:  codex-gpt6"} {
+	for _, want := range []string{"binding:  codex:gpt6", "model:    gpt6", "session:  codex-gpt6-<8 hex>"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("--help --model lacks %q:\n%s", want, out)
 		}
@@ -247,7 +247,7 @@ func TestToolShortcutDryRun(t *testing.T) {
 		t.Fatalf("--dry-run exit = %d, stderr = %s", code, stderr.String())
 	}
 	out := stdout.String()
-	for _, want := range []string{"session: teststeer", "teststeer-bin", "bashy chat steer teststeer"} {
+	for _, want := range []string{"session: teststeer-<8 hex>", "teststeer-bin", "bashy chat steer teststeer"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("--dry-run lacks %q:\n%s", want, out)
 		}
@@ -262,7 +262,7 @@ func TestDispatchToolShortcutHelp(t *testing.T) {
 	if code := dispatchToolShortcut("codex", []string{"--help"}, nil, &stdout, &stderr); code != 0 {
 		t.Fatalf("--help exit = %d, stderr = %s", code, stderr.String())
 	}
-	if out := stdout.String(); !strings.Contains(out, "session:  codex") {
+	if out := stdout.String(); !strings.Contains(out, "session:  codex-<8 hex>") {
 		t.Errorf("--help lacks the session id:\n%s", out)
 	}
 }

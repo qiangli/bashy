@@ -8,8 +8,10 @@ package agentos
 //
 // `bashy codex` (or agy, claude, muse, opencode, ...) opens that tool's own
 // TUI in the foreground under the same steerable-session machinery as
-// `bashy chat -i`: the session id is the tool name, so
-// `bashy chat steer codex "..."` reaches it from another terminal, and the
+// `bashy chat -i`: each launch gets its own session id, the tool name plus a
+// short form of its instance UUID (codex-7f3a9c1e), so no later session
+// inherits its inbox. `bashy chat steer codex "..."` reaches it from another
+// terminal while it is the only live codex session, and the
 // capped host-inbox relay stays on (BASHY_CHAT_INBOX=off opts out, as usual).
 //
 // The operator decision of record (2026-11-19): the launch follows the
@@ -27,10 +29,8 @@ package agentos
 //   bashy <tool> --help              resolved model, binding, steer id
 //
 // A TUI needs a terminal: without one stdin is refused with guidance instead
-// of starting a session that exits at once. A live same-name session is
-// refused by the chat path with its standard attach/clone guidance; a second
-// concurrent seat (codex-2) needs a yoke-side session-id override in
-// Interact and is reported, not worked around, here.
+// of starting a session that exits at once. A second launch of the same tool
+// is simply a second session with its own id.
 
 import (
 	"fmt"
@@ -146,9 +146,10 @@ func toolShortcutAgentName(toolName, model string) string {
 	return toolName
 }
 
-// toolShortcutSessionID is the steerable session id for the shortcut: the
-// tool name (or tool:model), sanitized exactly the way chat derives it, so
-// `bashy chat steer <id>` reaches the session this opens.
+// toolShortcutSessionID is the base of the shortcut's session id: the tool
+// name (or tool:model), sanitized exactly the way chat derives it. The live
+// id is this plus a per-launch suffix, so `bashy chat steer <base>` reaches
+// the session while it is the only one live on that base.
 func toolShortcutSessionID(agent string) string {
 	return room.AgentClaimID(agent)
 }
@@ -174,7 +175,9 @@ func toolShortcutUsage(tool string) string {
 
 Open %[1]s's own TUI in this repo as a steerable session (like running %[1]s
 by hand, plus yolo): the vendor's own default model and config, permission
-bypass on. Session id is %[1]s; steer it with: bashy chat steer %[1]s "...".
+bypass on. Each launch gets its own session id, %[1]s-<8 hex> (shown in the
+launch banner and by bashy chat sessions). While one %[1]s session is live,
+the tool name reaches it: bashy chat steer %[1]s "...".
 
   --model MODEL   run a registry tool:model binding instead of the vendor default
   --yolo          keep permission bypass on (the default)
@@ -264,9 +267,10 @@ func toolShortcutHelp(w io.Writer, t fleet.Tool, opts toolShortcutOpts) {
   tool:     %s
   binding:  %s
   model:    %s
-  session:  %s
+  session:  %s-<8 hex>, new per launch
   vendor:   %s
 Steer it: bashy chat steer %s "..."   (watch: bashy chat attach %s)
+With several live, use the full id: bashy chat sessions
 `, t.Name, agent, model, id, t.Binary(), id, id)
 }
 
@@ -288,7 +292,7 @@ func toolShortcutExplain(w io.Writer, agent string, yolo, noYolo bool) error {
 	}
 	id := toolShortcutSessionID(agent)
 	argv := append([]string{l.Tool}, l.Args...)
-	fmt.Fprintf(w, "tool: %s\nmodel: %s\nbinding: %s\nsession: %s\nargv: %s\n",
+	fmt.Fprintf(w, "tool: %s\nmodel: %s\nbinding: %s\nsession: %s-<8 hex>, new per launch\nargv: %s\n",
 		l.ToolName, modelOrDefault(l.Model), binding, id, shellJoin(argv))
 	fmt.Fprintf(w, "Steer it: bashy chat steer %s \"...\"   (watch: bashy chat attach %s)\n", id, id)
 	return nil

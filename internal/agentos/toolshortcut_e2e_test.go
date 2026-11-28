@@ -5,7 +5,7 @@ package agentos
 
 // E2E for `bashy <tool>` (toolshortcut.go): the merged shortcut launches the
 // vendor CLI through the `bashy chat` steerable path as a live session whose
-// id is the tool name, reachable via `bashy chat steer`.
+// id starts with the tool name, reachable via `bashy chat steer <tool>`.
 //
 // ZERO TOKENS: no LLM, no network. The vendor CLIs are tiny POSIX sh fakes
 // that log their argv, echo every input line, and exit on EOF or `quit`,
@@ -291,7 +291,7 @@ func runToolShortcutPTY(t *testing.T, bin, work, tool string, toolArgs []string,
 		return "child alive"
 	}
 
-	// (1) launched via the chat steerable path, (2) session id is the tool name.
+	// (1) launched via the chat steerable path, (2) session id starts with the tool name.
 	sessions := waitForToolShortcut(t, tool+" session in chat sessions", 45*time.Second, func() (string, bool) {
 		if err, done := exited(); done {
 			return snapshot() + "\n--- child exited while waiting for session: " + err.Error(), false
