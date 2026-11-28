@@ -25,7 +25,7 @@ if [ -n "$top" ] && [ "$top" != "$(pwd -P)" ] && [ -f "$top/shapeware/index.bsh"
 else
     impl=$(pwd -P)/.shapeware/src
     [ -d "$impl/.git" ] || git clone -q https://github.com/qiangli/bashy.git "$impl"
-    git -C "$impl" checkout -q --detach REFERENCE_COMMIT
+    git -C "$impl" checkout -q --detach 851b4c4fc8488180177736f83f6a150b90366b52
 fi
 printf '%s\n' "$impl" > .shapeware/impl
 echo "implementation: $impl"
