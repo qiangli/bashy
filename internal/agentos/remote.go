@@ -22,6 +22,7 @@ import (
 
 	"github.com/bashsharp/bashsharp/cli"
 	"github.com/qiangli/yoke/pkg/binmgr"
+	"github.com/qiangli/yoke/pkg/offer"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/ssh"
 )
@@ -39,6 +40,8 @@ func remoteCmd() *cobra.Command {
 		Long:  `Manage bashy on remote hosts. The first step is remote install: push the self-contained bashy binary to a remote host via the host OS transport (ssh/scp on Unix), idempotently and version-matched, from the local release cache.`,
 	}
 	cmd.AddCommand(remoteInstallCmd(), peerServeCmd(), remoteExecCmd())
+	// Sprint 739: call (and later mount) a member's offered typed tool.
+	cmd.AddCommand(offer.RemoteSubcommands()...)
 	return cmd
 }
 

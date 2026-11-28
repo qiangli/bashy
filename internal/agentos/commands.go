@@ -641,6 +641,8 @@ var verbSynopsis = map[string]string{
 	"desktop":            "Cloudbox desktop preferences: schema, get, catalog, set, wish, undo, history, allowance, shape-only, pages/invoke/result, and the allowance policy",
 	"suite":              "Cloudbox app suites: list, show, create, add, remove, delete, and share with circles",
 	"reproduce":          "dry-run what master metadata can recreate (reproduce --plan; read-only, no --apply)",
+	"offer":              "offer a fleet model, tool, agent or registered command to your trusted group as a metered, typed tool call (offer NAME --circle C; stop; list)",
+	"files":              "share a designated folder read-only with your group, and read members' shared folders in place (share, unshare, shares; ls, stat, cat, get, link)",
 	"paired-host":        "paired hosts from the master (paired-host ls), plus invite: the pair-once code for your OWN account — owner node provisioning, never a member invitation",
 	"resource":           "host totals and active weave disk, CPU, GPU, and memory usage",
 	"resources":          "hidden alias for bashy resource",

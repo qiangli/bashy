@@ -162,6 +162,8 @@ var adaptedVerbs = map[string][2]string{
 	"suite":       {"yoke", "suite"},
 	"reproduce":   {"yoke", "reproduce"},
 	"paired-host": {"yoke", "paired-host"},
+	"offer":       {"yoke", "offer"},
+	"files":       {"yoke", "files"},
 	"resource":    {"yoke", "resource"},
 	"resources":   {"yoke", "resource"},
 	"handoff":     {"yoke", "handoff"},

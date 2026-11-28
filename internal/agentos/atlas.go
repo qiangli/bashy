@@ -246,6 +246,21 @@ var bashyOwnedVerbAtlas = map[string]atlas.Entry{
 	// mints the pair-once code of the signed-in account — owner node
 	// provisioning for one's OWN hardware, never a member invitation
 	// (docs: yoke docs/cloudbox-members-attach-wire.md §3).
+	// Sprint 739 (TaaS): offer a fleet model, tool, agent or registered
+	// command as a metered typed tool call (yoke pkg/offer).
+	"offer": {
+		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
+		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork},
+		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite},
+		Stability: atlas.StabilityExperimental,
+	},
+	// Sprint 739: designated folders shared read-only (yoke pkg/sharedfiles).
+	"files": {
+		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
+		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork},
+		Effects:   []string{atlas.EffNet, atlas.EffRead, atlas.EffWrite},
+		Stability: atlas.StabilityExperimental,
+	},
 	"paired-host": {
 		Stage: atlas.StageCross, Group: atlas.GroupPlatform, Tier: atlas.TierWorkplace,
 		Caps:      []string{atlas.CapJSON, atlas.CapNeedsNetwork, atlas.CapNeedsPairing},

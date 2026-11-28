@@ -113,7 +113,7 @@ import (
 // surface lister) is itself shimmed so it is reachable bare.
 var (
 	alwaysShimVerbs = []string{
-		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "account", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "member", "group", "superadmin", "suite", "desktop", "journey", "satellite", "reproduce", "paired-host", "resource", "otel", "self", "src", "shape", "check", "gate", "pair", "judge", "conform", "selftest", "dhnt", "release", "app", "transpile", "transcribe", "providers",
+		"weave", "sprint", "todo", "handoff", "resume", "claim", "chat", "delegate", "coach", "meet", "mcp", "capability", "foreman", "supervise", "agent", "sdlc", "web", "dag", "schedule", "secret", "account", "ask", "bus", "feed", "herald", "search", "sota", "genie", "stats", "skill", "craft", "kb", "lexicon", "define", "tool", "model", "person", "whois", "inbox", "instance", "notify", "activity", "run", "agentic", "commands", "inspect", "adapt", "adapter", "infra", "token", "fleet", "member", "group", "superadmin", "suite", "desktop", "journey", "satellite", "reproduce", "paired-host", "offer", "files", "resource", "otel", "self", "src", "shape", "check", "gate", "pair", "judge", "conform", "selftest", "dhnt", "release", "app", "transpile", "transcribe", "providers",
 		"git", "gh", "act", "act-runner", "rclone", "oci", "podman", "ollama",
 		"loom", "zot", "seaweedfs", "kopia", "mirror",
 		"kubectl", "helm", "sphere", "peer", "tessaro", "login", "dks",
@@ -873,7 +873,7 @@ Go source also accepts --go-file, --go-test-file, --go-xtest-file,
 		dispatchExit(runCommandAdapter("yoke", "sprint", os.Args[1], os.Args[2:]))
 	case "llm", "share", "adapt", "adapter", "infra", "token", "fleet",
 		"satellite", "member", "group", "superadmin", "desktop", "journey",
-		"suite", "reproduce", "paired-host", "handoff", "resume":
+		"suite", "reproduce", "paired-host", "offer", "files", "handoff", "resume":
 		folder, entry, _ := lookupAdaptedVerb(os.Args[1])
 		dispatchExit(runCommandAdapter(folder, entry, os.Args[1], os.Args[2:]))
 	case "resource", "resources":

@@ -48,6 +48,7 @@ import (
 	"github.com/qiangli/yoke/pkg/kb"
 	"github.com/qiangli/yoke/pkg/meet"
 	"github.com/qiangli/yoke/pkg/mirror"
+	"github.com/qiangli/yoke/pkg/offer"
 	"github.com/qiangli/yoke/pkg/pair"
 	"github.com/qiangli/yoke/pkg/policy/coord"
 	"github.com/qiangli/yoke/pkg/principal"
@@ -55,6 +56,7 @@ import (
 	"github.com/qiangli/yoke/pkg/sdlc"
 	"github.com/qiangli/yoke/pkg/search"
 	"github.com/qiangli/yoke/pkg/secrets"
+	"github.com/qiangli/yoke/pkg/sharedfiles"
 	coreskills "github.com/qiangli/yoke/pkg/skills"
 	"github.com/qiangli/yoke/pkg/sota"
 	"github.com/qiangli/yoke/pkg/stats"
@@ -114,6 +116,10 @@ func cobraVerb(name string) *cobra.Command {
 		return fleet.NewSuiteCmd()
 	case "reproduce":
 		return fleet.NewReproduceCmd()
+	case "offer":
+		return offer.NewOfferCmd()
+	case "files":
+		return sharedfiles.NewCmd()
 	case "paired-host":
 		return newPairedHostCmd()
 	case "resource", "resources":
