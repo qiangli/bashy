@@ -347,7 +347,8 @@ def scenario(c, o, outpost):
             # Both hosts share one container, so mount under a local name.
             cli(o, "remote", "add", "c", name, "--as", "c-" + name)
             tools = cli_json(o, "mcp", "tools", "--json")
-            tools = tools.get("tools", []) if isinstance(tools, dict) else tools
+            # bashy-mcp-tools-v1: names in tools/registered, schemas in definitions.
+            tools = tools.get("definitions", []) if isinstance(tools, dict) else tools
             mounted = [t for t in tools if t.get("name", "") == "c-" + name]
             check(mounted and mounted[0].get("inputSchema", {}).get("properties"),
                   f"bashy remote add c {name} shows a typed tool in bashy mcp tools")
