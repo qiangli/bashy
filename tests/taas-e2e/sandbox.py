@@ -38,7 +38,7 @@ HOME = Path.home()
 C_HOME, O_HOME = HOME / ".bashy", HOME / "o-host"
 CONFIG = HOME / ".config/matrix/agent.json"
 MODEL, AGENT, CAP = "fake-model", "helper", 64
-OFFERS = ("llm", "transcribe", AGENT, "files-docs", "files-outside")
+OFFERS = ("llm", "stt", AGENT, "files-docs", "files-outside")
 T1, T2 = os.environ.get("TAAS_T1") == "1", os.environ.get("TAAS_T2") == "1"
 WAIT = float(os.environ.get("TAAS_WAIT", "15"))
 calls = {}  # (principal, tool) -> list of usage dicts the callers saw
@@ -94,7 +94,7 @@ class FakeModel(BaseHTTPRequestHandler):
         pass
 
 
-TRANSCRIBE = f"""name: transcribe
+TRANSCRIBE = f"""name: stt
 kind: command
 synopsis: transcribe an audio file (fake provider)
 script: |
@@ -102,7 +102,8 @@ script: |
   n=$(wc -c < "$in")
   printf 'transcript of %s bytes\\n' "$n" > out.txt
   printf '{{"text":"transcript of %s bytes","seconds":1}}\\n' "$n"
-effects: [read, write]
+effects: [read]
+unit: seconds
 args:
   flags:
     - name: input
@@ -217,7 +218,7 @@ def scenario(c, o, outpost):
           f"the agent tool runs locally on C or names its token cap (exit {agent.returncode})")
 
     # (2) offers: one of each class; an internal verb and an untyped command are refused.
-    for name, extra in (("llm", ["--limit", "0"]), ("transcribe", ["--limit", "1"]),
+    for name, extra in (("llm", ["--limit", "0"]), ("stt", ["--limit", "1"]),
                         (AGENT, ["--token-cap", str(CAP)])):
         target = MODEL if name == "llm" else name
         out = cli_json(c, "offer", target, "--group", "support", *extra, "--json")
@@ -250,7 +251,7 @@ def scenario(c, o, outpost):
     peer(o, c, "o", "c", O_PORT, ["files-in"])
     got = cli(c, "files", "cat", "bashy://o/files-in/in.wav", ok=False)
     check(got.returncode == 0 and got.stdout.startswith("RIFF"), "O offered files-in to C and C read in.wav")
-    peer(c, o, "c", "o", C_PORT, ["llm", MODEL, "transcribe", "files-offers", "files-docs"])
+    peer(c, o, "c", "o", C_PORT, ["llm", MODEL, "stt", "files-offers", "files-docs"])
 
     # (3) member calls through the front.
     status, _, raw = member(A, MODEL, f"/offers/{MODEL}?definition", "GET")
@@ -260,13 +261,13 @@ def scenario(c, o, outpost):
     check("fake answer" in json.dumps(reply), "A's wish ran on C's LLM through the offer")
     reply = member_call(O, MODEL, prompt_args(definition, "model"))
     check("fake answer" in json.dumps(reply), "O's call ran on C's LLM through the offer")
-    reply = member_call(A, "transcribe", {"input": "bashy://o/files-in/in.wav"})
+    reply = member_call(A, "stt", {"input": "bashy://o/files-in/in.wav"})
     refs = reply["result"].get("artifact_refs") or reply["result"].get("ArtifactRefs") or []
     check(refs and "/files-offers/" in refs[0]["uri"], f"transcribe returned an artifact URI {refs and refs[0]['uri']}")
-    member_call(A, "transcribe", {"input": "bashy://o/files-in/in.wav"}, expect=429)
-    remote = cli(o, "remote", "call", "c", "transcribe", "--input", "bashy://o/files-in/in.wav", "--json")
+    member_call(A, "stt", {"input": "bashy://o/files-in/in.wav"}, expect=429)
+    remote = cli(o, "remote", "call", "c", "stt", "--input", "bashy://o/files-in/in.wav", "--json")
     peer_reply = json.loads(remote.stdout)
-    calls.setdefault(("peer:o", "transcribe"), []).append(peer_reply.get("usage"))
+    calls.setdefault(("peer:o", "stt"), []).append(peer_reply.get("usage"))
     uri = (peer_reply["result"].get("artifact_refs") or [{}])[0].get("uri", "")
     run_path = uri.split("/files-offers/", 1)[-1]
     status, headers, raw = http("GET", f"http://127.0.0.1:{C_PORT}/files/offers/{run_path}",
@@ -301,14 +302,14 @@ def scenario(c, o, outpost):
     for bad in ("../secret.txt", "out/hostname"):
         status, _, _ = member(A, "files-docs", "/offers/files-docs", body={"args": {"op": "read", "path": bad}})
         check(400 <= status < 500, f"path escape {bad} is refused: HTTP {status}")
-    status, _, _ = member(A, MODEL, "/offers/transcribe", body={"args": {}})
+    status, _, _ = member(A, MODEL, "/offers/stt", body={"args": {}})
     check(status == 403, f"a command not offered on this app is refused: HTTP {status}")
     proc = cli(o, "remote", "call", "c", "untyped", ok=False)
     check(proc.returncode and "403" in proc.stderr + proc.stdout, "a peer calling a non-offered command is refused 403")
 
     # (6) T2: mounted tools.
     if T2:
-        for name, args in (("transcribe", ["--input", "bashy://o/files-in/in.wav"]),
+        for name, args in (("stt", ["--input", "bashy://o/files-in/in.wav"]),
                            ("files-docs", ["--op", "ls"])):
             cli(o, "remote", "add", "c", name)
             tools = cli_json(o, "mcp", "tools", "--json")
@@ -331,7 +332,7 @@ def scenario(c, o, outpost):
         remote = cli_json(o, "remote", "usage", "--json")
         text = json.dumps(offered) + json.dumps(remote)
         check("price" not in text and "usd" not in text.lower(), "no usage record carries a price")
-        for tool, unit in ((MODEL, "token"), (AGENT, "token"), ("transcribe", "seconds"), ("files-docs", "bytes")):
+        for tool, unit in ((MODEL, "token"), (AGENT, "token"), ("stt", "seconds"), ("files-docs", "bytes")):
             mine = [r for r in offered if r.get("tool") == tool]
             theirs = [r for r in remote if r.get("tool") == tool]
             check(mine and all(r.get("unit") in (unit, unit + "s") for r in mine),
