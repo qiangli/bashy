@@ -309,3 +309,18 @@ func TestDispatchContainConfineFlags(t *testing.T) {
 		t.Error("an empty --dir must be refused and still count as asked for")
 	}
 }
+
+// BASHY_CONTAIN_BASHY replaces the image's bashy in a confined run.
+func TestContainerConfinedInject(t *testing.T) {
+	c := &containConfine{Dir: "/home/u/r"}
+	args := containerConfinedArgs(c, "localhost/bashy:test", nil, []string{"LANG=C"}, []string{"bashy", "genie"})
+	got := strings.Join(containerConfinedInject(args, "/opt/cand/bashy"), " ")
+	for _, want := range []string{
+		"--user ",
+		"--entrypoint /.bashy/bashy -v /opt/cand/bashy:/.bashy/bashy:ro -e PATH=/.bashy:/ localhost/bashy:test -c ",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("injected spec missing %q:\n%s", want, got)
+		}
+	}
+}

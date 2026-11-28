@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -440,7 +441,30 @@ func runContainerConfined(c *containConfine, argv []string) int {
 		fmt.Fprintf(os.Stderr, "bashy contain: %v; nothing ran\n", err)
 		return containUnsupportedStatus
 	}
-	return runContainChild(self, containerConfinedArgs(c, image, with, os.Environ(), argv), "", nil)
+	args := containerConfinedArgs(c, image, with, os.Environ(), argv)
+	if injected := strings.TrimSpace(os.Getenv("BASHY_CONTAIN_BASHY")); injected != "" {
+		path, err := containInjectedBashy(injected, runtime.GOARCH)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "bashy contain: %v; nothing ran\n", err)
+			return containUnsupportedStatus
+		}
+		args = containerConfinedInject(args, path)
+	}
+	return runContainChild(self, args, "", nil)
+}
+
+// containerConfinedInject runs the confined image with the given static
+// linux bashy in place of the image's own (BASHY_CONTAIN_BASHY, the same
+// override an image call honours): mounted read-only at containInBashy, the
+// entrypoint, and first on PATH so `bashy` inside is that binary. A candidate
+// build is tested in the released image this way, and anything bashy starts
+// inside the sandbox is the caller's version.
+func containerConfinedInject(args []string, bashyPath string) []string {
+	n := len(args) - 3 // image, "-c", command
+	out := append([]string{}, args[:n]...)
+	out = append(out, "--entrypoint", containInBashy, "-v", bashyPath+":"+containInBashy+":ro",
+		"-e", "PATH="+filepath.Dir(containInBashy)+":/")
+	return append(out, args[n:]...)
 }
 
 // runContainChild runs name args with the terminal, in dir (if set) with env
