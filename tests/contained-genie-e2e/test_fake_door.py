@@ -305,32 +305,19 @@ class AssertionHelperTests(unittest.TestCase):
 
 
 class InSandboxLauncherTests(unittest.TestCase):
-    def test_in_sandbox_starts_forwarder_exports_env_and_cleans_up(self) -> None:
+    def test_in_sandbox_hands_over_to_the_product_launcher(self) -> None:
         with tempfile.TemporaryDirectory() as tmp_str:
             tmp = Path(tmp_str)
             fake_bashy = tmp / "fake-bashy"
             seen_file = tmp / "seen-genie.json"
-            fwd_pid_file = tmp / "fwd.pid"
             fake_bashy.write_text(
                 f"""#!/bin/sh
 set -eu
-case "${{1:-}}" in
-  llm)
-    echo $$ > {str(fwd_pid_file)!r}
-    echo "http://127.0.0.1:19999/v1"
-    trap 'exit 0' TERM INT
-    while true; do sleep 1; done
-    ;;
-  genie)
-    python3 -c 'import json, os, sys; open(sys.argv[1], "w").write(json.dumps({{k: os.environ.get(k, "") for k in ("GENIE_EXTERNAL_MODEL", "GENIE_MODEL_ID", "GENIE_EXTERNAL_CONTEXT", "OPENAI_BASE_URL", "OPENAI_API_KEY", "GENIE_BAR", "GENIE_APPROVAL", "GENIE_TOOLCHAINS")}}))' {str(seen_file)!r}
-    echo "CONTAINED_GENIE_FINAL_ANSWER: ok"
-    echo "DONE"
-    ;;
-  *)
-    echo "unexpected invocation: $*" >&2
-    exit 2
-    ;;
-esac
+[ "${{1:-}}" = genie ] && [ "${{2:-}}" = --session-launcher ] || {{ echo "unexpected invocation: $*" >&2; exit 2; }}
+shift 2
+python3 -c 'import json, os, sys; open(sys.argv[1], "w").write(json.dumps({{"argv": sys.argv[2:], "env": {{k: os.environ.get(k, "") for k in ("OPENAI_API_KEY", "GENIE_APPROVAL")}}}}))' {str(seen_file)!r} "$@"
+echo "CONTAINED_GENIE_FINAL_ANSWER: ok"
+echo "DONE"
 """,
                 encoding="utf-8",
             )
@@ -342,10 +329,10 @@ esac
                 "TMPDIR": str(tmp / "priv-tmp"),
                 "CONTAINED_GENIE_IN_SANDBOX_BASHY": str(fake_bashy),
                 "CONTAINED_GENIE_SOCKET": "/tmp/fake-door.sock",
+                "CONTAINED_GENIE_PORT": "19999",
                 "CONTAINED_GENIE_TOKEN": "tok-sandbox-test",
                 "CONTAINED_GENIE_MODEL_ID": "fake-cligw-model",
                 "CONTAINED_GENIE_GENIE_BAR": "/ro/genie.bar",
-                "CONTAINED_GENIE_FORWARD_READY_SECONDS": "5",
                 "CONTAINED_GENIE_TASK": "hello",
             }
             proc = subprocess.run(
@@ -360,24 +347,26 @@ esac
             self.assertEqual(proc.returncode, 0, proc.stdout)
             self.assertIn("=== CONTAIN_ENV_BEGIN ===", proc.stdout)
             self.assertIn("CONTAINED_GENIE_FINAL_ANSWER", proc.stdout)
-            self.assertIn("DONE", proc.stdout)
             seen = json.loads(seen_file.read_text(encoding="utf-8"))
-            self.assertEqual(
-                seen,
-                {
-                    "GENIE_EXTERNAL_MODEL": "fake-cligw",
-                    "GENIE_MODEL_ID": "fake-cligw-model",
-                    "GENIE_EXTERNAL_CONTEXT": "32768",
-                    "OPENAI_BASE_URL": "http://127.0.0.1:19999/v1",
-                    "OPENAI_API_KEY": "tok-sandbox-test",
-                    "GENIE_BAR": "/ro/genie.bar",
-                    "GENIE_APPROVAL": "auto",
-                    "GENIE_TOOLCHAINS": "none",
-                },
-            )
-            fwd_pid = int(fwd_pid_file.read_text(encoding="utf-8").strip())
-            with self.assertRaises(ProcessLookupError):
-                os.kill(fwd_pid, 0)
+            argv = seen["argv"]
+            self.assertEqual(argv[:4], ["/tmp/fake-door.sock", "19999", "/ro/genie.bar", "fake-cligw-model"])
+            self.assertEqual(argv[5], "hello")
+            self.assertEqual(seen["env"], {"OPENAI_API_KEY": "tok-sandbox-test", "GENIE_APPROVAL": "auto"})
+
+    def test_in_sandbox_refuses_without_a_port(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp_str:
+            env = {
+                "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
+                "TMPDIR": tmp_str,
+                "CONTAINED_GENIE_IN_SANDBOX_BASHY": "/bin/true",
+                "CONTAINED_GENIE_SOCKET": "/tmp/fake-door.sock",
+                "CONTAINED_GENIE_TOKEN": "t",
+                "CONTAINED_GENIE_GENIE_BAR": "/ro/genie.bar",
+            }
+            proc = subprocess.run(["sh", str(HERE / "in_sandbox.sh")], cwd=tmp_str, env=env,
+                                  stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=15)
+            self.assertEqual(proc.returncode, 2, proc.stdout)
+            self.assertIn("CONTAINED_GENIE_PORT is unset", proc.stdout)
 
 
 if __name__ == "__main__":
