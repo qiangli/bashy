@@ -22,9 +22,24 @@ surface's `SKILL.md` is where to start; its `CONTRACT.md` is the behaviour.
     bashy --bashsharp shapeware/index.bsh --json      # the same as JSON
     bashy --bashsharp shapeware/index.bsh path NAME   # the folder of one surface
     bashy --bashsharp shapeware/index.bsh check       # conform spec check on each
+    bashy --bashsharp shapeware/index.bsh coverage    # which apps have a surface
+    bashy --bashsharp shapeware/index.bsh run TARGET  # one dag.md target in each surface
 
 A folder without a `SKILL.md` is not a surface and is skipped. `check` exits 1
 when any surface fails the lint.
+
+`coverage` reads the optional `shapeware/apps`, the list of what this repository
+expects to be lifted, one app per line: `<app> <surfaces> <note...>`, where
+`<surfaces>` is a comma-separated list of surface folders, or `-` for an app
+that is not lifted by design (say why in the note). `#` starts a comment. It
+prints one line per app, `COVERED`, `PARTIAL` (some surfaces missing, or the
+note starts with `partial`), `UNCOVERED` or `EXCLUDED`, then the surfaces no
+app names as `UNLISTED`. Exit 0 when every app is covered or excluded, 3 when
+any is partial or uncovered, 2 with no `shapeware/apps`.
+
+`run TARGET` runs `bashy dag -f dag.md TARGET` in every surface whose `dag.md`
+defines that target (for example `test`, `cert`), printing `PASS`, `FAIL` or
+`SKIP` per surface; it exits 1 when any surface fails.
 ~~~
 
 set -euo pipefail
@@ -32,7 +47,7 @@ set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 
 usage() {
-	echo "usage: index.bsh [list] [--json] | path NAME | check" >&2
+	echo "usage: index.bsh [list] [--json] | path NAME | check | coverage | run TARGET" >&2
 	exit 2
 }
 
@@ -123,11 +138,65 @@ cmd_check() {
 	return "$failed"
 }
 
+cmd_coverage() {
+	local file="$here/apps" app surf note s status rc=0 listed=" " missing have
+	if [ ! -f "$file" ]; then
+		echo "index.bsh: no shapeware/apps (the list of apps this repository expects to lift)" >&2
+		return 2
+	fi
+	while IFS= read -r line || [ -n "$line" ]; do
+		line=${line%%#*}
+		read -r app surf note <<<"$line" || true
+		[ -n "${app:-}" ] || continue
+		if [ "$surf" = "-" ] || [ -z "${surf:-}" ]; then
+			[ "$surf" = "-" ] && status=EXCLUDED || status=UNCOVERED
+		else
+			missing=0 have=0
+			IFS=, read -r -a parts <<<"$surf"
+			for s in "${parts[@]}"; do
+				listed="$listed$s "
+				if [ -f "$here/$s/SKILL.md" ]; then have=$((have + 1)); else missing=$((missing + 1)); fi
+			done
+			if [ "$have" -eq 0 ]; then status=UNCOVERED
+			elif [ "$missing" -gt 0 ]; then status=PARTIAL
+			else
+				case "${note:-}" in partial*) status=PARTIAL ;; *) status=COVERED ;; esac
+			fi
+		fi
+		case $status in PARTIAL | UNCOVERED) rc=3 ;; esac
+		printf '%s\t%s\t%s\t%s\n' "$status" "$app" "$surf" "${note:-}"
+	done < "$file"
+	while IFS= read -r s; do
+		case "$listed" in *" $s "*) ;; *) printf 'UNLISTED\t-\t%s\t\n' "$s" ;; esac
+	done < <(surfaces)
+	return "$rc"
+}
+
+cmd_run() {
+	local target=${1:-} name failed=0
+	[ -n "$target" ] || usage
+	while IFS= read -r name; do
+		if [ ! -f "$here/$name/dag.md" ] || ! grep -q "^### $target\$" "$here/$name/dag.md"; then
+			echo "SKIP shapeware/$name (no $target target)"
+			continue
+		fi
+		if (cd "$here/$name" && bashy dag -f dag.md "$target"); then
+			echo "PASS shapeware/$name $target"
+		else
+			echo "FAIL shapeware/$name $target"
+			failed=1
+		fi
+	done < <(surfaces)
+	return "$failed"
+}
+
 case "${1:-list}" in
 list) cmd_list "$([ "${2:-}" = --json ] && echo 1 || echo 0)" ;;
 --json) cmd_list 1 ;;
 path) cmd_path "${2:-}" ;;
 check) cmd_check ;;
+coverage) cmd_coverage ;;
+run) cmd_run "${2:-}" ;;
 -h | --help) usage ;;
 *) usage ;;
 esac
