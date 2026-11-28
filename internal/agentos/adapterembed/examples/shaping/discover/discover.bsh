@@ -144,6 +144,13 @@ write_server() {
 import json, os, sys, urllib.request, urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+# serve execs this generated file, so nothing is left to remove it later.
+# Python has read it already: delete it now so no copy stays in $TMPDIR.
+try:
+    os.unlink(os.path.abspath(__file__))
+except OSError:
+    pass
+
 ROOT = sys.argv[1]            # fixture root, or "" in proxy mode
 LOG = sys.argv[2]
 PORT = int(sys.argv[3])
